@@ -1,4 +1,4 @@
-mod error;
+pub mod error;
 pub mod source;
 pub mod syntax;
 pub mod ty;

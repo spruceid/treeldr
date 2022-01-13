@@ -8,7 +8,7 @@ pub enum Error<E: Debug> {
 	Lexer(E),
 }
 
-impl<E: Debug + fmt::Display> crate::Error for Loc<Error<E>> {
+impl<E: Debug + fmt::Display> crate::error::Diagnose for Loc<Error<E>> {
 	fn message(&self) -> String {
 		match self.inner() {
 			Error::Unexpected(_) => "parsing error".to_owned(),

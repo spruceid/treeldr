@@ -7,7 +7,7 @@ use codespan_reporting::{
 	},
 };
 use std::{convert::Infallible, fs, io};
-use treeldr::{source, syntax, syntax::Parse, Error};
+use treeldr::{source, syntax, syntax::Parse, error::Diagnose};
 
 fn main() -> io::Result<()> {
 	// Parse options.
