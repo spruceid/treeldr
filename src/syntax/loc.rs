@@ -1,6 +1,6 @@
-use std::fmt;
 use super::Span;
 use crate::Source;
+use std::fmt;
 
 /// Located syntax node.
 #[derive(Clone, Copy, Debug)]
@@ -9,14 +9,12 @@ pub struct Loc<T> {
 	t: T,
 
 	/// Source position.
-	source: Source
+	source: Source,
 }
 
 impl<T> Loc<T> {
 	pub fn new(t: T, source: Source) -> Self {
-		Self {
-			t, source
-		}
+		Self { t, source }
 	}
 
 	pub fn inner(&self) -> &T {
@@ -34,7 +32,7 @@ impl<T> Loc<T> {
 	pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Loc<U> {
 		Loc {
 			t: f(self.t),
-			source: self.source
+			source: self.source,
 		}
 	}
 

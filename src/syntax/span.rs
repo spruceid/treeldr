@@ -5,14 +5,14 @@ pub struct Span {
 	start: usize,
 
 	/// End byte (excluded).
-	end: usize
+	end: usize,
 }
 
 impl Span {
 	pub fn new(start: usize, end: usize) -> Self {
 		Self {
 			start,
-			end: std::cmp::max(start, end)
+			end: std::cmp::max(start, end),
 		}
 	}
 
@@ -27,6 +27,10 @@ impl Span {
 	/// Returns the byte length of the span.
 	pub fn len(&self) -> usize {
 		self.end - self.start
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
 	}
 
 	pub fn push(&mut self, c: char) {

@@ -1,22 +1,13 @@
-use clap::{
-	self,
-	load_yaml
-};
-use treeldr::{
-	syntax,
-	syntax::Parse,
-	source,
-	Error
-};
-use std::{
-	fs,
-	io,
-	convert::Infallible
-};
+use clap::{self, load_yaml};
 use codespan_reporting::{
-	diagnostic::{Diagnostic, Label},
-	term::{self, termcolor::{ColorChoice, StandardStream}}
+	diagnostic::Diagnostic,
+	term::{
+		self,
+		termcolor::{ColorChoice, StandardStream},
+	},
 };
+use std::{convert::Infallible, fs, io};
+use treeldr::{source, syntax, syntax::Parse, Error};
 
 fn main() -> io::Result<()> {
 	// Parse options.
@@ -33,7 +24,9 @@ fn main() -> io::Result<()> {
 	let mut files = source::Files::new();
 	let (source_id, file) = files.add(source::Path::Local(filename.into()), content);
 
-	let mut lexer = syntax::Lexer::<Infallible, _>::new(source_id, file.buffer().chars().map(Result::Ok)).peekable();
+	let mut lexer =
+		syntax::Lexer::<Infallible, _>::new(source_id, file.buffer().chars().map(Result::Ok))
+			.peekable();
 
 	// for token in lexer {
 	// 	eprintln!("token: {:?}", token)
@@ -42,12 +35,16 @@ fn main() -> io::Result<()> {
 	match syntax::Document::parse(source_id, &mut lexer, 0) {
 		Ok(_doc) => {
 			println!("parsing succeeded.");
-		},
+		}
 		Err(e) => {
-			let diagnostic = Diagnostic::error().with_message(e.message()).with_labels(e.labels()).with_notes(e.notes());
+			let diagnostic = Diagnostic::error()
+				.with_message(e.message())
+				.with_labels(e.labels())
+				.with_notes(e.notes());
 			let writer = StandardStream::stderr(ColorChoice::Always);
 			let config = codespan_reporting::term::Config::default();
-			term::emit(&mut writer.lock(), &config, &files, &diagnostic).expect("diagnostic failed");
+			term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+				.expect("diagnostic failed");
 		}
 	}
 

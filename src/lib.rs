@@ -2,9 +2,9 @@ use std::marker::PhantomData;
 
 mod error;
 pub mod source;
-pub mod vocab;
-pub mod ty;
 pub mod syntax;
+pub mod ty;
+pub mod vocab;
 
 pub use error::Error;
 pub use source::Source;

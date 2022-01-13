@@ -1,8 +1,8 @@
-use iref::{IriBuf, Iri};
+use iref::{Iri, IriBuf};
 use std::collections::HashMap;
 
 /// Unique identifier associated to a known IRI.
-/// 
+///
 /// This simplifies storage and comparison between IRIs.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct Id(usize);
@@ -14,22 +14,20 @@ impl Id {
 }
 
 /// Dictionary storing each known IRI and associated unique `Id`.
+#[derive(Default)]
 pub struct Vocabulary {
 	iri_to_id: HashMap<IriBuf, Id>,
-	id_to_iri: Vec<IriBuf>
+	id_to_iri: Vec<IriBuf>,
 }
 
 impl Vocabulary {
 	/// Creates a new empty vocabulary.
 	pub fn new() -> Self {
-		Self {
-			iri_to_id: HashMap::new(),
-			id_to_iri: Vec::new()
-		}
+		Self::default()
 	}
 
 	/// Adds a new IRI to the vocabulary and returns its `Id`.
-	/// 
+	///
 	/// If the IRI is already in the vocabulary, its `Id` is returned
 	/// and the vocabulary is unchanged.
 	pub fn insert(&mut self, iri: IriBuf) -> Id {
