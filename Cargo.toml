@@ -1,0 +1,22 @@
+[package]
+name = "treeldr"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+bin = [
+	"stderrlog",
+	"clap"
+]
+
+[dependencies]
+iref = "*"
+log = "^0.4"
+codespan-reporting = "*"
+
+stderrlog = { version = "^0.5", optional = true }
+clap = { version = "^2.33", features = ["yaml"], optional = true }
+
+[[bin]]
+name = "treeldr"
+required-features = ["bin"]

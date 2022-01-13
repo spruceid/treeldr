@@ -1,0 +1,12 @@
+name: treeldr
+version: "0.0"
+author: Spruce Systems Inc.
+about: Schema definition language.
+args:
+    - FILE:
+        help: Input TreeLDR file.
+        required: true
+    - verbose:
+        short: v
+        multiple: true
+        help: Sets the level of verbosity.

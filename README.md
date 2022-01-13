@@ -1,16 +1,13 @@
 # TreeLDR
 
-Data schema languages are already hard to use, and this difficulty compounds
-when introducing signing and remixing. TreeLDR is a that combines data schemas,
-signature suites, migration strategies, and blockchain publishing and produces
-an SDK in the target language such as Python or Java. This way, developers can
-define data structures in a familiar way and think purely about the application
-level.
+An intuitive Linked Data schema definition language and boilerplate code generator.
+TreeLDR can be used to produce JSON Schemas, JSON-LD contexts, migration strategies, blockchain publishing routines, etc.
+and entire SDKs in various target programing languages such as Python, Java and more.
+This way, developers can define data structures in a familiar way and focus purely on the application level.
 
-Under the hood, standard data semantics and schema specification
-languages such as JSON-LD and jsonschema should be used. Ideally, TreeLDR
-supports more than just JSON-based data formats, such as CBOR, capnproto,
-protobuf, ASN.1, and more.
+Ideally, TreeLDR supports more than just JSON-based data formats, such as CBOR, capnproto, protobuf, ASN.1, and more.
+
+## Usage
 
 TreeLDR strawman example:
 ```
@@ -31,7 +28,8 @@ Profile{downgrade} = // ...
 Profile{issuers} = // ...
 ```
 
-Generating a Python package from TreeLDR and installing it:
+### Generating a Python package
+
 ```bash
 $ treeldr ./diploma ./openbadges3
 $ ./openbadges3/setup.py
