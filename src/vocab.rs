@@ -4,11 +4,11 @@ use std::collections::HashMap;
 /// Unique identifier associated to a known IRI.
 ///
 /// This simplifies storage and comparison between IRIs.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub struct Id(usize);
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
+pub struct Id(pub(crate) usize);
 
 impl Id {
-	fn index(&self) -> usize {
+	pub(crate) fn index(&self) -> usize {
 		self.0
 	}
 }
