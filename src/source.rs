@@ -1,7 +1,7 @@
 use crate::syntax::Span;
 use iref::IriBuf;
 use std::{
-	collections::HashMap,
+	collections::{HashMap, BTreeSet},
 	fmt,
 	ops::{Deref, DerefMut, Range},
 };
@@ -256,5 +256,93 @@ impl<'a> codespan_reporting::files::Files<'a> for Files {
 			})
 			.transpose()?
 			.ok_or(codespan_reporting::files::Error::FileMissing)
+	}
+}
+
+/// Cause.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum Cause {
+	/// Explicitly caused by the given source.
+	Explicit(Source),
+
+	/// Implicitly caused by the given source.
+	Implicit(Source)
+}
+
+impl Cause {
+	pub fn is_explicit(&self) -> bool {
+		matches!(self, Self::Explicit(_))
+	}
+
+	pub fn is_implicit(&self) -> bool {
+		matches!(self, Self::Implicit(_))
+	}
+
+	pub fn source(&self) -> Source {
+		match self {
+			Self::Explicit(s) => *s,
+			Self::Implicit(s) => *s
+		}
+	}
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct Caused<T> {
+	t: T,
+	cause: Option<Cause>
+}
+
+impl<T> Caused<T> {
+	pub fn new(t: T, cause: Option<Cause>) -> Self {
+		Self {
+			t, cause
+		}
+	}
+
+	pub fn inner(&self) -> &T {
+		&self.t
+	}
+
+	pub fn cause(&self) -> Option<Cause> {
+		self.cause
+	}
+}
+
+#[derive(Default)]
+pub struct Causes {
+	set: BTreeSet<Cause>
+}
+
+impl Causes {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	/// Adds a new cause.
+	pub fn add(&mut self, cause: Cause) {
+		self.set.insert(cause);
+	}
+
+	/// Picks the preferred cause, unless there are no causes.
+	pub fn preferred(&self) -> Option<Cause> {
+		self.set.iter().next().cloned()
+	}
+}
+
+impl From<Cause> for Causes {
+	fn from(cause: Cause) -> Self {
+		let mut causes = Self::new();
+		causes.add(cause);
+		causes
+	}
+}
+
+impl From<Option<Cause>> for Causes {
+	fn from(cause: Option<Cause>) -> Self {
+		let mut causes = Self::new();
+		if let Some(cause) = cause {
+			causes.add(cause);
+		}
+		causes
 	}
 }

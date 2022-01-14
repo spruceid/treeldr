@@ -3,6 +3,9 @@ version: "0.0"
 author: Spruce Systems Inc.
 about: Schema definition language.
 args:
+    - BASE_IRI:
+        help: Base IRI.
+        required: true
     - FILE:
         help: Input TreeLDR file.
         required: true

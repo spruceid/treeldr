@@ -7,6 +7,10 @@ use derivative::Derivative;
 pub struct Ref<T>(usize, PhantomData<T>);
 
 impl<T> Ref<T> {
+	pub(crate) fn new(index: usize) -> Self {
+		Self(index, PhantomData)
+	}
+
 	fn index(&self) -> usize {
 		self.0
 	}
@@ -25,6 +29,12 @@ impl<T> Collection<T> {
 
 	pub fn get(&self, r: Ref<T>) -> Option<&T> {
 		self.items.get(r.index())
+	}
+
+	pub fn insert(&mut self, v: T) -> Ref<T> {
+		let r = Ref::new(self.items.len());
+		self.items.push(v);
+		r
 	}
 }
 

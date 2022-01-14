@@ -200,7 +200,12 @@ impl Parse for Item {
 					parse_block(file, lexer, id.span().end())?.into_parts();
 				span.set_end(prop_source.span().end());
 				Ok(Loc::new(
-					Item::Type(TypeDefinition { id, properties }),
+					Item::Type(
+						Loc::new(
+							TypeDefinition { id, properties },
+							Source::new(file, span)
+						)
+					),
 					Source::new(file, span),
 				))
 			}
@@ -210,7 +215,12 @@ impl Parse for Item {
 					parse_block(file, lexer, id.span().end())?.into_parts();
 				span.set_end(field_source.span().end());
 				Ok(Loc::new(
-					Item::Layout(LayoutDefinition { id, fields }),
+					Item::Layout(
+						Loc::new(
+							LayoutDefinition { id, fields },
+							Source::new(file, span)
+						)
+					),
 					Source::new(file, span),
 				))
 			}

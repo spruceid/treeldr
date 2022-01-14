@@ -13,8 +13,8 @@ pub struct Document {
 }
 
 pub enum Item {
-	Type(TypeDefinition),
-	Layout(LayoutDefinition),
+	Type(Loc<TypeDefinition>),
+	Layout(Loc<LayoutDefinition>),
 }
 
 pub struct TypeDefinition {
