@@ -48,3 +48,44 @@ impl Vocabulary {
 		self.id_to_iri.get(id.index()).map(|iri| iri.as_iri())
 	}
 }
+
+/// Vocabulary map.
+pub struct Map<T> {
+	data: Vec<Option<T>>
+}
+
+impl<T> Map<T> {
+	pub fn new() -> Self {
+		Self {
+			data: Vec::new()
+		}
+	}
+
+	pub fn get(&self, id: Id) -> Option<&T> {
+		self.data.get(id.index()).and_then(Option::as_ref)
+	}
+
+	pub fn get_mut(&mut self, id: Id) -> Option<&mut T> {
+		self.data.get_mut(id.index()).and_then(Option::as_mut)
+	}
+
+	fn reserve(&mut self, id: Id) {
+		let len = id.index() + 1;
+		if self.data.len() < len {
+			self.data.resize_with(len, || None)
+		}
+	}
+
+	pub fn insert(&mut self, id: Id, value: T) -> Option<T> {
+		self.reserve(id);
+		let mut result = Some(value);
+		std::mem::swap(&mut result, &mut self.data[id.index()]);
+		result
+	}
+}
+
+impl<T> Default for Map<T> {
+	fn default() -> Self {
+		Self::new()
+	}
+}

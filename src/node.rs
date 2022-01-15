@@ -11,8 +11,7 @@ use crate::{
 pub enum Type {
 	Type,
 	Property,
-	Layout,
-	Unknown
+	Layout
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -24,12 +23,12 @@ pub enum Node {
 }
 
 impl Node {
-	pub fn ty(&self) -> Type {
+	pub fn ty(&self) -> Option<Type> {
 		match self {
-			Self::Type(_) => Type::Type,
-			Self::Property(_) => Type::Property,
-			Self::Layout(_) => Type::Layout,
-			Self::Unknown(_) => Type::Unknown
+			Self::Type(_) => Some(Type::Type),
+			Self::Property(_) => Some(Type::Property),
+			Self::Layout(_) => Some(Type::Layout),
+			Self::Unknown(_) => None
 		}
 	}
 
@@ -39,6 +38,27 @@ impl Node {
 			Self::Property(r) => context.properties().get(*r).expect("undefined property").id(),
 			Self::Layout(r) => context.layouts().get(*r).expect("undefined layout").id(),
 			Self::Unknown(id) => *id
+		}
+	}
+
+	pub fn as_type(&self) -> Option<Ref<ty::Definition>> {
+		match self {
+			Self::Type(ty_ref) => Some(*ty_ref),
+			_ => None
+		}
+	}
+
+	pub fn as_property(&self) -> Option<Ref<prop::Definition>> {
+		match self {
+			Self::Property(prop_ref) => Some(*prop_ref),
+			_ => None
+		}
+	}
+
+	pub fn as_layout(&self) -> Option<Ref<layout::Definition>> {
+		match self {
+			Self::Layout(layout_ref) => Some(*layout_ref),
+			_ => None
 		}
 	}
 }

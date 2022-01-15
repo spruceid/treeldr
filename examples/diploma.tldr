@@ -1,3 +1,16 @@
 type Diploma {
-	# ...
+	department : Department
+}
+
+/// hey.
+type Department {
+	// ...
+}
+
+layout DiplomaView for Diploma {
+	// ...
+}
+
+layout DiplomaView for Department {
+	// ...
 }

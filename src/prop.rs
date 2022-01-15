@@ -1,19 +1,25 @@
 use crate::{
+	Error,
 	Id,
-	source::Causes
+	Cause,
+	Caused,
+	source::Causes,
+	ty
 };
 
 /// Property definition.
 pub struct Definition {
 	id: Id,
-	causes: Causes
+	causes: Causes,
+	ty: Option<Type>
 }
 
 impl Definition {
 	pub fn new(id: Id, causes: impl Into<Causes>) -> Self {
 		Self {
 			id,
-			causes: causes.into()
+			causes: causes.into(),
+			ty: None
 		}
 	}
 
@@ -24,5 +30,49 @@ impl Definition {
 
 	pub fn causes(&self) -> &Causes {
 		&self.causes
+	}
+
+	pub fn ty(&self) -> Option<&Type> {
+		self.ty.as_ref()
+	}
+
+	pub fn declare_type(&mut self, ty_expr: ty::Expr, cause: Option<Cause>) -> Result<(), Caused<Error>> {
+		match &mut self.ty {
+			Some(ty) => ty.declare(ty_expr, cause),
+			None => {
+				self.ty = Some(Type::new(ty_expr, cause));
+				Ok(())
+			}
+		}
+	}
+}
+
+pub struct Type {
+	expr: ty::Expr,
+	causes: Causes
+}
+
+impl Type {
+	pub fn new(expr: ty::Expr, causes: impl Into<Causes>) -> Self {
+		Self {
+			expr,
+			causes: causes.into()
+		}
+	}
+
+	pub fn expr(&self) -> &ty::Expr {
+		&self.expr
+	}
+
+	pub fn causes(&self) -> &Causes {
+		&self.causes
+	}
+
+	pub fn declare(&mut self, ty_expr: ty::Expr, source: Option<Cause>) -> Result<(), Caused<Error>> {
+		if self.expr == ty_expr {
+			Ok(())
+		} else {
+			Err(Caused::new(Error::TypeMismatch { expected: self.expr.clone(), found: ty_expr, because: self.causes.preferred() }, source))
+		}
 	}
 }

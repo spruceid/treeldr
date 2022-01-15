@@ -1,6 +1,9 @@
 use super::Span;
 use crate::Source;
-use std::fmt;
+use std::{
+	fmt,
+	ops::{Deref, DerefMut}
+};
 
 /// Located syntax node.
 #[derive(Clone, Copy, Debug)]
@@ -40,8 +43,26 @@ impl<T> Loc<T> {
 		(self.t, self.source)
 	}
 
+	pub fn parts(&self) -> (&T, Source) {
+		(&self.t, self.source)
+	}
+
 	pub fn into_inner(self) -> T {
 		self.t
+	}
+}
+
+impl<T> Deref for Loc<T> {
+	type Target = T;
+
+	fn deref(&self) -> &T {
+		&self.t
+	}
+}
+
+impl<T> DerefMut for Loc<T> {
+	fn deref_mut(&mut self) -> &mut T {
+		&mut self.t
 	}
 }
 

@@ -8,6 +8,18 @@ pub use loc::*;
 pub use parsing::Parse;
 pub use span::*;
 
+pub struct Documentation {
+	pub items: Vec<Loc<String>>
+}
+
+impl Documentation {
+	pub fn new(items: Vec<Loc<String>>) -> Self {
+		Self {
+			items
+		}
+	}
+}
+
 pub struct Document {
 	pub items: Vec<Loc<Item>>,
 }
@@ -20,11 +32,13 @@ pub enum Item {
 pub struct TypeDefinition {
 	pub id: Loc<Id>,
 	pub properties: Vec<Loc<PropertyDefinition>>,
+	pub doc: Documentation
 }
 
 pub struct PropertyDefinition {
 	pub id: Loc<Id>,
 	pub ty: Option<Loc<TypeExpr>>,
+	pub doc: Documentation
 }
 
 pub struct TypeExpr {
@@ -34,13 +48,16 @@ pub struct TypeExpr {
 
 pub struct LayoutDefinition {
 	pub id: Loc<Id>,
+	pub ty_id: Loc<Id>,
 	pub fields: Vec<Loc<FieldDefinition>>,
+	pub doc: Documentation
 }
 
 pub struct FieldDefinition {
 	pub id: Loc<Id>,
 	pub layout: Option<Loc<LayoutExpr>>,
 	pub alias: Option<Loc<Id>>,
+	pub doc: Documentation
 }
 
 pub struct LayoutExpr {

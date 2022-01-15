@@ -31,6 +31,10 @@ impl<T> Collection<T> {
 		self.items.get(r.index())
 	}
 
+	pub fn get_mut(&mut self, r: Ref<T>) -> Option<&mut T> {
+		self.items.get_mut(r.index())
+	}
+
 	pub fn insert(&mut self, v: T) -> Ref<T> {
 		let r = Ref::new(self.items.len());
 		self.items.push(v);

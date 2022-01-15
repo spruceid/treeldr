@@ -34,13 +34,15 @@ fn main() -> io::Result<()> {
 	// 	eprintln!("token: {:?}", token)
 	// }
 
+	log::debug!("ready for parsing.");
 	match syntax::Document::parse(source_id, &mut lexer, 0) {
 		Ok(doc) => {
-			log::info!("parsing succeeded.");
+			log::debug!("parsing succeeded.");
 			let mut context = treeldr::Context::new(base_iri);
-			match doc.compile(&mut context) {
+			let mut env = treeldr::compile::Environment::new(&mut context);
+			match doc.compile(&mut env) {
 				Ok(_) => {
-					log::info!("compilation succeeded.");
+					log::debug!("compilation succeeded.");
 				},
 				Err(e) => {
 					log::error!("compilation error");
