@@ -306,6 +306,10 @@ impl<T> Caused<T> {
 	pub fn cause(&self) -> Option<Cause> {
 		self.cause
 	}
+
+	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Caused<U> {
+		Caused::new(f(self.t), self.cause)
+	}
 }
 
 #[derive(Default)]

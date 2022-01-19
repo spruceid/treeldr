@@ -323,9 +323,12 @@ fn next_id<E, C: Iterator<Item = Result<char, E>>>(
 	lexer: &mut Lexer<E, C>,
 ) -> Result<Loc<Token>, Loc<Error<E>>> {
 	let mut id = String::new();
+	// let mut is_name = true;
 
 	while let Some(c) = peek_char(lexer)? {
-		if c.is_alphabetic() {
+		// is_name &= c.is_alphabetic() || c.is_digit(10);
+
+		if !c.is_whitespace() && !c.is_control() {
 			id.push(consume_char(lexer)?.unwrap())
 		} else {
 			break;
@@ -341,6 +344,13 @@ fn next_id<E, C: Iterator<Item = Result<char, E>>>(
 		"as" => Token::Keyword(Keyword::As),
 		"for" => Token::Keyword(Keyword::For),
 		_ => {
+			// if is_name {
+			// 	return Ok(Loc::new(
+			// 		Token::Id(Id::Name(id)),
+			// 		Source::new(lexer.file, span),
+			// 	));
+			// }
+
 			// Is it a compact IRI?
 			if let Some((prefix, suffix)) = id.split_once(':') {
 				if !suffix.starts_with("//") {

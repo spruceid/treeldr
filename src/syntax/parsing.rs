@@ -5,6 +5,7 @@ use std::{fmt, fmt::Debug, iter::Peekable};
 
 pub enum Error<E: Debug> {
 	Unexpected(Option<Token>, Vec<lexing::TokenKind>),
+	InvalidAlias(Id),
 	Lexer(E),
 }
 
@@ -12,6 +13,7 @@ impl<E: Debug + fmt::Display> crate::error::Diagnose for Loc<Error<E>> {
 	fn message(&self) -> String {
 		match self.inner() {
 			Error::Unexpected(_, _) => "parsing error".to_owned(),
+			Error::InvalidAlias(_) => "invalid alias".to_owned(),
 			Error::Lexer(_) => "lexing error".to_owned(),
 		}
 	}
@@ -55,6 +57,7 @@ impl<E: Debug + fmt::Display> fmt::Display for Error<E> {
 		match self {
 			Self::Unexpected(None, _) => write!(f, "unexpected end of text"),
 			Self::Unexpected(Some(token), _) => write!(f, "unexpected {}", token),
+			Self::InvalidAlias(id) => write!(f, "invalid alias `{}`", id),
 			Self::Lexer(e) => write!(f, "lexer error: {}", e),
 		}
 	}
@@ -341,7 +344,7 @@ impl Parse for FieldDefinition {
 				(Token::Keyword(lexing::Keyword::As), as_source) => {
 					consume_token(lexer)?;
 					span.set_end(as_source.span().end());
-					let alias = Id::parse(file, lexer, span.end())?;
+					let alias = Alias::parse(file, lexer, span.end())?;
 					span.set_end(alias.span().end());
 					Some(alias)
 				}
@@ -350,24 +353,56 @@ impl Parse for FieldDefinition {
 			None => None,
 		};
 
-		let layout = match peek_token(lexer)? {
-			Some(token) => {
-				if let (Token::Punct(lexing::Punct::Colon), _) = token.parts() {
-					consume_token(lexer)?;
-					let layout = LayoutExpr::parse(file, lexer, span.end())?;
-					span.set_end(layout.span().end());
-					Some(layout)
-				} else {
-					None
-				}
-			},
-			None => None,
+		let (token, token_source) = consume_expected_token(file, lexer, span.end(), || vec![TokenKind::Punct(lexing::Punct::Colon)])?.into_parts();
+		let layout = match token {
+			Token::Punct(lexing::Punct::Colon) => {
+				let layout = LayoutExpr::parse(file, lexer, span.end())?;
+				span.set_end(layout.span().end());
+				layout
+			}
+			unexpected => return Err(Loc::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Punct(lexing::Punct::Colon)]), token_source))
 		};
+
+		// NOTE: if someday we have default layouts, to parse optional layout exprs.
+		// let layout = match peek_token(lexer)? {
+		// 	Some(token) => {
+		// 		if let (Token::Punct(lexing::Punct::Colon), _) = token.parts() {
+		// 			consume_token(lexer)?;
+		// 			let layout = LayoutExpr::parse(file, lexer, span.end())?;
+		// 			span.set_end(layout.span().end());
+		// 			Some(layout)
+		// 		} else {
+		// 			None
+		// 		}
+		// 	},
+		// 	None => None,
+		// };
 
 		Ok(Loc::new(
 			Self { id, layout, alias, doc },
 			Source::new(file, span),
 		))
+	}
+}
+
+impl Parse for Alias {
+	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
+		file: source::Id,
+		lexer: &mut Peekable<L>,
+		start: usize,
+	) -> Result<Loc<Self>, Loc<Error<E>>> {
+		let (token, source) = consume_expected_token(file, lexer, start, || vec![TokenKind::Id])?.into_parts();
+		match token {
+			Token::Id(Id::IriRef(iri_ref)) => {
+				if iri_ref.scheme().is_none() && iri_ref.authority().is_none() && iri_ref.query().is_none() && iri_ref.fragment().is_none() && iri_ref.path().len() == 1 && iri_ref.path().is_closed() {
+					Ok(Loc::new(Alias(iri_ref.path().as_str().to_owned()), source))
+				} else {
+					Err(Loc::new(Error::InvalidAlias(Id::IriRef(iri_ref)), source))
+				}
+			}
+			Token::Id(id @ Id::Compact(_, _)) => Err(Loc::new(Error::InvalidAlias(id), source)),
+			unexpected => Err(Loc::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id]), source)),
+		}
 	}
 }
 

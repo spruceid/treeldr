@@ -2,6 +2,7 @@ use iref::{Iri, IriBuf};
 
 mod feature;
 pub mod error;
+mod doc;
 pub mod source;
 pub mod syntax;
 pub mod ty;
@@ -14,15 +15,16 @@ pub mod compile;
 
 pub use feature::Feature;
 pub use error::Error;
+pub use doc::Documentation;
 pub use source::{Source, Cause, Caused};
 pub use vocab::{Vocabulary, Id};
 pub use collection::{Collection, Ref};
 pub use node::Node;
 pub use compile::Compile;
 
-/// TreeLDR context.
-pub struct Context {
-	// Base IRI.
+/// TreeLDR model.
+pub struct Model {
+	/// Base IRI.
 	base_iri: IriBuf,
 
 	/// Vocabulary.
@@ -41,7 +43,7 @@ pub struct Context {
 	layouts: Collection<layout::Definition>
 }
 
-impl Context {
+impl Model {
 	/// Creates a new empty context.
 	pub fn new(base_iri: impl Into<IriBuf>) -> Self {
 		Self {
@@ -120,11 +122,11 @@ impl Context {
 			Some(Node::Type(ty_ref)) => Ok(*ty_ref),
 			Some(Node::Property(prop_ref)) => {
 				let because = self.properties.get(*prop_ref).unwrap().causes().preferred();
-				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Type, found: node::Type::Property, because }, cause))
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Type, found: Some(node::Type::Property), because }, cause))
 			},
 			Some(Node::Layout(layout_ref)) => {
 				let because = self.layouts.get(*layout_ref).unwrap().causes().preferred();
-				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Type, found: node::Type::Layout, because }, cause))
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Type, found: Some(node::Type::Layout), because }, cause))
 			},
 			_ => {
 				let ty_ref = self.types.insert(ty::Definition::new(id, cause));
@@ -134,22 +136,24 @@ impl Context {
 		}
 	}
 
-	pub fn require_type(&mut self, id: Id, source: Source) -> Result<Ref<ty::Definition>, Caused<Error>> {
+	/// Requires the given type to be declared.
+	/// 
+	/// Returns an error if no node with the given `id` is declared,
+	/// or if it is not a type.
+	pub fn require_type(&self, id: Id, source: Option<Source>) -> Result<Ref<ty::Definition>, Caused<Error>> {
 		match self.get(id) {
-			None => Err(Caused::new(Error::UnknownNode { id, expected_ty: Some(node::Type::Type) }, Some(Cause::Explicit(source)))),
+			None => Err(Caused::new(Error::UnknownNode { id, expected_ty: Some(node::Type::Type) }, source.map(Cause::Explicit))),
 			Some(Node::Type(ty_ref)) => Ok(*ty_ref),
 			Some(Node::Property(prop_ref)) => {
 				let because = self.properties.get(*prop_ref).unwrap().causes().preferred();
-				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Type, found: node::Type::Property, because }, Some(Cause::Explicit(source))))
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Type, found: Some(node::Type::Property), because }, source.map(Cause::Explicit)))
 			}
 			Some(Node::Layout(layout_ref)) => {
 				let because = self.layouts.get(*layout_ref).unwrap().causes().preferred();
-				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Type, found: node::Type::Layout, because }, Some(Cause::Explicit(source))))
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Type, found: Some(node::Type::Layout), because }, source.map(Cause::Explicit)))
 			}
 			Some(Node::Unknown(_)) => {
-				let ty_ref = self.types.insert(ty::Definition::new(id, Some(Cause::Implicit(source))));
-				self.nodes.insert(id, Node::Type(ty_ref));
-				Ok(ty_ref)
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Type, found: None, because: None }, source.map(Cause::Explicit)))
 			}
 		}
 	}
@@ -161,17 +165,39 @@ impl Context {
 		match self.nodes.get_mut(id) {
 			Some(Node::Type(ty_ref)) => {
 				let because = self.types.get(*ty_ref).unwrap().causes().preferred();
-				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Property, found: node::Type::Type, because }, cause))
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Property, found: Some(node::Type::Type), because }, cause))
 			},
 			Some(Node::Property(prop_ref)) => Ok(*prop_ref),
 			Some(Node::Layout(layout_ref)) => {
 				let because = self.layouts.get(*layout_ref).unwrap().causes().preferred();
-				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Property, found: node::Type::Layout, because }, cause))
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Property, found: Some(node::Type::Layout), because }, cause))
 			},
 			_ => {
 				let prop_ref = self.properties.insert(prop::Definition::new(id, cause));
 				self.nodes.insert(id, Node::Property(prop_ref));
 				Ok(prop_ref)
+			}
+		}
+	}
+
+	/// Requires the given property to be declared.
+	/// 
+	/// Returns an error if no node with the given `id` is declared,
+	/// or if it is not a property.
+	pub fn require_property(&self, id: Id, source: Option<Source>) -> Result<Ref<prop::Definition>, Caused<Error>> {
+		match self.get(id) {
+			None => Err(Caused::new(Error::UnknownNode { id, expected_ty: Some(node::Type::Property) }, source.map(Cause::Explicit))),
+			Some(Node::Type(ty_ref)) => {
+				let because = self.types.get(*ty_ref).unwrap().causes().preferred();
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Property, found: Some(node::Type::Type), because }, source.map(Cause::Explicit)))
+			},
+			Some(Node::Property(prop_ref)) => Ok(*prop_ref),
+			Some(Node::Layout(layout_ref)) => {
+				let because = self.layouts.get(*layout_ref).unwrap().causes().preferred();
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Property, found: Some(node::Type::Layout), because }, source.map(Cause::Explicit)))
+			}
+			Some(Node::Unknown(_)) => {
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Property, found: None, because: None }, source.map(Cause::Explicit)))
 			}
 		}
 	}
@@ -183,17 +209,39 @@ impl Context {
 		match self.nodes.get_mut(id) {
 			Some(Node::Type(ty_ref)) => {
 				let because = self.types.get(*ty_ref).unwrap().causes().preferred();
-				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Layout, found: node::Type::Type, because }, cause))
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Layout, found: Some(node::Type::Type), because }, cause))
 			},
 			Some(Node::Property(prop_ref)) => {
 				let because = self.properties.get(*prop_ref).unwrap().causes().preferred();
-				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Layout, found: node::Type::Property, because }, cause))
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Layout, found: Some(node::Type::Property), because }, cause))
 			},
 			Some(Node::Layout(layout_ref)) => Ok(*layout_ref),
 			_ => {
 				let layout_ref = self.layouts.insert(layout::Definition::new(id, cause));
 				self.nodes.insert(id, Node::Layout(layout_ref));
 				Ok(layout_ref)
+			}
+		}
+	}
+
+	/// Requires the given layout to be declared.
+	/// 
+	/// Returns an error if no node with the given `id` is declared,
+	/// or if it is not a layout.
+	pub fn require_layout(&self, id: Id, source: Option<Source>) -> Result<Ref<layout::Definition>, Caused<Error>> {
+		match self.get(id) {
+			None => Err(Caused::new(Error::UnknownNode { id, expected_ty: Some(node::Type::Layout) }, source.map(Cause::Explicit))),
+			Some(Node::Type(ty_ref)) => {
+				let because = self.types.get(*ty_ref).unwrap().causes().preferred();
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Layout, found: Some(node::Type::Type), because }, source.map(Cause::Explicit)))
+			},
+			Some(Node::Property(prop_ref)) => {
+				let because = self.properties.get(*prop_ref).unwrap().causes().preferred();
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Layout, found: Some(node::Type::Property), because }, source.map(Cause::Explicit)))
+			},
+			Some(Node::Layout(layout_ref)) => Ok(*layout_ref),
+			Some(Node::Unknown(_)) => {
+				Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Layout, found: None, because: None }, source.map(Cause::Explicit)))
 			}
 		}
 	}

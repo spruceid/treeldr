@@ -1,13 +1,14 @@
 use crate::{
 	Feature,
-	Context,
+	Model,
 	Ref,
 	Id,
 	source,
 	Cause,
 	Caused,
 	node,
-	ty
+	ty,
+	layout
 };
 
 /// Error with diagnostic reporting support.
@@ -37,7 +38,7 @@ pub enum Error {
 	InvalidNodeType {
 		id: Id,
 		expected: node::Type,
-		found: node::Type,
+		found: Option<node::Type>,
 		because: Option<Cause>
 	},
 	UnknownNode {
@@ -53,20 +54,27 @@ pub enum Error {
 		expected: Ref<ty::Definition>,
 		found: Ref<ty::Definition>,
 		because: Option<Cause>
-	}
+	},
+	LayoutMismatch(layout::Mismatch)
 }
 
 impl Caused<Error> {
-	pub fn with_context<'c>(&self, context: &'c Context) -> WithContext<'c, '_> {
-		WithContext(context, self)
+	pub fn with_model<'c>(&self, context: &'c Model) -> WithModel<'c, '_> {
+		WithModel(context, self)
+	}
+}
+
+impl From<Caused<layout::Mismatch>> for Caused<Error> {
+	fn from(e: Caused<layout::Mismatch>) -> Self {
+		e.map(Error::LayoutMismatch)
 	}
 }
 
 /// Caused error with contextual information.
-pub struct WithContext<'c, 'a>(&'c Context, &'a Caused<Error>);
+pub struct WithModel<'c, 'a>(&'c Model, &'a Caused<Error>);
 
-impl<'c, 'a> WithContext<'c, 'a> {
-	fn context(&self) -> &'c Context {
+impl<'c, 'a> WithModel<'c, 'a> {
+	fn context(&self) -> &'c Model {
 		self.0
 	}
 
@@ -94,7 +102,7 @@ impl node::Type {
 	}
 }
 
-// impl<'c, 'a> fmt::Display for WithContext<'c, 'a> {
+// impl<'c, 'a> fmt::Display for WithModel<'c, 'a> {
 // 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 // 		match self.error().inner() {
 // 			Error::Unimplemented(feature) => write!(f, "unimplemented feature `{}`", feature),
@@ -113,7 +121,7 @@ impl node::Type {
 // 	}
 // }
 
-impl<'c, 'a> Diagnose for WithContext<'c, 'a> {
+impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 	fn message(&self) -> String {
 		match self.error().inner() {
 			Error::Unimplemented(feature) => format!("unimplemented feature `{}`.", feature),
@@ -133,6 +141,13 @@ impl<'c, 'a> Diagnose for WithContext<'c, 'a> {
 			}
 			Error::LayoutTypeMismatch { .. } => {
 				format!("layout type mismatch")
+			}
+			Error::LayoutMismatch(e) => match e {
+				layout::Mismatch::FieldProperty { .. } => format!("field property mismatch"),
+				layout::Mismatch::FieldName { .. } => format!("field name mismatch"),
+				layout::Mismatch::FieldLayout { .. } => format!("field layout mismatch"),
+				layout::Mismatch::MissingField { name, .. } => format!("missing field `{}`", name),
+				layout::Mismatch::AdditionalField { name, .. } => format!("unexpected field `{}`", name)
 			}
 		}
 	}
@@ -158,14 +173,16 @@ impl<'c, 'a> Diagnose for WithContext<'c, 'a> {
 					labels.push(Label::primary(source.file(), source.span()).with_message(message))
 				}
 
-				if let Some(cause) = because {
-					let message = match cause {
-						Cause::Explicit(_) => format!("already declared as {} here", found.en_determiner_name()),
-						Cause::Implicit(_) => format!("already implicitly declared as {} here", found.en_determiner_name())
-					};
-
-					let source = cause.source();
-					labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+				if let Some(found) = found {
+					if let Some(cause) = because {
+						let message = match cause {
+							Cause::Explicit(_) => format!("already declared as {} here", found.en_determiner_name()),
+							Cause::Implicit(_) => format!("already implicitly declared as {} here", found.en_determiner_name())
+						};
+	
+						let source = cause.source();
+						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+					}
 				}
 			}
 			Error::UnknownNode { .. } => {
@@ -195,6 +212,58 @@ impl<'c, 'a> Diagnose for WithContext<'c, 'a> {
 					labels.push(Label::secondary(source.file(), source.span()).with_message(message))
 				}
 			}
+			Error::LayoutMismatch(e) => match e {
+				layout::Mismatch::FieldProperty { because, .. } => {
+					if let Some(cause) = because {
+						let message = match cause {
+							Cause::Explicit(_) => format!("expected property is declared here"),
+							Cause::Implicit(_) => format!("expected property is implicitly declared here")
+						};
+	
+						let source = cause.source();
+						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+					}
+				},
+				layout::Mismatch::FieldName { because, .. } => {
+					if let Some(cause) = because {
+						let message = match cause {
+							Cause::Explicit(_) => format!("expected name is declared here"),
+							Cause::Implicit(_) => format!("expected name is implicitly declared here")
+						};
+	
+						let source = cause.source();
+						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+					}
+				},
+				layout::Mismatch::FieldLayout { because, .. } => {
+					if let Some(cause) = because {
+						let message = match cause {
+							Cause::Explicit(_) => format!("expected layout is declared here"),
+							Cause::Implicit(_) => format!("expected layout is implicitly declared here")
+						};
+	
+						let source = cause.source();
+						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+					}
+				},
+				layout::Mismatch::MissingField { because, .. } => {
+					if let Some(cause) = because {
+						let message = match cause {
+							Cause::Explicit(_) => format!("missing field is declared here"),
+							Cause::Implicit(_) => format!("missing field is implicitly declared here")
+						};
+	
+						let source = cause.source();
+						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+					}
+				},
+				layout::Mismatch::AdditionalField { because, .. } => {
+					if let Some(cause) = because {
+						let source = cause.source();
+						labels.push(Label::secondary(source.file(), source.span()).with_message(format!("this field is not declared here")))
+					}
+				}
+			}
 		}
 
 		labels
@@ -210,13 +279,17 @@ impl<'c, 'a> Diagnose for WithContext<'c, 'a> {
 					notes.push(format!("<{}> should be {}", iri, expected.en_determiner_name()))
 				}
 
-				if because.is_none() {
-					notes.push(format!("...but <{}> is {}", iri, found.en_determiner_name()))
+				if let Some(found) = found {
+					if because.is_none() {
+						notes.push(format!("...but is {}", found.en_determiner_name()))
+					}
+				} else {
+					notes.push(format!("...but is unknown."))
 				}
 			}
 			Error::TypeMismatch { expected, found, .. } => {
-				notes.push(format!("expected type `{}`", expected.with_context(self.context())));
-				notes.push(format!("   found type `{}`", found.with_context(self.context())))
+				notes.push(format!("expected type `{}`", expected.with_model(self.context())));
+				notes.push(format!("   found type `{}`", found.with_model(self.context())))
 			},
 			Error::LayoutTypeMismatch { expected, found, .. } => {
 				let expected_id = self.context().vocabulary().get(self.context().types().get(*expected).unwrap().id()).unwrap();
@@ -224,6 +297,23 @@ impl<'c, 'a> Diagnose for WithContext<'c, 'a> {
 				notes.push(format!("expected type `{}`", expected_id));
 				notes.push(format!("   found type `{}`", found_id))
 			},
+			Error::LayoutMismatch(e) => match e {
+				layout::Mismatch::FieldProperty { expected, found, .. } => {
+					let expected_id = self.context().vocabulary().get(self.context().properties().get(*expected).unwrap().id()).unwrap();
+					let found_id = self.context().vocabulary().get(self.context().properties().get(*found).unwrap().id()).unwrap();
+					notes.push(format!("expected property `{}`", expected_id));
+					notes.push(format!("   found property `{}`", found_id))
+				}
+				layout::Mismatch::FieldName { expected, found, .. } => {
+					notes.push(format!("expected `{}`", expected));
+					notes.push(format!("   found `{}`", found))
+				}
+				layout::Mismatch::FieldLayout { expected, found, .. } => {
+					notes.push(format!("expected `{}`", expected.with_model(self.context())));
+					notes.push(format!("   found `{}`", found.with_model(self.context())))
+				},
+				_ => ()
+			}
 			_ => ()
 		}
 

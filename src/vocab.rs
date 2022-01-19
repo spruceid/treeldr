@@ -26,6 +26,16 @@ impl Vocabulary {
 		Self::default()
 	}
 
+	/// Returns the `Id` of the given IRI, if any.
+	pub fn id(&self, iri: &IriBuf) -> Option<Id> {
+		self.iri_to_id.get(iri).cloned()
+	}
+
+	/// Returns the IRI of the given `Id`, if any.
+	pub fn get(&self, id: Id) -> Option<Iri> {
+		self.id_to_iri.get(id.index()).map(|iri| iri.as_iri())
+	}
+
 	/// Adds a new IRI to the vocabulary and returns its `Id`.
 	///
 	/// If the IRI is already in the vocabulary, its `Id` is returned
@@ -41,11 +51,6 @@ impl Vocabulary {
 				id
 			}
 		}
-	}
-
-	/// Returns the IRI of the given `Id`, if any.
-	pub fn get(&self, id: Id) -> Option<Iri> {
-		self.id_to_iri.get(id.index()).map(|iri| iri.as_iri())
 	}
 }
 

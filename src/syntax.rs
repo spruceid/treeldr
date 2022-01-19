@@ -55,9 +55,17 @@ pub struct LayoutDefinition {
 
 pub struct FieldDefinition {
 	pub id: Loc<Id>,
-	pub layout: Option<Loc<LayoutExpr>>,
-	pub alias: Option<Loc<Id>>,
+	pub layout: Loc<LayoutExpr>,
+	pub alias: Option<Loc<Alias>>,
 	pub doc: Documentation
+}
+
+pub struct Alias(String);
+
+impl Alias {
+	pub fn as_str(&self) -> &str {
+		&self.0
+	}
 }
 
 pub struct LayoutExpr {

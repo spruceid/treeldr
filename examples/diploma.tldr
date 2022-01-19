@@ -1,4 +1,6 @@
+/// Certificate or deed issued by an educational institution.
 type Diploma {
+	/// Issuer.
 	department : Department
 }
 
@@ -7,10 +9,11 @@ type Department {
 	// ...
 }
 
-layout DiplomaView for Diploma {
+layout DiplomaLayout for Diploma {
 	// ...
+	department : DepartmentLayout
 }
 
-layout DiplomaView for Department {
+layout DepartmentLayout for Diploma {
 	// ...
 }

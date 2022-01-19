@@ -1,17 +1,22 @@
 use crate::{
 	Error,
+	Ref,
 	Id,
 	Cause,
 	Caused,
 	source::Causes,
+	Documentation,
 	ty
 };
+use std::collections::HashMap;
 
 /// Property definition.
 pub struct Definition {
 	id: Id,
 	causes: Causes,
-	ty: Option<Type>
+	domain: HashMap<Ref<ty::Definition>, Causes>,
+	ty: Option<Type>,
+	doc: Documentation
 }
 
 impl Definition {
@@ -19,7 +24,9 @@ impl Definition {
 		Self {
 			id,
 			causes: causes.into(),
-			ty: None
+			domain: HashMap::new(),
+			ty: None,
+			doc: Documentation::default()
 		}
 	}
 
@@ -34,6 +41,32 @@ impl Definition {
 
 	pub fn ty(&self) -> Option<&Type> {
 		self.ty.as_ref()
+	}
+
+	pub fn documentation(&self) -> &Documentation {
+		&self.doc
+	}
+
+	pub fn documentation_mut(&mut self) -> &mut Documentation {
+		&mut self.doc
+	}
+
+	pub fn set_documentation(&mut self, doc: Documentation) {
+		self.doc = doc
+	}
+
+	pub fn declare_domain(&mut self, ty_ref: Ref<ty::Definition>, cause: Option<Cause>) {
+		use std::collections::hash_map::Entry;
+		match self.domain.entry(ty_ref) {
+			Entry::Vacant(entry) => {
+				entry.insert(cause.into());
+			},
+			Entry::Occupied(mut entry) => {
+				if let Some(cause) = cause {
+					entry.get_mut().add(cause)
+				}
+			}
+		}
 	}
 
 	pub fn declare_type(&mut self, ty_expr: ty::Expr, cause: Option<Cause>) -> Result<(), Caused<Error>> {

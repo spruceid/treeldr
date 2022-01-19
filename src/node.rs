@@ -1,5 +1,5 @@
 use crate::{
-	Context,
+	Model,
 	Id,
 	Ref,
 	ty,
@@ -32,7 +32,7 @@ impl Node {
 		}
 	}
 
-	pub fn id(&self, context: &Context) -> Id {
+	pub fn id(&self, context: &Model) -> Id {
 		match self {
 			Self::Type(r) => context.types().get(*r).expect("undefined type").id(),
 			Self::Property(r) => context.properties().get(*r).expect("undefined property").id(),
