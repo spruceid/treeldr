@@ -284,6 +284,10 @@ impl Cause {
 			Self::Implicit(s) => *s
 		}
 	}
+
+	pub fn into_implicit(self) -> Self {
+		Self::Implicit(self.source())
+	}
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -303,12 +307,30 @@ impl<T> Caused<T> {
 		&self.t
 	}
 
+	pub fn inner_mut(&mut self) -> &mut T {
+		&mut self.t
+	}
+
 	pub fn cause(&self) -> Option<Cause> {
 		self.cause
 	}
 
 	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Caused<U> {
 		Caused::new(f(self.t), self.cause)
+	}
+}
+
+impl<T> Deref for Caused<T> {
+	type Target = T;
+
+	fn deref(&self) -> &T {
+		self.inner()
+	}
+}
+
+impl<T> DerefMut for Caused<T> {
+	fn deref_mut(&mut self) -> &mut T {
+		self.inner_mut()
 	}
 }
 
@@ -330,6 +352,16 @@ impl Causes {
 	/// Picks the preferred cause, unless there are no causes.
 	pub fn preferred(&self) -> Option<Cause> {
 		self.set.iter().next().cloned()
+	}
+
+	pub fn iter(&self) -> impl '_ + Iterator<Item=Cause> {
+		self.set.iter().cloned()
+	}
+
+	pub fn map(&self, f: impl Fn(Cause) -> Cause) -> Self {
+		Self {
+			set: self.set.iter().cloned().map(f).collect()
+		}
 	}
 }
 

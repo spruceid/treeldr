@@ -38,8 +38,7 @@ pub enum Error {
 	InvalidNodeType {
 		id: Id,
 		expected: node::Type,
-		found: Option<node::Type>,
-		because: Option<Cause>
+		found: node::CausedTypes
 	},
 	UnknownNode {
 		id: Id,
@@ -162,22 +161,22 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 					labels.push(Label::primary(source.file(), source.span()).with_message("feature required here"))
 				}
 			},
-			Error::InvalidNodeType { expected, found, because, .. } => {
+			Error::InvalidNodeType { expected, found, .. } => {
 				if let Some(cause) = self.error().cause() {
 					let message = match cause {
-						Cause::Explicit(_) => format!("declared as {} here", expected.en_determiner_name()),
-						Cause::Implicit(_) => format!("implicitly declared as {} here", expected.en_determiner_name())
+						Cause::Explicit(_) => format!("used as {} here", expected.en_determiner_name()),
+						Cause::Implicit(_) => format!("implicitly used as {} here", expected.en_determiner_name())
 					};
 
 					let source = cause.source();
 					labels.push(Label::primary(source.file(), source.span()).with_message(message))
 				}
 
-				if let Some(found) = found {
-					if let Some(cause) = because {
+				for ty in found {
+					if let Some(cause) = ty.cause() {
 						let message = match cause {
-							Cause::Explicit(_) => format!("already declared as {} here", found.en_determiner_name()),
-							Cause::Implicit(_) => format!("already implicitly declared as {} here", found.en_determiner_name())
+							Cause::Explicit(_) => format!("already declared as {} here", ty.en_determiner_name()),
+							Cause::Implicit(_) => format!("already implicitly declared as {} here", ty.en_determiner_name())
 						};
 	
 						let source = cause.source();
@@ -273,18 +272,24 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 		let mut notes = Vec::new();
 
 		match self.error().inner() {
-			Error::InvalidNodeType { id, expected, found, because, .. } => {
+			Error::InvalidNodeType { id, expected, found, .. } => {
 				let iri = self.context().vocabulary().get(*id).unwrap();
 				if self.error().cause().is_none() {
 					notes.push(format!("<{}> should be {}", iri, expected.en_determiner_name()))
 				}
 
-				if let Some(found) = found {
-					if because.is_none() {
-						notes.push(format!("...but is {}", found.en_determiner_name()))
-					}
-				} else {
+				if found.is_empty() {
 					notes.push(format!("...but is unknown."))
+				} else {
+					if found.iter().any(|ty| ty.cause().is_none()) {
+						for (i, ty) in found.iter().enumerate() {
+							if i == 0 {
+								notes.push(format!("...but is {}", ty.en_determiner_name()))
+							} else {
+								notes.push(format!("...and {}", ty.en_determiner_name()))
+							}
+						}
+					}
 				}
 			}
 			Error::TypeMismatch { expected, found, .. } => {

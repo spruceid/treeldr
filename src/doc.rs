@@ -1,4 +1,4 @@
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Documentation {
 	short: Option<String>,
 	long: Option<String>

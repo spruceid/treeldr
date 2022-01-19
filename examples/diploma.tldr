@@ -8,12 +8,3 @@ type Diploma {
 type Department {
 	// ...
 }
-
-layout DiplomaLayout for Diploma {
-	// ...
-	department : DepartmentLayout
-}
-
-layout DepartmentLayout for Diploma {
-	// ...
-}

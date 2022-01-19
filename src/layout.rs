@@ -98,6 +98,10 @@ impl Definition {
 			}
 		}
 	}
+
+	pub fn set_fields(&mut self, fields: Vec<Field>, causes: impl Into<Causes>) {
+		self.fields = Some(Fields::new(fields, causes))
+	}
 }
 
 /// Layout mismatch error.

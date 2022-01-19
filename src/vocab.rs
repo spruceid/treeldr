@@ -74,6 +74,18 @@ impl<T> Map<T> {
 		self.data.get_mut(id.index()).and_then(Option::as_mut)
 	}
 
+	pub fn iter(&self) -> Iter<T> {
+		Iter {
+			inner: self.data.iter().enumerate()
+		}
+	}
+
+	pub fn iter_mut(&mut self) -> IterMut<T> {
+		IterMut {
+			inner: self.data.iter_mut().enumerate()
+		}
+	}
+
 	fn reserve(&mut self, id: Id) {
 		let len = id.index() + 1;
 		if self.data.len() < len {
@@ -92,5 +104,41 @@ impl<T> Map<T> {
 impl<T> Default for Map<T> {
 	fn default() -> Self {
 		Self::new()
+	}
+}
+
+pub struct Iter<'a, T> {
+	inner: std::iter::Enumerate<std::slice::Iter<'a, Option<T>>>
+}
+
+impl<'a, T> Iterator for Iter<'a, T> {
+	type Item = (Id, &'a T);
+
+	fn next(&mut self) -> Option<Self::Item> {
+		loop {
+			match self.inner.next() {
+				Some((_, None)) => (),
+				Some((i, Some(t))) => break Some((Id(i), t)),
+				None => break None
+			}
+		}
+	}
+}
+
+pub struct IterMut<'a, T> {
+	inner: std::iter::Enumerate<std::slice::IterMut<'a, Option<T>>>
+}
+
+impl<'a, T> Iterator for IterMut<'a, T> {
+	type Item = (Id, &'a mut T);
+
+	fn next(&mut self) -> Option<Self::Item> {
+		loop {
+			match self.inner.next() {
+				Some((_, None)) => (),
+				Some((i, Some(t))) => break Some((Id(i), t)),
+				None => break None
+			}
+		}
 	}
 }
