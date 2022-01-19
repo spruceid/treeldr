@@ -1,6 +1,8 @@
 [package]
 name = "treeldr"
 version = "0.1.0"
+author = ["Spruce Systems Inc."]
+description = "Schema definition language."
 edition = "2021"
 
 [features]
@@ -11,12 +13,12 @@ bin = [
 
 [dependencies]
 iref = "*"
-log = "^0.4"
+log = "0.4"
 derivative = "*"
 codespan-reporting = "*"
 
-stderrlog = { version = "^0.5", optional = true }
-clap = { version = "^2.33", features = ["yaml"], optional = true }
+stderrlog = { version = "0.5", optional = true }
+clap = { version = "3.0", features = ["derive"], optional = true }
 
 [[bin]]
 name = "treeldr"

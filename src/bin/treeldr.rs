@@ -1,4 +1,4 @@
-use clap::{self, load_yaml};
+use clap::Parser;
 use codespan_reporting::{
 	term::{
 		self,
@@ -6,25 +6,35 @@ use codespan_reporting::{
 	},
 };
 use iref::IriBuf;
-use std::{convert::Infallible, fs, io};
+use std::{convert::Infallible, fs, io, path::PathBuf};
 use treeldr::{source, syntax, syntax::Parse, Compile, error::Diagnose};
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+	/// Base IRI.
+	base_iri: IriBuf,
+
+	/// Input TreeLDR file.
+	#[clap(name="FILE")]
+	filename: PathBuf,
+
+	/// Sets the level of verbosity.
+	#[clap(short, long="verbose", parse(from_occurrences))]
+	verbosity: usize,
+}
 
 fn main() -> io::Result<()> {
 	// Parse options.
-	let yaml = load_yaml!("treeldr.yml");
-	let matches = clap::App::from_yaml(yaml).get_matches();
+	let args = Args::parse();
 
 	// Init logger.
-	let verbosity = matches.occurrences_of("verbose") as usize;
-	stderrlog::new().verbosity(verbosity).init().unwrap();
+	stderrlog::new().verbosity(args.verbosity).init().unwrap();
 
-	let base_iri = IriBuf::new(matches.value_of("BASE_IRI").unwrap()).expect("invalid base IRI");
-
-	let filename = matches.value_of("FILE").unwrap();
-	let content = fs::read_to_string(filename)?;
+	let content = fs::read_to_string(&args.filename)?;
 
 	let mut files = source::Files::new();
-	let (source_id, file) = files.add(source::Path::Local(filename.into()), content);
+	let (source_id, file) = files.add(source::Path::Local(args.filename), content);
 
 	let mut lexer =
 		syntax::Lexer::<Infallible, _>::new(source_id, file.buffer().chars().map(Result::Ok))
@@ -38,7 +48,7 @@ fn main() -> io::Result<()> {
 	match syntax::Document::parse(source_id, &mut lexer, 0) {
 		Ok(doc) => {
 			log::debug!("parsing succeeded.");
-			let mut context = treeldr::Context::new(base_iri);
+			let mut context = treeldr::Context::new(args.base_iri);
 			let mut env = treeldr::compile::Environment::new(&mut context);
 			match doc.compile(&mut env) {
 				Ok(_) => {
