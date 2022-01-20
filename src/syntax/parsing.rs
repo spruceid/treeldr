@@ -393,14 +393,10 @@ impl Parse for Alias {
 	) -> Result<Loc<Self>, Loc<Error<E>>> {
 		let (token, source) = consume_expected_token(file, lexer, start, || vec![TokenKind::Id])?.into_parts();
 		match token {
-			Token::Id(Id::IriRef(iri_ref)) => {
-				if iri_ref.scheme().is_none() && iri_ref.authority().is_none() && iri_ref.query().is_none() && iri_ref.fragment().is_none() && iri_ref.path().len() == 1 && iri_ref.path().is_closed() {
-					Ok(Loc::new(Alias(iri_ref.path().as_str().to_owned()), source))
-				} else {
-					Err(Loc::new(Error::InvalidAlias(Id::IriRef(iri_ref)), source))
-				}
+			Token::Id(Id::Name(alias)) => {
+				Ok(Loc::new(Alias(alias), source))
 			}
-			Token::Id(id @ Id::Compact(_, _)) => Err(Loc::new(Error::InvalidAlias(id), source)),
+			Token::Id(id) => Err(Loc::new(Error::InvalidAlias(id), source)),
 			unexpected => Err(Loc::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id]), source)),
 		}
 	}
