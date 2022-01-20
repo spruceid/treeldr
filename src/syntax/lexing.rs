@@ -6,6 +6,7 @@ use std::{fmt, iter::Peekable};
 /// Identifier.
 #[derive(Clone, Debug)]
 pub enum Id {
+	Name(String),
 	IriRef(IriRefBuf),
 	Compact(String, IriRefBuf),
 }
@@ -13,6 +14,7 @@ pub enum Id {
 impl fmt::Display for Id {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
+			Self::Name(name) => name.fmt(f),
 			Self::IriRef(iri) => iri.fmt(f),
 			Self::Compact(prefix, suffix) => write!(f, "{}:{}", prefix, suffix),
 		}
@@ -319,16 +321,13 @@ fn skip_whitespaces<E, C: Iterator<Item = Result<char, E>>>(
 	Ok(None)
 }
 
-fn next_id<E, C: Iterator<Item = Result<char, E>>>(
+fn next_name<E, C: Iterator<Item = Result<char, E>>>(
 	lexer: &mut Lexer<E, C>,
 ) -> Result<Loc<Token>, Loc<Error<E>>> {
 	let mut id = String::new();
-	// let mut is_name = true;
 
 	while let Some(c) = peek_char(lexer)? {
-		// is_name &= c.is_alphabetic() || c.is_digit(10);
-
-		if !c.is_whitespace() && !c.is_control() {
+		if c.is_alphanumeric() {
 			id.push(consume_char(lexer)?.unwrap())
 		} else {
 			break;
@@ -344,48 +343,61 @@ fn next_id<E, C: Iterator<Item = Result<char, E>>>(
 		"as" => Token::Keyword(Keyword::As),
 		"for" => Token::Keyword(Keyword::For),
 		_ => {
-			// if is_name {
-			// 	return Ok(Loc::new(
-			// 		Token::Id(Id::Name(id)),
-			// 		Source::new(lexer.file, span),
-			// 	));
-			// }
+			Token::Id(Id::Name(id))
+		}
+	};
 
-			// Is it a compact IRI?
-			if let Some((prefix, suffix)) = id.split_once(':') {
-				if !suffix.starts_with("//") {
-					let suffix = match IriRef::new(suffix) {
-						Ok(iri_ref) => iri_ref.to_owned(),
-						Err(_) => {
-							return Err(Loc::new(
-								Error::InvalidId(id),
-								Source::new(lexer.file, span),
-							))
-						}
-					};
+	Ok(Loc::new(token, Source::new(lexer.file, span)))
+}
 
-					return Ok(Loc::new(
-						Token::Id(Id::Compact(prefix.to_string(), suffix)),
-						Source::new(lexer.file, span),
-					));
-				}
-			}
+fn next_iri<E, C: Iterator<Item = Result<char, E>>>(
+	lexer: &mut Lexer<E, C>,
+) -> Result<Loc<Token>, Loc<Error<E>>> {
+	let mut iri = String::new();
+	consume_char(lexer)?;
 
-			let id = match id.try_into() {
-				Ok(iri_ref) => iri_ref,
-				Err((_, id)) => {
+	while let Some(c) = consume_char(lexer)? {
+		if c == '>' {
+			break
+		} else {
+			iri.push(c)
+		}
+	}
+
+	let span = lexer.span;
+	lexer.span.clear();
+
+	// Is it a compact IRI?
+	if let Some((prefix, suffix)) = iri.split_once(':') {
+		if !suffix.starts_with("//") {
+			let suffix = match IriRef::new(suffix) {
+				Ok(iri_ref) => iri_ref.to_owned(),
+				Err(_) => {
 					return Err(Loc::new(
-						Error::InvalidId(id),
+						Error::InvalidId(iri),
 						Source::new(lexer.file, span),
 					))
 				}
 			};
 
-			Token::Id(Id::IriRef(id))
+			return Ok(Loc::new(
+				Token::Id(Id::Compact(prefix.to_string(), suffix)),
+				Source::new(lexer.file, span),
+			));
+		}
+	}
+
+	let iri = match iri.try_into() {
+		Ok(iri_ref) => iri_ref,
+		Err((_, id)) => {
+			return Err(Loc::new(
+				Error::InvalidId(id),
+				Source::new(lexer.file, span),
+			))
 		}
 	};
 
-	Ok(Loc::new(token, Source::new(lexer.file, span)))
+	Ok(Loc::new(Token::Id(Id::IriRef(iri)), Source::new(lexer.file, span)))
 }
 
 fn next_block<E, C: Iterator<Item = Result<char, E>>>(
@@ -423,7 +435,8 @@ fn next_token<E, C: Iterator<Item = Result<char, E>>>(
 		Some(token) => Ok(Some(token)),
 		None => {
 			match peek_char(lexer)? {
-				Some(c) if c.is_alphabetic() => Ok(Some(next_id(lexer)?)),
+				Some('<') => Ok(Some(next_iri(lexer)?)),
+				Some(c) if c.is_alphabetic() => Ok(Some(next_name(lexer)?)),
 				Some(c) => match Delimiter::from_start(c) {
 					Some(delimiter) => next_block(lexer, delimiter).map(Option::Some),
 					None => {

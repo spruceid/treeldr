@@ -4,6 +4,7 @@ use crate::{
 	Id,
 	Cause,
 	Caused,
+	WithCauses,
 	source::Causes,
 	Documentation,
 	ty,
@@ -12,13 +13,49 @@ use crate::{
 };
 use std::fmt;
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum Type {
+	Struct,
+	Native(Native)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum Native {
+	Boolean,
+	Integer,
+	PositiveInteger,
+	Float,
+	Double,
+	String,
+	Time,
+	Date,
+	DateTime,
+	Iri,
+	Uri,
+	Url
+}
+
 /// Layout definition.
 pub struct Definition {
 	id: Id,
-	ty: Option<Type>,
+	ty: Option<WithCauses<Ref<ty::Definition>>>,
 	causes: Causes,
-	fields: Option<Fields>,
-	doc: Documentation
+	doc: Documentation,
+	desc: Option<WithCauses<Description>>,
+}
+
+pub enum Description {
+	Struct(Fields),
+	Native(Native)
+}
+
+impl Description {
+	pub fn ty(&self) -> Type {
+		match self {
+			Self::Struct(_) => Type::Struct,
+			Self::Native(n) => Type::Native(*n)
+		}
+	}
 }
 
 impl Definition {
@@ -27,13 +64,13 @@ impl Definition {
 			id,
 			ty: None,
 			causes: causes.into(),
-			fields: None,
-			doc: Documentation::default()
+			doc: Documentation::default(),
+			desc: None
 		}
 	}
 
 	/// Type for which the layout is defined.
-	pub fn ty(&self) -> Option<&Type> {
+	pub fn ty(&self) -> Option<&WithCauses<Ref<ty::Definition>>> {
 		self.ty.as_ref()
 	}
 
@@ -46,8 +83,8 @@ impl Definition {
 		&self.causes
 	}
 
-	pub fn fields(&self) -> Option<&Fields> {
-		self.fields.as_ref()
+	pub fn description(&self) -> Option<&WithCauses<Description>> {
+		self.desc.as_ref()
 	}
 
 	pub fn documentation(&self) -> &Documentation {
@@ -65,7 +102,7 @@ impl Definition {
 	pub fn preferred_documentation<'a>(&'a self, model: &'a crate::Model) -> &'a Documentation {
 		if self.doc.is_empty() {
 			match &self.ty {
-				Some(ty) => model.types().get(ty.reference()).unwrap().documentation(),
+				Some(ty) => model.types().get(*ty.inner()).unwrap().documentation(),
 				None => &self.doc
 			}
 		} else {
@@ -77,36 +114,62 @@ impl Definition {
 	pub fn declare_type(&mut self, ty_ref: Ref<ty::Definition>, cause: Option<Cause>) -> Result<(), Caused<Error>> {
 		match &self.ty {
 			Some(expected_ty) => {
-				if expected_ty.reference() != ty_ref {
-					return Err(Caused::new(Error::LayoutTypeMismatch { expected: expected_ty.reference(), found: ty_ref, because: expected_ty.causes().preferred() }, cause))
+				if *expected_ty.inner() != ty_ref {
+					return Err(Caused::new(Error::LayoutTypeMismatch { expected: *expected_ty.inner(), found: ty_ref, because: expected_ty.causes().preferred() }, cause))
 				}
 			},
 			None => {
-				self.ty = Some(Type::new(ty_ref, cause));
+				self.ty = Some(WithCauses::new(ty_ref, cause));
 			}
 		}
 
 		Ok(())
 	}
 
-	pub fn declare_fields(&mut self, fields: Vec<Field>, cause: Option<Cause>) -> Result<(), Caused<Mismatch>> {
-		match &mut self.fields {
-			Some(current_fields) => current_fields.add_causes(&fields, cause),
+	pub fn declare_native(&mut self, native: Native, cause: Option<Cause>) -> Result<(), Caused<Mismatch>> {
+		match &mut self.desc {
+			Some(desc) => {
+				match desc.inner_mut() {
+					Description::Native(n) if *n == native => Ok(()),
+					_ => Err(Caused::new(Mismatch::Type { expected: desc.ty(), found: Type::Struct, because: desc.causes().preferred() }, cause))
+				}
+			}
 			None => {
-				self.fields = Some(Fields::new(fields, cause));
+				self.desc = Some(WithCauses::new(Description::Native(native), cause));
+				Ok(())
+			}
+		}
+	}
+
+	pub fn declare_fields(&mut self, fields: Vec<Field>, cause: Option<Cause>) -> Result<(), Caused<Mismatch>> {
+		match &mut self.desc {
+			Some(desc) => {
+				let desc_cause = desc.causes().preferred();
+				match desc.inner_mut() {
+					Description::Struct(current_fields) => current_fields.add_causes(desc_cause, &fields, cause),
+					_ => Err(Caused::new(Mismatch::Type { expected: desc.ty(), found: Type::Struct, because: desc.causes().preferred() }, cause))
+				}
+			}
+			None => {
+				self.desc = Some(WithCauses::new(Description::Struct(Fields::new(fields)), cause));
 				Ok(())
 			}
 		}
 	}
 
 	pub fn set_fields(&mut self, fields: Vec<Field>, causes: impl Into<Causes>) {
-		self.fields = Some(Fields::new(fields, causes))
+		self.desc = Some(WithCauses::new(Description::Struct(Fields::new(fields)), causes))
 	}
 }
 
 /// Layout mismatch error.
 #[derive(Debug)]
 pub enum Mismatch {
+	Type {
+		expected: Type,
+		found: Type,
+		because: Option<Cause>
+	},
 	FieldProperty {
 		expected: Ref<prop::Definition>,
 		found: Ref<prop::Definition>,
@@ -134,15 +197,13 @@ pub enum Mismatch {
 
 /// Layout fields.
 pub struct Fields {
-	fields: Vec<Field>,
-	causes: Causes
+	fields: Vec<Field>
 }
 
 impl Fields {
-	pub fn new(fields: Vec<Field>, causes: impl Into<Causes>) -> Self {
+	pub fn new(fields: Vec<Field>) -> Self {
 		Self {
-			fields,
-			causes: causes.into()
+			fields
 		}
 	}
 
@@ -154,7 +215,7 @@ impl Fields {
 		self.fields.iter()
 	}
 	
-	pub fn add_causes(&mut self, fields: &[Field], cause: Option<Cause>) -> Result<(), Caused<Mismatch>> {
+	pub fn add_causes(&mut self, self_cause: Option<Cause>, fields: &[Field], cause: Option<Cause>) -> Result<(), Caused<Mismatch>> {
 		for (a, b) in self.fields.iter().zip(fields) {
 			if a.property() != b.property() {
 				return Err(Caused::new(
@@ -205,7 +266,7 @@ impl Fields {
 			return Err(Caused::new(
 				Mismatch::AdditionalField {
 					name: field.name().to_owned(),
-					because: self.causes.preferred()
+					because: self_cause
 				},
 				field.causes().preferred()
 			))
@@ -292,42 +353,6 @@ impl Field {
 		} else {
 			&self.doc
 		}
-	}
-}
-
-pub struct Type {
-	ty_ref: Ref<ty::Definition>,
-	causes: Causes
-}
-
-impl Type {
-	pub fn new(ty_ref: Ref<ty::Definition>, causes: impl Into<Causes>) -> Self {
-		Self {
-			ty_ref,
-			causes: causes.into()
-		}
-	}
-
-	pub fn reference(&self) -> Ref<ty::Definition> {
-		self.ty_ref
-	}
-
-	pub fn causes(&self) -> &Causes {
-		&self.causes
-	}
-
-	pub fn with_model<'c>(&self, context: &'c crate::Model) -> TypeWithContext<'c, '_> {
-		TypeWithContext(context, self)
-	}
-}
-
-pub struct TypeWithContext<'c, 't>(&'c crate::Model, &'t Type);
-
-impl<'c, 't> fmt::Display for TypeWithContext<'c, 't> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let id = self.0.types().get(self.1.reference()).unwrap().id();
-		let iri = self.0.vocabulary().get(id).unwrap();
-		iri.fmt(f)
 	}
 }
 

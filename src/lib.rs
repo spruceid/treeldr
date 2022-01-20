@@ -16,7 +16,7 @@ pub mod compile;
 pub use feature::Feature;
 pub use error::Error;
 pub use doc::Documentation;
-pub use source::{Source, Cause, Caused};
+pub use source::{Source, Cause, Caused, WithCauses};
 pub use vocab::{Vocabulary, Id};
 pub use collection::{Collection, Ref};
 pub use node::Node;
@@ -54,6 +54,28 @@ impl Model {
 			properties: Collection::new(),
 			layouts: Collection::new()
 		}
+	}
+
+	pub fn define_native_type(&mut self, iri: IriBuf, layout: layout::Native) -> Result<(), Caused<layout::Mismatch>> {
+		let id = self.vocabulary_mut().insert(iri);
+		self.declare_type(id, None);
+		let layout_ref = self.declare_layout(id, None);
+		self.layouts.get_mut(layout_ref).unwrap().declare_native(layout, None)
+	}
+
+	pub fn define_xml_types(&mut self) -> Result<(), Caused<layout::Mismatch>> {
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(), layout::Native::Boolean)?;
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#int").unwrap(), layout::Native::Integer)?;
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(), layout::Native::Integer)?;
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#positiveInteger").unwrap(), layout::Native::PositiveInteger)?;
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#float").unwrap(), layout::Native::Float)?;
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#double").unwrap(), layout::Native::Double)?;
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#string").unwrap(), layout::Native::String)?;
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#time").unwrap(), layout::Native::Time)?;
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#date").unwrap(), layout::Native::Date)?;
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(), layout::Native::DateTime)?;
+		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#anyURI").unwrap(), layout::Native::Uri)?;
+		Ok(())
 	}
 
 	/// Returns the current base IRI.

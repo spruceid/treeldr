@@ -382,3 +382,43 @@ impl From<Option<Cause>> for Causes {
 		causes
 	}
 }
+
+pub struct WithCauses<T> {
+	t: T,
+	causes: Causes
+}
+
+impl<T> WithCauses<T> {
+	pub fn new(t: T, causes: impl Into<Causes>) -> Self {
+		Self {
+			t,
+			causes: causes.into()
+		}
+	}
+
+	pub fn causes(&self) -> &Causes {
+		&self.causes
+	}
+
+	pub fn inner(&self) -> &T {
+		&self.t
+	}
+
+	pub fn inner_mut(&mut self) -> &mut T {
+		&mut self.t
+	}
+}
+
+impl<T> Deref for WithCauses<T> {
+	type Target = T;
+
+	fn deref(&self) -> &T {
+		self.inner()
+	}
+}
+
+impl<T> DerefMut for WithCauses<T> {
+	fn deref_mut(&mut self) -> &mut T {
+		self.inner_mut()
+	}
+}

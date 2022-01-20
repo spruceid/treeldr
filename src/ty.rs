@@ -120,6 +120,22 @@ impl Definition {
 	}
 }
 
+impl Ref<Definition> {
+	pub fn with_model<'c>(&self, context: &'c crate::Model) -> RefWithContext<'c> {
+		RefWithContext(context, *self)
+	}
+}
+
+pub struct RefWithContext<'c>(&'c crate::Model, Ref<Definition>);
+
+impl<'c> fmt::Display for RefWithContext<'c> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let id = self.0.types().get(self.1).unwrap().id();
+		let iri = self.0.vocabulary().get(id).unwrap();
+		iri.fmt(f)
+	}
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Expr {
 	ty: crate::Ref<Definition>,

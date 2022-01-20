@@ -1,4 +1,4 @@
-use iref::Iri;
+use iref::{Iri, IriRef};
 use crate::{
 	Feature,
 	Model,
@@ -27,7 +27,7 @@ impl Scope {
 				context.types().get(*ty_ref).unwrap().id()
 			},
 			Self::Layout(layout_ref) => {
-				let ty_ref = context.layouts().get(*layout_ref).unwrap().ty().unwrap().reference();
+				let ty_ref = *context.layouts().get(*layout_ref).unwrap().ty().unwrap().inner();
 				context.types().get(ty_ref).unwrap().id()
 			}
 		}
@@ -116,6 +116,9 @@ impl Compile for Loc<syntax::Id> {
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
 		let iri = match self.inner() {
+			syntax::Id::Name(name) => {
+				IriRef::new(name).unwrap().resolved(env.base_iri())
+			}
 			syntax::Id::IriRef(iri_ref) => {
 				iri_ref.resolved(env.base_iri())
 			},
@@ -146,7 +149,7 @@ impl Compile for Loc<syntax::Document> {
 			if let Some(ty_ref) = node.as_type() {
 				if let Some(layout_ref) = node.as_layout() {
 					let layout = env.context.layouts().get(layout_ref).unwrap();
-					if layout.fields().is_none() && layout.causes().iter().any(|cause| cause.is_implicit()) {
+					if layout.description().is_none() && layout.causes().iter().any(|cause| cause.is_implicit()) {
 						let ty = env.context.types().get(ty_ref).unwrap();
 						implicit_layouts.push((layout_ref, ty.default_fields(env.context)?, ty.causes().map(Cause::into_implicit)))
 					}

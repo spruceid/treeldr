@@ -101,6 +101,28 @@ impl node::Type {
 	}
 }
 
+impl layout::Type {
+	fn en_name(&self) -> &'static str {
+		match self {
+			Self::Struct => "structure",
+			Self::Native(n) => match n {
+				layout::Native::Boolean => "boolean",
+				layout::Native::Integer => "integer",
+				layout::Native::PositiveInteger => "positive integer",
+				layout::Native::Float => "float",
+				layout::Native::Double => "double",
+				layout::Native::String => "string",
+				layout::Native::Time => "time",
+				layout::Native::Date => "date",
+				layout::Native::DateTime => "data and time",
+				layout::Native::Iri => "IRI",
+				layout::Native::Uri => "URI",
+				layout::Native::Url => "URL",
+			}
+		}
+	}
+}
+
 // impl<'c, 'a> fmt::Display for WithModel<'c, 'a> {
 // 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 // 		match self.error().inner() {
@@ -139,9 +161,10 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 				format!("type mismatch")
 			}
 			Error::LayoutTypeMismatch { .. } => {
-				format!("layout type mismatch")
+				format!("layout for-type mismatch")
 			}
 			Error::LayoutMismatch(e) => match e {
+				layout::Mismatch::Type { .. } => format!("layout type mismatch"),
 				layout::Mismatch::FieldProperty { .. } => format!("field property mismatch"),
 				layout::Mismatch::FieldName { .. } => format!("field name mismatch"),
 				layout::Mismatch::FieldLayout { .. } => format!("field layout mismatch"),
@@ -212,6 +235,17 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 				}
 			}
 			Error::LayoutMismatch(e) => match e {
+				layout::Mismatch::Type { because, .. } => {
+					if let Some(cause) = because {
+						let message = match cause {
+							Cause::Explicit(_) => format!("expected layout type declared here"),
+							Cause::Implicit(_) => format!("expected layout type is implicitly declared here")
+						};
+	
+						let source = cause.source();
+						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+					}
+				},
 				layout::Mismatch::FieldProperty { because, .. } => {
 					if let Some(cause) = because {
 						let message = match cause {
@@ -303,6 +337,10 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 				notes.push(format!("   found type `{}`", found_id))
 			},
 			Error::LayoutMismatch(e) => match e {
+				layout::Mismatch::Type { expected, found, .. } => {
+					notes.push(format!("expected {}", expected.en_name()));
+					notes.push(format!("   found {}", found.en_name()))
+				}
 				layout::Mismatch::FieldProperty { expected, found, .. } => {
 					let expected_id = self.context().vocabulary().get(self.context().properties().get(*expected).unwrap().id()).unwrap();
 					let found_id = self.context().vocabulary().get(self.context().properties().get(*found).unwrap().id()).unwrap();
