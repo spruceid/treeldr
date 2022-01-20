@@ -1,4 +1,4 @@
-use iref::{Iri, IriRef};
+use iref::{IriBuf, IriRef};
 use crate::{
 	Feature,
 	Model,
@@ -48,13 +48,15 @@ impl<'c> Environment<'c> {
 		}
 	}
 
-	pub fn base_iri(&self) -> Iri {
+	pub fn base_iri(&self) -> IriBuf {
 		match &self.scope {
 			Some(scope) => {
 				let id = scope.id(self.context);
-				self.context.vocabulary().get(id).unwrap()
+				let mut iri = self.context.vocabulary().get(id).unwrap().to_owned();
+				iri.path_mut().open();
+				iri
 			},
-			None => self.context.base_iri()
+			None => self.context.base_iri().to_owned()
 		}
 	}
 
@@ -117,10 +119,10 @@ impl Compile for Loc<syntax::Id> {
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
 		let iri = match self.inner() {
 			syntax::Id::Name(name) => {
-				IriRef::new(name).unwrap().resolved(env.base_iri())
+				IriRef::new(name).unwrap().resolved(env.base_iri().as_iri())
 			}
 			syntax::Id::IriRef(iri_ref) => {
-				iri_ref.resolved(env.base_iri())
+				iri_ref.resolved(env.base_iri().as_iri())
 			},
 			syntax::Id::Compact(_, _) => {
 				return Err(Caused::new(Error::Unimplemented(Feature::CompactIri), Some(Cause::Explicit(self.source()))))
@@ -252,11 +254,9 @@ impl Compile for Loc<syntax::PropertyDefinition> {
 		let prop_ref = env.context.get(id).unwrap().as_property().unwrap();
 
 		if let Some(ty_expr) = &self.inner().ty {
-			let scope = env.scope.take();
 			let ty = ty_expr.compile(env)?;
 			let prop = env.context.properties_mut().get_mut(prop_ref).unwrap();
 			prop.declare_type(ty, Some(Cause::Explicit(self.source())))?;
-			env.scope = scope
 		}
 
 		if let Some(ty_ref) = env.ty() {
@@ -275,6 +275,7 @@ impl Compile for Loc<syntax::TypeExpr> {
 	type Target = ty::Expr;
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
+		let scope = env.scope.take();
 		let ty_id = self.inner().ty.compile(env)?;
 		let ty_ref = env.context.require_type(ty_id, Some(self.source()))?;
 
@@ -284,6 +285,7 @@ impl Compile for Loc<syntax::TypeExpr> {
 			args.push(arg.compile(env)?)
 		}
 
+		env.scope = scope;
 		Ok(ty::Expr::new(ty_ref, args))
 	}
 }
@@ -344,6 +346,8 @@ impl Compile for Loc<syntax::LayoutExpr> {
 	type Target = layout::Expr;
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
+		let scope = env.scope.take();
+
 		let ty_id = self.inner().layout.compile(env)?;
 		let ty_ref = env.context.require_layout(ty_id, Some(Cause::Explicit(self.source())))?;
 
@@ -353,6 +357,7 @@ impl Compile for Loc<syntax::LayoutExpr> {
 			args.push(arg.compile(env)?)
 		}
 
+		env.scope = scope;
 		Ok(layout::Expr::new(ty_ref, args))
 	}
 }
