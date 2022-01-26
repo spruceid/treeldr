@@ -1,7 +1,16 @@
-use super::{Loc, Span};
-use crate::{source, Source};
+use locspan::ErrAt;
+use super::{Loc, Span, Location, peekable3::Peekable3};
+use crate::source;
 use iref::{IriRef, IriRefBuf};
-use std::{fmt, iter::Peekable};
+use std::fmt;
+
+/// Fallible tokens iterator with lookahead.
+pub trait Tokens {
+	type Error: fmt::Debug;
+
+	fn peek(&mut self) -> Result<Loc<Option<&Token>>, Loc<Self::Error>>;
+	fn next(&mut self) -> Result<Loc<Option<Token>>, Loc<Self::Error>>;
+}
 
 /// Identifier.
 #[derive(Clone, Debug)]
@@ -50,7 +59,7 @@ pub enum Token {
 	Punct(Punct),
 
 	/// Block.
-	Block(Delimiter, Vec<Loc<Token>>),
+	Block(Delimiter, Block),
 
 	/// Keyword.
 	Keyword(Keyword),
@@ -71,7 +80,7 @@ impl Token {
 		}
 	}
 
-	pub fn into_block(self) -> Option<(Delimiter, Vec<Loc<Token>>)> {
+	pub fn into_block(self) -> Option<(Delimiter, Block)> {
 		match self {
 			Self::Block(d, tokens) => Some((d, tokens)),
 			_ => None
@@ -87,6 +96,43 @@ impl fmt::Display for Token {
 			Self::Block(d, _) => write!(f, "`{} {}` block", d.start(), d.end()),
 			Self::Keyword(k) => write!(f, "keyword `{}`", k),
 			Self::Id(id) => write!(f, "identifier `{}`", id),
+		}
+	}
+}
+
+#[derive(Clone, Debug)]
+pub struct Block(Vec<Loc<Token>>);
+
+impl Block {
+	pub fn into_tokens<E>(self, loc: Location) -> BlockIntoTokens<E> {
+		BlockIntoTokens {
+			tokens: self.0.into_iter().peekable(),
+			end: Location::new(*loc.file(), loc.span().end()),
+			e: std::marker::PhantomData
+		}
+	}
+}
+
+pub struct BlockIntoTokens<E> {
+	tokens: std::iter::Peekable<std::vec::IntoIter<Loc<Token>>>,
+	end: Location,
+	e: std::marker::PhantomData<E>
+}
+
+impl<E: fmt::Debug> Tokens for BlockIntoTokens<E> {
+	type Error = E;
+
+	fn peek(&mut self) -> Result<Loc<Option<&Token>>, Loc<Self::Error>> {
+		match self.tokens.peek() {
+			Some(locspan::Loc(token, loc)) => Ok(Loc::new(Some(token), *loc)),
+			None => Ok(Loc::new(None, self.end))
+		}
+	}
+
+	fn next(&mut self) -> Result<Loc<Option<Token>>, Loc<Self::Error>> {
+		match self.tokens.next() {
+			Some(locspan::Loc(token, loc)) => Ok(Loc::new(Some(token), loc)),
+			None => Ok(Loc::new(None, self.end))
 		}
 	}
 }
@@ -171,6 +217,16 @@ pub enum Keyword {
 }
 
 impl Keyword {
+	pub fn from_name(name: &str) -> Option<Self> {
+		match name {
+			"type" => Some(Keyword::Type),
+			"layout" => Some(Keyword::Layout),
+			"as" => Some(Keyword::As),
+			"for" => Some(Keyword::For),
+			_ => None
+		}
+	}
+	
 	pub fn as_str(&self) -> &'static str {
 		match self {
 			Self::Type => "type",
@@ -212,263 +268,290 @@ impl<E> From<E> for Error<E> {
 	}
 }
 
+/// Characters iterator.
+struct Chars<C: Iterator>(Peekable3<C>);
+
+impl<E, C: Iterator<Item=Result<char, E>>> Chars<C> {
+	fn peek(&mut self) -> Result<Option<char>, Error<E>> {
+		match self.0.peek() {
+			None => Ok(None),
+			Some(Ok(c)) => Ok(Some(*c)),
+			Some(Err(_)) => self.next()
+		}
+	}
+
+	fn peek2(&mut self) -> Result<Option<char>, Error<E>> {
+		match self.0.peek2() {
+			None => Ok(None),
+			Some(Ok(c)) => Ok(Some(*c)),
+			Some(Err(_)) => {
+				self.next()?;
+				self.next()
+			}
+		}
+	}
+
+	fn peek3(&mut self) -> Result<Option<char>, Error<E>> {
+		match self.0.peek3() {
+			None => Ok(None),
+			Some(Ok(c)) => Ok(Some(*c)),
+			Some(Err(_)) => {
+				self.next()?;
+				self.next()?;
+				self.next()
+			}
+		}
+	}
+
+	fn next(&mut self) -> Result<Option<char>, Error<E>> {
+		self.0.next().transpose().map_err(Error::Stream)
+	}
+}
+
+struct Position {
+	file: source::Id,
+	span: Span
+}
+
+impl Position {
+	fn current(&self) -> Location {
+		Location::new(self.file, self.span)
+	}
+
+	fn end(&self) -> Location {
+		Location::new(self.file, self.span.end())
+	}
+}
+
 /// Lexer.
 ///
 /// Changes a character iterator into a `Token` iterator.
 pub struct Lexer<E, C: Iterator<Item = Result<char, E>>> {
-	file: source::Id,
-	chars: Peekable<C>,
-	span: Span,
-	delimiters: Vec<(Delimiter, Span)>
+	chars: Chars<C>,
+	pos: Position,
+	lookahead: Option<Loc<Token>>
 }
 
 impl<E, C: Iterator<Item = Result<char, E>>> Lexer<E, C> {
 	pub fn new(file: source::Id, chars: C) -> Self {
 		Self {
-			file,
-			chars: chars.peekable(),
-			span: Span::default(),
-			delimiters: Vec::new()
+			chars: Chars(Peekable3::new(chars)),
+			pos: Position {
+				file,
+				span: Span::default()
+			},
+			lookahead: None
 		}
 	}
 
-	fn last_delimiter(&self) -> Option<Delimiter> {
-		self.delimiters.last().map(|(d, _)| *d)
+	fn peek_char(&mut self) -> Result<Option<char>, Loc<Error<E>>> {
+		self.chars.peek().err_at(|| self.pos.end())
 	}
-}
 
-fn peek_char<E, C: Iterator<Item = Result<char, E>>>(
-	lexer: &mut Lexer<E, C>,
-) -> Result<Option<char>, Loc<Error<E>>> {
-	match lexer.chars.peek() {
-		None => Ok(None),
-		Some(Ok(c)) => Ok(Some(*c)),
-		Some(Err(_)) => consume_char(lexer),
+	fn peek_char2(&mut self) -> Result<Option<char>, Loc<Error<E>>> {
+		let offset = self.peek_char()?.map(char::len_utf8).unwrap_or(0);
+		self.chars.peek2().err_at(|| Location::new(self.pos.file, self.pos.span.end() + offset))
 	}
-}
 
-fn consume_char<E, C: Iterator<Item = Result<char, E>>>(
-	lexer: &mut Lexer<E, C>,
-) -> Result<Option<char>, Loc<Error<E>>> {
-	match lexer.chars.next() {
-		None => Ok(None),
-		Some(Ok(c)) => {
-			lexer.span.push(c);
-			Ok(Some(c))
-		}
-		Some(Err(e)) => {
-			lexer.span.clear();
-			Err(Loc::new(
-				Error::Stream(e),
-				Source::new(lexer.file, lexer.span),
-			))
+	fn peek_char3(&mut self) -> Result<Option<char>, Loc<Error<E>>> {
+		let offset = self.peek_char()?.map(char::len_utf8).unwrap_or(0) + self.peek_char2()?.map(char::len_utf8).unwrap_or(0);
+		self.chars.peek3().err_at(|| Location::new(self.pos.file, self.pos.span.end() + offset))
+	}
+
+	fn next_char(&mut self) -> Result<Option<char>, Loc<Error<E>>> {
+		match self.chars.next().err_at(|| self.pos.end())? {
+			Some(c) => {
+				self.pos.span.push(c.len_utf8());
+				Ok(Some(c))
+			},
+			None => Ok(None)
 		}
 	}
-}
 
-fn skip_whitespaces<E, C: Iterator<Item = Result<char, E>>>(
-	lexer: &mut Lexer<E, C>,
-) -> Result<Option<Loc<Token>>, Loc<Error<E>>> {
-	lexer.span.clear();
+	fn skip_whitespaces(&mut self) -> Result<(), Loc<Error<E>>> {
+		while let Some(c) = self.peek_char()? {
+			if c.is_whitespace() {
+				self.next_char()?;
+			} else {
+				if c == '/' { // maybe a comment?
+					if self.peek_char2()? == Some('/') { // definitely a comment.
+						if self.peek_char3()? == Some('/') { // doc comment.
+							break
+						}
 
-	while let Some(c) = peek_char(lexer)? {
-		if !c.is_whitespace() {
-			if c == '/' { // maybe a comment?
-				lexer.span.clear();
-				consume_char(lexer)?;
-
-				if let Some('/') = peek_char(lexer)? { // definitely a comment.
-					consume_char(lexer)?;
-		
-					if let Some('/') = peek_char(lexer)? { // doc comment.
-						consume_char(lexer)?;
-						
-						let mut comment = String::new();
-						while let Some(c) = peek_char(lexer)? {
+						self.next_char()?;
+						self.next_char()?;
+						while let Some(c) = self.next_char()? {
 							if c == '\n' {
 								break;
 							}
-		
-							consume_char(lexer)?;
-							comment.push(c);
 						}
-		
-						let span = lexer.span;
-						consume_char(lexer)?;
-						return Ok(Some(Loc::new(Token::Doc(comment), Source::new(lexer.file, span))))
 					} else {
-						// Regular comment.
-						while let Some(c) = peek_char(lexer)? {
-							if c == '\n' {
-								break;
-							}
-
-							consume_char(lexer)?;
-						}
+						break
 					}
 				} else {
-					return Err(Loc::new(Error::Unexpected(Some('/')), Source::new(lexer.file, lexer.span)))
+					break
 				}
-			} else {
-				break
 			}
 		}
 
-		consume_char(lexer)?;
+		self.pos.span.clear();
+		Ok(())
 	}
 
-	lexer.span.clear();
-	Ok(None)
-}
+	fn next_doc(&mut self) -> Result<String, Loc<Error<E>>> {
+		self.next_char()?;
+		self.next_char()?;
 
-fn next_name<E, C: Iterator<Item = Result<char, E>>>(
-	lexer: &mut Lexer<E, C>,
-) -> Result<Loc<Token>, Loc<Error<E>>> {
-	let mut id = String::new();
+		let mut doc = String::new();
+		while let Some(c) = self.next_char()? {
+			if c == '\n' {
+				break;
+			}
 
-	while let Some(c) = peek_char(lexer)? {
-		if c.is_alphanumeric() {
-			id.push(consume_char(lexer)?.unwrap())
-		} else {
-			break;
+			doc.push(c);
 		}
+
+		Ok(doc)
 	}
-
-	let span = lexer.span;
-	lexer.span.clear();
-
-	let token = match id.as_str() {
-		"type" => Token::Keyword(Keyword::Type),
-		"layout" => Token::Keyword(Keyword::Layout),
-		"as" => Token::Keyword(Keyword::As),
-		"for" => Token::Keyword(Keyword::For),
-		_ => {
-			Token::Id(Id::Name(id))
+	
+	fn next_name(&mut self, first: char) -> Result<String, Loc<Error<E>>> {
+		let mut id = String::new();
+		id.push(first);
+	
+		while let Some(c) = self.peek_char()? {
+			if c.is_alphanumeric() {
+				id.push(self.next_char()?.unwrap())
+			} else {
+				break;
+			}
 		}
-	};
-
-	Ok(Loc::new(token, Source::new(lexer.file, span)))
-}
-
-fn next_iri<E, C: Iterator<Item = Result<char, E>>>(
-	lexer: &mut Lexer<E, C>,
-) -> Result<Loc<Token>, Loc<Error<E>>> {
-	let mut iri = String::new();
-	consume_char(lexer)?;
-
-	while let Some(c) = consume_char(lexer)? {
-		if c == '>' {
-			break
-		} else {
-			iri.push(c)
-		}
+	
+		Ok(id)
 	}
-
-	let span = lexer.span;
-	lexer.span.clear();
-
-	// Is it a compact IRI?
-	if let Some((prefix, suffix)) = iri.split_once(':') {
-		if !suffix.starts_with("//") {
-			let suffix = match IriRef::new(suffix) {
-				Ok(iri_ref) => iri_ref.to_owned(),
-				Err(_) => {
-					return Err(Loc::new(
-						Error::InvalidId(iri),
-						Source::new(lexer.file, span),
-					))
+	
+	fn next_iri(&mut self) -> Result<Id, Loc<Error<E>>> {
+		let mut iri = String::new();
+	
+		while let Some(c) = self.next_char()? {
+			if c == '>' {
+				break
+			} else {
+				iri.push(c)
+			}
+		}
+	
+		// Is it a compact IRI?
+		if let Some((prefix, suffix)) = iri.split_once(':') {
+			if !suffix.starts_with("//") {
+				let suffix = match IriRef::new(suffix) {
+					Ok(iri_ref) => iri_ref.to_owned(),
+					Err(_) => {
+						return Err(Loc::new(
+							Error::InvalidId(iri),
+							self.pos.current(),
+						))
+					}
+				};
+	
+				return Ok(Id::Compact(prefix.to_string(), suffix));
+			}
+		}
+	
+		let iri = match iri.try_into() {
+			Ok(iri_ref) => iri_ref,
+			Err((_, id)) => {
+				return Err(Loc::new(
+					Error::InvalidId(id),
+					self.pos.current(),
+				))
+			}
+		};
+	
+		Ok(Id::IriRef(iri))
+	}
+	
+	fn next_block(&mut self, d: Delimiter) -> Result<Block, Loc<Error<E>>> {
+		let mut tokens = Vec::new();
+	
+		loop {
+			self.skip_whitespaces()?;
+			if self.peek_char()? == Some(d.end()) {
+				self.next_char()?;
+				break
+			} else {
+				match self.next()? {
+					locspan::Loc(Some(token), loc) => tokens.push(Loc::new(token, loc)),
+					locspan::Loc(None, loc) => return Err(Loc::new(Error::Unexpected(None), loc))
 				}
-			};
-
-			return Ok(Loc::new(
-				Token::Id(Id::Compact(prefix.to_string(), suffix)),
-				Source::new(lexer.file, span),
-			));
+			}
 		}
+
+		Ok(Block(tokens))
 	}
 
-	let iri = match iri.try_into() {
-		Ok(iri_ref) => iri_ref,
-		Err((_, id)) => {
-			return Err(Loc::new(
-				Error::InvalidId(id),
-				Source::new(lexer.file, span),
-			))
-		}
-	};
-
-	Ok(Loc::new(Token::Id(Id::IriRef(iri)), Source::new(lexer.file, span)))
-}
-
-fn next_block<E, C: Iterator<Item = Result<char, E>>>(
-	lexer: &mut Lexer<E, C>,
-	delimiter: Delimiter,
-) -> Result<Loc<Token>, Loc<Error<E>>> {
-	let mut tokens = Vec::new();
-	let mut span: Span = lexer.span.start().into();
-
-	consume_char(lexer)?; // skip the first delimiter.
-
-	lexer.delimiters.push((delimiter, lexer.span));
-	while let Some(token) = next_token(lexer)? {
-		span.set_end(token.span().end());
-		tokens.push(token);
-	}
-	lexer.delimiters.pop();
-
-	match consume_char(lexer)? {
-		Some(c) if c == delimiter.end() => {
-			span.set_end(lexer.span.end());
-			Ok(Loc::new(
-				Token::Block(delimiter, tokens),
-				Source::new(lexer.file, span),
-			))
-		},
-		unexpected => Err(Loc::new(Error::Unexpected(unexpected), Source::new(lexer.file, lexer.span)))
-	}
-}
-
-fn next_token<E, C: Iterator<Item = Result<char, E>>>(
-	lexer: &mut Lexer<E, C>,
-) -> Result<Option<Loc<Token>>, Loc<Error<E>>> {
-	match skip_whitespaces(lexer)? {
-		Some(token) => Ok(Some(token)),
-		None => {
-			match peek_char(lexer)? {
-				Some('<') => Ok(Some(next_iri(lexer)?)),
-				Some(c) if c.is_alphabetic() => Ok(Some(next_name(lexer)?)),
-				Some(c) => match Delimiter::from_start(c) {
-					Some(delimiter) => next_block(lexer, delimiter).map(Option::Some),
-					None => {
-						match Punct::from_char(c) {
-							Some(punct) => {
-								consume_char(lexer)?;
-								Ok(Some(Loc::new(
-									Token::Punct(punct),
-									Source::new(lexer.file, lexer.span),
-								)))
-							},
-							None => {
-								match Delimiter::from_end(c) {
-									Some(delimiter) if lexer.last_delimiter() == Some(delimiter) => {
-										Ok(None)
-									},
-									_ => {
-										lexer.span.clear();
-										consume_char(lexer)?;
-										Err(Loc::new(
-											Error::Unexpected(Some(c)),
-											Source::new(lexer.file, lexer.span),
-										))
-									}
+	fn consume(&mut self) -> Result<Loc<Option<Token>>, Loc<Error<E>>>{
+		self.skip_whitespaces()?;
+		match self.next_char()? {
+			Some(c) => match c {
+				'/' => Ok(Loc::new(Some(Token::Doc(self.next_doc()?)), self.pos.current())),
+				'<' => Ok(Loc::new(Some(Token::Id(self.next_iri()?)), self.pos.current())),
+				c => if c.is_alphabetic() {
+					let name = self.next_name(c)?;
+					match Keyword::from_name(&name) {
+						Some(kw) => Ok(Loc::new(Some(Token::Keyword(kw)), self.pos.current())),
+						None => Ok(Loc::new(Some(Token::Id(Id::Name(name))), self.pos.current()))
+					}
+				} else {
+					match Delimiter::from_start(c) {
+						Some(d) => Ok(Loc::new(Some(Token::Block(d, self.next_block(d)?)), self.pos.current())),
+						None => {
+							match Punct::from_char(c) {
+								Some(p) => Ok(Loc::new(Some(Token::Punct(p)), self.pos.current())),
+								None => {
+									Err(Loc::new(Error::Unexpected(Some(c)), self.pos.current()))
 								}
 							}
 						}
 					}
-				},
-				None => Ok(None),
+				}
+			}
+			None => Ok(Loc::new(None, self.pos.end()))
+		}
+	}
+
+	fn peek(&mut self) -> Result<Loc<Option<&Token>>, Loc<Error<E>>> {
+		if self.lookahead.is_none() {
+			if let locspan::Loc(Some(token), loc) = self.consume()? {
+				self.lookahead = Some(Loc::new(token, loc));
 			}
 		}
+
+		match &self.lookahead {
+			Some(locspan::Loc(token, loc)) => Ok(Loc::new(Some(token), *loc)),
+			None => Ok(Loc::new(None, self.pos.end()))
+		}
+	}
+	
+	fn next(&mut self) -> Result<Loc<Option<Token>>, Loc<Error<E>>> {
+		match self.lookahead.take() {
+			Some(locspan::Loc(token, loc)) => Ok(Loc::new(Some(token), loc)),
+			None => {
+				self.consume()
+			}
+		}
+	}
+}
+
+impl<E: fmt::Debug, C: Iterator<Item = Result<char, E>>> Tokens for Lexer<E, C> {
+	type Error = Error<E>;
+
+	fn peek(&mut self) -> Result<Loc<Option<&Token>>, Loc<Error<E>>> {
+		self.peek()
+	}
+	
+	fn next(&mut self) -> Result<Loc<Option<Token>>, Loc<Error<E>>> {
+		self.next()
 	}
 }
 
@@ -476,6 +559,10 @@ impl<E, C: Iterator<Item = Result<char, E>>> Iterator for Lexer<E, C> {
 	type Item = Result<Loc<Token>, Loc<Error<E>>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		next_token(self).transpose()
+		match self.next() {
+			Ok(locspan::Loc(Some(token), loc)) => Some(Ok(Loc::new(token, loc))),
+			Ok(locspan::Loc(None, _)) => None,
+			Err(e) => Some(Err(e))
+		}
 	}
 }

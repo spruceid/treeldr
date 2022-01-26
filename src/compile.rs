@@ -117,7 +117,7 @@ impl Compile for Loc<syntax::Id> {
 	type Target = Id;
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let iri = match self.inner() {
+		let iri = match self.value() {
 			syntax::Id::Name(name) => {
 				IriRef::new(name).unwrap().resolved(env.base_iri().as_iri())
 			}
@@ -125,7 +125,7 @@ impl Compile for Loc<syntax::Id> {
 				iri_ref.resolved(env.base_iri().as_iri())
 			},
 			syntax::Id::Compact(_, _) => {
-				return Err(Caused::new(Error::Unimplemented(Feature::CompactIri), Some(Cause::Explicit(self.source()))))
+				return Err(Caused::new(Error::Unimplemented(Feature::CompactIri), Some(Cause::Explicit(*self.location()))))
 			}
 		};
 
@@ -137,11 +137,11 @@ impl Compile for Loc<syntax::Document> {
 	type Target = ();
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		for item in &self.inner().items {
+		for item in &self.value().items {
 			item.declare(env)?;
 		}
 
-		for item in &self.inner().items {
+		for item in &self.value().items {
 			item.compile(env)?;
 		}
 
@@ -168,7 +168,7 @@ impl Compile for Loc<syntax::Document> {
 
 impl Declare for Loc<syntax::Item> {
 	fn declare<'c>(&self, env: &mut Environment<'c>) -> Result<(), Caused<Error>> {
-		match self.inner() {
+		match self.value() {
 			syntax::Item::Type(ty_def) => {
 				ty_def.declare(env)?;
 			},
@@ -185,7 +185,7 @@ impl Compile for Loc<syntax::Item> {
 	type Target = ();
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		match self.inner() {
+		match self.value() {
 			syntax::Item::Type(ty_def) => {
 				ty_def.compile(env)?;
 			},
@@ -200,19 +200,19 @@ impl Compile for Loc<syntax::Item> {
 
 impl Declare for Loc<syntax::TypeDefinition> {
 	fn declare<'c>(&self, env: &mut Environment<'c>) -> Result<(), Caused<Error>> {
-		let id = self.inner().id.compile(env)?;
-		let ty_ref = env.context.declare_type(id, Some(Cause::Explicit(self.source())));
-		let layout_ref = env.context.declare_layout(id, Some(Cause::Implicit(self.source())));
+		let id = self.value().id.compile(env)?;
+		let ty_ref = env.context.declare_type(id, Some(Cause::Explicit(*self.location())));
+		let layout_ref = env.context.declare_layout(id, Some(Cause::Implicit(*self.location())));
 
 		env.scope = Some(Scope::Type(ty_ref));
-		for prop_def in &self.inner().properties {
+		for prop_def in &self.value().properties {
 			prop_def.declare(env)?;
 		}
 		env.scope = None;
 
-		let doc = self.inner().doc.compile(env)?;
+		let doc = self.value().doc.compile(env)?;
 		env.context.types_mut().get_mut(ty_ref).unwrap().set_documentation(doc.clone());
-		let doc = self.inner().doc.compile(env)?;
+		let doc = self.value().doc.compile(env)?;
 		env.context.layouts_mut().get_mut(layout_ref).unwrap().set_documentation(doc);
 
 		Ok(())
@@ -223,11 +223,11 @@ impl Compile for Loc<syntax::TypeDefinition> {
 	type Target = ();
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let id = self.inner().id.compile(env)?;
+		let id = self.value().id.compile(env)?;
 		let ty_ref = env.context.get(id).unwrap().as_type().unwrap();
 
 		env.scope = Some(Scope::Type(ty_ref));
-		for prop_def in &self.inner().properties {
+		for prop_def in &self.value().properties {
 			prop_def.compile(env)?;
 		}
 		env.scope = None;
@@ -238,9 +238,9 @@ impl Compile for Loc<syntax::TypeDefinition> {
 
 impl Declare for Loc<syntax::PropertyDefinition> {
 	fn declare<'c>(&self, env: &mut Environment<'c>) -> Result<(), Caused<Error>> {
-		let id = self.inner().id.compile(env)?;
-		let prop_ref = env.context.declare_property(id, Some(Cause::Explicit(self.source())));
-		let doc = self.inner().doc.compile(env)?;
+		let id = self.value().id.compile(env)?;
+		let prop_ref = env.context.declare_property(id, Some(Cause::Explicit(*self.location())));
+		let doc = self.value().doc.compile(env)?;
 		env.context.properties_mut().get_mut(prop_ref).unwrap().set_documentation(doc);
 		Ok(())
 	}
@@ -250,21 +250,21 @@ impl Compile for Loc<syntax::PropertyDefinition> {
 	type Target = ();
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let id = self.inner().id.compile(env)?;
+		let id = self.value().id.compile(env)?;
 		let prop_ref = env.context.get(id).unwrap().as_property().unwrap();
 
-		if let Some(ty_expr) = &self.inner().ty {
+		if let Some(ty_expr) = &self.value().ty {
 			let ty = ty_expr.compile(env)?;
 			let prop = env.context.properties_mut().get_mut(prop_ref).unwrap();
-			prop.declare_type(ty, Some(Cause::Explicit(self.source())))?;
+			prop.declare_type(ty, Some(Cause::Explicit(*self.location())))?;
 		}
 
 		if let Some(ty_ref) = env.ty() {
 			let prop = env.context.properties_mut().get_mut(prop_ref).unwrap();
-			prop.declare_domain(ty_ref, Some(Cause::Explicit(self.source())));
+			prop.declare_domain(ty_ref, Some(Cause::Explicit(*self.location())));
 
 			let ty = env.context.types_mut().get_mut(ty_ref).unwrap();
-			ty.declare_property(prop_ref, Some(Cause::Explicit(self.source())));
+			ty.declare_property(prop_ref, Some(Cause::Explicit(*self.location())));
 		}
 
 		Ok(())
@@ -276,12 +276,12 @@ impl Compile for Loc<syntax::TypeExpr> {
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
 		let scope = env.scope.take();
-		let ty_id = self.inner().ty.compile(env)?;
-		let ty_ref = env.context.require_type(ty_id, Some(self.source()))?;
+		let ty_id = self.value().ty.compile(env)?;
+		let ty_ref = env.context.require_type(ty_id, Some(*self.location()))?;
 
-		let mut args = Vec::with_capacity(self.inner().args.len());
+		let mut args = Vec::with_capacity(self.value().args.len());
 
-		for arg in &self.inner().args {
+		for arg in &self.value().args {
 			args.push(arg.compile(env)?)
 		}
 
@@ -292,9 +292,9 @@ impl Compile for Loc<syntax::TypeExpr> {
 
 impl Declare for Loc<syntax::LayoutDefinition> {
 	fn declare<'c>(&self, env: &mut Environment<'c>) -> Result<(), Caused<Error>> {
-		let id = self.inner().id.compile(env)?;
-		let layout_ref = env.context.declare_layout(id, Some(Cause::Explicit(self.source())));
-		let doc = self.inner().doc.compile(env)?;
+		let id = self.value().id.compile(env)?;
+		let layout_ref = env.context.declare_layout(id, Some(Cause::Explicit(*self.location())));
+		let doc = self.value().doc.compile(env)?;
 		env.context.layouts_mut().get_mut(layout_ref).unwrap().set_documentation(doc);
 		Ok(())
 	}
@@ -304,20 +304,20 @@ impl Compile for Loc<syntax::LayoutDefinition> {
 	type Target = ();
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let id = self.inner().id.compile(env)?;
+		let id = self.value().id.compile(env)?;
 		let layout_ref = env.context.get(id).unwrap().as_layout().unwrap();
 
-		let ty_id = self.inner().ty_id.compile(env)?;
-		let ty_ref = env.context.require_type(ty_id, Some(self.source()))?;
-		env.context.layouts_mut().get_mut(layout_ref).unwrap().declare_type(ty_ref, Some(Cause::Explicit(self.inner().ty_id.source())))?;
+		let ty_id = self.value().ty_id.compile(env)?;
+		let ty_ref = env.context.require_type(ty_id, Some(*self.location()))?;
+		env.context.layouts_mut().get_mut(layout_ref).unwrap().declare_type(ty_ref, Some(Cause::Explicit(*self.value().ty_id.location())))?;
 
 		env.scope = Some(Scope::Layout(layout_ref));
-		let mut fields = Vec::with_capacity(self.inner().fields.len());
-		for field_def in &self.inner().fields {
+		let mut fields = Vec::with_capacity(self.value().fields.len());
+		for field_def in &self.value().fields {
 			fields.push(field_def.compile(env)?);
 		}
 		env.scope = None;
-		env.context.layouts_mut().get_mut(layout_ref).unwrap().declare_fields(fields, Some(Cause::Explicit(self.inner().ty_id.source())))?;
+		env.context.layouts_mut().get_mut(layout_ref).unwrap().declare_fields(fields, Some(Cause::Explicit(*self.value().ty_id.location())))?;
 		Ok(())
 	}
 }
@@ -326,19 +326,19 @@ impl Compile for Loc<syntax::FieldDefinition> {
 	type Target = layout::Field;
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let id = self.inner().id.compile(env)?;
-		let prop_ref = env.context.require_property(id, Some(self.source()))?;
+		let id = self.value().id.compile(env)?;
+		let prop_ref = env.context.require_property(id, Some(*self.location()))?;
 
-		let name = match self.inner().alias.as_ref() {
-			Some(name) => name.inner().as_str().to_owned(),
+		let name = match self.value().alias.as_ref() {
+			Some(name) => name.value().as_str().to_owned(),
 			None => {
 				env.context.vocabulary().get(id).unwrap().path().file_name().expect("invalid property IRI").to_owned()
 			}
 		};
 
-		let layout_expr = self.inner().layout.compile(env)?;
+		let layout_expr = self.value().layout.compile(env)?;
 
-		Ok(layout::Field::new(prop_ref, name, layout_expr, Some(Cause::Explicit(self.source()))))
+		Ok(layout::Field::new(prop_ref, name, layout_expr, Some(Cause::Explicit(*self.location()))))
 	}
 }
 
@@ -348,12 +348,12 @@ impl Compile for Loc<syntax::LayoutExpr> {
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
 		let scope = env.scope.take();
 
-		let ty_id = self.inner().layout.compile(env)?;
-		let ty_ref = env.context.require_layout(ty_id, Some(Cause::Explicit(self.source())))?;
+		let ty_id = self.value().layout.compile(env)?;
+		let ty_ref = env.context.require_layout(ty_id, Some(Cause::Explicit(*self.location())))?;
 
-		let mut args = Vec::with_capacity(self.inner().args.len());
+		let mut args = Vec::with_capacity(self.value().args.len());
 
-		for arg in &self.inner().args {
+		for arg in &self.value().args {
 			args.push(arg.compile(env)?)
 		}
 

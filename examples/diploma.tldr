@@ -1,11 +1,15 @@
 /// Certificate or deed issued by an educational institution.
 type Diploma {
 	/// Issuer.
-	department: Department,
+	department: required Department,
 	degree: Degree,
-    year: Year,
-    honors: Honors,
-    url: <http://www.w3.org/2001/XMLSchema#anyURI>
+	year: Year,
+	honors: Honors,
+	url: <http://www.w3.org/2001/XMLSchema#anyURI>
+}
+
+layout CustomLayout for Diploma {
+	department as issuer: required Department,
 }
 
 type Department {

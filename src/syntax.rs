@@ -1,12 +1,15 @@
+pub use locspan::Span;
+use crate::source;
+
+mod peekable3;
 pub mod lexing;
-mod loc;
 pub mod parsing;
-mod span;
 
 pub use lexing::{Id, Lexer};
-pub use loc::*;
 pub use parsing::Parse;
-pub use span::*;
+
+pub type Loc<T> = locspan::Loc<T, source::Id>;
+pub type Location = locspan::Location<source::Id>;
 
 pub struct Documentation {
 	pub items: Vec<Loc<String>>
@@ -32,13 +35,26 @@ pub enum Item {
 pub struct TypeDefinition {
 	pub id: Loc<Id>,
 	pub properties: Vec<Loc<PropertyDefinition>>,
-	pub doc: Documentation
+	pub doc: Loc<Documentation>
 }
 
 pub struct PropertyDefinition {
 	pub id: Loc<Id>,
 	pub ty: Option<Loc<TypeExpr>>,
-	pub doc: Documentation
+	pub doc: Loc<Documentation>
+}
+
+/// Type annotation.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum Annotation {
+	/// Required field.
+	Required
+}
+
+/// Annotated type expression.
+pub struct AnnotatedTypeExpr {
+	expr: Loc<TypeExpr>,
+	annotations: Vec<Loc<Annotation>>
 }
 
 pub struct TypeExpr {
@@ -50,14 +66,14 @@ pub struct LayoutDefinition {
 	pub id: Loc<Id>,
 	pub ty_id: Loc<Id>,
 	pub fields: Vec<Loc<FieldDefinition>>,
-	pub doc: Documentation
+	pub doc: Loc<Documentation>
 }
 
 pub struct FieldDefinition {
 	pub id: Loc<Id>,
 	pub layout: Loc<LayoutExpr>,
 	pub alias: Option<Loc<Alias>>,
-	pub doc: Documentation
+	pub doc: Loc<Documentation>
 }
 
 pub struct Alias(String);

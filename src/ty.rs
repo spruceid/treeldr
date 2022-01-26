@@ -4,14 +4,14 @@ use crate::{
 	Id,
 	Cause,
 	Caused,
-	source::Causes,
+	Causes,
 	Documentation,
 	prop,
 	layout
 };
 use iref::Iri;
 use std::fmt;
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 
 /// Type definition.
 pub struct Definition {
@@ -136,6 +136,7 @@ impl<'c> fmt::Display for RefWithContext<'c> {
 	}
 }
 
+/// Type expression.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Expr {
 	ty: crate::Ref<Definition>,

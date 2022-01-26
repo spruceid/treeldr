@@ -5,7 +5,7 @@ use crate::{
 	Cause,
 	Caused,
 	WithCauses,
-	source::Causes,
+	Causes,
 	Documentation,
 	ty,
 	prop,
@@ -185,6 +185,14 @@ pub enum Mismatch {
 		found: layout::Expr,
 		because: Option<Cause>
 	},
+	FieldRequirement {
+		/// Is the field required?
+		///
+		/// If `true` then it is, and some other declaration is missing the `required` attribute.
+		/// If `false` then it is not, and some other declaration is adding the attribute.
+		required: bool,
+		because: Option<Cause>
+	},
 	MissingField {
 		name: String,
 		because: Option<Cause>
@@ -249,6 +257,16 @@ impl Fields {
 					b.causes().preferred()
 				))
 			}
+
+			if a.is_required() != b.is_required() {
+				return Err(Caused::new(
+					Mismatch::FieldRequirement {
+						required: a.is_required(),
+						because: a.causes().preferred()
+					},
+					b.causes().preferred()
+				))
+			}
 		}
 
 		if self.fields.len() > fields.len() {
@@ -304,6 +322,7 @@ pub struct Field {
 	prop: Ref<prop::Definition>,
 	name: String,
 	layout: Expr,
+	required: bool,
 	causes: Causes,
 	doc: Documentation
 }
@@ -314,6 +333,7 @@ impl Field {
 			prop,
 			name,
 			layout,
+			required: false,
 			causes: causes.into(),
 			doc: Documentation::default()
 		}
@@ -329,6 +349,14 @@ impl Field {
 
 	pub fn layout(&self) -> &Expr {
 		&self.layout
+	}
+
+	pub fn is_required(&self) -> bool {
+		self.required
+	}
+
+	pub fn declare_required(&mut self) {
+		self.required = true
 	}
 
 	pub fn causes(&self) -> &Causes {

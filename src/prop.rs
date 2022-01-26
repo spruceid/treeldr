@@ -4,7 +4,7 @@ use crate::{
 	Id,
 	Cause,
 	Caused,
-	source::Causes,
+	Causes,
 	Documentation,
 	ty
 };
@@ -16,6 +16,7 @@ pub struct Definition {
 	causes: Causes,
 	domain: HashMap<Ref<ty::Definition>, Causes>,
 	ty: Option<Type>,
+	required: bool,
 	doc: Documentation
 }
 
@@ -26,6 +27,7 @@ impl Definition {
 			causes: causes.into(),
 			domain: HashMap::new(),
 			ty: None,
+			required: false,
 			doc: Documentation::default()
 		}
 	}
@@ -41,6 +43,14 @@ impl Definition {
 
 	pub fn ty(&self) -> Option<&Type> {
 		self.ty.as_ref()
+	}
+
+	pub fn is_required(&self) -> bool {
+		self.required
+	}
+
+	pub fn declare_required(&mut self) {
+		self.required = true
 	}
 
 	pub fn documentation(&self) -> &Documentation {

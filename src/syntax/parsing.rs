@@ -1,7 +1,8 @@
 use super::*;
-use crate::{source, Source};
-use lexing::{Token, TokenKind};
-use std::{fmt, fmt::Debug, iter::Peekable};
+use crate::source;
+use locspan::MapLocErr;
+use lexing::{Tokens, Token, TokenKind};
+use std::{fmt, fmt::Debug};
 
 pub enum Error<E: Debug> {
 	Unexpected(Option<Token>, Vec<lexing::TokenKind>),
@@ -11,7 +12,7 @@ pub enum Error<E: Debug> {
 
 impl<E: Debug + fmt::Display> crate::error::Diagnose for Loc<Error<E>> {
 	fn message(&self) -> String {
-		match self.inner() {
+		match self.value() {
 			Error::Unexpected(_, _) => "parsing error".to_owned(),
 			Error::InvalidAlias(_) => "invalid alias".to_owned(),
 			Error::Lexer(_) => "lexing error".to_owned(),
@@ -20,14 +21,14 @@ impl<E: Debug + fmt::Display> crate::error::Diagnose for Loc<Error<E>> {
 
 	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<source::Id>> {
 		vec![codespan_reporting::diagnostic::Label::primary(
-			self.source().file(),
-			self.source().span(),
+			*self.location().file(),
+			self.location().span(),
 		)
 		.with_message(self.to_string())]
 	}
 
 	fn notes(&self) -> Vec<String> {
-		if let Error::Unexpected(_, expected) = self.inner() {
+		if let Error::Unexpected(_, expected) = self.value() {
 			if !expected.is_empty() {
 				let mut note = "expected ".to_owned();
 				
@@ -58,132 +59,75 @@ impl<E: Debug + fmt::Display> fmt::Display for Error<E> {
 			Self::Unexpected(None, _) => write!(f, "unexpected end of text"),
 			Self::Unexpected(Some(token), _) => write!(f, "unexpected {}", token),
 			Self::InvalidAlias(id) => write!(f, "invalid alias `{}`", id),
-			Self::Lexer(e) => write!(f, "lexer error: {}", e),
+			Self::Lexer(e) => write!(f, "tokens error: {}", e),
 		}
 	}
 }
 
 /// Parsable abstract syntax nodes.
 pub trait Parse: Sized {
-	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-		file: source::Id,
-		lexer: &mut Peekable<L>,
-		start: usize,
-	) -> Result<Loc<Self>, Loc<Error<E>>>;
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>>;
 }
 
-fn peek_token<'l, E: 'l + Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-	lexer: &'l mut Peekable<L>,
-) -> Result<Option<&'l Loc<Token>>, Loc<Error<E>>> {
-	match lexer.peek_mut() {
-		None => Ok(None),
-		Some(Ok(token)) => Ok(Some(token)),
-		Some(e) => {
-			let source = e.as_ref().err().unwrap().source();
-			// replace the next item with a dummy token to be able to get the actual error.
-			let mut result = Ok(Loc::new(Token::Doc(String::new()), source));
-			std::mem::swap(e, &mut result);
-			Err(result.err().unwrap().map(Error::Lexer))
-		},
+fn peek_token<L: Tokens>(tokens: &mut L) -> Result<Loc<Option<&Token>>, Loc<Error<L::Error>>> {
+	tokens.peek().map_loc_err(Error::Lexer)
+}
+
+fn next_token<L: Tokens>(tokens: &mut L) -> Result<Loc<Option<Token>>, Loc<Error<L::Error>>> {
+	tokens.next().map_loc_err(Error::Lexer)
+}
+
+fn next_expected_token<L: Tokens>(tokens: &mut L, expected: impl FnOnce() -> Vec<TokenKind>) -> Result<Loc<Token>, Loc<Error<L::Error>>> {
+	match next_token(tokens)? {
+		locspan::Loc(None, loc) => Err(Loc::new(Error::Unexpected(None, expected()), loc)),
+		locspan::Loc(Some(token), loc) => Ok(Loc::new(token, loc))
 	}
 }
 
-fn consume_token<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-	lexer: &mut Peekable<L>,
-) -> Result<Option<Loc<Token>>, Loc<Error<E>>> {
-	match lexer.next() {
-		None => Ok(None),
-		Some(Ok(token)) => Ok(Some(token)),
-		Some(Err(e)) => Err(e.map(Error::Lexer)),
-	}
-}
-
-// fn peek_expected_token<E: Debug, L: Iterator<Item=Result<Loc<Token>, Loc<E>>>>(file: source::Id, lexer: &mut Peekable<L>, start: usize) -> Result<Loc<Token>, Loc<Error<E>>> {
-// 	match lexer.peek() {
-// 		None => Err(Loc::new(Error::Unexpected(None), start.into())),
-// 		Some(Ok(token)) => return Ok(token.clone()),
-// 		Some(Err(_)) => Err(consume_token(lexer).unwrap_err())
-// 	}
-// }
-
-fn consume_expected_token<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-	file: source::Id,
-	lexer: &mut Peekable<L>,
-	start: usize,
-	expected: impl FnOnce() -> Vec<lexing::TokenKind>
-) -> Result<Loc<Token>, Loc<Error<E>>> {
-	match lexer.next() {
-		None => Err(Loc::new(
-			Error::Unexpected(None, expected()),
-			Source::new(file, start.into()),
-		)),
-		Some(Ok(token)) => Ok(token),
-		Some(Err(e)) => Err(e.map(Error::Lexer)),
-	}
-}
-
-fn parse_comma_separated_list<
-	E: Debug,
-	L: Iterator<Item = Result<Loc<Token>, Loc<E>>>,
-	T: Parse,
->(
-	file: source::Id,
-	lexer: &mut Peekable<L>,
-	start: usize,
-) -> Result<Vec<Loc<T>>, Loc<Error<E>>> {
+fn parse_comma_separated_list<L: Tokens, T: Parse>(tokens: &mut L) -> Result<Vec<Loc<T>>, Loc<Error<L::Error>>> {
 	let mut list = Vec::new();
-	let mut end = start;
 
 	loop {
 		if !list.is_empty() {
-			match consume_token(lexer)? {
-				Some(token) => match token.inner() {
-					Token::Punct(lexing::Punct::Comma) => {
-						end = token.span().end();
-					}
-					_ => return Err(token.map(|token| Error::Unexpected(Some(token), vec![TokenKind::Punct(lexing::Punct::Comma)]))),
+			match next_token(tokens)? {
+				locspan::Loc(Some(Token::Punct(lexing::Punct::Comma)), _) => {
+					// ...
 				},
-				None => break,
+				locspan::Loc(Some(unexpected), loc) => {
+					return Err(Loc::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Punct(lexing::Punct::Comma)]), loc))
+				},
+				locspan::Loc(None, _) => {
+					break
+				}
 			}
 		}
 
-		match peek_token(lexer)? {
-			Some(_) => {
-				let item = T::parse(file, lexer, end)?;
-				end = item.span().end();
-				list.push(item);
-			}
-			None => break,
+		if peek_token(tokens)?.is_some() {
+			let item = T::parse(tokens)?;
+			list.push(item);
+		} else {
+			break
 		}
 	}
 
 	Ok(list)
 }
 
-fn parse_block<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>, T: Parse>(
-	file: source::Id,
-	lexer: &mut Peekable<L>,
-	start: usize,
-) -> Result<Loc<Vec<Loc<T>>>, Loc<Error<E>>> {
-	let (token, span) = consume_expected_token(file, lexer, start, || vec![TokenKind::Block])?.into_parts();
+fn parse_block<L: Tokens, T: Parse>(tokens: &mut L) -> Result<Loc<Vec<Loc<T>>>, Loc<Error<L::Error>>> {
+	let locspan::Loc(token, span) = next_expected_token(tokens, || vec![TokenKind::Block])?;
 
 	match token {
 		Token::Block(lexing::Delimiter::Brace, tokens) => {
-			let mut block_lexer = tokens.into_iter().map(Ok).peekable();
-			let items = parse_comma_separated_list::<E, _, _>(file, &mut block_lexer, start)?;
+			let mut block_tokens = tokens.into_tokens(span);
+			let items = parse_comma_separated_list(&mut block_tokens)?;
 			Ok(Loc::new(items, span))
 		}
 		unexpected => Err(Loc::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Block]), span)),
 	}
 }
 
-fn parse_keyword<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-	file: source::Id,
-	lexer: &mut Peekable<L>,
-	start: usize,
-	keyword: lexing::Keyword
-) -> Result<(), Loc<Error<E>>> {
-	let (token, span) = consume_expected_token(file, lexer, start, || vec![TokenKind::Keyword(keyword)])?.into_parts();
+fn parse_keyword<L: Tokens>(tokens: &mut L, keyword: lexing::Keyword) -> Result<(), Loc<Error<L::Error>>> {
+	let locspan::Loc(token, span) = next_expected_token(tokens, || vec![TokenKind::Keyword(keyword)])?;
 
 	match token {
 		Token::Keyword(k) if k == keyword => {
@@ -193,42 +137,30 @@ fn parse_keyword<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
 	}
 }
 
-// impl<T: Parse> Parse for Option<T> {
-// 	fn parse<E: Debug, L: Iterator<Item=Result<Loc<Token>, Loc<E>>>>(file: source::Id, lexer: &mut Peekable<L>, start: usize) -> Result<Loc<Self>, Loc<Error<E>>> {
-// 		match lexer.peek() {
-// 			None => Ok(Loc::new(None, start.into())),
-// 			Some(Ok(_)) => Ok(T::parse(lexer, start)?.map(Option::Some)),
-// 			Some(Err(_)) => Err(lexer.next().unwrap().unwrap_err().map(Error::Lexer))
-// 		}
-// 	}
-// }
-
 impl Parse for Document {
-	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-		file: source::Id,
-		lexer: &mut Peekable<L>,
-		start: usize,
-	) -> Result<Loc<Self>, Loc<Error<E>>> {
-		let mut span: Span = start.into();
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
 		let mut items = Vec::new();
 
-		while peek_token(lexer)?.is_some() {
-			let item = Item::parse(file, lexer, span.end())?;
-			span.set_end(item.span().end());
-			items.push(item)
+		let mut span = Span::default();
+		loop {
+			match peek_token(tokens)? {
+				locspan::Loc(Some(_), _) => {
+					let item = Item::parse(tokens)?;
+					span.set_end(item.span().end());
+					items.push(item)
+				}
+				locspan::Loc(None, loc) => {
+					span.append(loc.span());
+					break Ok(Loc::new(Self { items }, Location::new(*loc.file(), span)))
+				}
+			}
 		}
-
-		Ok(Loc::new(Self { items }, Source::new(file, span)))
 	}
 }
 
 impl Parse for Id {
-	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-		file: source::Id,
-		lexer: &mut Peekable<L>,
-		start: usize,
-	) -> Result<Loc<Self>, Loc<Error<E>>> {
-		let (token, source) = consume_expected_token(file, lexer, start, || vec![TokenKind::Id])?.into_parts();
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
+		let locspan::Loc(token, source) = next_expected_token(tokens, || vec![TokenKind::Id])?;
 		match token {
 			Token::Id(id) => Ok(Loc::new(id, source)),
 			unexpected => Err(Loc::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id]), source)),
@@ -236,127 +168,119 @@ impl Parse for Id {
 	}
 }
 
-impl Documentation {
-	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(lexer: &mut Peekable<L>) -> Result<Self, Loc<Error<E>>> {
+impl Parse for Documentation {
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
 		let mut items = Vec::new();
-		while peek_token(lexer)?.map(|token| token.is_doc()).unwrap_or(false) {
-			items.push(consume_token(lexer)?.unwrap().map(|t| t.into_doc().unwrap()))
-		}
 
-		Ok(Self::new(items))
+		let mut span = Span::default();
+		loop {
+			match peek_token(tokens)? {
+				locspan::Loc(Some(token), loc) if token.is_doc() => {
+					let doc = next_token(tokens)?.unwrap().map(|t| t.into_doc().unwrap());
+					span.set_end(loc.span().end());
+					items.push(doc)
+				}
+				locspan::Loc(_, loc) => {
+					span.append(loc.span().start().into());
+					break Ok(Loc::new(Self::new(items), Location::new(*loc.file(), span)))
+				}
+			}
+		}
 	}
 }
 
 impl Parse for Item {
-	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-		file: source::Id,
-		lexer: &mut Peekable<L>,
-		start: usize,
-	) -> Result<Loc<Self>, Loc<Error<E>>> {
-		let doc = Documentation::parse(lexer)?;
-		let (token, source) = consume_expected_token(file, lexer, start, || vec![TokenKind::Keyword(lexing::Keyword::Type), TokenKind::Keyword(lexing::Keyword::Layout)])?.into_parts();
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
+		let doc = Documentation::parse(tokens)?;
+
+		let locspan::Loc(token, source) = next_expected_token(tokens, || vec![TokenKind::Keyword(lexing::Keyword::Type), TokenKind::Keyword(lexing::Keyword::Layout)])?;
 		let mut span = source.span();
 		match token {
 			Token::Keyword(lexing::Keyword::Type) => {
-				let id = Id::parse(file, lexer, span.end())?;
-				let (properties, prop_source) =
-					parse_block(file, lexer, id.span().end())?.into_parts();
+				let id = Id::parse(tokens)?;
+				let locspan::Loc(properties, prop_source) =
+					parse_block(tokens)?;
 				span.set_end(prop_source.span().end());
 				Ok(Loc::new(
 					Item::Type(
 						Loc::new(
 							TypeDefinition { id, properties, doc },
-							Source::new(file, span)
+							Location::new(*source.file(), span)
 						)
 					),
-					Source::new(file, span),
+					Location::new(*source.file(), span),
 				))
 			}
 			Token::Keyword(lexing::Keyword::Layout) => {
-				let id = Id::parse(file, lexer, span.end())?;
-				parse_keyword(file, lexer, span.end(), lexing::Keyword::For)?;
-				let ty_id = Id::parse(file, lexer, span.end())?;
-				let (fields, field_source) =
-					parse_block(file, lexer, id.span().end())?.into_parts();
+				let id = Id::parse(tokens)?;
+				parse_keyword(tokens, lexing::Keyword::For)?;
+				let ty_id = Id::parse(tokens)?;
+				let locspan::Loc(fields, field_source) =
+					parse_block(tokens)?;
 				span.set_end(field_source.span().end());
 				Ok(Loc::new(
 					Item::Layout(
 						Loc::new(
 							LayoutDefinition { id, ty_id, fields, doc },
-							Source::new(file, span)
+							Location::new(*source.file(), span)
 						)
 					),
-					Source::new(file, span),
+					Location::new(*source.file(), span),
 				))
 			}
 			unexpected => Err(Loc::new(
 				Error::Unexpected(Some(unexpected), vec![TokenKind::Keyword(lexing::Keyword::Type), TokenKind::Keyword(lexing::Keyword::Layout)]),
-				Source::new(file, span),
+				Location::new(*source.file(), span),
 			)),
 		}
 	}
 }
 
 impl Parse for PropertyDefinition {
-	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-		file: source::Id,
-		lexer: &mut Peekable<L>,
-		start: usize,
-	) -> Result<Loc<Self>, Loc<Error<E>>> {
-		let doc = Documentation::parse(lexer)?;
-		let mut span: Span = start.into();
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
+		let doc = Documentation::parse(tokens)?;
 
-		let id = Id::parse(file, lexer, span.end())?;
-		span = id.span();
+		let id = Id::parse(tokens)?;
+		let mut span = id.span();
+		let file = *id.file();
 
-		let ty = match peek_token(lexer)? {
-			Some(token) => {
-				if let Token::Punct(lexing::Punct::Colon) = token.inner() {
-					consume_token(lexer)?;
-					let ty = TypeExpr::parse(file, lexer, span.end())?;
-					span.set_end(ty.span().end());
-					Some(ty)
-				} else {
-					None
-				}
+		let ty = match peek_token(tokens)?.into_value() {
+			Some(Token::Punct(lexing::Punct::Colon)) => {
+				next_token(tokens)?;
+				let ty = TypeExpr::parse(tokens)?;
+				span.set_end(ty.span().end());
+				Some(ty)
 			},
-			None => None,
+			_ => None,
 		};
 
-		Ok(Loc::new(Self { id, ty, doc }, Source::new(file, span)))
+		Ok(Loc::new(Self { id, ty, doc }, Location::new(file, span)))
 	}
 }
 
 impl Parse for FieldDefinition {
-	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-		file: source::Id,
-		lexer: &mut Peekable<L>,
-		start: usize,
-	) -> Result<Loc<Self>, Loc<Error<E>>> {
-		let doc = Documentation::parse(lexer)?;
-		let mut span: Span = start.into();
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
+		let doc = Documentation::parse(tokens)?;
 
-		let id = Id::parse(file, lexer, span.end())?;
-		span = id.span();
+		let id = Id::parse(tokens)?;
+		let mut span = id.span();
+		let file = *id.file();
 
-		let alias = match peek_token(lexer)? {
-			Some(token) => match token.parts() {
-				(Token::Keyword(lexing::Keyword::As), as_source) => {
-					consume_token(lexer)?;
-					span.set_end(as_source.span().end());
-					let alias = Alias::parse(file, lexer, span.end())?;
-					span.set_end(alias.span().end());
-					Some(alias)
-				}
-				_ => None,
+		let alias = match peek_token(tokens)? {
+			locspan::Loc(Some(Token::Keyword(lexing::Keyword::As)), as_source) => {
+				next_token(tokens)?;
+				span.set_end(as_source.span().end());
+				let alias = Alias::parse(tokens)?;
+				span.set_end(alias.span().end());
+				Some(alias)
 			},
-			None => None,
+			_ => None,
 		};
 
-		let (token, token_source) = consume_expected_token(file, lexer, span.end(), || vec![TokenKind::Punct(lexing::Punct::Colon)])?.into_parts();
+		let locspan::Loc(token, token_source) = next_expected_token(tokens, || vec![TokenKind::Punct(lexing::Punct::Colon)])?;
 		let layout = match token {
 			Token::Punct(lexing::Punct::Colon) => {
-				let layout = LayoutExpr::parse(file, lexer, span.end())?;
+				let layout = LayoutExpr::parse(tokens)?;
 				span.set_end(layout.span().end());
 				layout
 			}
@@ -364,11 +288,11 @@ impl Parse for FieldDefinition {
 		};
 
 		// NOTE: if someday we have default layouts, to parse optional layout exprs.
-		// let layout = match peek_token(lexer)? {
+		// let layout = match peek_token(tokens)? {
 		// 	Some(token) => {
 		// 		if let (Token::Punct(lexing::Punct::Colon), _) = token.parts() {
-		// 			consume_token(lexer)?;
-		// 			let layout = LayoutExpr::parse(file, lexer, span.end())?;
+		// 			next_token(tokens)?;
+		// 			let layout = LayoutExpr::parse(tokens)?;
 		// 			span.set_end(layout.span().end());
 		// 			Some(layout)
 		// 		} else {
@@ -380,84 +304,63 @@ impl Parse for FieldDefinition {
 
 		Ok(Loc::new(
 			Self { id, layout, alias, doc },
-			Source::new(file, span),
+			Location::new(file, span),
 		))
 	}
 }
 
 impl Parse for Alias {
-	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-		file: source::Id,
-		lexer: &mut Peekable<L>,
-		start: usize,
-	) -> Result<Loc<Self>, Loc<Error<E>>> {
-		let (token, source) = consume_expected_token(file, lexer, start, || vec![TokenKind::Id])?.into_parts();
-		match token {
-			Token::Id(Id::Name(alias)) => {
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
+		match next_expected_token(tokens, || vec![TokenKind::Id])? {
+			locspan::Loc(Token::Id(Id::Name(alias)), source) => {
 				Ok(Loc::new(Alias(alias), source))
 			}
-			Token::Id(id) => Err(Loc::new(Error::InvalidAlias(id), source)),
-			unexpected => Err(Loc::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id]), source)),
+			locspan::Loc(Token::Id(id), source) => Err(Loc::new(Error::InvalidAlias(id), source)),
+			locspan::Loc(unexpected, source) => Err(Loc::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id]), source)),
 		}
 	}
 }
 
 impl Parse for TypeExpr {
-	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-		file: source::Id,
-		lexer: &mut Peekable<L>,
-		start: usize,
-	) -> Result<Loc<Self>, Loc<Error<E>>> {
-		let mut span: Span = start.into();
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
+		let ty = Id::parse(tokens)?;
+		let mut span = ty.span();
+		let file = *ty.file();
 
-		let ty = Id::parse(file, lexer, span.end())?;
-		span = ty.span();
-
-		let args = match peek_token(lexer)? {
-			Some(token) => match token.parts() {
-				(Token::Block(lexing::Delimiter::Parenthesis, _), args_source) => {
-					let (_, tokens) = consume_token(lexer)?.unwrap().into_inner().into_block().unwrap();
-					let mut block_lexer = tokens.into_iter().map(Ok).peekable();
-					let items =
-						parse_comma_separated_list::<E, _, _>(file, &mut block_lexer, start)?;
-					span.set_end(args_source.span().end());
-					items
-				}
-				_ => Vec::new(),
+		let args = match peek_token(tokens)? {
+			locspan::Loc(Some(Token::Block(lexing::Delimiter::Parenthesis, _)), args_source) => {
+				let (_, tokens) = next_token(tokens)?.unwrap().into_value().into_block().unwrap();
+				let mut block_tokens = tokens.into_tokens(args_source);
+				let items =
+					parse_comma_separated_list(&mut block_tokens)?;
+				span.append(args_source.span());
+				items
 			},
-			None => Vec::new(),
+			_ => Vec::new(),
 		};
 
-		Ok(Loc::new(Self { ty, args }, Source::new(file, span)))
+		Ok(Loc::new(Self { ty, args }, Location::new(file, span)))
 	}
 }
 
 impl Parse for LayoutExpr {
-	fn parse<E: Debug, L: Iterator<Item = Result<Loc<Token>, Loc<E>>>>(
-		file: source::Id,
-		lexer: &mut Peekable<L>,
-		start: usize,
-	) -> Result<Loc<Self>, Loc<Error<E>>> {
-		let mut span: Span = start.into();
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
+		let layout = Id::parse(tokens)?;
+		let mut span = layout.span();
+		let file = *layout.file();
 
-		let layout = Id::parse(file, lexer, span.end())?;
-		span = layout.span();
-
-		let args = match peek_token(lexer)? {
-			Some(token) => match token.parts() {
-				(Token::Block(lexing::Delimiter::Parenthesis, _), args_source) => {
-					let (_, tokens) = consume_token(lexer)?.unwrap().into_inner().into_block().unwrap();
-					let mut block_lexer = tokens.into_iter().map(Ok).peekable();
-					let items =
-						parse_comma_separated_list::<E, _, _>(file, &mut block_lexer, start)?;
-					span.set_end(args_source.span().end());
-					items
-				}
-				_ => Vec::new(),
+		let args = match peek_token(tokens)? {
+			locspan::Loc(Some(Token::Block(lexing::Delimiter::Parenthesis, _)), args_source) => {
+				let (_, tokens) = next_token(tokens)?.unwrap().into_value().into_block().unwrap();
+				let mut block_tokens = tokens.into_tokens(args_source);
+				let items =
+					parse_comma_separated_list(&mut block_tokens)?;
+				span.append(args_source.span());
+				items
 			},
-			None => Vec::new(),
+			_ => Vec::new(),
 		};
 
-		Ok(Loc::new(Self { layout, args }, Source::new(file, span)))
+		Ok(Loc::new(Self { layout, args }, Location::new(file, span)))
 	}
 }

@@ -5,6 +5,7 @@ pub mod error;
 mod doc;
 pub mod source;
 pub mod syntax;
+mod cause;
 pub mod ty;
 pub mod prop;
 pub mod layout;
@@ -16,7 +17,7 @@ pub mod compile;
 pub use feature::Feature;
 pub use error::Error;
 pub use doc::Documentation;
-pub use source::{Source, Cause, Caused, WithCauses};
+pub use cause::*;
 pub use vocab::{Vocabulary, Id};
 pub use collection::{Collection, Ref};
 pub use node::Node;
@@ -168,7 +169,7 @@ impl Model {
 	/// 
 	/// Returns an error if no node with the given `id` is declared,
 	/// or if it is not a type.
-	pub fn require_type(&self, id: Id, source: Option<Source>) -> Result<Ref<ty::Definition>, Caused<Error>> {
+	pub fn require_type(&self, id: Id, source: Option<syntax::Location>) -> Result<Ref<ty::Definition>, Caused<Error>> {
 		match self.get(id) {
 			None => Err(Caused::new(Error::UnknownNode { id, expected_ty: Some(node::Type::Type) }, source.map(Cause::Explicit))),
 			Some(node) => match node.as_type() {
@@ -203,7 +204,7 @@ impl Model {
 	/// 
 	/// Returns an error if no node with the given `id` is declared,
 	/// or if it is not a property.
-	pub fn require_property(&self, id: Id, source: Option<Source>) -> Result<Ref<prop::Definition>, Caused<Error>> {
+	pub fn require_property(&self, id: Id, source: Option<syntax::Location>) -> Result<Ref<prop::Definition>, Caused<Error>> {
 		match self.get(id) {
 			None => Err(Caused::new(Error::UnknownNode { id, expected_ty: Some(node::Type::Property) }, source.map(Cause::Explicit))),
 			Some(node) => match node.as_property() {

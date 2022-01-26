@@ -168,6 +168,7 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 				layout::Mismatch::FieldProperty { .. } => format!("field property mismatch"),
 				layout::Mismatch::FieldName { .. } => format!("field name mismatch"),
 				layout::Mismatch::FieldLayout { .. } => format!("field layout mismatch"),
+				layout::Mismatch::FieldRequirement { .. } => format!("required field mismatch"),
 				layout::Mismatch::MissingField { name, .. } => format!("missing field `{}`", name),
 				layout::Mismatch::AdditionalField { name, .. } => format!("unexpected field `{}`", name)
 			}
@@ -176,12 +177,11 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 
 	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<source::Id>> {
 		let mut labels = Vec::new();
-		use codespan_reporting::diagnostic::Label;
 		match self.error().inner() {
 			Error::Unimplemented(_) => {
 				if let Some(cause) = self.error().cause() {
 					let source = cause.source();
-					labels.push(Label::primary(source.file(), source.span()).with_message("feature required here"))
+					labels.push(source.into_primary_label().with_message("feature required here"))
 				}
 			},
 			Error::InvalidNodeType { expected, found, .. } => {
@@ -192,7 +192,7 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 					};
 
 					let source = cause.source();
-					labels.push(Label::primary(source.file(), source.span()).with_message(message))
+					labels.push(source.into_primary_label().with_message(message))
 				}
 
 				for ty in found {
@@ -203,14 +203,14 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 						};
 	
 						let source = cause.source();
-						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+						labels.push(source.into_secondary_label().with_message(message))
 					}
 				}
 			}
 			Error::UnknownNode { .. } => {
 				if let Some(cause) = self.error().cause() {
 					let source = cause.source();
-					labels.push(Label::secondary(source.file(), source.span()).with_message("used here"))
+					labels.push(source.into_secondary_label().with_message("used here"))
 				}
 			}
 			Error::TypeMismatch { because, .. } | Error::LayoutTypeMismatch { because, .. } => {
@@ -221,7 +221,7 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 					};
 
 					let source = cause.source();
-					labels.push(Label::primary(source.file(), source.span()).with_message(message))
+					labels.push(source.into_primary_label().with_message(message))
 				}
 
 				if let Some(cause) = because {
@@ -231,7 +231,7 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 					};
 
 					let source = cause.source();
-					labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+					labels.push(source.into_secondary_label().with_message(message))
 				}
 			}
 			Error::LayoutMismatch(e) => match e {
@@ -243,7 +243,7 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 						};
 	
 						let source = cause.source();
-						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+						labels.push(source.into_secondary_label().with_message(message))
 					}
 				},
 				layout::Mismatch::FieldProperty { because, .. } => {
@@ -254,7 +254,7 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 						};
 	
 						let source = cause.source();
-						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+						labels.push(source.into_secondary_label().with_message(message))
 					}
 				},
 				layout::Mismatch::FieldName { because, .. } => {
@@ -265,7 +265,7 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 						};
 	
 						let source = cause.source();
-						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+						labels.push(source.into_secondary_label().with_message(message))
 					}
 				},
 				layout::Mismatch::FieldLayout { because, .. } => {
@@ -276,7 +276,25 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 						};
 	
 						let source = cause.source();
-						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+						labels.push(source.into_secondary_label().with_message(message))
+					}
+				},
+				layout::Mismatch::FieldRequirement { required, because } => {
+					if let Some(cause) = because {
+						let message = if *required {
+							match cause {
+								Cause::Explicit(_) => format!("field is required here"),
+								Cause::Implicit(_) => format!("field is implicitly required here")
+							}
+						} else {
+							match cause {
+								Cause::Explicit(_) => format!("field is not required here"),
+								Cause::Implicit(_) => format!("field is implicitly not required here")
+							}
+						};
+	
+						let source = cause.source();
+						labels.push(source.into_secondary_label().with_message(message))
 					}
 				},
 				layout::Mismatch::MissingField { because, .. } => {
@@ -287,13 +305,13 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 						};
 	
 						let source = cause.source();
-						labels.push(Label::secondary(source.file(), source.span()).with_message(message))
+						labels.push(source.into_secondary_label().with_message(message))
 					}
 				},
 				layout::Mismatch::AdditionalField { because, .. } => {
 					if let Some(cause) = because {
 						let source = cause.source();
-						labels.push(Label::secondary(source.file(), source.span()).with_message(format!("this field is not declared here")))
+						labels.push(source.into_secondary_label().with_message(format!("this field is not declared here")))
 					}
 				}
 			}
