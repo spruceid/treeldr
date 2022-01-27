@@ -1,6 +1,6 @@
-use std::ops::{Deref, DerefMut};
-use std::collections::BTreeSet;
 use crate::syntax::Location;
+use std::collections::BTreeSet;
+use std::ops::{Deref, DerefMut};
 
 /// Cause.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -9,7 +9,7 @@ pub enum Cause {
 	Explicit(Location),
 
 	/// Implicitly caused by the given source.
-	Implicit(Location)
+	Implicit(Location),
 }
 
 impl Cause {
@@ -24,7 +24,7 @@ impl Cause {
 	pub fn source(&self) -> Location {
 		match self {
 			Self::Explicit(s) => *s,
-			Self::Implicit(s) => *s
+			Self::Implicit(s) => *s,
 		}
 	}
 
@@ -36,14 +36,12 @@ impl Cause {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct Caused<T> {
 	t: T,
-	cause: Option<Cause>
+	cause: Option<Cause>,
 }
 
 impl<T> Caused<T> {
 	pub fn new(t: T, cause: Option<Cause>) -> Self {
-		Self {
-			t, cause
-		}
+		Self { t, cause }
 	}
 
 	pub fn inner(&self) -> &T {
@@ -79,7 +77,7 @@ impl<T> DerefMut for Caused<T> {
 
 #[derive(Default)]
 pub struct Causes {
-	set: BTreeSet<Cause>
+	set: BTreeSet<Cause>,
 }
 
 impl Causes {
@@ -97,13 +95,13 @@ impl Causes {
 		self.set.iter().next().cloned()
 	}
 
-	pub fn iter(&self) -> impl '_ + Iterator<Item=Cause> {
+	pub fn iter(&self) -> impl '_ + Iterator<Item = Cause> {
 		self.set.iter().cloned()
 	}
 
 	pub fn map(&self, f: impl Fn(Cause) -> Cause) -> Self {
 		Self {
-			set: self.set.iter().cloned().map(f).collect()
+			set: self.set.iter().cloned().map(f).collect(),
 		}
 	}
 }
@@ -128,14 +126,14 @@ impl From<Option<Cause>> for Causes {
 
 pub struct WithCauses<T> {
 	t: T,
-	causes: Causes
+	causes: Causes,
 }
 
 impl<T> WithCauses<T> {
 	pub fn new(t: T, causes: impl Into<Causes>) -> Self {
 		Self {
 			t,
-			causes: causes.into()
+			causes: causes.into(),
 		}
 	}
 

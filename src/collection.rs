@@ -1,9 +1,18 @@
-use std::marker::PhantomData;
 use derivative::Derivative;
+use std::marker::PhantomData;
 
 /// Reference to an element of the context.
 #[derive(Derivative)]
-#[derivative(Clone(bound=""), Copy(bound=""), PartialEq(bound=""), Eq(bound=""), Hash(bound=""), PartialOrd(bound=""), Ord(bound=""), Debug(bound=""))]
+#[derivative(
+	Clone(bound = ""),
+	Copy(bound = ""),
+	PartialEq(bound = ""),
+	Eq(bound = ""),
+	Hash(bound = ""),
+	PartialOrd(bound = ""),
+	Ord(bound = ""),
+	Debug(bound = "")
+)]
 pub struct Ref<T>(usize, PhantomData<T>);
 
 impl<T> Ref<T> {
@@ -17,14 +26,12 @@ impl<T> Ref<T> {
 }
 
 pub struct Collection<T> {
-	items: Vec<T>
+	items: Vec<T>,
 }
 
 impl<T> Collection<T> {
 	pub fn new() -> Self {
-		Self {
-			items: Vec::new()
-		}
+		Self { items: Vec::new() }
 	}
 
 	pub fn get(&self, r: Ref<T>) -> Option<&T> {
@@ -41,7 +48,7 @@ impl<T> Collection<T> {
 		r
 	}
 
-	pub fn iter(&self) -> impl Iterator<Item=(Ref<T>, &T)> {
+	pub fn iter(&self) -> impl Iterator<Item = (Ref<T>, &T)> {
 		self.items.iter().enumerate().map(|(i, t)| (Ref::new(i), t))
 	}
 }

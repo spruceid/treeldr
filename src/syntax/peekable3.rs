@@ -3,7 +3,7 @@ pub struct Peekable3<I: Iterator> {
 	next1: Option<Option<I::Item>>,
 	next2: Option<Option<I::Item>>,
 	next3: Option<Option<I::Item>>,
-	inner: I
+	inner: I,
 }
 
 impl<I: Iterator> Peekable3<I> {
@@ -12,7 +12,7 @@ impl<I: Iterator> Peekable3<I> {
 			next1: None,
 			next2: None,
 			next3: None,
-			inner: iter
+			inner: iter,
 		}
 	}
 
@@ -68,10 +68,8 @@ impl<I: Iterator> Iterator for Peekable3<I> {
 				self.next1 = self.next2.take();
 				self.next2 = self.next3.take();
 				item
-			},
-			None => {
-				self.inner.next()
 			}
+			None => self.inner.next(),
 		}
 	}
 }

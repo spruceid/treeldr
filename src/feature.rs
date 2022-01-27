@@ -2,15 +2,11 @@ use std::fmt;
 
 /// Experimental/uncomplete features.
 #[derive(Debug)]
-pub enum Feature {
-	CompactIri
-}
+pub enum Feature {}
 
 impl Feature {
 	fn name(&self) -> &'static str {
-		match self {
-			Self::CompactIri => "compact_iri"
-		}
+		unreachable!()
 	}
 }
 

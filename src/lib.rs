@@ -1,27 +1,27 @@
 use iref::{Iri, IriBuf};
 
-mod feature;
-pub mod error;
+mod cause;
+pub mod collection;
+pub mod compile;
 mod doc;
+pub mod error;
+mod feature;
+pub mod layout;
+pub mod node;
+pub mod prop;
 pub mod source;
 pub mod syntax;
-mod cause;
 pub mod ty;
-pub mod prop;
-pub mod layout;
 pub mod vocab;
-pub mod collection;
-pub mod node;
-pub mod compile;
 
-pub use feature::Feature;
-pub use error::Error;
-pub use doc::Documentation;
 pub use cause::*;
-pub use vocab::{Vocabulary, Id};
 pub use collection::{Collection, Ref};
-pub use node::Node;
 pub use compile::Compile;
+pub use doc::Documentation;
+pub use error::Error;
+pub use feature::Feature;
+pub use node::Node;
+pub use vocab::{Id, Vocabulary};
 
 /// TreeLDR model.
 pub struct Model {
@@ -41,7 +41,7 @@ pub struct Model {
 	properties: Collection<prop::Definition>,
 
 	/// Layout definitions.
-	layouts: Collection<layout::Definition>
+	layouts: Collection<layout::Definition>,
 }
 
 impl Model {
@@ -53,11 +53,15 @@ impl Model {
 			nodes: vocab::Map::new(),
 			types: Collection::new(),
 			properties: Collection::new(),
-			layouts: Collection::new()
+			layouts: Collection::new(),
 		}
 	}
 
-	pub fn define_native_type(&mut self, iri: IriBuf, native_layout: layout::Native) -> Result<(), Caused<layout::Mismatch>> {
+	pub fn define_native_type(
+		&mut self,
+		iri: IriBuf,
+		native_layout: layout::Native,
+	) -> Result<(), Caused<layout::Mismatch>> {
 		let id = self.vocabulary_mut().insert(iri);
 		let ty_ref = self.declare_type(id, None);
 
@@ -68,17 +72,50 @@ impl Model {
 	}
 
 	pub fn define_xml_types(&mut self) -> Result<(), Caused<layout::Mismatch>> {
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(), layout::Native::Boolean)?;
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#int").unwrap(), layout::Native::Integer)?;
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(), layout::Native::Integer)?;
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#positiveInteger").unwrap(), layout::Native::PositiveInteger)?;
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#float").unwrap(), layout::Native::Float)?;
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#double").unwrap(), layout::Native::Double)?;
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#string").unwrap(), layout::Native::String)?;
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#time").unwrap(), layout::Native::Time)?;
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#date").unwrap(), layout::Native::Date)?;
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(), layout::Native::DateTime)?;
-		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#anyURI").unwrap(), layout::Native::Uri)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+			layout::Native::Boolean,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#int").unwrap(),
+			layout::Native::Integer,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+			layout::Native::Integer,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#positiveInteger").unwrap(),
+			layout::Native::PositiveInteger,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#float").unwrap(),
+			layout::Native::Float,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+			layout::Native::Double,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
+			layout::Native::String,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#time").unwrap(),
+			layout::Native::Time,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#date").unwrap(),
+			layout::Native::Date,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(),
+			layout::Native::DateTime,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#anyURI").unwrap(),
+			layout::Native::Uri,
+		)?;
 		Ok(())
 	}
 
@@ -119,7 +156,7 @@ impl Model {
 	}
 
 	/// Inserts the given node to the context.
-	/// 
+	///
 	/// Replaces any previous node with the same [`Node::id`].
 	pub fn insert(&mut self, node: Node) -> Option<Node> {
 		self.nodes.insert(node.id(), node)
@@ -158,14 +195,12 @@ impl Model {
 	/// Declare the given `id` as a type.
 	pub fn declare_type(&mut self, id: Id, cause: Option<Cause>) -> Ref<ty::Definition> {
 		match self.nodes.get_mut(id) {
-			Some(node) => {
-				match node.as_type() {
-					Some(ty_ref) => ty_ref,
-					None => {
-						let ty_ref = self.types.insert(ty::Definition::new(id, cause));
-						node.declare_type(ty_ref);
-						ty_ref
-					}
+			Some(node) => match node.as_type() {
+				Some(ty_ref) => ty_ref,
+				None => {
+					let ty_ref = self.types.insert(ty::Definition::new(id, cause));
+					node.declare_type(ty_ref);
+					ty_ref
 				}
 			},
 			None => {
@@ -177,30 +212,45 @@ impl Model {
 	}
 
 	/// Requires the given type to be declared.
-	/// 
+	///
 	/// Returns an error if no node with the given `id` is declared,
 	/// or if it is not a type.
-	pub fn require_type(&self, id: Id, source: Option<syntax::Location>) -> Result<Ref<ty::Definition>, Caused<Error>> {
+	pub fn require_type(
+		&self,
+		id: Id,
+		source: Option<syntax::Location>,
+	) -> Result<Ref<ty::Definition>, Caused<Error>> {
 		match self.get(id) {
-			None => Err(Caused::new(Error::UnknownNode { id, expected_ty: Some(node::Type::Type) }, source.map(Cause::Explicit))),
+			None => Err(Caused::new(
+				Error::UnknownNode {
+					id,
+					expected_ty: Some(node::Type::Type),
+				},
+				source.map(Cause::Explicit),
+			)),
 			Some(node) => match node.as_type() {
 				Some(ty_ref) => Ok(ty_ref),
-				None => Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Type, found: node.caused_types(self) }, source.map(Cause::Explicit)))
-			}
+				None => Err(Caused::new(
+					Error::InvalidNodeType {
+						id,
+						expected: node::Type::Type,
+						found: node.caused_types(self),
+					},
+					source.map(Cause::Explicit),
+				)),
+			},
 		}
 	}
 
 	/// Declare the given `id` as a property.
 	pub fn declare_property(&mut self, id: Id, cause: Option<Cause>) -> Ref<prop::Definition> {
 		match self.nodes.get_mut(id) {
-			Some(node) => {
-				match node.as_property() {
-					Some(prop_ref) => prop_ref,
-					None => {
-						let prop_ref = self.properties.insert(prop::Definition::new(id, cause));
-						node.declare_property(prop_ref);
-						prop_ref
-					}
+			Some(node) => match node.as_property() {
+				Some(prop_ref) => prop_ref,
+				None => {
+					let prop_ref = self.properties.insert(prop::Definition::new(id, cause));
+					node.declare_property(prop_ref);
+					prop_ref
 				}
 			},
 			None => {
@@ -212,30 +262,45 @@ impl Model {
 	}
 
 	/// Requires the given property to be declared.
-	/// 
+	///
 	/// Returns an error if no node with the given `id` is declared,
 	/// or if it is not a property.
-	pub fn require_property(&self, id: Id, source: Option<syntax::Location>) -> Result<Ref<prop::Definition>, Caused<Error>> {
+	pub fn require_property(
+		&self,
+		id: Id,
+		source: Option<syntax::Location>,
+	) -> Result<Ref<prop::Definition>, Caused<Error>> {
 		match self.get(id) {
-			None => Err(Caused::new(Error::UnknownNode { id, expected_ty: Some(node::Type::Property) }, source.map(Cause::Explicit))),
+			None => Err(Caused::new(
+				Error::UnknownNode {
+					id,
+					expected_ty: Some(node::Type::Property),
+				},
+				source.map(Cause::Explicit),
+			)),
 			Some(node) => match node.as_property() {
 				Some(prop_ref) => Ok(prop_ref),
-				None => Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Property, found: node.caused_types(self) }, source.map(Cause::Explicit)))
-			}
+				None => Err(Caused::new(
+					Error::InvalidNodeType {
+						id,
+						expected: node::Type::Property,
+						found: node.caused_types(self),
+					},
+					source.map(Cause::Explicit),
+				)),
+			},
 		}
 	}
 
 	/// Declare the given `id` as a layout.
 	pub fn declare_layout(&mut self, id: Id, cause: Option<Cause>) -> Ref<layout::Definition> {
 		match self.nodes.get_mut(id) {
-			Some(node) => {
-				match node.as_layout() {
-					Some(layout_ref) => layout_ref,
-					None => {
-						let layout_ref = self.layouts.insert(layout::Definition::new(id, cause));
-						node.declare_layout(layout_ref);
-						layout_ref
-					}
+			Some(node) => match node.as_layout() {
+				Some(layout_ref) => layout_ref,
+				None => {
+					let layout_ref = self.layouts.insert(layout::Definition::new(id, cause));
+					node.declare_layout(layout_ref);
+					layout_ref
 				}
 			},
 			None => {
@@ -247,16 +312,33 @@ impl Model {
 	}
 
 	/// Requires the given layout to be declared.
-	/// 
+	///
 	/// Returns an error if no node with the given `id` is declared,
 	/// or if it is not a layout.
-	pub fn require_layout(&self, id: Id, cause: Option<Cause>) -> Result<Ref<layout::Definition>, Caused<Error>> {
+	pub fn require_layout(
+		&self,
+		id: Id,
+		cause: Option<Cause>,
+	) -> Result<Ref<layout::Definition>, Caused<Error>> {
 		match self.get(id) {
-			None => Err(Caused::new(Error::UnknownNode { id, expected_ty: Some(node::Type::Layout) }, cause)),
+			None => Err(Caused::new(
+				Error::UnknownNode {
+					id,
+					expected_ty: Some(node::Type::Layout),
+				},
+				cause,
+			)),
 			Some(node) => match node.as_layout() {
 				Some(layout_ref) => Ok(layout_ref),
-				None => Err(Caused::new(Error::InvalidNodeType { id, expected: node::Type::Layout, found: node.caused_types(self) }, cause))
-			}
+				None => Err(Caused::new(
+					Error::InvalidNodeType {
+						id,
+						expected: node::Type::Layout,
+						found: node.caused_types(self),
+					},
+					cause,
+				)),
+			},
 		}
 	}
 }

@@ -56,14 +56,12 @@ impl Vocabulary {
 
 /// Vocabulary map.
 pub struct Map<T> {
-	data: Vec<Option<T>>
+	data: Vec<Option<T>>,
 }
 
 impl<T> Map<T> {
 	pub fn new() -> Self {
-		Self {
-			data: Vec::new()
-		}
+		Self { data: Vec::new() }
 	}
 
 	pub fn get(&self, id: Id) -> Option<&T> {
@@ -76,13 +74,13 @@ impl<T> Map<T> {
 
 	pub fn iter(&self) -> Iter<T> {
 		Iter {
-			inner: self.data.iter().enumerate()
+			inner: self.data.iter().enumerate(),
 		}
 	}
 
 	pub fn iter_mut(&mut self) -> IterMut<T> {
 		IterMut {
-			inner: self.data.iter_mut().enumerate()
+			inner: self.data.iter_mut().enumerate(),
 		}
 	}
 
@@ -108,7 +106,7 @@ impl<T> Default for Map<T> {
 }
 
 pub struct Iter<'a, T> {
-	inner: std::iter::Enumerate<std::slice::Iter<'a, Option<T>>>
+	inner: std::iter::Enumerate<std::slice::Iter<'a, Option<T>>>,
 }
 
 impl<'a, T> Iterator for Iter<'a, T> {
@@ -119,14 +117,14 @@ impl<'a, T> Iterator for Iter<'a, T> {
 			match self.inner.next() {
 				Some((_, None)) => (),
 				Some((i, Some(t))) => break Some((Id(i), t)),
-				None => break None
+				None => break None,
 			}
 		}
 	}
 }
 
 pub struct IterMut<'a, T> {
-	inner: std::iter::Enumerate<std::slice::IterMut<'a, Option<T>>>
+	inner: std::iter::Enumerate<std::slice::IterMut<'a, Option<T>>>,
 }
 
 impl<'a, T> Iterator for IterMut<'a, T> {
@@ -137,7 +135,7 @@ impl<'a, T> Iterator for IterMut<'a, T> {
 			match self.inner.next() {
 				Some((_, None)) => (),
 				Some((i, Some(t))) => break Some((Id(i), t)),
-				None => break None
+				None => break None,
 			}
 		}
 	}

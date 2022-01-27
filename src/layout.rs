@@ -1,22 +1,10 @@
-use crate::{
-	Error,
-	Ref,
-	Id,
-	Cause,
-	Caused,
-	WithCauses,
-	Causes,
-	Documentation,
-	ty,
-	prop,
-	layout
-};
+use crate::{layout, prop, ty, Cause, Caused, Causes, Documentation, Error, Id, Ref, WithCauses};
 use std::fmt;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Type {
 	Struct,
-	Native(Native)
+	Native(Native),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -32,7 +20,7 @@ pub enum Native {
 	DateTime,
 	Iri,
 	Uri,
-	Url
+	Url,
 }
 
 /// Layout definition.
@@ -46,23 +34,27 @@ pub struct Definition {
 
 pub enum Description {
 	Struct(Fields),
-	Native(Native)
+	Native(Native),
 }
 
 impl Description {
 	pub fn ty(&self) -> Type {
 		match self {
 			Self::Struct(_) => Type::Struct,
-			Self::Native(n) => Type::Native(*n)
+			Self::Native(n) => Type::Native(*n),
 		}
 	}
 }
 
 impl WithCauses<Description> {
-	pub fn check(&self, model: &crate::Model, ty: Ref<ty::Definition>) -> Result<(), Caused<Error>> {
+	pub fn check(
+		&self,
+		model: &crate::Model,
+		ty: Ref<ty::Definition>,
+	) -> Result<(), Caused<Error>> {
 		match self.inner() {
 			Description::Native(_) => Ok(()),
-			Description::Struct(fields) => fields.check(model, self.causes(), ty)
+			Description::Struct(fields) => fields.check(model, self.causes(), ty),
 		}
 	}
 }
@@ -74,7 +66,7 @@ impl Definition {
 			ty: None,
 			causes: causes.into(),
 			doc: Documentation::default(),
-			desc: None
+			desc: None,
 		}
 	}
 
@@ -112,7 +104,7 @@ impl Definition {
 		if self.doc.is_empty() {
 			match &self.ty {
 				Some(ty) => model.types().get(*ty.inner()).unwrap().documentation(),
-				None => &self.doc
+				None => &self.doc,
 			}
 		} else {
 			&self.doc
@@ -120,13 +112,24 @@ impl Definition {
 	}
 
 	/// Declare the type for which this layout is defined.
-	pub fn declare_type(&mut self, ty_ref: Ref<ty::Definition>, cause: Option<Cause>) -> Result<(), Caused<Error>> {
+	pub fn declare_type(
+		&mut self,
+		ty_ref: Ref<ty::Definition>,
+		cause: Option<Cause>,
+	) -> Result<(), Caused<Error>> {
 		match &self.ty {
 			Some(expected_ty) => {
 				if *expected_ty.inner() != ty_ref {
-					return Err(Caused::new(Error::LayoutTypeMismatch { expected: *expected_ty.inner(), found: ty_ref, because: expected_ty.causes().preferred() }, cause))
+					return Err(Caused::new(
+						Error::LayoutTypeMismatch {
+							expected: *expected_ty.inner(),
+							found: ty_ref,
+							because: expected_ty.causes().preferred(),
+						},
+						cause,
+					));
 				}
-			},
+			}
 			None => {
 				self.ty = Some(WithCauses::new(ty_ref, cause));
 			}
@@ -135,14 +138,23 @@ impl Definition {
 		Ok(())
 	}
 
-	pub fn declare_native(&mut self, native: Native, cause: Option<Cause>) -> Result<(), Caused<Mismatch>> {
+	pub fn declare_native(
+		&mut self,
+		native: Native,
+		cause: Option<Cause>,
+	) -> Result<(), Caused<Mismatch>> {
 		match &mut self.desc {
-			Some(desc) => {
-				match desc.inner_mut() {
-					Description::Native(n) if *n == native => Ok(()),
-					_ => Err(Caused::new(Mismatch::Type { expected: desc.ty(), found: Type::Struct, because: desc.causes().preferred() }, cause))
-				}
-			}
+			Some(desc) => match desc.inner_mut() {
+				Description::Native(n) if *n == native => Ok(()),
+				_ => Err(Caused::new(
+					Mismatch::Type {
+						expected: desc.ty(),
+						found: Type::Struct,
+						because: desc.causes().preferred(),
+					},
+					cause,
+				)),
+			},
 			None => {
 				self.desc = Some(WithCauses::new(Description::Native(native), cause));
 				Ok(())
@@ -150,24 +162,43 @@ impl Definition {
 		}
 	}
 
-	pub fn declare_fields(&mut self, fields: Vec<Field>, cause: Option<Cause>) -> Result<(), Caused<Mismatch>> {
+	pub fn declare_fields(
+		&mut self,
+		fields: Vec<Field>,
+		cause: Option<Cause>,
+	) -> Result<(), Caused<Mismatch>> {
 		match &mut self.desc {
 			Some(desc) => {
 				let desc_cause = desc.causes().preferred();
 				match desc.inner_mut() {
-					Description::Struct(current_fields) => current_fields.add_causes(desc_cause, &fields, cause),
-					_ => Err(Caused::new(Mismatch::Type { expected: desc.ty(), found: Type::Struct, because: desc.causes().preferred() }, cause))
+					Description::Struct(current_fields) => {
+						current_fields.add_causes(desc_cause, &fields, cause)
+					}
+					_ => Err(Caused::new(
+						Mismatch::Type {
+							expected: desc.ty(),
+							found: Type::Struct,
+							because: desc.causes().preferred(),
+						},
+						cause,
+					)),
 				}
 			}
 			None => {
-				self.desc = Some(WithCauses::new(Description::Struct(Fields::new(fields)), cause));
+				self.desc = Some(WithCauses::new(
+					Description::Struct(Fields::new(fields)),
+					cause,
+				));
 				Ok(())
 			}
 		}
 	}
 
 	pub fn set_fields(&mut self, fields: Vec<Field>, causes: impl Into<Causes>) {
-		self.desc = Some(WithCauses::new(Description::Struct(Fields::new(fields)), causes))
+		self.desc = Some(WithCauses::new(
+			Description::Struct(Fields::new(fields)),
+			causes,
+		))
 	}
 
 	pub fn check(&self, model: &crate::Model) -> Result<(), Caused<Error>> {
@@ -176,7 +207,7 @@ impl Definition {
 		if let Some(desc) = &self.desc {
 			desc.check(model, ty)?
 		}
-		
+
 		Ok(())
 	}
 }
@@ -187,22 +218,22 @@ pub enum Mismatch {
 	Type {
 		expected: Type,
 		found: Type,
-		because: Option<Cause>
+		because: Option<Cause>,
 	},
 	FieldProperty {
 		expected: Ref<prop::Definition>,
 		found: Ref<prop::Definition>,
-		because: Option<Cause>
+		because: Option<Cause>,
 	},
 	FieldName {
 		expected: String,
 		found: String,
-		because: Option<Cause>
+		because: Option<Cause>,
 	},
 	FieldLayout {
 		expected: layout::Expr,
 		found: layout::Expr,
-		because: Option<Cause>
+		because: Option<Cause>,
 	},
 	AttributeRequired {
 		/// Is the field required?
@@ -210,35 +241,38 @@ pub enum Mismatch {
 		/// If `true` then it is, and some other declaration is missing the `required` attribute.
 		/// If `false` then it is not, and some other declaration is adding the attribute.
 		required: bool,
-		because: Option<Cause>
+		because: Option<Cause>,
 	},
 	AttributeFunctional {
 		functional: bool,
-		because: Option<Cause>
+		because: Option<Cause>,
 	},
 	MissingField {
 		name: String,
-		because: Option<Cause>
+		because: Option<Cause>,
 	},
 	AdditionalField {
 		name: String,
-		because: Option<Cause>
-	}
+		because: Option<Cause>,
+	},
 }
 
 /// Layout fields.
 pub struct Fields {
-	fields: Vec<Field>
+	fields: Vec<Field>,
 }
 
 impl Fields {
 	pub fn new(fields: Vec<Field>) -> Self {
-		Self {
-			fields
-		}
+		Self { fields }
 	}
 
-	pub fn check(&self, model: &crate::Model, causes: &Causes, ty_ref: Ref<ty::Definition>) -> Result<(), Caused<Error>> {
+	pub fn check(
+		&self,
+		model: &crate::Model,
+		causes: &Causes,
+		ty_ref: Ref<ty::Definition>,
+	) -> Result<(), Caused<Error>> {
 		let ty = model.types().get(ty_ref).unwrap();
 
 		for (prop_ref, _) in ty.properties() {
@@ -247,10 +281,10 @@ impl Fields {
 				return Err(Caused::new(
 					Error::MissingPropertyField {
 						prop: prop_ref,
-						because: prop.causes().preferred()
+						because: prop.causes().preferred(),
 					},
-					causes.preferred()
-				))
+					causes.preferred(),
+				));
 			}
 		}
 
@@ -272,18 +306,23 @@ impl Fields {
 	pub fn iter(&self) -> std::slice::Iter<Field> {
 		self.fields.iter()
 	}
-	
-	pub fn add_causes(&mut self, self_cause: Option<Cause>, fields: &[Field], cause: Option<Cause>) -> Result<(), Caused<Mismatch>> {
+
+	pub fn add_causes(
+		&mut self,
+		self_cause: Option<Cause>,
+		fields: &[Field],
+		cause: Option<Cause>,
+	) -> Result<(), Caused<Mismatch>> {
 		for (a, b) in self.fields.iter().zip(fields) {
 			if a.property() != b.property() {
 				return Err(Caused::new(
 					Mismatch::FieldProperty {
 						expected: a.property(),
 						found: b.property(),
-						because: a.causes().preferred()
+						because: a.causes().preferred(),
 					},
-					b.causes().preferred()
-				))
+					b.causes().preferred(),
+				));
 			}
 
 			if a.name() != b.name() {
@@ -291,10 +330,10 @@ impl Fields {
 					Mismatch::FieldName {
 						expected: a.name().to_owned(),
 						found: b.name().to_owned(),
-						because: a.causes().preferred()
+						because: a.causes().preferred(),
 					},
-					b.causes().preferred()
-				))
+					b.causes().preferred(),
+				));
 			}
 
 			if a.layout() != b.layout() {
@@ -302,30 +341,30 @@ impl Fields {
 					Mismatch::FieldLayout {
 						expected: a.layout().clone(),
 						found: b.layout().clone(),
-						because: a.causes().preferred()
+						because: a.causes().preferred(),
 					},
-					b.causes().preferred()
-				))
+					b.causes().preferred(),
+				));
 			}
 
 			if a.is_required() != b.is_required() {
 				return Err(Caused::new(
 					Mismatch::AttributeRequired {
 						required: a.is_required(),
-						because: a.causes().preferred()
+						because: a.causes().preferred(),
 					},
-					b.causes().preferred()
-				))
+					b.causes().preferred(),
+				));
 			}
 
 			if a.is_functional() != b.is_functional() {
 				return Err(Caused::new(
 					Mismatch::AttributeFunctional {
 						functional: a.is_functional(),
-						because: a.causes().preferred()
+						because: a.causes().preferred(),
 					},
-					b.causes().preferred()
-				))
+					b.causes().preferred(),
+				));
 			}
 		}
 
@@ -334,9 +373,10 @@ impl Fields {
 			return Err(Caused::new(
 				Mismatch::MissingField {
 					name: field.name().to_owned(),
-					because: field.causes().preferred()
-				}, cause
-			))
+					because: field.causes().preferred(),
+				},
+				cause,
+			));
 		}
 
 		if fields.len() > self.fields.len() {
@@ -344,10 +384,10 @@ impl Fields {
 			return Err(Caused::new(
 				Mismatch::AdditionalField {
 					name: field.name().to_owned(),
-					because: self_cause
+					because: self_cause,
 				},
-				field.causes().preferred()
-			))
+				field.causes().preferred(),
+			));
 		}
 
 		Ok(())
@@ -385,11 +425,16 @@ pub struct Field {
 	required: bool,
 	functional: bool,
 	causes: Causes,
-	doc: Documentation
+	doc: Documentation,
 }
 
 impl Field {
-	pub fn new(prop: Ref<prop::Definition>, name: String, layout: Expr, causes: impl Into<Causes>) -> Self {
+	pub fn new(
+		prop: Ref<prop::Definition>,
+		name: String,
+		layout: Expr,
+		causes: impl Into<Causes>,
+	) -> Self {
 		Self {
 			prop,
 			name,
@@ -397,12 +442,12 @@ impl Field {
 			required: false,
 			functional: false,
 			causes: causes.into(),
-			doc: Documentation::default()
+			doc: Documentation::default(),
 		}
 	}
 
 	/// Check the well-formedness of this field.
-	/// 
+	///
 	/// The layout must be fit for the given property type.
 	/// The field must be required if the property is required.
 	pub fn check(&self, model: &crate::Model) -> Result<(), Caused<Error>> {
@@ -412,25 +457,25 @@ impl Field {
 			return Err(Caused::new(
 				Error::FieldNotRequired {
 					prop: self.prop,
-					because: prop.causes().preferred()
+					because: prop.causes().preferred(),
 				},
-				self.causes().preferred()
-			))
+				self.causes().preferred(),
+			));
 		}
 
 		if prop.is_functional() && !self.is_functional() {
 			return Err(Caused::new(
 				Error::FieldNotFunctional {
 					prop: self.prop,
-					because: prop.causes().preferred()
+					because: prop.causes().preferred(),
 				},
-				self.causes().preferred()
-			))
+				self.causes().preferred(),
+			));
 		}
 
 		Ok(())
 	}
-	
+
 	pub fn property(&self) -> Ref<prop::Definition> {
 		self.prop
 	}
@@ -495,21 +540,18 @@ impl Field {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Expr {
 	layout: crate::Ref<Definition>,
-	args: Vec<Self>
+	args: Vec<Self>,
 }
 
 impl Expr {
 	pub fn new(layout: crate::Ref<Definition>, args: Vec<Self>) -> Self {
-		Self {
-			layout,
-			args
-		}
+		Self { layout, args }
 	}
 
 	pub fn layout(&self) -> crate::Ref<Definition> {
 		self.layout
 	}
-	
+
 	pub fn arguments(&self) -> &[Self] {
 		&self.args
 	}

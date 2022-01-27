@@ -1,17 +1,7 @@
-use crate::{
-	Error,
-	Ref,
-	Id,
-	Cause,
-	Caused,
-	Causes,
-	Documentation,
-	prop,
-	layout
-};
+use crate::{layout, prop, Cause, Caused, Causes, Documentation, Error, Id, Ref};
 use iref::Iri;
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 
 /// Type definition.
 pub struct Definition {
@@ -25,7 +15,7 @@ pub struct Definition {
 	properties: HashMap<Ref<prop::Definition>, Causes>,
 
 	/// Documentation.
-	doc: Documentation
+	doc: Documentation,
 }
 
 impl Definition {
@@ -34,7 +24,7 @@ impl Definition {
 			id,
 			causes: causes.into(),
 			properties: HashMap::new(),
-			doc: Documentation::default()
+			doc: Documentation::default(),
 		}
 	}
 
@@ -59,7 +49,7 @@ impl Definition {
 		self.doc = doc
 	}
 
-	pub fn properties(&self) -> impl Iterator<Item=(Ref<prop::Definition>, &Causes)> {
+	pub fn properties(&self) -> impl Iterator<Item = (Ref<prop::Definition>, &Causes)> {
 		self.properties.iter().map(|(p, c)| (*p, c))
 	}
 
@@ -68,7 +58,7 @@ impl Definition {
 		match self.properties.entry(prop_ref) {
 			Entry::Vacant(entry) => {
 				entry.insert(cause.into());
-			},
+			}
 			Entry::Occupied(mut entry) => {
 				if let Some(cause) = cause {
 					entry.get_mut().add(cause)
@@ -77,7 +67,10 @@ impl Definition {
 		}
 	}
 
-	pub fn default_fields(&self, model: &crate::Model) -> Result<Vec<layout::Field>, Caused<Error>> {
+	pub fn default_fields(
+		&self,
+		model: &crate::Model,
+	) -> Result<Vec<layout::Field>, Caused<Error>> {
 		struct PropertyIri<'a>(Iri<'a>, Ref<prop::Definition>, &'a Causes);
 
 		impl<'a> PartialEq for PropertyIri<'a> {
@@ -100,24 +93,39 @@ impl Definition {
 			}
 		}
 
-		let mut properties: Vec<PropertyIri> = self.properties.iter().map(|(prop_ref, causes)| {
-			let prop = model.properties().get(*prop_ref).unwrap();
-			let iri = model.vocabulary().get(prop.id()).unwrap();
-			PropertyIri(iri, *prop_ref, causes)
-		}).collect();
+		let mut properties: Vec<PropertyIri> = self
+			.properties
+			.iter()
+			.map(|(prop_ref, causes)| {
+				let prop = model.properties().get(*prop_ref).unwrap();
+				let iri = model.vocabulary().get(prop.id()).unwrap();
+				PropertyIri(iri, *prop_ref, causes)
+			})
+			.collect();
 
 		properties.sort();
 
 		let mut fields = Vec::with_capacity(properties.len());
 		for PropertyIri(iri, prop_ref, causes) in properties {
 			let prop = model.properties().get(prop_ref).unwrap();
-			let name = iri.path().file_name().expect("invalid property IRI").to_owned();
+			let name = iri
+				.path()
+				.file_name()
+				.expect("invalid property IRI")
+				.to_owned();
 			let layout_expr = match prop.ty() {
-				Some(ty) => ty.expr().as_layout_expr(model, ty.causes().preferred().map(Cause::into_implicit))?,
-				None => panic!("no known type")
+				Some(ty) => ty
+					.expr()
+					.as_layout_expr(model, ty.causes().preferred().map(Cause::into_implicit))?,
+				None => panic!("no known type"),
 			};
 
-			let mut field = layout::Field::new(prop_ref, name, layout_expr, causes.map(Cause::into_implicit));
+			let mut field = layout::Field::new(
+				prop_ref,
+				name,
+				layout_expr,
+				causes.map(Cause::into_implicit),
+			);
 
 			field.set_required(prop.is_required());
 			field.set_functional(prop.is_functional());
@@ -149,21 +157,18 @@ impl<'c> fmt::Display for RefWithContext<'c> {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Expr {
 	ty: crate::Ref<Definition>,
-	args: Vec<Self>
+	args: Vec<Self>,
 }
 
 impl Expr {
 	pub fn new(ty: crate::Ref<Definition>, args: Vec<Self>) -> Self {
-		Self {
-			ty,
-			args
-		}
+		Self { ty, args }
 	}
 
 	pub fn ty(&self) -> crate::Ref<Definition> {
 		self.ty
 	}
-	
+
 	pub fn arguments(&self) -> &[Self] {
 		&self.args
 	}
@@ -172,7 +177,11 @@ impl Expr {
 		ExprWithContext(context, self)
 	}
 
-	pub fn as_layout_expr(&self, model: &crate::Model, cause: Option<Cause>) -> Result<layout::Expr, Caused<Error>> {
+	pub fn as_layout_expr(
+		&self,
+		model: &crate::Model,
+		cause: Option<Cause>,
+	) -> Result<layout::Expr, Caused<Error>> {
 		let id = model.types().get(self.ty).unwrap().id();
 		let layout_ref = model.require_layout(id, cause)?;
 		let mut args = Vec::with_capacity(self.args.len());

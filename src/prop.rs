@@ -1,13 +1,4 @@
-use crate::{
-	Error,
-	Ref,
-	Id,
-	Cause,
-	Caused,
-	Causes,
-	Documentation,
-	ty
-};
+use crate::{ty, Cause, Caused, Causes, Documentation, Error, Id, Ref};
 use std::collections::HashMap;
 
 /// Property definition.
@@ -18,7 +9,7 @@ pub struct Definition {
 	ty: Option<Type>,
 	required: bool,
 	functional: bool,
-	doc: Documentation
+	doc: Documentation,
 }
 
 impl Definition {
@@ -30,7 +21,7 @@ impl Definition {
 			ty: None,
 			required: false,
 			functional: false,
-			doc: Documentation::default()
+			doc: Documentation::default(),
 		}
 	}
 
@@ -82,7 +73,7 @@ impl Definition {
 		match self.domain.entry(ty_ref) {
 			Entry::Vacant(entry) => {
 				entry.insert(cause.into());
-			},
+			}
 			Entry::Occupied(mut entry) => {
 				if let Some(cause) = cause {
 					entry.get_mut().add(cause)
@@ -91,7 +82,11 @@ impl Definition {
 		}
 	}
 
-	pub fn declare_type(&mut self, ty_expr: ty::Expr, cause: Option<Cause>) -> Result<(), Caused<Error>> {
+	pub fn declare_type(
+		&mut self,
+		ty_expr: ty::Expr,
+		cause: Option<Cause>,
+	) -> Result<(), Caused<Error>> {
 		match &mut self.ty {
 			Some(ty) => ty.declare(ty_expr, cause),
 			None => {
@@ -104,14 +99,14 @@ impl Definition {
 
 pub struct Type {
 	expr: ty::Expr,
-	causes: Causes
+	causes: Causes,
 }
 
 impl Type {
 	pub fn new(expr: ty::Expr, causes: impl Into<Causes>) -> Self {
 		Self {
 			expr,
-			causes: causes.into()
+			causes: causes.into(),
 		}
 	}
 
@@ -123,11 +118,22 @@ impl Type {
 		&self.causes
 	}
 
-	pub fn declare(&mut self, ty_expr: ty::Expr, source: Option<Cause>) -> Result<(), Caused<Error>> {
+	pub fn declare(
+		&mut self,
+		ty_expr: ty::Expr,
+		source: Option<Cause>,
+	) -> Result<(), Caused<Error>> {
 		if self.expr == ty_expr {
 			Ok(())
 		} else {
-			Err(Caused::new(Error::TypeMismatch { expected: self.expr.clone(), found: ty_expr, because: self.causes.preferred() }, source))
+			Err(Caused::new(
+				Error::TypeMismatch {
+					expected: self.expr.clone(),
+					found: ty_expr,
+					because: self.causes.preferred(),
+				},
+				source,
+			))
 		}
 	}
 }
