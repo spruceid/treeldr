@@ -8,6 +8,7 @@ use crate::{
 	Caused,
 	node,
 	ty,
+	prop,
 	layout
 };
 
@@ -54,7 +55,16 @@ pub enum Error {
 		found: Ref<ty::Definition>,
 		because: Option<Cause>
 	},
-	LayoutMismatch(layout::Mismatch)
+	LayoutMismatch(layout::Mismatch),
+	/// A field is not required but its corresponding property is.
+	FieldNotRequired {
+		prop: Ref<prop::Definition>,
+		because: Option<Cause>
+	},
+	MissingPropertyField {
+		prop: Ref<prop::Definition>,
+		because: Option<Cause>
+	}
 }
 
 impl Caused<Error> {
@@ -171,6 +181,12 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 				layout::Mismatch::FieldRequirement { .. } => format!("required field mismatch"),
 				layout::Mismatch::MissingField { name, .. } => format!("missing field `{}`", name),
 				layout::Mismatch::AdditionalField { name, .. } => format!("unexpected field `{}`", name)
+			}
+			Error::FieldNotRequired { .. } => {
+				format!("required property has a non required field")
+			}
+			Error::MissingPropertyField { .. } => {
+				format!("missing field for required property")
 			}
 		}
 	}
@@ -313,6 +329,38 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 						let source = cause.source();
 						labels.push(source.into_secondary_label().with_message(format!("this field is not declared here")))
 					}
+				}
+			}
+			Error::FieldNotRequired { because, .. } => {
+				if let Some(cause) = because {
+					let message = match cause {
+						Cause::Explicit(_) => format!("property is required here..."),
+						Cause::Implicit(_) => format!("property is implicitly required here...")
+					};
+
+					let source = cause.source();
+					labels.push(source.into_secondary_label().with_message(message))
+				}
+
+				if let Some(cause) = self.error().cause() {
+					let source = cause.source();
+					labels.push(source.into_primary_label().with_message("...but is not required here"))
+				}
+			}
+			Error::MissingPropertyField { because, .. } => {
+				if let Some(cause) = because {
+					let message = match cause {
+						Cause::Explicit(_) => format!("property is required here..."),
+						Cause::Implicit(_) => format!("property is implicitly required here...")
+					};
+
+					let source = cause.source();
+					labels.push(source.into_secondary_label().with_message(message))
+				}
+
+				if let Some(cause) = self.error().cause() {
+					let source = cause.source();
+					labels.push(source.into_primary_label().with_message("...but no field captures this property here"))
 				}
 			}
 		}

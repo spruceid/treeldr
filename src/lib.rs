@@ -57,11 +57,14 @@ impl Model {
 		}
 	}
 
-	pub fn define_native_type(&mut self, iri: IriBuf, layout: layout::Native) -> Result<(), Caused<layout::Mismatch>> {
+	pub fn define_native_type(&mut self, iri: IriBuf, native_layout: layout::Native) -> Result<(), Caused<layout::Mismatch>> {
 		let id = self.vocabulary_mut().insert(iri);
-		self.declare_type(id, None);
+		let ty_ref = self.declare_type(id, None);
+
 		let layout_ref = self.declare_layout(id, None);
-		self.layouts.get_mut(layout_ref).unwrap().declare_native(layout, None)
+		let layout = self.layouts.get_mut(layout_ref).unwrap();
+		layout.declare_type(ty_ref, None).unwrap();
+		layout.declare_native(native_layout, None)
 	}
 
 	pub fn define_xml_types(&mut self) -> Result<(), Caused<layout::Mismatch>> {
@@ -76,6 +79,14 @@ impl Model {
 		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#date").unwrap(), layout::Native::Date)?;
 		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(), layout::Native::DateTime)?;
 		self.define_native_type(IriBuf::new("http://www.w3.org/2001/XMLSchema#anyURI").unwrap(), layout::Native::Uri)?;
+		Ok(())
+	}
+
+	pub fn check(&self) -> Result<(), Caused<Error>> {
+		for (_, layout) in self.layouts.iter() {
+			layout.check(self)?;
+		}
+
 		Ok(())
 	}
 

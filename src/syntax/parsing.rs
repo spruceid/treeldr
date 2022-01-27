@@ -1,7 +1,7 @@
 use super::*;
 use crate::source;
 use locspan::MapLocErr;
-use lexing::{Tokens, Token, TokenKind};
+use lexing::{Tokens, Token, TokenKind, Keyword};
 use std::{fmt, fmt::Debug};
 
 pub enum Error<E: Debug> {
@@ -247,7 +247,7 @@ impl Parse for PropertyDefinition {
 		let ty = match peek_token(tokens)?.into_value() {
 			Some(Token::Punct(lexing::Punct::Colon)) => {
 				next_token(tokens)?;
-				let ty = TypeExpr::parse(tokens)?;
+				let ty = AnnotatedTypeExpr::parse(tokens)?;
 				span.set_end(ty.span().end());
 				Some(ty)
 			},
@@ -280,7 +280,7 @@ impl Parse for FieldDefinition {
 		let locspan::Loc(token, token_source) = next_expected_token(tokens, || vec![TokenKind::Punct(lexing::Punct::Colon)])?;
 		let layout = match token {
 			Token::Punct(lexing::Punct::Colon) => {
-				let layout = LayoutExpr::parse(tokens)?;
+				let layout = AnnotatedLayoutExpr::parse(tokens)?;
 				span.set_end(layout.span().end());
 				layout
 			}
@@ -321,6 +321,44 @@ impl Parse for Alias {
 	}
 }
 
+impl Parse for AnnotatedTypeExpr {
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
+		let mut annotations = Vec::new();
+
+		loop {
+			match peek_token(tokens)? {
+				locspan::Loc(Some(Token::Keyword(Keyword::Annotation(a))), loc) => {
+					annotations.push(Loc::new(*a, loc));
+					next_token(tokens)?;
+				},
+				_ => break,
+			}
+		}
+
+		let expr = TypeExpr::parse(tokens)?;
+		let mut span = expr.span();
+
+		if let Some(a) = annotations.first() {
+			span.set_start(a.span().start())
+		}
+
+		let file = *expr.file();
+
+		loop {
+			match peek_token(tokens)? {
+				locspan::Loc(Some(Token::Keyword(Keyword::Annotation(a))), loc) => {
+					annotations.push(Loc::new(*a, loc));
+					span.append(loc.span());
+					next_token(tokens)?;
+				},
+				_ => break,
+			}
+		}
+
+		Ok(Loc::new(Self { expr, annotations }, Location::new(file, span)))
+	}
+}
+
 impl Parse for TypeExpr {
 	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
 		let ty = Id::parse(tokens)?;
@@ -340,6 +378,44 @@ impl Parse for TypeExpr {
 		};
 
 		Ok(Loc::new(Self { ty, args }, Location::new(file, span)))
+	}
+}
+
+impl Parse for AnnotatedLayoutExpr {
+	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
+		let mut annotations = Vec::new();
+
+		loop {
+			match peek_token(tokens)? {
+				locspan::Loc(Some(Token::Keyword(Keyword::Annotation(a))), loc) => {
+					annotations.push(Loc::new(*a, loc));
+					next_token(tokens)?;
+				},
+				_ => break,
+			}
+		}
+
+		let expr = LayoutExpr::parse(tokens)?;
+		let mut span = expr.span();
+
+		if let Some(a) = annotations.first() {
+			span.set_start(a.span().start())
+		}
+
+		let file = *expr.file();
+
+		loop {
+			match peek_token(tokens)? {
+				locspan::Loc(Some(Token::Keyword(Keyword::Annotation(a))), loc) => {
+					annotations.push(Loc::new(*a, loc));
+					span.append(loc.span());
+					next_token(tokens)?;
+				},
+				_ => break,
+			}
+		}
+
+		Ok(Loc::new(Self { expr, annotations }, Location::new(file, span)))
 	}
 }
 

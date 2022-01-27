@@ -40,7 +40,7 @@ pub struct TypeDefinition {
 
 pub struct PropertyDefinition {
 	pub id: Loc<Id>,
-	pub ty: Option<Loc<TypeExpr>>,
+	pub ty: Option<Loc<AnnotatedTypeExpr>>,
 	pub doc: Loc<Documentation>
 }
 
@@ -51,10 +51,25 @@ pub enum Annotation {
 	Required
 }
 
+impl Annotation {
+	pub fn from_name(name: &str) -> Option<Self> {
+		match name {
+			"required" => Some(Self::Required),
+			_ => None
+		}
+	}
+	
+	pub fn as_str(&self) -> &'static str {
+		match self {
+			Self::Required => "required",
+		}
+	}
+}
+
 /// Annotated type expression.
 pub struct AnnotatedTypeExpr {
-	expr: Loc<TypeExpr>,
-	annotations: Vec<Loc<Annotation>>
+	pub expr: Loc<TypeExpr>,
+	pub annotations: Vec<Loc<Annotation>>
 }
 
 pub struct TypeExpr {
@@ -71,7 +86,7 @@ pub struct LayoutDefinition {
 
 pub struct FieldDefinition {
 	pub id: Loc<Id>,
-	pub layout: Loc<LayoutExpr>,
+	pub layout: Loc<AnnotatedLayoutExpr>,
 	pub alias: Option<Loc<Alias>>,
 	pub doc: Loc<Documentation>
 }
@@ -82,6 +97,12 @@ impl Alias {
 	pub fn as_str(&self) -> &str {
 		&self.0
 	}
+}
+
+/// Annotated layout expression.
+pub struct AnnotatedLayoutExpr {
+	pub expr: Loc<LayoutExpr>,
+	pub annotations: Vec<Loc<Annotation>>
 }
 
 pub struct LayoutExpr {

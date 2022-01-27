@@ -58,6 +58,15 @@ impl Description {
 	}
 }
 
+impl WithCauses<Description> {
+	pub fn check(&self, model: &crate::Model, ty: Ref<ty::Definition>) -> Result<(), Caused<Error>> {
+		match self.inner() {
+			Description::Native(_) => Ok(()),
+			Description::Struct(fields) => fields.check(model, self.causes(), ty)
+		}
+	}
+}
+
 impl Definition {
 	pub fn new(id: Id, causes: impl Into<Causes>) -> Self {
 		Self {
@@ -160,6 +169,16 @@ impl Definition {
 	pub fn set_fields(&mut self, fields: Vec<Field>, causes: impl Into<Causes>) {
 		self.desc = Some(WithCauses::new(Description::Struct(Fields::new(fields)), causes))
 	}
+
+	pub fn check(&self, model: &crate::Model) -> Result<(), Caused<Error>> {
+		let ty = *self.ty().expect("undefined layout").inner();
+
+		if let Some(desc) = &self.desc {
+			desc.check(model, ty)?
+		}
+		
+		Ok(())
+	}
 }
 
 /// Layout mismatch error.
@@ -213,6 +232,33 @@ impl Fields {
 		Self {
 			fields
 		}
+	}
+
+	pub fn check(&self, model: &crate::Model, causes: &Causes, ty_ref: Ref<ty::Definition>) -> Result<(), Caused<Error>> {
+		let ty = model.types().get(ty_ref).unwrap();
+
+		for (prop_ref, _) in ty.properties() {
+			let prop = model.properties().get(prop_ref).unwrap();
+			if prop.is_required() && !self.contains_prop(prop_ref) {
+				return Err(Caused::new(
+					Error::MissingPropertyField {
+						prop: prop_ref,
+						because: prop.causes().preferred()
+					},
+					causes.preferred()
+				))
+			}
+		}
+
+		for f in &self.fields {
+			f.check(model)?
+		}
+
+		Ok(())
+	}
+
+	pub fn contains_prop(&self, prop_ref: Ref<prop::Definition>) -> bool {
+		self.fields.iter().any(|f| f.prop == prop_ref)
 	}
 
 	pub fn as_slice(&self) -> &[Field] {
@@ -337,6 +383,26 @@ impl Field {
 			causes: causes.into(),
 			doc: Documentation::default()
 		}
+	}
+
+	/// Check the well-formedness of this field.
+	/// 
+	/// The layout must be fit for the given property type.
+	/// The field must be required if the property is required.
+	pub fn check(&self, model: &crate::Model) -> Result<(), Caused<Error>> {
+		let prop = model.properties().get(self.prop).unwrap();
+
+		if prop.is_required() && !self.is_required() {
+			return Err(Caused::new(
+				Error::FieldNotRequired {
+					prop: self.prop,
+					because: prop.causes().preferred()
+				},
+				self.causes().preferred()
+			))
+		}
+
+		Ok(())
 	}
 	
 	pub fn property(&self) -> Ref<prop::Definition> {

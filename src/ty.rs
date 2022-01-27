@@ -11,7 +11,7 @@ use crate::{
 };
 use iref::Iri;
 use std::fmt;
-use std::collections::{HashSet, HashMap};
+use std::collections::HashMap;
 
 /// Type definition.
 pub struct Definition {
@@ -57,6 +57,10 @@ impl Definition {
 
 	pub fn set_documentation(&mut self, doc: Documentation) {
 		self.doc = doc
+	}
+
+	pub fn properties(&self) -> impl Iterator<Item=(Ref<prop::Definition>, &Causes)> {
+		self.properties.iter().map(|(p, c)| (*p, c))
 	}
 
 	pub fn declare_property(&mut self, prop_ref: Ref<prop::Definition>, cause: Option<Cause>) {
@@ -113,7 +117,13 @@ impl Definition {
 				None => panic!("no known type")
 			};
 
-			fields.push(layout::Field::new(prop_ref, name, layout_expr, causes.map(Cause::into_implicit)));
+			let mut field = layout::Field::new(prop_ref, name, layout_expr, causes.map(Cause::into_implicit));
+
+			if prop.is_required() {
+				field.declare_required()
+			}
+
+			fields.push(field);
 		}
 
 		Ok(fields)

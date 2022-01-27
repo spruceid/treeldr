@@ -40,6 +40,10 @@ impl<T> Collection<T> {
 		self.items.push(v);
 		r
 	}
+
+	pub fn iter(&self) -> impl Iterator<Item=(Ref<T>, &T)> {
+		self.items.iter().enumerate().map(|(i, t)| (Ref::new(i), t))
+	}
 }
 
 impl<T> Default for Collection<T> {

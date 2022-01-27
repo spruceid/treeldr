@@ -1,5 +1,5 @@
 use locspan::ErrAt;
-use super::{Loc, Span, Location, peekable3::Peekable3};
+use super::{Loc, Span, Location, peekable3::Peekable3, Annotation};
 use crate::source;
 use iref::{IriRef, IriRefBuf};
 use std::fmt;
@@ -213,7 +213,8 @@ pub enum Keyword {
 	Type,
 	Layout,
 	As,
-	For
+	For,
+	Annotation(Annotation)
 }
 
 impl Keyword {
@@ -223,7 +224,7 @@ impl Keyword {
 			"layout" => Some(Keyword::Layout),
 			"as" => Some(Keyword::As),
 			"for" => Some(Keyword::For),
-			_ => None
+			_ => Annotation::from_name(name).map(Self::Annotation)
 		}
 	}
 	
@@ -232,7 +233,8 @@ impl Keyword {
 			Self::Type => "type",
 			Self::Layout => "layout",
 			Self::As => "as",
-			Self::For => "for"
+			Self::For => "for",
+			Self::Annotation(a) => a.as_str()
 		}
 	}
 }

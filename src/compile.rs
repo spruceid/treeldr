@@ -9,7 +9,7 @@ use crate::{
 	Caused,
 	Documentation,
 	syntax,
-	syntax::Loc,
+	syntax::{Loc, Annotation},
 	ty,
 	layout
 };
@@ -161,8 +161,8 @@ impl Compile for Loc<syntax::Document> {
 		for (layout_ref, fields, causes) in implicit_layouts {
 			env.context.layouts_mut().get_mut(layout_ref).unwrap().set_fields(fields, causes.preferred());
 		}
-		
-		Ok(())
+
+		env.context.check()
 	}
 }
 
@@ -213,7 +213,9 @@ impl Declare for Loc<syntax::TypeDefinition> {
 		let doc = self.value().doc.compile(env)?;
 		env.context.types_mut().get_mut(ty_ref).unwrap().set_documentation(doc.clone());
 		let doc = self.value().doc.compile(env)?;
-		env.context.layouts_mut().get_mut(layout_ref).unwrap().set_documentation(doc);
+		let layout = env.context.layouts_mut().get_mut(layout_ref).unwrap();
+		layout.declare_type(ty_ref, Some(Cause::Implicit(*self.location())))?;
+		layout.set_documentation(doc);
 
 		Ok(())
 	}
@@ -253,10 +255,16 @@ impl Compile for Loc<syntax::PropertyDefinition> {
 		let id = self.value().id.compile(env)?;
 		let prop_ref = env.context.get(id).unwrap().as_property().unwrap();
 
-		if let Some(ty_expr) = &self.value().ty {
-			let ty = ty_expr.compile(env)?;
+		if let Some(annotated_ty_expr) = &self.value().ty {
+			let ty = annotated_ty_expr.expr.compile(env)?;
 			let prop = env.context.properties_mut().get_mut(prop_ref).unwrap();
 			prop.declare_type(ty, Some(Cause::Explicit(*self.location())))?;
+
+			for a in &annotated_ty_expr.annotations {
+				match a.value() {
+					Annotation::Required => prop.declare_required()
+				}
+			}
 		}
 
 		if let Some(ty_ref) = env.ty() {
@@ -317,7 +325,7 @@ impl Compile for Loc<syntax::LayoutDefinition> {
 			fields.push(field_def.compile(env)?);
 		}
 		env.scope = None;
-		env.context.layouts_mut().get_mut(layout_ref).unwrap().declare_fields(fields, Some(Cause::Explicit(*self.value().ty_id.location())))?;
+		env.context.layouts_mut().get_mut(layout_ref).unwrap().declare_fields(fields, Some(Cause::Explicit(*self.value().id.location())))?;
 		Ok(())
 	}
 }
@@ -336,9 +344,16 @@ impl Compile for Loc<syntax::FieldDefinition> {
 			}
 		};
 
-		let layout_expr = self.value().layout.compile(env)?;
+		let layout_expr = self.value().layout.expr.compile(env)?;
+		let mut field = layout::Field::new(prop_ref, name, layout_expr, Some(Cause::Explicit(*self.location())));
 
-		Ok(layout::Field::new(prop_ref, name, layout_expr, Some(Cause::Explicit(*self.location()))))
+		for a in &self.value().layout.annotations {
+			match a.value() {
+				Annotation::Required => field.declare_required()
+			}
+		}
+
+		Ok(field)
 	}
 }
 
