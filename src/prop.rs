@@ -17,6 +17,7 @@ pub struct Definition {
 	domain: HashMap<Ref<ty::Definition>, Causes>,
 	ty: Option<Type>,
 	required: bool,
+	functional: bool,
 	doc: Documentation
 }
 
@@ -28,6 +29,7 @@ impl Definition {
 			domain: HashMap::new(),
 			ty: None,
 			required: false,
+			functional: false,
 			doc: Documentation::default()
 		}
 	}
@@ -51,6 +53,16 @@ impl Definition {
 
 	pub fn declare_required(&mut self) {
 		self.required = true
+	}
+
+	/// Checks if this property is functional,
+	/// meaning that it is associated to at most one value.
+	pub fn is_functional(&self) -> bool {
+		self.functional
+	}
+
+	pub fn declare_functional(&mut self) {
+		self.functional = true
 	}
 
 	pub fn documentation(&self) -> &Documentation {

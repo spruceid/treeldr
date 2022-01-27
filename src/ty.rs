@@ -119,9 +119,8 @@ impl Definition {
 
 			let mut field = layout::Field::new(prop_ref, name, layout_expr, causes.map(Cause::into_implicit));
 
-			if prop.is_required() {
-				field.declare_required()
-			}
+			field.set_required(prop.is_required());
+			field.set_functional(prop.is_functional());
 
 			fields.push(field);
 		}

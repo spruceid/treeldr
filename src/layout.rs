@@ -204,12 +204,16 @@ pub enum Mismatch {
 		found: layout::Expr,
 		because: Option<Cause>
 	},
-	FieldRequirement {
+	AttributeRequired {
 		/// Is the field required?
 		///
 		/// If `true` then it is, and some other declaration is missing the `required` attribute.
 		/// If `false` then it is not, and some other declaration is adding the attribute.
 		required: bool,
+		because: Option<Cause>
+	},
+	AttributeFunctional {
+		functional: bool,
 		because: Option<Cause>
 	},
 	MissingField {
@@ -306,8 +310,18 @@ impl Fields {
 
 			if a.is_required() != b.is_required() {
 				return Err(Caused::new(
-					Mismatch::FieldRequirement {
+					Mismatch::AttributeRequired {
 						required: a.is_required(),
+						because: a.causes().preferred()
+					},
+					b.causes().preferred()
+				))
+			}
+
+			if a.is_functional() != b.is_functional() {
+				return Err(Caused::new(
+					Mismatch::AttributeFunctional {
+						functional: a.is_functional(),
 						because: a.causes().preferred()
 					},
 					b.causes().preferred()
@@ -369,6 +383,7 @@ pub struct Field {
 	name: String,
 	layout: Expr,
 	required: bool,
+	functional: bool,
 	causes: Causes,
 	doc: Documentation
 }
@@ -380,6 +395,7 @@ impl Field {
 			name,
 			layout,
 			required: false,
+			functional: false,
 			causes: causes.into(),
 			doc: Documentation::default()
 		}
@@ -395,6 +411,16 @@ impl Field {
 		if prop.is_required() && !self.is_required() {
 			return Err(Caused::new(
 				Error::FieldNotRequired {
+					prop: self.prop,
+					because: prop.causes().preferred()
+				},
+				self.causes().preferred()
+			))
+		}
+
+		if prop.is_functional() && !self.is_functional() {
+			return Err(Caused::new(
+				Error::FieldNotFunctional {
 					prop: self.prop,
 					because: prop.causes().preferred()
 				},
@@ -423,6 +449,22 @@ impl Field {
 
 	pub fn declare_required(&mut self) {
 		self.required = true
+	}
+
+	pub fn set_required(&mut self, v: bool) {
+		self.required = v
+	}
+
+	pub fn is_functional(&self) -> bool {
+		self.functional
+	}
+
+	pub fn declare_functional(&mut self) {
+		self.functional = true
+	}
+
+	pub fn set_functional(&mut self, v: bool) {
+		self.functional = v
 	}
 
 	pub fn causes(&self) -> &Causes {

@@ -48,13 +48,17 @@ pub struct PropertyDefinition {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Annotation {
 	/// Required field.
-	Required
+	Required,
+
+	/// Field with unique value.
+	Unique
 }
 
 impl Annotation {
 	pub fn from_name(name: &str) -> Option<Self> {
 		match name {
 			"required" => Some(Self::Required),
+			"unique" => Some(Self::Unique),
 			_ => None
 		}
 	}
@@ -62,6 +66,7 @@ impl Annotation {
 	pub fn as_str(&self) -> &'static str {
 		match self {
 			Self::Required => "required",
+			Self::Unique => "unique"
 		}
 	}
 }

@@ -61,6 +61,10 @@ pub enum Error {
 		prop: Ref<prop::Definition>,
 		because: Option<Cause>
 	},
+	FieldNotFunctional {
+		prop: Ref<prop::Definition>,
+		because: Option<Cause>
+	},
 	MissingPropertyField {
 		prop: Ref<prop::Definition>,
 		because: Option<Cause>
@@ -178,12 +182,16 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 				layout::Mismatch::FieldProperty { .. } => format!("field property mismatch"),
 				layout::Mismatch::FieldName { .. } => format!("field name mismatch"),
 				layout::Mismatch::FieldLayout { .. } => format!("field layout mismatch"),
-				layout::Mismatch::FieldRequirement { .. } => format!("required field mismatch"),
+				layout::Mismatch::AttributeRequired { .. } => format!("field `required` attribute mismatch"),
+				layout::Mismatch::AttributeFunctional { .. } => format!("field `unique` attribute mismatch"),
 				layout::Mismatch::MissingField { name, .. } => format!("missing field `{}`", name),
 				layout::Mismatch::AdditionalField { name, .. } => format!("unexpected field `{}`", name)
 			}
 			Error::FieldNotRequired { .. } => {
 				format!("required property has a non required field")
+			}
+			Error::FieldNotFunctional { .. } => {
+				format!("functional (unique) property has a non functional field")
 			}
 			Error::MissingPropertyField { .. } => {
 				format!("missing field for required property")
@@ -295,7 +303,7 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 						labels.push(source.into_secondary_label().with_message(message))
 					}
 				},
-				layout::Mismatch::FieldRequirement { required, because } => {
+				layout::Mismatch::AttributeRequired { required, because } => {
 					if let Some(cause) = because {
 						let message = if *required {
 							match cause {
@@ -306,6 +314,24 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 							match cause {
 								Cause::Explicit(_) => format!("field is not required here"),
 								Cause::Implicit(_) => format!("field is implicitly not required here")
+							}
+						};
+	
+						let source = cause.source();
+						labels.push(source.into_secondary_label().with_message(message))
+					}
+				},
+				layout::Mismatch::AttributeFunctional { functional, because } => {
+					if let Some(cause) = because {
+						let message = if *functional {
+							match cause {
+								Cause::Explicit(_) => format!("field is unique here"),
+								Cause::Implicit(_) => format!("field is implicitly unique here")
+							}
+						} else {
+							match cause {
+								Cause::Explicit(_) => format!("field is not unique here"),
+								Cause::Implicit(_) => format!("field is implicitly not unique here")
 							}
 						};
 	
@@ -345,6 +371,22 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 				if let Some(cause) = self.error().cause() {
 					let source = cause.source();
 					labels.push(source.into_primary_label().with_message("...but is not required here"))
+				}
+			}
+			Error::FieldNotFunctional { because, .. } => {
+				if let Some(cause) = because {
+					let message = match cause {
+						Cause::Explicit(_) => format!("property is unique here..."),
+						Cause::Implicit(_) => format!("property is implicitly unique here...")
+					};
+
+					let source = cause.source();
+					labels.push(source.into_secondary_label().with_message(message))
+				}
+
+				if let Some(cause) = self.error().cause() {
+					let source = cause.source();
+					labels.push(source.into_primary_label().with_message("...but is not unique here"))
 				}
 			}
 			Error::MissingPropertyField { because, .. } => {
