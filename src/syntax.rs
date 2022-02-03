@@ -66,15 +66,15 @@ pub enum Annotation {
 	/// Required field.
 	Required,
 
-	/// Field with unique value.
-	Unique,
+	/// Field with single value.
+	Single,
 }
 
 impl Annotation {
 	pub fn from_name(name: &str) -> Option<Self> {
 		match name {
 			"required" => Some(Self::Required),
-			"unique" => Some(Self::Unique),
+			"single" => Some(Self::Single),
 			_ => None,
 		}
 	}
@@ -82,7 +82,7 @@ impl Annotation {
 	pub fn as_str(&self) -> &'static str {
 		match self {
 			Self::Required => "required",
-			Self::Unique => "unique",
+			Self::Single => "single",
 		}
 	}
 }

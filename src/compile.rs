@@ -328,7 +328,7 @@ impl Compile for Loc<syntax::PropertyDefinition> {
 			for a in &annotated_ty_expr.annotations {
 				match a.value() {
 					Annotation::Required => prop.declare_required(),
-					Annotation::Unique => prop.declare_functional(),
+					Annotation::Single => prop.declare_functional(),
 				}
 			}
 		}
@@ -444,7 +444,7 @@ impl Compile for Loc<syntax::FieldDefinition> {
 		for a in &self.value().layout.annotations {
 			match a.value() {
 				Annotation::Required => field.declare_required(),
-				Annotation::Unique => field.declare_functional(),
+				Annotation::Single => field.declare_functional(),
 			}
 		}
 
