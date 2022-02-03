@@ -4,7 +4,7 @@ use iref::IriRefBuf;
 /// Generate a JSON Schema from a TreeLDR model.
 pub struct Command {
 	/// Layout schema to generate.
-	layout: IriRefBuf
+	layout: IriRefBuf,
 }
 
 impl Command {
