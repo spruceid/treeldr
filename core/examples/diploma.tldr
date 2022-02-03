@@ -3,15 +3,15 @@ import <http://www.w3.org/2001/XMLSchema#> as xs
 /// Certificate or deed issued by an educational institution.
 type Diploma {
 	/// Issuer.
-	department: unique required Department,
-	degree: unique Degree,
-	year: unique Year,
-	honors: required Honors,
-	url: unique <xs:anyURI>
+	department: Department,
+	degree: Degree,
+	year: Year,
+	honors: Honors,
+	url: <xs:anyURI>
 }
 
 type Department {
-	name: <xs:anyURI>
+	// ...
 }
 
 type Degree {
