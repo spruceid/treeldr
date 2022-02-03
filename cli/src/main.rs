@@ -1,13 +1,11 @@
 use clap::Parser;
-use codespan_reporting::{
-	term::{
-		self,
-		termcolor::{ColorChoice, StandardStream},
-	},
+use codespan_reporting::term::{
+	self,
+	termcolor::{ColorChoice, StandardStream},
 };
 use iref::IriBuf;
 use std::{convert::Infallible, fs, io, path::PathBuf};
-use treeldr::{source, syntax, syntax::Parse, Compile, error::Diagnose};
+use treeldr::{error::Diagnose, source, syntax, syntax::Parse, Compile};
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -16,21 +14,21 @@ struct Args {
 	base_iri: IriBuf,
 
 	/// Input TreeLDR file.
-	#[clap(name="FILE")]
+	#[clap(name = "FILE")]
 	filename: PathBuf,
 
 	/// Sets the level of verbosity.
-	#[clap(short, long="verbose", parse(from_occurrences))]
+	#[clap(short, long = "verbose", parse(from_occurrences))]
 	verbosity: usize,
 
 	#[clap(subcommand)]
-	command: Option<Command>
+	command: Option<Command>,
 }
 
 #[derive(clap::Subcommand)]
 pub enum Command {
-	#[cfg(feature="json-schema")]
-	JsonSchema(treeldr_json_schema::Command)
+	#[cfg(feature = "json-schema")]
+	JsonSchema(treeldr_json_schema::Command),
 }
 
 fn main() -> io::Result<()> {
@@ -64,11 +62,11 @@ fn main() -> io::Result<()> {
 				Ok(()) => {
 					log::debug!("compilation succeeded.");
 					match args.command {
-						#[cfg(feature="json-schema")]
+						#[cfg(feature = "json-schema")]
 						Some(Command::JsonSchema(command)) => command.execute(&model),
-						_ => ()
+						_ => (),
 					}
-				},
+				}
 				Err(e) => {
 					let diagnostic = e.with_model(&model).diagnostic();
 					let writer = StandardStream::stderr(ColorChoice::Always);
