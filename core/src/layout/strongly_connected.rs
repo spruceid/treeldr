@@ -9,11 +9,17 @@ pub struct StronglyConnectedLayouts<'l> {
 }
 
 impl<'l> StronglyConnectedLayouts<'l> {
+	#[inline(always)]
 	pub fn new(layouts: &'l Collection<Definition>) -> Self {
-		Self::new_from(layouts, layouts.iter().map(|(layout_ref, _)| layout_ref))
+		Self::from_entry_points(layouts, layouts.iter().map(|(layout_ref, _)| layout_ref))
 	}
 
-	pub fn new_from<I: IntoIterator<Item=Ref<Definition>>>(layouts: &'l Collection<Definition>, entry_points: I) -> Self {
+	#[inline(always)]
+	pub fn from_entry_points<I: IntoIterator<Item=Ref<Definition>>>(layouts: &'l Collection<Definition>, entry_points: I) -> Self {
+		Self::from_entry_points_with_filter(layouts, entry_points, |_, _| true)
+	}
+
+	pub fn from_entry_points_with_filter<I: IntoIterator<Item=Ref<Definition>>>(layouts: &'l Collection<Definition>, entry_points: I, filter: impl Clone + Fn(Ref<Definition>, &super::Expr) -> bool) -> Self {
 		let mut components = Self {
 			layouts,
 			map: HashMap::new(),
@@ -25,7 +31,7 @@ impl<'l> StronglyConnectedLayouts<'l> {
 
 		for layout_ref in entry_points {
 			if !map.contains_key(&layout_ref) {
-				strong_connect(&mut components, &mut map, &mut stack, layout_ref);
+				strong_connect(&mut components, &mut map, &mut stack, layout_ref, filter.clone());
 			}
 		}
 
@@ -71,7 +77,8 @@ fn strong_connect<'l>(
 	components: &mut StronglyConnectedLayouts<'l>,
 	map: &mut HashMap<Ref<Definition>, Data>,
 	stack: &mut Vec<Ref<Definition>>,
-	layout_ref: Ref<Definition>
+	layout_ref: Ref<Definition>,
+	filter: impl Clone + Fn(Ref<Definition>, &super::Expr) -> bool
 ) -> u32 {
 	let index = map.len() as u32;
 	stack.push(layout_ref);
@@ -86,23 +93,25 @@ fn strong_connect<'l>(
 
 	let layout = components.layouts.get(layout_ref).unwrap();
 	for sub_layout_expr in layout.composing_layouts().into_iter().flatten() {
-		let sub_layout_ref = sub_layout_expr.layout();
-		let new_layout_low_link = match map.get(&sub_layout_ref) {
-			None => {
-				let sub_layout_low_link = strong_connect(components, map, stack, sub_layout_ref);
-				Some(std::cmp::min(map[&layout_ref].low_link, sub_layout_low_link))
-			}
-			Some(sub_layout_data) => {
-				if sub_layout_data.on_stack {
-					Some(std::cmp::min(map[&layout_ref].low_link, sub_layout_data.index))
-				} else {
-					None
+		if filter(layout_ref, sub_layout_expr) {
+			let sub_layout_ref = sub_layout_expr.layout();
+			let new_layout_low_link = match map.get(&sub_layout_ref) {
+				None => {
+					let sub_layout_low_link = strong_connect(components, map, stack, sub_layout_ref, filter.clone());
+					Some(std::cmp::min(map[&layout_ref].low_link, sub_layout_low_link))
 				}
+				Some(sub_layout_data) => {
+					if sub_layout_data.on_stack {
+						Some(std::cmp::min(map[&layout_ref].low_link, sub_layout_data.index))
+					} else {
+						None
+					}
+				}
+			};
+	
+			if let Some(new_layout_low_link) = new_layout_low_link {
+				map.get_mut(&layout_ref).unwrap().low_link = new_layout_low_link;
 			}
-		};
-
-		if let Some(new_layout_low_link) = new_layout_low_link {
-			map.get_mut(&layout_ref).unwrap().low_link = new_layout_low_link;
 		}
 	}
 
