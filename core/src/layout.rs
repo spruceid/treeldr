@@ -1,6 +1,10 @@
 use crate::{layout, prop, ty, Cause, Caused, Causes, Documentation, Error, Id, Ref, WithCauses};
 use std::fmt;
 
+mod strongly_connected;
+
+pub use strongly_connected::StronglyConnectedLayouts;
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Type {
 	Struct,
@@ -209,6 +213,29 @@ impl Definition {
 		}
 
 		Ok(())
+	}
+
+	pub fn composing_layouts(&self) -> Option<ComposingLayouts> {
+		match self.description()?.inner() {
+			Description::Struct(fields) => Some(ComposingLayouts::Struct(fields.iter())),
+			Description::Native(_) => Some(ComposingLayouts::Native)
+		}
+	}
+}
+
+pub enum ComposingLayouts<'a> {
+	Struct(std::slice::Iter<'a, Field>),
+	Native
+}
+
+impl<'a> Iterator for ComposingLayouts<'a> {
+	type Item = &'a Expr;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			Self::Struct(fields) => Some(fields.next()?.layout()),
+			Self::Native => None
+		}
 	}
 }
 
