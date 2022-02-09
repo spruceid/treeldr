@@ -2,8 +2,10 @@ use crate::{layout, prop, ty, Cause, Caused, Causes, Documentation, Error, Id, R
 use std::fmt;
 
 mod strongly_connected;
+mod usages;
 
 pub use strongly_connected::StronglyConnectedLayouts;
+pub use usages::Usages;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Type {
