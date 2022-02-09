@@ -19,6 +19,11 @@ impl<'l> StronglyConnectedLayouts<'l> {
 		Self::from_entry_points_with_filter(layouts, entry_points, |_, _| true)
 	}
 
+	#[inline(always)]
+	pub fn with_filter(layouts: &'l Collection<Definition>, filter: impl Clone + Fn(Ref<Definition>, &super::Expr) -> bool) -> Self {
+		Self::from_entry_points_with_filter(layouts, layouts.iter().map(|(layout_ref, _)| layout_ref), filter)
+	}
+
 	pub fn from_entry_points_with_filter<I: IntoIterator<Item=Ref<Definition>>>(layouts: &'l Collection<Definition>, entry_points: I, filter: impl Clone + Fn(Ref<Definition>, &super::Expr) -> bool) -> Self {
 		let mut components = Self {
 			layouts,
@@ -52,14 +57,21 @@ impl<'l> StronglyConnectedLayouts<'l> {
 		self.map.get(&layout_ref).cloned()
 	}
 
+	#[inline(always)]
 	pub fn is_recursive(&self, layout_ref: Ref<Definition>) -> Option<bool> {
+		self.is_recursive_with_filter(layout_ref, |_| true)
+	}
+
+	pub fn is_recursive_with_filter(&self, layout_ref: Ref<Definition>, filter: impl Fn(&super::Expr) -> bool) -> Option<bool> {
 		let layout = self.layouts.get(layout_ref)?;
 		let component = self.component(layout_ref)?;
 
 		for sub_layout_expr in layout.composing_layouts().into_iter().flatten() {
-			let sub_layout_ref = sub_layout_expr.layout();
-			if self.component(sub_layout_ref)? == component {
-				return Some(true)
+			if filter(sub_layout_expr) {
+				let sub_layout_ref = sub_layout_expr.layout();
+				if self.component(sub_layout_ref)? == component {
+					return Some(true)
+				}
 			}
 		}
 
