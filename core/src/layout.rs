@@ -470,7 +470,7 @@ impl Field {
 			name,
 			layout,
 			required: false,
-			functional: false,
+			functional: true,
 			causes: causes.into(),
 			doc: Documentation::default(),
 		}
@@ -536,6 +536,10 @@ impl Field {
 
 	pub fn declare_functional(&mut self) {
 		self.functional = true
+	}
+
+	pub fn declare_multiple(&mut self) {
+		self.functional = false
 	}
 
 	pub fn set_functional(&mut self, v: bool) {

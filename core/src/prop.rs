@@ -20,7 +20,7 @@ impl Definition {
 			domain: HashMap::new(),
 			ty: None,
 			required: false,
-			functional: false,
+			functional: true,
 			doc: Documentation::default(),
 		}
 	}
@@ -54,6 +54,10 @@ impl Definition {
 
 	pub fn declare_functional(&mut self) {
 		self.functional = true
+	}
+
+	pub fn declare_multiple(&mut self) {
+		self.functional = false
 	}
 
 	pub fn documentation(&self) -> &Documentation {

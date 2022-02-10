@@ -162,6 +162,23 @@ impl Build for Loc<syntax::Id> {
 			)?,
 		};
 
+		// let schema_iri = if iri.fragment().is_some() {
+		// 	let mut schema_iri = iri.clone();
+		// 	schema_iri.set_query(None);
+		// 	schema_iri.set_fragment(None);
+		// 	Some(schema_iri)
+		// } else if iri.path().is_closed() && !iri.path().is_empty() {
+		// 	let mut schema_iri = iri.clone();
+		// 	schema_iri.path_mut().pop();
+		// 	Some(schema_iri)
+		// } else {
+		// 	None
+		// };
+
+		// if let Some(schema_iri) = schema_iri {
+		// 	log::info!("must load `{}`", schema_iri)
+		// }
+
 		Ok(env.context.vocabulary_mut().insert(iri))
 	}
 }
@@ -328,7 +345,7 @@ impl Build for Loc<syntax::PropertyDefinition> {
 			for a in &annotated_ty_expr.annotations {
 				match a.value() {
 					Annotation::Required => prop.declare_required(),
-					Annotation::Single => prop.declare_functional(),
+					Annotation::Multiple => prop.declare_multiple(),
 				}
 			}
 		}
@@ -453,7 +470,7 @@ impl Build for Loc<syntax::FieldDefinition> {
 		for a in &self.value().layout.annotations {
 			match a.value() {
 				Annotation::Required => field.declare_required(),
-				Annotation::Single => field.declare_functional(),
+				Annotation::Multiple => field.declare_multiple(),
 			}
 		}
 
