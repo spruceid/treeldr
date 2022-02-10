@@ -2,7 +2,7 @@ use iref::{Iri, IriBuf};
 
 mod cause;
 pub mod collection;
-pub mod compile;
+pub mod build;
 mod doc;
 pub mod error;
 mod feature;
@@ -16,7 +16,7 @@ pub mod vocab;
 
 pub use cause::*;
 pub use collection::{Collection, Ref};
-pub use compile::Compile;
+pub use build::Build;
 pub use doc::Documentation;
 pub use error::Error;
 pub use feature::Feature;

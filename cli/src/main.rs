@@ -5,7 +5,7 @@ use codespan_reporting::term::{
 };
 use iref::IriBuf;
 use std::{convert::Infallible, fs, io, path::PathBuf};
-use treeldr::{error::Diagnose, source, syntax, syntax::Parse, Compile};
+use treeldr::{error::Diagnose, source, syntax, syntax::Parse, Build};
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -57,8 +57,8 @@ fn main() -> io::Result<()> {
 			let mut model = treeldr::Model::new(args.base_iri);
 			model.define_xml_types().unwrap();
 
-			let mut env = treeldr::compile::Environment::new(&mut model);
-			match doc.compile(&mut env) {
+			let mut env = treeldr::build::Environment::new(&mut model);
+			match doc.build(&mut env) {
 				Ok(()) => {
 					log::debug!("compilation succeeded.");
 					match args.command {
