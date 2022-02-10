@@ -16,8 +16,7 @@ impl Usages {
 				entry.insert(HashSet::new());
 			}
 
-			for sub_layout_expr in layout.composing_layouts().into_iter().flatten() {
-				let sub_layout_ref = sub_layout_expr.layout();
+			for sub_layout_ref in layout.composing_layouts().into_iter().flatten() {
 				match map.entry(sub_layout_ref) {
 					Entry::Occupied(mut entry) => {
 						entry.get_mut().insert(layout_ref);

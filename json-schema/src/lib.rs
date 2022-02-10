@@ -22,12 +22,12 @@ pub fn generate(
 	// Check there are no cycles induced by the embedded layouts.
 	let strongly_connected_layouts = treeldr::layout::StronglyConnectedLayouts::with_filter(
 		model.layouts(),
-		|_, layout_expr| embedding.get(layout_expr.layout()).is_direct(),
+		|_, sub_layout_ref| embedding.get(sub_layout_ref).is_direct(),
 	);
 	for (layout_ref, _) in model.layouts().iter() {
 		if strongly_connected_layouts
-			.is_recursive_with_filter(layout_ref, |layout_expr| {
-				embedding.get(layout_expr.layout()).is_direct()
+			.is_recursive_with_filter(layout_ref, |sub_layout_ref| {
+				embedding.get(sub_layout_ref).is_direct()
 			})
 			.unwrap_or(false)
 		{
@@ -116,7 +116,7 @@ fn generate_struct(
 	let mut required_properties = Vec::new();
 
 	for field in fields {
-		let field_layout_ref = field.layout().layout();
+		let field_layout_ref = field.layout();
 
 		let mut layout_schema = serde_json::Map::new();
 
@@ -256,6 +256,9 @@ fn generate_native_type(
 			def.insert("type".into(), "string".into());
 		}
 		Native::Url => {
+			def.insert("type".into(), "string".into());
+		}
+		Native::Reference(_) => {
 			def.insert("type".into(), "string".into());
 		}
 	}

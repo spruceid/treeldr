@@ -98,20 +98,20 @@ impl Definition {
 }
 
 pub struct Type {
-	expr: ty::Expr,
+	ty_expr: ty::Expr,
 	causes: Causes,
 }
 
 impl Type {
-	pub fn new(expr: ty::Expr, causes: impl Into<Causes>) -> Self {
+	pub fn new(ty_expr: ty::Expr, causes: impl Into<Causes>) -> Self {
 		Self {
-			expr,
+			ty_expr,
 			causes: causes.into(),
 		}
 	}
 
-	pub fn expr(&self) -> &ty::Expr {
-		&self.expr
+	pub fn expr(&self) -> ty::Expr {
+		self.ty_expr
 	}
 
 	pub fn causes(&self) -> &Causes {
@@ -123,13 +123,32 @@ impl Type {
 		ty_expr: ty::Expr,
 		source: Option<Cause>,
 	) -> Result<(), Caused<Error>> {
-		if self.expr == ty_expr {
+		if self.ty_expr.ty() == ty_expr.ty() {
+			match (self.ty_expr.implicit_layout(), ty_expr.implicit_layout()) {
+				(Some(expected), Some(found)) => {
+					if expected != found {
+						return Err(Caused::new(
+							Error::ImplicitLayoutMismatch {
+								expected,
+								found,
+								because: self.causes.preferred()
+							},
+							source
+						))
+					}
+				}
+				(None, Some(b)) => {
+					self.ty_expr.set_implicit_layout(b)
+				}
+				_ => ()
+			}
+
 			Ok(())
 		} else {
 			Err(Caused::new(
 				Error::TypeMismatch {
-					expected: self.expr.clone(),
-					found: ty_expr,
+					expected: self.ty_expr.ty(),
+					found: ty_expr.ty(),
 					because: self.causes.preferred(),
 				},
 				source,

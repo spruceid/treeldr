@@ -20,11 +20,11 @@ impl<'l> StronglyConnectedLayouts<'l> {
 	}
 
 	#[inline(always)]
-	pub fn with_filter(layouts: &'l Collection<Definition>, filter: impl Clone + Fn(Ref<Definition>, &super::Expr) -> bool) -> Self {
+	pub fn with_filter(layouts: &'l Collection<Definition>, filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool) -> Self {
 		Self::from_entry_points_with_filter(layouts, layouts.iter().map(|(layout_ref, _)| layout_ref), filter)
 	}
 
-	pub fn from_entry_points_with_filter<I: IntoIterator<Item=Ref<Definition>>>(layouts: &'l Collection<Definition>, entry_points: I, filter: impl Clone + Fn(Ref<Definition>, &super::Expr) -> bool) -> Self {
+	pub fn from_entry_points_with_filter<I: IntoIterator<Item=Ref<Definition>>>(layouts: &'l Collection<Definition>, entry_points: I, filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool) -> Self {
 		let mut components = Self {
 			layouts,
 			map: HashMap::new(),
@@ -62,13 +62,12 @@ impl<'l> StronglyConnectedLayouts<'l> {
 		self.is_recursive_with_filter(layout_ref, |_| true)
 	}
 
-	pub fn is_recursive_with_filter(&self, layout_ref: Ref<Definition>, filter: impl Fn(&super::Expr) -> bool) -> Option<bool> {
+	pub fn is_recursive_with_filter(&self, layout_ref: Ref<Definition>, filter: impl Fn(Ref<Definition>) -> bool) -> Option<bool> {
 		let layout = self.layouts.get(layout_ref)?;
 		let component = self.component(layout_ref)?;
 
-		for sub_layout_expr in layout.composing_layouts().into_iter().flatten() {
-			if filter(sub_layout_expr) {
-				let sub_layout_ref = sub_layout_expr.layout();
+		for sub_layout_ref in layout.composing_layouts().into_iter().flatten() {
+			if filter(sub_layout_ref) {
 				if self.component(sub_layout_ref)? == component {
 					return Some(true)
 				}
@@ -90,7 +89,7 @@ fn strong_connect<'l>(
 	map: &mut HashMap<Ref<Definition>, Data>,
 	stack: &mut Vec<Ref<Definition>>,
 	layout_ref: Ref<Definition>,
-	filter: impl Clone + Fn(Ref<Definition>, &super::Expr) -> bool
+	filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool
 ) -> u32 {
 	let index = map.len() as u32;
 	stack.push(layout_ref);
@@ -104,9 +103,8 @@ fn strong_connect<'l>(
 	);
 
 	let layout = components.layouts.get(layout_ref).unwrap();
-	for sub_layout_expr in layout.composing_layouts().into_iter().flatten() {
-		if filter(layout_ref, sub_layout_expr) {
-			let sub_layout_ref = sub_layout_expr.layout();
+	for sub_layout_ref in layout.composing_layouts().into_iter().flatten() {
+		if filter(layout_ref, sub_layout_ref) {
 			let new_layout_low_link = match map.get(&sub_layout_ref) {
 				None => {
 					let sub_layout_low_link = strong_connect(components, map, stack, sub_layout_ref, filter.clone());

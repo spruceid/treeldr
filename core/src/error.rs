@@ -37,8 +37,13 @@ pub enum Error {
 		expected_ty: Option<node::Type>,
 	},
 	TypeMismatch {
-		expected: ty::Expr,
-		found: ty::Expr,
+		expected: Ref<ty::Definition>,
+		found: Ref<ty::Definition>,
+		because: Option<Cause>,
+	},
+	ImplicitLayoutMismatch {
+		expected: Ref<layout::Definition>,
+		found: Ref<layout::Definition>,
 		because: Option<Cause>,
 	},
 	LayoutTypeMismatch {
@@ -123,6 +128,7 @@ impl layout::Type {
 				layout::Native::Iri => "IRI",
 				layout::Native::Uri => "URI",
 				layout::Native::Url => "URL",
+				layout::Native::Reference(_) => "reference"
 			},
 		}
 	}
@@ -166,6 +172,7 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 				}
 			}
 			Error::TypeMismatch { .. } => "type mismatch".to_string(),
+			Error::ImplicitLayoutMismatch { .. } => "implicit layout mismatch".to_string(),
 			Error::LayoutTypeMismatch { .. } => "layout for-type mismatch".to_string(),
 			Error::LayoutMismatch(e) => match e {
 				layout::Mismatch::Type { .. } => "layout type mismatch".to_string(),
@@ -289,6 +296,29 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 						Cause::Explicit(_) => "expected type is declared here".to_string(),
 						Cause::Implicit(_) => {
 							"expected type is implicitly declared here".to_string()
+						}
+					};
+
+					let source = cause.source();
+					labels.push(source.into_secondary_label().with_message(message))
+				}
+			}
+			Error::ImplicitLayoutMismatch { because, .. } => {
+				if let Some(cause) = self.error().cause() {
+					let message = match cause {
+						Cause::Explicit(_) => "found layout is declared here".to_string(),
+						Cause::Implicit(_) => "found layout is implicitly declared here".to_string(),
+					};
+
+					let source = cause.source();
+					labels.push(source.into_primary_label().with_message(message))
+				}
+
+				if let Some(cause) = because {
+					let message = match cause {
+						Cause::Explicit(_) => "expected layout is declared here".to_string(),
+						Cause::Implicit(_) => {
+							"expected layout is implicitly declared here".to_string()
 						}
 					};
 

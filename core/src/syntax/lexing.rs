@@ -186,6 +186,7 @@ impl Delimiter {
 pub enum Punct {
 	Comma,
 	Colon,
+	Ampersand
 }
 
 impl Punct {
@@ -193,6 +194,7 @@ impl Punct {
 		match c {
 			',' => Some(Self::Comma),
 			':' => Some(Self::Colon),
+			'&' => Some(Self::Ampersand),
 			_ => None,
 		}
 	}
@@ -203,6 +205,7 @@ impl fmt::Display for Punct {
 		match self {
 			Self::Comma => write!(f, ","),
 			Self::Colon => write!(f, ":"),
+			Self::Ampersand => write!(f, "&")
 		}
 	}
 }

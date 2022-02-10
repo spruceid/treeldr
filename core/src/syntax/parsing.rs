@@ -467,26 +467,26 @@ impl Parse for AnnotatedTypeExpr {
 
 impl Parse for TypeExpr {
 	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
-		let ty = Id::parse(tokens)?;
-		let mut span = ty.span();
-		let file = *ty.file();
-
-		let args = match peek_token(tokens)? {
-			locspan::Loc(Some(Token::Block(lexing::Delimiter::Parenthesis, _)), args_source) => {
-				let (_, tokens) = next_token(tokens)?
-					.unwrap()
-					.into_value()
-					.into_block()
-					.unwrap();
-				let mut block_tokens = tokens.into_tokens(args_source);
-				let items = parse_comma_separated_list(&mut block_tokens)?;
-				span.append(args_source.span());
-				items
+		match next_token(tokens)? {
+			locspan::Loc(Some(Token::Id(id)), source) => {
+				Ok(Loc::new(Self::Id(Loc::new(id, source)), source))
 			}
-			_ => Vec::new(),
-		};
-
-		Ok(Loc::new(Self { ty, args }, Location::new(file, span)))
+			locspan::Loc(Some(Token::Punct(lexing::Punct::Ampersand)), mut source) => {
+				let arg = Self::parse(tokens)?;
+				source.span_mut().set_end(arg.span().end());
+				Ok(Loc::new(Self::Reference(Box::new(arg)), source))
+			}
+			locspan::Loc(unexpected, source) => Err(Loc::new(
+				Error::Unexpected(
+					unexpected,
+					vec![
+						TokenKind::Id,
+						TokenKind::Punct(lexing::Punct::Ampersand)
+					],
+				),
+				source,
+			))
+		}
 	}
 }
 
@@ -527,25 +527,25 @@ impl Parse for AnnotatedLayoutExpr {
 
 impl Parse for LayoutExpr {
 	fn parse<L: Tokens>(tokens: &mut L) -> Result<Loc<Self>, Loc<Error<L::Error>>> {
-		let layout = Id::parse(tokens)?;
-		let mut span = layout.span();
-		let file = *layout.file();
-
-		let args = match peek_token(tokens)? {
-			locspan::Loc(Some(Token::Block(lexing::Delimiter::Parenthesis, _)), args_source) => {
-				let (_, tokens) = next_token(tokens)?
-					.unwrap()
-					.into_value()
-					.into_block()
-					.unwrap();
-				let mut block_tokens = tokens.into_tokens(args_source);
-				let items = parse_comma_separated_list(&mut block_tokens)?;
-				span.append(args_source.span());
-				items
+		match next_token(tokens)? {
+			locspan::Loc(Some(Token::Id(id)), source) => {
+				Ok(Loc::new(Self::Id(Loc::new(id, source)), source))
 			}
-			_ => Vec::new(),
-		};
-
-		Ok(Loc::new(Self { layout, args }, Location::new(file, span)))
+			locspan::Loc(Some(Token::Punct(lexing::Punct::Ampersand)), mut source) => {
+				let arg = Self::parse(tokens)?;
+				source.span_mut().set_end(arg.span().end());
+				Ok(Loc::new(Self::Reference(Box::new(arg)), source))
+			}
+			locspan::Loc(unexpected, source) => Err(Loc::new(
+				Error::Unexpected(
+					unexpected,
+					vec![
+						TokenKind::Id,
+						TokenKind::Punct(lexing::Punct::Ampersand)
+					],
+				),
+				source,
+			))
+		}
 	}
 }

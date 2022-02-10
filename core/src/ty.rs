@@ -116,7 +116,7 @@ impl Definition {
 			let layout_expr = match prop.ty() {
 				Some(ty) => ty
 					.expr()
-					.as_layout_expr(model, ty.causes().preferred().map(Cause::into_implicit))?,
+					.default_layout(model, ty.causes().preferred().map(Cause::into_implicit))?,
 				None => panic!("no known type"),
 			};
 
@@ -153,76 +153,117 @@ impl<'c> fmt::Display for RefWithContext<'c> {
 	}
 }
 
-/// Type expression.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 pub struct Expr {
-	ty: crate::Ref<Definition>,
-	args: Vec<Self>,
+	ty_ref: Ref<Definition>,
+	implicit_layout_ref: Option<Ref<layout::Definition>>
 }
 
 impl Expr {
-	pub fn new(ty: crate::Ref<Definition>, args: Vec<Self>) -> Self {
-		Self { ty, args }
+	pub fn new(ty_ref: Ref<Definition>, implicit_layout_ref: Option<Ref<layout::Definition>>) -> Self {
+		Self {
+			ty_ref,
+			implicit_layout_ref
+		}
 	}
 
-	pub fn ty(&self) -> crate::Ref<Definition> {
-		self.ty
+	pub fn ty(&self) -> Ref<Definition> {
+		self.ty_ref
 	}
 
-	pub fn arguments(&self) -> &[Self] {
-		&self.args
+	pub fn implicit_layout(&self) -> Option<Ref<layout::Definition>> {
+		self.implicit_layout_ref
 	}
 
-	pub fn with_model<'c>(&self, context: &'c crate::Model) -> ExprWithContext<'c, '_> {
-		ExprWithContext(context, self)
+	pub fn set_implicit_layout(&mut self, l: Ref<layout::Definition>) {
+		self.implicit_layout_ref = Some(l)
 	}
 
-	pub fn as_layout_expr(
+	pub fn default_layout(
 		&self,
 		model: &crate::Model,
 		cause: Option<Cause>,
-	) -> Result<layout::Expr, Caused<Error>> {
-		let id = model.types().get(self.ty).unwrap().id();
-		let layout_ref = model.require_layout(id, cause)?;
-		let mut args = Vec::with_capacity(self.args.len());
-		for arg in &self.args {
-			args.push(arg.as_layout_expr(model, cause)?)
-		}
-		Ok(layout::Expr::new(layout_ref, args))
-	}
-}
-
-pub struct ExprWithContext<'c, 'e>(&'c crate::Model, &'e Expr);
-
-impl<'c, 'e> ExprWithContext<'c, 'e> {
-	pub fn context(&self) -> &'c crate::Model {
-		self.0
-	}
-
-	pub fn expr(&self) -> &'e Expr {
-		self.1
-	}
-}
-
-impl<'c, 'e> fmt::Display for ExprWithContext<'c, 'e> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let ty_def = self.context().types().get(self.expr().ty).unwrap();
-		let iri = self.context().vocabulary().get(ty_def.id).unwrap();
-
-		iri.fmt(f)?;
-
-		if !self.expr().args.is_empty() {
-			write!(f, "(")?;
-			for (i, arg) in self.expr().args.iter().enumerate() {
-				if i > 0 {
-					write!(f, ", ")?;
-				}
-
-				arg.with_model(self.context()).fmt(f)?;
+	) -> Result<Ref<layout::Definition>, Caused<Error>> {
+		match self.implicit_layout_ref {
+			Some(layout_ref) => Ok(layout_ref),
+			None => {
+				let id = model.types().get(self.ty_ref).unwrap().id();
+				model.require_layout(id, cause)
 			}
-			write!(f, ")")?;
 		}
-
-		Ok(())
 	}
 }
+
+// /// Type expression.
+// #[derive(Clone, PartialEq, Eq, Debug)]
+// pub struct Expr {
+// 	ty: crate::Ref<Definition>,
+// 	args: Vec<Self>,
+// }
+
+// impl Expr {
+// 	pub fn new(ty: crate::Ref<Definition>, args: Vec<Self>) -> Self {
+// 		Self { ty, args }
+// 	}
+
+// 	pub fn ty(&self) -> crate::Ref<Definition> {
+// 		self.ty
+// 	}
+
+// 	pub fn arguments(&self) -> &[Self] {
+// 		&self.args
+// 	}
+
+// 	pub fn with_model<'c>(&self, context: &'c crate::Model) -> ExprWithContext<'c, '_> {
+// 		ExprWithContext(context, self)
+// 	}
+
+// 	pub fn as_layout_expr(
+// 		&self,
+// 		model: &crate::Model,
+// 		cause: Option<Cause>,
+// 	) -> Result<layout::Expr, Caused<Error>> {
+// 		let id = model.types().get(self.ty).unwrap().id();
+// 		let layout_ref = model.require_layout(id, cause)?;
+// 		let mut args = Vec::with_capacity(self.args.len());
+// 		for arg in &self.args {
+// 			args.push(arg.as_layout_expr(model, cause)?)
+// 		}
+// 		Ok(layout::Expr::new(layout_ref, args))
+// 	}
+// }
+
+// pub struct ExprWithContext<'c, 'e>(&'c crate::Model, &'e Expr);
+
+// impl<'c, 'e> ExprWithContext<'c, 'e> {
+// 	pub fn context(&self) -> &'c crate::Model {
+// 		self.0
+// 	}
+
+// 	pub fn expr(&self) -> &'e Expr {
+// 		self.1
+// 	}
+// }
+
+// impl<'c, 'e> fmt::Display for ExprWithContext<'c, 'e> {
+// 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+// 		let ty_def = self.context().types().get(self.expr().ty).unwrap();
+// 		let iri = self.context().vocabulary().get(ty_def.id).unwrap();
+
+// 		iri.fmt(f)?;
+
+// 		if !self.expr().args.is_empty() {
+// 			write!(f, "(")?;
+// 			for (i, arg) in self.expr().args.iter().enumerate() {
+// 				if i > 0 {
+// 					write!(f, ", ")?;
+// 				}
+
+// 				arg.with_model(self.context()).fmt(f)?;
+// 			}
+// 			write!(f, ")")?;
+// 		}
+
+// 		Ok(())
+// 	}
+// }

@@ -93,9 +93,9 @@ pub struct AnnotatedTypeExpr {
 	pub annotations: Vec<Loc<Annotation>>,
 }
 
-pub struct TypeExpr {
-	pub ty: Loc<Id>,
-	pub args: Vec<Loc<TypeExpr>>,
+pub enum TypeExpr {
+	Id(Loc<Id>),
+	Reference(Box<Loc<TypeExpr>>)
 }
 
 pub struct LayoutDefinition {
@@ -126,7 +126,7 @@ pub struct AnnotatedLayoutExpr {
 	pub annotations: Vec<Loc<Annotation>>,
 }
 
-pub struct LayoutExpr {
-	pub layout: Loc<Id>,
-	pub args: Vec<Loc<LayoutExpr>>,
+pub enum LayoutExpr {
+	Id(Loc<Id>),
+	Reference(Box<Loc<LayoutExpr>>)
 }

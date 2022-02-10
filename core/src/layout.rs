@@ -27,6 +27,7 @@ pub enum Native {
 	Iri,
 	Uri,
 	Url,
+	Reference(Ref<layout::Definition>)
 }
 
 /// Layout definition.
@@ -231,7 +232,7 @@ pub enum ComposingLayouts<'a> {
 }
 
 impl<'a> Iterator for ComposingLayouts<'a> {
-	type Item = &'a Expr;
+	type Item = Ref<Definition>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
@@ -260,8 +261,8 @@ pub enum Mismatch {
 		because: Option<Cause>,
 	},
 	FieldLayout {
-		expected: layout::Expr,
-		found: layout::Expr,
+		expected: Ref<Definition>,
+		found: Ref<Definition>,
 		because: Option<Cause>,
 	},
 	AttributeRequired {
@@ -450,7 +451,7 @@ impl<'a> IntoIterator for &'a Fields {
 pub struct Field {
 	prop: Ref<prop::Definition>,
 	name: String,
-	layout: Expr,
+	layout: Ref<Definition>,
 	required: bool,
 	functional: bool,
 	causes: Causes,
@@ -461,7 +462,7 @@ impl Field {
 	pub fn new(
 		prop: Ref<prop::Definition>,
 		name: String,
-		layout: Expr,
+		layout: Ref<Definition>,
 		causes: impl Into<Causes>,
 	) -> Self {
 		Self {
@@ -513,8 +514,8 @@ impl Field {
 		&self.name
 	}
 
-	pub fn layout(&self) -> &Expr {
-		&self.layout
+	pub fn layout(&self) -> Ref<Definition> {
+		self.layout
 	}
 
 	pub fn is_required(&self) -> bool {
@@ -566,61 +567,77 @@ impl Field {
 	}
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Expr {
-	layout: crate::Ref<Definition>,
-	args: Vec<Self>,
-}
-
-impl Expr {
-	pub fn new(layout: crate::Ref<Definition>, args: Vec<Self>) -> Self {
-		Self { layout, args }
-	}
-
-	pub fn layout(&self) -> crate::Ref<Definition> {
-		self.layout
-	}
-
-	pub fn arguments(&self) -> &[Self] {
-		&self.args
-	}
-
-	pub fn with_model<'c>(&self, context: &'c crate::Model) -> ExprWithContext<'c, '_> {
-		ExprWithContext(context, self)
+impl Ref<Definition> {
+	pub fn with_model<'c>(&self, context: &'c crate::Model) -> RefWithContext<'c> {
+		RefWithContext(context, *self)
 	}
 }
 
-pub struct ExprWithContext<'c, 'e>(&'c crate::Model, &'e Expr);
+pub struct RefWithContext<'c>(&'c crate::Model, Ref<Definition>);
 
-impl<'c, 'e> ExprWithContext<'c, 'e> {
-	pub fn context(&self) -> &'c crate::Model {
-		self.0
-	}
-
-	pub fn expr(&self) -> &'e Expr {
-		self.1
-	}
-}
-
-impl<'c, 'e> fmt::Display for ExprWithContext<'c, 'e> {
+impl<'c> fmt::Display for RefWithContext<'c> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let layout_def = self.context().layouts().get(self.expr().layout).unwrap();
-		let iri = self.context().vocabulary().get(layout_def.id).unwrap();
-
-		iri.fmt(f)?;
-
-		if !self.expr().args.is_empty() {
-			write!(f, "(")?;
-			for (i, arg) in self.expr().args.iter().enumerate() {
-				if i > 0 {
-					write!(f, ", ")?;
-				}
-
-				arg.with_model(self.context()).fmt(f)?;
-			}
-			write!(f, ")")?;
-		}
-
-		Ok(())
+		let id = self.0.layouts().get(self.1).unwrap().id();
+		let iri = self.0.vocabulary().get(id).unwrap();
+		iri.fmt(f)
 	}
 }
+
+// #[derive(Clone, PartialEq, Eq, Debug)]
+// pub struct Expr {
+// 	layout: crate::Ref<Definition>,
+// 	args: Vec<Self>,
+// }
+
+// impl Expr {
+// 	pub fn new(layout: crate::Ref<Definition>, args: Vec<Self>) -> Self {
+// 		Self { layout, args }
+// 	}
+
+// 	pub fn layout(&self) -> crate::Ref<Definition> {
+// 		self.layout
+// 	}
+
+// 	pub fn arguments(&self) -> &[Self] {
+// 		&self.args
+// 	}
+
+// 	pub fn with_model<'c>(&self, context: &'c crate::Model) -> ExprWithContext<'c, '_> {
+// 		ExprWithContext(context, self)
+// 	}
+// }
+
+// pub struct ExprWithContext<'c, 'e>(&'c crate::Model, &'e Expr);
+
+// impl<'c, 'e> ExprWithContext<'c, 'e> {
+// 	pub fn context(&self) -> &'c crate::Model {
+// 		self.0
+// 	}
+
+// 	pub fn expr(&self) -> &'e Expr {
+// 		self.1
+// 	}
+// }
+
+// impl<'c, 'e> fmt::Display for ExprWithContext<'c, 'e> {
+// 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+// 		let layout_def = self.context().layouts().get(self.expr().layout).unwrap();
+// 		let iri = self.context().vocabulary().get(layout_def.id).unwrap();
+
+// 		iri.fmt(f)?;
+
+// 		if !self.expr().args.is_empty() {
+// 			write!(f, "(")?;
+// 			for (i, arg) in self.expr().args.iter().enumerate() {
+// 				if i > 0 {
+// 					write!(f, ", ")?;
+// 				}
+
+// 				arg.with_model(self.context()).fmt(f)?;
+// 			}
+// 			write!(f, ")")?;
+// 		}
+
+// 		Ok(())
+// 	}
+// }

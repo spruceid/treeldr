@@ -350,17 +350,24 @@ impl Compile for Loc<syntax::TypeExpr> {
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
 		let scope = env.scope.take();
-		let ty_id = self.value().ty.compile(env)?;
-		let ty_ref = env.context.require_type(ty_id, Some(*self.location()))?;
-
-		let mut args = Vec::with_capacity(self.value().args.len());
-
-		for arg in &self.value().args {
-			args.push(arg.compile(env)?)
-		}
+		let expr = match self.value() {
+			syntax::TypeExpr::Id(id) => {
+				let ty_id = id.compile(env)?;
+				let ty_ref = env
+					.context
+					.require_type(ty_id, Some(*self.location()))?;
+				ty::Expr::new(ty_ref, None)
+			}
+			syntax::TypeExpr::Reference(arg) => {
+				let arg = arg.compile(env)?;
+				let arg_layout_ref = arg.default_layout(env.context, Some(Cause::Implicit(*self.location())))?;
+				let implicit_layout_ref = env.context.define_reference_layout(arg_layout_ref, Some(Cause::Explicit(*self.location())))?;
+				ty::Expr::new(arg.ty(), Some(implicit_layout_ref))
+			}
+		};
 
 		env.scope = scope;
-		Ok(ty::Expr::new(ty_ref, args))
+		Ok(expr)
 	}
 }
 
@@ -453,23 +460,24 @@ impl Compile for Loc<syntax::FieldDefinition> {
 }
 
 impl Compile for Loc<syntax::LayoutExpr> {
-	type Target = layout::Expr;
+	type Target = Ref<layout::Definition>;
 
 	fn compile<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
 		let scope = env.scope.take();
-
-		let ty_id = self.value().layout.compile(env)?;
-		let ty_ref = env
-			.context
-			.require_layout(ty_id, Some(Cause::Explicit(*self.location())))?;
-
-		let mut args = Vec::with_capacity(self.value().args.len());
-
-		for arg in &self.value().args {
-			args.push(arg.compile(env)?)
-		}
+		let layout_ref = match self.value() {
+			syntax::LayoutExpr::Id(id) => {
+				let layout_id = id.compile(env)?;
+				env
+					.context
+					.require_layout(layout_id, Some(Cause::Explicit(*self.location())))?
+			}
+			syntax::LayoutExpr::Reference(arg) => {
+				let arg = arg.compile(env)?;
+				env.context.define_reference_layout(arg, Some(Cause::Explicit(*self.location())))?
+			}
+		};
 
 		env.scope = scope;
-		Ok(layout::Expr::new(ty_ref, args))
+		Ok(layout_ref)
 	}
 }
