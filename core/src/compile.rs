@@ -353,15 +353,17 @@ impl Compile for Loc<syntax::TypeExpr> {
 		let expr = match self.value() {
 			syntax::TypeExpr::Id(id) => {
 				let ty_id = id.compile(env)?;
-				let ty_ref = env
-					.context
-					.require_type(ty_id, Some(*self.location()))?;
+				let ty_ref = env.context.require_type(ty_id, Some(*self.location()))?;
 				ty::Expr::new(ty_ref, None)
 			}
 			syntax::TypeExpr::Reference(arg) => {
 				let arg = arg.compile(env)?;
-				let arg_layout_ref = arg.default_layout(env.context, Some(Cause::Implicit(*self.location())))?;
-				let implicit_layout_ref = env.context.define_reference_layout(arg_layout_ref, Some(Cause::Explicit(*self.location())))?;
+				let arg_layout_ref =
+					arg.default_layout(env.context, Some(Cause::Implicit(*self.location())))?;
+				let implicit_layout_ref = env.context.define_reference_layout(
+					arg_layout_ref,
+					Some(Cause::Explicit(*self.location())),
+				)?;
 				ty::Expr::new(arg.ty(), Some(implicit_layout_ref))
 			}
 		};
@@ -467,13 +469,13 @@ impl Compile for Loc<syntax::LayoutExpr> {
 		let layout_ref = match self.value() {
 			syntax::LayoutExpr::Id(id) => {
 				let layout_id = id.compile(env)?;
-				env
-					.context
+				env.context
 					.require_layout(layout_id, Some(Cause::Explicit(*self.location())))?
 			}
 			syntax::LayoutExpr::Reference(arg) => {
 				let arg = arg.compile(env)?;
-				env.context.define_reference_layout(arg, Some(Cause::Explicit(*self.location())))?
+				env.context
+					.define_reference_layout(arg, Some(Cause::Explicit(*self.location())))?
 			}
 		};
 

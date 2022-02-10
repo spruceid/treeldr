@@ -27,7 +27,7 @@ pub enum Native {
 	Iri,
 	Uri,
 	Url,
-	Reference(Ref<layout::Definition>)
+	Reference(Ref<layout::Definition>),
 }
 
 /// Layout definition.
@@ -221,14 +221,14 @@ impl Definition {
 	pub fn composing_layouts(&self) -> Option<ComposingLayouts> {
 		match self.description()?.inner() {
 			Description::Struct(fields) => Some(ComposingLayouts::Struct(fields.iter())),
-			Description::Native(_) => Some(ComposingLayouts::Native)
+			Description::Native(_) => Some(ComposingLayouts::Native),
 		}
 	}
 }
 
 pub enum ComposingLayouts<'a> {
 	Struct(std::slice::Iter<'a, Field>),
-	Native
+	Native,
 }
 
 impl<'a> Iterator for ComposingLayouts<'a> {
@@ -237,7 +237,7 @@ impl<'a> Iterator for ComposingLayouts<'a> {
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
 			Self::Struct(fields) => Some(fields.next()?.layout()),
-			Self::Native => None
+			Self::Native => None,
 		}
 	}
 }
@@ -369,8 +369,8 @@ impl Fields {
 			if a.layout() != b.layout() {
 				return Err(Caused::new(
 					Mismatch::FieldLayout {
-						expected: a.layout().clone(),
-						found: b.layout().clone(),
+						expected: a.layout(),
+						found: b.layout(),
 						because: a.causes().preferred(),
 					},
 					b.causes().preferred(),

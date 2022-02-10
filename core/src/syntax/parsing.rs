@@ -479,13 +479,10 @@ impl Parse for TypeExpr {
 			locspan::Loc(unexpected, source) => Err(Loc::new(
 				Error::Unexpected(
 					unexpected,
-					vec![
-						TokenKind::Id,
-						TokenKind::Punct(lexing::Punct::Ampersand)
-					],
+					vec![TokenKind::Id, TokenKind::Punct(lexing::Punct::Ampersand)],
 				),
 				source,
-			))
+			)),
 		}
 	}
 }
@@ -539,13 +536,10 @@ impl Parse for LayoutExpr {
 			locspan::Loc(unexpected, source) => Err(Loc::new(
 				Error::Unexpected(
 					unexpected,
-					vec![
-						TokenKind::Id,
-						TokenKind::Punct(lexing::Punct::Ampersand)
-					],
+					vec![TokenKind::Id, TokenKind::Punct(lexing::Punct::Ampersand)],
 				),
 				source,
-			))
+			)),
 		}
 	}
 }

@@ -95,7 +95,7 @@ pub struct AnnotatedTypeExpr {
 
 pub enum TypeExpr {
 	Id(Loc<Id>),
-	Reference(Box<Loc<TypeExpr>>)
+	Reference(Box<Loc<TypeExpr>>),
 }
 
 pub struct LayoutDefinition {
@@ -128,5 +128,5 @@ pub struct AnnotatedLayoutExpr {
 
 pub enum LayoutExpr {
 	Id(Loc<Id>),
-	Reference(Box<Loc<LayoutExpr>>)
+	Reference(Box<Loc<LayoutExpr>>),
 }

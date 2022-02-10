@@ -61,7 +61,7 @@ impl Model {
 		&mut self,
 		iri: IriBuf,
 		native_layout: layout::Native,
-		cause: Option<Cause>
+		cause: Option<Cause>,
 	) -> Result<Ref<layout::Definition>, Caused<layout::Mismatch>> {
 		let id = self.vocabulary_mut().insert(iri);
 		let ty_ref = self.declare_type(id, cause);
@@ -78,67 +78,76 @@ impl Model {
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
 			layout::Native::Boolean,
-			None
+			None,
 		)?;
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#int").unwrap(),
 			layout::Native::Integer,
-			None
+			None,
 		)?;
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
 			layout::Native::Integer,
-			None
+			None,
 		)?;
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#positiveInteger").unwrap(),
 			layout::Native::PositiveInteger,
-			None
+			None,
 		)?;
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#float").unwrap(),
 			layout::Native::Float,
-			None
+			None,
 		)?;
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
 			layout::Native::Double,
-			None
+			None,
 		)?;
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
 			layout::Native::String,
-			None
+			None,
 		)?;
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#time").unwrap(),
 			layout::Native::Time,
-			None
+			None,
 		)?;
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#date").unwrap(),
 			layout::Native::Date,
-			None
+			None,
 		)?;
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(),
 			layout::Native::DateTime,
-			None
+			None,
 		)?;
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#anyURI").unwrap(),
 			layout::Native::Uri,
-			None
+			None,
 		)?;
 
 		Ok(())
 	}
 
-	pub fn define_reference_layout(&mut self, arg_layout_ref: Ref<layout::Definition>, cause: Option<Cause>) -> Result<Ref<layout::Definition>, Caused<layout::Mismatch>> {
+	pub fn define_reference_layout(
+		&mut self,
+		arg_layout_ref: Ref<layout::Definition>,
+		cause: Option<Cause>,
+	) -> Result<Ref<layout::Definition>, Caused<layout::Mismatch>> {
 		let arg_layout = self.layouts().get(arg_layout_ref).unwrap();
 		let arg_iri = self.vocabulary().get(arg_layout.id()).unwrap();
-		let arg_pct_iri = pct_str::PctString::encode(arg_iri.as_str().chars(), pct_str::URIReserved);
-		let iri = IriBuf::from_string(format!("http://schema.treeldr.org/Reference_{}", arg_pct_iri)).unwrap();
+		let arg_pct_iri =
+			pct_str::PctString::encode(arg_iri.as_str().chars(), pct_str::URIReserved);
+		let iri = IriBuf::from_string(format!(
+			"http://schema.treeldr.org/Reference_{}",
+			arg_pct_iri
+		))
+		.unwrap();
 		self.define_native_type(iri, layout::Native::Reference(arg_layout_ref), cause)
 	}
 

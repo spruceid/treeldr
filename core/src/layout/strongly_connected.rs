@@ -1,11 +1,11 @@
-use std::collections::HashMap;
 use super::Definition;
 use crate::{Collection, Ref};
+use std::collections::HashMap;
 
 pub struct StronglyConnectedLayouts<'l> {
 	layouts: &'l Collection<Definition>,
 	map: HashMap<Ref<Definition>, u32>,
-	component_count: u32
+	component_count: u32,
 }
 
 impl<'l> StronglyConnectedLayouts<'l> {
@@ -15,20 +15,34 @@ impl<'l> StronglyConnectedLayouts<'l> {
 	}
 
 	#[inline(always)]
-	pub fn from_entry_points<I: IntoIterator<Item=Ref<Definition>>>(layouts: &'l Collection<Definition>, entry_points: I) -> Self {
+	pub fn from_entry_points<I: IntoIterator<Item = Ref<Definition>>>(
+		layouts: &'l Collection<Definition>,
+		entry_points: I,
+	) -> Self {
 		Self::from_entry_points_with_filter(layouts, entry_points, |_, _| true)
 	}
 
 	#[inline(always)]
-	pub fn with_filter(layouts: &'l Collection<Definition>, filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool) -> Self {
-		Self::from_entry_points_with_filter(layouts, layouts.iter().map(|(layout_ref, _)| layout_ref), filter)
+	pub fn with_filter(
+		layouts: &'l Collection<Definition>,
+		filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool,
+	) -> Self {
+		Self::from_entry_points_with_filter(
+			layouts,
+			layouts.iter().map(|(layout_ref, _)| layout_ref),
+			filter,
+		)
 	}
 
-	pub fn from_entry_points_with_filter<I: IntoIterator<Item=Ref<Definition>>>(layouts: &'l Collection<Definition>, entry_points: I, filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool) -> Self {
+	pub fn from_entry_points_with_filter<I: IntoIterator<Item = Ref<Definition>>>(
+		layouts: &'l Collection<Definition>,
+		entry_points: I,
+		filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool,
+	) -> Self {
 		let mut components = Self {
 			layouts,
 			map: HashMap::new(),
-			component_count: 0
+			component_count: 0,
 		};
 
 		let mut map = HashMap::new();
@@ -36,7 +50,13 @@ impl<'l> StronglyConnectedLayouts<'l> {
 
 		for layout_ref in entry_points {
 			if !map.contains_key(&layout_ref) {
-				strong_connect(&mut components, &mut map, &mut stack, layout_ref, filter.clone());
+				strong_connect(
+					&mut components,
+					&mut map,
+					&mut stack,
+					layout_ref,
+					filter.clone(),
+				);
 			}
 		}
 
@@ -62,15 +82,17 @@ impl<'l> StronglyConnectedLayouts<'l> {
 		self.is_recursive_with_filter(layout_ref, |_| true)
 	}
 
-	pub fn is_recursive_with_filter(&self, layout_ref: Ref<Definition>, filter: impl Fn(Ref<Definition>) -> bool) -> Option<bool> {
+	pub fn is_recursive_with_filter(
+		&self,
+		layout_ref: Ref<Definition>,
+		filter: impl Fn(Ref<Definition>) -> bool,
+	) -> Option<bool> {
 		let layout = self.layouts.get(layout_ref)?;
 		let component = self.component(layout_ref)?;
 
 		for sub_layout_ref in layout.composing_layouts().into_iter().flatten() {
-			if filter(sub_layout_ref) {
-				if self.component(sub_layout_ref)? == component {
-					return Some(true)
-				}
+			if filter(sub_layout_ref) && self.component(sub_layout_ref)? == component {
+				return Some(true);
 			}
 		}
 
@@ -81,7 +103,7 @@ impl<'l> StronglyConnectedLayouts<'l> {
 struct Data {
 	index: u32,
 	low_link: u32,
-	on_stack: bool
+	on_stack: bool,
 }
 
 fn strong_connect<'l>(
@@ -89,7 +111,7 @@ fn strong_connect<'l>(
 	map: &mut HashMap<Ref<Definition>, Data>,
 	stack: &mut Vec<Ref<Definition>>,
 	layout_ref: Ref<Definition>,
-	filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool
+	filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool,
 ) -> u32 {
 	let index = map.len() as u32;
 	stack.push(layout_ref);
@@ -98,8 +120,8 @@ fn strong_connect<'l>(
 		Data {
 			index,
 			low_link: index,
-			on_stack: true
-		}
+			on_stack: true,
+		},
 	);
 
 	let layout = components.layouts.get(layout_ref).unwrap();
@@ -107,18 +129,25 @@ fn strong_connect<'l>(
 		if filter(layout_ref, sub_layout_ref) {
 			let new_layout_low_link = match map.get(&sub_layout_ref) {
 				None => {
-					let sub_layout_low_link = strong_connect(components, map, stack, sub_layout_ref, filter.clone());
-					Some(std::cmp::min(map[&layout_ref].low_link, sub_layout_low_link))
+					let sub_layout_low_link =
+						strong_connect(components, map, stack, sub_layout_ref, filter.clone());
+					Some(std::cmp::min(
+						map[&layout_ref].low_link,
+						sub_layout_low_link,
+					))
 				}
 				Some(sub_layout_data) => {
 					if sub_layout_data.on_stack {
-						Some(std::cmp::min(map[&layout_ref].low_link, sub_layout_data.index))
+						Some(std::cmp::min(
+							map[&layout_ref].low_link,
+							sub_layout_data.index,
+						))
 					} else {
 						None
 					}
 				}
 			};
-	
+
 			if let Some(new_layout_low_link) = new_layout_low_link {
 				map.get_mut(&layout_ref).unwrap().low_link = new_layout_low_link;
 			}

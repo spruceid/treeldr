@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
 use super::Definition;
 use crate::{Collection, Ref};
+use std::collections::{HashMap, HashSet};
 
 pub struct Usages {
-	map: HashMap<Ref<Definition>, HashSet<Ref<Definition>>>
+	map: HashMap<Ref<Definition>, HashSet<Ref<Definition>>>,
 }
 
 impl Usages {
@@ -28,9 +28,7 @@ impl Usages {
 			}
 		}
 
-		Self {
-			map
-		}
+		Self { map }
 	}
 
 	pub fn get(&self, layout_ref: Ref<Definition>) -> Option<&HashSet<Ref<Definition>>> {

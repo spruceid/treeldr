@@ -156,14 +156,17 @@ impl<'c> fmt::Display for RefWithContext<'c> {
 #[derive(Clone, Copy)]
 pub struct Expr {
 	ty_ref: Ref<Definition>,
-	implicit_layout_ref: Option<Ref<layout::Definition>>
+	implicit_layout_ref: Option<Ref<layout::Definition>>,
 }
 
 impl Expr {
-	pub fn new(ty_ref: Ref<Definition>, implicit_layout_ref: Option<Ref<layout::Definition>>) -> Self {
+	pub fn new(
+		ty_ref: Ref<Definition>,
+		implicit_layout_ref: Option<Ref<layout::Definition>>,
+	) -> Self {
 		Self {
 			ty_ref,
-			implicit_layout_ref
+			implicit_layout_ref,
 		}
 	}
 

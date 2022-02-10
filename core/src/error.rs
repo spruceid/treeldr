@@ -128,7 +128,7 @@ impl layout::Type {
 				layout::Native::Iri => "IRI",
 				layout::Native::Uri => "URI",
 				layout::Native::Url => "URL",
-				layout::Native::Reference(_) => "reference"
+				layout::Native::Reference(_) => "reference",
 			},
 		}
 	}
@@ -307,7 +307,9 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 				if let Some(cause) = self.error().cause() {
 					let message = match cause {
 						Cause::Explicit(_) => "found layout is declared here".to_string(),
-						Cause::Implicit(_) => "found layout is implicitly declared here".to_string(),
+						Cause::Implicit(_) => {
+							"found layout is implicitly declared here".to_string()
+						}
 					};
 
 					let source = cause.source();

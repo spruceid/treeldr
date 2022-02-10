@@ -131,16 +131,14 @@ impl Type {
 							Error::ImplicitLayoutMismatch {
 								expected,
 								found,
-								because: self.causes.preferred()
+								because: self.causes.preferred(),
 							},
-							source
-						))
+							source,
+						));
 					}
 				}
-				(None, Some(b)) => {
-					self.ty_expr.set_implicit_layout(b)
-				}
-				_ => ()
+				(None, Some(b)) => self.ty_expr.set_implicit_layout(b),
+				_ => (),
 			}
 
 			Ok(())
