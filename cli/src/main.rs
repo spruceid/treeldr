@@ -4,7 +4,7 @@ use codespan_reporting::term::{
 	termcolor::{ColorChoice, StandardStream},
 };
 use iref::IriBuf;
-use std::{convert::Infallible, fmt, fs, io, path::PathBuf};
+use std::{convert::Infallible, fs, io, path::PathBuf};
 use treeldr::{error::Diagnose, source, syntax, syntax::Parse, Build};
 
 #[derive(Parser)]
@@ -16,10 +16,6 @@ struct Args {
 	/// Input TreeLDR file.
 	#[clap(name = "FILE")]
 	filename: PathBuf,
-
-	#[clap(short = 'M', parse(try_from_str = parse_mount_point), multiple_occurrences(true))]
-	/// Mount a filename to an IRI with the syntax `IRI=FILENAME`.
-	mounts: Vec<(IriBuf, PathBuf)>,
 
 	/// Sets the level of verbosity.
 	#[clap(short, long = "verbose", parse(from_occurrences))]
@@ -92,30 +88,4 @@ fn main() -> io::Result<()> {
 	}
 
 	Ok(())
-}
-
-#[derive(Debug)]
-pub enum MountPointError {
-	InvalidPath(String),
-	MissingEqual,
-	InvalidIRI(String)
-}
-
-impl fmt::Display for MountPointError {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match self {
-			Self::InvalidPath(s) => write!(f, "invalid path `{}`", s),
-			Self::MissingEqual => "missing `=` between IRI and path".fmt(f),
-			Self::InvalidIRI(s) => write!(f, "invalid IRI `{}`", s)
-		}
-	}
-}
-
-impl std::error::Error for MountPointError {}
-
-fn parse_mount_point(s: &str) -> Result<(IriBuf, PathBuf), MountPointError> {
-	let pos = s.find('=').ok_or(MountPointError::MissingEqual)?;
-	let iri = s[..pos].parse().map_err(|_| MountPointError::InvalidIRI(s[..pos].to_string()))?;
-	let filename = s[pos+1..].parse().map_err(|_| MountPointError::InvalidPath(s[pos+1..].to_string()))?;
-	Ok((iri, filename))
 }
