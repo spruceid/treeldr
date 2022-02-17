@@ -14,7 +14,7 @@ struct Args {
 	base_iri: IriBuf,
 
 	/// Input files.
-	#[clap(short = 'i', multiple_occurrences=true)]
+	#[clap(short = 'i', multiple_occurrences = true)]
 	filenames: Vec<PathBuf>,
 
 	/// Sets the level of verbosity.
@@ -68,11 +68,7 @@ fn main() {
 }
 
 /// Import a TreeLDR file.
-fn import_treeldr(
-	model: &mut treeldr::Model,
-	files: &source::Files,
-	source_id: source::Id,
-) {
+fn import_treeldr(model: &mut treeldr::Model, files: &source::Files, source_id: source::Id) {
 	let file = files.get(source_id).unwrap();
 
 	let mut lexer =
@@ -94,15 +90,14 @@ fn import_treeldr(
 					term::emit(&mut writer.lock(), &config, files, &diagnostic)
 						.expect("diagnostic failed");
 					std::process::exit(1);
-				} 
+				}
 			}
 		}
 		Err(e) => {
 			let diagnostic = e.diagnostic();
 			let writer = StandardStream::stderr(ColorChoice::Always);
 			let config = codespan_reporting::term::Config::default();
-			term::emit(&mut writer.lock(), &config, files, &diagnostic)
-				.expect("diagnostic failed");
+			term::emit(&mut writer.lock(), &config, files, &diagnostic).expect("diagnostic failed");
 			std::process::exit(1);
 		}
 	}

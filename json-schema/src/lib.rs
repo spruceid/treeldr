@@ -56,7 +56,7 @@ pub fn generate(
 		let mut json_schema = serde_json::Map::new();
 		let name = layout_name(model, layout_ref)?;
 		generate_layout(&mut json_schema, model, embedding, layout_ref)?;
-		defs.insert(name.into(), json_schema.into());
+		defs.insert(name, json_schema.into());
 	}
 	if !defs.is_empty() {
 		json_schema.insert("$defs".into(), defs.into());

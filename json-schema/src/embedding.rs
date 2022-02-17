@@ -24,15 +24,14 @@ impl Default for Embedding {
 	}
 }
 
+#[derive(Default)]
 pub struct Configuration {
 	map: HashMap<Ref<layout::Definition>, Embedding>,
 }
 
 impl Configuration {
 	pub fn new() -> Self {
-		Self {
-			map: HashMap::new(),
-		}
+		Self::default()
 	}
 
 	pub fn get(&self, layout_ref: Ref<layout::Definition>) -> Embedding {

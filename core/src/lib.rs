@@ -1,8 +1,8 @@
 use iref::{Iri, IriBuf};
 
+pub mod build;
 mod cause;
 pub mod collection;
-pub mod build;
 mod doc;
 pub mod error;
 mod feature;
@@ -14,9 +14,9 @@ pub mod syntax;
 pub mod ty;
 pub mod vocab;
 
+pub use build::Build;
 pub use cause::*;
 pub use collection::{Collection, Ref};
-pub use build::Build;
 pub use doc::Documentation;
 pub use error::Error;
 pub use feature::Feature;
