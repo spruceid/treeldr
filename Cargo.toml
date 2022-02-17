@@ -2,5 +2,6 @@
 members = [
 	"core",
 	"cli",
-	"json-schema"
+	"json-schema",
+	"json-ld-context"
 ]

@@ -4,7 +4,7 @@ use codespan_reporting::term::{
 	termcolor::{ColorChoice, StandardStream},
 };
 use iref::IriBuf;
-use std::{convert::Infallible, fs, io, path::PathBuf};
+use std::{convert::Infallible, fs, path::PathBuf};
 use treeldr::{error::Diagnose, source, syntax, syntax::Parse, Build};
 
 #[derive(Parser)]
@@ -13,9 +13,9 @@ struct Args {
 	/// Base IRI.
 	base_iri: IriBuf,
 
-	/// Input TreeLDR file.
-	#[clap(name = "FILE")]
-	filename: PathBuf,
+	/// Input files.
+	#[clap(short = 'i', multiple_occurrences=true)]
+	filenames: Vec<PathBuf>,
 
 	/// Sets the level of verbosity.
 	#[clap(short, long = "verbose", parse(from_occurrences))]
@@ -29,63 +29,81 @@ struct Args {
 pub enum Command {
 	#[cfg(feature = "json-schema")]
 	JsonSchema(treeldr_json_schema::Command),
+
+	#[cfg(feature = "json-ld-context")]
+	JsonLdContext(treeldr_json_ld_context::Command),
 }
 
-fn main() -> io::Result<()> {
+fn main() {
 	// Parse options.
 	let args = Args::parse();
 
 	// Init logger.
 	stderrlog::new().verbosity(args.verbosity).init().unwrap();
 
-	let content = fs::read_to_string(&args.filename)?;
+	let mut model = treeldr::Model::new(args.base_iri);
+	model.define_xml_types().unwrap();
 
 	let mut files = source::Files::new();
-	let (source_id, file) = files.add(source::Path::Local(args.filename), content);
+	for filename in args.filenames {
+		match fs::read_to_string(&filename) {
+			Ok(content) => {
+				let (file_id, _) = files.add(source::Path::Local(filename), content);
+				import_treeldr(&mut model, &files, file_id);
+			}
+			Err(e) => {
+				log::error!("unable to read file `{}`: {}", filename.display(), e);
+				std::process::exit(1);
+			}
+		}
+	}
+
+	match args.command {
+		#[cfg(feature = "json-schema")]
+		Some(Command::JsonSchema(command)) => command.execute(&model),
+		#[cfg(feature = "json-ld-context")]
+		Some(Command::JsonLdContext(command)) => command.execute(&model),
+		_ => (),
+	}
+}
+
+/// Import a TreeLDR file.
+fn import_treeldr(
+	model: &mut treeldr::Model,
+	files: &source::Files,
+	source_id: source::Id,
+) {
+	let file = files.get(source_id).unwrap();
 
 	let mut lexer =
 		syntax::Lexer::<Infallible, _>::new(source_id, file.buffer().chars().map(Result::Ok));
-
-	// for token in lexer {
-	// 	eprintln!("token: {:?}", token)
-	// }
 
 	log::debug!("ready for parsing.");
 	match syntax::Document::parse(&mut lexer) {
 		Ok(doc) => {
 			log::debug!("parsing succeeded.");
-			let mut model = treeldr::Model::new(args.base_iri);
-			model.define_xml_types().unwrap();
-
-			let mut env = treeldr::build::Environment::new(&mut model);
+			let mut env = treeldr::build::Environment::new(model);
 			match doc.build(&mut env) {
 				Ok(()) => {
-					log::debug!("compilation succeeded.");
-					match args.command {
-						#[cfg(feature = "json-schema")]
-						Some(Command::JsonSchema(command)) => command.execute(&model),
-						_ => (),
-					}
+					log::debug!("build succeeded.");
 				}
 				Err(e) => {
-					let diagnostic = e.with_model(&model).diagnostic();
+					let diagnostic = e.with_model(model).diagnostic();
 					let writer = StandardStream::stderr(ColorChoice::Always);
 					let config = codespan_reporting::term::Config::default();
-					term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+					term::emit(&mut writer.lock(), &config, files, &diagnostic)
 						.expect("diagnostic failed");
 					std::process::exit(1);
-				}
+				} 
 			}
 		}
 		Err(e) => {
 			let diagnostic = e.diagnostic();
 			let writer = StandardStream::stderr(ColorChoice::Always);
 			let config = codespan_reporting::term::Config::default();
-			term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+			term::emit(&mut writer.lock(), &config, files, &diagnostic)
 				.expect("diagnostic failed");
 			std::process::exit(1);
 		}
 	}
-
-	Ok(())
 }

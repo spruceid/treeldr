@@ -3,7 +3,7 @@ import <http://www.w3.org/2001/XMLSchema#> as xs
 /// Certificate or deed issued by an educational institution.
 type Diploma {
 	/// Issuer.
-	department: Department,
+	department: &Department,
 	degree: Degree,
 	year: Year,
 	honors: Honors,
@@ -11,7 +11,7 @@ type Diploma {
 }
 
 type Department {
-	// ...
+	parent: Department
 }
 
 type Degree {

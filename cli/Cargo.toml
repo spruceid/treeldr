@@ -9,17 +9,22 @@ edition = "2021"
 json-schema = [
 	"treeldr-json-schema"
 ]
+json-ld-context = [
+	"treeldr-json-ld-context"
+]
 
 [dependencies]
 treeldr = { path = "../core" }
 iref = "2.0"
 log = "0.4"
+locspan = "*"
 codespan-reporting = "0.11"
 stderrlog = "0.5"
 clap = { version = "3.0", features = ["derive"] }
 
 # Extensions.
 treeldr-json-schema = { path = "../json-schema", version = "0.1", optional = true }
+treeldr-json-ld-context = { path = "../json-ld-context", version = "0.1", optional = true }
 
 [[bin]]
 name = "treeldr"
