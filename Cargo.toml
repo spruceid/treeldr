@@ -1,6 +1,7 @@
 [workspace]
 members = [
 	"core",
+	"syntax",
 	"cli",
 	"json-schema",
 	"json-ld-context"

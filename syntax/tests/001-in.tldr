@@ -1,0 +1,6 @@
+import <http://www.w3.org/2001/XMLSchema#> as xs
+
+/// Foo.
+type Foo {
+	bar: <xs:anyURI>
+}

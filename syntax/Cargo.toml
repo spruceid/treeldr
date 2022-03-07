@@ -1,0 +1,18 @@
+[package]
+name = "treeldr-syntax"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+iref = "2.1.1"
+iref-enum = "1.2.0"
+static-iref = "1.0.0"
+locspan = "0.3"
+codespan-reporting = "0.11"
+rdf-types = { version = "0.2.10", features = ["loc"] }
+
+[dev-dependencies]
+nquads-syntax = "0.1.6"
+grdf = "0.4.2"
