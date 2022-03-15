@@ -1,6 +1,7 @@
 use iref::{Iri, IriBuf};
+use locspan::Location;
 
-pub mod build;
+// pub mod build;
 mod cause;
 pub mod collection;
 mod doc;
@@ -9,12 +10,10 @@ mod feature;
 pub mod layout;
 pub mod node;
 pub mod prop;
-pub mod source;
-pub mod syntax;
+// pub mod source;
 pub mod ty;
 pub mod vocab;
 
-pub use build::Build;
 pub use cause::*;
 pub use collection::{Collection, Ref};
 pub use doc::Documentation;
@@ -24,7 +23,7 @@ pub use node::Node;
 pub use vocab::{Id, Vocabulary};
 
 /// TreeLDR model.
-pub struct Model {
+pub struct Model<F> {
 	/// Base IRI.
 	base_iri: IriBuf,
 
@@ -32,19 +31,19 @@ pub struct Model {
 	vocab: Vocabulary,
 
 	/// Nodes.
-	nodes: vocab::Map<Node>,
+	nodes: vocab::Map<Node<F>>,
 
 	/// Type definitions.
-	types: Collection<ty::Definition>,
+	types: Collection<ty::Definition<F>>,
 
 	/// Property definitions.
-	properties: Collection<prop::Definition>,
+	properties: Collection<prop::Definition<F>>,
 
 	/// Layout definitions.
-	layouts: Collection<layout::Definition>,
+	layouts: Collection<layout::Definition<F>>,
 }
 
-impl Model {
+impl<F> Model<F> {
 	/// Creates a new empty context.
 	pub fn new(base_iri: impl Into<IriBuf>) -> Self {
 		Self {
@@ -60,21 +59,21 @@ impl Model {
 	pub fn define_native_type(
 		&mut self,
 		iri: IriBuf,
-		native_layout: layout::Native,
-		cause: Option<Cause>,
-	) -> Result<Ref<layout::Definition>, Caused<layout::Mismatch>> {
+		native_layout: layout::Native<F>,
+		cause: Option<Location<F>>,
+	) -> Result<Ref<layout::Definition<F>>, Caused<layout::Mismatch<F>, F>> where F: Clone + Ord {
 		let id = self.vocabulary_mut().insert(iri);
-		let ty_ref = self.declare_type(id, cause);
+		let ty_ref = self.declare_type(id, cause.clone());
 
-		let layout_ref = self.declare_layout(id, cause);
+		let layout_ref = self.declare_layout(id, cause.clone());
 		let layout = self.layouts.get_mut(layout_ref).unwrap();
-		layout.declare_type(ty_ref, cause).unwrap();
+		layout.declare_type(ty_ref, cause.clone()).ok().unwrap();
 		layout.declare_native(native_layout, cause)?;
 
 		Ok(layout_ref)
 	}
 
-	pub fn define_xml_types(&mut self) -> Result<(), Caused<layout::Mismatch>> {
+	pub fn define_xml_types(&mut self) -> Result<(), Caused<layout::Mismatch<F>, F>> where F: Clone + Ord {
 		self.define_native_type(
 			IriBuf::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
 			layout::Native::Boolean,
@@ -136,9 +135,9 @@ impl Model {
 
 	pub fn define_reference_layout(
 		&mut self,
-		arg_layout_ref: Ref<layout::Definition>,
-		cause: Option<Cause>,
-	) -> Result<Ref<layout::Definition>, Caused<layout::Mismatch>> {
+		arg_layout_ref: Ref<layout::Definition<F>>,
+		cause: Option<Location<F>>,
+	) -> Result<Ref<layout::Definition<F>>, Caused<layout::Mismatch<F>, F>> where F: Clone + Ord {
 		let arg_layout = self.layouts().get(arg_layout_ref).unwrap();
 		let arg_iri = self.vocabulary().get(arg_layout.id()).unwrap();
 		let arg_pct_iri =
@@ -151,7 +150,7 @@ impl Model {
 		self.define_native_type(iri, layout::Native::Reference(arg_layout_ref), cause)
 	}
 
-	pub fn check(&self) -> Result<(), Caused<Error>> {
+	pub fn check(&self) -> Result<(), Caused<Error<F>, F>> where F: Clone {
 		for (_, layout) in self.layouts.iter() {
 			layout.check(self)?;
 		}
@@ -175,57 +174,57 @@ impl Model {
 	}
 
 	/// Returns the node associated to the given `Id`, if any.
-	pub fn get(&self, id: Id) -> Option<&Node> {
+	pub fn get(&self, id: Id) -> Option<&Node<F>> {
 		self.nodes.get(id)
 	}
 
-	pub fn nodes(&self) -> vocab::Iter<Node> {
+	pub fn nodes(&self) -> vocab::Iter<Node<F>> {
 		self.nodes.iter()
 	}
 
-	pub fn nodes_mut(&mut self) -> vocab::IterMut<Node> {
+	pub fn nodes_mut(&mut self) -> vocab::IterMut<Node<F>> {
 		self.nodes.iter_mut()
 	}
 
 	/// Inserts the given node to the context.
 	///
 	/// Replaces any previous node with the same [`Node::id`].
-	pub fn insert(&mut self, node: Node) -> Option<Node> {
+	pub fn insert(&mut self, node: Node<F>) -> Option<Node<F>> {
 		self.nodes.insert(node.id(), node)
 	}
 
 	/// Returns a reference to the collection of type definitions.
-	pub fn types(&self) -> &Collection<ty::Definition> {
+	pub fn types(&self) -> &Collection<ty::Definition<F>> {
 		&self.types
 	}
 
 	/// Returns a mutable reference to the collection of type definitions.
-	pub fn types_mut(&mut self) -> &mut Collection<ty::Definition> {
+	pub fn types_mut(&mut self) -> &mut Collection<ty::Definition<F>> {
 		&mut self.types
 	}
 
 	/// Returns a reference to the collection of property definitions.
-	pub fn properties(&self) -> &Collection<prop::Definition> {
+	pub fn properties(&self) -> &Collection<prop::Definition<F>> {
 		&self.properties
 	}
 
 	/// Returns a mutable reference to the collection of property definitions.
-	pub fn properties_mut(&mut self) -> &mut Collection<prop::Definition> {
+	pub fn properties_mut(&mut self) -> &mut Collection<prop::Definition<F>> {
 		&mut self.properties
 	}
 
 	/// Returns a reference to the collection of layout definitions.
-	pub fn layouts(&self) -> &Collection<layout::Definition> {
+	pub fn layouts(&self) -> &Collection<layout::Definition<F>> {
 		&self.layouts
 	}
 
 	/// Returns a mutable reference to the collection of layout definitions.
-	pub fn layouts_mut(&mut self) -> &mut Collection<layout::Definition> {
+	pub fn layouts_mut(&mut self) -> &mut Collection<layout::Definition<F>> {
 		&mut self.layouts
 	}
 
 	/// Declare the given `id` as a type.
-	pub fn declare_type(&mut self, id: Id, cause: Option<Cause>) -> Ref<ty::Definition> {
+	pub fn declare_type(&mut self, id: Id, cause: Option<Location<F>>) -> Ref<ty::Definition<F>> where F: Ord {
 		match self.nodes.get_mut(id) {
 			Some(node) => match node.as_type() {
 				Some(ty_ref) => ty_ref,
@@ -250,15 +249,15 @@ impl Model {
 	pub fn require_type(
 		&self,
 		id: Id,
-		source: Option<syntax::Location>,
-	) -> Result<Ref<ty::Definition>, Caused<Error>> {
+		source: Option<Location<F>>,
+	) -> Result<Ref<ty::Definition<F>>, Caused<Error<F>, F>> where F: Clone {
 		match self.get(id) {
 			None => Err(Caused::new(
 				Error::UnknownNode {
 					id,
 					expected_ty: Some(node::Type::Type),
 				},
-				source.map(Cause::Explicit),
+				source,
 			)),
 			Some(node) => match node.as_type() {
 				Some(ty_ref) => Ok(ty_ref),
@@ -268,14 +267,14 @@ impl Model {
 						expected: node::Type::Type,
 						found: node.caused_types(self),
 					},
-					source.map(Cause::Explicit),
+					source,
 				)),
 			},
 		}
 	}
 
 	/// Declare the given `id` as a property.
-	pub fn declare_property(&mut self, id: Id, cause: Option<Cause>) -> Ref<prop::Definition> {
+	pub fn declare_property(&mut self, id: Id, cause: Option<Location<F>>) -> Ref<prop::Definition<F>> where F: Ord {
 		match self.nodes.get_mut(id) {
 			Some(node) => match node.as_property() {
 				Some(prop_ref) => prop_ref,
@@ -300,15 +299,15 @@ impl Model {
 	pub fn require_property(
 		&self,
 		id: Id,
-		source: Option<syntax::Location>,
-	) -> Result<Ref<prop::Definition>, Caused<Error>> {
+		source: Option<Location<F>>,
+	) -> Result<Ref<prop::Definition<F>>, Caused<Error<F>, F>> where F: Clone {
 		match self.get(id) {
 			None => Err(Caused::new(
 				Error::UnknownNode {
 					id,
 					expected_ty: Some(node::Type::Property),
 				},
-				source.map(Cause::Explicit),
+				source,
 			)),
 			Some(node) => match node.as_property() {
 				Some(prop_ref) => Ok(prop_ref),
@@ -318,14 +317,14 @@ impl Model {
 						expected: node::Type::Property,
 						found: node.caused_types(self),
 					},
-					source.map(Cause::Explicit),
+					source,
 				)),
 			},
 		}
 	}
 
 	/// Declare the given `id` as a layout.
-	pub fn declare_layout(&mut self, id: Id, cause: Option<Cause>) -> Ref<layout::Definition> {
+	pub fn declare_layout(&mut self, id: Id, cause: Option<Location<F>>) -> Ref<layout::Definition<F>> where F: Ord {
 		match self.nodes.get_mut(id) {
 			Some(node) => match node.as_layout() {
 				Some(layout_ref) => layout_ref,
@@ -350,8 +349,8 @@ impl Model {
 	pub fn require_layout(
 		&self,
 		id: Id,
-		cause: Option<Cause>,
-	) -> Result<Ref<layout::Definition>, Caused<Error>> {
+		cause: Option<Location<F>>,
+	) -> Result<Ref<layout::Definition<F>>, Caused<Error<F>, F>> where F: Clone {
 		match self.get(id) {
 			None => Err(Caused::new(
 				Error::UnknownNode {

@@ -1,19 +1,20 @@
-use crate::{ty, Cause, Caused, Causes, Documentation, Error, Id, Ref};
+use crate::{ty, Caused, Causes, Documentation, Error, Id, Ref};
 use std::collections::HashMap;
+use locspan::Location;
 
 /// Property definition.
-pub struct Definition {
+pub struct Definition<F> {
 	id: Id,
-	causes: Causes,
-	domain: HashMap<Ref<ty::Definition>, Causes>,
-	ty: Option<Type>,
+	causes: Causes<F>,
+	domain: HashMap<Ref<ty::Definition<F>>, Causes<F>>,
+	ty: Option<Type<F>>,
 	required: bool,
 	functional: bool,
 	doc: Documentation,
 }
 
-impl Definition {
-	pub fn new(id: Id, causes: impl Into<Causes>) -> Self {
+impl<F> Definition<F> {
+	pub fn new(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
 			causes: causes.into(),
@@ -30,11 +31,11 @@ impl Definition {
 		self.id
 	}
 
-	pub fn causes(&self) -> &Causes {
+	pub fn causes(&self) -> &Causes<F> {
 		&self.causes
 	}
 
-	pub fn ty(&self) -> Option<&Type> {
+	pub fn ty(&self) -> Option<&Type<F>> {
 		self.ty.as_ref()
 	}
 
@@ -72,7 +73,7 @@ impl Definition {
 		self.doc = doc
 	}
 
-	pub fn declare_domain(&mut self, ty_ref: Ref<ty::Definition>, cause: Option<Cause>) {
+	pub fn declare_domain(&mut self, ty_ref: Ref<ty::Definition<F>>, cause: Option<Location<F>>) where F: Ord {
 		use std::collections::hash_map::Entry;
 		match self.domain.entry(ty_ref) {
 			Entry::Vacant(entry) => {
@@ -88,9 +89,9 @@ impl Definition {
 
 	pub fn declare_type(
 		&mut self,
-		ty_expr: ty::Expr,
-		cause: Option<Cause>,
-	) -> Result<(), Caused<Error>> {
+		ty_expr: ty::Expr<F>,
+		cause: Option<Location<F>>,
+	) -> Result<(), Caused<Error<F>, F>> where F: Clone + Ord {
 		match &mut self.ty {
 			Some(ty) => ty.declare(ty_expr, cause),
 			None => {
@@ -101,32 +102,32 @@ impl Definition {
 	}
 }
 
-pub struct Type {
-	ty_expr: ty::Expr,
-	causes: Causes,
+pub struct Type<F> {
+	ty_expr: ty::Expr<F>,
+	causes: Causes<F>,
 }
 
-impl Type {
-	pub fn new(ty_expr: ty::Expr, causes: impl Into<Causes>) -> Self {
+impl<F> Type<F> {
+	pub fn new(ty_expr: ty::Expr<F>, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			ty_expr,
 			causes: causes.into(),
 		}
 	}
 
-	pub fn expr(&self) -> ty::Expr {
+	pub fn expr(&self) -> ty::Expr<F> {
 		self.ty_expr
 	}
 
-	pub fn causes(&self) -> &Causes {
+	pub fn causes(&self) -> &Causes<F> {
 		&self.causes
 	}
 
 	pub fn declare(
 		&mut self,
-		ty_expr: ty::Expr,
-		source: Option<Cause>,
-	) -> Result<(), Caused<Error>> {
+		ty_expr: ty::Expr<F>,
+		source: Option<Location<F>>,
+	) -> Result<(), Caused<Error<F>, F>> where F: Clone {
 		if self.ty_expr.ty() == ty_expr.ty() {
 			match (self.ty_expr.implicit_layout(), ty_expr.implicit_layout()) {
 				(Some(expected), Some(found)) => {
@@ -135,7 +136,7 @@ impl Type {
 							Error::ImplicitLayoutMismatch {
 								expected,
 								found,
-								because: self.causes.preferred(),
+								because: self.causes.preferred().cloned(),
 							},
 							source,
 						));
@@ -151,7 +152,7 @@ impl Type {
 				Error::TypeMismatch {
 					expected: self.ty_expr.ty(),
 					found: ty_expr.ty(),
-					because: self.causes.preferred(),
+					because: self.causes.preferred().cloned(),
 				},
 				source,
 			))

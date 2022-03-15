@@ -2,14 +2,14 @@ use super::Definition;
 use crate::{Collection, Ref};
 use std::collections::{HashMap, HashSet};
 
-pub struct Usages {
-	map: HashMap<Ref<Definition>, HashSet<Ref<Definition>>>,
+pub struct Usages<F> {
+	map: HashMap<Ref<Definition<F>>, HashSet<Ref<Definition<F>>>>,
 }
 
-impl Usages {
-	pub fn new(layouts: &Collection<Definition>) -> Self {
+impl<F> Usages<F> {
+	pub fn new(layouts: &Collection<Definition<F>>) -> Self {
 		use std::collections::hash_map::Entry;
-		let mut map: HashMap<Ref<Definition>, HashSet<Ref<Definition>>> = HashMap::new();
+		let mut map: HashMap<Ref<Definition<F>>, HashSet<Ref<Definition<F>>>> = HashMap::new();
 
 		for (layout_ref, layout) in layouts.iter() {
 			if let Entry::Vacant(entry) = map.entry(layout_ref) {
@@ -31,7 +31,7 @@ impl Usages {
 		Self { map }
 	}
 
-	pub fn get(&self, layout_ref: Ref<Definition>) -> Option<&HashSet<Ref<Definition>>> {
+	pub fn get(&self, layout_ref: Ref<Definition<F>>) -> Option<&HashSet<Ref<Definition<F>>>> {
 		self.map.get(&layout_ref)
 	}
 }

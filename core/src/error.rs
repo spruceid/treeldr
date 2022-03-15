@@ -1,10 +1,11 @@
-use crate::{layout, node, prop, source, ty, Cause, Caused, Feature, Id, Model, Ref};
+use crate::{layout, node, prop, ty, Caused, Feature, Id, Model, Ref};
+use locspan::Location;
 
 /// Error with diagnostic reporting support.
-pub trait Diagnose {
+pub trait Diagnose<F> {
 	fn message(&self) -> String;
 
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<source::Id>> {
+	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
 		Vec::new()
 	}
 
@@ -12,7 +13,7 @@ pub trait Diagnose {
 		Vec::new()
 	}
 
-	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<source::Id> {
+	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<F> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message())
 			.with_labels(self.labels())
@@ -22,72 +23,72 @@ pub trait Diagnose {
 
 /// Error.
 #[derive(Debug)]
-pub enum Error {
+pub enum Error<F> {
 	Unimplemented(Feature),
-	PrefixRedefinition(String, Option<Cause>),
+	PrefixRedefinition(String, Option<Location<F>>),
 	UndefinedPrefix(String),
 	InvalidExpandedCompactIri(String),
 	InvalidNodeType {
 		id: Id,
 		expected: node::Type,
-		found: node::CausedTypes,
+		found: node::CausedTypes<F>,
 	},
 	UnknownNode {
 		id: Id,
 		expected_ty: Option<node::Type>,
 	},
 	TypeMismatch {
-		expected: Ref<ty::Definition>,
-		found: Ref<ty::Definition>,
-		because: Option<Cause>,
+		expected: Ref<ty::Definition<F>>,
+		found: Ref<ty::Definition<F>>,
+		because: Option<Location<F>>,
 	},
 	ImplicitLayoutMismatch {
-		expected: Ref<layout::Definition>,
-		found: Ref<layout::Definition>,
-		because: Option<Cause>,
+		expected: Ref<layout::Definition<F>>,
+		found: Ref<layout::Definition<F>>,
+		because: Option<Location<F>>,
 	},
 	LayoutTypeMismatch {
-		expected: Ref<ty::Definition>,
-		found: Ref<ty::Definition>,
-		because: Option<Cause>,
+		expected: Ref<ty::Definition<F>>,
+		found: Ref<ty::Definition<F>>,
+		because: Option<Location<F>>,
 	},
-	LayoutMismatch(layout::Mismatch),
+	LayoutMismatch(layout::Mismatch<F>),
 	/// A field is not required but its corresponding property is.
 	FieldNotRequired {
-		prop: Ref<prop::Definition>,
-		because: Option<Cause>,
+		prop: Ref<prop::Definition<F>>,
+		because: Option<Location<F>>,
 	},
 	FieldNotFunctional {
-		prop: Ref<prop::Definition>,
-		because: Option<Cause>,
+		prop: Ref<prop::Definition<F>>,
+		because: Option<Location<F>>,
 	},
 	MissingPropertyField {
-		prop: Ref<prop::Definition>,
-		because: Option<Cause>,
+		prop: Ref<prop::Definition<F>>,
+		because: Option<Location<F>>,
 	},
 }
 
-impl Caused<Error> {
-	pub fn with_model<'c>(&self, context: &'c Model) -> WithModel<'c, '_> {
+impl<F> Caused<Error<F>, F> {
+	pub fn with_model<'c>(&self, context: &'c Model<F>) -> WithModel<'c, '_, F> {
 		WithModel(context, self)
 	}
 }
 
-impl From<Caused<layout::Mismatch>> for Caused<Error> {
-	fn from(e: Caused<layout::Mismatch>) -> Self {
+impl<F> From<Caused<layout::Mismatch<F>, F>> for Caused<Error<F>, F> {
+	fn from(e: Caused<layout::Mismatch<F>, F>) -> Self {
 		e.map(Error::LayoutMismatch)
 	}
 }
 
 /// Caused error with contextual information.
-pub struct WithModel<'c, 'a>(&'c Model, &'a Caused<Error>);
+pub struct WithModel<'c, 'a, F>(&'c Model<F>, &'a Caused<Error<F>, F>);
 
-impl<'c, 'a> WithModel<'c, 'a> {
-	fn context(&self) -> &'c Model {
+impl<'c, 'a, F> WithModel<'c, 'a, F> {
+	fn context(&self) -> &'c Model<F> {
 		self.0
 	}
 
-	fn error(&self) -> &'a Caused<Error> {
+	fn error(&self) -> &'a Caused<Error<F>, F> {
 		self.1
 	}
 }
@@ -111,7 +112,7 @@ impl node::Type {
 	}
 }
 
-impl layout::Type {
+impl<F> layout::Type<F> {
 	fn en_name(&self) -> &'static str {
 		match self {
 			Self::Struct => "structure",
@@ -153,7 +154,7 @@ impl layout::Type {
 // 	}
 // }
 
-impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
+impl<'c, 'a, F: Clone> Diagnose<F> for WithModel<'c, 'a, F> {
 	fn message(&self) -> String {
 		match self.error().inner() {
 			Error::Unimplemented(feature) => format!("unimplemented feature `{}`", feature),
@@ -200,250 +201,141 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 		}
 	}
 
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<source::Id>> {
+	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
 		let mut labels = Vec::new();
 		match self.error().inner() {
 			Error::Unimplemented(_) => {
-				if let Some(cause) = self.error().cause() {
-					let source = cause.source();
+				if let Some(source) = self.error().cause() {
 					labels.push(
-						source
+						source.clone()
 							.into_primary_label()
 							.with_message("feature required here"),
 					)
 				}
 			}
 			Error::PrefixRedefinition(_, because) => {
-				if let Some(cause) = because {
-					let source = cause.source();
+				if let Some(source) = because {
 					labels.push(
-						source
+						source.clone()
 							.into_secondary_label()
 							.with_message("first defined here"),
 					)
 				}
 
-				if let Some(cause) = self.error().cause() {
-					let source = cause.source();
-					labels.push(source.into_primary_label().with_message("redefined here"))
+				if let Some(source) = self.error().cause() {
+					labels.push(source.clone().into_primary_label().with_message("redefined here"))
 				}
 			}
 			Error::UndefinedPrefix(_) => {
-				if let Some(cause) = self.error().cause() {
-					let source = cause.source();
-					labels.push(source.into_primary_label().with_message("undefined prefix"))
+				if let Some(source) = self.error().cause() {
+					labels.push(source.clone().into_primary_label().with_message("undefined prefix"))
 				}
 			}
 			Error::InvalidExpandedCompactIri(_) => {
-				if let Some(cause) = self.error().cause() {
-					let source = cause.source();
-					labels.push(source.into_primary_label().with_message("used here"))
+				if let Some(source) = self.error().cause() {
+					labels.push(source.clone().into_primary_label().with_message("used here"))
 				}
 			}
 			Error::InvalidNodeType {
 				expected, found, ..
 			} => {
-				if let Some(cause) = self.error().cause() {
-					let message = match cause {
-						Cause::Explicit(_) => {
-							format!("used as {} here", expected.en_determiner_name())
-						}
-						Cause::Implicit(_) => {
-							format!("implicitly used as {} here", expected.en_determiner_name())
-						}
-					};
-
-					let source = cause.source();
-					labels.push(source.into_primary_label().with_message(message))
+				if let Some(source) = self.error().cause() {
+					let message = format!("used as {} here", expected.en_determiner_name());
+					labels.push(source.clone().into_primary_label().with_message(message))
 				}
 
 				for ty in found {
-					if let Some(cause) = ty.cause() {
-						let message = match cause {
-							Cause::Explicit(_) => {
-								format!("already declared as {} here", ty.en_determiner_name())
-							}
-							Cause::Implicit(_) => format!(
-								"already implicitly declared as {} here",
-								ty.en_determiner_name()
-							),
-						};
-
-						let source = cause.source();
-						labels.push(source.into_secondary_label().with_message(message))
+					if let Some(source) = ty.cause() {
+						let message = format!("already declared as {} here", ty.en_determiner_name());
+						labels.push(source.clone().into_secondary_label().with_message(message))
 					}
 				}
 			}
 			Error::UnknownNode { .. } => {
-				if let Some(cause) = self.error().cause() {
-					let source = cause.source();
-					labels.push(source.into_secondary_label().with_message("used here"))
+				if let Some(source) = self.error().cause() {
+					labels.push(source.clone().into_secondary_label().with_message("used here"))
 				}
 			}
 			Error::TypeMismatch { because, .. } | Error::LayoutTypeMismatch { because, .. } => {
-				if let Some(cause) = self.error().cause() {
-					let message = match cause {
-						Cause::Explicit(_) => "found type is declared here".to_string(),
-						Cause::Implicit(_) => "found type is implicitly declared here".to_string(),
-					};
-
-					let source = cause.source();
-					labels.push(source.into_primary_label().with_message(message))
+				if let Some(source) = self.error().cause() {
+					let message = "found type is declared here".to_string();
+					labels.push(source.clone().into_primary_label().with_message(message))
 				}
 
-				if let Some(cause) = because {
-					let message = match cause {
-						Cause::Explicit(_) => "expected type is declared here".to_string(),
-						Cause::Implicit(_) => {
-							"expected type is implicitly declared here".to_string()
-						}
-					};
-
-					let source = cause.source();
-					labels.push(source.into_secondary_label().with_message(message))
+				if let Some(source) = because {
+					let message = "expected type is declared here".to_string();
+					labels.push(source.clone().into_secondary_label().with_message(message))
 				}
 			}
 			Error::ImplicitLayoutMismatch { because, .. } => {
-				if let Some(cause) = self.error().cause() {
-					let message = match cause {
-						Cause::Explicit(_) => "found layout is declared here".to_string(),
-						Cause::Implicit(_) => {
-							"found layout is implicitly declared here".to_string()
-						}
-					};
-
-					let source = cause.source();
-					labels.push(source.into_primary_label().with_message(message))
+				if let Some(source) = self.error().cause() {
+					let message = "found layout is declared here".to_string();
+					labels.push(source.clone().into_primary_label().with_message(message))
 				}
 
-				if let Some(cause) = because {
-					let message = match cause {
-						Cause::Explicit(_) => "expected layout is declared here".to_string(),
-						Cause::Implicit(_) => {
-							"expected layout is implicitly declared here".to_string()
-						}
-					};
-
-					let source = cause.source();
-					labels.push(source.into_secondary_label().with_message(message))
+				if let Some(source) = because {
+					let message = "expected layout is declared here".to_string();
+					labels.push(source.clone().into_secondary_label().with_message(message))
 				}
 			}
 			Error::LayoutMismatch(e) => match e {
 				layout::Mismatch::Type { because, .. } => {
-					if let Some(cause) = because {
-						let message = match cause {
-							Cause::Explicit(_) => "expected layout type declared here".to_string(),
-							Cause::Implicit(_) => {
-								"expected layout type is implicitly declared here".to_string()
-							}
-						};
-
-						let source = cause.source();
-						labels.push(source.into_secondary_label().with_message(message))
+					if let Some(source) = because {
+						let message = "expected layout type declared here".to_string();
+						labels.push(source.clone().into_secondary_label().with_message(message))
 					}
 				}
 				layout::Mismatch::FieldProperty { because, .. } => {
-					if let Some(cause) = because {
-						let message = match cause {
-							Cause::Explicit(_) => "expected property is declared here".to_string(),
-							Cause::Implicit(_) => {
-								"expected property is implicitly declared here".to_string()
-							}
-						};
-
-						let source = cause.source();
-						labels.push(source.into_secondary_label().with_message(message))
+					if let Some(source) = because {
+						let message = "expected property is declared here".to_string();
+						labels.push(source.clone().into_secondary_label().with_message(message))
 					}
 				}
 				layout::Mismatch::FieldName { because, .. } => {
-					if let Some(cause) = because {
-						let message = match cause {
-							Cause::Explicit(_) => "expected name is declared here".to_string(),
-							Cause::Implicit(_) => {
-								"expected name is implicitly declared here".to_string()
-							}
-						};
-
-						let source = cause.source();
-						labels.push(source.into_secondary_label().with_message(message))
+					if let Some(source) = because {
+						let message = "expected name is declared here".to_string();
+						labels.push(source.clone().into_secondary_label().with_message(message))
 					}
 				}
 				layout::Mismatch::FieldLayout { because, .. } => {
-					if let Some(cause) = because {
-						let message = match cause {
-							Cause::Explicit(_) => "expected layout is declared here".to_string(),
-							Cause::Implicit(_) => {
-								"expected layout is implicitly declared here".to_string()
-							}
-						};
-
-						let source = cause.source();
-						labels.push(source.into_secondary_label().with_message(message))
+					if let Some(source) = because {
+						let message = "expected layout is declared here".to_string();
+						labels.push(source.clone().into_secondary_label().with_message(message))
 					}
 				}
 				layout::Mismatch::AttributeRequired { required, because } => {
-					if let Some(cause) = because {
+					if let Some(source) = because {
 						let message = if *required {
-							match cause {
-								Cause::Explicit(_) => "field is required here".to_string(),
-								Cause::Implicit(_) => {
-									"field is implicitly required here".to_string()
-								}
-							}
+							"field is required here".to_string()
 						} else {
-							match cause {
-								Cause::Explicit(_) => "field is not required here".to_string(),
-								Cause::Implicit(_) => {
-									"field is implicitly not required here".to_string()
-								}
-							}
+							"field is not required here".to_string()
 						};
-
-						let source = cause.source();
-						labels.push(source.into_secondary_label().with_message(message))
+						labels.push(source.clone().into_secondary_label().with_message(message))
 					}
 				}
 				layout::Mismatch::AttributeFunctional {
 					functional,
 					because,
 				} => {
-					if let Some(cause) = because {
+					if let Some(source) = because {
 						let message = if *functional {
-							match cause {
-								Cause::Explicit(_) => "field is unique here".to_string(),
-								Cause::Implicit(_) => "field is implicitly unique here".to_string(),
-							}
+							"field is unique here".to_string()
 						} else {
-							match cause {
-								Cause::Explicit(_) => "field is not unique here".to_string(),
-								Cause::Implicit(_) => {
-									"field is implicitly not unique here".to_string()
-								}
-							}
+							"field is not unique here".to_string()
 						};
-
-						let source = cause.source();
-						labels.push(source.into_secondary_label().with_message(message))
+						labels.push(source.clone().into_secondary_label().with_message(message))
 					}
 				}
 				layout::Mismatch::MissingField { because, .. } => {
-					if let Some(cause) = because {
-						let message = match cause {
-							Cause::Explicit(_) => "missing field is declared here".to_string(),
-							Cause::Implicit(_) => {
-								"missing field is implicitly declared here".to_string()
-							}
-						};
-
-						let source = cause.source();
-						labels.push(source.into_secondary_label().with_message(message))
+					if let Some(source) = because {
+						let message = "missing field is declared here".to_string();
+						labels.push(source.clone().into_secondary_label().with_message(message))
 					}
 				}
 				layout::Mismatch::AdditionalField { because, .. } => {
-					if let Some(cause) = because {
-						let source = cause.source();
+					if let Some(source) = because {
 						labels.push(
-							source
+							source.clone()
 								.into_secondary_label()
 								.with_message("this field is not declared here".to_string()),
 						)
@@ -451,60 +343,42 @@ impl<'c, 'a> Diagnose for WithModel<'c, 'a> {
 				}
 			},
 			Error::FieldNotRequired { because, .. } => {
-				if let Some(cause) = because {
-					let message = match cause {
-						Cause::Explicit(_) => "property is required here...".to_string(),
-						Cause::Implicit(_) => "property is implicitly required here...".to_string(),
-					};
-
-					let source = cause.source();
-					labels.push(source.into_secondary_label().with_message(message))
+				if let Some(source) = because {
+					let message = "property is required here...".to_string();
+					labels.push(source.clone().into_secondary_label().with_message(message))
 				}
 
-				if let Some(cause) = self.error().cause() {
-					let source = cause.source();
+				if let Some(source) = self.error().cause() {
 					labels.push(
-						source
+						source.clone()
 							.into_primary_label()
 							.with_message("...but is not required here"),
 					)
 				}
 			}
 			Error::FieldNotFunctional { because, .. } => {
-				if let Some(cause) = because {
-					let message = match cause {
-						Cause::Explicit(_) => "property is unique here...".to_string(),
-						Cause::Implicit(_) => "property is implicitly unique here...".to_string(),
-					};
-
-					let source = cause.source();
-					labels.push(source.into_secondary_label().with_message(message))
+				if let Some(source) = because {
+					let message = "property is unique here...".to_string();
+					labels.push(source.clone().into_secondary_label().with_message(message))
 				}
 
-				if let Some(cause) = self.error().cause() {
-					let source = cause.source();
+				if let Some(source) = self.error().cause() {
 					labels.push(
-						source
+						source.clone()
 							.into_primary_label()
 							.with_message("...but is not unique here"),
 					)
 				}
 			}
 			Error::MissingPropertyField { because, .. } => {
-				if let Some(cause) = because {
-					let message = match cause {
-						Cause::Explicit(_) => "property is required here...".to_string(),
-						Cause::Implicit(_) => "property is implicitly required here...".to_string(),
-					};
-
-					let source = cause.source();
-					labels.push(source.into_secondary_label().with_message(message))
+				if let Some(source) = because {
+					let message = "property is required here...".to_string();
+					labels.push(source.clone().into_secondary_label().with_message(message))
 				}
 
-				if let Some(cause) = self.error().cause() {
-					let source = cause.source();
+				if let Some(source) = self.error().cause() {
 					labels.push(
-						source
+						source.clone()
 							.into_primary_label()
 							.with_message("...but no field captures this property here"),
 					)

@@ -1,46 +1,16 @@
-use crate::syntax::Location;
+use derivative::Derivative;
 use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
-
-/// Cause.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub enum Cause {
-	/// Explicitly caused by the given source.
-	Explicit(Location),
-
-	/// Implicitly caused by the given source.
-	Implicit(Location),
-}
-
-impl Cause {
-	pub fn is_explicit(&self) -> bool {
-		matches!(self, Self::Explicit(_))
-	}
-
-	pub fn is_implicit(&self) -> bool {
-		matches!(self, Self::Implicit(_))
-	}
-
-	pub fn source(&self) -> Location {
-		match self {
-			Self::Explicit(s) => *s,
-			Self::Implicit(s) => *s,
-		}
-	}
-
-	pub fn into_implicit(self) -> Self {
-		Self::Implicit(self.source())
-	}
-}
+use locspan::Location;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub struct Caused<T> {
+pub struct Caused<T, F> {
 	t: T,
-	cause: Option<Cause>,
+	cause: Option<Location<F>>,
 }
 
-impl<T> Caused<T> {
-	pub fn new(t: T, cause: Option<Cause>) -> Self {
+impl<T, F> Caused<T, F> {
+	pub fn new(t: T, cause: Option<Location<F>>) -> Self {
 		Self { t, cause }
 	}
 
@@ -52,16 +22,16 @@ impl<T> Caused<T> {
 		&mut self.t
 	}
 
-	pub fn cause(&self) -> Option<Cause> {
-		self.cause
+	pub fn cause(&self) -> Option<&Location<F>> {
+		self.cause.as_ref()
 	}
 
-	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Caused<U> {
+	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Caused<U, F> {
 		Caused::new(f(self.t), self.cause)
 	}
 }
 
-impl<T> Deref for Caused<T> {
+impl<T, F> Deref for Caused<T, F> {
 	type Target = T;
 
 	fn deref(&self) -> &T {
@@ -69,53 +39,54 @@ impl<T> Deref for Caused<T> {
 	}
 }
 
-impl<T> DerefMut for Caused<T> {
+impl<T, F> DerefMut for Caused<T, F> {
 	fn deref_mut(&mut self) -> &mut T {
 		self.inner_mut()
 	}
 }
 
-#[derive(Default)]
-pub struct Causes {
-	set: BTreeSet<Cause>,
+#[derive(Derivative)]
+#[derivative(Clone, Default(bound=""))]
+pub struct Causes<F> {
+	set: BTreeSet<Location<F>>,
 }
 
-impl Causes {
+impl<F> Causes<F> {
 	pub fn new() -> Self {
 		Self::default()
 	}
 
 	/// Adds a new cause.
-	pub fn add(&mut self, cause: Cause) {
+	pub fn add(&mut self, cause: Location<F>) where F: Ord {
 		self.set.insert(cause);
 	}
 
 	/// Picks the preferred cause, unless there are no causes.
-	pub fn preferred(&self) -> Option<Cause> {
-		self.set.iter().next().cloned()
+	pub fn preferred(&self) -> Option<&Location<F>> {
+		self.set.iter().next()
 	}
 
-	pub fn iter(&self) -> impl '_ + Iterator<Item = Cause> {
-		self.set.iter().cloned()
+	pub fn iter(&self) -> impl Iterator<Item = &Location<F>> {
+		self.set.iter()
 	}
 
-	pub fn map(&self, f: impl Fn(Cause) -> Cause) -> Self {
+	pub fn map(&self, f: impl Fn(Location<F>) -> Location<F>) -> Self where F: Clone + Ord {
 		Self {
 			set: self.set.iter().cloned().map(f).collect(),
 		}
 	}
 }
 
-impl From<Cause> for Causes {
-	fn from(cause: Cause) -> Self {
+impl<F: Ord> From<Location<F>> for Causes<F> {
+	fn from(cause: Location<F>) -> Self {
 		let mut causes = Self::new();
 		causes.add(cause);
 		causes
 	}
 }
 
-impl From<Option<Cause>> for Causes {
-	fn from(cause: Option<Cause>) -> Self {
+impl<F: Ord> From<Option<Location<F>>> for Causes<F> {
+	fn from(cause: Option<Location<F>>) -> Self {
 		let mut causes = Self::new();
 		if let Some(cause) = cause {
 			causes.add(cause);
@@ -124,20 +95,20 @@ impl From<Option<Cause>> for Causes {
 	}
 }
 
-pub struct WithCauses<T> {
+pub struct WithCauses<T, F> {
 	t: T,
-	causes: Causes,
+	causes: Causes<F>,
 }
 
-impl<T> WithCauses<T> {
-	pub fn new(t: T, causes: impl Into<Causes>) -> Self {
+impl<T, F> WithCauses<T, F> {
+	pub fn new(t: T, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			t,
 			causes: causes.into(),
 		}
 	}
 
-	pub fn causes(&self) -> &Causes {
+	pub fn causes(&self) -> &Causes<F> {
 		&self.causes
 	}
 
@@ -150,7 +121,7 @@ impl<T> WithCauses<T> {
 	}
 }
 
-impl<T> Deref for WithCauses<T> {
+impl<T, F> Deref for WithCauses<T, F> {
 	type Target = T;
 
 	fn deref(&self) -> &T {
@@ -158,7 +129,7 @@ impl<T> Deref for WithCauses<T> {
 	}
 }
 
-impl<T> DerefMut for WithCauses<T> {
+impl<T, F> DerefMut for WithCauses<T, F> {
 	fn deref_mut(&mut self) -> &mut T {
 		self.inner_mut()
 	}

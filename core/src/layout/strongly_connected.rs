@@ -2,21 +2,21 @@ use super::Definition;
 use crate::{Collection, Ref};
 use std::collections::HashMap;
 
-pub struct StronglyConnectedLayouts<'l> {
-	layouts: &'l Collection<Definition>,
-	map: HashMap<Ref<Definition>, u32>,
+pub struct StronglyConnectedLayouts<'l, F> {
+	layouts: &'l Collection<Definition<F>>,
+	map: HashMap<Ref<Definition<F>>, u32>,
 	component_count: u32,
 }
 
-impl<'l> StronglyConnectedLayouts<'l> {
+impl<'l, F> StronglyConnectedLayouts<'l, F> {
 	#[inline(always)]
-	pub fn new(layouts: &'l Collection<Definition>) -> Self {
+	pub fn new(layouts: &'l Collection<Definition<F>>) -> Self {
 		Self::from_entry_points(layouts, layouts.iter().map(|(layout_ref, _)| layout_ref))
 	}
 
 	#[inline(always)]
-	pub fn from_entry_points<I: IntoIterator<Item = Ref<Definition>>>(
-		layouts: &'l Collection<Definition>,
+	pub fn from_entry_points<I: IntoIterator<Item = Ref<Definition<F>>>>(
+		layouts: &'l Collection<Definition<F>>,
 		entry_points: I,
 	) -> Self {
 		Self::from_entry_points_with_filter(layouts, entry_points, |_, _| true)
@@ -24,8 +24,8 @@ impl<'l> StronglyConnectedLayouts<'l> {
 
 	#[inline(always)]
 	pub fn with_filter(
-		layouts: &'l Collection<Definition>,
-		filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool,
+		layouts: &'l Collection<Definition<F>>,
+		filter: impl Clone + Fn(Ref<Definition<F>>, Ref<Definition<F>>) -> bool,
 	) -> Self {
 		Self::from_entry_points_with_filter(
 			layouts,
@@ -34,10 +34,10 @@ impl<'l> StronglyConnectedLayouts<'l> {
 		)
 	}
 
-	pub fn from_entry_points_with_filter<I: IntoIterator<Item = Ref<Definition>>>(
-		layouts: &'l Collection<Definition>,
+	pub fn from_entry_points_with_filter<I: IntoIterator<Item = Ref<Definition<F>>>>(
+		layouts: &'l Collection<Definition<F>>,
 		entry_points: I,
-		filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool,
+		filter: impl Clone + Fn(Ref<Definition<F>>, Ref<Definition<F>>) -> bool,
 	) -> Self {
 		let mut components = Self {
 			layouts,
@@ -69,23 +69,23 @@ impl<'l> StronglyConnectedLayouts<'l> {
 		c
 	}
 
-	fn set(&mut self, layout_ref: Ref<Definition>, component: u32) {
+	fn set(&mut self, layout_ref: Ref<Definition<F>>, component: u32) {
 		self.map.insert(layout_ref, component);
 	}
 
-	pub fn component(&self, layout_ref: Ref<Definition>) -> Option<u32> {
+	pub fn component(&self, layout_ref: Ref<Definition<F>>) -> Option<u32> {
 		self.map.get(&layout_ref).cloned()
 	}
 
 	#[inline(always)]
-	pub fn is_recursive(&self, layout_ref: Ref<Definition>) -> Option<bool> {
+	pub fn is_recursive(&self, layout_ref: Ref<Definition<F>>) -> Option<bool> {
 		self.is_recursive_with_filter(layout_ref, |_| true)
 	}
 
 	pub fn is_recursive_with_filter(
 		&self,
-		layout_ref: Ref<Definition>,
-		filter: impl Fn(Ref<Definition>) -> bool,
+		layout_ref: Ref<Definition<F>>,
+		filter: impl Fn(Ref<Definition<F>>) -> bool,
 	) -> Option<bool> {
 		let layout = self.layouts.get(layout_ref)?;
 		let component = self.component(layout_ref)?;
@@ -106,12 +106,12 @@ struct Data {
 	on_stack: bool,
 }
 
-fn strong_connect<'l>(
-	components: &mut StronglyConnectedLayouts<'l>,
-	map: &mut HashMap<Ref<Definition>, Data>,
-	stack: &mut Vec<Ref<Definition>>,
-	layout_ref: Ref<Definition>,
-	filter: impl Clone + Fn(Ref<Definition>, Ref<Definition>) -> bool,
+fn strong_connect<'l, F>(
+	components: &mut StronglyConnectedLayouts<'l, F>,
+	map: &mut HashMap<Ref<Definition<F>>, Data>,
+	stack: &mut Vec<Ref<Definition<F>>>,
+	layout_ref: Ref<Definition<F>>,
+	filter: impl Clone + Fn(Ref<Definition<F>>, Ref<Definition<F>>) -> bool,
 ) -> u32 {
 	let index = map.len() as u32;
 	stack.push(layout_ref);

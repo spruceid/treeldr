@@ -1,25 +1,27 @@
-use crate::{layout, prop, Cause, Caused, Causes, Documentation, Error, Id, Ref};
+use crate::{layout, prop, Caused, Causes, Documentation, Error, Id, Ref};
 use iref::Iri;
 use std::collections::HashMap;
 use std::fmt;
+use locspan::Location;
+use derivative::Derivative;
 
 /// Type definition.
-pub struct Definition {
+pub struct Definition<F> {
 	/// Identifier.
 	id: Id,
 
 	/// Causes of the definition.
-	causes: Causes,
+	causes: Causes<F>,
 
 	/// Properties.
-	properties: HashMap<Ref<prop::Definition>, Causes>,
+	properties: HashMap<Ref<prop::Definition<F>>, Causes<F>>,
 
 	/// Documentation.
 	doc: Documentation,
 }
 
-impl Definition {
-	pub fn new(id: Id, causes: impl Into<Causes>) -> Self {
+impl<F> Definition<F> {
+	pub fn new(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
 			causes: causes.into(),
@@ -33,7 +35,7 @@ impl Definition {
 		self.id
 	}
 
-	pub fn causes(&self) -> &Causes {
+	pub fn causes(&self) -> &Causes<F> {
 		&self.causes
 	}
 
@@ -49,11 +51,11 @@ impl Definition {
 		self.doc = doc
 	}
 
-	pub fn properties(&self) -> impl Iterator<Item = (Ref<prop::Definition>, &Causes)> {
+	pub fn properties(&self) -> impl Iterator<Item = (Ref<prop::Definition<F>>, &Causes<F>)> {
 		self.properties.iter().map(|(p, c)| (*p, c))
 	}
 
-	pub fn declare_property(&mut self, prop_ref: Ref<prop::Definition>, cause: Option<Cause>) {
+	pub fn declare_property(&mut self, prop_ref: Ref<prop::Definition<F>>, cause: Option<Location<F>>) where F: Ord {
 		use std::collections::hash_map::Entry;
 		match self.properties.entry(prop_ref) {
 			Entry::Vacant(entry) => {
@@ -69,31 +71,31 @@ impl Definition {
 
 	pub fn default_fields(
 		&self,
-		model: &crate::Model,
-	) -> Result<Vec<layout::Field>, Caused<Error>> {
-		struct PropertyIri<'a>(Iri<'a>, Ref<prop::Definition>, &'a Causes);
+		model: &crate::Model<F>,
+	) -> Result<Vec<layout::Field<F>>, Caused<Error<F>, F>> where F: Clone {
+		struct PropertyIri<'a, F>(Iri<'a>, Ref<prop::Definition<F>>, &'a Causes<F>);
 
-		impl<'a> PartialEq for PropertyIri<'a> {
+		impl<'a, F> PartialEq for PropertyIri<'a, F> {
 			fn eq(&self, other: &Self) -> bool {
 				self.0 == other.0
 			}
 		}
 
-		impl<'a> Eq for PropertyIri<'a> {}
+		impl<'a, F> Eq for PropertyIri<'a, F> {}
 
-		impl<'a> std::cmp::Ord for PropertyIri<'a> {
+		impl<'a, F> std::cmp::Ord for PropertyIri<'a, F> {
 			fn cmp(&self, other: &Self) -> std::cmp::Ordering {
 				self.0.cmp(&other.0)
 			}
 		}
 
-		impl<'a> std::cmp::PartialOrd for PropertyIri<'a> {
+		impl<'a, F> std::cmp::PartialOrd for PropertyIri<'a, F> {
 			fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
 				self.0.partial_cmp(&other.0)
 			}
 		}
 
-		let mut properties: Vec<PropertyIri> = self
+		let mut properties: Vec<PropertyIri<F>> = self
 			.properties
 			.iter()
 			.map(|(prop_ref, causes)| {
@@ -116,7 +118,7 @@ impl Definition {
 			let layout_expr = match prop.ty() {
 				Some(ty) => ty
 					.expr()
-					.default_layout(model, ty.causes().preferred().map(Cause::into_implicit))?,
+					.default_layout(model, ty.causes().preferred().cloned())?,
 				None => panic!("no known type"),
 			};
 
@@ -124,7 +126,7 @@ impl Definition {
 				prop_ref,
 				name,
 				layout_expr,
-				causes.map(Cause::into_implicit),
+				causes.clone(),
 			);
 
 			field.set_required(prop.is_required());
@@ -137,15 +139,15 @@ impl Definition {
 	}
 }
 
-impl Ref<Definition> {
-	pub fn with_model<'c>(&self, context: &'c crate::Model) -> RefWithContext<'c> {
+impl<F> Ref<Definition<F>> {
+	pub fn with_model<'c>(&self, context: &'c crate::Model<F>) -> RefWithContext<'c, F> {
 		RefWithContext(context, *self)
 	}
 }
 
-pub struct RefWithContext<'c>(&'c crate::Model, Ref<Definition>);
+pub struct RefWithContext<'c, F>(&'c crate::Model<F>, Ref<Definition<F>>);
 
-impl<'c> fmt::Display for RefWithContext<'c> {
+impl<'c, F> fmt::Display for RefWithContext<'c, F> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let id = self.0.types().get(self.1).unwrap().id();
 		let iri = self.0.vocabulary().get(id).unwrap();
@@ -153,16 +155,17 @@ impl<'c> fmt::Display for RefWithContext<'c> {
 	}
 }
 
-#[derive(Clone, Copy)]
-pub struct Expr {
-	ty_ref: Ref<Definition>,
-	implicit_layout_ref: Option<Ref<layout::Definition>>,
+#[derive(Derivative)]
+#[derivative(Clone(bound=""), Copy(bound=""))]
+pub struct Expr<F> {
+	ty_ref: Ref<Definition<F>>,
+	implicit_layout_ref: Option<Ref<layout::Definition<F>>>,
 }
 
-impl Expr {
+impl<F> Expr<F> {
 	pub fn new(
-		ty_ref: Ref<Definition>,
-		implicit_layout_ref: Option<Ref<layout::Definition>>,
+		ty_ref: Ref<Definition<F>>,
+		implicit_layout_ref: Option<Ref<layout::Definition<F>>>,
 	) -> Self {
 		Self {
 			ty_ref,
@@ -170,23 +173,23 @@ impl Expr {
 		}
 	}
 
-	pub fn ty(&self) -> Ref<Definition> {
+	pub fn ty(&self) -> Ref<Definition<F>> {
 		self.ty_ref
 	}
 
-	pub fn implicit_layout(&self) -> Option<Ref<layout::Definition>> {
+	pub fn implicit_layout(&self) -> Option<Ref<layout::Definition<F>>> {
 		self.implicit_layout_ref
 	}
 
-	pub fn set_implicit_layout(&mut self, l: Ref<layout::Definition>) {
+	pub fn set_implicit_layout(&mut self, l: Ref<layout::Definition<F>>) {
 		self.implicit_layout_ref = Some(l)
 	}
 
 	pub fn default_layout(
 		&self,
-		model: &crate::Model,
-		cause: Option<Cause>,
-	) -> Result<Ref<layout::Definition>, Caused<Error>> {
+		model: &crate::Model<F>,
+		cause: Option<Location<F>>,
+	) -> Result<Ref<layout::Definition<F>>, Caused<Error<F>, F>> where F: Clone {
 		match self.implicit_layout_ref {
 			Some(layout_ref) => Ok(layout_ref),
 			None => {
