@@ -61,7 +61,7 @@ fn parse_treeldr<P: AsRef<Path>>(
 	let input = std::fs::read_to_string(path).expect("unable to read input file");
 	let mut lexer = Lexer::new((), input.chars().map(infallible));
 	let ast = Document::parse(&mut lexer).expect("parse error");
-	let mut context = build::Context::new(iri!("http://www.example.com").into());
+	let mut context = build::Context::new(Some(iri!("http://www.example.com").into()));
 	let mut quads = Vec::new();
 	ast.build(&mut context, &mut quads).expect("build error");
 

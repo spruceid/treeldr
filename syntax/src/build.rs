@@ -21,17 +21,19 @@ pub enum Error<F> {
 	InvalidExpandedCompactIri(String),
 	UndefinedPrefix(String),
 	AlreadyDefinedPrefix(String, Location<F>),
+	NoBaseIri,
+	BaseIriMismatch(IriBuf, Location<F>)
 }
 
 pub struct Context<F> {
-	base_iri: IriBuf,
+	base_iri: Option<IriBuf>,
 	namespace: Vocabulary,
 	prefixes: HashMap<String, Loc<IriBuf, F>>,
 	scope: Option<Name>,
 }
 
 impl<F: Clone> Context<F> {
-	pub fn new(base_iri: IriBuf) -> Self {
+	pub fn new(base_iri: Option<IriBuf>) -> Self {
 		Self {
 			base_iri,
 			namespace: Vocabulary::new(),
@@ -48,15 +50,19 @@ impl<F: Clone> Context<F> {
 		self.namespace
 	}
 
-	pub fn base_iri(&self) -> IriBuf {
+	pub fn base_iri(&self, loc: Location<F>) -> Result<IriBuf, Loc<Error<F>, F>> {
 		match &self.scope {
 			Some(scope) => {
 				let mut iri = scope.iri(&self.namespace).unwrap().to_owned();
 				iri.path_mut().open();
-				iri
+				Ok(iri)
 			}
-			None => self.base_iri.clone(),
+			None => self.base_iri.clone().ok_or(Loc(Error::NoBaseIri, loc)),
 		}
+	}
+
+	pub fn set_base_iri(&mut self, base_iri: IriBuf) {
+		self.base_iri = Some(base_iri)
 	}
 
 	pub fn declare_prefix(
@@ -104,6 +110,21 @@ impl<F: Clone> Build<F> for Loc<crate::Document<F>, F> {
 	) -> Result<(), Loc<Error<F>, F>> {
 		let Loc(doc, _) = self;
 
+		let mut declared_base_iri = None;
+		for Loc(base_iri, loc) in doc.bases {
+			match declared_base_iri.take() {
+				Some(Loc(declared_base_iri, d_loc)) => {
+					if declared_base_iri != base_iri {
+						return Err(Loc(Error::BaseIriMismatch(declared_base_iri, d_loc), loc))
+					}
+				}
+				None => {
+					ctx.set_base_iri(base_iri.clone());
+					declared_base_iri = Some(Loc(base_iri, loc));
+				}
+			}
+		}
+
 		for import in doc.imports {
 			import.build(ctx, quads)?
 		}
@@ -132,10 +153,10 @@ impl<F: Clone> Build<F> for Loc<crate::Id, F> {
 		let iri = match id {
 			crate::Id::Name(name) => {
 				let mut iri_ref = IriRefBuf::from_string(name).unwrap();
-				iri_ref.resolve(ctx.base_iri().as_iri());
+				iri_ref.resolve(ctx.base_iri(loc.clone())?.as_iri());
 				iri_ref.try_into().unwrap()
 			}
-			crate::Id::IriRef(iri_ref) => iri_ref.resolved(ctx.base_iri().as_iri()),
+			crate::Id::IriRef(iri_ref) => iri_ref.resolved(ctx.base_iri(loc.clone())?.as_iri()),
 			crate::Id::Compact(prefix, iri_ref) => {
 				ctx.expand_compact_iri(&prefix, iri_ref.as_iri_ref(), &loc)?
 			}

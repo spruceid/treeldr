@@ -190,6 +190,7 @@ impl fmt::Display for Punct {
 /// Keyword.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Keyword {
+	Base,
 	Import,
 	Type,
 	Layout,
@@ -201,6 +202,7 @@ pub enum Keyword {
 impl Keyword {
 	pub fn from_name(name: &str) -> Option<Self> {
 		match name {
+			"base" => Some(Keyword::Base),
 			"import" => Some(Keyword::Import),
 			"type" => Some(Keyword::Type),
 			"layout" => Some(Keyword::Layout),
@@ -212,6 +214,7 @@ impl Keyword {
 
 	pub fn as_str(&self) -> &'static str {
 		match self {
+			Self::Base => "base",
 			Self::Import => "import",
 			Self::Type => "type",
 			Self::Layout => "layout",

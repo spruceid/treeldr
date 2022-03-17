@@ -254,6 +254,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 			Loc(Some(token), loc) => Self::parse_from(lexer, token, loc),
 			Loc(None, loc) => Ok(Loc::new(
 				Self {
+					bases: Vec::new(),
 					imports: Vec::new(),
 					types: Vec::new(),
 					layouts: Vec::new(),
@@ -268,12 +269,14 @@ impl<F: Clone> Parse<F> for Document<F> {
 		token: Token,
 		loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+		let mut bases = Vec::new();
 		let mut imports = Vec::new();
 		let mut types = Vec::new();
 		let mut layouts = Vec::new();
 
 		let Loc(first_item, mut loc) = Item::parse_from(lexer, token, loc)?;
 		match first_item {
+			Item::Base(i) => bases.push(Loc(i, loc.clone())),
 			Item::Import(i) => imports.push(i),
 			Item::Type(t) => types.push(t),
 			Item::Layout(l) => layouts.push(l),
@@ -286,6 +289,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 					loc.span_mut().append(item_loc.span());
 
 					match item {
+						Item::Base(i) => bases.push(Loc(i, item_loc)),
 						Item::Import(i) => imports.push(i),
 						Item::Type(t) => types.push(t),
 						Item::Layout(l) => layouts.push(l),
@@ -294,6 +298,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 				locspan::Loc(None, _) => {
 					break Ok(Loc::new(
 						Self {
+							bases,
 							imports,
 							types,
 							layouts,
@@ -358,6 +363,7 @@ impl<F: Clone> Parse<F> for Documentation<F> {
 impl<F: Clone> Parse<F> for Item<F> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Doc,
+		TokenKind::Keyword(lexing::Keyword::Base),
 		TokenKind::Keyword(lexing::Keyword::Type),
 		TokenKind::Keyword(lexing::Keyword::Layout),
 	];
