@@ -3,6 +3,9 @@ use shelves::Shelf;
 use std::collections::HashMap;
 use std::fmt;
 
+pub use shelves::Ref;
+
+pub mod error;
 pub mod build;
 mod cause;
 mod doc;
@@ -16,6 +19,7 @@ pub mod ty;
 pub mod utils;
 pub use treeldr_vocab as vocab;
 
+pub use error::Error;
 pub use cause::*;
 pub use doc::Documentation;
 pub use feature::Feature;

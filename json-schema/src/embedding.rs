@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use treeldr::{layout, Ref};
+use derivative::Derivative;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Embedding {
@@ -24,25 +25,26 @@ impl Default for Embedding {
 	}
 }
 
-#[derive(Default)]
-pub struct Configuration {
-	map: HashMap<Ref<layout::Definition>, Embedding>,
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct Configuration<F> {
+	map: HashMap<Ref<layout::Definition<F>>, Embedding>,
 }
 
-impl Configuration {
+impl<F> Configuration<F> {
 	pub fn new() -> Self {
 		Self::default()
 	}
 
-	pub fn get(&self, layout_ref: Ref<layout::Definition>) -> Embedding {
+	pub fn get(&self, layout_ref: Ref<layout::Definition<F>>) -> Embedding {
 		self.map.get(&layout_ref).cloned().unwrap_or_default()
 	}
 
-	pub fn set(&mut self, layout_ref: Ref<layout::Definition>, e: Embedding) {
+	pub fn set(&mut self, layout_ref: Ref<layout::Definition<F>>, e: Embedding) {
 		self.map.insert(layout_ref, e);
 	}
 
-	pub fn indirect_layouts(&self) -> impl '_ + Iterator<Item = Ref<layout::Definition>> {
+	pub fn indirect_layouts(&self) -> impl '_ + Iterator<Item = Ref<layout::Definition<F>>> {
 		self.map
 			.iter()
 			.filter_map(|(r, e)| if e.is_indirect() { Some(*r) } else { None })

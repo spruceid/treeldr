@@ -1,5 +1,4 @@
-use super::{error, Error};
-use crate::{Caused, Causes, Documentation, Id, MaybeSet, WithCauses};
+use crate::{Caused, Causes, Documentation, Id, MaybeSet, WithCauses, error, Error};
 use locspan::Location;
 use std::collections::HashMap;
 

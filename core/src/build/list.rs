@@ -1,5 +1,4 @@
-use super::{error, Error};
-use crate::{vocab::Object, Caused, Id, MaybeSet, WithCauses};
+use crate::{vocab::Object, Caused, Id, MaybeSet, WithCauses, error, Error};
 use locspan::Location;
 
 pub struct Definition<F> {

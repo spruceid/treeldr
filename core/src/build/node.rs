@@ -1,5 +1,5 @@
-use super::{error, layout, list, prop, ty, Error};
-use crate::{Caused, Causes, Documentation, Id, MaybeSet, WithCauses};
+use super::{layout, list, prop, ty};
+use crate::{Caused, Causes, Documentation, Id, MaybeSet, WithCauses, error, Error};
 use locspan::Location;
 
 pub use crate::node::{CausedTypes, Type, Types};

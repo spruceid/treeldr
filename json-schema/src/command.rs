@@ -16,15 +16,15 @@ pub struct Command {
 	embeds: Vec<IriRefBuf>,
 }
 
-pub enum Error {
+pub enum Error<F> {
 	InvalidLayoutIri(IriBuf),
 	UndefinedLayout(IriBuf),
-	NotALayout(IriBuf, treeldr::node::CausedTypes),
+	NotALayout(IriBuf, treeldr::node::CausedTypes<F>),
 	InfiniteSchema(IriBuf),
 	Serialization(serde_json::Error),
 }
 
-impl fmt::Display for Error {
+impl fmt::Display for Error<F> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::InvalidLayoutIri(iri) => write!(f, "invalid layout IRI `{}`", iri),
@@ -36,21 +36,21 @@ impl fmt::Display for Error {
 	}
 }
 
-fn find_layout(model: &treeldr::Model, iri_ref: IriRef) -> Result<Ref<layout::Definition>, Error> {
+fn find_layout<F>(model: &treeldr::Model<F>, iri_ref: IriRef) -> Result<Ref<layout::Definition<F>>, Error<F>> {
 	let iri = iri_ref.resolved(model.base_iri());
 	let id = model
 		.vocabulary()
 		.id(&iri)
 		.ok_or_else(|| Error::UndefinedLayout(iri.clone()))?;
 	model.require_layout(id, None).map_err(|e| match e.inner() {
-		treeldr::Error::UnknownNode { .. } => Error::UndefinedLayout(iri.clone()),
-		treeldr::Error::InvalidNodeType { found, .. } => Error::NotALayout(iri.clone(), *found),
+		treeldr::error::Description::NodeUnknown(_) => Error::UndefinedLayout(iri.clone()),
+		treeldr::error::Description::NodeInvalidType(e) => Error::NotALayout(iri.clone(), *e.found),
 		_ => unreachable!(),
 	})
 }
 
 impl Command {
-	pub fn execute(self, model: &treeldr::Model) {
+	pub fn execute<F>(self, model: &treeldr::Model<F>) {
 		log::info!("generating JSON Schema.");
 		match self.try_execute(model) {
 			Ok(()) => (),
@@ -61,7 +61,7 @@ impl Command {
 		}
 	}
 
-	fn try_execute(self, model: &treeldr::Model) -> Result<(), Error> {
+	fn try_execute<F>(self, model: &treeldr::Model<F>) -> Result<(), Error<F>> {
 		// Find the layouts to generate.
 		let mut layouts = Vec::new();
 
@@ -94,7 +94,7 @@ impl Command {
 	}
 }
 
-fn layout_iri(model: &treeldr::Model, r: Ref<layout::Definition>) -> IriBuf {
+fn layout_iri<F>(model: &treeldr::Model<F>, r: Ref<layout::Definition<F>>) -> IriBuf {
 	let layout = model.layouts().get(r).unwrap();
 	model.vocabulary().get(layout.id()).unwrap().into()
 }

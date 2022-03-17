@@ -1,11 +1,11 @@
 use crate::{
 	vocab::{self, GraphLabel, Name, Object},
 	Id, Vocabulary,
+	Error
 };
 use locspan::Loc;
 
 mod context;
-pub mod error;
 pub mod layout;
 pub mod list;
 pub mod node;
@@ -13,7 +13,6 @@ pub mod prop;
 pub mod ty;
 
 pub use context::Context;
-pub use error::Error;
 pub use list::{ListMut, ListRef};
 pub use node::Node;
 

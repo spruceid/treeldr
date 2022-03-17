@@ -82,8 +82,8 @@ impl<F> Definition<F> {
 		self.id
 	}
 
-	pub fn name(&self) -> &WithCauses<String, F> {
-		&self.name
+	pub fn name(&self) -> &str {
+		self.name.inner().as_str()
 	}
 
 	pub fn causes(&self) -> &Causes<F> {

@@ -1,5 +1,5 @@
-use super::{error, layout, list, node, prop, ty, Error, ListMut, ListRef, Node};
-use crate::{utils::TryCollect, vocab, Caused, Id, MaybeSet, Model, Vocabulary, WithCauses};
+use super::{layout, list, node, prop, ty, Error, ListMut, ListRef, Node};
+use crate::{error, utils::TryCollect, vocab, Caused, Id, MaybeSet, Model, Vocabulary, WithCauses};
 use derivative::Derivative;
 use iref::IriBuf;
 use locspan::Location;
