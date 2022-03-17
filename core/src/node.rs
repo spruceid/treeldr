@@ -1,4 +1,4 @@
-use crate::{layout, prop, ty, Caused, Documentation, Id, MaybeSet};
+use crate::{layout, prop, ty, error, Caused, Documentation, Id, MaybeSet};
 use locspan::Location;
 use shelves::Ref;
 
@@ -177,5 +177,35 @@ impl<F> Node<F> {
 
 	pub fn as_layout(&self) -> Option<Ref<layout::Definition<F>>> {
 		self.layout.value().cloned()
+	}
+
+	pub fn caused_types(&self) -> CausedTypes<F>
+	where
+		F: Clone,
+	{
+		CausedTypes {
+			ty: self
+				.ty
+				.causes()
+				.map(|causes| causes.preferred().cloned()),
+			property: self
+				.property
+				.causes()
+				.map(|causes| causes.preferred().cloned()),
+			layout: self
+				.layout
+				.causes()
+				.map(|causes| causes.preferred().cloned()),
+			layout_field: None,
+			list: None
+		}
+	}
+
+	pub fn require_layout(&self) -> Result<Ref<layout::Definition<F>>, error::Description<F>> where F: Clone {
+		self.as_layout().ok_or_else(|| error::NodeInvalidType {
+			id: self.id,
+			expected: Type::Layout,
+			found: self.caused_types(),
+		}.into())
 	}
 }

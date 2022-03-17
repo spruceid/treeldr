@@ -1,5 +1,5 @@
 use iref::IriBuf;
-use treeldr::{layout, Ref};
+use treeldr::{layout, Ref, vocab::Display};
 
 mod command;
 pub mod embedding;
@@ -50,7 +50,7 @@ pub fn generate<F>(
 	let mut defs = serde_json::Map::new();
 	for layout_ref in embedding.indirect_layouts() {
 		let mut json_schema = serde_json::Map::new();
-		let name = layout_name(model, layout_ref)?;
+		let name = model.layouts().get(layout_ref).unwrap().name().to_string();
 		generate_layout(&mut json_schema, model, embedding, layout_ref)?;
 		defs.insert(name, json_schema.into());
 	}
@@ -66,18 +66,6 @@ pub fn generate<F>(
 	Ok(())
 }
 
-fn layout_name<F>(
-	model: &treeldr::Model<F>,
-	layout_ref: Ref<layout::Definition<F>>,
-) -> Result<String, Error<F>> {
-	let layout = model.layouts().get(layout_ref).unwrap();
-	let iri = model.vocabulary().get(layout.id()).unwrap();
-	iri.path()
-		.file_name()
-		.ok_or_else(|| Error::InvalidLayoutIri(iri.into()))
-		.map(From::from)
-}
-
 fn generate_layout<F>(
 	json: &mut serde_json::Map<String, serde_json::Value>,
 	model: &treeldr::Model<F>,
@@ -85,15 +73,18 @@ fn generate_layout<F>(
 	layout_ref: Ref<layout::Definition<F>>,
 ) -> Result<(), Error<F>> {
 	let layout = model.layouts().get(layout_ref).unwrap();
-	let iri = model.vocabulary().get(layout.id()).unwrap();
-	json.insert("$id".into(), iri.as_str().into());
+	json.insert("$id".into(), layout.id().display(model.vocabulary()).to_string().into());
 
 	if let Some(description) = layout.preferred_documentation(model).short_description() {
 		json.insert("description".into(), description.trim().into());
 	}
 
 	use treeldr::layout::Description;
-	match layout.description().expect("unimplemented layout").inner() {
+	match layout.description() {
+		Description::Reference(_) => {
+			json.insert("type".into(), "string".into());
+			Ok(())
+		}
 		Description::Struct(fields) => generate_struct(json, model, embedding, fields),
 		Description::Native(n) => {
 			generate_native_type(json, *n);
@@ -106,7 +97,7 @@ fn generate_struct<F>(
 	json: &mut serde_json::Map<String, serde_json::Value>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
-	fields: &treeldr::layout::Fields<F>,
+	fields: &Vec<treeldr::layout::Field<F>>,
 ) -> Result<(), Error<F>> {
 	let mut properties = serde_json::Map::new();
 	let mut required_properties = Vec::new();
@@ -171,7 +162,7 @@ fn generate_layout_defs_ref<F>(
 ) -> Result<(), Error<F>> {
 	json.insert(
 		"$ref".into(),
-		format!("#/$defs/{}", layout_name(model, layout_ref)?).into(),
+		format!("#/$defs/{}", model.layouts().get(layout_ref).unwrap().name()).into(),
 	);
 	Ok(())
 }
@@ -187,11 +178,14 @@ fn generate_layout_ref<F>(
 	// }
 
 	use treeldr::layout::Description;
-	match layout.description().expect("unimplemented layout").inner() {
+	match layout.description() {
+		Description::Reference(_) => {
+			json.insert("type".into(), "string".into());
+			Ok(())
+		}
 		Description::Struct(_) => {
 			let layout = model.layouts().get(layout_ref).unwrap();
-			let iri = model.vocabulary().get(layout.id()).unwrap();
-			json.insert("$ref".into(), iri.as_str().into());
+			json.insert("$ref".into(), layout.id().display(model.vocabulary()).to_string().into());
 			Ok(())
 		}
 		Description::Native(n) => {

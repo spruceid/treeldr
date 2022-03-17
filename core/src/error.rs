@@ -5,7 +5,11 @@ pub type Error<F> = Caused<Description<F>, F>;
 pub trait AnyError<F> {
 	fn message(&self, vocab: &Vocabulary) -> String;
 
-	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn primary_label(&self, _vocab: &Vocabulary) -> Option<String> {
+		Some("here".to_string())
+	}
+
+	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
 		Vec::new()
 	}
 
@@ -48,7 +52,21 @@ macro_rules! errors {
 			fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
 				match self.error().inner() {
 					$(
-						Description::$id(e) => e.labels(self.vocabulary())
+						Description::$id(e) => {
+							let mut labels = e.other_labels(self.vocabulary());
+							
+							if let Some(cause) = self.error().cause() {
+								let label = cause.clone().into_primary_label();
+								let label = match AnyError::<F>::primary_label(e, self.vocabulary()) {
+									Some(msg) => label.with_message(msg),
+									None => label
+								};
+
+								labels.push(label)
+							}
+
+							labels
+						}
 					),*
 				}
 			}

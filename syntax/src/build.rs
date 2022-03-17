@@ -64,24 +64,24 @@ impl<F> fmt::Display for Error<F> {
 			Self::InvalidExpandedCompactIri(expanded) => write!(f, "`{}` is not a valid IRI", expanded),
 			Self::UndefinedPrefix(prefix) => write!(f, "prefix `{}` is undefined", prefix),
 			Self::AlreadyDefinedPrefix(prefix, _) => write!(f, "prefix `{}` is already defined", prefix),
-			Self::NoBaseIri => "no base IRI".fmt(f),
+			Self::NoBaseIri => "cannot resolve the IRI reference without a base IRI".fmt(f),
 			Self::BaseIriMismatch { expected, .. } => write!(f, "should be `{}`", expected)
 		}
 	}
 }
 
-pub struct Context<F> {
+pub struct Context<'v, F> {
 	base_iri: Option<IriBuf>,
-	vocabulary: Vocabulary,
+	vocabulary: &'v mut Vocabulary,
 	prefixes: HashMap<String, Loc<IriBuf, F>>,
 	scope: Option<Name>,
 }
 
-impl<F> Context<F> {
-	pub fn new(base_iri: Option<IriBuf>) -> Self {
+impl<'v, F> Context<'v, F> {
+	pub fn new(vocabulary: &'v mut Vocabulary, base_iri: Option<IriBuf>) -> Self {
 		Self {
 			base_iri,
-			vocabulary: Vocabulary::new(),
+			vocabulary,
 			prefixes: HashMap::new(),
 			scope: None,
 		}
@@ -91,12 +91,12 @@ impl<F> Context<F> {
 		&self.vocabulary
 	}
 
-	pub fn into_vocabulary(self) -> Vocabulary {
+	pub fn into_vocabulary(self) -> &'v mut Vocabulary {
 		self.vocabulary
 	}
 }
 
-impl<F: Clone> Context<F> {
+impl<'v, F: Clone> Context<'v, F> {
 	pub fn base_iri(&self, loc: Location<F>) -> Result<IriBuf, Loc<Error<F>, F>> {
 		match &self.scope {
 			Some(scope) => {
@@ -147,47 +147,47 @@ impl<F: Clone> Context<F> {
 	}
 }
 
-pub struct WithContext<'c, 't, T: ?Sized, F>(&'c Context<F>, &'t T);
+// pub struct WithContext<'c, 't, T: ?Sized, F>(&'c Context<F>, &'t T);
 
-pub trait BorrowWithContext {
-	fn with_context<'c, F>(&self, context: &'c Context<F>) -> WithContext<'c, '_, Self, F>;
-}
+// pub trait BorrowWithContext {
+// 	fn with_context<'c, F>(&self, context: &'c Context<F>) -> WithContext<'c, '_, Self, F>;
+// }
 
-impl<T> BorrowWithContext for T {
-	fn with_context<'c, F>(&self, context: &'c Context<F>) -> WithContext<'c, '_, Self, F> {
-		WithContext(context, self)
-	}
-}
+// impl<T> BorrowWithContext for T {
+// 	fn with_context<'c, F>(&self, context: &'c Context<F>) -> WithContext<'c, '_, Self, F> {
+// 		WithContext(context, self)
+// 	}
+// }
 
-impl<'c, 't, T, F> WithContext<'c, 't, T, F> {
-	pub fn value(&self) -> &'t T {
-		self.1
-	}
+// impl<'c, 't, T, F> WithContext<'c, 't, T, F> {
+// 	pub fn value(&self) -> &'t T {
+// 		self.1
+// 	}
 
-	pub fn context(&self) -> &'c Context<F> {
-		self.0
-	}
-}
+// 	pub fn context(&self) -> &'c Context<F> {
+// 		self.0
+// 	}
+// }
 
-pub trait DisplayWithContext<F> {
-	fn fmt(&self, context: &Context<F>, f: &mut fmt::Formatter) -> fmt::Result;
-}
+// pub trait DisplayWithContext<F> {
+// 	fn fmt(&self, context: &Context<F>, f: &mut fmt::Formatter) -> fmt::Result;
+// }
 
-impl<'c, 't, T: DisplayWithContext<F>, F> fmt::Display for WithContext<'c, 't, T, F> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		self.value().fmt(self.context(), f)
-	}
-}
+// impl<'c, 't, T: DisplayWithContext<F>, F> fmt::Display for WithContext<'c, 't, T, F> {
+// 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+// 		self.value().fmt(self.context(), f)
+// 	}
+// }
 
-impl<F> DisplayWithContext<F> for Id {
-	fn fmt(&self, context: &Context<F>, f: &mut fmt::Formatter) -> fmt::Result {
-		use fmt::Display;
-		match self {
-			Id::Iri(name) => name.iri(context.vocabulary()).unwrap().fmt(f),
-			Id::Blank(i) => write!(f, "_:{}", i)
-		}
-	}
-}
+// impl<F> DisplayWithContext<F> for Id {
+// 	fn fmt(&self, context: &Context<F>, f: &mut fmt::Formatter) -> fmt::Result {
+// 		use fmt::Display;
+// 		match self {
+// 			Id::Iri(name) => name.iri(context.vocabulary()).unwrap().fmt(f),
+// 			Id::Blank(i) => write!(f, "_:{}", i)
+// 		}
+// 	}
+// }
 
 impl<F: Clone> Build<F> for Loc<crate::Document<F>, F> {
 	type Target = ();
@@ -522,8 +522,20 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 			ctx.scope = Some(ty_id);
 
 			let item_label = ctx.vocabulary.new_blank_label();
+
 			let first = field.build(ctx, quads)?;
 			let first_loc = first.location().clone();
+			let list_loc = fields_head.location().clone().with(fields_head.span());
+
+			quads.push(Loc(
+				Quad(
+					Loc(Id::Blank(item_label), list_loc.clone()),
+					Loc(Name::Rdf(Rdf::Type), list_loc.clone()),
+					Loc(Object::Iri(Name::Rdf(Rdf::List)), list_loc.clone()),
+					None,
+				),
+				first_loc.clone(),
+			));
 
 			quads.push(Loc(
 				Quad(
@@ -537,15 +549,15 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 
 			quads.push(Loc(
 				Quad(
-					Loc(Id::Blank(item_label), first_loc.clone()),
-					Loc(Name::Rdf(Rdf::Rest), first_loc.clone()),
+					Loc(Id::Blank(item_label), fields_head.location().clone()),
+					Loc(Name::Rdf(Rdf::Rest), fields_head.location().clone()),
 					fields_head,
 					None,
 				),
 				first_loc.clone(),
 			));
 
-			fields_head = Loc(Object::Blank(item_label), first_loc);
+			fields_head = Loc(Object::Blank(item_label), list_loc);
 
 			ctx.scope = None;
 		}
@@ -618,7 +630,7 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 		quads.push(Loc(
 			Quad(
 				Loc(Id::Blank(label), prop_id_loc.clone()),
-				Loc(Name::Rdfs(Rdfs::Label), prop_id_loc.clone()),
+				Loc(Name::TreeLdr(TreeLdr::Name), prop_id_loc.clone()),
 				Loc(
 					Object::Literal(Literal::String(Loc(name.into(), name_loc.clone()))),
 					name_loc.clone(),

@@ -128,15 +128,23 @@ impl<F: Clone + Ord> Context<F> {
 					}
 
 					if let Some(prop) = prop {
-						prop.declare_domain(object, Some(loc.clone()));
+						prop.set_domain(object, Some(loc.clone()));
 						let ty = self.require_type_mut(object, Some(object_loc))?;
 						ty.declare_property(id, Some(loc))
 					}
 				}
 				Name::Rdfs(vocab::Rdfs::Range) => {
-					let prop = self.require_property_mut(id, Some(id_loc))?;
+					let (prop, field) =
+						self.require_property_or_layout_field_mut(id, Some(id_loc))?;
 					let Loc(object, _) = expect_id(object)?;
-					prop.declare_range(object, Some(loc))?
+
+					if let Some(prop) = prop {
+						prop.set_range(object, Some(loc.clone()))?
+					}
+
+					if let Some(field) = field {
+						field.set_layout(object, Some(loc))?
+					}
 				}
 				Name::Schema(vocab::Schema::ValueRequired) => {
 					let (prop, field) =

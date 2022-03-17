@@ -276,7 +276,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 
 		let Loc(first_item, mut loc) = Item::parse_from(lexer, token, loc)?;
 		match first_item {
-			Item::Base(i) => bases.push(Loc(i, loc.clone())),
+			Item::Base(i) => bases.push(i),
 			Item::Import(i) => imports.push(i),
 			Item::Type(t) => types.push(t),
 			Item::Layout(l) => layouts.push(l),
@@ -289,7 +289,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 					loc.span_mut().append(item_loc.span());
 
 					match item {
-						Item::Base(i) => bases.push(Loc(i, item_loc)),
+						Item::Base(i) => bases.push(i),
 						Item::Import(i) => imports.push(i),
 						Item::Type(t) => types.push(t),
 						Item::Layout(l) => layouts.push(l),
@@ -379,6 +379,23 @@ impl<F: Clone> Parse<F> for Item<F> {
 			next_expected_token_from(lexer, next_token, || Self::FIRST.to_vec())?;
 
 		match token {
+			Token::Keyword(lexing::Keyword::Base) => {
+				let id = Id::parse(lexer)?;
+				let iri = match id {
+					locspan::Loc(Id::IriRef(iri_ref), loc) => match IriBuf::try_from(iri_ref) {
+						Ok(iri) => Loc::new(iri, loc),
+						Err(iri_ref) => {
+							return Err(Loc::new(Error::InvalidImportId(Id::IriRef(iri_ref)), loc))
+						}
+					},
+					locspan::Loc(id, loc) => return Err(Loc::new(Error::InvalidImportId(id), loc)),
+				};
+
+				Ok(Loc::new(
+					Item::Base(iri),
+					loc
+				))
+			}
 			Token::Keyword(lexing::Keyword::Import) => {
 				let id = Id::parse(lexer)?;
 				let iri = match id {

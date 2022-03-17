@@ -79,31 +79,6 @@ impl<F> Model<F> {
 		}
 	}
 
-	// pub fn define_reference_layout(
-	// 	&mut self,
-	// 	arg_layout_ref: Ref<layout::Definition<F>>,
-	// 	cause: Option<Location<F>>,
-	// ) -> Result<Ref<layout::Definition<F>>, Caused<layout::Mismatch<F>, F>> where F: Clone + Ord {
-	// 	let arg_layout = self.layouts().get(arg_layout_ref).unwrap();
-	// 	let arg_iri = self.vocabulary().get(arg_layout.id()).unwrap();
-	// 	let arg_pct_iri =
-	// 		pct_str::PctString::encode(arg_iri.as_str().chars(), pct_str::URIReserved);
-	// 	let iri = IriBuf::from_string(format!(
-	// 		"http://schema.treeldr.org/Reference_{}",
-	// 		arg_pct_iri
-	// 	))
-	// 	.unwrap();
-	// 	self.define_native_type(iri, layout::Native::Reference(arg_layout_ref), cause)
-	// }
-
-	// pub fn check(&self) -> Result<(), Error<F>> where F: Clone {
-	// 	for (_, layout) in self.layouts.iter() {
-	// 		layout.check(self)?;
-	// 	}
-
-	// 	Ok(())
-	// }
-
 	/// Returns a reference to the vocabulary.
 	pub fn vocabulary(&self) -> &Vocabulary {
 		&self.vocab
@@ -167,6 +142,17 @@ impl<F> Model<F> {
 	/// Returns a mutable reference to the collection of layout definitions.
 	pub fn layouts_mut(&mut self) -> &mut Shelf<Vec<layout::Definition<F>>> {
 		&mut self.layouts
+	}
+
+	pub fn require(&self, id: Id, expected_ty: Option<node::Type>) -> Result<&Node<F>, error::Description<F>> {
+		self.get(id).ok_or_else(|| error::NodeUnknown {
+			id,
+			expected_ty
+		}.into())
+	}
+
+	pub fn require_layout(&self, id: Id) -> Result<Ref<layout::Definition<F>>, error::Description<F>> where F: Clone {
+		self.require(id, Some(node::Type::Layout))?.require_layout()
 	}
 }
 

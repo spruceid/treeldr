@@ -23,6 +23,13 @@ impl<F> Context<F> {
 		Self::default()
 	}
 
+	pub fn with_vocabulary(vocab: Vocabulary) -> Self {
+		Self {
+			vocab,
+			nodes: HashMap::new()
+		}
+	}
+
 	pub fn into_vocabulary(self) -> Vocabulary {
 		self.vocab
 	}
@@ -39,11 +46,12 @@ impl<F> Context<F> {
 		let id = Id::Iri(vocab::Name::from_iri(iri, self.vocabulary_mut()));
 		self.declare_type(id, cause.clone());
 		self.declare_layout(id, cause.clone());
-		self.get_mut(id)
+		let layout = self.get_mut(id)
 			.unwrap()
 			.as_layout_mut()
-			.unwrap()
-			.set_native(native_layout, cause)?;
+			.unwrap();
+		layout.set_native(native_layout, cause.clone())?;
+		layout.set_type(id, cause)?;
 		Ok(id)
 	}
 
@@ -632,6 +640,13 @@ impl<F: Clone> AllocatedNodes<F> {
 			.into_iter()
 			.map(|(id, node)| (id, node.into()))
 			.collect()
+	}
+
+	pub fn get(
+		&self,
+		id: Id
+	) -> Option<&Node<AllocatedComponents<F>>> {
+		self.nodes.get(&id)
 	}
 
 	pub fn require(

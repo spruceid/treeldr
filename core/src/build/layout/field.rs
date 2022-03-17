@@ -1,5 +1,5 @@
 use super::{error, Error};
-use crate::{Caused, Id, MaybeSet, Vocabulary, WithCauses};
+use crate::{Caused, Id, MaybeSet, Vocabulary, WithCauses, Documentation};
 use locspan::Location;
 
 /// Layout field definition.
@@ -131,13 +131,13 @@ impl<F> Definition<F> {
 impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 	pub fn build(
 		&self,
-		id: Id,
+		doc: Documentation,
 		vocab: &Vocabulary,
 		nodes: &super::super::context::AllocatedNodes<F>,
 	) -> Result<crate::layout::Field<F>, Error<F>> {
 		let prop_id = self.prop.value_or_else(|| {
 			Caused::new(
-				error::LayoutFieldMissingProperty(id).into(),
+				error::LayoutFieldMissingProperty(self.id).into(),
 				self.causes().preferred().cloned(),
 			)
 		})?;
@@ -145,7 +145,7 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 			.require_property(*prop_id.inner(), prop_id.causes().preferred().cloned())?
 			.clone_with_causes(prop_id.causes().clone());
 
-		let name = self.name.clone().unwrap_or_else_try(|| match id {
+		let name = self.name.clone().unwrap_or_else_try(|| match self.id {
 			Id::Iri(name) => {
 				let iri = name.iri(vocab).unwrap();
 				Ok(iri
@@ -153,21 +153,21 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 					.file_name()
 					.ok_or_else(|| {
 						Caused::new(
-							error::LayoutFieldMissingName(id).into(),
+							error::LayoutFieldMissingName(self.id).into(),
 							self.causes().preferred().cloned(),
 						)
 					})?
 					.into())
 			}
 			Id::Blank(_) => Err(Caused::new(
-				error::LayoutFieldMissingName(id).into(),
+				error::LayoutFieldMissingName(self.id).into(),
 				self.causes().preferred().cloned(),
 			)),
 		})?;
 
 		let layout_id = self.layout.value_or_else(|| {
 			Caused::new(
-				error::LayoutFieldMissingLayout(id).into(),
+				error::LayoutFieldMissingLayout(self.id).into(),
 				self.causes().preferred().cloned(),
 			)
 		})?;
@@ -179,7 +179,7 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 		let functional = self.functional.clone().unwrap_or(true);
 
 		Ok(crate::layout::Field::new(
-			prop, name, layout, required, functional,
+			prop, name, layout, required, functional, doc
 		))
 	}
 }

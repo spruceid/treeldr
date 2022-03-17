@@ -1,30 +1,30 @@
 use crate::embedding;
 use embedding::Embedding;
-use iref::{IriBuf, IriRef, IriRefBuf};
+use iref::{IriBuf, Iri};
 use std::fmt;
-use treeldr::{layout, Ref};
+use treeldr::{layout, Ref, vocab::Display};
 
 #[derive(clap::Args)]
 /// Generate a JSON Schema from a TreeLDR model.
 pub struct Command {
-	#[clap(multiple_occurrences(true))]
+	#[clap(multiple_occurrences(true), required(true))]
 	/// Layout schema to generate.
-	layouts: Vec<IriRefBuf>,
+	layouts: Vec<IriBuf>,
 
 	#[clap(short = 'e', multiple_occurrences(true))]
 	/// Layout schema to embed.
-	embeds: Vec<IriRefBuf>,
+	embeds: Vec<IriBuf>,
 }
 
 pub enum Error<F> {
 	InvalidLayoutIri(IriBuf),
 	UndefinedLayout(IriBuf),
 	NotALayout(IriBuf, treeldr::node::CausedTypes<F>),
-	InfiniteSchema(IriBuf),
+	InfiniteSchema(String),
 	Serialization(serde_json::Error),
 }
 
-impl fmt::Display for Error<F> {
+impl<F> fmt::Display for Error<F> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::InvalidLayoutIri(iri) => write!(f, "invalid layout IRI `{}`", iri),
@@ -36,21 +36,17 @@ impl fmt::Display for Error<F> {
 	}
 }
 
-fn find_layout<F>(model: &treeldr::Model<F>, iri_ref: IriRef) -> Result<Ref<layout::Definition<F>>, Error<F>> {
-	let iri = iri_ref.resolved(model.base_iri());
-	let id = model
-		.vocabulary()
-		.id(&iri)
-		.ok_or_else(|| Error::UndefinedLayout(iri.clone()))?;
-	model.require_layout(id, None).map_err(|e| match e.inner() {
-		treeldr::error::Description::NodeUnknown(_) => Error::UndefinedLayout(iri.clone()),
-		treeldr::error::Description::NodeInvalidType(e) => Error::NotALayout(iri.clone(), *e.found),
+fn find_layout<F: Clone>(model: &treeldr::Model<F>, iri: Iri) -> Result<Ref<layout::Definition<F>>, Error<F>> {
+	let name = treeldr::vocab::Name::try_from_iri(iri, model.vocabulary()).ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
+	model.require_layout(treeldr::Id::Iri(name)).map_err(|e| match e {
+		treeldr::error::Description::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
+		treeldr::error::Description::NodeInvalidType(e) => Error::NotALayout(iri.into(), e.found),
 		_ => unreachable!(),
 	})
 }
 
 impl Command {
-	pub fn execute<F>(self, model: &treeldr::Model<F>) {
+	pub fn execute<F: Clone>(self, model: &treeldr::Model<F>) {
 		log::info!("generating JSON Schema.");
 		match self.try_execute(model) {
 			Ok(()) => (),
@@ -61,12 +57,12 @@ impl Command {
 		}
 	}
 
-	fn try_execute<F>(self, model: &treeldr::Model<F>) -> Result<(), Error<F>> {
+	fn try_execute<F: Clone>(self, model: &treeldr::Model<F>) -> Result<(), Error<F>> {
 		// Find the layouts to generate.
 		let mut layouts = Vec::new();
 
-		for iri_ref in self.layouts {
-			layouts.push(find_layout(model, iri_ref.as_iri_ref())?);
+		for iri in self.layouts {
+			layouts.push(find_layout(model, iri.as_iri())?);
 		}
 
 		layouts.reverse();
@@ -78,8 +74,8 @@ impl Command {
 		for &layout_ref in &layouts {
 			embedding_config.set(layout_ref, Embedding::Indirect);
 		}
-		for iri_ref in &self.embeds {
-			let layout_ref = find_layout(model, iri_ref.as_iri_ref())?;
+		for iri in &self.embeds {
+			let layout_ref = find_layout(model, iri.as_iri())?;
 			embedding_config.set(layout_ref, Embedding::Direct);
 		}
 
@@ -87,14 +83,9 @@ impl Command {
 			Ok(()) => Ok(()),
 			Err(crate::Error::InvalidLayoutIri(iri)) => Err(Error::InvalidLayoutIri(iri)),
 			Err(crate::Error::InfiniteSchema(r)) => {
-				Err(Error::InfiniteSchema(layout_iri(model, r)))
+				Err(Error::InfiniteSchema(model.layouts().get(r).unwrap().id().display(model.vocabulary()).to_string()))
 			}
 			Err(crate::Error::Serialization(e)) => Err(Error::Serialization(e)),
 		}
 	}
-}
-
-fn layout_iri<F>(model: &treeldr::Model<F>, r: Ref<layout::Definition<F>>) -> IriBuf {
-	let layout = model.layouts().get(r).unwrap();
-	model.vocabulary().get(layout.id()).unwrap().into()
 }

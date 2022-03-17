@@ -1,3 +1,5 @@
+base <https://example.com>
+
 import <http://www.w3.org/2001/XMLSchema#> as xs
 
 /// Certificate or deed issued by an educational institution.

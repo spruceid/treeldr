@@ -29,6 +29,10 @@ impl<T, F> Caused<T, F> {
 	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Caused<U, F> {
 		Caused::new(f(self.t), self.cause)
 	}
+
+	pub fn into_parts(self) -> (T, Option<Location<F>>) {
+		(self.t, self.cause)
+	}
 }
 
 impl<T, F> Caused<Caused<T, F>, F> {

@@ -86,7 +86,7 @@ impl<F> Definition<F> {
 		self.doc = doc
 	}
 
-	pub fn declare_domain(&mut self, ty_ref: Id, cause: Option<Location<F>>)
+	pub fn set_domain(&mut self, ty_ref: Id, cause: Option<Location<F>>)
 	where
 		F: Ord,
 	{
@@ -103,7 +103,7 @@ impl<F> Definition<F> {
 		}
 	}
 
-	pub fn declare_range(&mut self, ty: Id, cause: Option<Location<F>>) -> Result<(), Error<F>>
+	pub fn set_range(&mut self, ty: Id, cause: Option<Location<F>>) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
 	{

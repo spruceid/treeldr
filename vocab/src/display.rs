@@ -49,29 +49,7 @@ impl Display for super::StrippedObject {
 
 impl Display for super::Name {
 	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "<{}>", self.iri(namespace).unwrap())
-	}
-}
-
-impl<S: Display, P: Display, O: Display, G: Display> Display for super::Quad<S, P, O, G> {
-	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
-		match self.graph() {
-			Some(graph) => write!(
-				f,
-				"{} {} {} {}",
-				self.subject().display(namespace),
-				self.predicate().display(namespace),
-				self.object().display(namespace),
-				graph.display(namespace)
-			),
-			None => write!(
-				f,
-				"{} {} {}",
-				self.subject().display(namespace),
-				self.predicate().display(namespace),
-				self.object().display(namespace)
-			),
-		}
+		self.iri(namespace).unwrap().fmt(f)
 	}
 }
 
@@ -84,5 +62,90 @@ impl<T: Display, F> Display for locspan::Loc<T, F> {
 impl<'a, T: Display> Display for &'a T {
 	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
 		(*self).fmt(namespace, f)
+	}
+}
+
+pub trait RdfDisplay {
+	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result;
+
+	fn rdf_display<'n>(&self, namespace: &'n Vocabulary) -> RdfDisplayed<'n, '_, Self> {
+		RdfDisplayed(namespace, self)
+	}
+}
+
+pub struct RdfDisplayed<'n, 'a, T: ?Sized>(&'n Vocabulary, &'a T);
+
+impl<'n, 'a, T: RdfDisplay> fmt::Display for RdfDisplayed<'n, 'a, T> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		self.1.rdf_fmt(self.0, f)
+	}
+}
+
+impl RdfDisplay for super::Id {
+	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::Iri(id) => id.rdf_fmt(namespace, f),
+			Self::Blank(id) => id.fmt(f),
+		}
+	}
+}
+
+impl<F> RdfDisplay for super::Object<F> {
+	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::Iri(id) => id.rdf_fmt(namespace, f),
+			Self::Blank(id) => id.fmt(f),
+			Self::Literal(lit) => lit.fmt(f),
+		}
+	}
+}
+
+impl RdfDisplay for super::StrippedObject {
+	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::Iri(id) => id.rdf_fmt(namespace, f),
+			Self::Blank(id) => id.fmt(f),
+			Self::Literal(lit) => lit.fmt(f),
+		}
+	}
+}
+
+impl RdfDisplay for super::Name {
+	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "<{}>", self.iri(namespace).unwrap())
+	}
+}
+
+impl<S: RdfDisplay, P: RdfDisplay, O: RdfDisplay, G: RdfDisplay> RdfDisplay for super::Quad<S, P, O, G> {
+	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
+		match self.graph() {
+			Some(graph) => write!(
+				f,
+				"{} {} {} {}",
+				self.subject().rdf_display(namespace),
+				self.predicate().rdf_display(namespace),
+				self.object().rdf_display(namespace),
+				graph.rdf_display(namespace)
+			),
+			None => write!(
+				f,
+				"{} {} {}",
+				self.subject().rdf_display(namespace),
+				self.predicate().rdf_display(namespace),
+				self.object().rdf_display(namespace)
+			),
+		}
+	}
+}
+
+impl<T: RdfDisplay, F> RdfDisplay for locspan::Loc<T, F> {
+	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
+		self.value().rdf_fmt(namespace, f)
+	}
+}
+
+impl<'a, T: RdfDisplay> RdfDisplay for &'a T {
+	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
+		(*self).rdf_fmt(namespace, f)
 	}
 }

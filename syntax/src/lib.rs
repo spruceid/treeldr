@@ -45,7 +45,7 @@ impl Prefix {
 }
 
 pub enum Item<F> {
-	Base(IriBuf),
+	Base(Loc<IriBuf, F>),
 	Import(Loc<Import<F>, F>),
 	Type(Loc<TypeDefinition<F>, F>),
 	Layout(Loc<LayoutDefinition<F>, F>),

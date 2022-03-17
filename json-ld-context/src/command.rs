@@ -1,4 +1,4 @@
-use iref::{IriBuf, IriRef, IriRefBuf};
+use iref::{Iri, IriBuf};
 use std::fmt;
 use treeldr::{layout, Ref};
 
@@ -7,16 +7,16 @@ use treeldr::{layout, Ref};
 pub struct Command {
 	#[clap(multiple_occurrences(true))]
 	/// Layout schema to generate.
-	layout: IriRefBuf,
+	layout: IriBuf,
 }
 
-pub enum Error {
+pub enum Error<F> {
 	UndefinedLayout(IriBuf),
-	NotALayout(IriBuf, treeldr::node::CausedTypes),
+	NotALayout(IriBuf, treeldr::node::CausedTypes<F>),
 	Serialization(serde_json::Error),
 }
 
-impl fmt::Display for Error {
+impl<F> fmt::Display for Error<F> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{}`", iri),
@@ -26,21 +26,17 @@ impl fmt::Display for Error {
 	}
 }
 
-fn find_layout(model: &treeldr::Model, iri_ref: IriRef) -> Result<Ref<layout::Definition>, Error> {
-	let iri = iri_ref.resolved(model.base_iri());
-	let id = model
-		.vocabulary()
-		.id(&iri)
-		.ok_or_else(|| Error::UndefinedLayout(iri.clone()))?;
-	model.require_layout(id, None).map_err(|e| match e.inner() {
-		treeldr::Error::UnknownNode { .. } => Error::UndefinedLayout(iri.clone()),
-		treeldr::Error::InvalidNodeType { found, .. } => Error::NotALayout(iri.clone(), *found),
+fn find_layout<F: Clone>(model: &treeldr::Model<F>, iri: Iri) -> Result<Ref<layout::Definition<F>>, Error<F>> {
+	let name = treeldr::vocab::Name::try_from_iri(iri, model.vocabulary()).ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
+	model.require_layout(treeldr::Id::Iri(name)).map_err(|e| match e {
+		treeldr::error::Description::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
+		treeldr::error::Description::NodeInvalidType(e) => Error::NotALayout(iri.into(), e.found),
 		_ => unreachable!(),
 	})
 }
 
 impl Command {
-	pub fn execute(self, model: &treeldr::Model) {
+	pub fn execute<F: Clone>(self, model: &treeldr::Model<F>) {
 		log::info!("generating JSON Schema.");
 		match self.try_execute(model) {
 			Ok(()) => (),
@@ -51,8 +47,8 @@ impl Command {
 		}
 	}
 
-	fn try_execute(self, model: &treeldr::Model) -> Result<(), Error> {
-		let layout_ref = find_layout(model, self.layout.as_iri_ref())?;
+	fn try_execute<F: Clone>(self, model: &treeldr::Model<F>) -> Result<(), Error<F>> {
+		let layout_ref = find_layout(model, self.layout.as_iri())?;
 		match crate::generate(model, layout_ref) {
 			Ok(()) => Ok(()),
 			Err(crate::Error::Serialization(e)) => Err(Error::Serialization(e)),

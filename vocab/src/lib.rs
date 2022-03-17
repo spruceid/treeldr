@@ -6,7 +6,7 @@ use std::{collections::HashMap, fmt};
 
 mod display;
 
-pub use display::{Display, Displayed};
+pub use display::*;
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]
@@ -100,10 +100,29 @@ pub enum Name {
 	Rdfs(Rdfs),
 	Schema(Schema),
 	TreeLdr(TreeLdr),
-	UnknownName(UnknownName),
+	Unknown(UnknownName),
 }
 
 impl Name {
+	pub fn try_from_iri(iri: Iri, ns: &Vocabulary) -> Option<Name> {
+		match Rdf::try_from(iri) {
+			Ok(id) => Some(Name::Rdf(id)),
+			Err(_) => match Rdfs::try_from(iri) {
+				Ok(id) => Some(Name::Rdfs(id)),
+				Err(_) => match Schema::try_from(iri) {
+					Ok(id) => Some(Name::Schema(id)),
+					Err(_) => match TreeLdr::try_from(iri) {
+						Ok(id) => Some(Name::TreeLdr(id)),
+						Err(_) => {
+							let iri_buf: IriBuf = iri.into();
+							ns.get(&iri_buf).map(Name::Unknown)
+						},
+					},
+				},
+			},
+		}
+	}
+
 	pub fn from_iri(iri: IriBuf, ns: &mut Vocabulary) -> Name {
 		match Rdf::try_from(iri.as_iri()) {
 			Ok(id) => Name::Rdf(id),
@@ -113,7 +132,7 @@ impl Name {
 					Ok(id) => Name::Schema(id),
 					Err(_) => match TreeLdr::try_from(iri.as_iri()) {
 						Ok(id) => Name::TreeLdr(id),
-						Err(_) => Name::UnknownName(ns.insert(iri)),
+						Err(_) => Name::Unknown(ns.insert(iri)),
 					},
 				},
 			},
@@ -126,7 +145,7 @@ impl Name {
 			Self::Rdfs(id) => Some(id.into()),
 			Self::Schema(id) => Some(id.into()),
 			Self::TreeLdr(id) => Some(id.into()),
-			Self::UnknownName(name) => ns.get(*name),
+			Self::Unknown(name) => ns.iri(*name),
 		}
 	}
 }
@@ -280,7 +299,11 @@ impl Vocabulary {
 		Self::default()
 	}
 
-	pub fn get(&self, name: UnknownName) -> Option<Iri> {
+	pub fn get(&self, iri: &IriBuf) -> Option<UnknownName> {
+		self.reverse.get(iri).cloned()
+	}
+
+	pub fn iri(&self, name: UnknownName) -> Option<Iri> {
 		self.map.get(name.0).map(|iri| iri.as_iri())
 	}
 

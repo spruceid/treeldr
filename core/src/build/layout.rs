@@ -143,14 +143,14 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 					.file_name()
 					.ok_or_else(|| {
 						Caused::new(
-							error::LayoutFieldMissingName(id).into(),
+							error::LayoutMissingName(id).into(),
 							causes.preferred().cloned(),
 						)
 					})?
 					.into())
 			}
 			Id::Blank(_) => Err(Caused::new(
-				error::LayoutFieldMissingName(id).into(),
+				error::LayoutMissingName(id).into(),
 				causes.preferred().cloned(),
 			)),
 		})?;
@@ -197,7 +197,8 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 
 							let field =
 								nodes.require_layout_field(field_id, causes.into_preferred())?;
-							field.build(field_id, vocab, nodes)
+							let doc = nodes.get(field_id).unwrap().documentation().clone();
+							field.build(doc, vocab, nodes)
 						})
 						.try_collect()?;
 					Ok(crate::layout::Description::Struct(fields))

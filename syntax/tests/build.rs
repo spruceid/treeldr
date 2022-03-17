@@ -27,8 +27,8 @@ impl BlankIdGenerator {
 }
 
 fn parse_nquads<P: AsRef<Path>>(
-	path: P,
 	vocabulary: &mut Vocabulary,
+	path: P,
 ) -> grdf::HashDataset<Id, Name, StrippedObject, GraphLabel> {
 	use nquads_syntax::{lexing::Utf8Decoded, Document, Lexer, Parse};
 
@@ -51,36 +51,32 @@ fn parse_nquads<P: AsRef<Path>>(
 }
 
 fn parse_treeldr<P: AsRef<Path>>(
+	vocab: &mut Vocabulary,
 	path: P,
-) -> (
-	grdf::HashDataset<Id, Name, StrippedObject, GraphLabel>,
-	Vocabulary,
-) {
+) -> grdf::HashDataset<Id, Name, StrippedObject, GraphLabel> {
 	use treeldr_syntax::{build, Build, Document, Lexer, Parse};
 
 	let input = std::fs::read_to_string(path).expect("unable to read input file");
 	let mut lexer = Lexer::new((), input.chars().map(infallible));
 	let ast = Document::parse(&mut lexer).expect("parse error");
-	let mut context = build::Context::new(Some(iri!("http://www.example.com").into()));
+	let mut context = build::Context::new(vocab, Some(iri!("http://www.example.com").into()));
 	let mut quads = Vec::new();
 	ast.build(&mut context, &mut quads).expect("build error");
 
-	(
-		quads
-			.into_iter()
-			.map(treeldr_vocab::strip_quad)
-			.collect(),
-		context.into_vocabulary(),
-	)
+	quads
+		.into_iter()
+		.map(treeldr_vocab::strip_quad)
+		.collect()
 }
 
 fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) {
-	use treeldr_vocab::Display;
-	let (output, mut vocabulary) = parse_treeldr(input_path);
-	let expected_output = parse_nquads(expected_output_path, &mut vocabulary);
+	use treeldr_vocab::RdfDisplay;
+	let mut vocabulary = Vocabulary::new();
+	let output = parse_treeldr(&mut vocabulary, input_path);
+	let expected_output = parse_nquads(&mut vocabulary, expected_output_path);
 
 	for quad in output.quads() {
-		println!("{} .", quad.display(&vocabulary))
+		println!("{} .", quad.rdf_display(&vocabulary))
 	}
 
 	assert!(output.is_isomorphic_to(&expected_output))
