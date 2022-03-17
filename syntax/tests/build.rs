@@ -28,7 +28,7 @@ impl BlankIdGenerator {
 
 fn parse_nquads<P: AsRef<Path>>(
 	path: P,
-	namespace: &mut Vocabulary,
+	vocabulary: &mut Vocabulary,
 ) -> grdf::HashDataset<Id, Name, StrippedObject, GraphLabel> {
 	use nquads_syntax::{lexing::Utf8Decoded, Document, Lexer, Parse};
 
@@ -45,7 +45,7 @@ fn parse_nquads<P: AsRef<Path>>(
 	quads
 		.into_iter()
 		.map(move |quad| {
-			treeldr_vocab::stripped_loc_quad_from_rdf(quad, namespace, &mut generate)
+			treeldr_vocab::stripped_loc_quad_from_rdf(quad, vocabulary, &mut generate)
 		})
 		.collect()
 }
@@ -70,17 +70,17 @@ fn parse_treeldr<P: AsRef<Path>>(
 			.into_iter()
 			.map(treeldr_vocab::strip_quad)
 			.collect(),
-		context.into_namespace(),
+		context.into_vocabulary(),
 	)
 }
 
 fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) {
 	use treeldr_vocab::Display;
-	let (output, mut namespace) = parse_treeldr(input_path);
-	let expected_output = parse_nquads(expected_output_path, &mut namespace);
+	let (output, mut vocabulary) = parse_treeldr(input_path);
+	let expected_output = parse_nquads(expected_output_path, &mut vocabulary);
 
 	for quad in output.quads() {
-		println!("{} .", quad.display(&namespace))
+		println!("{} .", quad.display(&vocabulary))
 	}
 
 	assert!(output.is_isomorphic_to(&expected_output))

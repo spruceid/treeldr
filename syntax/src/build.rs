@@ -2,8 +2,9 @@ use iref::{IriBuf, IriRef, IriRefBuf};
 use locspan::{Loc, Location};
 use rdf_types::{loc::Literal, Quad};
 use std::collections::HashMap;
+use std::fmt;
 
-use treeldr_vocab::*;
+use crate::vocab::*;
 
 pub trait Build<F> {
 	type Target;
@@ -17,43 +18,89 @@ pub trait Build<F> {
 
 #[derive(Debug)]
 pub enum Error<F> {
-	Undefined(crate::Id),
 	InvalidExpandedCompactIri(String),
 	UndefinedPrefix(String),
 	AlreadyDefinedPrefix(String, Location<F>),
 	NoBaseIri,
-	BaseIriMismatch(IriBuf, Location<F>)
+	BaseIriMismatch {
+		expected: IriBuf,
+		found: IriBuf,
+		because: Location<F>
+	}
+}
+
+impl<'c, 't, F: Clone> crate::reporting::Diagnose<F> for Loc<Error<F>, F> {
+	fn message(&self) -> String {
+		match self.value() {
+			Error::InvalidExpandedCompactIri(_) => "invalid expanded compact IRI".to_string(),
+			Error::UndefinedPrefix(_) => "undefined prefix".to_string(),
+			Error::AlreadyDefinedPrefix(_, _) => "aready defined prefix".to_string(),
+			Error::NoBaseIri => "no base IRI".to_string(),
+			Error::BaseIriMismatch { .. } => "base IRI mismatch".to_string()
+		}
+	}
+
+	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+		let mut labels = Vec::new();
+		labels.push(self.location().clone().into_primary_label().with_message(self.to_string()));
+
+		match self.value() {
+			Error::AlreadyDefinedPrefix(_, original_loc) => {
+				labels.push(original_loc.clone().into_secondary_label().with_message(format!("original prefix defined here")))
+			}
+			Error::BaseIriMismatch { because, .. } => {
+				labels.push(because.clone().into_secondary_label().with_message(format!("original base IRI defined here")))
+			},
+			_ => ()
+		}
+
+		labels
+	}
+}
+
+impl<F> fmt::Display for Error<F> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::InvalidExpandedCompactIri(expanded) => write!(f, "`{}` is not a valid IRI", expanded),
+			Self::UndefinedPrefix(prefix) => write!(f, "prefix `{}` is undefined", prefix),
+			Self::AlreadyDefinedPrefix(prefix, _) => write!(f, "prefix `{}` is already defined", prefix),
+			Self::NoBaseIri => "no base IRI".fmt(f),
+			Self::BaseIriMismatch { expected, .. } => write!(f, "should be `{}`", expected)
+		}
+	}
 }
 
 pub struct Context<F> {
 	base_iri: Option<IriBuf>,
-	namespace: Vocabulary,
+	vocabulary: Vocabulary,
 	prefixes: HashMap<String, Loc<IriBuf, F>>,
 	scope: Option<Name>,
 }
 
-impl<F: Clone> Context<F> {
+impl<F> Context<F> {
 	pub fn new(base_iri: Option<IriBuf>) -> Self {
 		Self {
 			base_iri,
-			namespace: Vocabulary::new(),
+			vocabulary: Vocabulary::new(),
 			prefixes: HashMap::new(),
 			scope: None,
 		}
 	}
 
-	pub fn namespace(&self) -> &Vocabulary {
-		&self.namespace
+	pub fn vocabulary(&self) -> &Vocabulary {
+		&self.vocabulary
 	}
 
-	pub fn into_namespace(self) -> Vocabulary {
-		self.namespace
+	pub fn into_vocabulary(self) -> Vocabulary {
+		self.vocabulary
 	}
+}
 
+impl<F: Clone> Context<F> {
 	pub fn base_iri(&self, loc: Location<F>) -> Result<IriBuf, Loc<Error<F>, F>> {
 		match &self.scope {
 			Some(scope) => {
-				let mut iri = scope.iri(&self.namespace).unwrap().to_owned();
+				let mut iri = scope.iri(&self.vocabulary).unwrap().to_owned();
 				iri.path_mut().open();
 				Ok(iri)
 			}
@@ -100,6 +147,48 @@ impl<F: Clone> Context<F> {
 	}
 }
 
+pub struct WithContext<'c, 't, T: ?Sized, F>(&'c Context<F>, &'t T);
+
+pub trait BorrowWithContext {
+	fn with_context<'c, F>(&self, context: &'c Context<F>) -> WithContext<'c, '_, Self, F>;
+}
+
+impl<T> BorrowWithContext for T {
+	fn with_context<'c, F>(&self, context: &'c Context<F>) -> WithContext<'c, '_, Self, F> {
+		WithContext(context, self)
+	}
+}
+
+impl<'c, 't, T, F> WithContext<'c, 't, T, F> {
+	pub fn value(&self) -> &'t T {
+		self.1
+	}
+
+	pub fn context(&self) -> &'c Context<F> {
+		self.0
+	}
+}
+
+pub trait DisplayWithContext<F> {
+	fn fmt(&self, context: &Context<F>, f: &mut fmt::Formatter) -> fmt::Result;
+}
+
+impl<'c, 't, T: DisplayWithContext<F>, F> fmt::Display for WithContext<'c, 't, T, F> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		self.value().fmt(self.context(), f)
+	}
+}
+
+impl<F> DisplayWithContext<F> for Id {
+	fn fmt(&self, context: &Context<F>, f: &mut fmt::Formatter) -> fmt::Result {
+		use fmt::Display;
+		match self {
+			Id::Iri(name) => name.iri(context.vocabulary()).unwrap().fmt(f),
+			Id::Blank(i) => write!(f, "_:{}", i)
+		}
+	}
+}
+
 impl<F: Clone> Build<F> for Loc<crate::Document<F>, F> {
 	type Target = ();
 
@@ -115,7 +204,11 @@ impl<F: Clone> Build<F> for Loc<crate::Document<F>, F> {
 			match declared_base_iri.take() {
 				Some(Loc(declared_base_iri, d_loc)) => {
 					if declared_base_iri != base_iri {
-						return Err(Loc(Error::BaseIriMismatch(declared_base_iri, d_loc), loc))
+						return Err(Loc(Error::BaseIriMismatch {
+							expected: declared_base_iri,
+							found: base_iri,
+							because: d_loc
+						}, loc))
 					}
 				}
 				None => {
@@ -162,7 +255,7 @@ impl<F: Clone> Build<F> for Loc<crate::Id, F> {
 			}
 		};
 
-		Ok(Loc(Name::from_iri(iri, &mut ctx.namespace), loc))
+		Ok(Loc(Name::from_iri(iri, &mut ctx.vocabulary), loc))
 	}
 }
 
@@ -428,7 +521,7 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 		for field in fields.into_iter().rev() {
 			ctx.scope = Some(ty_id);
 
-			let item_label = ctx.namespace.new_blank_label();
+			let item_label = ctx.vocabulary.new_blank_label();
 			let first = field.build(ctx, quads)?;
 			let first_loc = first.location().clone();
 
@@ -481,7 +574,7 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 	) -> Result<Self::Target, Loc<Error<F>, F>> {
 		let Loc(def, loc) = self;
 
-		let label = ctx.namespace.new_blank_label();
+		let label = ctx.vocabulary.new_blank_label();
 		let Loc(prop_id, prop_id_loc) = def.id.build(ctx, quads)?;
 
 		quads.push(Loc(
@@ -512,7 +605,7 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 			Some(Loc(alias, alias_loc)) => Loc(alias.into_string(), alias_loc),
 			None => Loc(
 				prop_id
-					.iri(&ctx.namespace)
+					.iri(&ctx.vocabulary)
 					.unwrap()
 					.path()
 					.file_name()
@@ -594,7 +687,7 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 			}
 			crate::LayoutExpr::Reference(r) => {
 				let deref_ty = r.build(ctx, quads)?;
-				let ty = ctx.namespace.new_blank_label();
+				let ty = ctx.vocabulary.new_blank_label();
 				quads.push(Loc(
 					Quad(
 						Loc(Id::Blank(ty), loc.clone()),

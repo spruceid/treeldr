@@ -1,6 +1,8 @@
 use iref::IriBuf;
 use locspan::Loc;
 
+pub use treeldr_vocab as vocab;
+
 pub mod build;
 pub mod lexing;
 pub mod parsing;
