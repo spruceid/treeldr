@@ -1,5 +1,5 @@
 use super::{error, Error};
-use crate::{Caused, Id, MaybeSet, Vocabulary, WithCauses, Documentation};
+use crate::{Caused, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
 use locspan::Location;
 
 /// Layout field definition.
@@ -179,7 +179,7 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 		let functional = self.functional.clone().unwrap_or(true);
 
 		Ok(crate::layout::Field::new(
-			prop, name, layout, required, functional, doc
+			prop, name, layout, required, functional, doc,
 		))
 	}
 }

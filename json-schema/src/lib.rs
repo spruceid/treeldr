@@ -1,5 +1,5 @@
 use iref::IriBuf;
-use treeldr::{layout, Ref, vocab::Display};
+use treeldr::{layout, vocab::Display, Ref};
 
 mod command;
 pub mod embedding;
@@ -73,7 +73,10 @@ fn generate_layout<F>(
 	layout_ref: Ref<layout::Definition<F>>,
 ) -> Result<(), Error<F>> {
 	let layout = model.layouts().get(layout_ref).unwrap();
-	json.insert("$id".into(), layout.id().display(model.vocabulary()).to_string().into());
+	json.insert(
+		"$id".into(),
+		layout.id().display(model.vocabulary()).to_string().into(),
+	);
 
 	if let Some(description) = layout.preferred_documentation(model).short_description() {
 		json.insert("description".into(), description.trim().into());
@@ -97,7 +100,7 @@ fn generate_struct<F>(
 	json: &mut serde_json::Map<String, serde_json::Value>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
-	fields: &Vec<treeldr::layout::Field<F>>,
+	fields: &[treeldr::layout::Field<F>],
 ) -> Result<(), Error<F>> {
 	let mut properties = serde_json::Map::new();
 	let mut required_properties = Vec::new();
@@ -162,7 +165,11 @@ fn generate_layout_defs_ref<F>(
 ) -> Result<(), Error<F>> {
 	json.insert(
 		"$ref".into(),
-		format!("#/$defs/{}", model.layouts().get(layout_ref).unwrap().name()).into(),
+		format!(
+			"#/$defs/{}",
+			model.layouts().get(layout_ref).unwrap().name()
+		)
+		.into(),
 	);
 	Ok(())
 }
@@ -185,7 +192,10 @@ fn generate_layout_ref<F>(
 		}
 		Description::Struct(_) => {
 			let layout = model.layouts().get(layout_ref).unwrap();
-			json.insert("$ref".into(), layout.id().display(model.vocabulary()).to_string().into());
+			json.insert(
+				"$ref".into(),
+				layout.id().display(model.vocabulary()).to_string().into(),
+			);
 			Ok(())
 		}
 		Description::Native(n) => {

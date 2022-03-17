@@ -65,19 +65,19 @@ fn main() {
 			}
 		}
 		command => {
-			let mut build_context: treeldr::build::Context<source::FileId> = treeldr::build::Context::with_vocabulary(vocab);
+			let mut build_context: treeldr::build::Context<source::FileId> =
+				treeldr::build::Context::with_vocabulary(vocab);
 			build_context.define_xml_types().unwrap();
 
 			match build_context.build_dataset(quads.into_iter().collect()) {
-				Ok(model) => {
-					match command {
-						#[cfg(feature = "json-schema")]
-						Some(Command::JsonSchema(command)) => command.execute(&model),
-						#[cfg(feature = "json-ld-context")]
-						Some(Command::JsonLdContext(command)) => command.execute(&model),
-						_ => (),
-					}
-				}
+				#[allow(unused_variables)]
+				Ok(model) => match command {
+					#[cfg(feature = "json-schema")]
+					Some(Command::JsonSchema(command)) => command.execute(&model),
+					#[cfg(feature = "json-ld-context")]
+					Some(Command::JsonLdContext(command)) => command.execute(&model),
+					_ => (),
+				},
 				Err((e, vocab)) => {
 					use treeldr::reporting::Diagnose;
 					let diagnostic = e.with_vocabulary(&vocab).diagnostic();
@@ -93,12 +93,13 @@ fn main() {
 }
 
 /// Import a TreeLDR file.
-fn import_treeldr(vocab: &mut treeldr::Vocabulary, quads: &mut Vec<syntax::vocab::LocQuad<source::FileId>>, files: &source::Files, source_id: source::FileId) {
-	use syntax::{
-		Parse,
-		Build,
-		reporting::Diagnose
-	};
+fn import_treeldr(
+	vocab: &mut treeldr::Vocabulary,
+	quads: &mut Vec<syntax::vocab::LocQuad<source::FileId>>,
+	files: &source::Files,
+	source_id: source::FileId,
+) {
+	use syntax::{reporting::Diagnose, Build, Parse};
 	let file = files.get(source_id).unwrap();
 
 	let mut lexer =

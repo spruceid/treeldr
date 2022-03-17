@@ -26,13 +26,21 @@ impl<F> fmt::Display for Error<F> {
 	}
 }
 
-fn find_layout<F: Clone>(model: &treeldr::Model<F>, iri: Iri) -> Result<Ref<layout::Definition<F>>, Error<F>> {
-	let name = treeldr::vocab::Name::try_from_iri(iri, model.vocabulary()).ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
-	model.require_layout(treeldr::Id::Iri(name)).map_err(|e| match e {
-		treeldr::error::Description::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
-		treeldr::error::Description::NodeInvalidType(e) => Error::NotALayout(iri.into(), e.found),
-		_ => unreachable!(),
-	})
+fn find_layout<F: Clone>(
+	model: &treeldr::Model<F>,
+	iri: Iri,
+) -> Result<Ref<layout::Definition<F>>, Error<F>> {
+	let name = treeldr::vocab::Name::try_from_iri(iri, model.vocabulary())
+		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
+	model
+		.require_layout(treeldr::Id::Iri(name))
+		.map_err(|e| match e {
+			treeldr::error::Description::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
+			treeldr::error::Description::NodeInvalidType(e) => {
+				Error::NotALayout(iri.into(), e.found)
+			}
+			_ => unreachable!(),
+		})
 }
 
 impl Command {

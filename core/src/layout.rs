@@ -1,4 +1,4 @@
-use crate::{layout, prop, ty, Causes, Id, WithCauses, Documentation};
+use crate::{layout, prop, ty, Causes, Documentation, Id, WithCauses};
 use shelves::Ref;
 
 mod strongly_connected;
@@ -142,7 +142,7 @@ pub struct Field<F> {
 	layout: WithCauses<Ref<Definition<F>>, F>,
 	required: WithCauses<bool, F>,
 	functional: WithCauses<bool, F>,
-	doc: Documentation
+	doc: Documentation,
 }
 
 impl<F> Field<F> {
@@ -152,7 +152,7 @@ impl<F> Field<F> {
 		layout: WithCauses<Ref<Definition<F>>, F>,
 		required: WithCauses<bool, F>,
 		functional: WithCauses<bool, F>,
-		doc: Documentation
+		doc: Documentation,
 	) -> Self {
 		Self {
 			prop,
@@ -160,7 +160,7 @@ impl<F> Field<F> {
 			layout,
 			required,
 			functional,
-			doc
+			doc,
 		}
 	}
 

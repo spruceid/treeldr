@@ -116,7 +116,7 @@ impl Name {
 						Err(_) => {
 							let iri_buf: IriBuf = iri.into();
 							ns.get(&iri_buf).map(Name::Unknown)
-						},
+						}
 					},
 				},
 			},

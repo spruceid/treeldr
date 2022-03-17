@@ -116,7 +116,9 @@ impl RdfDisplay for super::Name {
 	}
 }
 
-impl<S: RdfDisplay, P: RdfDisplay, O: RdfDisplay, G: RdfDisplay> RdfDisplay for super::Quad<S, P, O, G> {
+impl<S: RdfDisplay, P: RdfDisplay, O: RdfDisplay, G: RdfDisplay> RdfDisplay
+	for super::Quad<S, P, O, G>
+{
 	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
 		match self.graph() {
 			Some(graph) => write!(

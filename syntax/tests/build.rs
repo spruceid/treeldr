@@ -2,7 +2,7 @@ use locspan::Loc;
 use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;
-use treeldr_vocab::{GraphLabel, Name, Vocabulary, StrippedObject, Id};
+use treeldr_vocab::{GraphLabel, Id, Name, StrippedObject, Vocabulary};
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
@@ -44,9 +44,7 @@ fn parse_nquads<P: AsRef<Path>>(
 
 	quads
 		.into_iter()
-		.map(move |quad| {
-			treeldr_vocab::stripped_loc_quad_from_rdf(quad, vocabulary, &mut generate)
-		})
+		.map(move |quad| treeldr_vocab::stripped_loc_quad_from_rdf(quad, vocabulary, &mut generate))
 		.collect()
 }
 
@@ -63,10 +61,7 @@ fn parse_treeldr<P: AsRef<Path>>(
 	let mut quads = Vec::new();
 	ast.build(&mut context, &mut quads).expect("build error");
 
-	quads
-		.into_iter()
-		.map(treeldr_vocab::strip_quad)
-		.collect()
+	quads.into_iter().map(treeldr_vocab::strip_quad).collect()
 }
 
 fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) {

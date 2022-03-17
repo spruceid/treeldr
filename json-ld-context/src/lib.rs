@@ -1,4 +1,4 @@
-use treeldr::{layout, Ref, vocab::Display};
+use treeldr::{layout, vocab::Display, Ref};
 
 mod command;
 pub use command::Command;
@@ -8,7 +8,10 @@ pub enum Error {
 }
 
 /// Generate a JSON Schema from a TreeLDR model.
-pub fn generate<F>(model: &treeldr::Model<F>, layout_ref: Ref<layout::Definition<F>>) -> Result<(), Error> {
+pub fn generate<F>(
+	model: &treeldr::Model<F>,
+	layout_ref: Ref<layout::Definition<F>>,
+) -> Result<(), Error> {
 	let ld_context = generate_layout_context(model, layout_ref)?;
 
 	println!(
@@ -87,7 +90,10 @@ fn generate_struct<F>(
 				property.id().display(model.vocabulary()).to_string().into()
 			} else {
 				let mut field_def = serde_json::Map::new();
-				field_def.insert("@id".into(), property.id().display(model.vocabulary()).to_string().into());
+				field_def.insert(
+					"@id".into(),
+					property.id().display(model.vocabulary()).to_string().into(),
+				);
 
 				if let Some(field_type) = field_type {
 					field_def.insert("@type".into(), field_type);
@@ -120,6 +126,6 @@ fn generate_native_type(n: treeldr::layout::Native) -> serde_json::Value {
 		Native::DateTime => "http://www.w3.org/2001/XMLSchema#dateTime".into(),
 		Native::Iri => "http://www.w3.org/2001/XMLSchema#anyURI".into(),
 		Native::Uri => "http://www.w3.org/2001/XMLSchema#anyURI".into(),
-		Native::Url => "http://www.w3.org/2001/XMLSchema#anyURI".into()
+		Native::Url => "http://www.w3.org/2001/XMLSchema#anyURI".into(),
 	}
 }

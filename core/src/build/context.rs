@@ -26,7 +26,7 @@ impl<F> Context<F> {
 	pub fn with_vocabulary(vocab: Vocabulary) -> Self {
 		Self {
 			vocab,
-			nodes: HashMap::new()
+			nodes: HashMap::new(),
 		}
 	}
 
@@ -46,10 +46,7 @@ impl<F> Context<F> {
 		let id = Id::Iri(vocab::Name::from_iri(iri, self.vocabulary_mut()));
 		self.declare_type(id, cause.clone());
 		self.declare_layout(id, cause.clone());
-		let layout = self.get_mut(id)
-			.unwrap()
-			.as_layout_mut()
-			.unwrap();
+		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
 		layout.set_native(native_layout, cause.clone())?;
 		layout.set_type(id, cause)?;
 		Ok(id)
@@ -642,10 +639,7 @@ impl<F: Clone> AllocatedNodes<F> {
 			.collect()
 	}
 
-	pub fn get(
-		&self,
-		id: Id
-	) -> Option<&Node<AllocatedComponents<F>>> {
+	pub fn get(&self, id: Id) -> Option<&Node<AllocatedComponents<F>>> {
 		self.nodes.get(&id)
 	}
 

@@ -54,7 +54,7 @@ macro_rules! errors {
 					$(
 						Description::$id(e) => {
 							let mut labels = e.other_labels(self.vocabulary());
-							
+
 							if let Some(cause) = self.error().cause() {
 								let label = cause.clone().into_primary_label();
 								let label = match AnyError::<F>::primary_label(e, self.vocabulary()) {

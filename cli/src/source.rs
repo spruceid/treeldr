@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
-use std::collections::HashMap;
-use std::ops::{Range, Deref};
 use iref::{Iri, IriBuf};
+use std::collections::HashMap;
+use std::ops::{Deref, Range};
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct FileId(usize);
@@ -9,7 +9,7 @@ pub struct FileId(usize);
 pub struct File {
 	source: PathBuf,
 	base_iri: Option<IriBuf>,
-	buffer: Buffer
+	buffer: Buffer,
 }
 
 impl File {
@@ -29,7 +29,7 @@ impl File {
 #[derive(Default)]
 pub struct Files {
 	files: Vec<File>,
-	sources: HashMap<PathBuf, FileId>
+	sources: HashMap<PathBuf, FileId>,
 }
 
 impl Files {
@@ -49,7 +49,11 @@ impl Files {
 	// 	self.get(id).map(File::buffer)
 	// }
 
-	pub fn load(&mut self, source: &impl AsRef<Path>, base_iri: Option<IriBuf>) -> std::io::Result<FileId> {
+	pub fn load(
+		&mut self,
+		source: &impl AsRef<Path>,
+		base_iri: Option<IriBuf>,
+	) -> std::io::Result<FileId> {
 		let source = source.as_ref();
 		match self.sources.get(source).cloned() {
 			Some(id) => Ok(id),
@@ -59,7 +63,7 @@ impl Files {
 				self.files.push(File {
 					source: source.into(),
 					base_iri,
-					buffer: Buffer::new(content)
+					buffer: Buffer::new(content),
 				});
 				self.sources.insert(source.into(), id);
 				Ok(id)
@@ -148,11 +152,18 @@ impl<'a> codespan_reporting::files::Files<'a> for Files {
 	type Source = &'a Buffer;
 
 	fn name(&'a self, id: FileId) -> Result<Self::Name, codespan_reporting::files::Error> {
-		Ok(self.get(id).ok_or(codespan_reporting::files::Error::FileMissing)?.source().display())
+		Ok(self
+			.get(id)
+			.ok_or(codespan_reporting::files::Error::FileMissing)?
+			.source()
+			.display())
 	}
 
 	fn source(&'a self, id: FileId) -> Result<Self::Source, codespan_reporting::files::Error> {
-		Ok(self.get(id).ok_or(codespan_reporting::files::Error::FileMissing)?.buffer())
+		Ok(self
+			.get(id)
+			.ok_or(codespan_reporting::files::Error::FileMissing)?
+			.buffer())
 	}
 
 	fn line_index(

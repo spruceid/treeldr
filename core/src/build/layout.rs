@@ -1,4 +1,4 @@
-use crate::{utils::TryCollect, vocab, Caused, Id, MaybeSet, Vocabulary, WithCauses, error, Error};
+use crate::{error, utils::TryCollect, vocab, Caused, Error, Id, MaybeSet, Vocabulary, WithCauses};
 use locspan::Location;
 
 pub mod field;

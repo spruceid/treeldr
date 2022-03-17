@@ -1,6 +1,6 @@
+use derivative::Derivative;
 use std::collections::HashMap;
 use treeldr::{layout, Ref};
-use derivative::Derivative;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Embedding {

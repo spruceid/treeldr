@@ -23,10 +23,10 @@ pub enum Error<F> {
 	AlreadyDefinedPrefix(String, Location<F>),
 	NoBaseIri,
 	BaseIriMismatch {
-		expected: IriBuf,
-		found: IriBuf,
-		because: Location<F>
-	}
+		expected: Box<IriBuf>,
+		found: Box<IriBuf>,
+		because: Location<F>,
+	},
 }
 
 impl<'c, 't, F: Clone> crate::reporting::Diagnose<F> for Loc<Error<F>, F> {
@@ -36,22 +36,31 @@ impl<'c, 't, F: Clone> crate::reporting::Diagnose<F> for Loc<Error<F>, F> {
 			Error::UndefinedPrefix(_) => "undefined prefix".to_string(),
 			Error::AlreadyDefinedPrefix(_, _) => "aready defined prefix".to_string(),
 			Error::NoBaseIri => "no base IRI".to_string(),
-			Error::BaseIriMismatch { .. } => "base IRI mismatch".to_string()
+			Error::BaseIriMismatch { .. } => "base IRI mismatch".to_string(),
 		}
 	}
 
 	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
-		let mut labels = Vec::new();
-		labels.push(self.location().clone().into_primary_label().with_message(self.to_string()));
+		let mut labels = vec![self
+			.location()
+			.clone()
+			.into_primary_label()
+			.with_message(self.to_string())];
 
 		match self.value() {
-			Error::AlreadyDefinedPrefix(_, original_loc) => {
-				labels.push(original_loc.clone().into_secondary_label().with_message(format!("original prefix defined here")))
-			}
-			Error::BaseIriMismatch { because, .. } => {
-				labels.push(because.clone().into_secondary_label().with_message(format!("original base IRI defined here")))
-			},
-			_ => ()
+			Error::AlreadyDefinedPrefix(_, original_loc) => labels.push(
+				original_loc
+					.clone()
+					.into_secondary_label()
+					.with_message("original prefix defined here".to_string()),
+			),
+			Error::BaseIriMismatch { because, .. } => labels.push(
+				because
+					.clone()
+					.into_secondary_label()
+					.with_message("original base IRI defined here".to_string()),
+			),
+			_ => (),
 		}
 
 		labels
@@ -61,11 +70,15 @@ impl<'c, 't, F: Clone> crate::reporting::Diagnose<F> for Loc<Error<F>, F> {
 impl<F> fmt::Display for Error<F> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			Self::InvalidExpandedCompactIri(expanded) => write!(f, "`{}` is not a valid IRI", expanded),
+			Self::InvalidExpandedCompactIri(expanded) => {
+				write!(f, "`{}` is not a valid IRI", expanded)
+			}
 			Self::UndefinedPrefix(prefix) => write!(f, "prefix `{}` is undefined", prefix),
-			Self::AlreadyDefinedPrefix(prefix, _) => write!(f, "prefix `{}` is already defined", prefix),
+			Self::AlreadyDefinedPrefix(prefix, _) => {
+				write!(f, "prefix `{}` is already defined", prefix)
+			}
 			Self::NoBaseIri => "cannot resolve the IRI reference without a base IRI".fmt(f),
-			Self::BaseIriMismatch { expected, .. } => write!(f, "should be `{}`", expected)
+			Self::BaseIriMismatch { expected, .. } => write!(f, "should be `{}`", expected),
 		}
 	}
 }
@@ -88,7 +101,7 @@ impl<'v, F> Context<'v, F> {
 	}
 
 	pub fn vocabulary(&self) -> &Vocabulary {
-		&self.vocabulary
+		self.vocabulary
 	}
 
 	pub fn into_vocabulary(self) -> &'v mut Vocabulary {
@@ -100,7 +113,7 @@ impl<'v, F: Clone> Context<'v, F> {
 	pub fn base_iri(&self, loc: Location<F>) -> Result<IriBuf, Loc<Error<F>, F>> {
 		match &self.scope {
 			Some(scope) => {
-				let mut iri = scope.iri(&self.vocabulary).unwrap().to_owned();
+				let mut iri = scope.iri(self.vocabulary).unwrap().to_owned();
 				iri.path_mut().open();
 				Ok(iri)
 			}
@@ -204,11 +217,14 @@ impl<F: Clone> Build<F> for Loc<crate::Document<F>, F> {
 			match declared_base_iri.take() {
 				Some(Loc(declared_base_iri, d_loc)) => {
 					if declared_base_iri != base_iri {
-						return Err(Loc(Error::BaseIriMismatch {
-							expected: declared_base_iri,
-							found: base_iri,
-							because: d_loc
-						}, loc))
+						return Err(Loc(
+							Error::BaseIriMismatch {
+								expected: Box::new(declared_base_iri),
+								found: Box::new(base_iri),
+								because: d_loc,
+							},
+							loc,
+						));
 					}
 				}
 				None => {
@@ -255,7 +271,7 @@ impl<F: Clone> Build<F> for Loc<crate::Id, F> {
 			}
 		};
 
-		Ok(Loc(Name::from_iri(iri, &mut ctx.vocabulary), loc))
+		Ok(Loc(Name::from_iri(iri, ctx.vocabulary), loc))
 	}
 }
 
@@ -617,7 +633,7 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 			Some(Loc(alias, alias_loc)) => Loc(alias.into_string(), alias_loc),
 			None => Loc(
 				prop_id
-					.iri(&ctx.vocabulary)
+					.iri(ctx.vocabulary)
 					.unwrap()
 					.path()
 					.file_name()

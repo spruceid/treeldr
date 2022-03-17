@@ -391,10 +391,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 					locspan::Loc(id, loc) => return Err(Loc::new(Error::InvalidImportId(id), loc)),
 				};
 
-				Ok(Loc::new(
-					Item::Base(iri),
-					loc
-				))
+				Ok(Loc::new(Item::Base(iri), loc))
 			}
 			Token::Keyword(lexing::Keyword::Import) => {
 				let id = Id::parse(lexer)?;

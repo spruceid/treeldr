@@ -5,10 +5,10 @@ use std::fmt;
 
 pub use shelves::Ref;
 
-pub mod error;
 pub mod build;
 mod cause;
 mod doc;
+pub mod error;
 mod feature;
 pub mod layout;
 mod maybe_set;
@@ -19,9 +19,9 @@ pub mod ty;
 pub mod utils;
 pub use treeldr_vocab as vocab;
 
-pub use error::Error;
 pub use cause::*;
 pub use doc::Documentation;
+pub use error::Error;
 pub use feature::Feature;
 pub use maybe_set::*;
 pub use node::Node;
@@ -144,14 +144,22 @@ impl<F> Model<F> {
 		&mut self.layouts
 	}
 
-	pub fn require(&self, id: Id, expected_ty: Option<node::Type>) -> Result<&Node<F>, error::Description<F>> {
-		self.get(id).ok_or_else(|| error::NodeUnknown {
-			id,
-			expected_ty
-		}.into())
+	pub fn require(
+		&self,
+		id: Id,
+		expected_ty: Option<node::Type>,
+	) -> Result<&Node<F>, error::Description<F>> {
+		self.get(id)
+			.ok_or_else(|| error::NodeUnknown { id, expected_ty }.into())
 	}
 
-	pub fn require_layout(&self, id: Id) -> Result<Ref<layout::Definition<F>>, error::Description<F>> where F: Clone {
+	pub fn require_layout(
+		&self,
+		id: Id,
+	) -> Result<Ref<layout::Definition<F>>, error::Description<F>>
+	where
+		F: Clone,
+	{
 		self.require(id, Some(node::Type::Layout))?.require_layout()
 	}
 }

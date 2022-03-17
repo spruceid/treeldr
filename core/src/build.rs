@@ -1,7 +1,6 @@
 use crate::{
 	vocab::{self, GraphLabel, Name, Object},
-	Id, Vocabulary,
-	Error
+	Error, Id, Vocabulary,
 };
 use locspan::Loc;
 

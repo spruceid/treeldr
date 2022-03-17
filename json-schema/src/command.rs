@@ -1,8 +1,8 @@
 use crate::embedding;
 use embedding::Embedding;
-use iref::{IriBuf, Iri};
+use iref::{Iri, IriBuf};
 use std::fmt;
-use treeldr::{layout, Ref, vocab::Display};
+use treeldr::{layout, vocab::Display, Ref};
 
 #[derive(clap::Args)]
 /// Generate a JSON Schema from a TreeLDR model.
@@ -36,13 +36,21 @@ impl<F> fmt::Display for Error<F> {
 	}
 }
 
-fn find_layout<F: Clone>(model: &treeldr::Model<F>, iri: Iri) -> Result<Ref<layout::Definition<F>>, Error<F>> {
-	let name = treeldr::vocab::Name::try_from_iri(iri, model.vocabulary()).ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
-	model.require_layout(treeldr::Id::Iri(name)).map_err(|e| match e {
-		treeldr::error::Description::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
-		treeldr::error::Description::NodeInvalidType(e) => Error::NotALayout(iri.into(), e.found),
-		_ => unreachable!(),
-	})
+fn find_layout<F: Clone>(
+	model: &treeldr::Model<F>,
+	iri: Iri,
+) -> Result<Ref<layout::Definition<F>>, Error<F>> {
+	let name = treeldr::vocab::Name::try_from_iri(iri, model.vocabulary())
+		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
+	model
+		.require_layout(treeldr::Id::Iri(name))
+		.map_err(|e| match e {
+			treeldr::error::Description::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
+			treeldr::error::Description::NodeInvalidType(e) => {
+				Error::NotALayout(iri.into(), e.found)
+			}
+			_ => unreachable!(),
+		})
 }
 
 impl Command {
@@ -82,9 +90,15 @@ impl Command {
 		match crate::generate(model, &embedding_config, main_layout_ref) {
 			Ok(()) => Ok(()),
 			Err(crate::Error::InvalidLayoutIri(iri)) => Err(Error::InvalidLayoutIri(iri)),
-			Err(crate::Error::InfiniteSchema(r)) => {
-				Err(Error::InfiniteSchema(model.layouts().get(r).unwrap().id().display(model.vocabulary()).to_string()))
-			}
+			Err(crate::Error::InfiniteSchema(r)) => Err(Error::InfiniteSchema(
+				model
+					.layouts()
+					.get(r)
+					.unwrap()
+					.id()
+					.display(model.vocabulary())
+					.to_string(),
+			)),
 			Err(crate::Error::Serialization(e)) => Err(Error::Serialization(e)),
 		}
 	}
