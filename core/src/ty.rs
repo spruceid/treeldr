@@ -1,7 +1,7 @@
 use crate::{layout, prop, Causes, Documentation, Id};
+use derivative::Derivative;
 use shelves::Ref;
 use std::collections::HashMap;
-use derivative::Derivative;
 
 /// Type definition.
 pub struct Definition<F> {
@@ -53,14 +53,20 @@ impl<F> Definition<F> {
 		self.properties.iter().map(|(p, c)| (*p, c))
 	}
 
-	pub fn insert_property(&mut self, prop_ref: Ref<prop::Definition<F>>, causes: impl Into<Causes<F>>) where F: Ord {
+	pub fn insert_property(
+		&mut self,
+		prop_ref: Ref<prop::Definition<F>>,
+		causes: impl Into<Causes<F>>,
+	) where
+		F: Ord,
+	{
 		self.properties.insert(prop_ref, causes.into());
 	}
 
 	// pub fn default_fields(
 	// 	&self,
 	// 	model: &crate::Model<F>,
-	// ) -> Result<Vec<layout::Field<F>>, Caused<Error<F>, F>> where F: Clone {
+	// ) -> Result<Vec<layout::Field<F>>, Error<F>> where F: Clone {
 	// 	struct PropertyIri<'a, F>(Iri<'a>, Ref<prop::Definition<F>>, &'a Causes<F>);
 
 	// 	impl<'a, F> PartialEq for PropertyIri<'a, F> {
@@ -143,7 +149,7 @@ impl<F> Definition<F> {
 // }
 
 #[derive(Derivative)]
-#[derivative(Clone(bound=""), Copy(bound=""))]
+#[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub struct Expr<F> {
 	ty_ref: Ref<Definition<F>>,
 	implicit_layout_ref: Option<Ref<layout::Definition<F>>>,

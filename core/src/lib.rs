@@ -1,33 +1,32 @@
-use iref::{Iri, IriBuf};
+use derivative::Derivative;
+use shelves::Shelf;
 use std::collections::HashMap;
 use std::fmt;
-use shelves::Shelf;
 
-pub mod utils;
 pub mod build;
 mod cause;
-mod maybe_set;
 mod doc;
 mod feature;
 pub mod layout;
+mod maybe_set;
 pub mod node;
 pub mod prop;
-// pub mod source;
+pub mod reporting;
 pub mod ty;
+pub mod utils;
 pub use treeldr_vocab as vocab;
 
 pub use cause::*;
-pub use maybe_set::*;
 pub use doc::Documentation;
 pub use feature::Feature;
+pub use maybe_set::*;
 pub use node::Node;
 pub use vocab::{Id, Vocabulary};
 
 /// TreeLDR model.
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
 pub struct Model<F> {
-	/// Base IRI.
-	base_iri: IriBuf,
-
 	/// Vocabulary.
 	vocab: Vocabulary,
 
@@ -41,23 +40,38 @@ pub struct Model<F> {
 	properties: Shelf<Vec<prop::Definition<F>>>,
 
 	/// Layout definitions.
-	layouts: Shelf<Vec<layout::Definition<F>>>
+	layouts: Shelf<Vec<layout::Definition<F>>>,
 }
 
 impl<F> Model<F> {
 	/// Creates a new empty context.
-	pub fn new(base_iri: impl Into<IriBuf>) -> Self {
-		Self::with_vocabulary(base_iri, Vocabulary::new())
+	pub fn new() -> Self {
+		Self::default()
 	}
 
-	pub fn with_vocabulary(base_iri: impl Into<IriBuf>, vocab: Vocabulary) -> Self {
+	pub fn with_vocabulary(vocab: Vocabulary) -> Self {
 		Self {
-			base_iri: base_iri.into(),
 			vocab,
 			nodes: HashMap::new(),
 			types: Shelf::default(),
 			properties: Shelf::default(),
-			layouts: Shelf::default()
+			layouts: Shelf::default(),
+		}
+	}
+
+	pub fn from_parts(
+		vocab: Vocabulary,
+		nodes: HashMap<Id, Node<F>>,
+		types: Shelf<Vec<ty::Definition<F>>>,
+		properties: Shelf<Vec<prop::Definition<F>>>,
+		layouts: Shelf<Vec<layout::Definition<F>>>,
+	) -> Self {
+		Self {
+			vocab,
+			nodes,
+			types,
+			properties,
+			layouts,
 		}
 	}
 
@@ -78,18 +92,13 @@ impl<F> Model<F> {
 	// 	self.define_native_type(iri, layout::Native::Reference(arg_layout_ref), cause)
 	// }
 
-	// pub fn check(&self) -> Result<(), Caused<Error<F>, F>> where F: Clone {
+	// pub fn check(&self) -> Result<(), Error<F>> where F: Clone {
 	// 	for (_, layout) in self.layouts.iter() {
 	// 		layout.check(self)?;
 	// 	}
 
 	// 	Ok(())
 	// }
-
-	/// Returns the current base IRI.
-	pub fn base_iri(&self) -> Iri {
-		self.base_iri.as_iri()
-	}
 
 	/// Returns a reference to the vocabulary.
 	pub fn vocabulary(&self) -> &Vocabulary {
@@ -111,11 +120,11 @@ impl<F> Model<F> {
 		self.nodes.get_mut(&id)
 	}
 
-	pub fn nodes(&self) -> impl Iterator<Item=(Id, &Node<F>)> {
+	pub fn nodes(&self) -> impl Iterator<Item = (Id, &Node<F>)> {
 		self.nodes.iter().map(|(id, node)| (*id, node))
 	}
 
-	pub fn nodes_mut(&mut self) -> impl Iterator<Item=(Id, &mut Node<F>)> {
+	pub fn nodes_mut(&mut self) -> impl Iterator<Item = (Id, &mut Node<F>)> {
 		self.nodes.iter_mut().map(|(id, node)| (*id, node))
 	}
 
@@ -159,17 +168,14 @@ impl<F> Model<F> {
 
 pub struct WithModel<'m, 't, T: ?Sized, F> {
 	model: &'m Model<F>,
-	value: &'t T
+	value: &'t T,
 }
 
 pub trait DisplayWithModel<F> {
 	fn fmt(&self, model: &Model<F>, f: &mut fmt::Formatter) -> fmt::Result;
 
 	fn with_model<'m>(&self, model: &'m Model<F>) -> WithModel<'m, '_, Self, F> {
-		WithModel {
-			model,
-			value: self
-		}
+		WithModel { model, value: self }
 	}
 }
 

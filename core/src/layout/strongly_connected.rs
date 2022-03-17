@@ -1,22 +1,22 @@
 use super::Definition;
-use crate::{Collection, Ref};
+use shelves::{Ref, Shelf};
 use std::collections::HashMap;
 
 pub struct StronglyConnectedLayouts<'l, F> {
-	layouts: &'l Collection<Definition<F>>,
+	layouts: &'l Shelf<Vec<Definition<F>>>,
 	map: HashMap<Ref<Definition<F>>, u32>,
 	component_count: u32,
 }
 
 impl<'l, F> StronglyConnectedLayouts<'l, F> {
 	#[inline(always)]
-	pub fn new(layouts: &'l Collection<Definition<F>>) -> Self {
+	pub fn new(layouts: &'l Shelf<Vec<Definition<F>>>) -> Self {
 		Self::from_entry_points(layouts, layouts.iter().map(|(layout_ref, _)| layout_ref))
 	}
 
 	#[inline(always)]
 	pub fn from_entry_points<I: IntoIterator<Item = Ref<Definition<F>>>>(
-		layouts: &'l Collection<Definition<F>>,
+		layouts: &'l Shelf<Vec<Definition<F>>>,
 		entry_points: I,
 	) -> Self {
 		Self::from_entry_points_with_filter(layouts, entry_points, |_, _| true)
@@ -24,7 +24,7 @@ impl<'l, F> StronglyConnectedLayouts<'l, F> {
 
 	#[inline(always)]
 	pub fn with_filter(
-		layouts: &'l Collection<Definition<F>>,
+		layouts: &'l Shelf<Vec<Definition<F>>>,
 		filter: impl Clone + Fn(Ref<Definition<F>>, Ref<Definition<F>>) -> bool,
 	) -> Self {
 		Self::from_entry_points_with_filter(
@@ -35,7 +35,7 @@ impl<'l, F> StronglyConnectedLayouts<'l, F> {
 	}
 
 	pub fn from_entry_points_with_filter<I: IntoIterator<Item = Ref<Definition<F>>>>(
-		layouts: &'l Collection<Definition<F>>,
+		layouts: &'l Shelf<Vec<Definition<F>>>,
 		entry_points: I,
 		filter: impl Clone + Fn(Ref<Definition<F>>, Ref<Definition<F>>) -> bool,
 	) -> Self {
@@ -90,7 +90,7 @@ impl<'l, F> StronglyConnectedLayouts<'l, F> {
 		let layout = self.layouts.get(layout_ref)?;
 		let component = self.component(layout_ref)?;
 
-		for sub_layout_ref in layout.composing_layouts().into_iter().flatten() {
+		for sub_layout_ref in layout.composing_layouts() {
 			if filter(sub_layout_ref) && self.component(sub_layout_ref)? == component {
 				return Some(true);
 			}
@@ -125,7 +125,7 @@ fn strong_connect<'l, F>(
 	);
 
 	let layout = components.layouts.get(layout_ref).unwrap();
-	for sub_layout_ref in layout.composing_layouts().into_iter().flatten() {
+	for sub_layout_ref in layout.composing_layouts() {
 		if filter(layout_ref, sub_layout_ref) {
 			let new_layout_low_link = match map.get(&sub_layout_ref) {
 				None => {

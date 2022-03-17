@@ -1,53 +1,64 @@
 use crate::{
-	Caused,
-	Id,
-	vocab::{
-		self,
-		Name,
-		Object,
-		GraphLabel
-	}
+	vocab::{self, GraphLabel, Name, Object},
+	Id, Vocabulary,
 };
 use locspan::Loc;
 
-pub mod error;
-pub mod node;
-pub mod list;
-pub mod ty;
-pub mod prop;
-pub mod layout;
 mod context;
+pub mod error;
+pub mod layout;
+pub mod list;
+pub mod node;
+pub mod prop;
+pub mod ty;
 
-pub use error::Error;
-pub use node::Node;
-pub use list::{ListRef, ListMut};
 pub use context::Context;
+pub use error::Error;
+pub use list::{ListMut, ListRef};
+pub use node::Node;
 
-fn expect_id<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<Id, F>, Caused<Error<F>, F>> {
+fn expect_id<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<Id, F>, Error<F>> {
 	match value {
 		vocab::Object::Literal(_) => panic!("expected IRI or blank node label"),
 		vocab::Object::Blank(id) => Ok(Loc(Id::Blank(id), loc)),
-		vocab::Object::Iri(id) => Ok(Loc(Id::Iri(id), loc))
+		vocab::Object::Iri(id) => Ok(Loc(Id::Iri(id), loc)),
 	}
 }
 
-fn expect_boolean<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<bool, F>, Caused<Error<F>, F>> {
+fn expect_boolean<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<bool, F>, Error<F>> {
 	match value {
 		vocab::Object::Iri(vocab::Name::Schema(vocab::Schema::True)) => Ok(Loc(true, loc)),
 		vocab::Object::Iri(vocab::Name::Schema(vocab::Schema::False)) => Ok(Loc(false, loc)),
-		_ => panic!("expected a boolean value")
+		_ => panic!("expected a boolean value"),
 	}
 }
 
-fn expect_raw_string<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<rdf_types::StringLiteral, F>, Caused<Error<F>, F>> {
+fn expect_raw_string<F>(
+	Loc(value, _): Loc<vocab::Object<F>, F>,
+) -> Result<Loc<rdf_types::StringLiteral, F>, Error<F>> {
 	match value {
 		vocab::Object::Literal(rdf_types::loc::Literal::String(s)) => Ok(s),
-		_ => panic!("expected a untyped and untagged string literal")
+		_ => panic!("expected a untyped and untagged string literal"),
 	}
 }
 
+pub type ErrorWithVocabulary<F> = (Error<F>, Vocabulary);
+
 impl<F: Clone + Ord> Context<F> {
-	pub fn build(&mut self, dataset: grdf::loc::BTreeDataset<Id, Name, Object<F>, GraphLabel, F>) -> Result<(), Caused<Error<F>, F>> {
+	pub fn build_dataset(
+		mut self,
+		dataset: grdf::loc::BTreeDataset<Id, Name, Object<F>, GraphLabel, F>,
+	) -> Result<crate::Model<F>, ErrorWithVocabulary<F>> {
+		match self.add_dataset(dataset) {
+			Ok(()) => self.build(),
+			Err(e) => Err((e, self.into_vocabulary())),
+		}
+	}
+
+	pub fn add_dataset(
+		&mut self,
+		dataset: grdf::loc::BTreeDataset<Id, Name, Object<F>, GraphLabel, F>,
+	) -> Result<(), Error<F>> {
 		// Step 1: find out the type of each node.
 		for Loc(quad, loc) in dataset.loc_quads() {
 			let Loc(id, _) = quad.subject().cloned_value();
@@ -56,62 +67,61 @@ impl<F: Clone + Ord> Context<F> {
 				match quad.object().value() {
 					Object::Iri(Name::Rdf(vocab::Rdf::Property)) => {
 						self.declare_property(id, Some(loc.cloned()));
-					},
+					}
 					Object::Iri(Name::Rdf(vocab::Rdf::List)) => {
 						self.declare_list(id, Some(loc.cloned()));
-					},
+					}
 					Object::Iri(Name::Rdfs(vocab::Rdfs::Class)) => {
 						self.declare_type(id, Some(loc.cloned()));
-					},
+					}
 					Object::Iri(Name::TreeLdr(vocab::TreeLdr::Layout)) => {
 						self.declare_layout(id, Some(loc.cloned()));
-					},
+					}
 					Object::Iri(Name::TreeLdr(vocab::TreeLdr::Field)) => {
 						self.declare_layout_field(id, Some(loc.cloned()));
-					},
-					_ => ()
+					}
+					_ => (),
 				}
 			}
 		}
 
 		// Step 2: find out the properties of each node.
-		for Loc(rdf_types::Quad(subject, predicate, object, _graph), loc) in dataset.into_loc_quads() {
+		for Loc(rdf_types::Quad(subject, predicate, object, _graph), loc) in
+			dataset.into_loc_quads()
+		{
 			let Loc(id, id_loc) = subject;
 
 			match predicate.into_value() {
-				Name::Rdf(vocab::Rdf::First) => {
-					match self.require_list_mut(id, Some(id_loc))? {
-						ListMut::Cons(list) => {
-							list.set_first(object.into_value(), Some(loc))?
-						}
-						ListMut::Nil => {
-							panic!("nil first")
-						}
+				Name::Rdf(vocab::Rdf::First) => match self.require_list_mut(id, Some(id_loc))? {
+					ListMut::Cons(list) => list.set_first(object.into_value(), Some(loc))?,
+					ListMut::Nil => {
+						panic!("nil first")
 					}
 				},
-				Name::Rdf(vocab::Rdf::Rest) => {
-					match self.require_list_mut(id, Some(id_loc))? {
-						ListMut::Cons(list) => {
-							let Loc(object, _) = expect_id(object)?;
-							list.set_rest(object, Some(loc))?
-						}
-						ListMut::Nil => {
-							panic!("nil first")
-						}
+				Name::Rdf(vocab::Rdf::Rest) => match self.require_list_mut(id, Some(id_loc))? {
+					ListMut::Cons(list) => {
+						let Loc(object, _) = expect_id(object)?;
+						list.set_rest(object, Some(loc))?
+					}
+					ListMut::Nil => {
+						panic!("nil rest")
 					}
 				},
-				Name::Rdfs(vocab::Rdfs::Comment) => {
-					match object.as_literal() {
-						Some(literal) => {
-							self.add_comment(id, literal.string_literal().value().to_string(), Some(loc));
-						}
-						None => {
-							panic!("comment is not a string literal")
-						}
+				Name::Rdfs(vocab::Rdfs::Comment) => match object.as_literal() {
+					Some(literal) => {
+						self.add_comment(
+							id,
+							literal.string_literal().value().to_string(),
+							Some(loc),
+						);
 					}
-				}
+					None => {
+						panic!("comment is not a string literal")
+					}
+				},
 				Name::Rdfs(vocab::Rdfs::Domain) => {
-					let (prop, field) = self.require_property_or_layout_field_mut(id, Some(id_loc))?;
+					let (prop, field) =
+						self.require_property_or_layout_field_mut(id, Some(id_loc))?;
 					let Loc(object, object_loc) = expect_id(object)?;
 
 					if let Some(field) = field {
@@ -130,9 +140,10 @@ impl<F: Clone + Ord> Context<F> {
 					prop.declare_range(object, Some(loc))?
 				}
 				Name::Schema(vocab::Schema::ValueRequired) => {
-					let (prop, field) = self.require_property_or_layout_field_mut(id, Some(id_loc))?;
+					let (prop, field) =
+						self.require_property_or_layout_field_mut(id, Some(id_loc))?;
 					let Loc(required, _) = expect_boolean(object)?;
-					
+
 					if let Some(prop) = prop {
 						prop.set_required(required, Some(loc.clone()))?
 					}
@@ -142,7 +153,8 @@ impl<F: Clone + Ord> Context<F> {
 					}
 				}
 				Name::Schema(vocab::Schema::MultipleValues) => {
-					let (prop, field) = self.require_property_or_layout_field_mut(id, Some(id_loc))?;
+					let (prop, field) =
+						self.require_property_or_layout_field_mut(id, Some(id_loc))?;
 					let Loc(multiple, _) = expect_boolean(object)?;
 
 					if let Some(prop) = prop {
@@ -189,7 +201,7 @@ impl<F: Clone + Ord> Context<F> {
 					let layout = self.require_layout_mut(id, Some(id_loc))?;
 					layout.set_deref_to(target_id, Some(loc))?
 				}
-				_ => ()
+				_ => (),
 			}
 		}
 

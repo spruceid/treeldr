@@ -1,7 +1,7 @@
 use derivative::Derivative;
+use locspan::Location;
 use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
-use locspan::Location;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct Caused<T, F> {
@@ -31,6 +31,16 @@ impl<T, F> Caused<T, F> {
 	}
 }
 
+impl<T, F> Caused<Caused<T, F>, F> {
+	pub fn flatten(self) -> Caused<T, F> {
+		if self.t.cause.is_none() {
+			Caused::new(self.t.t, self.cause)
+		} else {
+			self.t
+		}
+	}
+}
+
 impl<T, F> Deref for Caused<T, F> {
 	type Target = T;
 
@@ -46,7 +56,7 @@ impl<T, F> DerefMut for Caused<T, F> {
 }
 
 #[derive(Derivative)]
-#[derivative(Clone, Default(bound=""))]
+#[derivative(Clone, Default(bound = ""), Debug)]
 pub struct Causes<F> {
 	set: BTreeSet<Location<F>>,
 }
@@ -57,7 +67,10 @@ impl<F> Causes<F> {
 	}
 
 	/// Adds a new cause.
-	pub fn add(&mut self, cause: Location<F>) where F: Ord {
+	pub fn add(&mut self, cause: Location<F>)
+	where
+		F: Ord,
+	{
 		self.set.insert(cause);
 	}
 
@@ -74,7 +87,10 @@ impl<F> Causes<F> {
 		self.set.iter()
 	}
 
-	pub fn map(&self, f: impl Fn(Location<F>) -> Location<F>) -> Self where F: Clone + Ord {
+	pub fn map(&self, f: impl Fn(Location<F>) -> Location<F>) -> Self
+	where
+		F: Clone + Ord,
+	{
 		Self {
 			set: self.set.iter().cloned().map(f).collect(),
 		}
@@ -99,6 +115,7 @@ impl<F: Ord> From<Option<Location<F>>> for Causes<F> {
 	}
 }
 
+#[derive(Clone, Debug)]
 pub struct WithCauses<T, F> {
 	t: T,
 	causes: Causes<F>,
@@ -115,7 +132,7 @@ impl<T, F> WithCauses<T, F> {
 	pub fn without_causes(t: T) -> Self {
 		Self {
 			t,
-			causes: Causes::new()
+			causes: Causes::new(),
 		}
 	}
 
@@ -123,11 +140,17 @@ impl<T, F> WithCauses<T, F> {
 		&self.causes
 	}
 
-	pub fn add_cause(&mut self, cause: Location<F>) where F: Ord {
+	pub fn add_cause(&mut self, cause: Location<F>)
+	where
+		F: Ord,
+	{
 		self.causes.add(cause)
 	}
 
-	pub fn add_opt_cause(&mut self, cause: Option<Location<F>>) where F: Ord {
+	pub fn add_opt_cause(&mut self, cause: Option<Location<F>>)
+	where
+		F: Ord,
+	{
 		if let Some(cause) = cause {
 			self.causes.add(cause)
 		}
@@ -140,29 +163,38 @@ impl<T, F> WithCauses<T, F> {
 	pub fn inner_mut(&mut self) -> &mut T {
 		&mut self.t
 	}
-	
+
 	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> WithCauses<U, F> {
 		WithCauses::new(f(self.t), self.causes)
 	}
 
-	pub fn try_map<U, E>(self, f: impl FnOnce(T) -> Result<U, E>) -> Result<WithCauses<U, F>, Caused<E, F>> {
+	pub fn try_map<U, E>(
+		self,
+		f: impl FnOnce(T) -> Result<U, E>,
+	) -> Result<WithCauses<U, F>, Caused<E, F>> {
 		match f(self.t) {
 			Ok(value) => Ok(WithCauses::new(value, self.causes)),
-			Err(e) => Err(Caused::new(e, self.causes.into_preferred()))
+			Err(e) => Err(Caused::new(e, self.causes.into_preferred())),
 		}
 	}
 
-	pub fn try_map_with_causes<U, E, M>(self, f: M) -> Result<WithCauses<U, F>, Caused<E, F>> where M: FnOnce(T, &Causes<F>) -> Result<U, E> {
+	pub fn try_map_with_causes<U, E, M>(self, f: M) -> Result<WithCauses<U, F>, Caused<E, F>>
+	where
+		M: FnOnce(T, &Causes<F>) -> Result<U, E>,
+	{
 		match f(self.t, &self.causes) {
 			Ok(value) => Ok(WithCauses::new(value, self.causes)),
-			Err(e) => Err(Caused::new(e, self.causes.into_preferred()))
+			Err(e) => Err(Caused::new(e, self.causes.into_preferred())),
 		}
 	}
 
-	pub fn clone_with_causes(&self, causes: impl Into<Causes<F>>) -> WithCauses<T, F> where T: Clone {
+	pub fn clone_with_causes(&self, causes: impl Into<Causes<F>>) -> WithCauses<T, F>
+	where
+		T: Clone,
+	{
 		WithCauses {
 			t: self.t.clone(),
-			causes: causes.into()
+			causes: causes.into(),
 		}
 	}
 

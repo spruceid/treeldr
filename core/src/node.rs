@@ -1,6 +1,6 @@
-use crate::{layout, prop, ty, Caused, Id, Documentation};
-use shelves::Ref;
+use crate::{layout, prop, ty, Caused, Documentation, Id, MaybeSet};
 use locspan::Location;
+use shelves::Ref;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Type {
@@ -8,7 +8,7 @@ pub enum Type {
 	Property,
 	Layout,
 	LayoutField,
-	List
+	List,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -17,7 +17,7 @@ pub struct Types {
 	pub property: bool,
 	pub layout: bool,
 	pub layout_field: bool,
-	pub list: bool
+	pub list: bool,
 }
 
 impl Types {
@@ -27,7 +27,7 @@ impl Types {
 			Type::Property => self.property,
 			Type::Layout => self.layout,
 			Type::LayoutField => self.layout_field,
-			Type::List => self.list
+			Type::List => self.list,
 		}
 	}
 }
@@ -52,7 +52,7 @@ impl<F> CausedTypes<F> {
 			Type::Property => self.property.as_ref(),
 			Type::Layout => self.layout.as_ref(),
 			Type::LayoutField => self.layout_field.as_ref(),
-			Type::List => self.list.as_ref()
+			Type::List => self.list.as_ref(),
 		}
 	}
 
@@ -62,7 +62,7 @@ impl<F> CausedTypes<F> {
 			property: self.property.as_ref(),
 			layout: self.layout.as_ref(),
 			layout_field: self.layout_field.as_ref(),
-			list: self.list.as_ref()
+			list: self.list.as_ref(),
 		}
 	}
 }
@@ -100,8 +100,8 @@ impl<'a, F: Clone> Iterator for CausedTypesIter<'a, F> {
 							.list
 							.take()
 							.map(|cause| Caused::new(Type::List, cause.clone())),
-					}
-				}
+					},
+				},
 			},
 		}
 	}
@@ -110,20 +110,36 @@ impl<'a, F: Clone> Iterator for CausedTypesIter<'a, F> {
 #[derive(Debug)]
 pub struct Node<F> {
 	id: Id,
-	ty: Option<Ref<ty::Definition<F>>>,
-	property: Option<Ref<prop::Definition<F>>>,
-	layout: Option<Ref<layout::Definition<F>>>,
-	doc: Documentation
+	ty: MaybeSet<Ref<ty::Definition<F>>, F>,
+	property: MaybeSet<Ref<prop::Definition<F>>, F>,
+	layout: MaybeSet<Ref<layout::Definition<F>>, F>,
+	doc: Documentation,
 }
 
 impl<F> Node<F> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
-			ty: None,
-			property: None,
-			layout: None,
-			doc: Documentation::default()
+			ty: MaybeSet::default(),
+			property: MaybeSet::default(),
+			layout: MaybeSet::default(),
+			doc: Documentation::default(),
+		}
+	}
+
+	pub fn from_parts(
+		id: Id,
+		ty: MaybeSet<Ref<ty::Definition<F>>, F>,
+		property: MaybeSet<Ref<prop::Definition<F>>, F>,
+		layout: MaybeSet<Ref<layout::Definition<F>>, F>,
+		doc: Documentation,
+	) -> Self {
+		Self {
+			id,
+			ty,
+			property,
+			layout,
+			doc,
 		}
 	}
 
@@ -140,26 +156,26 @@ impl<F> Node<F> {
 	}
 
 	pub fn is_type(&self) -> bool {
-		self.ty.is_some()
+		self.ty.is_set()
 	}
 
 	pub fn is_property(&self) -> bool {
-		self.property.is_some()
+		self.property.is_set()
 	}
 
 	pub fn is_layout(&self) -> bool {
-		self.layout.is_some()
+		self.layout.is_set()
 	}
 
 	pub fn as_type(&self) -> Option<Ref<ty::Definition<F>>> {
-		self.ty
+		self.ty.value().cloned()
 	}
 
 	pub fn as_property(&self) -> Option<Ref<prop::Definition<F>>> {
-		self.property
+		self.property.value().cloned()
 	}
 
 	pub fn as_layout(&self) -> Option<Ref<layout::Definition<F>>> {
-		self.layout
+		self.layout.value().cloned()
 	}
 }

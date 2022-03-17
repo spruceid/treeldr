@@ -9,7 +9,7 @@ pub struct Block {
 	short_end: usize,
 
 	/// Byte index of the start of the long description.
-	long_start: usize
+	long_start: usize,
 }
 
 impl Block {
@@ -20,7 +20,7 @@ impl Block {
 		enum State {
 			Short,
 			ShortNewline,
-			Separation
+			Separation,
 		}
 
 		let mut state = State::Short;
@@ -48,7 +48,7 @@ impl Block {
 					long_start = i;
 
 					if !c.is_whitespace() {
-						break
+						break;
 					}
 				}
 			}
@@ -57,7 +57,7 @@ impl Block {
 		Self {
 			data: s,
 			short_end,
-			long_start
+			long_start,
 		}
 	}
 
@@ -82,7 +82,7 @@ impl Block {
 
 #[derive(Clone, Default, Debug)]
 pub struct Documentation {
-	blocks: BTreeSet<Block>
+	blocks: BTreeSet<Block>,
 }
 
 impl Documentation {
@@ -97,7 +97,7 @@ impl Documentation {
 	pub fn short_description(&self) -> Option<&str> {
 		for block in &self.blocks {
 			if let Some(s) = block.short_description() {
-				return Some(s)
+				return Some(s);
 			}
 		}
 
@@ -107,7 +107,7 @@ impl Documentation {
 	pub fn long_description(&self) -> Option<&str> {
 		for block in &self.blocks {
 			if let Some(s) = block.long_description() {
-				return Some(s)
+				return Some(s);
 			}
 		}
 

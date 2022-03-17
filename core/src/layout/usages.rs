@@ -1,5 +1,5 @@
 use super::Definition;
-use crate::{Collection, Ref};
+use shelves::{Ref, Shelf};
 use std::collections::{HashMap, HashSet};
 
 pub struct Usages<F> {
@@ -7,7 +7,7 @@ pub struct Usages<F> {
 }
 
 impl<F> Usages<F> {
-	pub fn new(layouts: &Collection<Definition<F>>) -> Self {
+	pub fn new(layouts: &Shelf<Vec<Definition<F>>>) -> Self {
 		use std::collections::hash_map::Entry;
 		let mut map: HashMap<Ref<Definition<F>>, HashSet<Ref<Definition<F>>>> = HashMap::new();
 
@@ -16,7 +16,7 @@ impl<F> Usages<F> {
 				entry.insert(HashSet::new());
 			}
 
-			for sub_layout_ref in layout.composing_layouts().into_iter().flatten() {
+			for sub_layout_ref in layout.composing_layouts() {
 				match map.entry(sub_layout_ref) {
 					Entry::Occupied(mut entry) => {
 						entry.get_mut().insert(layout_ref);

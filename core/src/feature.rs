@@ -3,13 +3,13 @@ use std::fmt;
 /// Experimental/uncomplete features.
 #[derive(Debug)]
 pub enum Feature {
-	Error(&'static str)
+	Error(&'static str),
 }
 
 impl Feature {
 	fn name(&self) -> String {
 		match self {
-			Self::Error(s) => format!("error `{}`", s)
+			Self::Error(s) => format!("error `{}`", s),
 		}
 	}
 }

@@ -1,4 +1,4 @@
-use crate::{ty, Causes, WithCauses, Documentation, Id};
+use crate::{ty, Causes, Documentation, Id, WithCauses};
 use shelves::Ref;
 use std::collections::HashMap;
 
@@ -19,7 +19,7 @@ impl<F> Definition<F> {
 		range: WithCauses<Ref<ty::Definition<F>>, F>,
 		required: WithCauses<bool, F>,
 		functional: WithCauses<bool, F>,
-		causes: impl Into<Causes<F>>
+		causes: impl Into<Causes<F>>,
 	) -> Self {
 		Self {
 			id,
@@ -41,7 +41,10 @@ impl<F> Definition<F> {
 		&self.causes
 	}
 
-	pub fn insert_domain(&mut self, ty_ref: Ref<ty::Definition<F>>, causes: impl Into<Causes<F>>) where F: Ord {
+	pub fn insert_domain(&mut self, ty_ref: Ref<ty::Definition<F>>, causes: impl Into<Causes<F>>)
+	where
+		F: Ord,
+	{
 		self.domain.insert(ty_ref, causes.into());
 	}
 

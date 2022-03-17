@@ -1,20 +1,17 @@
-use derivative::Derivative;
-use crate::{layout, prop, ty, vocab::Display, Caused, Causes, MaybeSet, Id, WithCauses};
+use crate::{layout, prop, ty, Causes, Id, WithCauses};
 use shelves::Ref;
-use std::fmt;
-use locspan::Location;
 
-// mod strongly_connected;
-// mod usages;
+mod strongly_connected;
+mod usages;
 
-// pub use strongly_connected::StronglyConnectedLayouts;
-// pub use usages::Usages;
+pub use strongly_connected::StronglyConnectedLayouts;
+pub use usages::Usages;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Type {
 	Native(Native),
 	Struct,
-	Reference
+	Reference,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -30,7 +27,7 @@ pub enum Native {
 	DateTime,
 	Iri,
 	Uri,
-	Url
+	Url,
 }
 
 /// Layout definition.
@@ -64,7 +61,7 @@ impl<F> Definition<F> {
 		name: WithCauses<String, F>,
 		ty: WithCauses<Ref<ty::Definition<F>>, F>,
 		desc: WithCauses<Description<F>, F>,
-		causes: impl Into<Causes<F>>
+		causes: impl Into<Causes<F>>,
 	) -> Self {
 		Self {
 			id,
@@ -108,73 +105,31 @@ impl<F> Definition<F> {
 	// 	}
 	// }
 
-	// pub fn composing_layouts(&self) -> Option<ComposingLayouts<F>> {
-	// 	match self.description()?.inner() {
-	// 		Description::Struct(fields) => Some(ComposingLayouts::Struct(fields.iter())),
-	// 		Description::Native(_) => Some(ComposingLayouts::Native),
-	// 	}
-	// }
+	pub fn composing_layouts(&self) -> ComposingLayouts<F> {
+		match self.description().inner() {
+			Description::Struct(fields) => ComposingLayouts::Struct(fields.iter()),
+			Description::Reference(_) => ComposingLayouts::Reference,
+			Description::Native(_) => ComposingLayouts::Native,
+		}
+	}
 }
 
-// pub enum ComposingLayouts<'a, F> {
-// 	Struct(std::slice::Iter<'a, Field<F>>),
-// 	Native,
-// }
+pub enum ComposingLayouts<'a, F> {
+	Struct(std::slice::Iter<'a, Field<F>>),
+	Reference,
+	Native,
+}
 
-// impl<'a, F> Iterator for ComposingLayouts<'a, F> {
-// 	type Item = Ref<Definition<F>>;
+impl<'a, F> Iterator for ComposingLayouts<'a, F> {
+	type Item = Ref<Definition<F>>;
 
-// 	fn next(&mut self) -> Option<Self::Item> {
-// 		match self {
-// 			Self::Struct(fields) => Some(fields.next()?.layout()),
-// 			Self::Native => None,
-// 		}
-// 	}
-// }
-
-/// Layout mismatch error.
-#[derive(Debug)]
-pub enum Mismatch<F> {
-	Type {
-		expected: Type,
-		found: Type,
-		because: Option<Location<F>>,
-	},
-	FieldProperty {
-		expected: Ref<prop::Definition<F>>,
-		found: Ref<prop::Definition<F>>,
-		because: Option<Location<F>>,
-	},
-	FieldName {
-		expected: String,
-		found: String,
-		because: Option<Location<F>>,
-	},
-	FieldLayout {
-		expected: Ref<Definition<F>>,
-		found: Ref<Definition<F>>,
-		because: Option<Location<F>>,
-	},
-	AttributeRequired {
-		/// Is the field required?
-		///
-		/// If `true` then it is, and some other declaration is missing the `required` attribute.
-		/// If `false` then it is not, and some other declaration is adding the attribute.
-		required: bool,
-		because: Option<Location<F>>,
-	},
-	AttributeFunctional {
-		functional: bool,
-		because: Option<Location<F>>,
-	},
-	MissingField {
-		name: String,
-		because: Option<Location<F>>,
-	},
-	AdditionalField {
-		name: String,
-		because: Option<Location<F>>,
-	},
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			Self::Struct(fields) => Some(fields.next()?.layout()),
+			Self::Reference => None,
+			Self::Native => None,
+		}
+	}
 }
 
 // /// Layout fields.
@@ -192,7 +147,7 @@ pub enum Mismatch<F> {
 // 		model: &crate::Model<F>,
 // 		causes: &Causes<F>,
 // 		ty_ref: Ref<ty::Definition<F>>,
-// 	) -> Result<(), Caused<Error<F>, F>> where F: Clone {
+// 	) -> Result<(), Error<F>> where F: Clone {
 // 		let ty = model.types().get(ty_ref).unwrap();
 
 // 		for (prop_ref, _) in ty.properties() {
@@ -339,36 +294,56 @@ pub enum Mismatch<F> {
 
 /// Layout field.
 pub struct Field<F> {
-	prop: Ref<prop::Definition<F>>,
-	name: String,
-	layout: Ref<Definition<F>>,
-	required: bool,
-	functional: bool,
-	causes: Causes<F>
+	prop: WithCauses<Ref<prop::Definition<F>>, F>,
+	name: WithCauses<String, F>,
+	layout: WithCauses<Ref<Definition<F>>, F>,
+	required: WithCauses<bool, F>,
+	functional: WithCauses<bool, F>,
 }
 
-// impl<F> Field<F> {
-// 	pub fn new(
-// 		prop: Ref<prop::Definition<F>>,
-// 		name: String,
-// 		layout: Ref<Definition<F>>,
-// 		causes: impl Into<Causes<F>>,
-// 	) -> Self {
-// 		Self {
-// 			prop,
-// 			name,
-// 			layout,
-// 			required: false,
-// 			functional: true,
-// 			causes: causes.into()
-// 		}
-// 	}
+impl<F> Field<F> {
+	pub fn new(
+		prop: WithCauses<Ref<prop::Definition<F>>, F>,
+		name: WithCauses<String, F>,
+		layout: WithCauses<Ref<Definition<F>>, F>,
+		required: WithCauses<bool, F>,
+		functional: WithCauses<bool, F>,
+	) -> Self {
+		Self {
+			prop,
+			name,
+			layout,
+			required,
+			functional,
+		}
+	}
+
+	pub fn property(&self) -> Ref<prop::Definition<F>> {
+		*self.prop.inner()
+	}
+
+	pub fn name(&self) -> &str {
+		self.name.inner().as_str()
+	}
+
+	pub fn layout(&self) -> Ref<layout::Definition<F>> {
+		*self.layout.inner()
+	}
+
+	pub fn is_required(&self) -> bool {
+		*self.required.inner()
+	}
+
+	pub fn is_functional(&self) -> bool {
+		*self.functional.inner()
+	}
+}
 
 // 	/// Check the well-formedness of this field.
 // 	///
 // 	/// The layout must be fit for the given property type.
 // 	/// The field must be required if the property is required.
-// 	pub fn check(&self, model: &crate::Model<F>) -> Result<(), Caused<Error<F>, F>> where F: Clone {
+// 	pub fn check(&self, model: &crate::Model<F>) -> Result<(), Error<F>> where F: Clone {
 // 		let prop = model.properties().get(self.prop).unwrap();
 
 // 		if prop.is_required() && !self.is_required() {
