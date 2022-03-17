@@ -2,23 +2,23 @@ use locspan::Loc;
 use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;
-use treeldr_syntax::build::{GraphLabel, Id, Namespace, StrippedObject, Subject};
+use treeldr_vocab::{GraphLabel, Name, Vocabulary, StrippedObject, Id};
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
 }
 
 #[derive(Default)]
-struct BlankIdGenerator(HashMap<rdf_types::BlankIdBuf, treeldr_syntax::build::BlankLabel>);
+struct BlankIdGenerator(HashMap<rdf_types::BlankIdBuf, treeldr_vocab::BlankLabel>);
 
 impl BlankIdGenerator {
-	pub fn generate(&mut self, label: rdf_types::BlankIdBuf) -> treeldr_syntax::build::BlankLabel {
+	pub fn generate(&mut self, label: rdf_types::BlankIdBuf) -> treeldr_vocab::BlankLabel {
 		use std::collections::hash_map::Entry;
 		let len = self.0.len() as u32;
 		match self.0.entry(label) {
 			Entry::Occupied(entry) => entry.get().clone(),
 			Entry::Vacant(entry) => {
-				let label = treeldr_syntax::build::BlankLabel::new(len);
+				let label = treeldr_vocab::BlankLabel::new(len);
 				entry.insert(label);
 				label
 			}
@@ -28,8 +28,8 @@ impl BlankIdGenerator {
 
 fn parse_nquads<P: AsRef<Path>>(
 	path: P,
-	namespace: &mut Namespace,
-) -> grdf::HashDataset<Subject, Id, StrippedObject, GraphLabel> {
+	namespace: &mut Vocabulary,
+) -> grdf::HashDataset<Id, Name, StrippedObject, GraphLabel> {
 	use nquads_syntax::{lexing::Utf8Decoded, Document, Lexer, Parse};
 
 	let buffer = std::fs::read_to_string(path).expect("unable to read file");
@@ -45,7 +45,7 @@ fn parse_nquads<P: AsRef<Path>>(
 	quads
 		.into_iter()
 		.map(move |quad| {
-			treeldr_syntax::build::stripped_loc_quad_from_rdf(quad, namespace, &mut generate)
+			treeldr_vocab::stripped_loc_quad_from_rdf(quad, namespace, &mut generate)
 		})
 		.collect()
 }
@@ -53,8 +53,8 @@ fn parse_nquads<P: AsRef<Path>>(
 fn parse_treeldr<P: AsRef<Path>>(
 	path: P,
 ) -> (
-	grdf::HashDataset<Subject, Id, StrippedObject, GraphLabel>,
-	Namespace,
+	grdf::HashDataset<Id, Name, StrippedObject, GraphLabel>,
+	Vocabulary,
 ) {
 	use treeldr_syntax::{build, Build, Document, Lexer, Parse};
 
@@ -68,14 +68,14 @@ fn parse_treeldr<P: AsRef<Path>>(
 	(
 		quads
 			.into_iter()
-			.map(treeldr_syntax::build::strip_quad)
+			.map(treeldr_vocab::strip_quad)
 			.collect(),
 		context.into_namespace(),
 	)
 }
 
 fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) {
-	use treeldr_syntax::build::Display;
+	use treeldr_vocab::Display;
 	let (output, mut namespace) = parse_treeldr(input_path);
 	let expected_output = parse_nquads(expected_output_path, &mut namespace);
 

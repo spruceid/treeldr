@@ -25,7 +25,7 @@ _:9 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Field
 _:9 <https://treeldr.org/fieldFor> <http://www.example.com/Diploma/department> .
 _:9 <http://www.w3.org/2000/01/rdf-schema#label> "department" .
 _:9 <http://www.w3.org/2000/01/rdf-schema#range> _:10 .
-_:10 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Reference> .
+_:10 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 _:10 <https://treeldr.org/derefTo> <http://www.example.com/Department> .
 _:6 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:7 .
 _:6 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:4 .

@@ -1,4 +1,5 @@
-use crate::{layout, prop, ty, Caused, Id, Ref};
+use crate::{layout, prop, ty, Caused, Id, Documentation};
+use shelves::Ref;
 use locspan::Location;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -6,6 +7,8 @@ pub enum Type {
 	Type,
 	Property,
 	Layout,
+	LayoutField,
+	List
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -13,6 +16,8 @@ pub struct Types {
 	pub ty: bool,
 	pub property: bool,
 	pub layout: bool,
+	pub layout_field: bool,
+	pub list: bool
 }
 
 impl Types {
@@ -21,6 +26,8 @@ impl Types {
 			Type::Type => self.ty,
 			Type::Property => self.property,
 			Type::Layout => self.layout,
+			Type::LayoutField => self.layout_field,
+			Type::List => self.list
 		}
 	}
 }
@@ -30,6 +37,8 @@ pub struct CausedTypes<F> {
 	pub ty: Option<Option<Location<F>>>,
 	pub property: Option<Option<Location<F>>>,
 	pub layout: Option<Option<Location<F>>>,
+	pub layout_field: Option<Option<Location<F>>>,
+	pub list: Option<Option<Location<F>>>,
 }
 
 impl<F> CausedTypes<F> {
@@ -42,6 +51,8 @@ impl<F> CausedTypes<F> {
 			Type::Type => self.ty.as_ref(),
 			Type::Property => self.property.as_ref(),
 			Type::Layout => self.layout.as_ref(),
+			Type::LayoutField => self.layout_field.as_ref(),
+			Type::List => self.list.as_ref()
 		}
 	}
 
@@ -50,6 +61,8 @@ impl<F> CausedTypes<F> {
 			ty: self.ty.as_ref(),
 			property: self.property.as_ref(),
 			layout: self.layout.as_ref(),
+			layout_field: self.layout_field.as_ref(),
+			list: self.list.as_ref()
 		}
 	}
 }
@@ -67,6 +80,8 @@ pub struct CausedTypesIter<'a, F> {
 	ty: Option<&'a Option<Location<F>>>,
 	property: Option<&'a Option<Location<F>>>,
 	layout: Option<&'a Option<Location<F>>>,
+	layout_field: Option<&'a Option<Location<F>>>,
+	list: Option<&'a Option<Location<F>>>,
 }
 
 impl<'a, F: Clone> Iterator for CausedTypesIter<'a, F> {
@@ -77,21 +92,28 @@ impl<'a, F: Clone> Iterator for CausedTypesIter<'a, F> {
 			Some(cause) => Some(Caused::new(Type::Type, cause.clone())),
 			None => match self.property.take() {
 				Some(cause) => Some(Caused::new(Type::Property, cause.clone())),
-				None => self
-					.layout
-					.take()
-					.map(|cause| Caused::new(Type::Property, cause.clone())),
+				None => match self.layout.take() {
+					Some(cause) => Some(Caused::new(Type::Layout, cause.clone())),
+					None => match self.layout_field.take() {
+						Some(cause) => Some(Caused::new(Type::LayoutField, cause.clone())),
+						None => self
+							.list
+							.take()
+							.map(|cause| Caused::new(Type::List, cause.clone())),
+					}
+				}
 			},
 		}
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[derive(Debug)]
 pub struct Node<F> {
 	id: Id,
 	ty: Option<Ref<ty::Definition<F>>>,
 	property: Option<Ref<prop::Definition<F>>>,
 	layout: Option<Ref<layout::Definition<F>>>,
+	doc: Documentation
 }
 
 impl<F> Node<F> {
@@ -101,70 +123,32 @@ impl<F> Node<F> {
 			ty: None,
 			property: None,
 			layout: None,
-		}
-	}
-
-	pub fn new_type(id: Id, ty: Ref<ty::Definition<F>>) -> Self {
-		Self {
-			id,
-			ty: Some(ty),
-			property: None,
-			layout: None,
-		}
-	}
-
-	pub fn new_property(id: Id, prop: Ref<prop::Definition<F>>) -> Self {
-		Self {
-			id,
-			ty: None,
-			property: Some(prop),
-			layout: None,
-		}
-	}
-
-	pub fn new_layout(id: Id, layout: Ref<layout::Definition<F>>) -> Self {
-		Self {
-			id,
-			ty: None,
-			property: None,
-			layout: Some(layout),
-		}
-	}
-
-	pub fn types(&self) -> Types {
-		Types {
-			ty: self.ty.is_some(),
-			property: self.property.is_some(),
-			layout: self.layout.is_some(),
-		}
-	}
-
-	pub fn caused_types(&self, model: &crate::Model<F>) -> CausedTypes<F> where F: Clone {
-		CausedTypes {
-			ty: self
-				.ty
-				.map(|ty_ref| model.types().get(ty_ref).unwrap().causes().preferred().cloned()),
-			property: self.property.map(|prop_ref| {
-				model
-					.properties()
-					.get(prop_ref)
-					.unwrap()
-					.causes()
-					.preferred().cloned()
-			}),
-			layout: self.layout.map(|layout_ref| {
-				model
-					.layouts()
-					.get(layout_ref)
-					.unwrap()
-					.causes()
-					.preferred().cloned()
-			}),
+			doc: Documentation::default()
 		}
 	}
 
 	pub fn id(&self) -> Id {
 		self.id
+	}
+
+	pub fn documentation(&self) -> &Documentation {
+		&self.doc
+	}
+
+	pub fn documentation_mut(&mut self) -> &mut Documentation {
+		&mut self.doc
+	}
+
+	pub fn is_type(&self) -> bool {
+		self.ty.is_some()
+	}
+
+	pub fn is_property(&self) -> bool {
+		self.property.is_some()
+	}
+
+	pub fn is_layout(&self) -> bool {
+		self.layout.is_some()
 	}
 
 	pub fn as_type(&self) -> Option<Ref<ty::Definition<F>>> {
@@ -177,17 +161,5 @@ impl<F> Node<F> {
 
 	pub fn as_layout(&self) -> Option<Ref<layout::Definition<F>>> {
 		self.layout
-	}
-
-	pub fn declare_type(&mut self, ty_ref: Ref<ty::Definition<F>>) {
-		self.ty = Some(ty_ref)
-	}
-
-	pub fn declare_property(&mut self, prop_ref: Ref<prop::Definition<F>>) {
-		self.property = Some(prop_ref)
-	}
-
-	pub fn declare_layout(&mut self, layout_ref: Ref<layout::Definition<F>>) {
-		self.layout = Some(layout_ref)
 	}
 }

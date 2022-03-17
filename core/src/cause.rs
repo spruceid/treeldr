@@ -66,6 +66,10 @@ impl<F> Causes<F> {
 		self.set.iter().next()
 	}
 
+	pub fn into_preferred(self) -> Option<Location<F>> {
+		self.set.into_iter().next()
+	}
+
 	pub fn iter(&self) -> impl Iterator<Item = &Location<F>> {
 		self.set.iter()
 	}
@@ -108,8 +112,25 @@ impl<T, F> WithCauses<T, F> {
 		}
 	}
 
+	pub fn without_causes(t: T) -> Self {
+		Self {
+			t,
+			causes: Causes::new()
+		}
+	}
+
 	pub fn causes(&self) -> &Causes<F> {
 		&self.causes
+	}
+
+	pub fn add_cause(&mut self, cause: Location<F>) where F: Ord {
+		self.causes.add(cause)
+	}
+
+	pub fn add_opt_cause(&mut self, cause: Option<Location<F>>) where F: Ord {
+		if let Some(cause) = cause {
+			self.causes.add(cause)
+		}
 	}
 
 	pub fn inner(&self) -> &T {
@@ -118,6 +139,45 @@ impl<T, F> WithCauses<T, F> {
 
 	pub fn inner_mut(&mut self) -> &mut T {
 		&mut self.t
+	}
+	
+	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> WithCauses<U, F> {
+		WithCauses::new(f(self.t), self.causes)
+	}
+
+	pub fn try_map<U, E>(self, f: impl FnOnce(T) -> Result<U, E>) -> Result<WithCauses<U, F>, Caused<E, F>> {
+		match f(self.t) {
+			Ok(value) => Ok(WithCauses::new(value, self.causes)),
+			Err(e) => Err(Caused::new(e, self.causes.into_preferred()))
+		}
+	}
+
+	pub fn try_map_with_causes<U, E, M>(self, f: M) -> Result<WithCauses<U, F>, Caused<E, F>> where M: FnOnce(T, &Causes<F>) -> Result<U, E> {
+		match f(self.t, &self.causes) {
+			Ok(value) => Ok(WithCauses::new(value, self.causes)),
+			Err(e) => Err(Caused::new(e, self.causes.into_preferred()))
+		}
+	}
+
+	pub fn clone_with_causes(&self, causes: impl Into<Causes<F>>) -> WithCauses<T, F> where T: Clone {
+		WithCauses {
+			t: self.t.clone(),
+			causes: causes.into()
+		}
+	}
+
+	pub fn into_parts(self) -> (T, Causes<F>) {
+		(self.t, self.causes)
+	}
+
+	pub fn into_causes(self) -> Causes<F> {
+		self.causes
+	}
+}
+
+impl<T, F> From<T> for WithCauses<T, F> {
+	fn from(t: T) -> Self {
+		Self::without_causes(t)
 	}
 }
 

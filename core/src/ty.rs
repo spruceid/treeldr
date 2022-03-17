@@ -1,8 +1,6 @@
-use crate::{layout, prop, Caused, Causes, Documentation, Error, Id, Ref};
-use iref::Iri;
+use crate::{layout, prop, Causes, Documentation, Id};
+use shelves::Ref;
 use std::collections::HashMap;
-use std::fmt;
-use locspan::Location;
 use derivative::Derivative;
 
 /// Type definition.
@@ -10,14 +8,14 @@ pub struct Definition<F> {
 	/// Identifier.
 	id: Id,
 
-	/// Causes of the definition.
-	causes: Causes<F>,
-
 	/// Properties.
 	properties: HashMap<Ref<prop::Definition<F>>, Causes<F>>,
 
 	/// Documentation.
 	doc: Documentation,
+
+	/// Causes of the definition.
+	causes: Causes<F>,
 }
 
 impl<F> Definition<F> {
@@ -55,105 +53,94 @@ impl<F> Definition<F> {
 		self.properties.iter().map(|(p, c)| (*p, c))
 	}
 
-	pub fn declare_property(&mut self, prop_ref: Ref<prop::Definition<F>>, cause: Option<Location<F>>) where F: Ord {
-		use std::collections::hash_map::Entry;
-		match self.properties.entry(prop_ref) {
-			Entry::Vacant(entry) => {
-				entry.insert(cause.into());
-			}
-			Entry::Occupied(mut entry) => {
-				if let Some(cause) = cause {
-					entry.get_mut().add(cause)
-				}
-			}
-		}
+	pub fn insert_property(&mut self, prop_ref: Ref<prop::Definition<F>>, causes: impl Into<Causes<F>>) where F: Ord {
+		self.properties.insert(prop_ref, causes.into());
 	}
 
-	pub fn default_fields(
-		&self,
-		model: &crate::Model<F>,
-	) -> Result<Vec<layout::Field<F>>, Caused<Error<F>, F>> where F: Clone {
-		struct PropertyIri<'a, F>(Iri<'a>, Ref<prop::Definition<F>>, &'a Causes<F>);
+	// pub fn default_fields(
+	// 	&self,
+	// 	model: &crate::Model<F>,
+	// ) -> Result<Vec<layout::Field<F>>, Caused<Error<F>, F>> where F: Clone {
+	// 	struct PropertyIri<'a, F>(Iri<'a>, Ref<prop::Definition<F>>, &'a Causes<F>);
 
-		impl<'a, F> PartialEq for PropertyIri<'a, F> {
-			fn eq(&self, other: &Self) -> bool {
-				self.0 == other.0
-			}
-		}
+	// 	impl<'a, F> PartialEq for PropertyIri<'a, F> {
+	// 		fn eq(&self, other: &Self) -> bool {
+	// 			self.0 == other.0
+	// 		}
+	// 	}
 
-		impl<'a, F> Eq for PropertyIri<'a, F> {}
+	// 	impl<'a, F> Eq for PropertyIri<'a, F> {}
 
-		impl<'a, F> std::cmp::Ord for PropertyIri<'a, F> {
-			fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-				self.0.cmp(&other.0)
-			}
-		}
+	// 	impl<'a, F> std::cmp::Ord for PropertyIri<'a, F> {
+	// 		fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+	// 			self.0.cmp(&other.0)
+	// 		}
+	// 	}
 
-		impl<'a, F> std::cmp::PartialOrd for PropertyIri<'a, F> {
-			fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-				self.0.partial_cmp(&other.0)
-			}
-		}
+	// 	impl<'a, F> std::cmp::PartialOrd for PropertyIri<'a, F> {
+	// 		fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+	// 			self.0.partial_cmp(&other.0)
+	// 		}
+	// 	}
 
-		let mut properties: Vec<PropertyIri<F>> = self
-			.properties
-			.iter()
-			.map(|(prop_ref, causes)| {
-				let prop = model.properties().get(*prop_ref).unwrap();
-				let iri = model.vocabulary().get(prop.id()).unwrap();
-				PropertyIri(iri, *prop_ref, causes)
-			})
-			.collect();
+	// 	let mut properties: Vec<PropertyIri<F>> = self
+	// 		.properties
+	// 		.iter()
+	// 		.map(|(prop_ref, causes)| {
+	// 			let prop = model.properties().get(*prop_ref).unwrap();
+	// 			let iri = model.vocabulary().get(prop.id()).unwrap();
+	// 			PropertyIri(iri, *prop_ref, causes)
+	// 		})
+	// 		.collect();
 
-		properties.sort();
+	// 	properties.sort();
 
-		let mut fields = Vec::with_capacity(properties.len());
-		for PropertyIri(iri, prop_ref, causes) in properties {
-			let prop = model.properties().get(prop_ref).unwrap();
-			let name = iri
-				.path()
-				.file_name()
-				.expect("invalid property IRI")
-				.to_owned();
-			let layout_expr = match prop.ty() {
-				Some(ty) => ty
-					.expr()
-					.default_layout(model, ty.causes().preferred().cloned())?,
-				None => panic!("no known type"),
-			};
+	// 	let mut fields = Vec::with_capacity(properties.len());
+	// 	for PropertyIri(iri, prop_ref, causes) in properties {
+	// 		let prop = model.properties().get(prop_ref).unwrap();
+	// 		let name = iri
+	// 			.path()
+	// 			.file_name()
+	// 			.expect("invalid property IRI")
+	// 			.to_owned();
+	// 		let layout_expr = match prop.ty() {
+	// 			Some(ty) => ty
+	// 				.expr()
+	// 				.default_layout(model, ty.causes().preferred().cloned())?,
+	// 			None => panic!("no known type"),
+	// 		};
 
-			let mut field = layout::Field::new(
-				prop_ref,
-				name,
-				layout_expr,
-				causes.clone(),
-			);
+	// 		let mut field = layout::Field::new(
+	// 			prop_ref,
+	// 			name,
+	// 			layout_expr,
+	// 			causes.clone(),
+	// 		);
 
-			field.set_required(prop.is_required());
-			field.set_functional(prop.is_functional());
+	// 		field.set_required(prop.is_required());
+	// 		field.set_functional(prop.is_functional());
 
-			fields.push(field);
-		}
+	// 		fields.push(field);
+	// 	}
 
-		Ok(fields)
-	}
+	// 	Ok(fields)
+	// }
 }
 
-impl<F> Ref<Definition<F>> {
-	pub fn with_model<'c>(&self, context: &'c crate::Model<F>) -> RefWithContext<'c, F> {
-		RefWithContext(context, *self)
-	}
-}
+// impl<F> Ref<Definition<F>> {
+// 	pub fn with_model<'c>(&self, context: &'c crate::Model<F>) -> RefWithContext<'c, F> {
+// 		RefWithContext(context, *self)
+// 	}
+// }
 
-pub struct RefWithContext<'c, F>(&'c crate::Model<F>, Ref<Definition<F>>);
+// pub struct RefWithContext<'c, F>(&'c crate::Model<F>, Ref<Definition<F>>);
 
-impl<'c, F> fmt::Display for RefWithContext<'c, F> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let id = self.0.types().get(self.1).unwrap().id();
-		let iri = self.0.vocabulary().get(id).unwrap();
-		iri.fmt(f)
-	}
-}
+// impl<'c, F> fmt::Display for RefWithContext<'c, F> {
+// 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+// 		let id = self.0.types().get(self.1).unwrap().id();
+// 		id.display(self.0.vocabulary()).fmt(f)
+// 	}
+// }
 
 #[derive(Derivative)]
 #[derivative(Clone(bound=""), Copy(bound=""))]
@@ -184,92 +171,4 @@ impl<F> Expr<F> {
 	pub fn set_implicit_layout(&mut self, l: Ref<layout::Definition<F>>) {
 		self.implicit_layout_ref = Some(l)
 	}
-
-	pub fn default_layout(
-		&self,
-		model: &crate::Model<F>,
-		cause: Option<Location<F>>,
-	) -> Result<Ref<layout::Definition<F>>, Caused<Error<F>, F>> where F: Clone {
-		match self.implicit_layout_ref {
-			Some(layout_ref) => Ok(layout_ref),
-			None => {
-				let id = model.types().get(self.ty_ref).unwrap().id();
-				model.require_layout(id, cause)
-			}
-		}
-	}
 }
-
-// /// Type expression.
-// #[derive(Clone, PartialEq, Eq, Debug)]
-// pub struct Expr {
-// 	ty: crate::Ref<Definition>,
-// 	args: Vec<Self>,
-// }
-
-// impl Expr {
-// 	pub fn new(ty: crate::Ref<Definition>, args: Vec<Self>) -> Self {
-// 		Self { ty, args }
-// 	}
-
-// 	pub fn ty(&self) -> crate::Ref<Definition> {
-// 		self.ty
-// 	}
-
-// 	pub fn arguments(&self) -> &[Self] {
-// 		&self.args
-// 	}
-
-// 	pub fn with_model<'c>(&self, context: &'c crate::Model) -> ExprWithContext<'c, '_> {
-// 		ExprWithContext(context, self)
-// 	}
-
-// 	pub fn as_layout_expr(
-// 		&self,
-// 		model: &crate::Model,
-// 		cause: Option<Cause>,
-// 	) -> Result<layout::Expr, Caused<Error>> {
-// 		let id = model.types().get(self.ty).unwrap().id();
-// 		let layout_ref = model.require_layout(id, cause)?;
-// 		let mut args = Vec::with_capacity(self.args.len());
-// 		for arg in &self.args {
-// 			args.push(arg.as_layout_expr(model, cause)?)
-// 		}
-// 		Ok(layout::Expr::new(layout_ref, args))
-// 	}
-// }
-
-// pub struct ExprWithContext<'c, 'e>(&'c crate::Model, &'e Expr);
-
-// impl<'c, 'e> ExprWithContext<'c, 'e> {
-// 	pub fn context(&self) -> &'c crate::Model {
-// 		self.0
-// 	}
-
-// 	pub fn expr(&self) -> &'e Expr {
-// 		self.1
-// 	}
-// }
-
-// impl<'c, 'e> fmt::Display for ExprWithContext<'c, 'e> {
-// 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-// 		let ty_def = self.context().types().get(self.expr().ty).unwrap();
-// 		let iri = self.context().vocabulary().get(ty_def.id).unwrap();
-
-// 		iri.fmt(f)?;
-
-// 		if !self.expr().args.is_empty() {
-// 			write!(f, "(")?;
-// 			for (i, arg) in self.expr().args.iter().enumerate() {
-// 				if i > 0 {
-// 					write!(f, ", ")?;
-// 				}
-
-// 				arg.with_model(self.context()).fmt(f)?;
-// 			}
-// 			write!(f, ")")?;
-// 		}
-
-// 		Ok(())
-// 	}
-// }

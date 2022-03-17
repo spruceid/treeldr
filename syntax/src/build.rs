@@ -1,272 +1,9 @@
-use iref::{Iri, IriBuf, IriRef, IriRefBuf};
-use iref_enum::IriEnum;
+use iref::{IriBuf, IriRef, IriRefBuf};
 use locspan::{Loc, Location};
 use rdf_types::{loc::Literal, Quad};
-use std::{collections::HashMap, fmt};
+use std::collections::HashMap;
 
-mod display;
-
-pub use display::{Display, Displayed};
-
-#[derive(IriEnum, Clone, Copy, PartialEq, Eq, Hash)]
-#[iri_prefix("tldr" = "https://treeldr.org/")]
-pub enum TreeLdr {
-	#[iri("tldr:Layout")]
-	Layout,
-
-	#[iri("tldr:layoutFor")]
-	LayoutFor,
-
-	#[iri("tldr:fields")]
-	Fields,
-
-	#[iri("tldr:Field")]
-	Field,
-
-	#[iri("tldr:fieldFor")]
-	FieldFor,
-
-	#[iri("tldr:Reference")]
-	Reference,
-
-	#[iri("tldr:derefTo")]
-	DerefTo,
-}
-
-#[derive(IriEnum, Clone, Copy, PartialEq, Eq, Hash)]
-#[iri_prefix("schema" = "https://schema.org/")]
-pub enum Schema {
-	#[iri("schema:True")]
-	True,
-
-	#[iri("schema:False")]
-	False,
-
-	#[iri("schema:multipleValues")]
-	MultipleValues,
-
-	#[iri("schema:valueRequired")]
-	ValueRequired,
-}
-
-#[derive(IriEnum, Clone, Copy, PartialEq, Eq, Hash)]
-#[iri_prefix("rdfs" = "http://www.w3.org/2000/01/rdf-schema#")]
-pub enum Rdfs {
-	#[iri("rdfs:Class")]
-	Class,
-
-	#[iri("rdfs:label")]
-	Label,
-
-	#[iri("rdfs:comment")]
-	Comment,
-
-	#[iri("rdfs:domain")]
-	Domain,
-
-	#[iri("rdfs:range")]
-	Range,
-}
-
-#[derive(IriEnum, Clone, Copy, PartialEq, Eq, Hash)]
-#[iri_prefix("rdf" = "http://www.w3.org/1999/02/22-rdf-syntax-ns#")]
-pub enum Rdf {
-	#[iri("rdf:Property")]
-	Property,
-
-	#[iri("rdf:List")]
-	List,
-
-	#[iri("rdf:type")]
-	Type,
-
-	#[iri("rdf:nil")]
-	Nil,
-
-	#[iri("rdf:first")]
-	First,
-
-	#[iri("rdf:rest")]
-	Rest,
-}
-
-/// Name index.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Name(usize);
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Id {
-	Rdf(Rdf),
-	Rdfs(Rdfs),
-	Schema(Schema),
-	TreeLdr(TreeLdr),
-	Name(Name),
-}
-
-impl Id {
-	pub fn from_iri(iri: IriBuf, ns: &mut Namespace) -> Id {
-		match Rdf::try_from(iri.as_iri()) {
-			Ok(id) => Id::Rdf(id),
-			Err(_) => match Rdfs::try_from(iri.as_iri()) {
-				Ok(id) => Id::Rdfs(id),
-				Err(_) => match Schema::try_from(iri.as_iri()) {
-					Ok(id) => Id::Schema(id),
-					Err(_) => match TreeLdr::try_from(iri.as_iri()) {
-						Ok(id) => Id::TreeLdr(id),
-						Err(_) => Id::Name(ns.insert(iri)),
-					},
-				},
-			},
-		}
-	}
-
-	pub fn iri<'n>(&self, ns: &'n Namespace) -> Option<Iri<'n>> {
-		match self {
-			Self::Rdf(id) => Some(id.into()),
-			Self::Rdfs(id) => Some(id.into()),
-			Self::Schema(id) => Some(id.into()),
-			Self::TreeLdr(id) => Some(id.into()),
-			Self::Name(name) => ns.get(*name),
-		}
-	}
-}
-
-impl rdf_types::AsTerm for Id {
-	type Iri = Self;
-	type BlankId = BlankLabel;
-	type Literal = rdf_types::Literal;
-
-	fn as_term(&self) -> rdf_types::Term<&Self::Iri, &Self::BlankId, &Self::Literal> {
-		rdf_types::Term::Iri(self)
-	}
-}
-
-impl rdf_types::IntoTerm for Id {
-	type Iri = Self;
-	type BlankId = BlankLabel;
-	type Literal = rdf_types::Literal;
-
-	fn into_term(self) -> rdf_types::Term<Self::Iri, Self::BlankId, Self::Literal> {
-		rdf_types::Term::Iri(self)
-	}
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BlankLabel(u32);
-
-impl BlankLabel {
-	pub fn new(index: u32) -> Self {
-		Self(index)
-	}
-
-	pub fn index(&self) -> u32 {
-		self.0
-	}
-}
-
-impl fmt::Display for BlankLabel {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "_:{}", self.index())
-	}
-}
-
-pub type Subject = rdf_types::Subject<Id, BlankLabel>;
-
-pub type GraphLabel = rdf_types::GraphLabel<Id, BlankLabel>;
-
-pub type Object<F> = rdf_types::Object<Id, BlankLabel, Literal<F>>;
-
-pub type LocQuad<F> = rdf_types::loc::LocQuad<Subject, Id, Object<F>, GraphLabel, F>;
-
-pub type StrippedObject = rdf_types::Object<Id, BlankLabel, rdf_types::Literal>;
-
-pub type StrippedQuad = rdf_types::Quad<Subject, Id, StrippedObject, GraphLabel>;
-
-pub fn strip_quad<F>(Loc(rdf_types::Quad(s, p, o, g), _): LocQuad<F>) -> StrippedQuad {
-	use locspan::Strip;
-	rdf_types::Quad(
-		s.into_value(),
-		p.into_value(),
-		o.strip(),
-		g.map(|g| g.into_value()),
-	)
-}
-
-pub fn subject_from_rdf(
-	subject: rdf_types::Subject,
-	ns: &mut Namespace,
-	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
-) -> Subject {
-	match subject {
-		rdf_types::Subject::Iri(iri) => Subject::Iri(Id::from_iri(iri, ns)),
-		rdf_types::Subject::Blank(label) => Subject::Blank(blank_label(label)),
-	}
-}
-
-pub fn object_from_rdf<F>(
-	object: rdf_types::loc::Object<F>,
-	ns: &mut Namespace,
-	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
-) -> Object<F> {
-	match object {
-		rdf_types::Object::Iri(iri) => Object::Iri(Id::from_iri(iri, ns)),
-		rdf_types::Object::Blank(label) => Object::Blank(blank_label(label)),
-		rdf_types::Object::Literal(lit) => Object::Literal(lit),
-	}
-}
-
-pub fn stripped_object_from_rdf(
-	object: rdf_types::Object,
-	ns: &mut Namespace,
-	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
-) -> StrippedObject {
-	match object {
-		rdf_types::Object::Iri(iri) => StrippedObject::Iri(Id::from_iri(iri, ns)),
-		rdf_types::Object::Blank(label) => StrippedObject::Blank(blank_label(label)),
-		rdf_types::Object::Literal(lit) => StrippedObject::Literal(lit),
-	}
-}
-
-pub fn graph_label_from_rdf(
-	graph_label: rdf_types::GraphLabel,
-	ns: &mut Namespace,
-	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
-) -> Subject {
-	match graph_label {
-		rdf_types::GraphLabel::Iri(iri) => GraphLabel::Iri(Id::from_iri(iri, ns)),
-		rdf_types::GraphLabel::Blank(label) => GraphLabel::Blank(blank_label(label)),
-	}
-}
-
-pub fn loc_quad_from_rdf<F>(
-	Loc(rdf_types::Quad(s, p, o, g), loc): rdf_types::loc::LocRdfQuad<F>,
-	ns: &mut Namespace,
-	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
-) -> LocQuad<F> {
-	Loc(
-		rdf_types::Quad(
-			s.map(|s| subject_from_rdf(s, ns, &mut blank_label)),
-			p.map(|p| Id::from_iri(p, ns)),
-			o.map(|o| object_from_rdf(o, ns, &mut blank_label)),
-			g.map(|g| g.map(|g| graph_label_from_rdf(g, ns, blank_label))),
-		),
-		loc,
-	)
-}
-
-pub fn stripped_loc_quad_from_rdf<F>(
-	Loc(rdf_types::Quad(s, p, o, g), _): rdf_types::loc::LocRdfQuad<F>,
-	ns: &mut Namespace,
-	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
-) -> StrippedQuad {
-	use locspan::Strip;
-	rdf_types::Quad(
-		subject_from_rdf(s.into_value(), ns, &mut blank_label),
-		Id::from_iri(p.into_value(), ns),
-		stripped_object_from_rdf(o.strip(), ns, &mut blank_label),
-		g.map(|g| graph_label_from_rdf(g.into_value(), ns, blank_label)),
-	)
-}
+use treeldr_vocab::*;
 
 pub trait Build<F> {
 	type Target;
@@ -286,64 +23,28 @@ pub enum Error<F> {
 	AlreadyDefinedPrefix(String, Location<F>),
 }
 
-#[derive(Default)]
-pub struct Namespace {
-	map: Vec<IriBuf>,
-	reverse: HashMap<IriBuf, Name>,
-	blank_label_count: u32,
-}
-
-impl Namespace {
-	pub fn new() -> Self {
-		Self::default()
-	}
-
-	pub fn get(&self, name: Name) -> Option<Iri> {
-		self.map.get(name.0).map(|iri| iri.as_iri())
-	}
-
-	pub fn new_blank_label(&mut self) -> BlankLabel {
-		let label = BlankLabel(self.blank_label_count);
-		self.blank_label_count += 1;
-		label
-	}
-
-	pub fn insert(&mut self, iri: IriBuf) -> Name {
-		use std::collections::hash_map::Entry;
-		match self.reverse.entry(iri) {
-			Entry::Occupied(entry) => *entry.get(),
-			Entry::Vacant(entry) => {
-				let name = Name(self.map.len());
-				self.map.push(entry.key().clone());
-				entry.insert(name);
-				name
-			}
-		}
-	}
-}
-
 pub struct Context<F> {
 	base_iri: IriBuf,
-	namespace: Namespace,
+	namespace: Vocabulary,
 	prefixes: HashMap<String, Loc<IriBuf, F>>,
-	scope: Option<Id>,
+	scope: Option<Name>,
 }
 
 impl<F: Clone> Context<F> {
 	pub fn new(base_iri: IriBuf) -> Self {
 		Self {
 			base_iri,
-			namespace: Namespace::new(),
+			namespace: Vocabulary::new(),
 			prefixes: HashMap::new(),
 			scope: None,
 		}
 	}
 
-	pub fn namespace(&self) -> &Namespace {
+	pub fn namespace(&self) -> &Vocabulary {
 		&self.namespace
 	}
 
-	pub fn into_namespace(self) -> Namespace {
+	pub fn into_namespace(self) -> Vocabulary {
 		self.namespace
 	}
 
@@ -420,7 +121,7 @@ impl<F: Clone> Build<F> for Loc<crate::Document<F>, F> {
 }
 
 impl<F: Clone> Build<F> for Loc<crate::Id, F> {
-	type Target = Loc<Id, F>;
+	type Target = Loc<Name, F>;
 
 	fn build(
 		self,
@@ -440,7 +141,7 @@ impl<F: Clone> Build<F> for Loc<crate::Id, F> {
 			}
 		};
 
-		Ok(Loc(Id::from_iri(iri, &mut ctx.namespace), loc))
+		Ok(Loc(Name::from_iri(iri, &mut ctx.namespace), loc))
 	}
 }
 
@@ -463,7 +164,7 @@ impl<F: Clone> Build<F> for Loc<crate::Import<F>, F> {
 
 fn build_doc<F: Clone>(
 	Loc(doc, loc): Loc<crate::Documentation<F>, F>,
-	subject: Loc<Subject, F>,
+	subject: Loc<Id, F>,
 	quads: &mut Vec<LocQuad<F>>,
 ) {
 	let mut short = String::new();
@@ -502,7 +203,7 @@ fn build_doc<F: Clone>(
 		quads.push(Loc(
 			Quad(
 				subject.clone(),
-				Loc(Id::Rdfs(Rdfs::Comment), loc.clone()),
+				Loc(Name::Rdfs(Rdfs::Comment), loc.clone()),
 				Loc(
 					Object::Literal(Literal::String(Loc(long.into(), long_loc.clone()))),
 					long_loc,
@@ -517,7 +218,7 @@ fn build_doc<F: Clone>(
 		quads.push(Loc(
 			Quad(
 				subject,
-				Loc(Id::Rdfs(Rdfs::Comment), loc.clone()),
+				Loc(Name::Rdfs(Rdfs::Comment), loc.clone()),
 				Loc(
 					Object::Literal(Literal::String(Loc(short.into(), short_loc.clone()))),
 					short_loc,
@@ -544,16 +245,16 @@ impl<F: Clone> Build<F> for Loc<crate::TypeDefinition<F>, F> {
 
 		quads.push(Loc(
 			Quad(
-				Loc(Subject::Iri(id), id_loc.clone()),
-				Loc(Id::Rdf(Rdf::Type), id_loc.clone()),
-				Loc(Object::Iri(Id::Rdfs(Rdfs::Class)), id_loc.clone()),
+				Loc(Id::Iri(id), id_loc.clone()),
+				Loc(Name::Rdf(Rdf::Type), id_loc.clone()),
+				Loc(Object::Iri(Name::Rdfs(Rdfs::Class)), id_loc.clone()),
 				None,
 			),
 			id_loc.clone(),
 		));
 
 		if let Some(doc) = def.doc {
-			build_doc(doc, Loc(Subject::Iri(id), id_loc.clone()), quads)
+			build_doc(doc, Loc(Id::Iri(id), id_loc.clone()), quads)
 		}
 
 		for property in def.properties.into_value() {
@@ -563,8 +264,8 @@ impl<F: Clone> Build<F> for Loc<crate::TypeDefinition<F>, F> {
 
 			quads.push(Loc(
 				Quad(
-					Loc(Subject::Iri(prop), prop_loc.clone()),
-					Loc(Id::Rdfs(Rdfs::Domain), prop_loc.clone()),
+					Loc(Id::Iri(prop), prop_loc.clone()),
+					Loc(Name::Rdfs(Rdfs::Domain), prop_loc.clone()),
 					Loc(Object::Iri(id), id_loc.clone()),
 					None,
 				),
@@ -577,7 +278,7 @@ impl<F: Clone> Build<F> for Loc<crate::TypeDefinition<F>, F> {
 }
 
 impl<F: Clone> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
-	type Target = Loc<Id, F>;
+	type Target = Loc<Name, F>;
 
 	fn build(
 		self,
@@ -589,16 +290,16 @@ impl<F: Clone> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
 
 		quads.push(Loc(
 			Quad(
-				Loc(Subject::Iri(id), id_loc.clone()),
-				Loc(Id::Rdf(Rdf::Type), id_loc.clone()),
-				Loc(Object::Iri(Id::Rdf(Rdf::Property)), id_loc.clone()),
+				Loc(Id::Iri(id), id_loc.clone()),
+				Loc(Name::Rdf(Rdf::Type), id_loc.clone()),
+				Loc(Object::Iri(Name::Rdf(Rdf::Property)), id_loc.clone()),
 				None,
 			),
 			id_loc.clone(),
 		));
 
 		if let Some(doc) = def.doc {
-			build_doc(doc, Loc(Subject::Iri(id), id_loc.clone()), quads)
+			build_doc(doc, Loc(Id::Iri(id), id_loc.clone()), quads)
 		}
 
 		if let Some(Loc(ty, _)) = def.ty {
@@ -608,8 +309,8 @@ impl<F: Clone> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
 
 			quads.push(Loc(
 				Quad(
-					Loc(Subject::Iri(id), id_loc.clone()),
-					Loc(Id::Rdfs(Rdfs::Range), object.location().clone()),
+					Loc(Id::Iri(id), id_loc.clone()),
+					Loc(Name::Rdfs(Rdfs::Range), object.location().clone()),
 					object,
 					None,
 				),
@@ -620,18 +321,18 @@ impl<F: Clone> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
 				match ann {
 					crate::Annotation::Multiple => quads.push(Loc(
 						Quad(
-							Loc(Subject::Iri(id), id_loc.clone()),
-							Loc(Id::Schema(Schema::MultipleValues), ann_loc.clone()),
-							Loc(Object::Iri(Id::Schema(Schema::True)), ann_loc.clone()),
+							Loc(Id::Iri(id), id_loc.clone()),
+							Loc(Name::Schema(Schema::MultipleValues), ann_loc.clone()),
+							Loc(Object::Iri(Name::Schema(Schema::True)), ann_loc.clone()),
 							None,
 						),
 						ann_loc,
 					)),
 					crate::Annotation::Required => quads.push(Loc(
 						Quad(
-							Loc(Subject::Iri(id), id_loc.clone()),
-							Loc(Id::Schema(Schema::ValueRequired), ann_loc.clone()),
-							Loc(Object::Iri(Id::Schema(Schema::True)), ann_loc.clone()),
+							Loc(Id::Iri(id), id_loc.clone()),
+							Loc(Name::Schema(Schema::ValueRequired), ann_loc.clone()),
+							Loc(Object::Iri(Name::Schema(Schema::True)), ann_loc.clone()),
 							None,
 						),
 						ann_loc,
@@ -678,9 +379,9 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 
 		quads.push(Loc(
 			Quad(
-				Loc(Subject::Iri(id), id_loc.clone()),
-				Loc(Id::Rdf(Rdf::Type), id_loc.clone()),
-				Loc(Object::Iri(Id::TreeLdr(TreeLdr::Layout)), id_loc.clone()),
+				Loc(Id::Iri(id), id_loc.clone()),
+				Loc(Name::Rdf(Rdf::Type), id_loc.clone()),
+				Loc(Object::Iri(Name::TreeLdr(TreeLdr::Layout)), id_loc.clone()),
 				None,
 			),
 			id_loc.clone(),
@@ -689,8 +390,8 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 		let for_loc = id_loc.clone().with(ty_id_loc.span());
 		quads.push(Loc(
 			Quad(
-				Loc(Subject::Iri(id), id_loc.clone()),
-				Loc(Id::TreeLdr(TreeLdr::LayoutFor), id_loc.clone()),
+				Loc(Id::Iri(id), id_loc.clone()),
+				Loc(Name::TreeLdr(TreeLdr::LayoutFor), id_loc.clone()),
 				Loc(Object::Iri(ty_id), ty_id_loc),
 				None,
 			),
@@ -698,11 +399,11 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 		));
 
 		if let Some(doc) = def.doc {
-			build_doc(doc, Loc(Subject::Iri(id), id_loc.clone()), quads)
+			build_doc(doc, Loc(Id::Iri(id), id_loc.clone()), quads)
 		}
 
 		let Loc(fields, fields_loc) = def.fields;
-		let mut fields_head = Loc(Object::Iri(Id::Rdf(Rdf::Nil)), fields_loc);
+		let mut fields_head = Loc(Object::Iri(Name::Rdf(Rdf::Nil)), fields_loc);
 		for field in fields.into_iter().rev() {
 			ctx.scope = Some(ty_id);
 
@@ -712,8 +413,8 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 
 			quads.push(Loc(
 				Quad(
-					Loc(Subject::Blank(item_label), first_loc.clone()),
-					Loc(Id::Rdf(Rdf::First), first_loc.clone()),
+					Loc(Id::Blank(item_label), first_loc.clone()),
+					Loc(Name::Rdf(Rdf::First), first_loc.clone()),
 					first,
 					None,
 				),
@@ -722,8 +423,8 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 
 			quads.push(Loc(
 				Quad(
-					Loc(Subject::Blank(item_label), first_loc.clone()),
-					Loc(Id::Rdf(Rdf::Rest), first_loc.clone()),
+					Loc(Id::Blank(item_label), first_loc.clone()),
+					Loc(Name::Rdf(Rdf::Rest), first_loc.clone()),
 					fields_head,
 					None,
 				),
@@ -737,8 +438,8 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 
 		quads.push(Loc(
 			Quad(
-				Loc(Subject::Iri(id), id_loc.clone()),
-				Loc(Id::TreeLdr(TreeLdr::Fields), id_loc.clone()),
+				Loc(Id::Iri(id), id_loc.clone()),
+				Loc(Name::TreeLdr(TreeLdr::Fields), id_loc.clone()),
 				fields_head,
 				None,
 			),
@@ -764,9 +465,9 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 
 		quads.push(Loc(
 			Quad(
-				Loc(Subject::Blank(label), loc.clone()),
-				Loc(Id::Rdf(Rdf::Type), loc.clone()),
-				Loc(Object::Iri(Id::TreeLdr(TreeLdr::Field)), loc.clone()),
+				Loc(Id::Blank(label), loc.clone()),
+				Loc(Name::Rdf(Rdf::Type), loc.clone()),
+				Loc(Object::Iri(Name::TreeLdr(TreeLdr::Field)), loc.clone()),
 				None,
 			),
 			loc.clone(),
@@ -774,8 +475,8 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 
 		quads.push(Loc(
 			Quad(
-				Loc(Subject::Blank(label), prop_id_loc.clone()),
-				Loc(Id::TreeLdr(TreeLdr::FieldFor), prop_id_loc.clone()),
+				Loc(Id::Blank(label), prop_id_loc.clone()),
+				Loc(Name::TreeLdr(TreeLdr::FieldFor), prop_id_loc.clone()),
 				Loc(Object::Iri(prop_id), prop_id_loc.clone()),
 				None,
 			),
@@ -783,7 +484,7 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 		));
 
 		if let Some(doc) = def.doc {
-			build_doc(doc, Loc(Subject::Blank(label), prop_id_loc.clone()), quads)
+			build_doc(doc, Loc(Id::Blank(label), prop_id_loc.clone()), quads)
 		}
 
 		let Loc(name, name_loc) = match def.alias {
@@ -802,8 +503,8 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 
 		quads.push(Loc(
 			Quad(
-				Loc(Subject::Blank(label), prop_id_loc.clone()),
-				Loc(Id::Rdfs(Rdfs::Label), prop_id_loc.clone()),
+				Loc(Id::Blank(label), prop_id_loc.clone()),
+				Loc(Name::Rdfs(Rdfs::Label), prop_id_loc.clone()),
 				Loc(
 					Object::Literal(Literal::String(Loc(name.into(), name_loc.clone()))),
 					name_loc.clone(),
@@ -819,8 +520,8 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 			ctx.scope = scope;
 			quads.push(Loc(
 				Quad(
-					Loc(Subject::Blank(label), prop_id_loc.clone()),
-					Loc(Id::Rdfs(Rdfs::Range), object.location().clone()),
+					Loc(Id::Blank(label), prop_id_loc.clone()),
+					Loc(Name::Rdfs(Rdfs::Range), object.location().clone()),
 					object,
 					None,
 				),
@@ -831,18 +532,18 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 				match ann {
 					crate::Annotation::Multiple => quads.push(Loc(
 						Quad(
-							Loc(Subject::Blank(label), prop_id_loc.clone()),
-							Loc(Id::Schema(Schema::MultipleValues), ann_loc.clone()),
-							Loc(Object::Iri(Id::Schema(Schema::True)), ann_loc.clone()),
+							Loc(Id::Blank(label), prop_id_loc.clone()),
+							Loc(Name::Schema(Schema::MultipleValues), ann_loc.clone()),
+							Loc(Object::Iri(Name::Schema(Schema::True)), ann_loc.clone()),
 							None,
 						),
 						ann_loc,
 					)),
 					crate::Annotation::Required => quads.push(Loc(
 						Quad(
-							Loc(Subject::Blank(label), prop_id_loc.clone()),
-							Loc(Id::Schema(Schema::ValueRequired), ann_loc.clone()),
-							Loc(Object::Iri(Id::Schema(Schema::True)), ann_loc.clone()),
+							Loc(Id::Blank(label), prop_id_loc.clone()),
+							Loc(Name::Schema(Schema::ValueRequired), ann_loc.clone()),
+							Loc(Object::Iri(Name::Schema(Schema::True)), ann_loc.clone()),
 							None,
 						),
 						ann_loc,
@@ -875,17 +576,17 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 				let ty = ctx.namespace.new_blank_label();
 				quads.push(Loc(
 					Quad(
-						Loc(Subject::Blank(ty), loc.clone()),
-						Loc(Id::Rdf(Rdf::Type), loc.clone()),
-						Loc(Object::Iri(Id::TreeLdr(TreeLdr::Reference)), loc.clone()),
+						Loc(Id::Blank(ty), loc.clone()),
+						Loc(Name::Rdf(Rdf::Type), loc.clone()),
+						Loc(Object::Iri(Name::TreeLdr(TreeLdr::Layout)), loc.clone()),
 						None,
 					),
 					loc.clone(),
 				));
 				quads.push(Loc(
 					Quad(
-						Loc(Subject::Blank(ty), loc.clone()),
-						Loc(Id::TreeLdr(TreeLdr::DerefTo), loc.clone()),
+						Loc(Id::Blank(ty), loc.clone()),
+						Loc(Name::TreeLdr(TreeLdr::DerefTo), loc.clone()),
 						deref_ty,
 						None,
 					),

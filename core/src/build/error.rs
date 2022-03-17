@@ -1,4 +1,5 @@
-use crate::{layout, node, prop, ty, Caused, Feature, Id, Model, Ref};
+use super::{layout, node, Context};
+use crate::{vocab::Display, Caused, Feature, Id};
 use locspan::Location;
 
 /// Error with diagnostic reporting support.
@@ -38,39 +39,49 @@ pub enum Error<F> {
 		expected_ty: Option<node::Type>,
 	},
 	TypeMismatch {
-		expected: Ref<ty::Definition<F>>,
-		found: Ref<ty::Definition<F>>,
+		expected: Id,
+		found: Id,
 		because: Option<Location<F>>,
 	},
 	ImplicitLayoutMismatch {
-		expected: Ref<layout::Definition<F>>,
-		found: Ref<layout::Definition<F>>,
+		expected: Id,
+		found: Id,
 		because: Option<Location<F>>,
 	},
 	LayoutTypeMismatch {
-		expected: Ref<ty::Definition<F>>,
-		found: Ref<ty::Definition<F>>,
+		expected: Id,
+		found: Id,
 		because: Option<Location<F>>,
 	},
 	LayoutMismatch(layout::Mismatch<F>),
 	/// A field is not required but its corresponding property is.
 	FieldNotRequired {
-		prop: Ref<prop::Definition<F>>,
+		prop: Id,
 		because: Option<Location<F>>,
 	},
 	FieldNotFunctional {
-		prop: Ref<prop::Definition<F>>,
+		prop: Id,
 		because: Option<Location<F>>,
 	},
 	MissingPropertyField {
-		prop: Ref<prop::Definition<F>>,
+		prop: Id,
 		because: Option<Location<F>>,
 	},
+	ListItemMismatch {
+		expected: crate::vocab::Object<F>,
+		found: crate::vocab::Object<F>,
+		because: Option<Location<F>>
+	},
+	ListRestMismatch {
+		expected: Id,
+		found: Id,
+		because: Option<Location<F>>
+	}
 }
 
 impl<F> Caused<Error<F>, F> {
-	pub fn with_model<'c>(&self, context: &'c Model<F>) -> WithModel<'c, '_, F> {
-		WithModel(context, self)
+	pub fn with_context<'c>(&self, context: &'c Context<F>) -> WithContext<'c, '_, F> {
+		WithContext(context, self)
 	}
 }
 
@@ -81,10 +92,10 @@ impl<F> From<Caused<layout::Mismatch<F>, F>> for Caused<Error<F>, F> {
 }
 
 /// Caused error with contextual information.
-pub struct WithModel<'c, 'a, F>(&'c Model<F>, &'a Caused<Error<F>, F>);
+pub struct WithContext<'c, 'a, F>(&'c Context<F>, &'a Caused<Error<F>, F>);
 
-impl<'c, 'a, F> WithModel<'c, 'a, F> {
-	fn context(&self) -> &'c Model<F> {
+impl<'c, 'a, F> WithContext<'c, 'a, F> {
+	fn context(&self) -> &'c Context<F> {
 		self.0
 	}
 
@@ -100,6 +111,8 @@ impl node::Type {
 			node::Type::Type => "a type",
 			node::Type::Property => "a property",
 			node::Type::Layout => "a layout",
+			node::Type::LayoutField => "a layout field",
+			node::Type::List => "a list"
 		}
 	}
 
@@ -108,13 +121,16 @@ impl node::Type {
 			node::Type::Type => "type",
 			node::Type::Property => "property",
 			node::Type::Layout => "layout",
+			node::Type::LayoutField => "layout field",
+			node::Type::List => "list"
 		}
 	}
 }
 
-impl<F> layout::Type<F> {
+impl layout::Type {
 	fn en_name(&self) -> &'static str {
 		match self {
+			Self::Reference => "reference",
 			Self::Struct => "structure",
 			Self::Native(n) => match n {
 				layout::Native::Boolean => "boolean",
@@ -129,13 +145,12 @@ impl<F> layout::Type<F> {
 				layout::Native::Iri => "IRI",
 				layout::Native::Uri => "URI",
 				layout::Native::Url => "URL",
-				layout::Native::Reference(_) => "reference",
 			},
 		}
 	}
 }
 
-// impl<'c, 'a> fmt::Display for WithModel<'c, 'a> {
+// impl<'c, 'a> fmt::Display for WithContext<'c, 'a> {
 // 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 // 		match self.error().inner() {
 // 			Error::Unimplemented(feature) => write!(f, "unimplemented feature `{}`", feature),
@@ -154,7 +169,7 @@ impl<F> layout::Type<F> {
 // 	}
 // }
 
-impl<'c, 'a, F: Clone> Diagnose<F> for WithModel<'c, 'a, F> {
+impl<'c, 'a, F: Clone> Diagnose<F> for WithContext<'c, 'a, F> {
 	fn message(&self) -> String {
 		match self.error().inner() {
 			Error::Unimplemented(feature) => format!("unimplemented feature `{}`", feature),
@@ -162,14 +177,12 @@ impl<'c, 'a, F: Clone> Diagnose<F> for WithModel<'c, 'a, F> {
 			Error::UndefinedPrefix(prefix) => format!("prefix `{}` is undefined", prefix),
 			Error::InvalidExpandedCompactIri(s) => format!("invalid expanded compact IRI `{}`", s),
 			Error::InvalidNodeType { id, .. } => {
-				let iri = self.context().vocabulary().get(*id).unwrap();
-				format!("invalid node type for <{}>.", iri)
+				format!("invalid node type for {}.", id.display(self.context().vocabulary()))
 			}
 			Error::UnknownNode { id, expected_ty } => {
-				let iri = self.context().vocabulary().get(*id).unwrap();
 				match expected_ty {
-					Some(ty) => format!("undefined {} <{}>", ty.en_name(), iri),
-					None => format!("undefined node <{}>", iri),
+					Some(ty) => format!("undefined {} {}", ty.en_name(), id.display(self.context().vocabulary())),
+					None => format!("undefined node {}", id.display(self.context().vocabulary())),
 				}
 			}
 			Error::TypeMismatch { .. } => "type mismatch".to_string(),
@@ -198,6 +211,8 @@ impl<'c, 'a, F: Clone> Diagnose<F> for WithModel<'c, 'a, F> {
 				"functional (unique) property has a non functional field".to_string()
 			}
 			Error::MissingPropertyField { .. } => "missing field for required property".to_string(),
+			Error::ListItemMismatch { .. } => "list item mismatch".to_string(),
+			Error::ListRestMismatch { .. } => "list successor mismatch".to_string()
 		}
 	}
 
@@ -384,6 +399,34 @@ impl<'c, 'a, F: Clone> Diagnose<F> for WithModel<'c, 'a, F> {
 					)
 				}
 			}
+			Error::ListItemMismatch { because, .. } => {
+				if let Some(source) = because {
+					let message = "item is first defined here".to_string();
+					labels.push(source.clone().into_secondary_label().with_message(message))
+				}
+
+				if let Some(source) = self.error().cause() {
+					labels.push(
+						source.clone()
+							.into_primary_label()
+							.with_message("different item defined here"),
+					)
+				}
+			}
+			Error::ListRestMismatch { because, .. } => {
+				if let Some(source) = because {
+					let message = "successor is first defined here".to_string();
+					labels.push(source.clone().into_secondary_label().with_message(message))
+				}
+
+				if let Some(source) = self.error().cause() {
+					labels.push(
+						source.clone()
+							.into_primary_label()
+							.with_message("different successor defined here"),
+					)
+				}
+			}
 		}
 
 		labels
@@ -399,11 +442,10 @@ impl<'c, 'a, F: Clone> Diagnose<F> for WithModel<'c, 'a, F> {
 				found,
 				..
 			} => {
-				let iri = self.context().vocabulary().get(*id).unwrap();
 				if self.error().cause().is_none() {
 					notes.push(format!(
 						"<{}> should be {}",
-						iri,
+						id.display(self.context().vocabulary()),
 						expected.en_determiner_name()
 					))
 				}
@@ -425,28 +467,18 @@ impl<'c, 'a, F: Clone> Diagnose<F> for WithModel<'c, 'a, F> {
 			} => {
 				notes.push(format!(
 					"expected type `{}`",
-					expected.with_model(self.context())
+					expected.display(self.context().vocabulary())
 				));
 				notes.push(format!(
 					"   found type `{}`",
-					found.with_model(self.context())
+					found.display(self.context().vocabulary())
 				))
 			}
 			Error::LayoutTypeMismatch {
 				expected, found, ..
 			} => {
-				let expected_id = self
-					.context()
-					.vocabulary()
-					.get(self.context().types().get(*expected).unwrap().id())
-					.unwrap();
-				let found_id = self
-					.context()
-					.vocabulary()
-					.get(self.context().types().get(*found).unwrap().id())
-					.unwrap();
-				notes.push(format!("expected type `{}`", expected_id));
-				notes.push(format!("   found type `{}`", found_id))
+				notes.push(format!("expected type `{}`", expected.display(self.context().vocabulary())));
+				notes.push(format!("   found type `{}`", found.display(self.context().vocabulary())))
 			}
 			Error::LayoutMismatch(e) => match e {
 				layout::Mismatch::Type {
@@ -458,18 +490,8 @@ impl<'c, 'a, F: Clone> Diagnose<F> for WithModel<'c, 'a, F> {
 				layout::Mismatch::FieldProperty {
 					expected, found, ..
 				} => {
-					let expected_id = self
-						.context()
-						.vocabulary()
-						.get(self.context().properties().get(*expected).unwrap().id())
-						.unwrap();
-					let found_id = self
-						.context()
-						.vocabulary()
-						.get(self.context().properties().get(*found).unwrap().id())
-						.unwrap();
-					notes.push(format!("expected property `{}`", expected_id));
-					notes.push(format!("   found property `{}`", found_id))
+					notes.push(format!("expected property `{}`", expected.display(self.context().vocabulary())));
+					notes.push(format!("   found property `{}`", found.display(self.context().vocabulary())))
 				}
 				layout::Mismatch::FieldName {
 					expected, found, ..
@@ -482,12 +504,16 @@ impl<'c, 'a, F: Clone> Diagnose<F> for WithModel<'c, 'a, F> {
 				} => {
 					notes.push(format!(
 						"expected `{}`",
-						expected.with_model(self.context())
+						expected.display(self.context().vocabulary())
 					));
-					notes.push(format!("   found `{}`", found.with_model(self.context())))
+					notes.push(format!("   found `{}`", found.display(self.context().vocabulary())))
 				}
 				_ => (),
 			},
+			Error::ListItemMismatch { expected, found, .. } => {
+				notes.push(format!("expected `{}`", expected.display(self.context().vocabulary())));
+				notes.push(format!("   found `{}`", found.display(self.context().vocabulary())))
+			}
 			_ => (),
 		}
 

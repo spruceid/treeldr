@@ -1,502 +1,198 @@
 use crate::{
-	layout, syntax,
-	syntax::{Annotation, Loc},
-	ty, Cause, Caused, Documentation, Error, Id, Model, Ref,
+	Caused,
+	Id,
+	vocab::{
+		self,
+		Name,
+		Object,
+		GraphLabel
+	}
 };
-use iref::{IriBuf, IriRef};
-use std::collections::HashMap;
+use locspan::Loc;
 
-#[derive(Clone, Copy)]
-enum Scope {
-	Type(Ref<ty::Definition>),
-	Layout(Ref<layout::Definition>),
-}
+pub mod error;
+pub mod node;
+pub mod list;
+pub mod ty;
+pub mod prop;
+pub mod layout;
+mod context;
 
-impl Scope {
-	fn id(&self, context: &Model) -> Id {
-		match self {
-			Self::Type(ty_ref) => context.types().get(*ty_ref).unwrap().id(),
-			Self::Layout(layout_ref) => {
-				let ty_ref = *context
-					.layouts()
-					.get(*layout_ref)
-					.unwrap()
-					.ty()
-					.unwrap()
-					.inner();
-				context.types().get(ty_ref).unwrap().id()
-			}
-		}
+pub use error::Error;
+pub use node::Node;
+pub use list::{ListRef, ListMut};
+pub use context::Context;
+
+fn expect_id<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<Id, F>, Caused<Error<F>, F>> {
+	match value {
+		vocab::Object::Literal(_) => panic!("expected IRI or blank node label"),
+		vocab::Object::Blank(id) => Ok(Loc(Id::Blank(id), loc)),
+		vocab::Object::Iri(id) => Ok(Loc(Id::Iri(id), loc))
 	}
 }
 
-/// Build environment.
-pub struct Environment<'c> {
-	context: &'c mut Model,
-	scope: Option<Scope>,
-	aliases: HashMap<String, Caused<IriBuf>>,
+fn expect_boolean<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<bool, F>, Caused<Error<F>, F>> {
+	match value {
+		vocab::Object::Iri(vocab::Name::Schema(vocab::Schema::True)) => Ok(Loc(true, loc)),
+		vocab::Object::Iri(vocab::Name::Schema(vocab::Schema::False)) => Ok(Loc(false, loc)),
+		_ => panic!("expected a boolean value")
+	}
 }
 
-impl<'c> Environment<'c> {
-	pub fn new(context: &'c mut Model) -> Self {
-		Self {
-			context,
-			scope: None,
-			aliases: HashMap::new(),
-		}
+fn expect_raw_string<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<rdf_types::StringLiteral, F>, Caused<Error<F>, F>> {
+	match value {
+		vocab::Object::Literal(rdf_types::loc::Literal::String(s)) => Ok(s),
+		_ => panic!("expected a untyped and untagged string literal")
 	}
+}
 
-	pub fn base_iri(&self) -> IriBuf {
-		match &self.scope {
-			Some(scope) => {
-				let id = scope.id(self.context);
-				let mut iri = self.context.vocabulary().get(id).unwrap().to_owned();
-				iri.path_mut().open();
-				iri
-			}
-			None => self.context.base_iri().to_owned(),
-		}
-	}
+impl<F: Clone + Ord> Context<F> {
+	pub fn build(&mut self, dataset: grdf::loc::BTreeDataset<Id, Name, Object<F>, GraphLabel, F>) -> Result<(), Caused<Error<F>, F>> {
+		// Step 1: find out the type of each node.
+		for Loc(quad, loc) in dataset.loc_quads() {
+			let Loc(id, _) = quad.subject().cloned_value();
 
-	pub fn ty(&self) -> Option<Ref<ty::Definition>> {
-		match self.scope {
-			Some(Scope::Type(ty_ref)) => Some(ty_ref),
-			_ => None,
-		}
-	}
-
-	pub fn import(
-		&mut self,
-		prefix: String,
-		iri: IriBuf,
-		cause: Option<Cause>,
-	) -> Result<(), Caused<Error>> {
-		use std::collections::hash_map::Entry;
-		match self.aliases.entry(prefix) {
-			Entry::Vacant(entry) => {
-				entry.insert(Caused::new(iri, cause));
-				Ok(())
-			}
-			Entry::Occupied(entry) => Err(Caused::new(
-				Error::PrefixRedefinition(entry.key().clone(), entry.get().cause()),
-				cause,
-			)),
-		}
-	}
-
-	pub fn expand_compact_iri(
-		&self,
-		prefix: &str,
-		iri_ref: IriRef,
-		cause: Option<Cause>,
-	) -> Result<IriBuf, Caused<Error>> {
-		match self.aliases.get(prefix) {
-			Some(iri) => match IriBuf::try_from(iri.as_str().to_string() + iri_ref.as_str()) {
-				Ok(iri) => Ok(iri),
-				Err((_, string)) => {
-					Err(Caused::new(Error::InvalidExpandedCompactIri(string), cause))
+			if let Name::Rdf(vocab::Rdf::Type) = quad.predicate().value() {
+				match quad.object().value() {
+					Object::Iri(Name::Rdf(vocab::Rdf::Property)) => {
+						self.declare_property(id, Some(loc.cloned()));
+					},
+					Object::Iri(Name::Rdf(vocab::Rdf::List)) => {
+						self.declare_list(id, Some(loc.cloned()));
+					},
+					Object::Iri(Name::Rdfs(vocab::Rdfs::Class)) => {
+						self.declare_type(id, Some(loc.cloned()));
+					},
+					Object::Iri(Name::TreeLdr(vocab::TreeLdr::Layout)) => {
+						self.declare_layout(id, Some(loc.cloned()));
+					},
+					Object::Iri(Name::TreeLdr(vocab::TreeLdr::Field)) => {
+						self.declare_layout_field(id, Some(loc.cloned()));
+					},
+					_ => ()
 				}
-			},
-			None => Err(Caused::new(
-				Error::UndefinedPrefix(prefix.to_owned()),
-				cause,
-			)),
-		}
-	}
-}
-
-impl<'c> From<&'c mut Model> for Environment<'c> {
-	fn from(context: &'c mut Model) -> Self {
-		Self::new(context)
-	}
-}
-
-/// Compilation function.
-pub trait Build {
-	type Target;
-
-	fn build<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>>;
-}
-
-pub trait Declare {
-	/// Declare types, layouts and properties.
-	fn declare<'c>(&self, _env: &mut Environment<'c>) -> Result<(), Caused<Error>>;
-}
-
-impl Build for syntax::Documentation {
-	type Target = Documentation;
-
-	fn build<'c>(&self, _env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let mut short = String::new();
-		let mut long = String::new();
-		let mut separated = false;
-
-		for line in &self.items {
-			if separated {
-				long.push_str(line);
-			} else if line.trim().is_empty() {
-				separated = true
-			} else {
-				short.push_str(line);
 			}
 		}
 
-		let short = if short.is_empty() { None } else { Some(short) };
-		let long = if long.is_empty() { None } else { Some(long) };
+		// Step 2: find out the properties of each node.
+		for Loc(rdf_types::Quad(subject, predicate, object, _graph), loc) in dataset.into_loc_quads() {
+			let Loc(id, id_loc) = subject;
 
-		Ok(Documentation::new(short, long))
-	}
-}
-
-impl Build for Loc<syntax::Id> {
-	type Target = Id;
-
-	fn build<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let iri = match self.value() {
-			syntax::Id::Name(name) => IriRef::new(name).unwrap().resolved(env.base_iri().as_iri()),
-			syntax::Id::IriRef(iri_ref) => iri_ref.resolved(env.base_iri().as_iri()),
-			syntax::Id::Compact(prefix, iri_ref) => env.expand_compact_iri(
-				prefix,
-				iri_ref.as_iri_ref(),
-				Some(Cause::Explicit(*self.location())),
-			)?,
-		};
-
-		// let schema_iri = if iri.fragment().is_some() {
-		// 	let mut schema_iri = iri.clone();
-		// 	schema_iri.set_query(None);
-		// 	schema_iri.set_fragment(None);
-		// 	Some(schema_iri)
-		// } else if iri.path().is_closed() && !iri.path().is_empty() {
-		// 	let mut schema_iri = iri.clone();
-		// 	schema_iri.path_mut().pop();
-		// 	Some(schema_iri)
-		// } else {
-		// 	None
-		// };
-
-		// if let Some(schema_iri) = schema_iri {
-		// 	log::info!("must load `{}`", schema_iri)
-		// }
-
-		Ok(env.context.vocabulary_mut().insert(iri))
-	}
-}
-
-impl Build for Loc<syntax::Document> {
-	type Target = ();
-
-	fn build<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		for import in &self.value().imports {
-			import.declare(env)?;
-		}
-
-		for ty in &self.value().types {
-			ty.declare(env)?;
-		}
-
-		for layout in &self.value().layouts {
-			layout.declare(env)?;
-		}
-
-		for ty in &self.value().types {
-			ty.build(env)?;
-		}
-
-		for layout in &self.value().layouts {
-			layout.build(env)?;
-		}
-
-		// Define implicit layouts.
-		let mut implicit_layouts = Vec::new();
-		for (_, node) in env.context.nodes() {
-			if let Some(ty_ref) = node.as_type() {
-				if let Some(layout_ref) = node.as_layout() {
-					let layout = env.context.layouts().get(layout_ref).unwrap();
-					if layout.description().is_none()
-						&& layout.causes().iter().any(|cause| cause.is_implicit())
-					{
-						let ty = env.context.types().get(ty_ref).unwrap();
-						implicit_layouts.push((
-							layout_ref,
-							ty.default_fields(env.context)?,
-							ty.causes().map(Cause::into_implicit),
-						))
+			match predicate.into_value() {
+				Name::Rdf(vocab::Rdf::First) => {
+					match self.require_list_mut(id, Some(id_loc))? {
+						ListMut::Cons(list) => {
+							list.set_first(object.into_value(), Some(loc))?
+						}
+						ListMut::Nil => {
+							panic!("nil first")
+						}
+					}
+				},
+				Name::Rdf(vocab::Rdf::Rest) => {
+					match self.require_list_mut(id, Some(id_loc))? {
+						ListMut::Cons(list) => {
+							let Loc(object, _) = expect_id(object)?;
+							list.set_rest(object, Some(loc))?
+						}
+						ListMut::Nil => {
+							panic!("nil first")
+						}
+					}
+				},
+				Name::Rdfs(vocab::Rdfs::Comment) => {
+					match object.as_literal() {
+						Some(literal) => {
+							self.add_comment(id, literal.string_literal().value().to_string(), Some(loc));
+						}
+						None => {
+							panic!("comment is not a string literal")
+						}
 					}
 				}
-			}
-		}
-		for (layout_ref, fields, causes) in implicit_layouts {
-			env.context
-				.layouts_mut()
-				.get_mut(layout_ref)
-				.unwrap()
-				.set_fields(fields, causes.preferred());
-		}
+				Name::Rdfs(vocab::Rdfs::Domain) => {
+					let (prop, field) = self.require_property_or_layout_field_mut(id, Some(id_loc))?;
+					let Loc(object, object_loc) = expect_id(object)?;
 
-		env.context.check()
-	}
-}
+					if let Some(field) = field {
+						field.set_layout(object, Some(loc.clone()))?
+					}
 
-impl Declare for Loc<syntax::Import> {
-	fn declare<'c>(&self, env: &mut Environment<'c>) -> Result<(), Caused<Error>> {
-		env.import(
-			self.prefix.as_str().to_owned(),
-			self.iri.value().clone(),
-			Some(Cause::Explicit(*self.location())),
-		)
-	}
-}
-
-impl Build for Loc<syntax::Item> {
-	type Target = ();
-
-	fn build<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		match self.value() {
-			syntax::Item::Import(_) => (),
-			syntax::Item::Type(ty_def) => {
-				ty_def.build(env)?;
-			}
-			syntax::Item::Layout(layout_def) => {
-				layout_def.build(env)?;
-			}
-		}
-
-		Ok(())
-	}
-}
-
-impl Declare for Loc<syntax::TypeDefinition> {
-	fn declare<'c>(&self, env: &mut Environment<'c>) -> Result<(), Caused<Error>> {
-		let id = self.value().id.build(env)?;
-		let ty_ref = env
-			.context
-			.declare_type(id, Some(Cause::Explicit(*self.location())));
-		let layout_ref = env
-			.context
-			.declare_layout(id, Some(Cause::Implicit(*self.location())));
-
-		env.scope = Some(Scope::Type(ty_ref));
-		for prop_def in &self.value().properties {
-			prop_def.declare(env)?;
-		}
-		env.scope = None;
-
-		let doc = self.value().doc.build(env)?;
-		env.context
-			.types_mut()
-			.get_mut(ty_ref)
-			.unwrap()
-			.set_documentation(doc);
-		let doc = self.value().doc.build(env)?;
-		let layout = env.context.layouts_mut().get_mut(layout_ref).unwrap();
-		layout.declare_type(ty_ref, Some(Cause::Implicit(*self.location())))?;
-		layout.set_documentation(doc);
-
-		Ok(())
-	}
-}
-
-impl Build for Loc<syntax::TypeDefinition> {
-	type Target = ();
-
-	fn build<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let id = self.value().id.build(env)?;
-		let ty_ref = env.context.get(id).unwrap().as_type().unwrap();
-
-		env.scope = Some(Scope::Type(ty_ref));
-		for prop_def in &self.value().properties {
-			prop_def.build(env)?;
-		}
-		env.scope = None;
-
-		Ok(())
-	}
-}
-
-impl Declare for Loc<syntax::PropertyDefinition> {
-	fn declare<'c>(&self, env: &mut Environment<'c>) -> Result<(), Caused<Error>> {
-		let id = self.value().id.build(env)?;
-		let prop_ref = env
-			.context
-			.declare_property(id, Some(Cause::Explicit(*self.location())));
-		let doc = self.value().doc.build(env)?;
-		env.context
-			.properties_mut()
-			.get_mut(prop_ref)
-			.unwrap()
-			.set_documentation(doc);
-		Ok(())
-	}
-}
-
-impl Build for Loc<syntax::PropertyDefinition> {
-	type Target = ();
-
-	fn build<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let id = self.value().id.build(env)?;
-		let prop_ref = env.context.get(id).unwrap().as_property().unwrap();
-
-		if let Some(annotated_ty_expr) = &self.value().ty {
-			let ty = annotated_ty_expr.expr.build(env)?;
-			let prop = env.context.properties_mut().get_mut(prop_ref).unwrap();
-			prop.declare_type(ty, Some(Cause::Explicit(*self.location())))?;
-
-			for a in &annotated_ty_expr.annotations {
-				match a.value() {
-					Annotation::Required => prop.declare_required(),
-					Annotation::Multiple => prop.declare_multiple(),
+					if let Some(prop) = prop {
+						prop.declare_domain(object, Some(loc.clone()));
+						let ty = self.require_type_mut(object, Some(object_loc))?;
+						ty.declare_property(id, Some(loc))
+					}
 				}
+				Name::Rdfs(vocab::Rdfs::Range) => {
+					let prop = self.require_property_mut(id, Some(id_loc))?;
+					let Loc(object, _) = expect_id(object)?;
+					prop.declare_range(object, Some(loc))?
+				}
+				Name::Schema(vocab::Schema::ValueRequired) => {
+					let (prop, field) = self.require_property_or_layout_field_mut(id, Some(id_loc))?;
+					let Loc(required, _) = expect_boolean(object)?;
+					
+					if let Some(prop) = prop {
+						prop.set_required(required, Some(loc.clone()))?
+					}
+
+					if let Some(field) = field {
+						field.set_required(required, Some(loc))?
+					}
+				}
+				Name::Schema(vocab::Schema::MultipleValues) => {
+					let (prop, field) = self.require_property_or_layout_field_mut(id, Some(id_loc))?;
+					let Loc(multiple, _) = expect_boolean(object)?;
+
+					if let Some(prop) = prop {
+						prop.set_functional(!multiple, Some(loc.clone()))?
+					}
+
+					if let Some(field) = field {
+						field.set_functional(!multiple, Some(loc))?
+					}
+				}
+				Name::TreeLdr(vocab::TreeLdr::Name) => {
+					let node = self.require_mut(id, Some(id_loc))?;
+					let Loc(name, _) = expect_raw_string(object)?;
+
+					if node.is_layout() || node.is_layout_field() {
+						if let Some(layout) = node.as_layout_mut() {
+							layout.set_name(name.clone().into(), Some(loc.clone()))?
+						}
+
+						if let Some(field) = node.as_layout_field_mut() {
+							field.set_name(name.into(), Some(loc))?
+						}
+					} else {
+						log::warn!("unapplicable <treelrd:name> property")
+					}
+				}
+				Name::TreeLdr(vocab::TreeLdr::LayoutFor) => {
+					let Loc(ty_id, _) = expect_id(object)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_type(ty_id, Some(loc))?
+				}
+				Name::TreeLdr(vocab::TreeLdr::Fields) => {
+					let Loc(fields_id, _) = expect_id(object)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_fields(fields_id, Some(loc))?
+				}
+				Name::TreeLdr(vocab::TreeLdr::FieldFor) => {
+					let Loc(prop_id, _) = expect_id(object)?;
+					let field = self.require_layout_field_mut(id, Some(id_loc))?;
+					field.set_property(prop_id, Some(loc))?
+				}
+				Name::TreeLdr(vocab::TreeLdr::DerefTo) => {
+					let Loc(target_id, _) = expect_id(object)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_deref_to(target_id, Some(loc))?
+				}
+				_ => ()
 			}
-		}
-
-		if let Some(ty_ref) = env.ty() {
-			let prop = env.context.properties_mut().get_mut(prop_ref).unwrap();
-			prop.declare_domain(ty_ref, Some(Cause::Explicit(*self.location())));
-
-			let ty = env.context.types_mut().get_mut(ty_ref).unwrap();
-			ty.declare_property(prop_ref, Some(Cause::Explicit(*self.location())));
 		}
 
 		Ok(())
-	}
-}
-
-impl Build for Loc<syntax::TypeExpr> {
-	type Target = ty::Expr;
-
-	fn build<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let scope = env.scope.take();
-		let expr = match self.value() {
-			syntax::TypeExpr::Id(id) => {
-				let ty_id = id.build(env)?;
-				let ty_ref = env.context.require_type(ty_id, Some(*self.location()))?;
-				ty::Expr::new(ty_ref, None)
-			}
-			syntax::TypeExpr::Reference(arg) => {
-				let arg = arg.build(env)?;
-				let arg_layout_ref =
-					arg.default_layout(env.context, Some(Cause::Implicit(*self.location())))?;
-				let implicit_layout_ref = env.context.define_reference_layout(
-					arg_layout_ref,
-					Some(Cause::Explicit(*self.location())),
-				)?;
-				ty::Expr::new(arg.ty(), Some(implicit_layout_ref))
-			}
-		};
-
-		env.scope = scope;
-		Ok(expr)
-	}
-}
-
-impl Declare for Loc<syntax::LayoutDefinition> {
-	fn declare<'c>(&self, env: &mut Environment<'c>) -> Result<(), Caused<Error>> {
-		let id = self.value().id.build(env)?;
-		let layout_ref = env
-			.context
-			.declare_layout(id, Some(Cause::Explicit(*self.location())));
-		let doc = self.value().doc.build(env)?;
-		env.context
-			.layouts_mut()
-			.get_mut(layout_ref)
-			.unwrap()
-			.set_documentation(doc);
-		Ok(())
-	}
-}
-
-impl Build for Loc<syntax::LayoutDefinition> {
-	type Target = ();
-
-	fn build<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let id = self.value().id.build(env)?;
-		let layout_ref = env.context.get(id).unwrap().as_layout().unwrap();
-
-		let ty_id = self.value().ty_id.build(env)?;
-		let ty_ref = env.context.require_type(ty_id, Some(*self.location()))?;
-		env.context
-			.layouts_mut()
-			.get_mut(layout_ref)
-			.unwrap()
-			.declare_type(
-				ty_ref,
-				Some(Cause::Explicit(*self.value().ty_id.location())),
-			)?;
-
-		env.scope = Some(Scope::Layout(layout_ref));
-		let mut fields = Vec::with_capacity(self.value().fields.len());
-		for field_def in &self.value().fields {
-			fields.push(field_def.build(env)?);
-		}
-		env.scope = None;
-		env.context
-			.layouts_mut()
-			.get_mut(layout_ref)
-			.unwrap()
-			.declare_fields(fields, Some(Cause::Explicit(*self.value().id.location())))?;
-		Ok(())
-	}
-}
-
-impl Build for Loc<syntax::FieldDefinition> {
-	type Target = layout::Field;
-
-	fn build<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let id = self.value().id.build(env)?;
-		let prop_ref = env.context.require_property(id, Some(*self.location()))?;
-
-		let name = match self.value().alias.as_ref() {
-			Some(name) => name.value().as_str().to_owned(),
-			None => env
-				.context
-				.vocabulary()
-				.get(id)
-				.unwrap()
-				.path()
-				.file_name()
-				.expect("invalid property IRI")
-				.to_owned(),
-		};
-
-		let layout_expr = self.value().layout.expr.build(env)?;
-		let mut field = layout::Field::new(
-			prop_ref,
-			name,
-			layout_expr,
-			Some(Cause::Explicit(*self.location())),
-		);
-
-		for a in &self.value().layout.annotations {
-			match a.value() {
-				Annotation::Required => field.declare_required(),
-				Annotation::Multiple => field.declare_multiple(),
-			}
-		}
-
-		Ok(field)
-	}
-}
-
-impl Build for Loc<syntax::LayoutExpr> {
-	type Target = Ref<layout::Definition>;
-
-	fn build<'c>(&self, env: &mut Environment<'c>) -> Result<Self::Target, Caused<Error>> {
-		let scope = env.scope.take();
-		let layout_ref = match self.value() {
-			syntax::LayoutExpr::Id(id) => {
-				let layout_id = id.build(env)?;
-				env.context
-					.require_layout(layout_id, Some(Cause::Explicit(*self.location())))?
-			}
-			syntax::LayoutExpr::Reference(arg) => {
-				let arg = arg.build(env)?;
-				env.context
-					.define_reference_layout(arg, Some(Cause::Explicit(*self.location())))?
-			}
-		};
-
-		env.scope = scope;
-		Ok(layout_ref)
 	}
 }

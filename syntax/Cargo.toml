@@ -6,13 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+treeldr-vocab = { path = "../vocab" }
 iref = "2.1.1"
-iref-enum = "1.2.0"
-static-iref = "1.0.0"
 locspan = "0.3"
 codespan-reporting = "0.11"
 rdf-types = { version = "0.3.4", features = ["loc"] }
 
 [dev-dependencies]
+static-iref = "1.0.0"
 nquads-syntax = "0.1.7"
 grdf = "0.5.0"
