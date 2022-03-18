@@ -27,7 +27,7 @@ impl<F> Documentation<F> {
 
 pub struct Document<F> {
 	pub bases: Vec<Loc<IriBuf, F>>,
-	pub imports: Vec<Loc<Import<F>, F>>,
+	pub uses: Vec<Loc<Use<F>, F>>,
 	pub types: Vec<Loc<TypeDefinition<F>, F>>,
 	pub layouts: Vec<Loc<LayoutDefinition<F>, F>>,
 }
@@ -46,12 +46,12 @@ impl Prefix {
 
 pub enum Item<F> {
 	Base(Loc<IriBuf, F>),
-	Import(Loc<Import<F>, F>),
+	Use(Loc<Use<F>, F>),
 	Type(Loc<TypeDefinition<F>, F>),
 	Layout(Loc<LayoutDefinition<F>, F>),
 }
 
-pub struct Import<F> {
+pub struct Use<F> {
 	pub iri: Loc<IriBuf, F>,
 	pub prefix: Loc<Prefix, F>,
 	pub doc: Option<Loc<Documentation<F>, F>>,

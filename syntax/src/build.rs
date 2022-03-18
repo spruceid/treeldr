@@ -234,7 +234,7 @@ impl<F: Clone> Build<F> for Loc<crate::Document<F>, F> {
 			}
 		}
 
-		for import in doc.imports {
+		for import in doc.uses {
 			import.build(ctx, quads)?
 		}
 
@@ -275,7 +275,7 @@ impl<F: Clone> Build<F> for Loc<crate::Id, F> {
 	}
 }
 
-impl<F: Clone> Build<F> for Loc<crate::Import<F>, F> {
+impl<F: Clone> Build<F> for Loc<crate::Use<F>, F> {
 	type Target = ();
 
 	fn build(

@@ -7,7 +7,7 @@ use std::{fmt, fmt::Debug};
 #[derive(Debug)]
 pub enum Error<E> {
 	Unexpected(Option<Token>, Vec<lexing::TokenKind>),
-	InvalidImportId(Id),
+	InvalidUseId(Id),
 	InvalidPrefix(Id),
 	InvalidAlias(Id),
 	Lexer(E),
@@ -17,7 +17,7 @@ impl<E: Debug + fmt::Display, F: Clone> reporting::Diagnose<F> for Loc<Error<E>,
 	fn message(&self) -> String {
 		match self.value() {
 			Error::Unexpected(_, _) => "parsing error".to_owned(),
-			Error::InvalidImportId(_) => "invalid import IRI".to_owned(),
+			Error::InvalidUseId(_) => "invalid use IRI".to_owned(),
 			Error::InvalidPrefix(_) => "invalid prefix".to_owned(),
 			Error::InvalidAlias(_) => "invalid alias".to_owned(),
 			Error::Lexer(_) => "lexing error".to_owned(),
@@ -63,7 +63,7 @@ impl<E: Debug + fmt::Display> fmt::Display for Error<E> {
 		match self {
 			Self::Unexpected(None, _) => write!(f, "unexpected end of text"),
 			Self::Unexpected(Some(token), _) => write!(f, "unexpected {}", token),
-			Self::InvalidImportId(id) => write!(f, "invalid import IRI `{}`", id),
+			Self::InvalidUseId(id) => write!(f, "invalid use IRI `{}`", id),
 			Self::InvalidPrefix(id) => write!(f, "invalid prefix `{}`", id),
 			Self::InvalidAlias(id) => write!(f, "invalid alias `{}`", id),
 			Self::Lexer(e) => write!(f, "tokens error: {}", e),
@@ -255,7 +255,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 			Loc(None, loc) => Ok(Loc::new(
 				Self {
 					bases: Vec::new(),
-					imports: Vec::new(),
+					uses: Vec::new(),
 					types: Vec::new(),
 					layouts: Vec::new(),
 				},
@@ -270,14 +270,14 @@ impl<F: Clone> Parse<F> for Document<F> {
 		loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
 		let mut bases = Vec::new();
-		let mut imports = Vec::new();
+		let mut uses = Vec::new();
 		let mut types = Vec::new();
 		let mut layouts = Vec::new();
 
 		let Loc(first_item, mut loc) = Item::parse_from(lexer, token, loc)?;
 		match first_item {
 			Item::Base(i) => bases.push(i),
-			Item::Import(i) => imports.push(i),
+			Item::Use(i) => uses.push(i),
 			Item::Type(t) => types.push(t),
 			Item::Layout(l) => layouts.push(l),
 		}
@@ -290,7 +290,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 
 					match item {
 						Item::Base(i) => bases.push(i),
-						Item::Import(i) => imports.push(i),
+						Item::Use(i) => uses.push(i),
 						Item::Type(t) => types.push(t),
 						Item::Layout(l) => layouts.push(l),
 					}
@@ -299,7 +299,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 					break Ok(Loc::new(
 						Self {
 							bases,
-							imports,
+							uses,
 							types,
 							layouts,
 						},
@@ -385,24 +385,24 @@ impl<F: Clone> Parse<F> for Item<F> {
 					locspan::Loc(Id::IriRef(iri_ref), loc) => match IriBuf::try_from(iri_ref) {
 						Ok(iri) => Loc::new(iri, loc),
 						Err(iri_ref) => {
-							return Err(Loc::new(Error::InvalidImportId(Id::IriRef(iri_ref)), loc))
+							return Err(Loc::new(Error::InvalidUseId(Id::IriRef(iri_ref)), loc))
 						}
 					},
-					locspan::Loc(id, loc) => return Err(Loc::new(Error::InvalidImportId(id), loc)),
+					locspan::Loc(id, loc) => return Err(Loc::new(Error::InvalidUseId(id), loc)),
 				};
 
 				Ok(Loc::new(Item::Base(iri), loc))
 			}
-			Token::Keyword(lexing::Keyword::Import) => {
+			Token::Keyword(lexing::Keyword::Use) => {
 				let id = Id::parse(lexer)?;
 				let iri = match id {
 					locspan::Loc(Id::IriRef(iri_ref), loc) => match IriBuf::try_from(iri_ref) {
 						Ok(iri) => Loc::new(iri, loc),
 						Err(iri_ref) => {
-							return Err(Loc::new(Error::InvalidImportId(Id::IriRef(iri_ref)), loc))
+							return Err(Loc::new(Error::InvalidUseId(Id::IriRef(iri_ref)), loc))
 						}
 					},
-					locspan::Loc(id, loc) => return Err(Loc::new(Error::InvalidImportId(id), loc)),
+					locspan::Loc(id, loc) => return Err(Loc::new(Error::InvalidUseId(id), loc)),
 				};
 
 				parse_keyword(lexer, lexing::Keyword::As)?;
@@ -411,7 +411,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 				loc.span_mut().append(prefix.span());
 
 				Ok(Loc::new(
-					Item::Import(Loc::new(Import { iri, prefix, doc }, loc.clone())),
+					Item::Use(Loc::new(Use { iri, prefix, doc }, loc.clone())),
 					loc,
 				))
 			}
