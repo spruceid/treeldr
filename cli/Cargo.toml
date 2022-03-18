@@ -6,6 +6,7 @@ description = "Schema definition language."
 edition = "2021"
 
 [features]
+default = ["json-schema", "json-ld-context"]
 json-schema = [
 	"treeldr-json-schema"
 ]
