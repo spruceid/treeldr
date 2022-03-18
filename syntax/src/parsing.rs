@@ -41,7 +41,7 @@ impl<E: Debug + fmt::Display, F: Clone> reporting::Diagnose<F> for Loc<Error<E>,
 				for (i, token) in expected.iter().enumerate() {
 					if i > 0 {
 						if i + 1 == len {
-							note.push_str("or ");
+							note.push_str(" or ");
 						} else {
 							note.push_str(", ");
 						}
@@ -582,7 +582,6 @@ impl<F: Clone> Parse<F> for AnnotatedTypeExpr<F> {
 
 		let k = match token {
 			Token::Keyword(Keyword::Annotation(a)) => {
-				next_token(lexer)?;
 				annotations.push(Loc::new(a, loc.clone()));
 				while let Loc(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) =
 					peek_token(lexer)?
@@ -598,6 +597,7 @@ impl<F: Clone> Parse<F> for AnnotatedTypeExpr<F> {
 		};
 
 		let expr = TypeExpr::parse_from_continuation(lexer, k)?;
+		loc.span_mut().append(expr.span());
 
 		while let locspan::Loc(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) =
 			peek_token(lexer)?
@@ -651,7 +651,6 @@ impl<F: Clone> Parse<F> for AnnotatedLayoutExpr<F> {
 
 		let k = match token {
 			Token::Keyword(Keyword::Annotation(a)) => {
-				next_token(lexer)?;
 				annotations.push(Loc::new(a, loc.clone()));
 				while let Loc(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) =
 					peek_token(lexer)?
@@ -667,6 +666,7 @@ impl<F: Clone> Parse<F> for AnnotatedLayoutExpr<F> {
 		};
 
 		let expr = LayoutExpr::parse_from_continuation(lexer, k)?;
+		loc.span_mut().append(expr.span());
 
 		while let locspan::Loc(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) =
 			peek_token(lexer)?
