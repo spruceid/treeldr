@@ -2,6 +2,11 @@
 	"scopeName": "source.treeldr",
 	"patterns": [
 		{
+			"name": "comment.line.double-slash.treeldr",
+			"begin": "//",
+			"end": "\n"
+		},
+		{
 			"name": "keyword.treeldr",
 			"match": "\\b(base|use|as|type|layout|for)\\b"
 		},
