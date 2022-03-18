@@ -9,8 +9,8 @@ edition = "2021"
 treeldr-vocab = { path = "../vocab" }
 shelves = "0.2.3"
 iref = "2.1.1"
-iref-enum = "1.2.0"
-static-iref = "1.0.0"
+iref-enum = "2.0"
+static-iref = "2.0"
 log = "0.4"
 derivative = "*"
 locspan = { version = "0.3.2", features = ["reporting"] }
