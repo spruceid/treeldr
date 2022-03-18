@@ -1,5 +1,5 @@
 use super::{peekable3::Peekable3, Annotation};
-use iref::{IriRef, IriRefBuf};
+use iref::IriRefBuf;
 use locspan::{ErrAt, Loc, Location, Span};
 use std::fmt;
 
@@ -235,6 +235,8 @@ impl fmt::Display for Keyword {
 #[derive(Debug)]
 pub enum Error<E> {
 	InvalidId(String),
+	InvalidCodepoint(u32),
+	InvalidSuffix(String),
 	Unexpected(Option<char>),
 	Stream(E),
 }
@@ -243,6 +245,8 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::InvalidId(id) => write!(f, "invalid identifier `{}`", id),
+			Self::InvalidCodepoint(c) => write!(f, "invalid character codepoint {:x}", c),
+			Self::InvalidSuffix(s) => write!(f, "invalid compact IRI suffix `{}`", s),
 			Self::Unexpected(None) => write!(f, "unexpected end of text"),
 			Self::Unexpected(Some(c)) => write!(f, "unexpected character `{}`", c),
 			Self::Stream(e) => e.fmt(f),
@@ -299,6 +303,7 @@ impl<E, C: Iterator<Item = Result<char, E>>> Chars<C> {
 struct Position<F> {
 	file: F,
 	span: Span,
+	last_span: Span,
 }
 
 impl<F: Clone> Position<F> {
@@ -306,8 +311,16 @@ impl<F: Clone> Position<F> {
 		Location::new(self.file.clone(), self.span)
 	}
 
+	fn current_span(&self) -> Span {
+		self.span
+	}
+
 	fn end(&self) -> Location<F> {
 		Location::new(self.file.clone(), self.span.end())
+	}
+
+	fn last(&self) -> Location<F> {
+		Location::new(self.file.clone(), self.last_span)
 	}
 }
 
@@ -320,6 +333,12 @@ pub struct Lexer<F, E, C: Iterator<Item = Result<char, E>>> {
 	lookahead: Option<Loc<Token, F>>,
 }
 
+pub enum PrefixedName {
+	Keyword(Keyword),
+	Name(String),
+	CompactIri(String, IriRefBuf),
+}
+
 impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 	pub fn new(file: F, chars: C) -> Self {
 		Self {
@@ -327,6 +346,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 			pos: Position {
 				file,
 				span: Span::default(),
+				last_span: Span::default(),
 			},
 			lookahead: None,
 		}
@@ -355,10 +375,17 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		match self.chars.next().err_at(|| self.pos.end())? {
 			Some(c) => {
 				self.pos.span.push(c.len_utf8());
+				self.pos.last_span.clear();
+				self.pos.last_span.push(c.len_utf8());
 				Ok(Some(c))
 			}
 			None => Ok(None),
 		}
+	}
+
+	fn expect_char(&mut self) -> Result<char, Loc<Error<E>, F>> {
+		self.next_char()?
+			.ok_or_else(|| Loc(Error::Unexpected(None), self.pos.end()))
 	}
 
 	fn skip_whitespaces(&mut self) -> Result<(), Loc<Error<E>, F>> {
@@ -409,19 +436,166 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		Ok(doc)
 	}
 
-	fn next_name(&mut self, first: char) -> Result<String, Loc<Error<E>, F>> {
-		let mut id = String::new();
-		id.push(first);
+	fn next_hex_char(&mut self, mut span: Span, len: u8) -> Result<char, Loc<Error<E>, F>> {
+		let mut codepoint = 0;
 
-		while let Some(c) = self.peek_char()? {
-			if c.is_alphanumeric() {
-				id.push(self.next_char()?.unwrap())
-			} else {
-				break;
+		for _ in 0..len {
+			let c = self.expect_char()?;
+			match c.to_digit(16) {
+				Some(d) => codepoint = codepoint << 4 | d,
+				None => return Err(Loc(Error::Unexpected(Some(c)), self.pos.last())),
 			}
 		}
 
-		Ok(id)
+		span.set_end(self.pos.current_span().end());
+		match char::try_from(codepoint) {
+			Ok(c) => Ok(c),
+			Err(_) => Err(Loc(
+				Error::InvalidCodepoint(codepoint),
+				Location::new(self.pos.file.clone(), span),
+			)),
+		}
+	}
+
+	fn next_escape(&mut self) -> Result<char, Loc<Error<E>, F>> {
+		match self.next_char()? {
+			Some(
+				c @ ('_' | '~' | '.' | '-' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ','
+				| ';' | '=' | '/' | '?' | '#' | '@' | '%'),
+			) => Ok(c),
+			unexpected => Err(Loc(Error::Unexpected(unexpected), self.pos.last())),
+		}
+	}
+
+	/// Parse a `PrefixedName` according to the following grammar BNF rules:
+	///
+	/// ```abnf
+	/// PrefixedName ::= NAME | PNAME_LN
+	///
+	/// NAME         ::= PN_CHARS_U PN_CHARS*
+	/// PNAME_NS     ::= PN_PREFIX? ':'
+	/// PNAME_LN     ::= PNAME_NS PN_LOCAL
+	/// ```
+	fn next_prefixed_name(&mut self, first: char) -> Result<PrefixedName, Loc<Error<E>, F>> {
+		// PNAME_NS or Keyword
+		let mut prefix = String::new();
+		match first {
+			':' => (),
+			c if is_pn_chars_base(c) => {
+				prefix.push(c);
+				let mut only_pn_chars = true;
+				let mut last_is_pn_chars = true;
+				loop {
+					match self.peek_char()? {
+						Some(c) if is_pn_chars(c) => {
+							prefix.push(self.expect_char()?);
+							last_is_pn_chars = true
+						}
+						Some('.') => {
+							prefix.push(self.expect_char()?);
+							last_is_pn_chars = false;
+							only_pn_chars = false
+						}
+						Some(':') if last_is_pn_chars => {
+							if self
+								.peek_char2()?
+								.map(|c| c.is_whitespace())
+								.unwrap_or(true)
+							{
+								return Ok(PrefixedName::Name(prefix));
+							} else {
+								self.expect_char()?;
+								break;
+							}
+						}
+						unexpected => {
+							return if only_pn_chars {
+								match Keyword::from_name(&prefix) {
+									Some(kw) => Ok(PrefixedName::Keyword(kw)),
+									None => Ok(PrefixedName::Name(prefix)),
+								}
+							} else {
+								Err(Loc(Error::Unexpected(unexpected), self.pos.end()))
+							}
+						}
+					}
+				}
+			}
+			'_' => {
+				// name
+				let mut name = String::new();
+				name.push(first);
+				loop {
+					match self.peek_char()? {
+						Some(c) if is_pn_chars(c) => {
+							name.push(self.expect_char()?);
+						}
+						_ => {
+							return match Keyword::from_name(&name) {
+								Some(kw) => Ok(PrefixedName::Keyword(kw)),
+								None => Ok(PrefixedName::Name(name)),
+							}
+						}
+					}
+				}
+			}
+			unexpected => return Err(Loc(Error::Unexpected(Some(unexpected)), self.pos.last())),
+		};
+
+		// PN_LOCAL
+		let mut suffix = String::new();
+		let mut suffix_span = self.pos.current_span().next();
+		let c = self.expect_char()?;
+		if is_pn_chars_u(c) || c.is_ascii_digit() || matches!(c, ':' | '%' | '\\') {
+			let c = match c {
+				'%' => {
+					// percent encoded.
+					self.next_hex_char(self.pos.current_span().end().into(), 2)?
+				}
+				'\\' => {
+					// escape sequence.
+					self.next_escape()?
+				}
+				c => c,
+			};
+
+			suffix.push(c);
+
+			loop {
+				match self.peek_char()? {
+					Some(c)
+						if is_pn_chars(c)
+							|| c.is_ascii_digit() || matches!(c, ':' | '%' | '\\') =>
+					{
+						let c = match self.expect_char()? {
+							'%' => {
+								// percent encoded.
+								self.next_hex_char(self.pos.current_span().end().into(), 2)?
+							}
+							'\\' => {
+								// escape sequence.
+								self.next_escape()?
+							}
+							c => c,
+						};
+
+						suffix.push(c);
+					}
+					_ => {
+						suffix_span.set_end(self.pos.current_span().end());
+						break match IriRefBuf::from_string(suffix) {
+							Ok(suffix) => Ok(PrefixedName::CompactIri(prefix, suffix)),
+							Err((_, invalid_suffix)) => Err(Loc(
+								Error::InvalidSuffix(invalid_suffix),
+								Location::new(self.pos.file.clone(), suffix_span),
+							)),
+						};
+					}
+				}
+			}
+		} else {
+			Err(Loc(Error::Unexpected(Some(c)), self.pos.last()))
+		}
 	}
 
 	fn next_iri(&mut self) -> Result<Id, Loc<Error<E>, F>> {
@@ -432,18 +606,6 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 				break;
 			} else {
 				iri.push(c)
-			}
-		}
-
-		// Is it a compact IRI?
-		if let Some((prefix, suffix)) = iri.split_once(':') {
-			if !suffix.starts_with("//") {
-				let suffix = match IriRef::new(suffix) {
-					Ok(iri_ref) => iri_ref.to_owned(),
-					Err(_) => return Err(Loc::new(Error::InvalidId(iri), self.pos.current())),
-				};
-
-				return Ok(Id::Compact(prefix.to_string(), suffix));
 			}
 		}
 
@@ -469,14 +631,15 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 				)),
 				c => {
 					if c.is_alphabetic() {
-						let name = self.next_name(c)?;
-						match Keyword::from_name(&name) {
-							Some(kw) => Ok(Loc::new(Some(Token::Keyword(kw)), self.pos.current())),
-							None => Ok(Loc::new(
-								Some(Token::Id(Id::Name(name))),
-								self.pos.current(),
-							)),
-						}
+						let token = match self.next_prefixed_name(c)? {
+							PrefixedName::Keyword(kw) => Token::Keyword(kw),
+							PrefixedName::CompactIri(prefix, suffix) => {
+								Token::Id(Id::Compact(prefix, suffix))
+							}
+							PrefixedName::Name(name) => Token::Id(Id::Name(name)),
+						};
+
+						Ok(Loc::new(Some(token), self.pos.current()))
 					} else {
 						match Delimiter::from_start(c) {
 							Some(d) => Ok(Loc::new(Some(Token::Begin(d)), self.pos.current())),
@@ -544,4 +707,17 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Iterator for Lexer<F, E, 
 			Err(e) => Some(Err(e)),
 		}
 	}
+}
+
+fn is_pn_chars_base(c: char) -> bool {
+	matches!(c, 'A'..='Z' | 'a'..='z' | '\u{00c0}'..='\u{00d6}' | '\u{00d8}'..='\u{00f6}' | '\u{00f8}'..='\u{02ff}' | '\u{0370}'..='\u{037d}' | '\u{037f}'..='\u{1fff}' | '\u{200c}'..='\u{200d}' | '\u{2070}'..='\u{218f}' | '\u{2c00}'..='\u{2fef}' | '\u{3001}'..='\u{d7ff}' | '\u{f900}'..='\u{fdcf}' | '\u{fdf0}'..='\u{fffd}' | '\u{10000}'..='\u{effff}')
+}
+
+fn is_pn_chars_u(c: char) -> bool {
+	is_pn_chars_base(c) || c == '_'
+}
+
+fn is_pn_chars(c: char) -> bool {
+	is_pn_chars_u(c)
+		|| matches!(c, '-' | '0'..='9' | '\u{00b7}' | '\u{0300}'..='\u{036f}' | '\u{203f}'..='\u{2040}')
 }

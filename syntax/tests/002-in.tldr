@@ -6,7 +6,7 @@ type Diploma {
 	degree: Degree,
 	year: Year,
 	honors: Honors,
-	url: <xs:anyURI>
+	url: xs:anyURI
 }
 
 /// Department
