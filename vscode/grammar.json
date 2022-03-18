@@ -2,29 +2,34 @@
 	"scopeName": "source.treeldr",
 	"patterns": [
 		{
+			"name": "comment.line.documentation.treeldr",
+			"begin": "///",
+			"end": "\n"
+		},
+		{
 			"name": "comment.line.double-slash.treeldr",
 			"begin": "//",
 			"end": "\n"
 		},
 		{
 			"name": "keyword.treeldr",
-			"match": "\\b(base|use|as|type|layout|for)\\b"
+			"match": "(?<!as\\s*)\\b(base|use|as|type|layout|for)\\b(?!\\s*(:|as))"
 		},
 		{
 			"name": "entity.name.tag.treeldr",
-			"match": "\\b(required|multiple|single)\\b"
+			"match": "(?<!as\\s*)\\b(required|multiple|single)\\b(?!\\s*(:|as))"
 		},
 		{
 			"name": "variable.prefix.treeldr",
-			"match": "[a-zA-Z0-9]+(?=:[a-zA-Z0-9])"
+			"match": "\\b\\w+(?=:\\w)"
 		},
 		{
 			"name": "entity.name.type.treeldr",
-			"match": "[A-Z][a-z0-9]*"
+			"match": "\\b\\p{Lu}\\w*\\b"
 		},
 		{
 			"name": "entity.name.type.xsd.treeldr",
-			"match": "(?<=xs:)[A-Za-z0-9]+"
+			"match": "(?<=xs:)\\w+\\b"
 		},
 		{
 			"name": "string.quoted.other.uri.treeldr",

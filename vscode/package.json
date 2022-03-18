@@ -4,12 +4,16 @@
     "description": "TreeLDR schema definition language for Visual Studio Code",
     "version": "0.0.1",
     "engines": {
-        "vscode": "^1.65.0"
+        "vscode": "^1.64.0"
     },
     "categories": [
         "Programming Languages",
         "Snippets"
     ],
+    "activationEvents": [
+        "onLanguage:treeldr"
+    ],
+    "main": "./main.js",
     "contributes": {
         "languages": [{
             "id": "treeldr",
