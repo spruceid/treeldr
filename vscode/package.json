@@ -1,0 +1,32 @@
+{
+    "name": "treeldr",
+    "displayName": "TreeLDR",
+    "description": "TreeLDR schema definition language for Visual Studio Code",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.65.0"
+    },
+    "categories": [
+        "Programming Languages",
+        "Snippets"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "treeldr",
+            "aliases": ["TreeLDR", "treeldr"],
+            "extensions": [".tldr"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "treeldr",
+            "scopeName": "source.treeldr",
+            "path": "./grammar.json"
+        }],
+        "snippets": [
+            {
+                "language": "treeldr",
+                "path": "./snippets.json"
+            }
+        ]
+    }
+}

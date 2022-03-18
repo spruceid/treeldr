@@ -1,0 +1,30 @@
+{
+	"scopeName": "source.treeldr",
+	"patterns": [
+		{
+			"name": "keyword.treeldr",
+			"match": "\\b(base|use|as|type|layout|for)\\b"
+		},
+		{
+			"name": "entity.name.tag.treeldr",
+			"match": "\\b(required|multiple|single)\\b"
+		},
+		{
+			"name": "variable.prefix.treeldr",
+			"match": "[a-zA-Z0-9]+(?=:[a-zA-Z0-9])"
+		},
+		{
+			"name": "entity.name.type.treeldr",
+			"match": "[A-Z][a-z0-9]*"
+		},
+		{
+			"name": "entity.name.type.xsd.treeldr",
+			"match": "(?<=xs:)[A-Za-z0-9]+"
+		},
+		{
+			"name": "string.quoted.other.uri.treeldr",
+			"begin": "<",
+			"end": ">"
+		}
+	]
+}

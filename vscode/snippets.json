@@ -1,0 +1,22 @@
+{
+	"Type": {
+		"scope": "treeldr",
+		"prefix": "type",
+		"body": [
+			"type ${1:Name} {",
+			"\t$0",
+			"}"
+		],
+		"description": "Type definition."
+	},
+	"Layout": {
+		"scope": "treeldr",
+		"prefix": "layout",
+		"body": [
+			"layout ${1:Name} {",
+			"\t$0",
+			"}"
+		],
+		"description": "Layout definition."
+	}
+}

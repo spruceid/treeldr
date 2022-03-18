@@ -1,0 +1,1 @@
+# TreeLDR language support for VSCode.
