@@ -1,4 +1,3 @@
-use iref::IriBuf;
 use treeldr::{layout, vocab::Display, Ref};
 
 mod command;
@@ -8,7 +7,7 @@ pub use command::Command;
 pub use embedding::Embedding;
 
 pub enum Error<F> {
-	InvalidLayoutIri(IriBuf),
+	NoLayoutName(Ref<layout::Definition<F>>),
 	InfiniteSchema(Ref<layout::Definition<F>>),
 	Serialization(serde_json::Error),
 }
@@ -36,7 +35,7 @@ pub fn generate<F>(
 	}
 
 	let layout = model.layouts().get(layout_ref).unwrap();
-	let name = layout.name();
+	let name = layout.name().ok_or(Error::NoLayoutName(layout_ref))?;
 
 	let mut json_schema = serde_json::Map::new();
 	json_schema.insert(
@@ -50,7 +49,13 @@ pub fn generate<F>(
 	let mut defs = serde_json::Map::new();
 	for layout_ref in embedding.indirect_layouts() {
 		let mut json_schema = serde_json::Map::new();
-		let name = model.layouts().get(layout_ref).unwrap().name().to_string();
+		let name = model
+			.layouts()
+			.get(layout_ref)
+			.unwrap()
+			.name()
+			.ok_or(Error::NoLayoutName(layout_ref))?
+			.to_string();
 		generate_layout(&mut json_schema, model, embedding, layout_ref)?;
 		defs.insert(name, json_schema.into());
 	}
@@ -84,12 +89,12 @@ fn generate_layout<F>(
 
 	use treeldr::layout::Description;
 	match layout.description() {
-		Description::Reference(_) => {
+		Description::Reference(_, _) => {
 			json.insert("type".into(), "string".into());
 			Ok(())
 		}
-		Description::Struct(fields) => generate_struct(json, model, embedding, fields),
-		Description::Native(n) => {
+		Description::Struct(s) => generate_struct(json, model, embedding, s.fields()),
+		Description::Native(n, _) => {
 			generate_native_type(json, *n);
 			Ok(())
 		}
@@ -167,7 +172,12 @@ fn generate_layout_defs_ref<F>(
 		"$ref".into(),
 		format!(
 			"#/$defs/{}",
-			model.layouts().get(layout_ref).unwrap().name()
+			model
+				.layouts()
+				.get(layout_ref)
+				.unwrap()
+				.name()
+				.ok_or(Error::NoLayoutName(layout_ref))?
 		)
 		.into(),
 	);
@@ -186,7 +196,7 @@ fn generate_layout_ref<F>(
 
 	use treeldr::layout::Description;
 	match layout.description() {
-		Description::Reference(_) => {
+		Description::Reference(_, _) => {
 			json.insert("type".into(), "string".into());
 			Ok(())
 		}
@@ -198,7 +208,7 @@ fn generate_layout_ref<F>(
 			);
 			Ok(())
 		}
-		Description::Native(n) => {
+		Description::Native(n, _) => {
 			generate_native_type(json, *n);
 			Ok(())
 		}

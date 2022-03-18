@@ -43,9 +43,9 @@ fn generate_layout_context<F>(
 
 	use treeldr::layout::Description;
 	match layout.description() {
-		Description::Struct(fields) => generate_struct(&mut json, model, fields)?,
-		Description::Reference(_) => (),
-		Description::Native(_) => (),
+		Description::Struct(s) => generate_struct(&mut json, model, s.fields())?,
+		Description::Reference(_, _) => (),
+		Description::Native(_, _) => (),
 	}
 
 	Ok(json)
@@ -65,8 +65,8 @@ fn generate_layout_type<F>(
 			// Some(ty_iri.as_str().into())
 			None
 		}
-		Description::Reference(_) => Some("@id".into()),
-		Description::Native(n) => Some(generate_native_type(*n)),
+		Description::Reference(_, _) => Some("@id".into()),
+		Description::Native(n, _) => Some(generate_native_type(*n)),
 	}
 }
 

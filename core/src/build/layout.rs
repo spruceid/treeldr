@@ -46,6 +46,11 @@ impl<F> Definition<F> {
 		self.ty.with_causes()
 	}
 
+	pub fn require_ty(&self, cause: Option<Location<F>>) -> Result<&WithCauses<Id, F>, Error<F>> {
+		self.ty
+			.value_or_else(|| Caused::new(error::LayoutMissingType(self.id).into(), cause))
+	}
+
 	pub fn name(&self) -> Option<&WithCauses<String, F>> {
 		self.name.with_causes()
 	}
@@ -133,27 +138,7 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 		vocab: &Vocabulary,
 		nodes: &super::context::AllocatedNodes<F>,
 	) -> Result<crate::layout::Definition<F>, Error<F>> {
-		let (def, causes) = self.into_parts();
-
-		let name = def.name.unwrap_or_else_try(|| match id {
-			Id::Iri(name) => {
-				let iri = name.iri(vocab).unwrap();
-				Ok(iri
-					.path()
-					.file_name()
-					.ok_or_else(|| {
-						Caused::new(
-							error::LayoutMissingName(id).into(),
-							causes.preferred().cloned(),
-						)
-					})?
-					.into())
-			}
-			Id::Blank(_) => Err(Caused::new(
-				error::LayoutMissingName(id).into(),
-				causes.preferred().cloned(),
-			)),
-		})?;
+		let (mut def, causes) = self.into_parts();
 
 		let ty_id = def.ty.ok_or_else(|| {
 			Caused::new(
@@ -171,16 +156,38 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 				causes.preferred().cloned(),
 			)
 		})?;
+
+		if !def.name.is_set() {
+			let default_name = match id {
+				Id::Iri(name) => {
+					let iri = name.iri(vocab).unwrap();
+					iri.path().file_name().map(Into::into)
+				}
+				Id::Blank(_) => None,
+			};
+
+			if let Some(name) = default_name {
+				def.name.replace(name, causes.preferred().cloned());
+			}
+		}
+
 		let desc = def_desc
 			.try_map_with_causes::<_, Error<F>, _>(|d, desc_causes| match d {
-				Description::Native(n) => Ok(crate::layout::Description::Native(n)),
+				Description::Native(n) => Ok(crate::layout::Description::Native(n, def.name)),
 				Description::Reference(layout_id) => {
 					let layout_ref = *nodes
 						.require_layout(layout_id, desc_causes.preferred().cloned())?
 						.inner();
-					Ok(crate::layout::Description::Reference(layout_ref))
+					Ok(crate::layout::Description::Reference(layout_ref, def.name))
 				}
 				Description::Struct(id) => {
+					let name = def.name.ok_or_else(|| {
+						Caused::new(
+							error::LayoutMissingName(id).into(),
+							causes.preferred().cloned(),
+						)
+					})?;
+
 					let fields = nodes
 						.require_list(id, desc_causes.preferred().cloned())?
 						.iter(nodes)
@@ -201,11 +208,14 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 							field.build(doc, vocab, nodes)
 						})
 						.try_collect()?;
-					Ok(crate::layout::Description::Struct(fields))
+
+					let strct = crate::layout::Struct::new(name, fields);
+
+					Ok(crate::layout::Description::Struct(strct))
 				}
 			})
 			.map_err(Caused::flatten)?;
 
-		Ok(crate::layout::Definition::new(id, name, ty, desc, causes))
+		Ok(crate::layout::Definition::new(id, ty, desc, causes))
 	}
 }

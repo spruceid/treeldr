@@ -115,10 +115,75 @@ impl<F> Context<F> {
 		Ok(())
 	}
 
-	pub fn build(self) -> Result<Model<F>, (Error<F>, Vocabulary)>
+	/// Resolve all the reference layouts.
+	///
+	/// Checks that the type of a reference layout (`&T`) is equal to the type of the target layout (`T`).
+	/// If no type is defined for the reference layout, it is set to the correct type.
+	pub fn resolve_references(&mut self) -> Result<(), Error<F>>
 	where
 		F: Ord + Clone,
 	{
+		let mut deref_map = HashMap::new();
+
+		for (id, node) in &self.nodes {
+			if let Some(layout) = node.as_layout() {
+				if let Some(desc) = layout.description() {
+					if let layout::Description::Reference(target_layout_id) = desc.inner() {
+						deref_map.insert(
+							*id,
+							Caused::new(*target_layout_id, desc.causes().preferred().cloned()),
+						);
+					}
+				}
+			}
+		}
+
+		// Assign a depth to each reference.
+		// The depth correspond the the reference nesting level (`&&&&T` => 4 nesting level => depth 3).
+		// References with higher depth must be resolved first.
+		let mut depth_map: HashMap<_, _> = deref_map.keys().map(|id| (*id, 0)).collect();
+		let mut stack: Vec<_> = deref_map.keys().map(|id| (*id, 0)).collect();
+		while let Some((id, depth)) = stack.pop() {
+			let current_depth = depth_map[&id];
+			if depth > current_depth {
+				if current_depth > 0 {
+					panic!("cycling reference")
+				}
+
+				depth_map.insert(id, depth);
+				if let Some(target_layout_id) = deref_map.get(&id) {
+					stack.push((*target_layout_id.inner(), depth + 1));
+				}
+			}
+		}
+
+		// Sort references by depth (highest first).
+		let mut by_depth: Vec<_> = deref_map.into_iter().collect();
+		by_depth.sort_by(|(a, _), (b, _)| depth_map[b].cmp(&depth_map[a]));
+
+		// Actually resolve the references.
+		for (id, target_layout_id) in by_depth {
+			let (target_layout_id, cause) = target_layout_id.into_parts();
+			let target_layout = self.require_layout(target_layout_id, cause.clone())?;
+			let (target_ty_id, ty_cause) = target_layout.require_ty(cause)?.clone().into_parts();
+			self.get_mut(id)
+				.unwrap()
+				.as_layout_mut()
+				.unwrap()
+				.set_type(target_ty_id, ty_cause.into_preferred())?
+		}
+
+		Ok(())
+	}
+
+	pub fn build(mut self) -> Result<Model<F>, (Error<F>, Vocabulary)>
+	where
+		F: Ord + Clone,
+	{
+		if let Err(e) = self.resolve_references() {
+			return Err((e, self.into_vocabulary()));
+		}
+
 		let mut allocated_shelves = AllocatedShelves::default();
 		let allocated_nodes = AllocatedNodes::new(&mut allocated_shelves, self.nodes);
 
@@ -330,6 +395,27 @@ impl<F> Context<F> {
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::Property),
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
+	pub fn require_layout(
+		&self,
+		id: Id,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<layout::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		match self.get(id) {
+			Some(node) => node.require_layout(cause),
+			None => Err(Caused::new(
+				error::NodeUnknown {
+					id,
+					expected_ty: Some(node::Type::Layout),
 				}
 				.into(),
 				cause,

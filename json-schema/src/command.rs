@@ -17,7 +17,7 @@ pub struct Command {
 }
 
 pub enum Error<F> {
-	InvalidLayoutIri(IriBuf),
+	NoLayoutName(String),
 	UndefinedLayout(IriBuf),
 	NotALayout(IriBuf, treeldr::node::CausedTypes<F>),
 	InfiniteSchema(String),
@@ -27,7 +27,7 @@ pub enum Error<F> {
 impl<F> fmt::Display for Error<F> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			Self::InvalidLayoutIri(iri) => write!(f, "invalid layout IRI `{}`", iri),
+			Self::NoLayoutName(iri) => write!(f, "layout `{}` has no name", iri),
 			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{}`", iri),
 			Self::NotALayout(iri, _) => write!(f, "node `{}` is not a layout", iri),
 			Self::InfiniteSchema(iri) => write!(f, "infinite schema `{}`", iri),
@@ -89,7 +89,15 @@ impl Command {
 
 		match crate::generate(model, &embedding_config, main_layout_ref) {
 			Ok(()) => Ok(()),
-			Err(crate::Error::InvalidLayoutIri(iri)) => Err(Error::InvalidLayoutIri(iri)),
+			Err(crate::Error::NoLayoutName(r)) => Err(Error::NoLayoutName(
+				model
+					.layouts()
+					.get(r)
+					.unwrap()
+					.id()
+					.display(model.vocabulary())
+					.to_string(),
+			)),
 			Err(crate::Error::InfiniteSchema(r)) => Err(Error::InfiniteSchema(
 				model
 					.layouts()

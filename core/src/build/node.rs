@@ -330,6 +330,28 @@ impl<F> Node<Components<F>> {
 		}
 	}
 
+	pub fn require_layout(
+		&self,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<layout::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		let types = self.caused_types();
+		match self.value.layout.with_causes() {
+			Some(layout) => Ok(layout),
+			None => Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id,
+					expected: Type::Layout,
+					found: types,
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
 	pub fn require_layout_mut(
 		&mut self,
 		cause: Option<Location<F>>,

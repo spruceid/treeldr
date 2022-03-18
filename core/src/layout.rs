@@ -1,4 +1,4 @@
-use crate::{layout, prop, ty, Causes, Documentation, Id, WithCauses};
+use crate::{layout, prop, ty, Causes, Documentation, Id, MaybeSet, WithCauses};
 use shelves::Ref;
 
 mod strongly_connected;
@@ -33,24 +33,23 @@ pub enum Native {
 /// Layout definition.
 pub struct Definition<F> {
 	id: Id,
-	name: WithCauses<String, F>,
 	ty: WithCauses<Ref<ty::Definition<F>>, F>,
 	desc: WithCauses<Description<F>, F>,
 	causes: Causes<F>,
 }
 
 pub enum Description<F> {
-	Native(Native),
-	Struct(Vec<Field<F>>),
-	Reference(Ref<layout::Definition<F>>),
+	Native(Native, MaybeSet<String, F>),
+	Struct(Struct<F>),
+	Reference(Ref<layout::Definition<F>>, MaybeSet<String, F>),
 }
 
 impl<F> Description<F> {
 	pub fn ty(&self) -> Type {
 		match self {
-			Self::Reference(_) => Type::Reference,
+			Self::Reference(_, _) => Type::Reference,
 			Self::Struct(_) => Type::Struct,
-			Self::Native(n) => Type::Native(*n),
+			Self::Native(n, _) => Type::Native(*n),
 		}
 	}
 }
@@ -58,14 +57,12 @@ impl<F> Description<F> {
 impl<F> Definition<F> {
 	pub fn new(
 		id: Id,
-		name: WithCauses<String, F>,
 		ty: WithCauses<Ref<ty::Definition<F>>, F>,
 		desc: WithCauses<Description<F>, F>,
 		causes: impl Into<Causes<F>>,
 	) -> Self {
 		Self {
 			id,
-			name,
 			ty,
 			desc,
 			causes: causes.into(),
@@ -82,8 +79,12 @@ impl<F> Definition<F> {
 		self.id
 	}
 
-	pub fn name(&self) -> &str {
-		self.name.as_str()
+	pub fn name(&self) -> Option<&str> {
+		match self.desc.inner() {
+			Description::Struct(s) => Some(s.name()),
+			Description::Reference(_, n) => n.value().map(String::as_str),
+			Description::Native(_, n) => n.value().map(String::as_str),
+		}
 	}
 
 	pub fn causes(&self) -> &Causes<F> {
@@ -110,9 +111,9 @@ impl<F> Definition<F> {
 
 	pub fn composing_layouts(&self) -> ComposingLayouts<F> {
 		match self.description() {
-			Description::Struct(fields) => ComposingLayouts::Struct(fields.iter()),
-			Description::Reference(_) => ComposingLayouts::Reference,
-			Description::Native(_) => ComposingLayouts::Native,
+			Description::Struct(s) => ComposingLayouts::Struct(s.fields().iter()),
+			Description::Reference(_, _) => ComposingLayouts::Reference,
+			Description::Native(_, _) => ComposingLayouts::Native,
 		}
 	}
 }
@@ -132,6 +133,26 @@ impl<'a, F> Iterator for ComposingLayouts<'a, F> {
 			Self::Reference => None,
 			Self::Native => None,
 		}
+	}
+}
+
+/// Structure layout.
+pub struct Struct<F> {
+	name: WithCauses<String, F>,
+	fields: Vec<Field<F>>,
+}
+
+impl<F> Struct<F> {
+	pub fn new(name: WithCauses<String, F>, fields: Vec<Field<F>>) -> Self {
+		Self { name, fields }
+	}
+
+	pub fn name(&self) -> &str {
+		self.name.as_str()
+	}
+
+	pub fn fields(&self) -> &[Field<F>] {
+		&self.fields
 	}
 }
 

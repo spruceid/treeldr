@@ -23,6 +23,13 @@ impl<T, F> MaybeSet<T, F> {
 		self.value.is_some()
 	}
 
+	pub fn replace(&mut self, value: T, cause: Option<Location<F>>) -> Option<WithCauses<T, F>>
+	where
+		F: Ord,
+	{
+		self.value.replace(WithCauses::new(value, cause))
+	}
+
 	pub fn set_once(&mut self, cause: Option<Location<F>>, f: impl FnOnce() -> T)
 	where
 		F: Ord,
