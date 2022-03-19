@@ -415,7 +415,7 @@ impl<F: Clone> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
 		ctx: &mut Context<F>,
 		quads: &mut Vec<LocQuad<F>>,
 	) -> Result<Self::Target, Loc<Error<F>, F>> {
-		let Loc(def, loc) = self;
+		let Loc(def, _) = self;
 		let Loc(id, id_loc) = def.id.build(ctx, quads)?;
 
 		quads.push(Loc(
@@ -435,16 +435,17 @@ impl<F: Clone> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
 		if let Some(Loc(ty, _)) = def.ty {
 			let scope = ctx.scope.take();
 			let object = ty.expr.build(ctx, quads)?;
+			let object_loc = object.location().clone();
 			ctx.scope = scope;
 
 			quads.push(Loc(
 				Quad(
 					Loc(Id::Iri(id), id_loc.clone()),
-					Loc(Name::Rdfs(Rdfs::Range), object.location().clone()),
+					Loc(Name::Rdfs(Rdfs::Range), object_loc.clone()),
 					object,
 					None,
 				),
-				loc,
+				object_loc,
 			));
 
 			for Loc(ann, ann_loc) in ty.annotations {
@@ -659,15 +660,16 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 		if let Some(Loc(layout, _)) = def.layout {
 			let scope = ctx.scope.take();
 			let object = layout.expr.build(ctx, quads)?;
+			let object_loc = object.location().clone();
 			ctx.scope = scope;
 			quads.push(Loc(
 				Quad(
 					Loc(Id::Blank(label), prop_id_loc.clone()),
-					Loc(Name::Rdfs(Rdfs::Range), object.location().clone()),
+					Loc(Name::Rdfs(Rdfs::Range), object_loc.clone()),
 					object,
 					None,
 				),
-				loc.clone(),
+				object_loc,
 			));
 
 			for Loc(ann, ann_loc) in layout.annotations {
