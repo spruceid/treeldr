@@ -17,7 +17,7 @@ pub fn generate<F>(
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
-	layout_ref: Ref<layout::Definition<F>>
+	layout_ref: Ref<layout::Definition<F>>,
 ) -> Result<(), Error<F>> {
 	// Check there are no cycles induced by the embedded layouts.
 	let strongly_connected_layouts = treeldr::layout::StronglyConnectedLayouts::with_filter(
@@ -44,7 +44,13 @@ pub fn generate<F>(
 		"https://json-schema.org/draft/2020-12/schema".into(),
 	);
 	json_schema.insert("title".into(), name.into());
-	generate_layout(&mut json_schema, model, embedding, type_property, layout_ref)?;
+	generate_layout(
+		&mut json_schema,
+		model,
+		embedding,
+		type_property,
+		layout_ref,
+	)?;
 
 	// Generate the `$defs` section.
 	let mut defs = serde_json::Map::new();
@@ -57,7 +63,13 @@ pub fn generate<F>(
 			.name()
 			.ok_or(Error::NoLayoutName(layout_ref))?
 			.to_string();
-		generate_layout(&mut json_schema, model, embedding, type_property, layout_ref)?;
+		generate_layout(
+			&mut json_schema,
+			model,
+			embedding,
+			type_property,
+			layout_ref,
+		)?;
 		defs.insert(name, json_schema.into());
 	}
 	if !defs.is_empty() {
@@ -115,7 +127,7 @@ fn generate_struct<F>(
 
 	if let Some(name) = type_property {
 		let mut type_schema = serde_json::Map::new();
-		
+
 		type_schema.insert("type".into(), "string".into());
 		type_schema.insert("pattern".into(), s.name().into());
 
@@ -135,7 +147,13 @@ fn generate_struct<F>(
 				generate_layout_defs_ref(&mut layout_schema, model, field_layout_ref)?;
 			}
 			Embedding::Direct => {
-				generate_layout(&mut layout_schema, model, embedding, type_property, field_layout_ref)?;
+				generate_layout(
+					&mut layout_schema,
+					model,
+					embedding,
+					type_property,
+					field_layout_ref,
+				)?;
 			}
 		}
 
