@@ -14,6 +14,11 @@ pub struct Command {
 	#[clap(short = 'e', multiple_occurrences(true))]
 	/// Layout schema to embed.
 	embeds: Vec<IriBuf>,
+
+	#[clap(short = 't', long = "type")]
+	/// Add a property in each schema, with the given name,
+	/// storing the type the object.
+	type_property: Option<String>
 }
 
 pub enum Error<F> {
@@ -87,7 +92,7 @@ impl Command {
 			embedding_config.set(layout_ref, Embedding::Direct);
 		}
 
-		match crate::generate(model, &embedding_config, main_layout_ref) {
+		match crate::generate(model, &embedding_config, self.type_property.as_ref().map(String::as_str), main_layout_ref) {
 			Ok(()) => Ok(()),
 			Err(crate::Error::NoLayoutName(r)) => Err(Error::NoLayoutName(
 				model
