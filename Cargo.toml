@@ -3,7 +3,8 @@ members = [
 	"vocab",
 	"core",
 	"syntax",
-	"cli",
 	"json-schema",
-	"json-ld-context"
+	"json-ld-context",
+	"tldrc",
+	"manager"
 ]
