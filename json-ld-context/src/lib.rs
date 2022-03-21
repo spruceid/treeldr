@@ -10,9 +10,18 @@ pub enum Error {
 /// Generate a JSON Schema from a TreeLDR model.
 pub fn generate<F>(
 	model: &treeldr::Model<F>,
-	layout_ref: Ref<layout::Definition<F>>,
+	layouts: Vec<Ref<layout::Definition<F>>>,
+	type_property: Option<String>,
 ) -> Result<(), Error> {
-	let ld_context = generate_layout_context(model, layout_ref)?;
+	let mut ld_context = serde_json::Map::new();
+
+	for layout_ref in layouts {
+		generate_layout_term_definition(model, layout_ref, &mut ld_context)?;
+	}
+
+	if let Some(name) = type_property {
+		ld_context.insert(name, "@type".into());
+	}
 
 	println!(
 		"{}",
@@ -22,33 +31,36 @@ pub fn generate<F>(
 	Ok(())
 }
 
-fn is_empty_context(context: &serde_json::Map<String, serde_json::Value>) -> bool {
-	for (key, _) in context {
-		if key != "@propagate" {
-			return false;
-		}
-	}
-
-	true
-}
-
-fn generate_layout_context<F>(
+fn generate_layout_term_definition<F>(
 	model: &treeldr::Model<F>,
 	layout_ref: Ref<layout::Definition<F>>,
-) -> Result<serde_json::Map<String, serde_json::Value>, Error> {
-	let mut json = serde_json::Map::new();
-	json.insert("@propagate".into(), false.into());
-
+	ld_context: &mut serde_json::Map<String, serde_json::Value>,
+) -> Result<(), Error> {
 	let layout = model.layouts().get(layout_ref).unwrap();
 
 	use treeldr::layout::Description;
 	match layout.description() {
-		Description::Struct(s) => generate_struct(&mut json, model, s.fields())?,
+		Description::Struct(s) => {
+			let ty_ref = layout.ty();
+			let ty = model.types().get(ty_ref).unwrap();
+
+			let mut def = serde_json::Map::new();
+			def.insert(
+				"@id".into(),
+				ty.id().display(model.vocabulary()).to_string().into(),
+			);
+			def.insert(
+				"@context".into(),
+				generate_struct_context(model, s.fields())?.into(),
+			);
+
+			ld_context.insert(s.name().into(), def.into());
+		}
 		Description::Reference(_, _) => (),
 		Description::Native(_, _) => (),
 	}
 
-	Ok(json)
+	Ok(())
 }
 
 fn generate_layout_type<F>(
@@ -59,57 +71,47 @@ fn generate_layout_type<F>(
 	use treeldr::layout::Description;
 	match layout.description() {
 		Description::Struct(_) => {
-			// let ty_ref = *layout.ty().unwrap().inner();
-			// let ty = model.types().get(ty_ref).unwrap();
-			// let ty_iri = model.vocabulary().get(ty.id()).unwrap();
-			// Some(ty_iri.as_str().into())
-			None
+			let ty_ref = layout.ty();
+			let ty = model.types().get(ty_ref).unwrap();
+			Some(ty.id().display(model.vocabulary()).to_string().into())
 		}
 		Description::Reference(_, _) => Some("@id".into()),
 		Description::Native(n, _) => Some(generate_native_type(*n)),
 	}
 }
 
-fn generate_struct<F>(
-	json: &mut serde_json::Map<String, serde_json::Value>,
+fn generate_struct_context<F>(
 	model: &treeldr::Model<F>,
 	fields: &[treeldr::layout::Field<F>],
-) -> Result<(), Error> {
+) -> Result<serde_json::Map<String, serde_json::Value>, Error> {
+	let mut json = serde_json::Map::new();
+
 	for field in fields {
 		let property_ref = field.property();
 		let property = model.properties().get(property_ref).unwrap();
 
 		let field_layout_ref = field.layout();
-		// let field_layout = model.layouts().get(field_layout_ref).unwrap();
-		// let field_layout_iri = model.vocabulary().get(field_layout.id()).unwrap();
-
-		let field_ld_context = generate_layout_context(model, field_layout_ref)?;
 		let field_type = generate_layout_type(model, field_layout_ref);
-		let field_def: serde_json::Value =
-			if is_empty_context(&field_ld_context) && field_type.is_none() {
-				property.id().display(model.vocabulary()).to_string().into()
-			} else {
-				let mut field_def = serde_json::Map::new();
-				field_def.insert(
-					"@id".into(),
-					property.id().display(model.vocabulary()).to_string().into(),
-				);
+		let field_def: serde_json::Value = if field_type.is_none() {
+			property.id().display(model.vocabulary()).to_string().into()
+		} else {
+			let mut field_def = serde_json::Map::new();
+			field_def.insert(
+				"@id".into(),
+				property.id().display(model.vocabulary()).to_string().into(),
+			);
 
-				if let Some(field_type) = field_type {
-					field_def.insert("@type".into(), field_type);
-				}
+			if let Some(field_type) = field_type {
+				field_def.insert("@type".into(), field_type);
+			}
 
-				if !is_empty_context(&field_ld_context) {
-					field_def.insert("@context".into(), field_ld_context.into());
-				}
-
-				field_def.into()
-			};
+			field_def.into()
+		};
 
 		json.insert(field.name().into(), field_def);
 	}
 
-	Ok(())
+	Ok(json)
 }
 
 fn generate_native_type(n: treeldr::layout::Native) -> serde_json::Value {

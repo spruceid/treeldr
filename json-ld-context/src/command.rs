@@ -6,8 +6,12 @@ use treeldr::{layout, Ref};
 /// Generate a JSON-LD Context from a TreeLDR model.
 pub struct Command {
 	#[clap(multiple_occurrences(true))]
-	/// Layout schema to generate.
-	layout: IriBuf,
+	/// Layout schemas to generate.
+	layouts: Vec<IriBuf>,
+
+	#[clap(short = 't', long = "type")]
+	/// Define a `@type` keyword alias.
+	type_property: Option<String>,
 }
 
 pub enum Error<F> {
@@ -56,8 +60,12 @@ impl Command {
 	}
 
 	fn try_execute<F: Clone>(self, model: &treeldr::Model<F>) -> Result<(), Error<F>> {
-		let layout_ref = find_layout(model, self.layout.as_iri())?;
-		match crate::generate(model, layout_ref) {
+		let mut layouts = Vec::with_capacity(self.layouts.len());
+		for layout_iri in self.layouts {
+			layouts.push(find_layout(model, layout_iri.as_iri())?);
+		}
+
+		match crate::generate(model, layouts, self.type_property) {
 			Ok(()) => Ok(()),
 			Err(crate::Error::Serialization(e)) => Err(Error::Serialization(e)),
 		}
