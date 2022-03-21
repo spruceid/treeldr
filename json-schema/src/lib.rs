@@ -254,31 +254,27 @@ fn generate_native_type(
 		}
 		Native::Time => {
 			def.insert("type".into(), "string".into());
-			def.insert(
-				"pattern".into(),
-				"\\d\\d:\\d\\d:\\d\\d(\\.\\d+)?(([+-]\\d\\d:\\d\\d)|Z)?$".into(),
-			);
+			def.insert("format".into(), "time".into());
 		}
 		Native::Date => {
 			def.insert("type".into(), "string".into());
-			def.insert("pattern".into(), "^\\d{4}-\\d\\d-\\d\\d".into());
+			def.insert("format".into(), "date".into());
 		}
 		Native::DateTime => {
 			def.insert("type".into(), "string".into());
-			def.insert(
-				"pattern".into(),
-				"^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(\\.\\d+)?(([+-]\\d\\d:\\d\\d)|Z)?$"
-					.into(),
-			);
+			def.insert("format".into(), "date-time".into());
 		}
 		Native::Iri => {
 			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "iri".into());
 		}
 		Native::Uri => {
 			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "uri".into());
 		}
 		Native::Url => {
 			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "uri".into());
 		}
 	}
 }
