@@ -1,9 +1,10 @@
 [package]
-name = "treeldr-cli"
+name = "tldrc"
 version = "0.1.0"
 authors = ["Spruce Systems Inc."]
-description = "Schema definition language."
+description = "TreeLDR compiler"
 edition = "2021"
+default-run = "tldrc"
 
 [features]
 default = ["json-schema", "json-ld-context"]
@@ -28,7 +29,3 @@ clap = { version = "3.0", features = ["derive"] }
 # Extensions.
 treeldr-json-schema = { path = "../json-schema", version = "0.1", optional = true }
 treeldr-json-ld-context = { path = "../json-ld-context", version = "0.1", optional = true }
-
-[[bin]]
-name = "treeldr"
-path = "src/main.rs"

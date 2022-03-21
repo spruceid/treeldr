@@ -1,0 +1,15 @@
+[package]
+name = "my-awesome-treeldr-package"
+version = "1.0.0"
+description = "Something"
+
+[dependencies]
+"https://schema.org" = "14.0"
+
+# Generate a JSON-LD context.
+[json-ld-context]
+target = "context.jsonld"
+
+# Generate a typescript package.
+[typescript]
+# Will generate `package.json`, `tsconfig.json`, `src/`

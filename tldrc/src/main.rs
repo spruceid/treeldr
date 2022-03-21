@@ -9,7 +9,7 @@ use treeldr_syntax as syntax;
 mod source;
 
 #[derive(Parser)]
-#[clap(name="treeldr", author, version, about, long_about = None)]
+#[clap(author, version, about, long_about = None)]
 struct Args {
 	/// Input files.
 	#[clap(short = 'i', multiple_occurrences = true)]

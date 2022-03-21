@@ -1,0 +1,15 @@
+[package]
+name = "treeldr-manager"
+version = "0.1.0"
+authors = ["Spruce Systems Inc."]
+description = "TreeLDR package manager"
+edition = "2021"
+
+[dependencies]
+log = "0.4"
+stderrlog = "0.5"
+clap = { version = "3.0", features = ["derive"] }
+
+[[bin]]
+name = "treeldr"
+path = "src/main.rs"
