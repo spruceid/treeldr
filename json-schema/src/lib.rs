@@ -2,6 +2,7 @@ use treeldr::{layout, vocab::Display, Ref};
 
 mod command;
 pub mod embedding;
+pub mod import;
 
 pub use command::Command;
 pub use embedding::Embedding;
