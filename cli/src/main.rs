@@ -20,7 +20,7 @@ struct Args {
 	verbosity: usize,
 
 	#[clap(subcommand)]
-	command: Option<Command>,
+	command: Command,
 }
 
 #[derive(clap::Subcommand)]
@@ -33,6 +33,14 @@ pub enum Command {
 
 	#[cfg(feature = "json-ld-context")]
 	JsonLdContext(treeldr_json_ld_context::Command),
+
+	#[cfg(feature = "typescript")]
+	#[clap(name="typescript")]
+	TypeScript(treeldr_typescript::Command),
+
+	#[cfg(feature = "typescript")]
+	#[clap(name="typescript-package")]
+	TypeScriptPackage(treeldr_typescript::command::Package),
 }
 
 fn main() {
@@ -58,7 +66,7 @@ fn main() {
 	}
 
 	match args.command {
-		Some(Command::Dump) => {
+		Command::Dump => {
 			for quad in &quads {
 				use treeldr::vocab::RdfDisplay;
 				println!("{} .", quad.rdf_display(&vocab))
@@ -73,10 +81,14 @@ fn main() {
 				#[allow(unused_variables)]
 				Ok(model) => match command {
 					#[cfg(feature = "json-schema")]
-					Some(Command::JsonSchema(command)) => command.execute(&model),
+					Command::JsonSchema(command) => command.execute(&model),
 					#[cfg(feature = "json-ld-context")]
-					Some(Command::JsonLdContext(command)) => command.execute(&model),
-					_ => (),
+					Command::JsonLdContext(command) => command.execute(&model),
+					#[cfg(feature = "typescript")]
+					Command::TypeScript(command) => command.execute(&model),
+					#[cfg(feature = "typescript")]
+					Command::TypeScriptPackage(command) => command.execute(&model),
+					_ => ()
 				},
 				Err((e, vocab)) => {
 					use treeldr::reporting::Diagnose;
