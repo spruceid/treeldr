@@ -52,6 +52,18 @@ impl<F> Description<F> {
 			Self::Native(n, _) => Type::Native(*n),
 		}
 	}
+
+	pub fn is_native(&self) -> bool {
+		matches!(self, Self::Native(_, _))
+	}
+
+	pub fn is_struct(&self) -> bool {
+		matches!(self, Self::Struct(_))
+	}
+
+	pub fn is_reference(&self) -> bool {
+		matches!(self, Self::Reference(_, _))
+	}
 }
 
 impl<F> Definition<F> {
@@ -160,9 +172,7 @@ impl<F> Struct<F> {
 pub struct Field<F> {
 	prop: WithCauses<Ref<prop::Definition<F>>, F>,
 	name: WithCauses<String, F>,
-	layout: WithCauses<Ref<Definition<F>>, F>,
-	required: WithCauses<bool, F>,
-	functional: WithCauses<bool, F>,
+	layout: AnnotatedRef<F>,
 	doc: Documentation,
 }
 
@@ -178,9 +188,11 @@ impl<F> Field<F> {
 		Self {
 			prop,
 			name,
-			layout,
-			required,
-			functional,
+			layout: AnnotatedRef {
+				layout,
+				required,
+				functional
+			},
 			doc,
 		}
 	}
@@ -190,19 +202,23 @@ impl<F> Field<F> {
 	}
 
 	pub fn name(&self) -> &str {
-		self.name.inner().as_str()
+		self.name.as_str()
+	}
+
+	pub fn annotated_layout(&self) -> &AnnotatedRef<F> {
+		&self.layout
 	}
 
 	pub fn layout(&self) -> Ref<layout::Definition<F>> {
-		*self.layout.inner()
+		*self.layout.layout
 	}
 
 	pub fn is_required(&self) -> bool {
-		*self.required.inner()
+		*self.layout.required
 	}
 
 	pub fn is_functional(&self) -> bool {
-		*self.functional.inner()
+		*self.layout.functional
 	}
 
 	pub fn documentation(&self) -> &Documentation {
@@ -216,5 +232,25 @@ impl<F> Field<F> {
 		} else {
 			&self.doc
 		}
+	}
+}
+
+pub struct AnnotatedRef<F> {
+	required: WithCauses<bool, F>,
+	functional: WithCauses<bool, F>,
+	layout: WithCauses<Ref<Definition<F>>, F>
+}
+
+impl<F> AnnotatedRef<F> {
+	pub fn is_required(&self) -> bool {
+		*self.required
+	}
+
+	pub fn is_functional(&self) -> bool {
+		*self.functional
+	}
+	
+	pub fn layout(&self) -> Ref<Definition<F>> {
+		*self.layout
 	}
 }
