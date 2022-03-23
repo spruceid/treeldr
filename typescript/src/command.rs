@@ -3,7 +3,11 @@ pub use crate::Error;
 
 #[derive(clap::Args)]
 /// Generate a TypeScript file.
-pub struct Command;
+pub struct Command {
+	#[clap(short = 's')]
+	/// Use the given number of spaces for indentation.
+	indent_spaces: Option<u8>
+}
 
 #[derive(clap::Args)]
 /// Generate a TypeScript package.
@@ -35,7 +39,11 @@ pub struct Package {
 	/// Defines where to generate the package.
 	/// 
 	/// The default is the current working directory.
-	directory: Option<PathBuf>
+	directory: Option<PathBuf>,
+
+	#[clap(short = 's')]
+	/// Use the given number of spaces for indentation.
+	indent_spaces: Option<u8>
 }
 
 impl Command {
@@ -51,7 +59,15 @@ impl Command {
 
 	fn try_execute<F: Clone>(self, model: &treeldr::Model<F>) -> Result<(), Error> {
 		use crate::Generate;
-		print!("{}", ().generated(model));
+
+		let options = crate::Options {
+			indent: match self.indent_spaces {
+				Some(s) => crate::Indent::Spaces(s),
+				None => crate::Indent::Tab
+			}
+		};
+
+		print!("{}", ().generated(model, options));
 		Ok(())
 	}
 }
@@ -76,8 +92,15 @@ impl Package {
 			git: self.git
 		};
 
+		let gen_options = crate::Options {
+			indent: match self.indent_spaces {
+				Some(s) => crate::Indent::Spaces(s),
+				None => crate::Indent::Tab
+			}
+		};
+
 		let directory = self.directory.unwrap_or_default();
 
-		crate::generate_package(model, directory, init_options)
+		crate::generate_package(model, directory, init_options, gen_options)
 	}
 }

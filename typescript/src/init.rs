@@ -79,7 +79,7 @@ pub fn initialize_package(directory: impl AsRef<Path>, options: InitOptions) -> 
 	std::fs::create_dir_all(directory)?;
 
 	// Create `src` directory.
-	std::fs::create_dir(directory.join("src"))?;
+	std::fs::create_dir_all(directory.join("src"))?;
 	
 	// Create Git repository.
 	if options.git {
@@ -177,7 +177,7 @@ pub fn initialize_package(directory: impl AsRef<Path>, options: InitOptions) -> 
 	changed |= try_insert(&mut package, "version", options.version);
 	changed |= try_insert(&mut package, "main", "main.js");
 	changed |= try_insert(&mut package, "build", "tsc");
-	changed |= try_insert(&mut package, "files", "lib/**/*");
+	changed |= try_insert(&mut package, "files", json_vec!["lib/**/*"]);
 	
 	match package.get_mut("devDependencies") {
 		Some(serde_json::Value::Object(dev_dependencies)) => {
