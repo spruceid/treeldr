@@ -183,31 +183,39 @@ pub fn initialize_package(
 		}
 	}
 
+	fn try_insert_object(
+		map: &mut serde_json::Map<String, serde_json::Value>,
+		key: &str,
+		f: impl FnOnce(&mut serde_json::Map<String, serde_json::Value>) -> bool,
+	) -> bool {
+		match map.get_mut(key) {
+			Some(serde_json::Value::Object(obj)) => f(obj),
+			Some(_) => false,
+			None => {
+				let mut obj = serde_json::Map::new();
+				f(&mut obj);
+				map.insert(key.into(), obj.into());
+				true
+			}
+		}
+	}
+
 	let mut changed = false;
 	changed |= try_insert(&mut package, "name", options.name);
 	changed |= try_insert(&mut package, "author", options.author);
 	changed |= try_insert(&mut package, "version", options.version);
 	changed |= try_insert(&mut package, "main", "main.js");
-	changed |= try_insert(&mut package, "build", "tsc");
 	changed |= try_insert(&mut package, "files", json_vec!["lib/**/*"]);
-
-	match package.get_mut("devDependencies") {
-		Some(serde_json::Value::Object(dev_dependencies)) => {
-			match dev_dependencies.get("typescript") {
-				Some(_version) => {
-					// TODO check minimal version.
-				}
-				None => {
-					dev_dependencies.insert("typescript".into(), "^4.6.0".into());
-				}
-			}
-		}
-		_ => {
-			let mut dev_dependencies = serde_json::Map::new();
-			dev_dependencies.insert("typescript".into(), "^4.6.0".into());
-			package.insert("devDependencies".into(), dev_dependencies.into());
-		}
-	}
+	changed |= try_insert_object(&mut package, "scripts", |scripts| {
+		try_insert(
+			scripts,
+			"test",
+			"echo \"Error: no test specified\" && exit 1",
+		) & try_insert(scripts, "build", "tsc")
+	});
+	changed |= try_insert_object(&mut package, "devDependencies", |dev_dependencies| {
+		try_insert(dev_dependencies, "typescript", "^4.6.0")
+	});
 
 	if changed {
 		let file = std::fs::File::create(package_path)?;
