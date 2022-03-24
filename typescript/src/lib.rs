@@ -88,28 +88,12 @@ impl<F> Generate<F> for () {
 				}
 				first = false;
 
-				let mut doc_comment = String::new();
-				if let Some(label) = layout.preferred_label(model) {
-					doc_comment.push_str(label);
-				}
-
-				if let Some(doc) = layout.preferred_documentation(model).as_str() {
-					if !doc_comment.is_empty() {
-						doc_comment.push_str("\n\n");
-					}
-
-					doc_comment.push_str(doc);
-				}
-
-				if !doc_comment.is_empty() {
-					let comment = treeldr_codegen::doc::Comment::new(
-						doc_comment,
-						treeldr_codegen::doc::CommentSyntax::Single("// "),
-						options.indent.by(0),
-					);
-
-					writeln!(f, "{}", comment)?;
-				}
+				gen_doc(
+					f,
+					layout.preferred_label(model),
+					layout.preferred_documentation(model).as_str(),
+					options.indent.by(0)
+				)?;
 
 				layout.gen(f, model, options)?;
 			}
@@ -117,6 +101,43 @@ impl<F> Generate<F> for () {
 
 		Ok(())
 	}
+}
+
+fn gen_doc(
+	f: &mut fmt::Formatter,
+	label: Option<&str>,
+	body: Option<&str>,
+	indent_by: IndentBy
+) -> fmt::Result {
+	let mut doc_comment = String::new();
+	if let Some(label) = label {
+		doc_comment.push_str(label);
+	}
+
+	if let Some(doc) = body {
+		if !doc_comment.is_empty() {
+			doc_comment.push_str("\n\n");
+		}
+
+		doc_comment.push_str(doc);
+	}
+
+	if !doc_comment.is_empty() {
+		let comment = treeldr_codegen::doc::Comment::new(
+			doc_comment,
+			treeldr_codegen::doc::CommentSyntax::Multi {
+				pad: true,
+				start: "/**",
+				middle: " * ",
+				end: " */"
+			},
+			indent_by,
+		);
+
+		writeln!(f, "{}", comment)?;
+	}
+
+	Ok(())
 }
 
 impl<F> Generate<F> for treeldr::layout::Definition<F> {
@@ -129,7 +150,18 @@ impl<F> Generate<F> for treeldr::layout::Definition<F> {
 		if let treeldr::layout::Description::Struct(s) = self.description() {
 			writeln!(f, "class {} {{", s.name())?;
 
-			for field in s.fields() {
+			for (i, field) in s.fields().iter().enumerate() {
+				if i > 0 {
+					writeln!(f)?;
+				}
+
+				gen_doc(
+					f,
+					field.preferred_label(model),
+					field.preferred_documentation(model).as_str(),
+					options.indent.by(1)
+				)?;
+
 				write!(
 					f,
 					"{}{}: {}",
