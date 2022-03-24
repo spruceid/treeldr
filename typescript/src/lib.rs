@@ -2,6 +2,7 @@ use std::path::Path;
 use std::fmt;
 use std::io::Write;
 use treeldr::Ref;
+pub use treeldr_codegen::{Indent, IndentBy};
 
 mod init;
 pub mod command;
@@ -39,45 +40,6 @@ pub fn generate_package<F>(
 }
 
 #[derive(Clone, Copy)]
-pub enum Indent {
-	Tab,
-	Spaces(u8)
-}
-
-impl Indent {
-	fn by(&self, n: u32) -> IndentBy {
-		IndentBy(*self, n)
-	}
-}
-
-impl fmt::Display for Indent {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match self {
-			Self::Tab => write!(f, "\t"),
-			Self::Spaces(n) => {
-				for _ in 0..*n {
-					write!(f, " ")?;
-				}
-
-				Ok(())
-			}
-		}
-	}
-}
-
-pub struct IndentBy(Indent, u32);
-
-impl fmt::Display for IndentBy {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		for _ in 0..self.1 {
-			self.0.fmt(f)?;
-		}
-
-		Ok(())
-	}
-}
-
-#[derive(Clone, Copy)]
 pub struct Options {
 	/// Indentation string.
 	indent: Indent
@@ -110,6 +72,29 @@ impl<F> Generate<F> for () {
 					writeln!(f, "")?;
 				}
 				first = false;
+
+				let mut doc_comment = String::new();
+				if let Some(label) = layout.preferred_label(model) {
+					doc_comment.push_str(label);
+				}
+
+				if let Some(doc) = layout.preferred_documentation(model).as_str() {
+					if !doc_comment.is_empty() {
+						doc_comment.push_str("\n\n");
+					}
+
+					doc_comment.push_str(doc);
+				}
+
+				if !doc_comment.is_empty() {
+					let comment = treeldr_codegen::doc::Comment::new(
+						doc_comment,
+						treeldr_codegen::doc::CommentSyntax::Single("// "),
+						options.indent.by(0)
+					);
+
+					writeln!(f, "{}", comment)?;
+				}
 
 				layout.gen(f, model, options)?;
 			}
