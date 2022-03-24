@@ -6,6 +6,7 @@ pub use crate::node::{CausedTypes, Type, Types};
 
 pub struct Node<T> {
 	id: Id,
+	label: Option<String>,
 	doc: Documentation,
 	value: T,
 }
@@ -23,6 +24,14 @@ impl<T> Node<T> {
 		self.id
 	}
 
+	pub fn label(&self) -> Option<&str> {
+		self.label.as_deref()
+	}
+
+	pub fn add_label(&mut self, label: String) {
+		self.label = Some(label)
+	}
+
 	pub fn documentation(&self) -> &Documentation {
 		&self.doc
 	}
@@ -38,13 +47,14 @@ impl<T> Node<T> {
 	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Node<U> {
 		Node {
 			id: self.id,
+			label: self.label,
 			doc: self.doc,
 			value: f(self.value),
 		}
 	}
 
-	pub fn into_parts(self) -> (Id, Documentation, T) {
-		(self.id, self.doc, self.value)
+	pub fn into_parts(self) -> (Id, Option<String>, Documentation, T) {
+		(self.id, self.label, self.doc, self.value)
 	}
 }
 
@@ -57,6 +67,7 @@ impl<F> Node<Components<F>> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),
@@ -71,6 +82,7 @@ impl<F> Node<Components<F>> {
 	pub fn new_type(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::new(ty::Definition::new(), causes),
@@ -85,6 +97,7 @@ impl<F> Node<Components<F>> {
 	pub fn new_property(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),
@@ -99,6 +112,7 @@ impl<F> Node<Components<F>> {
 	pub fn new_layout(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),
@@ -113,6 +127,7 @@ impl<F> Node<Components<F>> {
 	pub fn new_layout_field(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),
@@ -127,6 +142,7 @@ impl<F> Node<Components<F>> {
 	pub fn new_list(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),

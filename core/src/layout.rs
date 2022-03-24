@@ -107,6 +107,20 @@ impl<F> Definition<F> {
 		&self.desc
 	}
 
+	pub fn label<'m>(&self, model: &'m crate::Model<F>) -> Option<&'m str> {
+		model.get(self.id).unwrap().label()
+	}
+
+	pub fn preferred_label<'a>(&'a self, model: &'a crate::Model<F>) -> Option<&'a str> {
+		let label = self.label(model);
+		if label.is_none() {
+			let ty_id = model.types().get(*self.ty).unwrap().id();
+			model.get(ty_id).unwrap().label()
+		} else {
+			label
+		}
+	}
+
 	pub fn documentation<'m>(&self, model: &'m crate::Model<F>) -> &'m Documentation {
 		model.get(self.id).unwrap().documentation()
 	}
@@ -172,6 +186,7 @@ impl<F> Struct<F> {
 pub struct Field<F> {
 	prop: WithCauses<Ref<prop::Definition<F>>, F>,
 	name: WithCauses<String, F>,
+	label: Option<String>,
 	layout: AnnotatedRef<F>,
 	doc: Documentation,
 }
@@ -180,6 +195,7 @@ impl<F> Field<F> {
 	pub fn new(
 		prop: WithCauses<Ref<prop::Definition<F>>, F>,
 		name: WithCauses<String, F>,
+		label: Option<String>,
 		layout: WithCauses<Ref<Definition<F>>, F>,
 		required: WithCauses<bool, F>,
 		functional: WithCauses<bool, F>,
@@ -188,6 +204,7 @@ impl<F> Field<F> {
 		Self {
 			prop,
 			name,
+			label,
 			layout: AnnotatedRef {
 				layout,
 				required,
@@ -207,6 +224,19 @@ impl<F> Field<F> {
 
 	pub fn annotated_layout(&self) -> &AnnotatedRef<F> {
 		&self.layout
+	}
+
+	pub fn label(&self) -> Option<&str> {
+		self.label.as_deref()
+	}
+
+	pub fn preferred_label<'a>(&'a self, model: &'a crate::Model<F>) -> Option<&'a str> {
+		if self.label.is_none() {
+			let prop_id = model.properties().get(*self.prop).unwrap().id();
+			model.get(prop_id).unwrap().label()
+		} else {
+			self.label.as_deref()
+		}
 	}
 
 	pub fn layout(&self) -> Ref<layout::Definition<F>> {

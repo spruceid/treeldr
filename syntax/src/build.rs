@@ -160,48 +160,6 @@ impl<'v, F: Clone> Context<'v, F> {
 	}
 }
 
-// pub struct WithContext<'c, 't, T: ?Sized, F>(&'c Context<F>, &'t T);
-
-// pub trait BorrowWithContext {
-// 	fn with_context<'c, F>(&self, context: &'c Context<F>) -> WithContext<'c, '_, Self, F>;
-// }
-
-// impl<T> BorrowWithContext for T {
-// 	fn with_context<'c, F>(&self, context: &'c Context<F>) -> WithContext<'c, '_, Self, F> {
-// 		WithContext(context, self)
-// 	}
-// }
-
-// impl<'c, 't, T, F> WithContext<'c, 't, T, F> {
-// 	pub fn value(&self) -> &'t T {
-// 		self.1
-// 	}
-
-// 	pub fn context(&self) -> &'c Context<F> {
-// 		self.0
-// 	}
-// }
-
-// pub trait DisplayWithContext<F> {
-// 	fn fmt(&self, context: &Context<F>, f: &mut fmt::Formatter) -> fmt::Result;
-// }
-
-// impl<'c, 't, T: DisplayWithContext<F>, F> fmt::Display for WithContext<'c, 't, T, F> {
-// 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-// 		self.value().fmt(self.context(), f)
-// 	}
-// }
-
-// impl<F> DisplayWithContext<F> for Id {
-// 	fn fmt(&self, context: &Context<F>, f: &mut fmt::Formatter) -> fmt::Result {
-// 		use fmt::Display;
-// 		match self {
-// 			Id::Iri(name) => name.iri(context.vocabulary()).unwrap().fmt(f),
-// 			Id::Blank(i) => write!(f, "_:{}", i)
-// 		}
-// 	}
-// }
-
 impl<F: Clone> Build<F> for Loc<crate::Document<F>, F> {
 	type Target = ();
 
@@ -297,11 +255,11 @@ fn build_doc<F: Clone>(
 	subject: Loc<Id, F>,
 	quads: &mut Vec<LocQuad<F>>,
 ) {
-	let mut short = String::new();
-	let mut short_loc = loc.clone();
+	let mut label = String::new();
+	let mut label_loc = loc.clone();
 
-	let mut long = String::new();
-	let mut long_loc = loc.clone();
+	let mut description = String::new();
+	let mut description_loc = loc.clone();
 
 	let mut separated = false;
 
@@ -309,34 +267,38 @@ fn build_doc<F: Clone>(
 		let line = line.trim();
 
 		if separated {
-			if long.is_empty() {
-				long_loc = line_loc;
+			if description.is_empty() {
+				description_loc = line_loc;
 			} else {
-				long_loc.span_mut().append(line_loc.span());
+				description_loc.span_mut().append(line_loc.span());
 			}
 
-			long.push_str(line);
-		} else if line.is_empty() {
+			if !description.is_empty() {
+				description.push('\n');
+			}
+
+			description.push_str(line);
+		} else if line.trim().is_empty() {
 			separated = true
 		} else {
-			if short.is_empty() {
-				short_loc = line_loc;
+			if label.is_empty() {
+				label_loc = line_loc;
 			} else {
-				short_loc.span_mut().append(line_loc.span());
+				label_loc.span_mut().append(line_loc.span());
 			}
 
-			short.push_str(line);
+			label.push_str(line);
 		}
 	}
 
-	if !long.is_empty() {
+	if !label.is_empty() {
 		quads.push(Loc(
 			Quad(
 				subject.clone(),
-				Loc(Name::Rdfs(Rdfs::Comment), loc.clone()),
+				Loc(Name::Rdfs(Rdfs::Label), loc.clone()),
 				Loc(
-					Object::Literal(Literal::String(Loc(long.into(), long_loc.clone()))),
-					long_loc,
+					Object::Literal(Literal::String(Loc(label.into(), label_loc.clone()))),
+					label_loc,
 				),
 				None,
 			),
@@ -344,14 +306,14 @@ fn build_doc<F: Clone>(
 		))
 	}
 
-	if !short.is_empty() {
+	if !description.is_empty() {
 		quads.push(Loc(
 			Quad(
 				subject,
 				Loc(Name::Rdfs(Rdfs::Comment), loc.clone()),
 				Loc(
-					Object::Literal(Literal::String(Loc(short.into(), short_loc.clone()))),
-					short_loc,
+					Object::Literal(Literal::String(Loc(description.into(), description_loc.clone()))),
+					description_loc,
 				),
 				None,
 			),

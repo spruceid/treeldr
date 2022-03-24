@@ -20,7 +20,7 @@ typescript = [
 [dependencies]
 treeldr = { path = "../core" }
 treeldr-syntax = { path = "../syntax" }
-iref = "2.0"
+iref = "2.1.2"
 grdf = { version = "0.6.1", features = ["loc"] }
 log = "0.4"
 locspan = "*"

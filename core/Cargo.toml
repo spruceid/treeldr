@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 treeldr-vocab = { path = "../vocab" }
 shelves = "0.2.3"
-iref = "2.1.1"
+iref = "2.1.2"
 iref-enum = "2.0"
 static-iref = "2.0"
 log = "0.4"

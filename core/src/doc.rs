@@ -17,6 +17,7 @@ impl Block {
 		let mut short_end = 0;
 		let mut long_start = 0;
 
+		#[derive(PartialEq, Eq)]
 		enum State {
 			Short,
 			ShortNewline,
@@ -28,17 +29,18 @@ impl Block {
 		for (i, c) in s.char_indices() {
 			match state {
 				State::Short => {
+					short_end = i;
+					long_start = i;
+
 					if c == '\n' {
 						state = State::ShortNewline;
-						short_end = i;
 					}
-
-					long_start = i;
 				}
 				State::ShortNewline => {
 					if c == '\n' {
 						state = State::Separation;
 					} else if !c.is_whitespace() {
+						short_end = i;
 						state = State::Short;
 					}
 
@@ -52,6 +54,11 @@ impl Block {
 					}
 				}
 			}
+		}
+		
+		if state == State::Short {
+			short_end = s.len();
+			long_start = s.len();
 		}
 
 		Self {
@@ -77,6 +84,10 @@ impl Block {
 		} else {
 			Some(s)
 		}
+	}
+
+	pub fn as_str(&self) -> &str {
+		&self.data
 	}
 }
 
@@ -116,5 +127,9 @@ impl Documentation {
 
 	pub fn add(&mut self, comment: String) {
 		self.blocks.insert(Block::new(comment));
+	}
+
+	pub fn as_string(&self) -> Option<&str> {
+		self.blocks.iter().next().map(Block::as_str)
 	}
 }

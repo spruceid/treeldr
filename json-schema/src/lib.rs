@@ -16,6 +16,7 @@ pub enum Error<F> {
 pub fn generate<F>(
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
+	type_property: Option<&str>,
 	layout_ref: Ref<layout::Definition<F>>,
 ) -> Result<(), Error<F>> {
 	// Check there are no cycles induced by the embedded layouts.
@@ -42,8 +43,19 @@ pub fn generate<F>(
 		"$schema".into(),
 		"https://json-schema.org/draft/2020-12/schema".into(),
 	);
-	json_schema.insert("title".into(), name.into());
-	generate_layout(&mut json_schema, model, embedding, layout_ref)?;
+
+	let title = match layout.preferred_label(model) {
+		Some(label) => label,
+		None => name
+	};
+	json_schema.insert("title".into(), title.into());
+	generate_layout(
+		&mut json_schema,
+		model,
+		embedding,
+		type_property,
+		layout_ref,
+	)?;
 
 	// Generate the `$defs` section.
 	let mut defs = serde_json::Map::new();
@@ -56,7 +68,13 @@ pub fn generate<F>(
 			.name()
 			.ok_or(Error::NoLayoutName(layout_ref))?
 			.to_string();
-		generate_layout(&mut json_schema, model, embedding, layout_ref)?;
+		generate_layout(
+			&mut json_schema,
+			model,
+			embedding,
+			type_property,
+			layout_ref,
+		)?;
 		defs.insert(name, json_schema.into());
 	}
 	if !defs.is_empty() {
@@ -71,10 +89,25 @@ pub fn generate<F>(
 	Ok(())
 }
 
+fn remove_newlines(s: &str) -> String {
+	let mut result = String::new();
+	
+	for (i, line) in s.lines().enumerate() {
+		if i > 0 {
+			result.push(' ');
+		}
+		
+		result.push_str(line);
+	}
+	
+	result
+}
+
 fn generate_layout<F>(
 	json: &mut serde_json::Map<String, serde_json::Value>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
+	type_property: Option<&str>,
 	layout_ref: Ref<layout::Definition<F>>,
 ) -> Result<(), Error<F>> {
 	let layout = model.layouts().get(layout_ref).unwrap();
@@ -84,7 +117,7 @@ fn generate_layout<F>(
 	);
 
 	if let Some(description) = layout.preferred_documentation(model).short_description() {
-		json.insert("description".into(), description.trim().into());
+		json.insert("description".into(), remove_newlines(description.trim()).into());
 	}
 
 	use treeldr::layout::Description;
@@ -93,7 +126,7 @@ fn generate_layout<F>(
 			json.insert("type".into(), "string".into());
 			Ok(())
 		}
-		Description::Struct(s) => generate_struct(json, model, embedding, s.fields()),
+		Description::Struct(s) => generate_struct(json, model, embedding, type_property, s),
 		Description::Native(n, _) => {
 			generate_native_type(json, *n);
 			Ok(())
@@ -105,12 +138,23 @@ fn generate_struct<F>(
 	json: &mut serde_json::Map<String, serde_json::Value>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
-	fields: &[treeldr::layout::Field<F>],
+	type_property: Option<&str>,
+	s: &treeldr::layout::Struct<F>,
 ) -> Result<(), Error<F>> {
 	let mut properties = serde_json::Map::new();
 	let mut required_properties = Vec::new();
 
-	for field in fields {
+	if let Some(name) = type_property {
+		let mut type_schema = serde_json::Map::new();
+
+		type_schema.insert("type".into(), "string".into());
+		type_schema.insert("pattern".into(), s.name().into());
+
+		properties.insert(name.into(), type_schema.into());
+		required_properties.push(name.into());
+	}
+
+	for field in s.fields() {
 		let field_layout_ref = field.layout();
 
 		let mut layout_schema = serde_json::Map::new();
@@ -123,7 +167,13 @@ fn generate_struct<F>(
 				generate_layout_defs_ref(&mut layout_schema, model, field_layout_ref)?;
 			}
 			Embedding::Direct => {
-				generate_layout(&mut layout_schema, model, embedding, field_layout_ref)?;
+				generate_layout(
+					&mut layout_schema,
+					model,
+					embedding,
+					type_property,
+					field_layout_ref,
+				)?;
 			}
 		}
 
@@ -142,8 +192,8 @@ fn generate_struct<F>(
 			field_schema
 		};
 
-		if let Some(description) = field.preferred_documentation(model).short_description() {
-			field_schema.insert("description".into(), description.trim().into());
+		if let Some(description) = field.preferred_label(model) {
+			field_schema.insert("description".into(), remove_newlines(description.trim()).into());
 		}
 
 		properties.insert(field.name().into(), field_schema.into());
@@ -190,9 +240,6 @@ fn generate_layout_ref<F>(
 	layout_ref: Ref<layout::Definition<F>>,
 ) -> Result<(), Error<F>> {
 	let layout = model.layouts().get(layout_ref).unwrap();
-	// if let Some(description) = layout.preferred_documentation(model).short_description() {
-	// 	json.insert("description".into(), description.trim().into());
-	// }
 
 	use treeldr::layout::Description;
 	match layout.description() {
@@ -242,31 +289,27 @@ fn generate_native_type(
 		}
 		Native::Time => {
 			def.insert("type".into(), "string".into());
-			def.insert(
-				"pattern".into(),
-				"\\d\\d:\\d\\d:\\d\\d(\\.\\d+)?(([+-]\\d\\d:\\d\\d)|Z)?$".into(),
-			);
+			def.insert("format".into(), "time".into());
 		}
 		Native::Date => {
 			def.insert("type".into(), "string".into());
-			def.insert("pattern".into(), "^\\d{4}-\\d\\d-\\d\\d".into());
+			def.insert("format".into(), "date".into());
 		}
 		Native::DateTime => {
 			def.insert("type".into(), "string".into());
-			def.insert(
-				"pattern".into(),
-				"^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(\\.\\d+)?(([+-]\\d\\d:\\d\\d)|Z)?$"
-					.into(),
-			);
+			def.insert("format".into(), "date-time".into());
 		}
 		Native::Iri => {
 			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "iri".into());
 		}
 		Native::Uri => {
 			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "uri".into());
 		}
 		Native::Url => {
 			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "uri".into());
 		}
 	}
 }

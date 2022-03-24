@@ -1,5 +1,9 @@
 base <https://example.com>
 
 type Foo {
-	field: Foo
+	bar: Bar
+}
+
+type Bar {
+	foo: Foo,
 }
