@@ -35,11 +35,11 @@ pub enum Command {
 	JsonLdContext(treeldr_json_ld_context::Command),
 
 	#[cfg(feature = "typescript")]
-	#[clap(name="typescript")]
+	#[clap(name = "typescript")]
 	TypeScript(treeldr_typescript::Command),
 
 	#[cfg(feature = "typescript")]
-	#[clap(name="typescript-package")]
+	#[clap(name = "typescript-package")]
 	TypeScriptPackage(treeldr_typescript::command::Package),
 }
 
@@ -88,7 +88,7 @@ fn main() {
 					Command::TypeScript(command) => command.execute(&model),
 					#[cfg(feature = "typescript")]
 					Command::TypeScriptPackage(command) => command.execute(&model),
-					_ => ()
+					_ => (),
 				},
 				Err((e, vocab)) => {
 					use treeldr::reporting::Diagnose;

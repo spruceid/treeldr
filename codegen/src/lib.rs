@@ -10,7 +10,7 @@ pub enum Indent {
 	Tab,
 
 	/// Use the given number of spaces.
-	Spaces(u8)
+	Spaces(u8),
 }
 
 impl Indent {

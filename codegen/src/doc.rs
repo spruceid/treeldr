@@ -1,19 +1,19 @@
-use std::fmt;
 use crate::IndentBy;
+use std::fmt;
 
 pub enum CommentSyntax {
 	Single(&'static str),
 	Multi {
 		start: &'static str,
 		middle: &'static str,
-		end: &'static str
-	}
+		end: &'static str,
+	},
 }
 
 pub enum CommentPosition {
 	Start,
 	Middle,
-	End
+	End,
 }
 
 impl CommentSyntax {
@@ -23,8 +23,8 @@ impl CommentSyntax {
 			Self::Multi { start, middle, end } => match pos {
 				CommentPosition::Start => start,
 				CommentPosition::Middle => middle,
-				CommentPosition::End => end
-			}
+				CommentPosition::End => end,
+			},
 		}
 	}
 }
@@ -32,7 +32,7 @@ impl CommentSyntax {
 pub struct Comment<S> {
 	content: S,
 	syntax: CommentSyntax,
-	indent_by: IndentBy
+	indent_by: IndentBy,
 }
 
 impl<S> Comment<S> {
@@ -40,7 +40,7 @@ impl<S> Comment<S> {
 		Self {
 			content,
 			syntax,
-			indent_by
+			indent_by,
 		}
 	}
 }
@@ -53,19 +53,19 @@ impl<S: AsRef<str>> fmt::Display for Comment<S> {
 		for (i, line) in content.lines().enumerate() {
 			let pos = if i == 0 {
 				CommentPosition::Start
-			} else if i+1 == line_count {
+			} else if i + 1 == line_count {
 				CommentPosition::End
 			} else {
 				CommentPosition::Middle
 			};
 
 			if i > 0 {
-				writeln!(f, "")?;
+				writeln!(f)?;
 			}
 
 			write!(f, "{}{}{}", self.indent_by, self.syntax.as_str(pos), line)?;
 
-			if i == 0 && i+1 == line_count {
+			if i == 0 && i + 1 == line_count {
 				write!(f, "{}", self.syntax.as_str(CommentPosition::End))?;
 			}
 		}

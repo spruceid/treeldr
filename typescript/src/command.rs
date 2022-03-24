@@ -1,12 +1,12 @@
-use std::path::PathBuf;
 pub use crate::Error;
+use std::path::PathBuf;
 
 #[derive(clap::Args)]
 /// Generate a TypeScript file.
 pub struct Command {
 	#[clap(short = 's')]
 	/// Use the given number of spaces for indentation.
-	indent_spaces: Option<u8>
+	indent_spaces: Option<u8>,
 }
 
 #[derive(clap::Args)]
@@ -29,7 +29,7 @@ pub struct Package {
 
 	#[clap(short = 'g', long = "git")]
 	/// Initializes a git repository.
-	/// 
+	///
 	/// If a repository already exists,
 	/// creates a `.gitignore` file.
 	/// If such file already exists, add the missing entries in it.
@@ -37,13 +37,13 @@ pub struct Package {
 
 	#[clap(short = 'd', long = "dir")]
 	/// Defines where to generate the package.
-	/// 
+	///
 	/// The default is the current working directory.
 	directory: Option<PathBuf>,
 
 	#[clap(short = 's')]
 	/// Use the given number of spaces for indentation.
-	indent_spaces: Option<u8>
+	indent_spaces: Option<u8>,
 }
 
 impl Command {
@@ -63,8 +63,8 @@ impl Command {
 		let options = crate::Options {
 			indent: match self.indent_spaces {
 				Some(s) => crate::Indent::Spaces(s),
-				None => crate::Indent::Tab
-			}
+				None => crate::Indent::Tab,
+			},
 		};
 
 		print!("{}", ().generated(model, options));
@@ -89,14 +89,14 @@ impl Package {
 			author: self.author.unwrap_or_default(),
 			version: self.version.unwrap_or_else(|| "0.1.0".to_string()),
 			readme: self.readme,
-			git: self.git
+			git: self.git,
 		};
 
 		let gen_options = crate::Options {
 			indent: match self.indent_spaces {
 				Some(s) => crate::Indent::Spaces(s),
-				None => crate::Indent::Tab
-			}
+				None => crate::Indent::Tab,
+			},
 		};
 
 		let directory = self.directory.unwrap_or_default();

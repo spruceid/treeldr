@@ -1,6 +1,6 @@
-use std::path::Path;
-use std::io::Write;
 use std::fmt;
+use std::io::Write;
+use std::path::Path;
 
 /// Package initialization options.
 #[derive(Debug)]
@@ -18,11 +18,11 @@ pub struct InitOptions {
 	pub readme: bool,
 
 	/// Initializes a git repository.
-	/// 
+	///
 	/// If a repository already exists,
 	/// creates a `.gitignore` file.
 	/// If such file already exists, add the missing entries in it.
-	pub git: bool
+	pub git: bool,
 }
 
 #[derive(Debug)]
@@ -40,7 +40,7 @@ pub enum InitError {
 	ManifestWrite(serde_json::Error),
 
 	/// Could not write `tsconfig.json` file.
-	TSConfigWrite(serde_json::Error)
+	TSConfigWrite(serde_json::Error),
 }
 
 impl From<std::io::Error> for InitError {
@@ -56,15 +56,12 @@ impl fmt::Display for InitError {
 			Self::Git => write!(f, "unable to initialize Git repository"),
 			Self::InvalidManifest(e) => write!(f, "invalid `package.json` file: {}", e),
 			Self::ManifestWrite(e) => write!(f, "unable to write `package.json` file: {}", e),
-			Self::TSConfigWrite(e) => write!(f, "unable to write `tsconfig.json` file: {}", e)
+			Self::TSConfigWrite(e) => write!(f, "unable to write `tsconfig.json` file: {}", e),
 		}
 	}
 }
 
-const GITIGNORE_ENTRIES: [&'static str; 2] = [
-	"node_modules",
-	"/lib"
-];
+const GITIGNORE_ENTRIES: [&str; 2] = ["node_modules", "/lib"];
 
 macro_rules! json_vec {
 	[ $($e:expr),* ] => {
@@ -72,15 +69,18 @@ macro_rules! json_vec {
 	};
 }
 
-pub fn initialize_package(directory: impl AsRef<Path>, options: InitOptions) -> Result<(), InitError> {
+pub fn initialize_package(
+	directory: impl AsRef<Path>,
+	options: InitOptions,
+) -> Result<(), InitError> {
 	let directory = directory.as_ref();
-	
+
 	// Create target directory.
 	std::fs::create_dir_all(directory)?;
 
 	// Create `src` directory.
 	std::fs::create_dir_all(directory.join("src"))?;
-	
+
 	// Create Git repository.
 	if options.git {
 		// Call `git init`.
@@ -94,7 +94,7 @@ pub fn initialize_package(directory: impl AsRef<Path>, options: InitOptions) -> 
 			if output.status.code() != Some(0) {
 				let mut out = std::io::stderr();
 				out.write_all(&output.stderr)?;
-				return Err(InitError::Git)
+				return Err(InitError::Git);
 			}
 		}
 	}
@@ -103,7 +103,12 @@ pub fn initialize_package(directory: impl AsRef<Path>, options: InitOptions) -> 
 	let gitignore_path = directory.join(".gitignore");
 	let gitignore_content = if gitignore_path.exists() {
 		let mut content = std::fs::read_to_string(&gitignore_path)?;
-		let mut middle_of_line = content.chars().rev().next().map(|c| c != '\n').unwrap_or(false);
+		let mut middle_of_line = content
+			.chars()
+			.rev()
+			.next()
+			.map(|c| c != '\n')
+			.unwrap_or(false);
 		for entry in GITIGNORE_ENTRIES {
 			if content.lines().all(|line| line != entry) {
 				if middle_of_line {
@@ -147,7 +152,10 @@ pub fn initialize_package(directory: impl AsRef<Path>, options: InitOptions) -> 
 		let mut tsconfig = serde_json::Map::new();
 		tsconfig.insert("compilerOptions".into(), compiler_options.into());
 		tsconfig.insert("include".into(), json_vec!["src"].into());
-		tsconfig.insert("exclude".into(), json_vec!["node_modules", "**/__tests__/*"].into());
+		tsconfig.insert(
+			"exclude".into(),
+			json_vec!["node_modules", "**/__tests__/*"].into(),
+		);
 
 		let file = std::fs::File::create(tsconfig_path)?;
 		serde_json::to_writer_pretty(file, &tsconfig).map_err(InitError::TSConfigWrite)?;
@@ -162,7 +170,11 @@ pub fn initialize_package(directory: impl AsRef<Path>, options: InitOptions) -> 
 		serde_json::Map::new()
 	};
 
-	fn try_insert(map: &mut serde_json::Map<String, serde_json::Value>, key: &str, value: impl Into<serde_json::Value>) -> bool {
+	fn try_insert(
+		map: &mut serde_json::Map<String, serde_json::Value>,
+		key: &str,
+		value: impl Into<serde_json::Value>,
+	) -> bool {
 		if !map.contains_key(key) {
 			map.insert(key.to_owned(), value.into());
 			true
@@ -178,13 +190,13 @@ pub fn initialize_package(directory: impl AsRef<Path>, options: InitOptions) -> 
 	changed |= try_insert(&mut package, "main", "main.js");
 	changed |= try_insert(&mut package, "build", "tsc");
 	changed |= try_insert(&mut package, "files", json_vec!["lib/**/*"]);
-	
+
 	match package.get_mut("devDependencies") {
 		Some(serde_json::Value::Object(dev_dependencies)) => {
 			match dev_dependencies.get("typescript") {
 				Some(_version) => {
 					// TODO check minimal version.
-				},
+				}
 				None => {
 					dev_dependencies.insert("typescript".into(), "^4.6.0".into());
 				}

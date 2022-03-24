@@ -312,7 +312,10 @@ fn build_doc<F: Clone>(
 				subject,
 				Loc(Name::Rdfs(Rdfs::Comment), loc.clone()),
 				Loc(
-					Object::Literal(Literal::String(Loc(description.into(), description_loc.clone()))),
+					Object::Literal(Literal::String(Loc(
+						description.into(),
+						description_loc.clone(),
+					))),
 					description_loc,
 				),
 				None,

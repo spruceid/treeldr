@@ -208,7 +208,7 @@ impl<F> Field<F> {
 			layout: AnnotatedRef {
 				layout,
 				required,
-				functional
+				functional,
 			},
 			doc,
 		}
@@ -268,7 +268,7 @@ impl<F> Field<F> {
 pub struct AnnotatedRef<F> {
 	required: WithCauses<bool, F>,
 	functional: WithCauses<bool, F>,
-	layout: WithCauses<Ref<Definition<F>>, F>
+	layout: WithCauses<Ref<Definition<F>>, F>,
 }
 
 impl<F> AnnotatedRef<F> {
@@ -279,7 +279,7 @@ impl<F> AnnotatedRef<F> {
 	pub fn is_functional(&self) -> bool {
 		*self.functional
 	}
-	
+
 	pub fn layout(&self) -> Ref<Definition<F>> {
 		*self.layout
 	}
