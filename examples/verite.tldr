@@ -30,7 +30,7 @@ type schema:PostalAddress {}
 /// }
 /// ```
 type KYCAMLAttestation {
-	/// Define which KYC/AML process was performed.
+	/// Defines which KYC/AML process was performed.
 	process: required xs:string,
 
 	/// Date of KYC/AML process completion.

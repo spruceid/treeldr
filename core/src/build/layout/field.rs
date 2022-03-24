@@ -131,6 +131,7 @@ impl<F> Definition<F> {
 impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 	pub fn build(
 		&self,
+		label: Option<String>,
 		doc: Documentation,
 		vocab: &Vocabulary,
 		nodes: &super::super::context::AllocatedNodes<F>,
@@ -179,7 +180,7 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 		let functional = self.functional.clone().unwrap_or(true);
 
 		Ok(crate::layout::Field::new(
-			prop, name, layout, required, functional, doc,
+			prop, name, label, layout, required, functional, doc,
 		))
 	}
 }

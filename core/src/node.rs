@@ -110,6 +110,7 @@ impl<'a, F: Clone> Iterator for CausedTypesIter<'a, F> {
 #[derive(Debug)]
 pub struct Node<F> {
 	id: Id,
+	label: Option<String>,
 	ty: MaybeSet<Ref<ty::Definition<F>>, F>,
 	property: MaybeSet<Ref<prop::Definition<F>>, F>,
 	layout: MaybeSet<Ref<layout::Definition<F>>, F>,
@@ -120,6 +121,7 @@ impl<F> Node<F> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
+			label: None,
 			ty: MaybeSet::default(),
 			property: MaybeSet::default(),
 			layout: MaybeSet::default(),
@@ -129,6 +131,7 @@ impl<F> Node<F> {
 
 	pub fn from_parts(
 		id: Id,
+		label: Option<String>,
 		ty: MaybeSet<Ref<ty::Definition<F>>, F>,
 		property: MaybeSet<Ref<prop::Definition<F>>, F>,
 		layout: MaybeSet<Ref<layout::Definition<F>>, F>,
@@ -136,6 +139,7 @@ impl<F> Node<F> {
 	) -> Self {
 		Self {
 			id,
+			label,
 			ty,
 			property,
 			layout,
@@ -145,6 +149,10 @@ impl<F> Node<F> {
 
 	pub fn id(&self) -> Id {
 		self.id
+	}
+
+	pub fn label(&self) -> Option<&str> {
+		self.label.as_deref()
 	}
 
 	pub fn documentation(&self) -> &Documentation {

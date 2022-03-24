@@ -204,8 +204,10 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 
 							let field =
 								nodes.require_layout_field(field_id, causes.into_preferred())?;
-							let doc = nodes.get(field_id).unwrap().documentation().clone();
-							field.build(doc, vocab, nodes)
+							let node = nodes.get(field_id).unwrap();
+							let label = node.label().map(String::from);
+							let doc = node.documentation().clone();
+							field.build(label, doc, vocab, nodes)
 						})
 						.try_collect()?;
 

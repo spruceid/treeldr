@@ -262,6 +262,15 @@ impl<F> Context<F> {
 		self.nodes.insert(node.id(), node)
 	}
 
+	pub fn add_label(&mut self, id: Id, label: String, _cause: Option<Location<F>>)
+	where
+		F: Ord,
+	{
+		if let Some(node) = self.nodes.get_mut(&id) {
+			node.add_label(label)
+		}
+	}
+
 	pub fn add_comment(&mut self, id: Id, comment: String, _cause: Option<Location<F>>)
 	where
 		F: Ord,
@@ -661,9 +670,9 @@ impl<F> Node<AllocatedComponents<F>> {
 
 impl<F> From<Node<AllocatedComponents<F>>> for crate::Node<F> {
 	fn from(n: Node<AllocatedComponents<F>>) -> crate::Node<F> {
-		let (id, doc, value) = n.into_parts();
+		let (id, label, doc, value) = n.into_parts();
 
-		crate::Node::from_parts(id, value.ty, value.property, value.layout, doc)
+		crate::Node::from_parts(id, label, value.ty, value.property, value.layout, doc)
 	}
 }
 

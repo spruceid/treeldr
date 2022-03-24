@@ -1,5 +1,5 @@
 <http://www.example.com/Diploma> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
-<http://www.example.com/Diploma> <http://www.w3.org/2000/01/rdf-schema#comment> "Certificate or deed issued by an educational institution." .
+<http://www.example.com/Diploma> <http://www.w3.org/2000/01/rdf-schema#label> "Certificate or deed issued by an educational institution." .
 <http://www.example.com/Diploma/department> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
 <http://www.example.com/Diploma/department> <http://www.w3.org/2000/01/rdf-schema#domain> <http://www.example.com/Diploma> .
 <http://www.example.com/Diploma/department> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.example.com/Department> .
@@ -58,7 +58,7 @@ _:1 <https://treeldr.org/name> "url" .
 _:1 <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2001/XMLSchema#anyURI> .
 
 <http://www.example.com/Department> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
-<http://www.example.com/Department> <http://www.w3.org/2000/01/rdf-schema#comment> "Department" .
+<http://www.example.com/Department> <http://www.w3.org/2000/01/rdf-schema#label> "Department" .
 <http://www.example.com/Department/parent> <http://www.w3.org/2000/01/rdf-schema#domain> <http://www.example.com/Department> .
 <http://www.example.com/Department/parent> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.example.com/Department> .
 <http://www.example.com/Department/parent> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
