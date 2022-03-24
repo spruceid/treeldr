@@ -26,7 +26,9 @@ impl CommentSyntax {
 	pub fn as_str(&self, pos: CommentPosition) -> &'static str {
 		match self {
 			Self::Single(s) => s,
-			Self::Multi { start, middle, end, .. } => match pos {
+			Self::Multi {
+				start, middle, end, ..
+			} => match pos {
 				CommentPosition::Start => start,
 				CommentPosition::Middle => middle,
 				CommentPosition::End => end,
@@ -58,7 +60,12 @@ impl<S: AsRef<str>> fmt::Display for Comment<S> {
 		let pad = self.syntax.pad();
 
 		if pad {
-			writeln!(f, "{}{}", self.indent_by, self.syntax.as_str(CommentPosition::Start))?;
+			writeln!(
+				f,
+				"{}{}",
+				self.indent_by,
+				self.syntax.as_str(CommentPosition::Start)
+			)?;
 		}
 
 		for (i, line) in content.lines().enumerate() {
@@ -86,7 +93,12 @@ impl<S: AsRef<str>> fmt::Display for Comment<S> {
 				writeln!(f)?;
 			}
 
-			write!(f, "{}{}", self.indent_by, self.syntax.as_str(CommentPosition::End))?;
+			write!(
+				f,
+				"{}{}",
+				self.indent_by,
+				self.syntax.as_str(CommentPosition::End)
+			)?;
 		}
 
 		Ok(())

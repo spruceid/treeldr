@@ -79,7 +79,7 @@ impl<F> Generate<F> for () {
 		options: Options,
 	) -> fmt::Result {
 		let mut first = true;
-		for (layout_ref, _) in model.layouts().iter() {
+		for (layout_ref, _) in model.sorted_layouts() {
 			let layout = model.layouts().get(layout_ref).unwrap();
 
 			if layout.description().is_struct() {
@@ -92,7 +92,7 @@ impl<F> Generate<F> for () {
 					f,
 					layout.preferred_label(model),
 					layout.preferred_documentation(model).as_str(),
-					options.indent.by(0)
+					options.indent.by(0),
 				)?;
 
 				layout.gen(f, model, options)?;
@@ -107,7 +107,7 @@ fn gen_doc(
 	f: &mut fmt::Formatter,
 	label: Option<&str>,
 	body: Option<&str>,
-	indent_by: IndentBy
+	indent_by: IndentBy,
 ) -> fmt::Result {
 	let mut doc_comment = String::new();
 	if let Some(label) = label {
@@ -129,7 +129,7 @@ fn gen_doc(
 				pad: true,
 				start: "/**",
 				middle: " * ",
-				end: " */"
+				end: " */",
 			},
 			indent_by,
 		);
@@ -159,7 +159,7 @@ impl<F> Generate<F> for treeldr::layout::Definition<F> {
 					f,
 					field.preferred_label(model),
 					field.preferred_documentation(model).as_str(),
-					options.indent.by(1)
+					options.indent.by(1),
 				)?;
 
 				write!(

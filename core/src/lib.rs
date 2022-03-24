@@ -144,6 +144,13 @@ impl<F> Model<F> {
 		&mut self.layouts
 	}
 
+	/// Returns the list of defined layouts sorted by IRI.
+	pub fn sorted_layouts(&self) -> Vec<(Ref<layout::Definition<F>>, &layout::Definition<F>)> {
+		let mut result: Vec<_> = self.layouts().iter().collect();
+		result.sort_by_key(|(_, layout)| vocab::IdDeref::new(layout.id(), self.vocabulary()));
+		result
+	}
+
 	pub fn require(
 		&self,
 		id: Id,
