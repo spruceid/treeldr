@@ -106,17 +106,15 @@ impl<F: Clone + Ord> Context<F> {
 					}
 				},
 				Name::Rdfs(vocab::Rdfs::Label) => match object.as_literal() {
-					Some(label) => {
-						self.add_label(
-							id,
-							label.string_literal().value().as_str().to_owned(),
-							Some(loc),
-						)
-					}
+					Some(label) => self.add_label(
+						id,
+						label.string_literal().value().as_str().to_owned(),
+						Some(loc),
+					),
 					None => {
 						panic!("label is not a string literal")
 					}
-				}
+				},
 				Name::Rdfs(vocab::Rdfs::Comment) => match object.as_literal() {
 					Some(literal) => {
 						self.add_comment(
