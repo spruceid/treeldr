@@ -31,6 +31,19 @@ pub enum TreeLdr {
 
 	#[iri("tldr:derefTo")]
 	DerefTo,
+
+	/// Layout equality constraint.
+	/// 
+	/// The only possible instance of the subject layout is the given object.
+	#[iri("tldr:singleton")]
+	Singleton,
+
+	/// Layout regular expression matching constraint.
+	/// 
+	/// The instances of the subject layout must match the given regular
+	/// expression object.
+	#[iri("tldr:matches")]
+	Matches,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

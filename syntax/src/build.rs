@@ -1,10 +1,13 @@
 use iref::{IriBuf, IriRef, IriRefBuf};
-use locspan::{Loc, Location};
+use locspan::{Loc, Location, Strip};
 use rdf_types::{loc::Literal, Quad};
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::vocab::*;
+use crate::{
+	vocab::*,
+	stripped
+};
 
 pub trait Build<F> {
 	type Target;
@@ -83,11 +86,22 @@ impl<F> fmt::Display for Error<F> {
 	}
 }
 
+/// Build context.
 pub struct Context<'v, F> {
+	/// Base IRI of th parsed document.
 	base_iri: Option<IriBuf>,
+
+	/// Vocabulary.
 	vocabulary: &'v mut Vocabulary,
+
+	/// Bound prefixes.
 	prefixes: HashMap<String, Loc<IriBuf, F>>,
+
+	/// Current scope.
 	scope: Option<Name>,
+
+	/// Associates each literal type/value to a blank node label.
+	literal: HashMap<stripped::Literal, BlankLabel>
 }
 
 impl<'v, F> Context<'v, F> {
@@ -97,6 +111,7 @@ impl<'v, F> Context<'v, F> {
 			vocabulary,
 			prefixes: HashMap::new(),
 			scope: None,
+			literal: HashMap::new()
 		}
 	}
 
@@ -106,6 +121,18 @@ impl<'v, F> Context<'v, F> {
 
 	pub fn into_vocabulary(self) -> &'v mut Vocabulary {
 		self.vocabulary
+	}
+
+	pub fn insert_literal(&mut self, lit: stripped::Literal) -> BlankLabel {
+		use std::collections::hash_map::Entry;
+		match self.literal.entry(lit) {
+			Entry::Occupied(entry) => *entry.get(),
+			Entry::Vacant(entry) => {
+				let label = self.vocabulary.new_blank_label();
+				entry.insert(label);
+				label
+			}
+		}
 	}
 }
 
@@ -457,6 +484,10 @@ impl<F: Clone> Build<F> for Loc<crate::TypeExpr<F>, F> {
 				Ok(Loc(Object::Iri(id), loc))
 			}
 			crate::TypeExpr::Reference(r) => r.build(ctx, quads),
+			crate::TypeExpr::Literal(lit) => {
+				let label = ctx.insert_literal(lit.strip());
+				Ok(Loc(Object::Blank(label), loc))
+			}
 		}
 	}
 }
@@ -681,27 +712,62 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 				Ok(Loc(Object::Iri(id), loc))
 			}
 			crate::LayoutExpr::Reference(r) => {
-				let deref_ty = r.build(ctx, quads)?;
-				let ty = ctx.vocabulary.new_blank_label();
+				let deref_layout = r.build(ctx, quads)?;
+				let layout = ctx.vocabulary.new_blank_label();
+
 				quads.push(Loc(
 					Quad(
-						Loc(Id::Blank(ty), loc.clone()),
+						Loc(Id::Blank(layout), loc.clone()),
 						Loc(Name::Rdf(Rdf::Type), loc.clone()),
 						Loc(Object::Iri(Name::TreeLdr(TreeLdr::Layout)), loc.clone()),
 						None,
 					),
 					loc.clone(),
 				));
+
 				quads.push(Loc(
 					Quad(
-						Loc(Id::Blank(ty), loc.clone()),
+						Loc(Id::Blank(layout), loc.clone()),
 						Loc(Name::TreeLdr(TreeLdr::DerefTo), loc.clone()),
-						deref_ty,
+						deref_layout,
 						None,
 					),
 					loc.clone(),
 				));
-				Ok(Loc(Object::Blank(ty), loc))
+
+				Ok(Loc(Object::Blank(layout), loc))
+			}
+			crate::LayoutExpr::Literal(lit) => {
+				let layout = ctx.insert_literal(lit.clone().strip());
+
+				quads.push(Loc(
+					Quad(
+						Loc(Id::Blank(layout), loc.clone()),
+						Loc(Name::Rdf(Rdf::Type), loc.clone()),
+						Loc(Object::Iri(Name::TreeLdr(TreeLdr::Layout)), loc.clone()),
+						None,
+					),
+					loc.clone(),
+				));
+
+				match lit {
+					crate::Literal::String(s) => {
+						quads.push(Loc(
+							Quad(
+								Loc(Id::Blank(layout), loc.clone()),
+								Loc(Name::TreeLdr(TreeLdr::Singleton), loc.clone()),
+								Loc(Object::Literal(Literal::String(Loc(s.into(), loc.clone()))), loc.clone()),
+								None,
+							),
+							loc.clone(),
+						));
+					}
+					crate::Literal::RegExp(_) => {
+						todo!("regular expression layout")
+					}
+				}
+
+				Ok(Loc(Object::Blank(layout), loc))
 			}
 		}
 	}
