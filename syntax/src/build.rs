@@ -98,7 +98,7 @@ pub struct Context<'v, F> {
 	scope: Option<Name>,
 
 	/// Associates each literal type/value to a blank node label.
-	literal: HashMap<crate::Literal, BlankLabel>
+	literal: HashMap<crate::Literal, BlankLabel>,
 }
 
 impl<'v, F> Context<'v, F> {
@@ -108,7 +108,7 @@ impl<'v, F> Context<'v, F> {
 			vocabulary,
 			prefixes: HashMap::new(),
 			scope: None,
-			literal: HashMap::new()
+			literal: HashMap::new(),
 		}
 	}
 
@@ -753,7 +753,10 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 							Quad(
 								Loc(Id::Blank(layout), loc.clone()),
 								Loc(Name::TreeLdr(TreeLdr::Singleton), loc.clone()),
-								Loc(Object::Literal(Literal::String(Loc(s.into(), loc.clone()))), loc.clone()),
+								Loc(
+									Object::Literal(Literal::String(Loc(s, loc.clone()))),
+									loc.clone(),
+								),
 								None,
 							),
 							loc.clone(),

@@ -1,15 +1,15 @@
-use std::fmt;
 use btree_range_map::RangeSet;
+use std::fmt;
 
 /// Regular expression.
 pub enum RegExp {
 	/// Any character.
-	/// 
+	///
 	/// `.`
 	Any,
 
 	/// Character set.
-	/// 
+	///
 	/// `[]` or `[^ ]`
 	Set(RangeSet<char>),
 
@@ -20,7 +20,7 @@ pub enum RegExp {
 	Repeat(Box<Self>, usize, usize),
 
 	/// Union.
-	Union(Vec<Self>)
+	Union(Vec<Self>),
 }
 
 impl RegExp {
@@ -35,7 +35,7 @@ impl RegExp {
 			Self::Set(charset) => charset.len() == 1,
 			Self::Sequence(seq) => seq.iter().all(Self::is_singleton),
 			Self::Repeat(e, min, max) => min == max && e.is_singleton(),
-			Self::Union(items) => items.len() == 1 && items[0].is_singleton()
+			Self::Union(items) => items.len() == 1 && items[0].is_singleton(),
 		}
 	}
 
@@ -47,9 +47,9 @@ impl RegExp {
 				for e in seq {
 					e.build_singleton(s)
 				}
-			},
+			}
 			Self::Repeat(e, _, _) => e.build_singleton(s),
-			Self::Union(items) => items[0].build_singleton(s)
+			Self::Union(items) => items[0].build_singleton(s),
 		}
 	}
 
@@ -57,14 +57,14 @@ impl RegExp {
 		if self.is_singleton() {
 			let mut s = String::new();
 			self.build_singleton(&mut s);
-			Some(s)	
+			Some(s)
 		} else {
 			None
 		}
 	}
 
 	/// Display this regular expression as a sub expression.
-	/// 
+	///
 	/// This will enclose it between parenthesis if necessary.
 	pub fn display_sub(&self) -> DisplaySub {
 		DisplaySub(self)
@@ -78,14 +78,14 @@ impl fmt::Display for RegExp {
 		match self {
 			Self::Any => write!(f, "."),
 			Self::Set(charset) => {
-				if charset.len() > CHAR_COUNT/2 {
-					write!(f, "^");
+				if charset.len() > CHAR_COUNT / 2 {
+					write!(f, "^")?;
 					for range in charset.gaps() {
 						fmt_range(range.cloned(), f)?
 					}
 				} else {
 					for range in charset {
-						fmt_range(range.clone(), f)?
+						fmt_range(*range, f)?
 					}
 				}
 
@@ -109,7 +109,7 @@ impl fmt::Display for RegExp {
 				} else {
 					write!(f, "{}{{{},{}}}", e.display_sub(), min, max)
 				}
-			},
+			}
 			Self::Union(items) => {
 				for (i, item) in items.iter().enumerate() {
 					if i > 0 {
@@ -126,7 +126,7 @@ impl fmt::Display for RegExp {
 }
 
 /// Display the inner regular expression as a sub expression.
-/// 
+///
 /// This will enclose it between parenthesis if necessary.
 pub struct DisplaySub<'a>(&'a RegExp);
 
@@ -161,6 +161,6 @@ fn fmt_char(c: char, f: &mut fmt::Formatter) -> fmt::Result {
 		'\x0c' => write!(f, "\\f"),
 		'\r' => write!(f, "\\r"),
 		'\x1b' => write!(f, "\\e"),
-		_ => fmt::Display::fmt(&c, f)
+		_ => fmt::Display::fmt(&c, f),
 	}
 }

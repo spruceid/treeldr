@@ -1,7 +1,5 @@
 use iref::IriBuf;
-use locspan::{
-	Loc
-};
+use locspan::Loc;
 
 pub use treeldr_vocab as vocab;
 
@@ -152,7 +150,7 @@ impl<F: Clone> AnnotatedTypeExpr<F> {
 pub enum TypeExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<TypeExpr<F>, F>>),
-	Literal(Literal)
+	Literal(Literal),
 }
 
 impl<F: Clone> TypeExpr<F> {
@@ -163,7 +161,7 @@ impl<F: Clone> TypeExpr<F> {
 				r.implicit_layout_expr(),
 				r.location().clone(),
 			))),
-			Self::Literal(lit) => LayoutExpr::Literal(lit.clone())
+			Self::Literal(lit) => LayoutExpr::Literal(lit.clone()),
 		}
 	}
 }
@@ -203,29 +201,29 @@ pub struct AnnotatedLayoutExpr<F> {
 pub enum LayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<LayoutExpr<F>, F>>),
-	Literal(Literal)
+	Literal(Literal),
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Literal {
-	String(String),
-	RegExp(RegExp)
+	String(rdf_types::StringLiteral),
+	RegExp(RegExp),
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum RegExp {
 	Sub(SubRegExp),
-	Full(FullRegExp)
+	Full(FullRegExp),
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum SubRegExp {
 	Any,
 	Set(CharSet),
-	Sequence(Vec<RegExp>)
+	Sequence(Vec<RegExp>),
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum FullRegExp {
 	Sub(SubRegExp),
 	Optional(Box<RegExp>),
@@ -234,11 +232,11 @@ pub enum FullRegExp {
 	AtLeast(Box<RegExp>, u32),
 	AtMost(Box<RegExp>, u32),
 	Bounded(Box<RegExp>, u32, u32),
-	Union(Vec<RegExp>)
+	Union(Vec<RegExp>),
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct CharSet {
 	pub negate: bool,
-	pub chars: String
+	pub chars: String,
 }
