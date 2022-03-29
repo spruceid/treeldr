@@ -1,0 +1,3 @@
+# TypeScript package generator
+
+{{readme}}

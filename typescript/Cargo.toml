@@ -1,0 +1,15 @@
+[package]
+name = "treeldr-typescript"
+version = "0.1.0"
+authors = ["Spruce Systems Inc."]
+description = "TypeScript package generator for TreeLDR."
+edition = "2021"
+
+[dependencies]
+treeldr = { path = "../core" }
+treeldr-codegen = { path = "../codegen" }
+log = "0.4"
+iref = "2.0"
+clap = { version = "3.0", features = ["derive"] }
+derivative = "2.2.0"
+serde_json = "1.0.79"

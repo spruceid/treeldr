@@ -6,12 +6,15 @@ description = "Schema definition language."
 edition = "2021"
 
 [features]
-default = ["json-schema", "json-ld-context"]
+default = ["json-schema", "json-ld-context", "typescript"]
 json-schema = [
 	"treeldr-json-schema"
 ]
 json-ld-context = [
 	"treeldr-json-ld-context"
+]
+typescript = [
+	"treeldr-typescript"
 ]
 
 [dependencies]
@@ -28,6 +31,7 @@ clap = { version = "3.0", features = ["derive"] }
 # Extensions.
 treeldr-json-schema = { path = "../json-schema", version = "0.1", optional = true }
 treeldr-json-ld-context = { path = "../json-ld-context", version = "0.1", optional = true }
+treeldr-typescript = { path = "../typescript", version = "0.1", optional = true }
 
 [[bin]]
 name = "treeldr"

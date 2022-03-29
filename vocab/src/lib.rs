@@ -191,6 +191,31 @@ impl fmt::Display for BlankLabel {
 
 pub type Id = rdf_types::Subject<Name, BlankLabel>;
 
+/// Dereferenced, human readable `Id`.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum IdDeref<'a> {
+	Blank(BlankLabel),
+	Iri(Iri<'a>),
+}
+
+impl<'a> IdDeref<'a> {
+	pub fn new(id: Id, vocabulary: &'a Vocabulary) -> Self {
+		match id {
+			Id::Blank(b) => Self::Blank(b),
+			Id::Iri(n) => Self::Iri(n.iri(vocabulary).unwrap()),
+		}
+	}
+}
+
+impl<'a> fmt::Display for IdDeref<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::Blank(b) => b.fmt(f),
+			Self::Iri(iri) => iri.fmt(f),
+		}
+	}
+}
+
 pub type GraphLabel = rdf_types::GraphLabel<Name, BlankLabel>;
 
 pub type Object<F> = rdf_types::Object<Name, BlankLabel, Literal<F>>;

@@ -4,6 +4,8 @@ members = [
 	"core",
 	"syntax",
 	"cli",
+	"codegen",
 	"json-schema",
-	"json-ld-context"
+	"json-ld-context",
+	"typescript"
 ]

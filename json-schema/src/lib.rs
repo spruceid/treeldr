@@ -46,7 +46,7 @@ pub fn generate<F>(
 
 	let title = match layout.preferred_label(model) {
 		Some(label) => label,
-		None => name
+		None => name,
 	};
 	json_schema.insert("title".into(), title.into());
 	generate_layout(
@@ -91,15 +91,15 @@ pub fn generate<F>(
 
 fn remove_newlines(s: &str) -> String {
 	let mut result = String::new();
-	
+
 	for (i, line) in s.lines().enumerate() {
 		if i > 0 {
 			result.push(' ');
 		}
-		
+
 		result.push_str(line);
 	}
-	
+
 	result
 }
 
@@ -117,7 +117,10 @@ fn generate_layout<F>(
 	);
 
 	if let Some(description) = layout.preferred_documentation(model).short_description() {
-		json.insert("description".into(), remove_newlines(description.trim()).into());
+		json.insert(
+			"description".into(),
+			remove_newlines(description.trim()).into(),
+		);
 	}
 
 	use treeldr::layout::Description;
@@ -193,7 +196,10 @@ fn generate_struct<F>(
 		};
 
 		if let Some(description) = field.preferred_label(model) {
-			field_schema.insert("description".into(), remove_newlines(description.trim()).into());
+			field_schema.insert(
+				"description".into(),
+				remove_newlines(description.trim()).into(),
+			);
 		}
 
 		properties.insert(field.name().into(), field_schema.into());

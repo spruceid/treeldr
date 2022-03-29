@@ -264,7 +264,7 @@ fn build_doc<F: Clone>(
 	let mut separated = false;
 
 	for Loc(line, line_loc) in doc.items {
-		let line = line.trim();
+		let line = line.strip_prefix(' ').unwrap_or(&line).trim_end();
 
 		if separated {
 			if description.is_empty() {
@@ -312,7 +312,10 @@ fn build_doc<F: Clone>(
 				subject,
 				Loc(Name::Rdfs(Rdfs::Comment), loc.clone()),
 				Loc(
-					Object::Literal(Literal::String(Loc(description.into(), description_loc.clone()))),
+					Object::Literal(Literal::String(Loc(
+						description.into(),
+						description_loc.clone(),
+					))),
 					description_loc,
 				),
 				None,

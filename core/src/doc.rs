@@ -55,7 +55,7 @@ impl Block {
 				}
 			}
 		}
-		
+
 		if state == State::Short {
 			short_end = s.len();
 			long_start = s.len();
@@ -129,7 +129,7 @@ impl Documentation {
 		self.blocks.insert(Block::new(comment));
 	}
 
-	pub fn as_string(&self) -> Option<&str> {
+	pub fn as_str(&self) -> Option<&str> {
 		self.blocks.iter().next().map(Block::as_str)
 	}
 }
