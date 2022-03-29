@@ -1,13 +1,10 @@
 use iref::{IriBuf, IriRef, IriRefBuf};
-use locspan::{Loc, Location, Strip};
+use locspan::{Loc, Location};
 use rdf_types::{loc::Literal, Quad};
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::{
-	vocab::*,
-	stripped
-};
+use crate::vocab::*;
 
 pub trait Build<F> {
 	type Target;
@@ -101,7 +98,7 @@ pub struct Context<'v, F> {
 	scope: Option<Name>,
 
 	/// Associates each literal type/value to a blank node label.
-	literal: HashMap<stripped::Literal, BlankLabel>
+	literal: HashMap<crate::Literal, BlankLabel>
 }
 
 impl<'v, F> Context<'v, F> {
@@ -123,7 +120,7 @@ impl<'v, F> Context<'v, F> {
 		self.vocabulary
 	}
 
-	pub fn insert_literal(&mut self, lit: stripped::Literal) -> BlankLabel {
+	pub fn insert_literal(&mut self, lit: crate::Literal) -> BlankLabel {
 		use std::collections::hash_map::Entry;
 		match self.literal.entry(lit) {
 			Entry::Occupied(entry) => *entry.get(),
@@ -485,7 +482,7 @@ impl<F: Clone> Build<F> for Loc<crate::TypeExpr<F>, F> {
 			}
 			crate::TypeExpr::Reference(r) => r.build(ctx, quads),
 			crate::TypeExpr::Literal(lit) => {
-				let label = ctx.insert_literal(lit.strip());
+				let label = ctx.insert_literal(lit);
 				Ok(Loc(Object::Blank(label), loc))
 			}
 		}
@@ -738,7 +735,7 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 				Ok(Loc(Object::Blank(layout), loc))
 			}
 			crate::LayoutExpr::Literal(lit) => {
-				let layout = ctx.insert_literal(lit.clone().strip());
+				let layout = ctx.insert_literal(lit.clone());
 
 				quads.push(Loc(
 					Quad(

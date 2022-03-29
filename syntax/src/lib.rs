@@ -1,7 +1,6 @@
 use iref::IriBuf;
 use locspan::{
-	Loc,
-	Location
+	Loc
 };
 
 pub use treeldr_vocab as vocab;
@@ -153,7 +152,7 @@ impl<F: Clone> AnnotatedTypeExpr<F> {
 pub enum TypeExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<TypeExpr<F>, F>>),
-	Literal(Literal<F>)
+	Literal(Literal)
 }
 
 impl<F: Clone> TypeExpr<F> {
@@ -204,143 +203,42 @@ pub struct AnnotatedLayoutExpr<F> {
 pub enum LayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<LayoutExpr<F>, F>>),
-	Literal(Literal<F>)
+	Literal(Literal)
 }
 
-#[derive(Clone)]
-pub enum Literal<F> {
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum Literal {
 	String(String),
-	RegExp(RegExp<F>)
+	RegExp(RegExp)
 }
 
-impl<F> locspan::Strip for Literal<F> {
-	type Stripped = stripped::Literal;
-
-	fn strip(self) -> Self::Stripped {
-		match self {
-			Self::String(s) => stripped::Literal::String(s),
-			Self::RegExp(e) => stripped::Literal::RegExp(e.strip())
-		}
-	}
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum RegExp {
+	Sub(SubRegExp),
+	Full(FullRegExp)
 }
 
-#[derive(Clone)]
-pub enum RegExp<F> {
-	Sub(SubRegExp<F>),
-	Full(FullRegExp<F>)
-}
-
-impl<F> locspan::Strip for RegExp<F> {
-	type Stripped = stripped::RegExp;
-
-	fn strip(self) -> Self::Stripped {
-		match self {
-			Self::Sub(e) => stripped::RegExp::Sub(e.strip()),
-			Self::Full(e) => stripped::RegExp::Full(e.strip())
-		}
-	}
-}
-
-#[derive(Clone)]
-pub enum SubRegExp<F> {
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum SubRegExp {
 	Any,
-	Set(CharSet<F>),
-	Sequence(Vec<Loc<RegExp<F>, F>>)
+	Set(CharSet),
+	Sequence(Vec<RegExp>)
 }
 
-impl<F> locspan::Strip for SubRegExp<F> {
-	type Stripped = stripped::SubRegExp;
-
-	fn strip(self) -> Self::Stripped {
-		match self {
-			Self::Any => stripped::SubRegExp::Any,
-			Self::Set(charset) => stripped::SubRegExp::Set(charset.strip()),
-			Self::Sequence(seq) => stripped::SubRegExp::Sequence(seq.strip())
-		}
-	}
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum FullRegExp {
+	Sub(SubRegExp),
+	Optional(Box<RegExp>),
+	Star(Box<RegExp>),
+	Plus(Box<RegExp>),
+	AtLeast(Box<RegExp>, u32),
+	AtMost(Box<RegExp>, u32),
+	Bounded(Box<RegExp>, u32, u32),
+	Union(Vec<RegExp>)
 }
 
-#[derive(Clone)]
-pub enum FullRegExp<F> {
-	Sub(SubRegExp<F>),
-	Optional(Box<Loc<RegExp<F>, F>>, Location<F>),
-	Star(Box<Loc<RegExp<F>, F>>, Location<F>),
-	Plus(Box<Loc<RegExp<F>, F>>, Location<F>),
-	AtLeast(Box<Loc<RegExp<F>, F>>, Loc<u32, F>),
-	AtMost(Box<Loc<RegExp<F>, F>>, Loc<u32, F>),
-	Bounded(Box<Loc<RegExp<F>, F>>, Loc<u32, F>, Loc<u32, F>),
-	Union(Vec<Loc<RegExp<F>, F>>)
-}
-
-impl<F> locspan::Strip for FullRegExp<F> {
-	type Stripped = stripped::FullRegExp;
-
-	fn strip(self) -> Self::Stripped {
-		match self {
-			Self::Sub(e) => stripped::FullRegExp::Sub(e.strip()),
-			Self::Optional(e, _) => stripped::FullRegExp::Optional(Box::new(e.strip())),
-			Self::Star(e, _) => stripped::FullRegExp::Star(Box::new(e.strip())),
-			Self::Plus(e, _) => stripped::FullRegExp::Plus(Box::new(e.strip())),
-			Self::AtLeast(e, min) => stripped::FullRegExp::AtLeast(Box::new(e.strip()), min.into_value()),
-			Self::AtMost(e, max) => stripped::FullRegExp::AtMost(Box::new(e.strip()), max.into_value()),
-			Self::Bounded(e, min, max) => stripped::FullRegExp::Bounded(Box::new(e.strip()), min.into_value(), max.into_value()),
-			Self::Union(items) => stripped::FullRegExp::Union(items.strip())
-		}
-	}
-}
-
-#[derive(Clone)]
-pub struct CharSet<F> {
-	pub negate: Loc<bool, F>,
-	pub chars: Loc<String, F>
-}
-
-impl<F> locspan::Strip for CharSet<F> {
-	type Stripped = stripped::CharSet;
-
-	fn strip(self) -> Self::Stripped {
-		stripped::CharSet {
-			negate: self.negate.into_value(),
-			chars: self.chars.into_value()
-		}
-	}
-}
-
-pub mod stripped {
-	#[derive(Clone, PartialEq, Eq, Hash)]
-	pub enum Literal {
-		String(String),
-		RegExp(RegExp)
-	}
-
-	#[derive(Clone, PartialEq, Eq, Hash)]
-	pub enum RegExp {
-		Sub(SubRegExp),
-		Full(FullRegExp)
-	}
-
-	#[derive(Clone, PartialEq, Eq, Hash)]
-	pub enum SubRegExp {
-		Any,
-		Set(CharSet),
-		Sequence(Vec<RegExp>)
-	}
-
-	#[derive(Clone, PartialEq, Eq, Hash)]
-	pub enum FullRegExp {
-		Sub(SubRegExp),
-		Optional(Box<RegExp>),
-		Star(Box<RegExp>),
-		Plus(Box<RegExp>),
-		AtLeast(Box<RegExp>, u32),
-		AtMost(Box<RegExp>, u32),
-		Bounded(Box<RegExp>, u32, u32),
-		Union(Vec<RegExp>)
-	}
-
-	#[derive(Clone, PartialEq, Eq, Hash)]
-	pub struct CharSet {
-		pub negate: bool,
-		pub chars: String
-	}
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct CharSet {
+	pub negate: bool,
+	pub chars: String
 }
