@@ -276,8 +276,18 @@ fn generate_layout_ref<F>(
 		Description::Sum(_) => {
 			todo!("json-schema sum layout")
 		}
-		Description::Literal(_) => {
-			todo!("json-schema literal layout")
+		Description::Literal(lit) => {
+			json.insert("type".into(), "string".into());
+			match lit.regexp().as_singleton() {
+				Some(singleton) => {
+					json.insert("const".into(), singleton.into());
+				},
+				None => {
+					// TODO: convert to ECMA-262 regular expression?
+					json.insert("pattern".into(), lit.regexp().to_string().into());
+				}
+			}
+			Ok(())
 		}
 		Description::Native(n, _) => {
 			generate_native_type(json, *n);
