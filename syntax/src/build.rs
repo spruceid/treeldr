@@ -133,7 +133,7 @@ impl<'v, F> Context<'v, F> {
 					Quad(
 						Loc(Id::Blank(label), loc.clone()),
 						Loc(Name::Rdf(Rdf::Type), loc.clone()),
-						Loc(Object::Iri(Name::Rdf(Rdf::Type)), loc.clone()),
+						Loc(Object::Iri(Name::Rdfs(Rdfs::Class)), loc.clone()),
 						None,
 					),
 					loc.clone(),
