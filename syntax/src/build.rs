@@ -754,7 +754,7 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 								Loc(Id::Blank(layout), loc.clone()),
 								Loc(Name::TreeLdr(TreeLdr::Singleton), loc.clone()),
 								Loc(
-									Object::Literal(Literal::String(Loc(s, loc.clone()))),
+									Object::Literal(Literal::String(Loc(s.into(), loc.clone()))),
 									loc.clone(),
 								),
 								None,
@@ -762,8 +762,19 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 							loc.clone(),
 						));
 					}
-					crate::Literal::RegExp(_) => {
-						todo!("regular expression layout")
+					crate::Literal::RegExp(e) => {
+						quads.push(Loc(
+							Quad(
+								Loc(Id::Blank(layout), loc.clone()),
+								Loc(Name::TreeLdr(TreeLdr::Matches), loc.clone()),
+								Loc(
+									Object::Literal(Literal::String(Loc(e.into(), loc.clone()))),
+									loc.clone(),
+								),
+								None,
+							),
+							loc.clone(),
+						));
 					}
 				}
 

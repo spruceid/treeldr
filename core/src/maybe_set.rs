@@ -132,6 +132,13 @@ impl<T, F> MaybeSet<T, F> {
 		self.value.as_mut().map(|v| v.inner_mut())
 	}
 
+	pub fn as_deref(&self) -> Option<&T::Target>
+	where
+		T: std::ops::Deref,
+	{
+		self.value.as_ref().map(|v| v.inner().deref())
+	}
+
 	pub fn unwrap_or(self, default: T) -> WithCauses<T, F> {
 		self.value
 			.unwrap_or_else(|| WithCauses::without_causes(default))

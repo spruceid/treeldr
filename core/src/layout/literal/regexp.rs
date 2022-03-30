@@ -2,6 +2,7 @@ use btree_range_map::RangeSet;
 use std::fmt;
 
 /// Regular expression.
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum RegExp {
 	/// Any character.
 	///
@@ -17,13 +18,76 @@ pub enum RegExp {
 	Sequence(Vec<Self>),
 
 	/// Repetition.
-	Repeat(Box<Self>, usize, usize),
+	Repeat(Box<Self>, u32, u32),
 
 	/// Union.
 	Union(Vec<Self>),
 }
 
 impl RegExp {
+	pub fn empty() -> Self {
+		Self::Sequence(Vec::new())
+	}
+
+	/// Push the given regexp `e` at the end.
+	///
+	/// Builds the regexp sequence `self` followed by `e`.
+	/// For instance if `self` is `/ab|cd/` then the result is `/(ab|cd)e/`
+	pub fn push(&mut self, e: Self) {
+		let this = match unsafe { std::ptr::read(self) } {
+			Self::Sequence(mut seq) => {
+				seq.push(e);
+				Self::Sequence(seq)
+			}
+			item => Self::Sequence(vec![item, e]),
+		};
+
+		unsafe { std::ptr::write(self, this) }
+	}
+
+	pub fn repeat(&mut self, min: u32, max: u32) {
+		let this = Self::Repeat(Box::new(unsafe { std::ptr::read(self) }), min, max);
+		unsafe { std::ptr::write(self, this) }
+	}
+
+	pub fn simplified(self) -> Self {
+		match self {
+			Self::Any => Self::Any,
+			Self::Set(set) => Self::Set(set),
+			Self::Sequence(seq) => {
+				let new_seq = seq
+					.into_iter()
+					.filter_map(|e| {
+						if e.is_empty() {
+							None
+						} else {
+							Some(e.simplified())
+						}
+					})
+					.collect();
+				Self::Sequence(new_seq)
+			}
+			Self::Union(items) => {
+				if items.len() == 1 {
+					items.into_iter().next().unwrap().simplified()
+				} else {
+					Self::Union(items.into_iter().map(Self::simplified).collect())
+				}
+			}
+			Self::Repeat(e, min, max) => Self::Repeat(Box::new(e.simplified()), min, max),
+		}
+	}
+
+	pub fn is_empty(&self) -> bool {
+		match self {
+			Self::Set(set) => set.is_empty(),
+			Self::Sequence(seq) => seq.iter().all(Self::is_empty),
+			Self::Union(items) => items.iter().all(Self::is_empty),
+			Self::Repeat(r, min, max) => r.is_empty() || (*min == 0 && *max == 0),
+			_ => false,
+		}
+	}
+
 	pub fn is_simple(&self) -> bool {
 		matches!(self, Self::Any | Self::Set(_) | Self::Sequence(_))
 	}
@@ -69,9 +133,175 @@ impl RegExp {
 	pub fn display_sub(&self) -> DisplaySub {
 		DisplaySub(self)
 	}
+
+	pub fn parse(s: &str) -> Result<Self, ParseError> {
+		let mut stack = vec![vec![RegExp::empty()]];
+		let mut chars = s.chars();
+
+		while let Some(c) = chars.next() {
+			match c {
+				'(' => {
+					stack.push(vec![RegExp::empty()]);
+				}
+				')' => {
+					let sub_exp = RegExp::Union(stack.pop().unwrap()).simplified();
+					let options = stack
+						.last_mut()
+						.ok_or(ParseError::UnmatchedClosingParenthesis)?;
+					options.push(sub_exp);
+				}
+				'|' => {
+					let options = stack.last_mut().unwrap();
+					options.push(RegExp::empty());
+				}
+				'[' => {
+					let options = stack.last_mut().unwrap();
+					let charset = parse_charset(&mut chars)?;
+					options.last_mut().unwrap().push(RegExp::Set(charset))
+				}
+				'\\' => {
+					let options = stack.last_mut().unwrap();
+					let c = parse_escaped_char(&mut chars)?;
+					let mut charset = RangeSet::new();
+					charset.insert(c);
+					options.last_mut().unwrap().push(RegExp::Set(charset))
+				}
+				c => {
+					let options = stack.last_mut().unwrap();
+					let mut charset = RangeSet::new();
+					charset.insert(c);
+					options.last_mut().unwrap().push(RegExp::Set(charset))
+				}
+			}
+		}
+
+		match stack.len() {
+			0 => unreachable!(),
+			1 => Ok(RegExp::Union(stack.into_iter().next().unwrap()).simplified()),
+			_ => Err(ParseError::MissingClosingParenthesis),
+		}
+	}
+}
+
+#[derive(Debug)]
+pub enum ParseError {
+	UnmatchedClosingParenthesis,
+	MissingClosingParenthesis,
+	IncompleteEscapeSequence,
+	UnknownEscapeChar(char),
+	IncompleteCharacterSet,
+}
+
+impl fmt::Display for ParseError {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::UnmatchedClosingParenthesis => write!(f, "unmatched `)`"),
+			Self::MissingClosingParenthesis => write!(f, "missing closing `)`"),
+			Self::IncompleteEscapeSequence => write!(f, "incomplete escape sequence"),
+			Self::UnknownEscapeChar(c) => write!(f, "unknown escape sequence `\\{}`", c),
+			Self::IncompleteCharacterSet => write!(f, "incomplete character set"),
+		}
+	}
+}
+
+fn parse_charset(chars: &mut impl Iterator<Item = char>) -> Result<RangeSet<char>, ParseError> {
+	#[derive(PartialEq, Eq)]
+	enum State {
+		Start,
+		RangeStart,
+		RangeDashOrStart,
+		RangeEnd,
+	}
+
+	let mut state = State::Start;
+	let mut negate = false;
+	let mut set = RangeSet::new();
+
+	let mut range_start = None;
+
+	loop {
+		match chars.next() {
+			Some(c) => match c {
+				'^' if state == State::Start => {
+					negate = true;
+					state = State::RangeStart;
+				}
+				c => match state {
+					State::RangeDashOrStart if c == '-' => state = State::RangeEnd,
+					State::Start | State::RangeStart | State::RangeDashOrStart if c == ']' => {
+						if negate {
+							set = set.complement();
+						}
+
+						break Ok(set);
+					}
+					State::Start | State::RangeStart | State::RangeDashOrStart => {
+						if let Some(start) = range_start.take() {
+							set.insert(start);
+						}
+
+						let c = match c {
+							'\\' => parse_escaped_char(chars)?,
+							c => c,
+						};
+
+						range_start = Some(c);
+						state = State::RangeDashOrStart
+					}
+					State::RangeEnd => {
+						let c = match c {
+							'\\' => parse_escaped_char(chars)?,
+							c => c,
+						};
+
+						set.insert(range_start.take().unwrap()..=c);
+						state = State::RangeStart
+					}
+				},
+			},
+			None => break Err(ParseError::IncompleteCharacterSet),
+		}
+	}
+}
+
+fn parse_escaped_char(chars: &mut impl Iterator<Item = char>) -> Result<char, ParseError> {
+	match chars.next() {
+		Some(c) => match c {
+			'\\' => Ok('\\'),
+			'0' => Ok('\0'),
+			'a' => Ok('\x07'),
+			'b' => Ok('\x08'),
+			't' => Ok('\t'),
+			'n' => Ok('\n'),
+			'v' => Ok('\x0b'),
+			'f' => Ok('\x0c'),
+			'r' => Ok('\r'),
+			'e' => Ok('\x1b'),
+			unknown => Err(ParseError::UnknownEscapeChar(unknown)),
+		},
+		None => Err(ParseError::IncompleteEscapeSequence),
+	}
+}
+
+impl<S: AsRef<str>> From<S> for RegExp {
+	fn from(s: S) -> Self {
+		let mut regexp = Self::empty();
+		for c in s.as_ref().chars() {
+			let mut charset = RangeSet::new();
+			charset.insert(c);
+			regexp.push(Self::Set(charset))
+		}
+		regexp
+	}
 }
 
 const CHAR_COUNT: u64 = 0xd7ff + 0x10ffff - 0xe000;
+
+impl fmt::Debug for RegExp {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		fmt::Display::fmt(self, f)
+	}
+}
 
 impl fmt::Display for RegExp {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -99,9 +329,9 @@ impl fmt::Display for RegExp {
 				Ok(())
 			}
 			Self::Repeat(e, 0, 1) => write!(f, "{}?", e.display_sub()),
-			Self::Repeat(e, 0, usize::MAX) => write!(f, "{}*", e.display_sub()),
-			Self::Repeat(e, 1, usize::MAX) => write!(f, "{}+", e.display_sub()),
-			Self::Repeat(e, min, usize::MAX) => write!(f, "{}{{{},}}", e.display_sub(), min),
+			Self::Repeat(e, 0, u32::MAX) => write!(f, "{}*", e.display_sub()),
+			Self::Repeat(e, 1, u32::MAX) => write!(f, "{}+", e.display_sub()),
+			Self::Repeat(e, min, u32::MAX) => write!(f, "{}{{{},}}", e.display_sub(), min),
 			Self::Repeat(e, 0, max) => write!(f, "{}{{,{}}}", e.display_sub(), max),
 			Self::Repeat(e, min, max) => {
 				if min == max {
@@ -152,6 +382,7 @@ fn fmt_range(range: btree_range_map::AnyRange<char>, f: &mut fmt::Formatter) -> 
 
 fn fmt_char(c: char, f: &mut fmt::Formatter) -> fmt::Result {
 	match c {
+		'\\' => write!(f, "\\\\"),
 		'\0' => write!(f, "\\0"),
 		'\x07' => write!(f, "\\a"),
 		'\x08' => write!(f, "\\b"),

@@ -1,4 +1,4 @@
-use super::{peekable3::Peekable3, Annotation, Literal, RegExp};
+use super::{peekable3::Peekable3, Annotation, Literal};
 use iref::IriRefBuf;
 use locspan::{ErrAt, Loc, Location, Span};
 use std::fmt;
@@ -349,7 +349,7 @@ pub enum PrefixedName {
 
 pub enum DocOrRegExp {
 	Doc(String),
-	RegExp(RegExp),
+	RegExp(String),
 }
 
 impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
@@ -433,6 +433,31 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		Ok(())
 	}
 
+	fn next_regexp(&mut self, first: char) -> Result<String, Loc<Error<E>, F>> {
+		let mut regexp = String::new();
+
+		let first = match first {
+			'\\' => self.next_escape()?,
+			c => c,
+		};
+		regexp.push(first);
+
+		loop {
+			let c = match self.expect_char()? {
+				'/' => break,
+				'\\' => {
+					// escape sequence.
+					self.next_escape()?
+				}
+				c => c,
+			};
+
+			regexp.push(c)
+		}
+
+		Ok(regexp)
+	}
+
 	fn next_doc_or_regexp(&mut self) -> Result<DocOrRegExp, Loc<Error<E>, F>> {
 		match self.expect_char()? {
 			'/' => {
@@ -450,11 +475,27 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 
 				Ok(DocOrRegExp::Doc(doc))
 			}
-			_ => {
-				// regexp
-				todo!("parse regexp")
-			}
+			c => Ok(DocOrRegExp::RegExp(self.next_regexp(c)?)),
 		}
+	}
+
+	fn next_string_literal(&mut self) -> Result<String, Loc<Error<E>, F>> {
+		let mut string = String::new();
+
+		loop {
+			let c = match self.expect_char()? {
+				'\"' => break,
+				'\\' => {
+					// escape sequence.
+					self.next_escape()?
+				}
+				c => c,
+			};
+
+			string.push(c)
+		}
+
+		Ok(string)
 	}
 
 	fn next_hex_char(&mut self, mut span: Span, len: u8) -> Result<char, Loc<Error<E>, F>> {
@@ -650,9 +691,10 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 
 					Ok(Loc::new(Some(token), self.pos.current()))
 				}
-				'"' => {
-					todo!("parse string literal")
-				}
+				'"' => Ok(Loc(
+					Some(Token::Literal(Literal::String(self.next_string_literal()?))),
+					self.pos.current(),
+				)),
 				'<' => Ok(Loc::new(
 					Some(Token::Id(self.next_iri()?)),
 					self.pos.current(),

@@ -1,4 +1,5 @@
 use crate::{
+	error,
 	vocab::{self, GraphLabel, Name, Object},
 	Error, Id, Vocabulary,
 };
@@ -216,6 +217,24 @@ impl<F: Clone + Ord> Context<F> {
 					let Loc(target_id, _) = expect_id(object)?;
 					let layout = self.require_layout_mut(id, Some(id_loc))?;
 					layout.set_deref_to(target_id, Some(loc))?
+				}
+				Name::TreeLdr(vocab::TreeLdr::Singleton) => {
+					let Loc(string, _) = expect_raw_string(object)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_literal(string.into(), Some(loc))?
+				}
+				Name::TreeLdr(vocab::TreeLdr::Matches) => {
+					let Loc(regexp_string, regexp_loc) = expect_raw_string(object)?;
+					let regexp = crate::layout::literal::RegExp::parse(&regexp_string).map_err(
+						move |e| {
+							Error::new(
+								error::RegExpInvalid(regexp_string, e).into(),
+								Some(regexp_loc),
+							)
+						},
+					)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_literal(regexp, Some(loc))?
 				}
 				_ => (),
 			}

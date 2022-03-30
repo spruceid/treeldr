@@ -2,7 +2,7 @@ use crate::{layout, ty, Causes, Documentation, Id, MaybeSet, WithCauses};
 use shelves::Ref;
 
 mod enumeration;
-mod literal;
+pub mod literal;
 mod native;
 mod structure;
 mod sum;
@@ -104,7 +104,7 @@ impl<F> Definition<F> {
 			Description::Reference(_, n) => n.value().map(String::as_str),
 			Description::Native(_, n) => n.value().map(String::as_str),
 			Description::Sum(s) => Some(s.name()),
-			Description::Literal(l) => Some(l.name()),
+			Description::Literal(l) => l.name(),
 		}
 	}
 

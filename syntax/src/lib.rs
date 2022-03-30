@@ -206,37 +206,6 @@ pub enum LayoutExpr<F> {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Literal {
-	String(rdf_types::StringLiteral),
-	RegExp(RegExp),
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum RegExp {
-	Sub(SubRegExp),
-	Full(FullRegExp),
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum SubRegExp {
-	Any,
-	Set(CharSet),
-	Sequence(Vec<RegExp>),
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum FullRegExp {
-	Sub(SubRegExp),
-	Optional(Box<RegExp>),
-	Star(Box<RegExp>),
-	Plus(Box<RegExp>),
-	AtLeast(Box<RegExp>, u32),
-	AtMost(Box<RegExp>, u32),
-	Bounded(Box<RegExp>, u32, u32),
-	Union(Vec<RegExp>),
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct CharSet {
-	pub negate: bool,
-	pub chars: String,
+	String(String),
+	RegExp(String),
 }
