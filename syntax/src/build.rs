@@ -121,7 +121,15 @@ impl<'v, F> Context<'v, F> {
 	}
 
 	/// Inserts a new literal type & layout.
-	pub fn insert_literal(&mut self, quads: &mut Vec<LocQuad<F>>, lit: crate::Literal, loc: &Location<F>) -> BlankLabel where F: Clone {
+	pub fn insert_literal(
+		&mut self,
+		quads: &mut Vec<LocQuad<F>>,
+		lit: crate::Literal,
+		loc: &Location<F>,
+	) -> BlankLabel
+	where
+		F: Clone,
+	{
 		use std::collections::hash_map::Entry;
 		match self.literal.entry(lit) {
 			Entry::Occupied(entry) => *entry.get(),
@@ -166,7 +174,10 @@ impl<'v, F> Context<'v, F> {
 								Loc(Id::Blank(label), loc.clone()),
 								Loc(Name::TreeLdr(TreeLdr::Singleton), loc.clone()),
 								Loc(
-									Object::Literal(Literal::String(Loc(s.clone().into(), loc.clone()))),
+									Object::Literal(Literal::String(Loc(
+										s.clone().into(),
+										loc.clone(),
+									))),
 									loc.clone(),
 								),
 								None,
@@ -180,7 +191,10 @@ impl<'v, F> Context<'v, F> {
 								Loc(Id::Blank(label), loc.clone()),
 								Loc(Name::TreeLdr(TreeLdr::Matches), loc.clone()),
 								Loc(
-									Object::Literal(Literal::String(Loc(e.clone().into(), loc.clone()))),
+									Object::Literal(Literal::String(Loc(
+										e.clone().into(),
+										loc.clone(),
+									))),
 									loc.clone(),
 								),
 								None,
