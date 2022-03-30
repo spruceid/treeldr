@@ -813,7 +813,7 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 				Ok(Loc(Object::Blank(layout), loc))
 			}
 			crate::LayoutExpr::Literal(lit) => {
-				let layout = ctx.insert_literal(quads, lit.clone(), &loc);
+				let layout = ctx.insert_literal(quads, lit, &loc);
 				Ok(Loc(Object::Blank(layout), loc))
 			}
 		}

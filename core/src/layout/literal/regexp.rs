@@ -43,9 +43,7 @@ impl RegExp {
 					Self::Sequence(seq)
 				}
 			}
-			Self::Union(items) if items.is_empty() => {
-				e
-			}
+			Self::Union(items) if items.is_empty() => e,
 			item => Self::Sequence(vec![item, e]),
 		};
 
@@ -301,7 +299,7 @@ fn parse_escaped_char(chars: &mut impl Iterator<Item = char>) -> Result<char, Pa
 			'f' => Ok('\x0c'),
 			'r' => Ok('\r'),
 			'e' => Ok('\x1b'),
-			c => Ok(c)
+			c => Ok(c),
 		},
 		None => Err(ParseError::IncompleteEscapeSequence),
 	}
@@ -353,7 +351,7 @@ impl fmt::Display for RegExp {
 			}
 			Self::Sequence(seq) => {
 				for item in seq {
-					if seq.len() > 0 {
+					if seq.len() > 1 {
 						item.display_sub().fmt(f)?
 					} else {
 						item.fmt(f)?
@@ -460,13 +458,16 @@ mod tests {
 		("(abc)|de", "abc|de"),
 		("(a|b)?", "(a|b)?"),
 		("[A-Za-z0-89]", "[0-9A-Za-z]"),
-		("[a|b]", "[ab\\|]")
+		("[a|b]", "[ab\\|]"),
 	];
 
 	#[test]
 	fn test() {
 		for (regexp, formatted) in TESTS {
-			assert_eq!(super::RegExp::parse(regexp).unwrap().to_string(), *formatted)
+			assert_eq!(
+				super::RegExp::parse(regexp).unwrap().to_string(),
+				*formatted
+			)
 		}
 	}
 }
