@@ -1,5 +1,5 @@
 use super::{error, Error};
-use crate::{Caused, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
+use crate::{Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
 use locspan::Location;
 
 /// Layout field definition.
@@ -83,6 +83,15 @@ impl<F> Definition<F> {
 			})
 	}
 
+	pub fn require_layout(&self, causes: &Causes<F>) -> Result<&WithCauses<Id, F>, Error<F>> where F: Clone {
+		self.layout.value_or_else(|| {
+			Caused::new(
+				error::LayoutFieldMissingLayout(self.id).into(),
+				causes.preferred().cloned(),
+			)
+		})
+	}
+
 	pub fn is_required(&self) -> bool {
 		self.required.value().cloned().unwrap_or(false)
 	}
@@ -129,24 +138,8 @@ impl<F> Definition<F> {
 }
 
 impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
-	pub fn build(
-		&self,
-		label: Option<String>,
-		doc: Documentation,
-		vocab: &Vocabulary,
-		nodes: &super::super::context::AllocatedNodes<F>,
-	) -> Result<crate::layout::Field<F>, Error<F>> {
-		let prop_id = self.prop.value_or_else(|| {
-			Caused::new(
-				error::LayoutFieldMissingProperty(self.id).into(),
-				self.causes().preferred().cloned(),
-			)
-		})?;
-		let prop = nodes
-			.require_property(*prop_id.inner(), prop_id.causes().preferred().cloned())?
-			.clone_with_causes(prop_id.causes().clone());
-
-		let name = self.name.clone().unwrap_or_else_try(|| match self.id {
+	pub fn require_name(&self, vocab: &Vocabulary) -> Result<WithCauses<String, F>, Error<F>> where F: Clone {
+		self.name.clone().unwrap_or_else_try(|| match self.id {
 			Id::Iri(name) => {
 				let iri = name.iri(vocab).unwrap();
 				Ok(iri
@@ -164,14 +157,29 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 				error::LayoutFieldMissingName(self.id).into(),
 				self.causes().preferred().cloned(),
 			)),
-		})?;
+		})
+	}
 
-		let layout_id = self.layout.value_or_else(|| {
+	pub fn build(
+		&self,
+		label: Option<String>,
+		doc: Documentation,
+		vocab: &Vocabulary,
+		nodes: &super::super::context::AllocatedNodes<F>,
+	) -> Result<crate::layout::Field<F>, Error<F>> {
+		let prop_id = self.prop.value_or_else(|| {
 			Caused::new(
-				error::LayoutFieldMissingLayout(self.id).into(),
+				error::LayoutFieldMissingProperty(self.id).into(),
 				self.causes().preferred().cloned(),
 			)
 		})?;
+		let prop = nodes
+			.require_property(*prop_id.inner(), prop_id.causes().preferred().cloned())?
+			.clone_with_causes(prop_id.causes().clone());
+
+		let name = self.require_name(vocab)?;
+
+		let layout_id = self.require_layout(self.causes())?;
 		let layout = nodes
 			.require_layout(*layout_id.inner(), layout_id.causes().preferred().cloned())?
 			.clone_with_causes(layout_id.causes().clone());

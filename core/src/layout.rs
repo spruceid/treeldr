@@ -104,7 +104,7 @@ impl<F> Definition<F> {
 			Description::Reference(_, n) => n.value().map(String::as_str),
 			Description::Native(_, n) => n.value().map(String::as_str),
 			Description::Sum(s) => Some(s.name()),
-			Description::Literal(l) => l.name(),
+			Description::Literal(l) => Some(l.name()),
 		}
 	}
 
@@ -159,7 +159,7 @@ impl<F> Definition<F> {
 pub enum ComposingLayouts<'a, F> {
 	Struct(std::slice::Iter<'a, Field<F>>),
 	Enum(enumeration::Fields<'a, F>),
-	Sum(std::slice::Iter<'a, WithCauses<Ref<Definition<F>>, F>>),
+	Sum(std::slice::Iter<'a, Ref<Definition<F>>>),
 	None,
 }
 
@@ -170,7 +170,7 @@ impl<'a, F> Iterator for ComposingLayouts<'a, F> {
 		match self {
 			Self::Struct(fields) => Some(fields.next()?.layout()),
 			Self::Enum(fields) => Some(fields.next()?.layout()),
-			Self::Sum(layouts) => layouts.next().map(WithCauses::inner).cloned(),
+			Self::Sum(layouts) => layouts.next().cloned(),
 			Self::None => None,
 		}
 	}

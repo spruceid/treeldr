@@ -390,6 +390,28 @@ impl<F> Node<Components<F>> {
 		}
 	}
 
+	pub fn require_layout_field(
+		&self,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<layout::field::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		let types = self.caused_types();
+		match self.value.layout_field.with_causes() {
+			Some(field) => Ok(field),
+			None => Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id,
+					expected: Type::LayoutField,
+					found: types,
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
 	pub fn require_layout_field_mut(
 		&mut self,
 		cause: Option<Location<F>>,
@@ -438,6 +460,28 @@ impl<F> Node<Components<F>> {
 				.into(),
 				cause,
 			))
+		}
+	}
+
+	pub fn require_list(
+		&self,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<list::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		let types = self.caused_types();
+		match self.value.list.with_causes() {
+			Some(list) => Ok(list),
+			None => Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id,
+					expected: Type::List,
+					found: types,
+				}
+				.into(),
+				cause,
+			)),
 		}
 	}
 

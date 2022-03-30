@@ -176,11 +176,68 @@ impl<F> Context<F> {
 		Ok(())
 	}
 
+	/// Compute the `use` relation between all the layouts.
+	/// 
+	/// A layout is used by another layout if it is the layout of one of its
+	/// fields.
+	/// The purpose of this function is to declare to each layout how it it used
+	/// using the `layout::Definition::add_use` method.
+	pub fn compute_uses(&mut self) -> Result<(), Error<F>> where F: Ord + Clone {
+		// In a first pass, we collect the `use` relation.
+		let mut uses = HashMap::new();
+		for (id, node) in &self.nodes {
+			if let Some(layout) = node.value().layout.with_causes() {
+				uses.insert(*id, layout.compute_uses(&self)?);
+			}
+		}
+
+		// Then we declare the uses of each layout using the `add_use` method.
+		for (using_layout_id, using_layout_uses) in uses {
+			for (used_field_id, used_layout_id) in using_layout_uses {
+				let used_layout = self.require_layout_mut(*used_layout_id, used_layout_id.causes().preferred().cloned())?;
+				used_layout.add_use(using_layout_id, used_field_id);
+			}
+		}
+
+		// Now each layout knows how it is used.
+		Ok(())
+	}
+	
+	/// Assigns default name for layout that don't have a name yet.
+	pub fn assign_default_names(&mut self) -> Result<(), Error<F>> where F: Ord + Clone {
+		let mut default_names = HashMap::new();
+		for (id, node) in &self.nodes {
+			if let Some(layout) = node.as_layout() {
+				if let Some(name) = layout.compute_default_name(self, layout.causes().preferred().cloned())? {
+					default_names.insert(*id, name);
+				}
+			}
+		}
+
+		for (id, name) in default_names {
+			let (name, cause) = name.into_parts();
+			let layout = self.require_layout_mut(id, cause.clone())?;
+			if layout.name().is_none() {
+				layout.set_name(name, cause)?;
+			}
+		}
+
+		Ok(())
+	}
+
 	pub fn build(mut self) -> Result<Model<F>, (Error<F>, Vocabulary)>
 	where
 		F: Ord + Clone,
 	{
 		if let Err(e) = self.resolve_references() {
+			return Err((e, self.into_vocabulary()));
+		}
+
+		if let Err(e) = self.compute_uses() {
+			return Err((e, self.into_vocabulary()));
+		}
+
+		if let Err(e) = self.assign_default_names() {
 			return Err((e, self.into_vocabulary()));
 		}
 
@@ -453,6 +510,27 @@ impl<F> Context<F> {
 		}
 	}
 
+	pub fn require_layout_field(
+		&self,
+		id: Id,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<layout::field::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		match self.get(id) {
+			Some(node) => node.require_layout_field(cause),
+			None => Err(Caused::new(
+				error::NodeUnknown {
+					id,
+					expected_ty: Some(node::Type::LayoutField),
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
 	pub fn require_layout_field_mut(
 		&mut self,
 		id: Id,
@@ -492,6 +570,30 @@ impl<F> Context<F> {
 				.into(),
 				cause,
 			)),
+		}
+	}
+
+	pub fn require_list(
+		&self,
+		id: Id,
+		cause: Option<Location<F>>,
+	) -> Result<ListRef<F>, Error<F>>
+	where
+		F: Clone,
+	{
+		match id {
+			Id::Iri(vocab::Name::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
+			id => match self.get(id) {
+				Some(node) => Ok(ListRef::Cons(node.require_list(cause)?)),
+				None => Err(Caused::new(
+					error::NodeUnknown {
+						id,
+						expected_ty: Some(node::Type::List),
+					}
+					.into(),
+					cause,
+				)),
+			},
 		}
 	}
 

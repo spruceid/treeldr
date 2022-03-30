@@ -5,14 +5,70 @@ use locspan::Location;
 use std::collections::HashMap;
 
 /// Type definition.
+pub enum Definition<F> {
+	/// Normal type.
+	Normal(Normal<F>),
+
+	/// Union/sum type.
+	Union(Union<F>)
+}
+
+impl<F> Default for Definition<F> {
+	fn default() -> Self {
+		Self::Normal(Normal::default())
+	}
+}
+
+impl<F> Definition<F> {
+	/// Create a new type.
+	/// 
+	/// By default, a normal type is created.
+	/// It can later be changed into a non-normal type as long as no properties
+	/// have been defined on it.
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	/// Declare a property of type.
+	/// 
+	/// The type must be normal.
+	pub fn declare_property(&mut self, prop_ref: Id, cause: Option<Location<F>>)
+	where
+		F: Ord,
+	{
+		match self {
+			Self::Normal(n) => n.declare_property(prop_ref, cause),
+			Self::Union(_) => todo!()
+		}
+	}
+}
+
+impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
+	pub fn build(
+		self,
+		id: Id,
+		nodes: &super::context::AllocatedNodes<F>,
+	) -> Result<crate::ty::Definition<F>, Error<F>> {
+		let (def, causes) = self.into_parts();
+		
+		let desc = match def {
+			Definition::Normal(n) => n.build(nodes)?,
+			Definition::Union(u) => todo!()
+		};
+
+		Ok(crate::ty::Definition::new(id, desc, causes))
+	}
+}
+
+/// Normal type definition.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct Definition<F> {
+pub struct Normal<F> {
 	/// Properties.
 	properties: HashMap<Id, Causes<F>>,
 }
 
-impl<F> Definition<F> {
+impl<F> Normal<F> {
 	pub fn new() -> Self {
 		Self::default()
 	}
@@ -37,22 +93,24 @@ impl<F> Definition<F> {
 			}
 		}
 	}
-}
 
-impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 	pub fn build(
 		self,
-		id: Id,
 		nodes: &super::context::AllocatedNodes<F>,
-	) -> Result<crate::ty::Definition<F>, Error<F>> {
-		let (def, causes) = self.into_parts();
-		let mut result = crate::ty::Definition::new(id, causes);
+	) -> Result<crate::ty::Description<F>, Error<F>> where F: Clone + Ord {
+		let mut result = crate::ty::Normal::new();
 
-		for (prop_id, prop_causes) in def.properties {
+		for (prop_id, prop_causes) in self.properties {
 			let prop_ref = nodes.require_property(prop_id, prop_causes.preferred().cloned())?;
 			result.insert_property(*prop_ref.inner(), prop_causes)
 		}
 
-		Ok(result)
+		Ok(crate::ty::Description::Normal(result))
 	}
+}
+
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct Union<F> {
+	options: HashMap<Id, Causes<F>>
 }
