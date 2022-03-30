@@ -120,12 +120,76 @@ impl<'v, F> Context<'v, F> {
 		self.vocabulary
 	}
 
-	pub fn insert_literal(&mut self, lit: crate::Literal) -> BlankLabel {
+	/// Inserts a new literal type & layout.
+	pub fn insert_literal(&mut self, quads: &mut Vec<LocQuad<F>>, lit: crate::Literal, loc: &Location<F>) -> BlankLabel where F: Clone {
 		use std::collections::hash_map::Entry;
 		match self.literal.entry(lit) {
 			Entry::Occupied(entry) => *entry.get(),
 			Entry::Vacant(entry) => {
 				let label = self.vocabulary.new_blank_label();
+
+				// Define the type.
+				quads.push(Loc(
+					Quad(
+						Loc(Id::Blank(label), loc.clone()),
+						Loc(Name::Rdf(Rdf::Type), loc.clone()),
+						Loc(Object::Iri(Name::Rdf(Rdf::Type)), loc.clone()),
+						None,
+					),
+					loc.clone(),
+				));
+
+				// Define the associated layout.
+				quads.push(Loc(
+					Quad(
+						Loc(Id::Blank(label), loc.clone()),
+						Loc(Name::Rdf(Rdf::Type), loc.clone()),
+						Loc(Object::Iri(Name::TreeLdr(TreeLdr::Layout)), loc.clone()),
+						None,
+					),
+					loc.clone(),
+				));
+				quads.push(Loc(
+					Quad(
+						Loc(Id::Blank(label), loc.clone()),
+						Loc(Name::TreeLdr(TreeLdr::LayoutFor), loc.clone()),
+						Loc(Object::Blank(label), loc.clone()),
+						None,
+					),
+					loc.clone(),
+				));
+
+				match entry.key() {
+					crate::Literal::String(s) => {
+						quads.push(Loc(
+							Quad(
+								Loc(Id::Blank(label), loc.clone()),
+								Loc(Name::TreeLdr(TreeLdr::Singleton), loc.clone()),
+								Loc(
+									Object::Literal(Literal::String(Loc(s.clone().into(), loc.clone()))),
+									loc.clone(),
+								),
+								None,
+							),
+							loc.clone(),
+						));
+					}
+					crate::Literal::RegExp(e) => {
+						quads.push(Loc(
+							Quad(
+								Loc(Id::Blank(label), loc.clone()),
+								Loc(Name::TreeLdr(TreeLdr::Matches), loc.clone()),
+								Loc(
+									Object::Literal(Literal::String(Loc(e.clone().into(), loc.clone()))),
+									loc.clone(),
+								),
+								None,
+							),
+							loc.clone(),
+						));
+					}
+				}
+
 				entry.insert(label);
 				label
 			}
@@ -482,7 +546,7 @@ impl<F: Clone> Build<F> for Loc<crate::TypeExpr<F>, F> {
 			}
 			crate::TypeExpr::Reference(r) => r.build(ctx, quads),
 			crate::TypeExpr::Literal(lit) => {
-				let label = ctx.insert_literal(lit);
+				let label = ctx.insert_literal(quads, lit, &loc);
 				Ok(Loc(Object::Blank(label), loc))
 			}
 		}
@@ -735,49 +799,7 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 				Ok(Loc(Object::Blank(layout), loc))
 			}
 			crate::LayoutExpr::Literal(lit) => {
-				let layout = ctx.insert_literal(lit.clone());
-
-				quads.push(Loc(
-					Quad(
-						Loc(Id::Blank(layout), loc.clone()),
-						Loc(Name::Rdf(Rdf::Type), loc.clone()),
-						Loc(Object::Iri(Name::TreeLdr(TreeLdr::Layout)), loc.clone()),
-						None,
-					),
-					loc.clone(),
-				));
-
-				match lit {
-					crate::Literal::String(s) => {
-						quads.push(Loc(
-							Quad(
-								Loc(Id::Blank(layout), loc.clone()),
-								Loc(Name::TreeLdr(TreeLdr::Singleton), loc.clone()),
-								Loc(
-									Object::Literal(Literal::String(Loc(s.into(), loc.clone()))),
-									loc.clone(),
-								),
-								None,
-							),
-							loc.clone(),
-						));
-					}
-					crate::Literal::RegExp(e) => {
-						quads.push(Loc(
-							Quad(
-								Loc(Id::Blank(layout), loc.clone()),
-								Loc(Name::TreeLdr(TreeLdr::Matches), loc.clone()),
-								Loc(
-									Object::Literal(Literal::String(Loc(e.into(), loc.clone()))),
-									loc.clone(),
-								),
-								None,
-							),
-							loc.clone(),
-						));
-					}
-				}
-
+				let layout = ctx.insert_literal(quads, lit.clone(), &loc);
 				Ok(Loc(Object::Blank(layout), loc))
 			}
 		}

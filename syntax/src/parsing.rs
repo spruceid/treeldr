@@ -612,7 +612,11 @@ impl<F: Clone> Parse<F> for AnnotatedTypeExpr<F> {
 }
 
 impl<F: Clone> Parse<F> for TypeExpr<F> {
-	const FIRST: &'static [TokenKind] = &[TokenKind::Id, TokenKind::Punct(Punct::Ampersand)];
+	const FIRST: &'static [TokenKind] = &[
+		TokenKind::Id,
+		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+	];
 
 	fn parse_from<L: Tokens<F>>(
 		lexer: &mut L,
@@ -626,6 +630,7 @@ impl<F: Clone> Parse<F> for TypeExpr<F> {
 				loc.span_mut().set_end(arg.span().end());
 				Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
 			}
+			Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
 			unexpected => Err(Loc::new(
 				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
 				loc,
@@ -681,7 +686,11 @@ impl<F: Clone> Parse<F> for AnnotatedLayoutExpr<F> {
 }
 
 impl<F: Clone> Parse<F> for LayoutExpr<F> {
-	const FIRST: &'static [TokenKind] = &[TokenKind::Id, TokenKind::Punct(Punct::Ampersand)];
+	const FIRST: &'static [TokenKind] = &[
+		TokenKind::Id,
+		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+	];
 
 	fn parse_from<L: Tokens<F>>(
 		lexer: &mut L,
@@ -695,6 +704,7 @@ impl<F: Clone> Parse<F> for LayoutExpr<F> {
 				loc.span_mut().append(arg.span());
 				Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
 			}
+			Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
 			unexpected => Err(Loc::new(
 				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
 				loc,
