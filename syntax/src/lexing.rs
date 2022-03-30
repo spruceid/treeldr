@@ -1,4 +1,4 @@
-use super::{peekable3::Peekable3, Annotation};
+use super::{peekable3::Peekable3, Annotation, Literal};
 use iref::IriRefBuf;
 use locspan::{ErrAt, Loc, Location, Span};
 use std::fmt;
@@ -40,6 +40,7 @@ pub enum TokenKind {
 	Begin(Delimiter),
 	End(Delimiter),
 	Id,
+	Literal,
 }
 
 impl fmt::Display for TokenKind {
@@ -51,6 +52,7 @@ impl fmt::Display for TokenKind {
 			Self::Begin(d) => write!(f, "opening `{}`", d.start()),
 			Self::End(d) => write!(f, "closing `{}`", d.end()),
 			Self::Id => write!(f, "identifier"),
+			Self::Literal => write!(f, "literal value"),
 		}
 	}
 }
@@ -75,6 +77,9 @@ pub enum Token {
 
 	/// Identifier.
 	Id(Id),
+
+	/// Literal value.
+	Literal(Literal),
 }
 
 impl Token {
@@ -97,6 +102,7 @@ impl Token {
 			Self::End(d) => TokenKind::End(*d),
 			Self::Keyword(k) => TokenKind::Keyword(*k),
 			Self::Id(_) => TokenKind::Id,
+			Self::Literal(_) => TokenKind::Literal,
 		}
 	}
 }
@@ -110,6 +116,8 @@ impl fmt::Display for Token {
 			Self::End(d) => write!(f, "closing `{}`", d.end()),
 			Self::Keyword(k) => write!(f, "keyword `{}`", k),
 			Self::Id(id) => write!(f, "identifier `{}`", id),
+			Self::Literal(Literal::String(s)) => write!(f, "string literal {}", s),
+			Self::Literal(Literal::RegExp(_)) => write!(f, "regular expression"),
 		}
 	}
 }
@@ -339,6 +347,11 @@ pub enum PrefixedName {
 	CompactIri(String, IriRefBuf),
 }
 
+pub enum DocOrRegExp {
+	Doc(String),
+	RegExp(String),
+}
+
 impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 	pub fn new(file: F, chars: C) -> Self {
 		Self {
@@ -393,7 +406,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 			if c.is_whitespace() {
 				self.next_char()?;
 			} else if c == '/' {
-				// maybe a comment?
+				// maybe a comment or regexp?
 				if self.peek_char2()? == Some('/') {
 					// definitely a comment.
 					if self.peek_char3()? == Some('/') {
@@ -420,20 +433,69 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		Ok(())
 	}
 
-	fn next_doc(&mut self) -> Result<String, Loc<Error<E>, F>> {
-		self.next_char()?;
-		self.next_char()?;
+	fn next_regexp(&mut self, first: char) -> Result<String, Loc<Error<E>, F>> {
+		let mut regexp = String::new();
 
-		let mut doc = String::new();
-		while let Some(c) = self.next_char()? {
-			if c == '\n' {
-				break;
-			}
+		let first = match first {
+			'\\' => self.next_escape()?,
+			c => c,
+		};
+		regexp.push(first);
 
-			doc.push(c);
+		loop {
+			let c = match self.expect_char()? {
+				'/' => break,
+				'\\' => {
+					// escape sequence.
+					self.next_escape()?
+				}
+				c => c,
+			};
+
+			regexp.push(c)
 		}
 
-		Ok(doc)
+		Ok(regexp)
+	}
+
+	fn next_doc_or_regexp(&mut self) -> Result<DocOrRegExp, Loc<Error<E>, F>> {
+		match self.expect_char()? {
+			'/' => {
+				// doc
+				self.next_char()?;
+
+				let mut doc = String::new();
+				while let Some(c) = self.next_char()? {
+					if c == '\n' {
+						break;
+					}
+
+					doc.push(c);
+				}
+
+				Ok(DocOrRegExp::Doc(doc))
+			}
+			c => Ok(DocOrRegExp::RegExp(self.next_regexp(c)?)),
+		}
+	}
+
+	fn next_string_literal(&mut self) -> Result<String, Loc<Error<E>, F>> {
+		let mut string = String::new();
+
+		loop {
+			let c = match self.expect_char()? {
+				'\"' => break,
+				'\\' => {
+					// escape sequence.
+					self.next_escape()?
+				}
+				c => c,
+			};
+
+			string.push(c)
+		}
+
+		Ok(string)
 	}
 
 	fn next_hex_char(&mut self, mut span: Span, len: u8) -> Result<char, Loc<Error<E>, F>> {
@@ -621,8 +683,16 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		self.skip_whitespaces()?;
 		match self.next_char()? {
 			Some(c) => match c {
-				'/' => Ok(Loc::new(
-					Some(Token::Doc(self.next_doc()?)),
+				'/' => {
+					let token = match self.next_doc_or_regexp()? {
+						DocOrRegExp::Doc(doc) => Token::Doc(doc),
+						DocOrRegExp::RegExp(exp) => Token::Literal(Literal::RegExp(exp)),
+					};
+
+					Ok(Loc::new(Some(token), self.pos.current()))
+				}
+				'"' => Ok(Loc(
+					Some(Token::Literal(Literal::String(self.next_string_literal()?))),
 					self.pos.current(),
 				)),
 				'<' => Ok(Loc::new(

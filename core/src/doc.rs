@@ -55,7 +55,7 @@ impl Block {
 				}
 			}
 		}
-		
+
 		if state == State::Short {
 			short_end = s.len();
 			long_start = s.len();

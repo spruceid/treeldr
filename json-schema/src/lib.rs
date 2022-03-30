@@ -46,7 +46,7 @@ pub fn generate<F>(
 
 	let title = match layout.preferred_label(model) {
 		Some(label) => label,
-		None => name
+		None => name,
 	};
 	json_schema.insert("title".into(), title.into());
 	generate_layout(
@@ -91,15 +91,15 @@ pub fn generate<F>(
 
 fn remove_newlines(s: &str) -> String {
 	let mut result = String::new();
-	
+
 	for (i, line) in s.lines().enumerate() {
 		if i > 0 {
 			result.push(' ');
 		}
-		
+
 		result.push_str(line);
 	}
-	
+
 	result
 }
 
@@ -117,7 +117,10 @@ fn generate_layout<F>(
 	);
 
 	if let Some(description) = layout.preferred_documentation(model).short_description() {
-		json.insert("description".into(), remove_newlines(description.trim()).into());
+		json.insert(
+			"description".into(),
+			remove_newlines(description.trim()).into(),
+		);
 	}
 
 	use treeldr::layout::Description;
@@ -127,6 +130,16 @@ fn generate_layout<F>(
 			Ok(())
 		}
 		Description::Struct(s) => generate_struct(json, model, embedding, type_property, s),
+		Description::Enum(_) => {
+			todo!("json-schema enum layout")
+		}
+		Description::Sum(_) => {
+			todo!("json-schema sum layout")
+		}
+		Description::Literal(lit) => {
+			generate_literal_type(json, lit);
+			Ok(())
+		}
 		Description::Native(n, _) => {
 			generate_native_type(json, *n);
 			Ok(())
@@ -193,7 +206,10 @@ fn generate_struct<F>(
 		};
 
 		if let Some(description) = field.preferred_label(model) {
-			field_schema.insert("description".into(), remove_newlines(description.trim()).into());
+			field_schema.insert(
+				"description".into(),
+				remove_newlines(description.trim()).into(),
+			);
 		}
 
 		properties.insert(field.name().into(), field_schema.into());
@@ -255,9 +271,35 @@ fn generate_layout_ref<F>(
 			);
 			Ok(())
 		}
+		Description::Enum(_) => {
+			todo!("json-schema enum layout")
+		}
+		Description::Sum(_) => {
+			todo!("json-schema sum layout")
+		}
+		Description::Literal(lit) => {
+			generate_literal_type(json, lit);
+			Ok(())
+		}
 		Description::Native(n, _) => {
 			generate_native_type(json, *n);
 			Ok(())
+		}
+	}
+}
+
+fn generate_literal_type<F>(
+	def: &mut serde_json::Map<String, serde_json::Value>,
+	lit: &layout::Literal<F>,
+) {
+	def.insert("type".into(), "string".into());
+	match lit.regexp().as_singleton() {
+		Some(singleton) => {
+			def.insert("const".into(), singleton.into());
+		}
+		None => {
+			// TODO: convert to ECMA-262 regular expression?
+			def.insert("pattern".into(), lit.regexp().to_string().into());
 		}
 	}
 }

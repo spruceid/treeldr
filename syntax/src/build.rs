@@ -83,11 +83,22 @@ impl<F> fmt::Display for Error<F> {
 	}
 }
 
+/// Build context.
 pub struct Context<'v, F> {
+	/// Base IRI of th parsed document.
 	base_iri: Option<IriBuf>,
+
+	/// Vocabulary.
 	vocabulary: &'v mut Vocabulary,
+
+	/// Bound prefixes.
 	prefixes: HashMap<String, Loc<IriBuf, F>>,
+
+	/// Current scope.
 	scope: Option<Name>,
+
+	/// Associates each literal type/value to a blank node label.
+	literal: HashMap<crate::Literal, BlankLabel>,
 }
 
 impl<'v, F> Context<'v, F> {
@@ -97,6 +108,7 @@ impl<'v, F> Context<'v, F> {
 			vocabulary,
 			prefixes: HashMap::new(),
 			scope: None,
+			literal: HashMap::new(),
 		}
 	}
 
@@ -106,6 +118,96 @@ impl<'v, F> Context<'v, F> {
 
 	pub fn into_vocabulary(self) -> &'v mut Vocabulary {
 		self.vocabulary
+	}
+
+	/// Inserts a new literal type & layout.
+	pub fn insert_literal(
+		&mut self,
+		quads: &mut Vec<LocQuad<F>>,
+		lit: crate::Literal,
+		loc: &Location<F>,
+	) -> BlankLabel
+	where
+		F: Clone,
+	{
+		use std::collections::hash_map::Entry;
+		match self.literal.entry(lit) {
+			Entry::Occupied(entry) => *entry.get(),
+			Entry::Vacant(entry) => {
+				let label = self.vocabulary.new_blank_label();
+
+				// Define the type.
+				quads.push(Loc(
+					Quad(
+						Loc(Id::Blank(label), loc.clone()),
+						Loc(Name::Rdf(Rdf::Type), loc.clone()),
+						Loc(Object::Iri(Name::Rdfs(Rdfs::Class)), loc.clone()),
+						None,
+					),
+					loc.clone(),
+				));
+
+				// Define the associated layout.
+				quads.push(Loc(
+					Quad(
+						Loc(Id::Blank(label), loc.clone()),
+						Loc(Name::Rdf(Rdf::Type), loc.clone()),
+						Loc(Object::Iri(Name::TreeLdr(TreeLdr::Layout)), loc.clone()),
+						None,
+					),
+					loc.clone(),
+				));
+				quads.push(Loc(
+					Quad(
+						Loc(Id::Blank(label), loc.clone()),
+						Loc(Name::TreeLdr(TreeLdr::LayoutFor), loc.clone()),
+						Loc(Object::Blank(label), loc.clone()),
+						None,
+					),
+					loc.clone(),
+				));
+
+				match entry.key() {
+					crate::Literal::String(s) => {
+						quads.push(Loc(
+							Quad(
+								Loc(Id::Blank(label), loc.clone()),
+								Loc(Name::TreeLdr(TreeLdr::Singleton), loc.clone()),
+								Loc(
+									Object::Literal(Literal::String(Loc(
+										s.clone().into(),
+										loc.clone(),
+									))),
+									loc.clone(),
+								),
+								None,
+							),
+							loc.clone(),
+						));
+					}
+					crate::Literal::RegExp(e) => {
+						quads.push(Loc(
+							Quad(
+								Loc(Id::Blank(label), loc.clone()),
+								Loc(Name::TreeLdr(TreeLdr::Matches), loc.clone()),
+								Loc(
+									Object::Literal(Literal::String(Loc(
+										e.clone().into(),
+										loc.clone(),
+									))),
+									loc.clone(),
+								),
+								None,
+							),
+							loc.clone(),
+						));
+					}
+				}
+
+				entry.insert(label);
+				label
+			}
+		}
 	}
 }
 
@@ -312,7 +414,10 @@ fn build_doc<F: Clone>(
 				subject,
 				Loc(Name::Rdfs(Rdfs::Comment), loc.clone()),
 				Loc(
-					Object::Literal(Literal::String(Loc(description.into(), description_loc.clone()))),
+					Object::Literal(Literal::String(Loc(
+						description.into(),
+						description_loc.clone(),
+					))),
 					description_loc,
 				),
 				None,
@@ -454,6 +559,10 @@ impl<F: Clone> Build<F> for Loc<crate::TypeExpr<F>, F> {
 				Ok(Loc(Object::Iri(id), loc))
 			}
 			crate::TypeExpr::Reference(r) => r.build(ctx, quads),
+			crate::TypeExpr::Literal(lit) => {
+				let label = ctx.insert_literal(quads, lit, &loc);
+				Ok(Loc(Object::Blank(label), loc))
+			}
 		}
 	}
 }
@@ -678,27 +787,34 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 				Ok(Loc(Object::Iri(id), loc))
 			}
 			crate::LayoutExpr::Reference(r) => {
-				let deref_ty = r.build(ctx, quads)?;
-				let ty = ctx.vocabulary.new_blank_label();
+				let deref_layout = r.build(ctx, quads)?;
+				let layout = ctx.vocabulary.new_blank_label();
+
 				quads.push(Loc(
 					Quad(
-						Loc(Id::Blank(ty), loc.clone()),
+						Loc(Id::Blank(layout), loc.clone()),
 						Loc(Name::Rdf(Rdf::Type), loc.clone()),
 						Loc(Object::Iri(Name::TreeLdr(TreeLdr::Layout)), loc.clone()),
 						None,
 					),
 					loc.clone(),
 				));
+
 				quads.push(Loc(
 					Quad(
-						Loc(Id::Blank(ty), loc.clone()),
+						Loc(Id::Blank(layout), loc.clone()),
 						Loc(Name::TreeLdr(TreeLdr::DerefTo), loc.clone()),
-						deref_ty,
+						deref_layout,
 						None,
 					),
 					loc.clone(),
 				));
-				Ok(Loc(Object::Blank(ty), loc))
+
+				Ok(Loc(Object::Blank(layout), loc))
+			}
+			crate::LayoutExpr::Literal(lit) => {
+				let layout = ctx.insert_literal(quads, lit, &loc);
+				Ok(Loc(Object::Blank(layout), loc))
 			}
 		}
 	}

@@ -150,6 +150,7 @@ impl<F: Clone> AnnotatedTypeExpr<F> {
 pub enum TypeExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<TypeExpr<F>, F>>),
+	Literal(Literal),
 }
 
 impl<F: Clone> TypeExpr<F> {
@@ -160,6 +161,7 @@ impl<F: Clone> TypeExpr<F> {
 				r.implicit_layout_expr(),
 				r.location().clone(),
 			))),
+			Self::Literal(lit) => LayoutExpr::Literal(lit.clone()),
 		}
 	}
 }
@@ -199,4 +201,11 @@ pub struct AnnotatedLayoutExpr<F> {
 pub enum LayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<LayoutExpr<F>, F>>),
+	Literal(Literal),
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Literal {
+	String(String),
+	RegExp(String),
 }

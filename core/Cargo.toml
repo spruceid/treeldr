@@ -12,9 +12,10 @@ iref = "2.1.2"
 iref-enum = "2.0"
 static-iref = "2.0"
 log = "0.4"
-derivative = "*"
+derivative = "2.2.0"
 locspan = { version = "0.3.2", features = ["reporting"] }
 codespan-reporting = "0.11"
 pct-str = "1.1"
 rdf-types = { version = "0.3.6", features = ["loc"] }
 grdf = { version = "0.6.1", features = ["loc"] }
+btree-range-map = "0.2.5"

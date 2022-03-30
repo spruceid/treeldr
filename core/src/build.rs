@@ -1,4 +1,5 @@
 use crate::{
+	error,
 	vocab::{self, GraphLabel, Name, Object},
 	Error, Id, Vocabulary,
 };
@@ -106,17 +107,15 @@ impl<F: Clone + Ord> Context<F> {
 					}
 				},
 				Name::Rdfs(vocab::Rdfs::Label) => match object.as_literal() {
-					Some(label) => {
-						self.add_label(
-							id,
-							label.string_literal().value().as_str().to_owned(),
-							Some(loc),
-						)
-					}
+					Some(label) => self.add_label(
+						id,
+						label.string_literal().value().as_str().to_owned(),
+						Some(loc),
+					),
 					None => {
 						panic!("label is not a string literal")
 					}
-				}
+				},
 				Name::Rdfs(vocab::Rdfs::Comment) => match object.as_literal() {
 					Some(literal) => {
 						self.add_comment(
@@ -218,6 +217,24 @@ impl<F: Clone + Ord> Context<F> {
 					let Loc(target_id, _) = expect_id(object)?;
 					let layout = self.require_layout_mut(id, Some(id_loc))?;
 					layout.set_deref_to(target_id, Some(loc))?
+				}
+				Name::TreeLdr(vocab::TreeLdr::Singleton) => {
+					let Loc(string, _) = expect_raw_string(object)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_literal(string.into(), Some(loc))?
+				}
+				Name::TreeLdr(vocab::TreeLdr::Matches) => {
+					let Loc(regexp_string, regexp_loc) = expect_raw_string(object)?;
+					let regexp = crate::layout::literal::RegExp::parse(&regexp_string).map_err(
+						move |e| {
+							Error::new(
+								error::RegExpInvalid(regexp_string, e).into(),
+								Some(regexp_loc),
+							)
+						},
+					)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_literal(regexp, Some(loc))?
 				}
 				_ => (),
 			}

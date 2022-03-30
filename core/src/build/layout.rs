@@ -3,8 +3,7 @@ use locspan::Location;
 
 pub mod field;
 
-pub use crate::layout::Native;
-pub use crate::layout::Type;
+pub use crate::layout::{literal::RegExp, Native, Type};
 
 /// Layout definition.
 pub struct Definition<F> {
@@ -14,11 +13,12 @@ pub struct Definition<F> {
 	desc: MaybeSet<Description, F>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Description {
 	Native(Native),
 	Struct(Id),
 	Reference(Id),
+	Literal(RegExp),
 }
 
 impl Description {
@@ -27,6 +27,7 @@ impl Description {
 			Self::Reference(_) => Type::Reference,
 			Self::Struct(_) => Type::Struct,
 			Self::Native(n) => Type::Native(*n),
+			Self::Literal(_) => Type::Literal,
 		}
 	}
 }
@@ -101,7 +102,7 @@ impl<F> Definition<F> {
 		self.desc.try_set(desc, cause, |expected, because, found| {
 			error::LayoutMismatchDescription {
 				id: self.id,
-				expected: *expected,
+				expected: expected.clone(),
 				found,
 				because: because.cloned(),
 			}
@@ -128,6 +129,17 @@ impl<F> Definition<F> {
 		F: Clone + Ord,
 	{
 		self.set_description(Description::Reference(target), cause)
+	}
+
+	pub fn set_literal(
+		&mut self,
+		regexp: RegExp,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.set_description(Description::Literal(regexp), cause)
 	}
 }
 
@@ -214,6 +226,10 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 					let strct = crate::layout::Struct::new(name, fields);
 
 					Ok(crate::layout::Description::Struct(strct))
+				}
+				Description::Literal(regexp) => {
+					let lit = crate::layout::Literal::new(regexp, def.name);
+					Ok(crate::layout::Description::Literal(lit))
 				}
 			})
 			.map_err(Caused::flatten)?;
