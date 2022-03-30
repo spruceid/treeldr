@@ -136,8 +136,9 @@ fn generate_layout<F>(
 		Description::Sum(_) => {
 			todo!("json-schema sum layout")
 		}
-		Description::Literal(_) => {
-			todo!("json-schema literal layout")
+		Description::Literal(lit) => {
+			generate_literal_type(json, lit);
+			Ok(())
 		}
 		Description::Native(n, _) => {
 			generate_native_type(json, *n);
@@ -277,21 +278,28 @@ fn generate_layout_ref<F>(
 			todo!("json-schema sum layout")
 		}
 		Description::Literal(lit) => {
-			json.insert("type".into(), "string".into());
-			match lit.regexp().as_singleton() {
-				Some(singleton) => {
-					json.insert("const".into(), singleton.into());
-				},
-				None => {
-					// TODO: convert to ECMA-262 regular expression?
-					json.insert("pattern".into(), lit.regexp().to_string().into());
-				}
-			}
+			generate_literal_type(json, lit);
 			Ok(())
 		}
 		Description::Native(n, _) => {
 			generate_native_type(json, *n);
 			Ok(())
+		}
+	}
+}
+
+fn generate_literal_type<F>(
+	def: &mut serde_json::Map<String, serde_json::Value>,
+	lit: &layout::Literal<F>,
+) {
+	def.insert("type".into(), "string".into());
+	match lit.regexp().as_singleton() {
+		Some(singleton) => {
+			def.insert("const".into(), singleton.into());
+		}
+		None => {
+			// TODO: convert to ECMA-262 regular expression?
+			def.insert("pattern".into(), lit.regexp().to_string().into());
 		}
 	}
 }
