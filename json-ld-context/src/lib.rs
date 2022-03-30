@@ -62,8 +62,18 @@ fn generate_layout_term_definition<F>(
 		Description::Sum(_) => {
 			todo!("ld-context sum layout")
 		}
-		Description::Literal(_) => {
-			todo!("ld-context literal layout")
+		Description::Literal(lit) => {
+			let ty_ref = layout.ty();
+			let ty = model.types().get(ty_ref).unwrap();
+
+			if let Some(name) = lit.name() {
+				let mut def = serde_json::Map::new();
+				def.insert(
+					"@id".into(),
+					ty.id().display(model.vocabulary()).to_string().into(),
+				);
+				ld_context.insert(name.into(), def.into());
+			}
 		}
 		Description::Reference(_, _) => (),
 		Description::Native(_, _) => (),
@@ -91,7 +101,13 @@ fn generate_layout_type<F>(
 			todo!("ld-context sum layout")
 		}
 		Description::Literal(_) => {
-			todo!("ld-context literal layout")
+			let ty_ref = layout.ty();
+			let ty = model.types().get(ty_ref).unwrap();
+			if ty.id().is_blank() {
+				None
+			} else {
+				Some(ty.id().display(model.vocabulary()).to_string().into())
+			}
 		}
 		Description::Reference(_, _) => Some("@id".into()),
 		Description::Native(n, _) => Some(generate_native_type(*n)),
