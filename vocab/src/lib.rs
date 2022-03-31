@@ -49,6 +49,13 @@ pub enum TreeLdr {
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[iri_prefix("owl" = "http://www.w3.org/2002/07/owl#")]
+pub enum Owl {
+	#[iri("owl:unionOf")]
+	UnionOf
+}
+
+#[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("schema" = "https://schema.org/")]
 pub enum Schema {
 	#[iri("schema:True")]
@@ -114,6 +121,7 @@ pub enum Term {
 	Rdf(Rdf),
 	Rdfs(Rdfs),
 	Schema(Schema),
+	Owl(Owl),
 	TreeLdr(TreeLdr),
 	Unknown(UnknownTerm),
 }
@@ -145,9 +153,12 @@ impl Term {
 				Ok(id) => Term::Rdfs(id),
 				Err(_) => match Schema::try_from(iri.as_iri()) {
 					Ok(id) => Term::Schema(id),
-					Err(_) => match TreeLdr::try_from(iri.as_iri()) {
-						Ok(id) => Term::TreeLdr(id),
-						Err(_) => Term::Unknown(ns.insert(iri)),
+					Err(_) => match Owl::try_from(iri.as_iri()) {
+						Ok(id) => Term::Owl(id),
+						Err(_) => match TreeLdr::try_from(iri.as_iri()) {
+							Ok(id) => Term::TreeLdr(id),
+							Err(_) => Term::Unknown(ns.insert(iri)),
+						},
 					},
 				},
 			},
@@ -159,6 +170,7 @@ impl Term {
 			Self::Rdf(id) => Some(id.into()),
 			Self::Rdfs(id) => Some(id.into()),
 			Self::Schema(id) => Some(id.into()),
+			Self::Owl(id) => Some(id.into()),
 			Self::TreeLdr(id) => Some(id.into()),
 			Self::Unknown(name) => ns.iri(*name),
 		}
@@ -341,56 +353,3 @@ impl Vocabulary {
 		}
 	}
 }
-
-// /// Unique identifier associated to a known IRI.
-// ///
-// /// This simplifies storage and comparison between IRIs.
-// #[derive(Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Debug)]
-// pub struct Name(pub(crate) usize);
-
-// impl Name {
-// 	pub(crate) fn index(&self) -> usize {
-// 		self.0
-// 	}
-// }
-
-// /// Dictionary storing each known IRI and associated unique `Name`.
-// #[derive(Default)]
-// pub struct Vocabulary {
-// 	iri_to_id: HashMap<IriBuf, Name>,
-// 	id_to_iri: Vec<IriBuf>,
-// }
-
-// impl Vocabulary {
-// 	/// Creates a new empty vocabulary.
-// 	pub fn new() -> Self {
-// 		Self::default()
-// 	}
-
-// 	/// Returns the `Name` of the given IRI, if any.
-// 	pub fn id(&self, iri: &IriBuf) -> Option<Name> {
-// 		self.iri_to_id.get(iri).cloned()
-// 	}
-
-// 	/// Returns the IRI of the given `Name`, if any.
-// 	pub fn get(&self, id: Name) -> Option<Iri> {
-// 		self.id_to_iri.get(id.index()).map(|iri| iri.as_iri())
-// 	}
-
-// 	/// Adds a new IRI to the vocabulary and returns its `Name`.
-// 	///
-// 	/// If the IRI is already in the vocabulary, its `Name` is returned
-// 	/// and the vocabulary is unchanged.
-// 	pub fn insert(&mut self, iri: IriBuf) -> Name {
-// 		use std::collections::hash_map::Entry;
-// 		match self.iri_to_id.entry(iri) {
-// 			Entry::Occupied(entry) => *entry.get(),
-// 			Entry::Vacant(entry) => {
-// 				let id = Name(self.id_to_iri.len());
-// 				self.id_to_iri.push(entry.key().clone());
-// 				entry.insert(id);
-// 				id
-// 			}
-// 		}
-// 	}
-// }
