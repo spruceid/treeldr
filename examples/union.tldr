@@ -1,7 +1,7 @@
 base <https://example.com>
 
 type Type {
-	union: A | B
+	union: A | B | "foo"
 }
 
 type A {}

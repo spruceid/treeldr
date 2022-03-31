@@ -242,7 +242,7 @@ impl Name {
 		}
 	}
 
-	pub fn push_ident(&mut self, id: &Name) {
+	pub fn push_name(&mut self, id: &Name) {
 		self.normalized.push('_');
 		self.normalized.push_str(&id.normalized);
 		self.preferred = None

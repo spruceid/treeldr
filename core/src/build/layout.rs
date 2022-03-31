@@ -117,10 +117,11 @@ impl<F> Definition<F> {
 			}
 		}
 
-		let ty = self.require_ty(cause.clone())?;
-		if let Id::Iri(iri) = ty.inner() {
-			if let Some(name) = iri.iri(context.vocabulary()).unwrap().path().file_name() {
-				if let Ok(name) = vocab::Name::new(name) {
+		if let Some(Description::Literal(regexp)) = self.desc.value() {
+			if let Some(singleton) = regexp.as_singleton() {
+				if let Ok(singleton_name) = vocab::Name::new(singleton) {
+					let mut name = vocab::Name::new("const").unwrap();
+					name.push_name(&singleton_name);
 					return Ok(Some(Caused::new(name, cause)));
 				}
 			}
@@ -138,7 +139,7 @@ impl<F> Definition<F> {
 			if let Some(layout_name) = layout.name() {
 				if let Some(field_name) = field.name() {
 					let mut name = layout_name.inner().clone();
-					name.push_ident(field_name);
+					name.push_name(field_name);
 
 					return Ok(Some(Caused::new(name, cause)));
 				}
