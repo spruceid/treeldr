@@ -55,7 +55,8 @@ impl<F> Definition<F> {
 		}
 
 		if let Some(layout_id) = self.layout.with_causes() {
-			let layout = context.require_layout(*layout_id.inner(), layout_id.causes().preferred().cloned())?;
+			let layout = context
+				.require_layout(*layout_id.inner(), layout_id.causes().preferred().cloned())?;
 			if let Some(name) = layout.name() {
 				return Ok(Some(Caused::new(name.inner().clone(), cause)));
 			}

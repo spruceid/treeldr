@@ -287,7 +287,7 @@ fn generate_layout_ref<F>(
 fn generate_enum_type<F>(
 	def: &mut serde_json::Map<String, serde_json::Value>,
 	model: &treeldr::Model<F>,
-	enm: &layout::Enum<F>
+	enm: &layout::Enum<F>,
 ) -> Result<(), Error<F>> {
 	let mut variants = Vec::with_capacity(enm.variants().len());
 	for variant in enm.variants() {
@@ -296,11 +296,8 @@ fn generate_enum_type<F>(
 		generate_layout_ref(&mut variant_json, model, layout_ref)?;
 		variants.push(serde_json::Value::Object(variant_json))
 	}
-	
-	def.insert(
-		"oneOf".into(),
-		variants.into()
-	);
+
+	def.insert("oneOf".into(), variants.into());
 
 	Ok(())
 }

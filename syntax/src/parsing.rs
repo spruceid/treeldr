@@ -633,7 +633,7 @@ impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
 				loc.span_mut().append(item.span());
 				options.push(item);
 			}
-			
+
 			Ok(Loc(Self::Union(options), loc))
 		} else {
 			Ok(Loc(Self::Inner(first), first_loc))
@@ -737,7 +737,7 @@ impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
 				loc.span_mut().append(item.span());
 				options.push(item);
 			}
-			
+
 			Ok(Loc(Self::Union(options), loc))
 		} else {
 			Ok(Loc(Self::Inner(first), first_loc))

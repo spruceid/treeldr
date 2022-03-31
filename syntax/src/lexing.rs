@@ -172,7 +172,7 @@ pub enum Punct {
 	Comma,
 	Colon,
 	Ampersand,
-	Pipe
+	Pipe,
 }
 
 impl Punct {
@@ -193,7 +193,7 @@ impl fmt::Display for Punct {
 			Self::Comma => write!(f, ","),
 			Self::Colon => write!(f, ":"),
 			Self::Ampersand => write!(f, "&"),
-			Self::Pipe => write!(f, "|")
+			Self::Pipe => write!(f, "|"),
 		}
 	}
 }

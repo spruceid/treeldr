@@ -149,16 +149,19 @@ impl<F: Clone> AnnotatedTypeExpr<F> {
 
 pub enum OuterTypeExpr<F> {
 	Inner(InnerTypeExpr<F>),
-	Union(Vec<Loc<InnerTypeExpr<F>, F>>)
+	Union(Vec<Loc<InnerTypeExpr<F>, F>>),
 }
 
 impl<F: Clone> OuterTypeExpr<F> {
 	pub fn implicit_layout_expr(&self) -> OuterLayoutExpr<F> {
 		match self {
 			Self::Inner(i) => OuterLayoutExpr::Inner(i.implicit_layout_expr()),
-			Self::Union(options) => OuterLayoutExpr::Union(options.iter().map(|Loc(ty_expr, loc)| {
-				Loc(ty_expr.implicit_layout_expr(), loc.clone())
-			}).collect()),
+			Self::Union(options) => OuterLayoutExpr::Union(
+				options
+					.iter()
+					.map(|Loc(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
+					.collect(),
+			),
 		}
 	}
 }
@@ -166,7 +169,7 @@ impl<F: Clone> OuterTypeExpr<F> {
 pub enum InnerTypeExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
-	Literal(Literal)
+	Literal(Literal),
 }
 
 impl<F: Clone> InnerTypeExpr<F> {
@@ -177,7 +180,7 @@ impl<F: Clone> InnerTypeExpr<F> {
 				r.implicit_layout_expr(),
 				r.location().clone(),
 			))),
-			Self::Literal(lit) => InnerLayoutExpr::Literal(lit.clone())
+			Self::Literal(lit) => InnerLayoutExpr::Literal(lit.clone()),
 		}
 	}
 }
@@ -216,13 +219,13 @@ pub struct AnnotatedLayoutExpr<F> {
 
 pub enum OuterLayoutExpr<F> {
 	Inner(InnerLayoutExpr<F>),
-	Union(Vec<Loc<InnerLayoutExpr<F>, F>>)
+	Union(Vec<Loc<InnerLayoutExpr<F>, F>>),
 }
 
 pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
-	Literal(Literal)
+	Literal(Literal),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]

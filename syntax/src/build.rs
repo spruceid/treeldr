@@ -101,7 +101,7 @@ pub struct Context<'v, F> {
 	literal: BTreeMap<Loc<crate::Literal, F>, BlankLabel>,
 
 	/// Associates each union type (location) to a blank node label.
-	unions: BTreeMap<Location<F>, BlankLabel>
+	unions: BTreeMap<Location<F>, BlankLabel>,
 }
 
 impl<'v, F> Context<'v, F> {
@@ -112,7 +112,7 @@ impl<'v, F> Context<'v, F> {
 			prefixes: HashMap::new(),
 			scope: None,
 			literal: BTreeMap::new(),
-			unions: BTreeMap::new()
+			unions: BTreeMap::new(),
 		}
 	}
 
@@ -213,19 +213,22 @@ impl<'v, F> Context<'v, F> {
 			}
 		}
 	}
-	
+
 	fn generate_union_type(
 		&mut self,
 		label: BlankLabel,
 		quads: &mut Vec<LocQuad<F>>,
-		Loc(options, loc): Loc<Vec<Loc<crate::InnerTypeExpr<F>, F>>, F>
+		Loc(options, loc): Loc<Vec<Loc<crate::InnerTypeExpr<F>, F>>, F>,
 	) -> Result<(), Loc<Error<F>, F>>
 	where
-		F: Clone + Ord
+		F: Clone + Ord,
 	{
-		let options_list = options.into_iter().try_into_rdf_list(self, quads, loc.clone(), |ty_expr, ctx, quads| {
-			ty_expr.build(ctx, quads)
-		})?;
+		let options_list = options.into_iter().try_into_rdf_list(
+			self,
+			quads,
+			loc.clone(),
+			|ty_expr, ctx, quads| ty_expr.build(ctx, quads),
+		)?;
 		quads.push(Loc(
 			Quad(
 				Loc(Id::Blank(label), loc.clone()),
@@ -242,7 +245,7 @@ impl<'v, F> Context<'v, F> {
 				options_list,
 				None,
 			),
-			loc.clone(),
+			loc,
 		));
 
 		Ok(())
@@ -252,37 +255,42 @@ impl<'v, F> Context<'v, F> {
 		&mut self,
 		label: BlankLabel,
 		quads: &mut Vec<LocQuad<F>>,
-		Loc(options, loc): Loc<Vec<Loc<crate::InnerLayoutExpr<F>, F>>, F>
+		Loc(options, loc): Loc<Vec<Loc<crate::InnerLayoutExpr<F>, F>>, F>,
 	) -> Result<(), Loc<Error<F>, F>>
 	where
-		F: Clone + Ord
+		F: Clone + Ord,
 	{
-		let variants_list = options.into_iter().try_into_rdf_list(self, quads, loc.clone(), |ty_expr, ctx, quads| {
-			let loc = ty_expr.location().clone();
-			let variant_label = ctx.vocabulary.new_blank_label();
-			let ty = ty_expr.build(ctx, quads)?;
+		let variants_list = options.into_iter().try_into_rdf_list(
+			self,
+			quads,
+			loc.clone(),
+			|ty_expr, ctx, quads| {
+				let loc = ty_expr.location().clone();
+				let variant_label = ctx.vocabulary.new_blank_label();
+				let ty = ty_expr.build(ctx, quads)?;
 
-			quads.push(Loc(
-				Quad(
-					Loc(Id::Blank(variant_label), loc.clone()),
-					Loc(Term::Rdf(Rdf::Type), loc.clone()),
-					Loc(Object::Iri(Term::TreeLdr(TreeLdr::Variant)), loc.clone()),
-					None,
-				),
-				loc.clone(),
-			));
-			quads.push(Loc(
-				Quad(
-					Loc(Id::Blank(variant_label), loc.clone()),
-					Loc(Term::TreeLdr(TreeLdr::Format), loc.clone()),
-					ty,
-					None,
-				),
-				loc.clone(),
-			));
+				quads.push(Loc(
+					Quad(
+						Loc(Id::Blank(variant_label), loc.clone()),
+						Loc(Term::Rdf(Rdf::Type), loc.clone()),
+						Loc(Object::Iri(Term::TreeLdr(TreeLdr::Variant)), loc.clone()),
+						None,
+					),
+					loc.clone(),
+				));
+				quads.push(Loc(
+					Quad(
+						Loc(Id::Blank(variant_label), loc.clone()),
+						Loc(Term::TreeLdr(TreeLdr::Format), loc.clone()),
+						ty,
+						None,
+					),
+					loc.clone(),
+				));
 
-			Ok(Loc(Object::Blank(variant_label), loc))
-		})?;
+				Ok(Loc(Object::Blank(variant_label), loc))
+			},
+		)?;
 
 		quads.push(Loc(
 			Quad(
@@ -309,20 +317,20 @@ impl<'v, F> Context<'v, F> {
 				variants_list,
 				None,
 			),
-			loc.clone(),
+			loc,
 		));
 
 		Ok(())
 	}
 
-	pub fn insert_union(
-		&mut self,
-		loc: Location<F>,
-	) -> BlankLabel
+	pub fn insert_union(&mut self, loc: Location<F>) -> BlankLabel
 	where
-		F: Clone + Ord
+		F: Clone + Ord,
 	{
-		*self.unions.entry(loc.clone()).or_insert_with(|| self.vocabulary.new_blank_label())
+		*self
+			.unions
+			.entry(loc)
+			.or_insert_with(|| self.vocabulary.new_blank_label())
 	}
 }
 
@@ -763,12 +771,15 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 		}
 
 		let Loc(fields, fields_loc) = def.fields;
-		let fields_list = fields.into_iter().try_into_rdf_list(ctx, quads, fields_loc, |field, ctx, quads| {
-			ctx.scope = Some(ty_id);
-			let item = field.build(ctx, quads)?;
-			ctx.scope = None;
-			Ok(item)
-		})?;
+		let fields_list =
+			fields
+				.into_iter()
+				.try_into_rdf_list(ctx, quads, fields_loc, |field, ctx, quads| {
+					ctx.scope = Some(ty_id);
+					let item = field.build(ctx, quads)?;
+					ctx.scope = None;
+					Ok(item)
+				})?;
 
 		quads.push(Loc(
 			Quad(
@@ -790,9 +801,10 @@ pub trait TryIntoRdfList<F, T> {
 		ctx: &mut Context<F>,
 		quads: &mut Vec<LocQuad<F>>,
 		loc: Location<F>,
-		f: K
-	) -> Result<Loc<Object<F>, F>, E> where
-	K: FnMut(T, &mut Context<F>, &mut Vec<LocQuad<F>>) -> Result<Loc<Object<F>, F>, E>;
+		f: K,
+	) -> Result<Loc<Object<F>, F>, E>
+	where
+		K: FnMut(T, &mut Context<F>, &mut Vec<LocQuad<F>>) -> Result<Loc<Object<F>, F>, E>;
 }
 
 impl<F: Clone, I: DoubleEndedIterator> TryIntoRdfList<F, I::Item> for I {
@@ -801,9 +813,10 @@ impl<F: Clone, I: DoubleEndedIterator> TryIntoRdfList<F, I::Item> for I {
 		ctx: &mut Context<F>,
 		quads: &mut Vec<LocQuad<F>>,
 		loc: Location<F>,
-		mut f: K
-	) -> Result<Loc<Object<F>, F>, E> where
-	K: FnMut(I::Item, &mut Context<F>, &mut Vec<LocQuad<F>>) -> Result<Loc<Object<F>, F>, E>
+		mut f: K,
+	) -> Result<Loc<Object<F>, F>, E>
+	where
+		K: FnMut(I::Item, &mut Context<F>, &mut Vec<LocQuad<F>>) -> Result<Loc<Object<F>, F>, E>,
 	{
 		let mut head = Loc(Object::Iri(Term::Rdf(Rdf::Nil)), loc);
 		for item in self.rev() {
@@ -811,7 +824,7 @@ impl<F: Clone, I: DoubleEndedIterator> TryIntoRdfList<F, I::Item> for I {
 			let item_label = ctx.vocabulary.new_blank_label();
 			let item_loc = item.location().clone();
 			let list_loc = head.location().clone().with(item_loc.span());
-	
+
 			quads.push(Loc(
 				Quad(
 					Loc(Id::Blank(item_label), list_loc.clone()),
@@ -821,7 +834,7 @@ impl<F: Clone, I: DoubleEndedIterator> TryIntoRdfList<F, I::Item> for I {
 				),
 				item_loc.clone(),
 			));
-	
+
 			quads.push(Loc(
 				Quad(
 					Loc(Id::Blank(item_label), item_loc.clone()),
@@ -831,7 +844,7 @@ impl<F: Clone, I: DoubleEndedIterator> TryIntoRdfList<F, I::Item> for I {
 				),
 				item_loc.clone(),
 			));
-	
+
 			quads.push(Loc(
 				Quad(
 					Loc(Id::Blank(item_label), head.location().clone()),
@@ -841,12 +854,12 @@ impl<F: Clone, I: DoubleEndedIterator> TryIntoRdfList<F, I::Item> for I {
 				),
 				item_loc.clone(),
 			));
-	
+
 			head = Loc(Object::Blank(item_label), list_loc);
 		}
 
 		Ok(head)
-	}	
+	}
 }
 
 impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
@@ -983,7 +996,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 	fn build(
 		self,
 		ctx: &mut Context<F>,
-		quads: &mut Vec<LocQuad<F>>
+		quads: &mut Vec<LocQuad<F>>,
 	) -> Result<Self::Target, Loc<Error<F>, F>> {
 		let Loc(ty, loc) = self;
 
