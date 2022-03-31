@@ -758,7 +758,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 			quads.push(Loc(
 				Quad(
 					Loc(Id::Blank(label), prop_id_loc.clone()),
-					Loc(Term::Rdfs(Rdfs::Range), object_loc.clone()),
+					Loc(Term::TreeLdr(TreeLdr::Format), object_loc.clone()),
 					object,
 					None,
 				),

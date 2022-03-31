@@ -588,6 +588,27 @@ impl<F> Context<F> {
 		}
 	}
 
+	pub fn require_layout_field_or_variant_mut(
+		&mut self,
+		id: Id,
+		cause: Option<Location<F>>,
+	) -> Result<node::LayoutFieldOrVariant<F>, Error<F>>
+	where
+		F: Clone,
+	{
+		match self.get_mut(id) {
+			Some(node) => node.require_layout_field_or_variant_mut(cause),
+			None => Err(Caused::new(
+				error::NodeUnknown {
+					id,
+					expected_ty: Some(node::Type::Property),
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
 	pub fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
 	where
 		F: Clone,

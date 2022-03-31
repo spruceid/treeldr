@@ -64,6 +64,11 @@ pub type PropertyOrLayoutField<'a, F> = (
 	Option<&'a mut WithCauses<layout::field::Definition<F>, F>>,
 );
 
+pub type LayoutFieldOrVariant<'a, F> = (
+	Option<&'a mut WithCauses<layout::field::Definition<F>, F>>,
+	Option<&'a mut WithCauses<layout::variant::Definition<F>, F>>,
+);
+
 impl<F> Node<Components<F>> {
 	pub fn new(id: Id) -> Self {
 		Self {
@@ -538,6 +543,35 @@ impl<F> Node<Components<F>> {
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::Property,
+					found: types,
+				}
+				.into(),
+				cause,
+			))
+		}
+	}
+
+	pub fn require_layout_field_or_variant_mut(
+		&mut self,
+		cause: Option<Location<F>>,
+	) -> Result<LayoutFieldOrVariant<F>, Error<F>>
+	where
+		F: Clone,
+	{
+		let types = self.caused_types();
+
+		let (layout_field, layout_variant) = (
+			self.value.layout_field.with_causes_mut(),
+			self.value.layout_variant.with_causes_mut(),
+		);
+
+		if layout_field.is_some() || layout_variant.is_some() {
+			Ok((layout_field, layout_variant))
+		} else {
+			Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id,
+					expected: Type::LayoutField,
 					found: types,
 				}
 				.into(),

@@ -144,16 +144,21 @@ impl<F: Clone + Ord> Context<F> {
 					}
 				}
 				Term::Rdfs(vocab::Rdfs::Range) => {
-					let (prop, field) =
-						self.require_property_or_layout_field_mut(id, Some(id_loc))?;
+					let prop = self.require_property_mut(id, Some(id_loc))?;
+					let Loc(object, _) = expect_id(object)?;
+					prop.set_range(object, Some(loc))?
+				}
+				Term::TreeLdr(vocab::TreeLdr::Format) => {
+					let (field, variant) =
+						self.require_layout_field_or_variant_mut(id, Some(id_loc))?;
 					let Loc(object, _) = expect_id(object)?;
 
-					if let Some(prop) = prop {
-						prop.set_range(object, Some(loc.clone()))?
+					if let Some(field) = field {
+						field.set_layout(object, Some(loc.clone()))?
 					}
 
-					if let Some(field) = field {
-						field.set_layout(object, Some(loc))?
+					if let Some(variant) = variant {
+						variant.set_layout(object, Some(loc))?
 					}
 				}
 				Term::Schema(vocab::Schema::ValueRequired) => {
