@@ -5,8 +5,10 @@ use rdf_types::{loc::Literal, Quad};
 use std::{collections::HashMap, fmt};
 
 mod display;
+mod name;
 
 pub use display::*;
+pub use name::Name;
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]
