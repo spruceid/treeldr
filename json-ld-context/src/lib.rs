@@ -56,9 +56,7 @@ fn generate_layout_term_definition<F>(
 
 			ld_context.insert(s.name().to_pascal_case(), def.into());
 		}
-		Description::Enum(_) => {
-			todo!("ld-context enum layout")
-		}
+		Description::Enum(_) => (),
 		Description::Literal(lit) => {
 			let ty_ref = layout.ty();
 			let ty = model.types().get(ty_ref).unwrap();
@@ -92,7 +90,13 @@ fn generate_layout_type<F>(
 			Some(ty.id().display(model.vocabulary()).to_string().into())
 		}
 		Description::Enum(_) => {
-			todo!("ld-context enum layout")
+			let ty_ref = layout.ty();
+			let ty = model.types().get(ty_ref).unwrap();
+			if ty.id().is_blank() {
+				None
+			} else {
+				Some(ty.id().display(model.vocabulary()).to_string().into())
+			}
 		}
 		Description::Literal(_) => {
 			let ty_ref = layout.ty();
