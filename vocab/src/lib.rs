@@ -103,32 +103,32 @@ pub enum Rdf {
 	Rest,
 }
 
-/// UnknownName index.
+/// UnknownTerm index.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct UnknownName(usize);
+pub struct UnknownTerm(usize);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub enum Name {
+pub enum Term {
 	Rdf(Rdf),
 	Rdfs(Rdfs),
 	Schema(Schema),
 	TreeLdr(TreeLdr),
-	Unknown(UnknownName),
+	Unknown(UnknownTerm),
 }
 
-impl Name {
-	pub fn try_from_iri(iri: Iri, ns: &Vocabulary) -> Option<Name> {
+impl Term {
+	pub fn try_from_iri(iri: Iri, ns: &Vocabulary) -> Option<Self> {
 		match Rdf::try_from(iri) {
-			Ok(id) => Some(Name::Rdf(id)),
+			Ok(id) => Some(Term::Rdf(id)),
 			Err(_) => match Rdfs::try_from(iri) {
-				Ok(id) => Some(Name::Rdfs(id)),
+				Ok(id) => Some(Term::Rdfs(id)),
 				Err(_) => match Schema::try_from(iri) {
-					Ok(id) => Some(Name::Schema(id)),
+					Ok(id) => Some(Term::Schema(id)),
 					Err(_) => match TreeLdr::try_from(iri) {
-						Ok(id) => Some(Name::TreeLdr(id)),
+						Ok(id) => Some(Term::TreeLdr(id)),
 						Err(_) => {
 							let iri_buf: IriBuf = iri.into();
-							ns.get(&iri_buf).map(Name::Unknown)
+							ns.get(&iri_buf).map(Term::Unknown)
 						}
 					},
 				},
@@ -136,16 +136,16 @@ impl Name {
 		}
 	}
 
-	pub fn from_iri(iri: IriBuf, ns: &mut Vocabulary) -> Name {
+	pub fn from_iri(iri: IriBuf, ns: &mut Vocabulary) -> Self {
 		match Rdf::try_from(iri.as_iri()) {
-			Ok(id) => Name::Rdf(id),
+			Ok(id) => Term::Rdf(id),
 			Err(_) => match Rdfs::try_from(iri.as_iri()) {
-				Ok(id) => Name::Rdfs(id),
+				Ok(id) => Term::Rdfs(id),
 				Err(_) => match Schema::try_from(iri.as_iri()) {
-					Ok(id) => Name::Schema(id),
+					Ok(id) => Term::Schema(id),
 					Err(_) => match TreeLdr::try_from(iri.as_iri()) {
-						Ok(id) => Name::TreeLdr(id),
-						Err(_) => Name::Unknown(ns.insert(iri)),
+						Ok(id) => Term::TreeLdr(id),
+						Err(_) => Term::Unknown(ns.insert(iri)),
 					},
 				},
 			},
@@ -163,7 +163,7 @@ impl Name {
 	}
 }
 
-impl rdf_types::AsTerm for Name {
+impl rdf_types::AsTerm for Term {
 	type Iri = Self;
 	type BlankId = BlankLabel;
 	type Literal = rdf_types::Literal;
@@ -173,7 +173,7 @@ impl rdf_types::AsTerm for Name {
 	}
 }
 
-impl rdf_types::IntoTerm for Name {
+impl rdf_types::IntoTerm for Term {
 	type Iri = Self;
 	type BlankId = BlankLabel;
 	type Literal = rdf_types::Literal;
@@ -202,17 +202,17 @@ impl fmt::Display for BlankLabel {
 	}
 }
 
-pub type Id = rdf_types::Subject<Name, BlankLabel>;
+pub type Id = rdf_types::Subject<Term, BlankLabel>;
 
-pub type GraphLabel = rdf_types::GraphLabel<Name, BlankLabel>;
+pub type GraphLabel = rdf_types::GraphLabel<Term, BlankLabel>;
 
-pub type Object<F> = rdf_types::Object<Name, BlankLabel, Literal<F>>;
+pub type Object<F> = rdf_types::Object<Term, BlankLabel, Literal<F>>;
 
-pub type LocQuad<F> = rdf_types::loc::LocQuad<Id, Name, Object<F>, GraphLabel, F>;
+pub type LocQuad<F> = rdf_types::loc::LocQuad<Id, Term, Object<F>, GraphLabel, F>;
 
-pub type StrippedObject = rdf_types::Object<Name, BlankLabel, rdf_types::Literal>;
+pub type StrippedObject = rdf_types::Object<Term, BlankLabel, rdf_types::Literal>;
 
-pub type StrippedQuad = rdf_types::Quad<Id, Name, StrippedObject, GraphLabel>;
+pub type StrippedQuad = rdf_types::Quad<Id, Term, StrippedObject, GraphLabel>;
 
 pub fn strip_quad<F>(Loc(rdf_types::Quad(s, p, o, g), _): LocQuad<F>) -> StrippedQuad {
 	use locspan::Strip;
@@ -230,7 +230,7 @@ pub fn subject_from_rdf(
 	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
 ) -> Id {
 	match subject {
-		rdf_types::Subject::Iri(iri) => Id::Iri(Name::from_iri(iri, ns)),
+		rdf_types::Subject::Iri(iri) => Id::Iri(Term::from_iri(iri, ns)),
 		rdf_types::Subject::Blank(label) => Id::Blank(blank_label(label)),
 	}
 }
@@ -241,7 +241,7 @@ pub fn object_from_rdf<F>(
 	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
 ) -> Object<F> {
 	match object {
-		rdf_types::Object::Iri(iri) => Object::Iri(Name::from_iri(iri, ns)),
+		rdf_types::Object::Iri(iri) => Object::Iri(Term::from_iri(iri, ns)),
 		rdf_types::Object::Blank(label) => Object::Blank(blank_label(label)),
 		rdf_types::Object::Literal(lit) => Object::Literal(lit),
 	}
@@ -253,7 +253,7 @@ pub fn stripped_object_from_rdf(
 	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
 ) -> StrippedObject {
 	match object {
-		rdf_types::Object::Iri(iri) => StrippedObject::Iri(Name::from_iri(iri, ns)),
+		rdf_types::Object::Iri(iri) => StrippedObject::Iri(Term::from_iri(iri, ns)),
 		rdf_types::Object::Blank(label) => StrippedObject::Blank(blank_label(label)),
 		rdf_types::Object::Literal(lit) => StrippedObject::Literal(lit),
 	}
@@ -265,7 +265,7 @@ pub fn graph_label_from_rdf(
 	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
 ) -> Id {
 	match graph_label {
-		rdf_types::GraphLabel::Iri(iri) => GraphLabel::Iri(Name::from_iri(iri, ns)),
+		rdf_types::GraphLabel::Iri(iri) => GraphLabel::Iri(Term::from_iri(iri, ns)),
 		rdf_types::GraphLabel::Blank(label) => GraphLabel::Blank(blank_label(label)),
 	}
 }
@@ -278,7 +278,7 @@ pub fn loc_quad_from_rdf<F>(
 	Loc(
 		rdf_types::Quad(
 			s.map(|s| subject_from_rdf(s, ns, &mut blank_label)),
-			p.map(|p| Name::from_iri(p, ns)),
+			p.map(|p| Term::from_iri(p, ns)),
 			o.map(|o| object_from_rdf(o, ns, &mut blank_label)),
 			g.map(|g| g.map(|g| graph_label_from_rdf(g, ns, blank_label))),
 		),
@@ -294,7 +294,7 @@ pub fn stripped_loc_quad_from_rdf<F>(
 	use locspan::Strip;
 	rdf_types::Quad(
 		subject_from_rdf(s.into_value(), ns, &mut blank_label),
-		Name::from_iri(p.into_value(), ns),
+		Term::from_iri(p.into_value(), ns),
 		stripped_object_from_rdf(o.strip(), ns, &mut blank_label),
 		g.map(|g| graph_label_from_rdf(g.into_value(), ns, blank_label)),
 	)
@@ -303,7 +303,7 @@ pub fn stripped_loc_quad_from_rdf<F>(
 #[derive(Default)]
 pub struct Vocabulary {
 	map: Vec<IriBuf>,
-	reverse: HashMap<IriBuf, UnknownName>,
+	reverse: HashMap<IriBuf, UnknownTerm>,
 	blank_label_count: u32,
 }
 
@@ -312,11 +312,11 @@ impl Vocabulary {
 		Self::default()
 	}
 
-	pub fn get(&self, iri: &IriBuf) -> Option<UnknownName> {
+	pub fn get(&self, iri: &IriBuf) -> Option<UnknownTerm> {
 		self.reverse.get(iri).cloned()
 	}
 
-	pub fn iri(&self, name: UnknownName) -> Option<Iri> {
+	pub fn iri(&self, name: UnknownTerm) -> Option<Iri> {
 		self.map.get(name.0).map(|iri| iri.as_iri())
 	}
 
@@ -326,12 +326,12 @@ impl Vocabulary {
 		label
 	}
 
-	pub fn insert(&mut self, iri: IriBuf) -> UnknownName {
+	pub fn insert(&mut self, iri: IriBuf) -> UnknownTerm {
 		use std::collections::hash_map::Entry;
 		match self.reverse.entry(iri) {
 			Entry::Occupied(entry) => *entry.get(),
 			Entry::Vacant(entry) => {
-				let name = UnknownName(self.map.len());
+				let name = UnknownTerm(self.map.len());
 				self.map.push(entry.key().clone());
 				entry.insert(name);
 				name

@@ -2,7 +2,7 @@ use locspan::Loc;
 use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;
-use treeldr_vocab::{GraphLabel, Id, Name, StrippedObject, Vocabulary};
+use treeldr_vocab::{GraphLabel, Id, Term, StrippedObject, Vocabulary};
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
@@ -29,7 +29,7 @@ impl BlankIdGenerator {
 fn parse_nquads<P: AsRef<Path>>(
 	vocabulary: &mut Vocabulary,
 	path: P,
-) -> grdf::HashDataset<Id, Name, StrippedObject, GraphLabel> {
+) -> grdf::HashDataset<Id, Term, StrippedObject, GraphLabel> {
 	use nquads_syntax::{lexing::Utf8Decoded, Document, Lexer, Parse};
 
 	let buffer = std::fs::read_to_string(path).expect("unable to read file");
@@ -51,7 +51,7 @@ fn parse_nquads<P: AsRef<Path>>(
 fn parse_treeldr<P: AsRef<Path>>(
 	vocab: &mut Vocabulary,
 	path: P,
-) -> grdf::HashDataset<Id, Name, StrippedObject, GraphLabel> {
+) -> grdf::HashDataset<Id, Term, StrippedObject, GraphLabel> {
 	use treeldr_syntax::{build, Build, Document, Lexer, Parse};
 
 	let input = std::fs::read_to_string(path).expect("unable to read input file");

@@ -43,7 +43,7 @@ impl<F> Context<F> {
 	where
 		F: Clone + Ord,
 	{
-		let id = Id::Iri(vocab::Name::from_iri(iri, self.vocabulary_mut()));
+		let id = Id::Iri(vocab::Term::from_iri(iri, self.vocabulary_mut()));
 		self.declare_type(id, cause.clone());
 		self.declare_layout(id, cause.clone());
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
@@ -395,7 +395,7 @@ impl<F> Context<F> {
 		F: Ord,
 	{
 		match id {
-			Id::Iri(vocab::Name::Rdf(vocab::Rdf::Nil)) => (),
+			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => (),
 			id => match self.nodes.get_mut(&id) {
 				Some(node) => node.declare_list(cause),
 				None => {
@@ -582,7 +582,7 @@ impl<F> Context<F> {
 		F: Clone,
 	{
 		match id {
-			Id::Iri(vocab::Name::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
+			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
 			id => match self.get(id) {
 				Some(node) => Ok(ListRef::Cons(node.require_list(cause)?)),
 				None => Err(Caused::new(
@@ -606,7 +606,7 @@ impl<F> Context<F> {
 		F: Clone,
 	{
 		match id {
-			Id::Iri(vocab::Name::Rdf(vocab::Rdf::Nil)) => Ok(ListMut::Nil),
+			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListMut::Nil),
 			id => match self.get_mut(id) {
 				Some(node) => Ok(ListMut::Cons(node.require_list_mut(cause)?)),
 				None => Err(Caused::new(
@@ -889,7 +889,7 @@ impl<F: Clone> AllocatedNodes<F> {
 
 	pub fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>> {
 		match id {
-			Id::Iri(vocab::Name::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
+			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
 			id => Ok(ListRef::Cons(
 				self.require(id, Some(node::Type::List), cause.clone())?
 					.require_list(cause)?,
