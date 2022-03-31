@@ -1,7 +1,7 @@
 use iref::{IriBuf, IriRef, IriRefBuf};
 use locspan::{Loc, Location};
 use rdf_types::{loc::Literal, Quad};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::fmt;
 
 use crate::vocab::*;
@@ -98,7 +98,7 @@ pub struct Context<'v, F> {
 	scope: Option<Name>,
 
 	/// Associates each literal type/value to a blank node label.
-	literal: HashMap<crate::Literal, BlankLabel>,
+	literal: BTreeMap<Loc<crate::Literal, F>, BlankLabel>,
 }
 
 impl<'v, F> Context<'v, F> {
@@ -108,7 +108,7 @@ impl<'v, F> Context<'v, F> {
 			vocabulary,
 			prefixes: HashMap::new(),
 			scope: None,
-			literal: HashMap::new(),
+			literal: BTreeMap::new(),
 		}
 	}
 
@@ -124,17 +124,17 @@ impl<'v, F> Context<'v, F> {
 	pub fn insert_literal(
 		&mut self,
 		quads: &mut Vec<LocQuad<F>>,
-		lit: crate::Literal,
-		loc: &Location<F>,
+		lit: Loc<crate::Literal, F>,
 	) -> BlankLabel
 	where
-		F: Clone,
+		F: Clone + Ord,
 	{
-		use std::collections::hash_map::Entry;
+		use std::collections::btree_map::Entry;
 		match self.literal.entry(lit) {
 			Entry::Occupied(entry) => *entry.get(),
 			Entry::Vacant(entry) => {
 				let label = self.vocabulary.new_blank_label();
+				let loc = entry.key().location();
 
 				// Define the type.
 				quads.push(Loc(
@@ -167,7 +167,7 @@ impl<'v, F> Context<'v, F> {
 					loc.clone(),
 				));
 
-				match entry.key() {
+				match entry.key().value() {
 					crate::Literal::String(s) => {
 						quads.push(Loc(
 							Quad(
@@ -262,7 +262,7 @@ impl<'v, F: Clone> Context<'v, F> {
 	}
 }
 
-impl<F: Clone> Build<F> for Loc<crate::Document<F>, F> {
+impl<F: Clone + Ord> Build<F> for Loc<crate::Document<F>, F> {
 	type Target = ();
 
 	fn build(
@@ -427,7 +427,7 @@ fn build_doc<F: Clone>(
 	}
 }
 
-impl<F: Clone> Build<F> for Loc<crate::TypeDefinition<F>, F> {
+impl<F: Clone + Ord> Build<F> for Loc<crate::TypeDefinition<F>, F> {
 	type Target = ();
 
 	fn build(
@@ -474,7 +474,7 @@ impl<F: Clone> Build<F> for Loc<crate::TypeDefinition<F>, F> {
 	}
 }
 
-impl<F: Clone> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
+impl<F: Clone + Ord> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
 	type Target = Loc<Name, F>;
 
 	fn build(
@@ -543,7 +543,7 @@ impl<F: Clone> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
 	}
 }
 
-impl<F: Clone> Build<F> for Loc<crate::TypeExpr<F>, F> {
+impl<F: Clone + Ord> Build<F> for Loc<crate::TypeExpr<F>, F> {
 	type Target = Loc<Object<F>, F>;
 
 	fn build(
@@ -560,14 +560,14 @@ impl<F: Clone> Build<F> for Loc<crate::TypeExpr<F>, F> {
 			}
 			crate::TypeExpr::Reference(r) => r.build(ctx, quads),
 			crate::TypeExpr::Literal(lit) => {
-				let label = ctx.insert_literal(quads, lit, &loc);
+				let label = ctx.insert_literal(quads, Loc(lit, loc.clone()));
 				Ok(Loc(Object::Blank(label), loc))
 			}
 		}
 	}
 }
 
-impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
+impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 	type Target = ();
 
 	fn build(
@@ -664,7 +664,7 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 	}
 }
 
-impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
+impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 	type Target = Loc<Object<F>, F>;
 
 	fn build(
@@ -771,7 +771,7 @@ impl<F: Clone> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 	}
 }
 
-impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
+impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 	type Target = Loc<Object<F>, F>;
 
 	fn build(
@@ -813,7 +813,7 @@ impl<F: Clone> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 				Ok(Loc(Object::Blank(layout), loc))
 			}
 			crate::LayoutExpr::Literal(lit) => {
-				let layout = ctx.insert_literal(quads, lit, &loc);
+				let layout = ctx.insert_literal(quads, Loc(lit, loc.clone()));
 				Ok(Loc(Object::Blank(layout), loc))
 			}
 		}

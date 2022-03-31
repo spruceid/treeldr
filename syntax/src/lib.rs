@@ -204,7 +204,7 @@ pub enum LayoutExpr<F> {
 	Literal(Literal),
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Literal {
 	String(String),
 	RegExp(String),
