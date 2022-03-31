@@ -1,14 +1,14 @@
 use super::Field;
-use crate::{Documentation, MaybeSet, WithCauses};
+use crate::{Documentation, MaybeSet, WithCauses, vocab::Name};
 
 /// Enum layout.
 pub struct Enum<F> {
-	name: WithCauses<String, F>,
+	name: WithCauses<Name, F>,
 	variants: Vec<Variant<F>>,
 }
 
 impl<F> Enum<F> {
-	pub fn name(&self) -> &str {
+	pub fn name(&self) -> &Name {
 		&self.name
 	}
 
@@ -26,7 +26,7 @@ impl<F> Enum<F> {
 
 /// Enum layout variant.
 pub struct Variant<F> {
-	name: WithCauses<String, F>,
+	name: WithCauses<Name, F>,
 	label: Option<String>,
 	payload: MaybeSet<Vec<Field<F>>, F>,
 	doc: Documentation,
@@ -34,7 +34,7 @@ pub struct Variant<F> {
 
 impl<F> Variant<F> {
 	pub fn new(
-		name: WithCauses<String, F>,
+		name: WithCauses<Name, F>,
 		label: Option<String>,
 		payload: MaybeSet<Vec<Field<F>>, F>,
 		doc: Documentation,
@@ -47,7 +47,7 @@ impl<F> Variant<F> {
 		}
 	}
 
-	pub fn name(&self) -> &str {
+	pub fn name(&self) -> &Name {
 		&self.name
 	}
 

@@ -8,7 +8,7 @@ mod display;
 mod name;
 
 pub use display::*;
-pub use name::Name;
+pub use name::*;
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]

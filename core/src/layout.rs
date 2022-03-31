@@ -1,4 +1,4 @@
-use crate::{layout, ty, Causes, Documentation, Id, MaybeSet, WithCauses};
+use crate::{layout, ty, Causes, Documentation, Id, MaybeSet, WithCauses, vocab::Name};
 use shelves::Ref;
 
 mod enumeration;
@@ -41,7 +41,7 @@ pub struct Definition<F> {
 /// Layout description.
 pub enum Description<F> {
 	/// Native layout, such as a number, a string, etc.
-	Native(Native, MaybeSet<String, F>),
+	Native(Native, MaybeSet<Name, F>),
 
 	/// Structure.
 	Struct(Struct<F>),
@@ -50,7 +50,7 @@ pub enum Description<F> {
 	Enum(Enum<F>),
 
 	/// Reference.
-	Reference(Ref<layout::Definition<F>>, MaybeSet<String, F>),
+	Reference(Ref<layout::Definition<F>>, MaybeSet<Name, F>),
 
 	/// Sum type.
 	Sum(Sum<F>),
@@ -97,12 +97,12 @@ impl<F> Definition<F> {
 		self.id
 	}
 
-	pub fn name(&self) -> Option<&str> {
+	pub fn name(&self) -> Option<&Name> {
 		match self.desc.inner() {
 			Description::Struct(s) => Some(s.name()),
 			Description::Enum(e) => Some(e.name()),
-			Description::Reference(_, n) => n.value().map(String::as_str),
-			Description::Native(_, n) => n.value().map(String::as_str),
+			Description::Reference(_, n) => n.value(),
+			Description::Native(_, n) => n.value(),
 			Description::Sum(s) => Some(s.name()),
 			Description::Literal(l) => Some(l.name()),
 		}

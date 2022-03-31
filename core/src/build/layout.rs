@@ -16,7 +16,7 @@ pub struct Definition<F> {
 	/// If not provided, the name is generated using the `generate_default_name`
 	/// method. If it conflicts with another name or failed to be generated,
 	/// then a name must be explicitly defined by the user.
-	name: MaybeSet<String, F>,
+	name: MaybeSet<vocab::Name, F>,
 
 	/// Type for which this layout is defined.
 	ty: MaybeSet<Id, F>,
@@ -98,17 +98,21 @@ impl<F> Definition<F> {
 		&self,
 		context: &super::Context<F>,
 		cause: Option<Location<F>>
-	) -> Result<Option<Caused<String, F>>, Error<F>> where F: Clone {
+	) -> Result<Option<Caused<vocab::Name, F>>, Error<F>> where F: Clone {
 		if let Id::Iri(iri) = self.id {
 			if let Some(name) = iri.iri(context.vocabulary()).unwrap().path().file_name() {
-				return Ok(Some(Caused::new(name.to_string(), cause)))
+				if let Ok(name) = vocab::Name::new(name) {
+					return Ok(Some(Caused::new(name, cause)))
+				}
 			}
 		}
 
 		let ty = self.require_ty(cause.clone())?;
 		if let Id::Iri(iri) = ty.inner() {
 			if let Some(name) = iri.iri(context.vocabulary()).unwrap().path().file_name() {
-				return Ok(Some(Caused::new(name.to_string(), cause)))
+				if let Ok(name) = vocab::Name::new(name) {
+					return Ok(Some(Caused::new(name, cause)))
+				}
 			}
 		}
 
@@ -119,8 +123,11 @@ impl<F> Definition<F> {
 
 			if let Some(layout_name) = layout.name() {
 				if let Some(field_name) = field.name() {
+					let mut name = layout_name.inner().clone();
+					name.push_ident(field_name);
+
 					return Ok(Some(Caused::new(
-						format!("{}{}", layout_name.inner(), field_name.inner()),
+						name,
 						cause
 					)))
 				}
@@ -130,11 +137,11 @@ impl<F> Definition<F> {
 		Ok(None)
 	}
 
-	pub fn name(&self) -> Option<&WithCauses<String, F>> {
+	pub fn name(&self) -> Option<&WithCauses<vocab::Name, F>> {
 		self.name.with_causes()
 	}
 
-	pub fn set_name(&mut self, name: String, cause: Option<Location<F>>) -> Result<(), Error<F>>
+	pub fn set_name(&mut self, name: vocab::Name, cause: Option<Location<F>>) -> Result<(), Error<F>>
 	where
 		F: Ord + Clone,
 	{
@@ -279,9 +286,9 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 
 		fn require_name<F>(
 			id: Id,
-			name: MaybeSet<String, F>,
+			name: MaybeSet<vocab::Name, F>,
 			causes: &Causes<F>
-		) -> Result<WithCauses<String, F>, Error<F>> where F: Clone {
+		) -> Result<WithCauses<vocab::Name, F>, Error<F>> where F: Clone {
 			name.ok_or_else(|| {
 				Caused::new(
 					error::LayoutMissingName(id).into(),

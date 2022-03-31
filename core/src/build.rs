@@ -184,7 +184,12 @@ impl<F: Clone + Ord> Context<F> {
 				}
 				Term::TreeLdr(vocab::TreeLdr::Name) => {
 					let node = self.require_mut(id, Some(id_loc))?;
-					let Loc(name, _) = expect_raw_string(object)?;
+					let Loc(name, name_loc) = expect_raw_string(object)?;
+
+					let name = vocab::Name::new(&name).map_err(|vocab::InvalidName| Error::new(
+						error::NameInvalid(name).into(),
+						Some(name_loc),
+					))?;
 
 					if node.is_layout() || node.is_layout_field() {
 						if let Some(layout) = node.as_layout_mut() {

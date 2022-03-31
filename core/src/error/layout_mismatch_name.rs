@@ -1,11 +1,11 @@
-use crate::{Id, Vocabulary, vocab::Display};
+use crate::{Id, Vocabulary, vocab::Display, vocab::Name};
 use locspan::Location;
 
 #[derive(Debug)]
 pub struct LayoutMismatchName<F> {
 	pub id: Id,
-	pub expected: String,
-	pub found: String,
+	pub expected: Name,
+	pub found: Name,
 	pub because: Option<Location<F>>
 }
 

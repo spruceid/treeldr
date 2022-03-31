@@ -109,7 +109,8 @@ errors! {
 	list_mismatch_rest::ListMismatchRest<F>,
 	list_missing_item::ListMissingItem,
 	list_missing_rest::ListMissingRest,
-	regexp_invalid::RegExpInvalid
+	regexp_invalid::RegExpInvalid,
+	name_invalid::NameInvalid
 }
 
 impl<F> Caused<Description<F>, F> {

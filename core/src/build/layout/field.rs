@@ -1,12 +1,12 @@
 use super::{error, Error};
-use crate::{Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
+use crate::{Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses, vocab::Name};
 use locspan::Location;
 
 /// Layout field definition.
 pub struct Definition<F> {
 	id: Id,
 	prop: MaybeSet<Id, F>,
-	name: MaybeSet<String, F>,
+	name: MaybeSet<Name, F>,
 	layout: MaybeSet<Id, F>,
 	required: MaybeSet<bool, F>,
 	functional: MaybeSet<bool, F>,
@@ -44,11 +44,11 @@ impl<F> Definition<F> {
 			})
 	}
 
-	pub fn name(&self) -> Option<&WithCauses<String, F>> {
+	pub fn name(&self) -> Option<&WithCauses<Name, F>> {
 		self.name.with_causes()
 	}
 
-	pub fn set_name(&mut self, name: String, cause: Option<Location<F>>) -> Result<(), Error<F>>
+	pub fn set_name(&mut self, name: Name, cause: Option<Location<F>>) -> Result<(), Error<F>>
 	where
 		F: Ord + Clone,
 	{
@@ -61,6 +61,10 @@ impl<F> Definition<F> {
 			}
 			.into()
 		})
+	}
+
+	pub fn default_name(&self, vocab: &Vocabulary) -> Option<Name> {
+		self.id.as_iri().and_then(|term| term.iri(vocab)).and_then(|iri| iri.path().file_name().and_then(|name| Name::try_from(name).ok()))
 	}
 
 	pub fn layout(&self) -> Option<&WithCauses<Id, F>> {
@@ -138,25 +142,12 @@ impl<F> Definition<F> {
 }
 
 impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
-	pub fn require_name(&self, vocab: &Vocabulary) -> Result<WithCauses<String, F>, Error<F>> where F: Clone {
-		self.name.clone().unwrap_or_else_try(|| match self.id {
-			Id::Iri(name) => {
-				let iri = name.iri(vocab).unwrap();
-				Ok(iri
-					.path()
-					.file_name()
-					.ok_or_else(|| {
-						Caused::new(
-							error::LayoutFieldMissingName(self.id).into(),
-							self.causes().preferred().cloned(),
-						)
-					})?
-					.into())
-			}
-			Id::Blank(_) => Err(Caused::new(
+	pub fn require_name(&self, vocab: &Vocabulary) -> Result<WithCauses<Name, F>, Error<F>> where F: Clone {
+		self.name.clone().unwrap_or_else_try(|| {
+			self.default_name(vocab).ok_or_else(|| Caused::new(
 				error::LayoutFieldMissingName(self.id).into(),
 				self.causes().preferred().cloned(),
-			)),
+			))
 		})
 	}
 

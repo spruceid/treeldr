@@ -1,4 +1,4 @@
-use crate::WithCauses;
+use crate::{WithCauses, vocab::Name};
 
 pub mod regexp;
 
@@ -7,7 +7,7 @@ pub use regexp::RegExp;
 /// Literal value layout.
 pub struct Literal<F> {
 	/// Layout name.
-	name: WithCauses<String, F>,
+	name: WithCauses<Name, F>,
 
 	/// Regular expression defining the members of the layout.
 	regexp: RegExp,
@@ -17,11 +17,11 @@ pub struct Literal<F> {
 }
 
 impl<F> Literal<F> {
-	pub fn new(regexp: RegExp, name: WithCauses<String, F>, should_inline: bool) -> Self {
+	pub fn new(regexp: RegExp, name: WithCauses<Name, F>, should_inline: bool) -> Self {
 		Self { name, regexp, should_inline }
 	}
 
-	pub fn name(&self) -> &str {
+	pub fn name(&self) -> &Name {
 		&self.name
 	}
 

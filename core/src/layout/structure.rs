@@ -1,19 +1,19 @@
-use crate::{layout, prop, Documentation, WithCauses};
+use crate::{layout, prop, vocab::Name, Documentation, WithCauses};
 use shelves::Ref;
 
 /// Structure layout.
 pub struct Struct<F> {
-	name: WithCauses<String, F>,
+	name: WithCauses<Name, F>,
 	fields: Vec<Field<F>>,
 }
 
 impl<F> Struct<F> {
-	pub fn new(name: WithCauses<String, F>, fields: Vec<Field<F>>) -> Self {
+	pub fn new(name: WithCauses<Name, F>, fields: Vec<Field<F>>) -> Self {
 		Self { name, fields }
 	}
 
-	pub fn name(&self) -> &str {
-		self.name.as_str()
+	pub fn name(&self) -> &Name {
+		&self.name
 	}
 
 	pub fn fields(&self) -> &[Field<F>] {
@@ -24,7 +24,7 @@ impl<F> Struct<F> {
 /// Layout field.
 pub struct Field<F> {
 	prop: WithCauses<Ref<prop::Definition<F>>, F>,
-	name: WithCauses<String, F>,
+	name: WithCauses<Name, F>,
 	label: Option<String>,
 	layout: WithCauses<Ref<super::Definition<F>>, F>,
 	required: WithCauses<bool, F>,
@@ -35,7 +35,7 @@ pub struct Field<F> {
 impl<F> Field<F> {
 	pub fn new(
 		prop: WithCauses<Ref<prop::Definition<F>>, F>,
-		name: WithCauses<String, F>,
+		name: WithCauses<Name, F>,
 		label: Option<String>,
 		layout: WithCauses<Ref<super::Definition<F>>, F>,
 		required: WithCauses<bool, F>,
@@ -57,8 +57,8 @@ impl<F> Field<F> {
 		*self.prop.inner()
 	}
 
-	pub fn name(&self) -> &str {
-		self.name.inner().as_str()
+	pub fn name(&self) -> &Name {
+		&self.name
 	}
 
 	pub fn label(&self) -> Option<&str> {

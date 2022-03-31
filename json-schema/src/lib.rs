@@ -45,8 +45,8 @@ pub fn generate<F>(
 	);
 
 	let title = match layout.preferred_label(model) {
-		Some(label) => label,
-		None => name,
+		Some(label) => label.to_string(),
+		None => name.to_pascal_case(),
 	};
 	json_schema.insert("title".into(), title.into());
 	generate_layout(
@@ -161,7 +161,7 @@ fn generate_struct<F>(
 		let mut type_schema = serde_json::Map::new();
 
 		type_schema.insert("type".into(), "string".into());
-		type_schema.insert("pattern".into(), s.name().into());
+		type_schema.insert("pattern".into(), s.name().to_pascal_case().into());
 
 		properties.insert(name.into(), type_schema.into());
 		required_properties.push(name.into());
@@ -212,10 +212,10 @@ fn generate_struct<F>(
 			);
 		}
 
-		properties.insert(field.name().into(), field_schema.into());
+		properties.insert(field.name().to_camel_case().into(), field_schema.into());
 
 		if field.is_required() {
-			required_properties.push(serde_json::Value::from(field.name()));
+			required_properties.push(serde_json::Value::from(field.name().to_camel_case()));
 		}
 	}
 

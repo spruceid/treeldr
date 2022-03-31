@@ -591,15 +591,17 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 
 		if let Some(iri) = id.iri(ctx.vocabulary()) {
 			if let Some(name) = iri.path().file_name() {
-				quads.push(Loc(
-					Quad(
-						Loc(Id::Iri(id), id_loc.clone()),
-						Loc(Term::TreeLdr(TreeLdr::Name), id_loc.clone()),
-						Loc(Object::Literal(Literal::String(Loc(name.to_string().into(), id_loc.clone()))), id_loc.clone()),
-						None,
-					),
-					id_loc.clone(),
-				));
+				if let Ok(name) = Name::new(name) {
+					quads.push(Loc(
+						Quad(
+							Loc(Id::Iri(id), id_loc.clone()),
+							Loc(Term::TreeLdr(TreeLdr::Name), id_loc.clone()),
+							Loc(Object::Literal(Literal::String(Loc(name.to_string().into(), id_loc.clone()))), id_loc.clone()),
+							None,
+						),
+						id_loc.clone(),
+					));
+				}
 			}
 		}
 

@@ -1,21 +1,21 @@
-use crate::WithCauses;
+use crate::{WithCauses, vocab::Name};
 use shelves::Ref;
 
 /// Sum type.
 pub struct Sum<F> {
-	name: WithCauses<String, F>,
+	name: WithCauses<Name, F>,
 	options: Vec<Ref<super::Definition<F>>>,
 }
 
 impl<F> Sum<F> {
 	pub fn new(
-		name: WithCauses<String, F>,
+		name: WithCauses<Name, F>,
 		options: Vec<Ref<super::Definition<F>>>,
 	) -> Self {
 		Self { name, options }
 	}
 
-	pub fn name(&self) -> &str {
+	pub fn name(&self) -> &Name {
 		&self.name
 	}
 
