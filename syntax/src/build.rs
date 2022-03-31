@@ -218,7 +218,7 @@ impl<'v, F> Context<'v, F> {
 		&mut self,
 		label: BlankLabel,
 		quads: &mut Vec<LocQuad<F>>,
-		Loc(options, loc): Loc<Vec<Loc<crate::TypeExpr<F>, F>>, F>
+		Loc(options, loc): Loc<Vec<Loc<crate::InnerTypeExpr<F>, F>>, F>
 	) -> Result<(), Loc<Error<F>, F>>
 	where
 		F: Clone + Ord
@@ -252,7 +252,7 @@ impl<'v, F> Context<'v, F> {
 		&mut self,
 		label: BlankLabel,
 		quads: &mut Vec<LocQuad<F>>,
-		Loc(options, loc): Loc<Vec<Loc<crate::LayoutExpr<F>, F>>, F>
+		Loc(options, loc): Loc<Vec<Loc<crate::InnerLayoutExpr<F>, F>>, F>
 	) -> Result<(), Loc<Error<F>, F>>
 	where
 		F: Clone + Ord
@@ -283,7 +283,7 @@ impl<'v, F> Context<'v, F> {
 
 			Ok(Loc(Object::Blank(variant_label), loc))
 		})?;
-		
+
 		quads.push(Loc(
 			Quad(
 				Loc(Id::Blank(label), loc.clone()),
@@ -658,7 +658,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
 	}
 }
 
-impl<F: Clone + Ord> Build<F> for Loc<crate::TypeExpr<F>, F> {
+impl<F: Clone + Ord> Build<F> for Loc<crate::OuterTypeExpr<F>, F> {
 	type Target = Loc<Object<F>, F>;
 
 	fn build(
@@ -669,18 +669,34 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::TypeExpr<F>, F> {
 		let Loc(ty, loc) = self;
 
 		match ty {
-			crate::TypeExpr::Id(id) => {
+			crate::OuterTypeExpr::Inner(e) => Loc(e, loc).build(ctx, quads),
+			crate::OuterTypeExpr::Union(options) => {
+				let label = ctx.insert_union(loc.clone());
+				ctx.generate_union_type(label, quads, Loc(options, loc.clone()))?;
+				Ok(Loc(Object::Blank(label), loc))
+			}
+		}
+	}
+}
+
+impl<F: Clone + Ord> Build<F> for Loc<crate::InnerTypeExpr<F>, F> {
+	type Target = Loc<Object<F>, F>;
+
+	fn build(
+		self,
+		ctx: &mut Context<F>,
+		quads: &mut Vec<LocQuad<F>>,
+	) -> Result<Self::Target, Loc<Error<F>, F>> {
+		let Loc(ty, loc) = self;
+
+		match ty {
+			crate::InnerTypeExpr::Id(id) => {
 				let Loc(id, _) = id.build(ctx, quads)?;
 				Ok(Loc(Object::Iri(id), loc))
 			}
-			crate::TypeExpr::Reference(r) => r.build(ctx, quads),
-			crate::TypeExpr::Literal(lit) => {
+			crate::InnerTypeExpr::Reference(r) => r.build(ctx, quads),
+			crate::InnerTypeExpr::Literal(lit) => {
 				let label = ctx.insert_literal(quads, Loc(lit, loc.clone()));
-				Ok(Loc(Object::Blank(label), loc))
-			}
-			crate::TypeExpr::Union(options) => {
-				let label = ctx.insert_union(loc.clone());
-				ctx.generate_union_type(label, quads, Loc(options, loc.clone()))?;
 				Ok(Loc(Object::Blank(label), loc))
 			}
 		}
@@ -940,7 +956,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 	}
 }
 
-impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutExpr<F>, F> {
+impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 	type Target = Loc<Object<F>, F>;
 
 	fn build(
@@ -951,11 +967,32 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 		let Loc(ty, loc) = self;
 
 		match ty {
-			crate::LayoutExpr::Id(id) => {
+			crate::OuterLayoutExpr::Inner(e) => Loc(e, loc).build(ctx, quads),
+			crate::OuterLayoutExpr::Union(options) => {
+				let label = ctx.insert_union(loc.clone());
+				ctx.generate_union_layout(label, quads, Loc(options, loc.clone()))?;
+				Ok(Loc(Object::Blank(label), loc))
+			}
+		}
+	}
+}
+
+impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
+	type Target = Loc<Object<F>, F>;
+
+	fn build(
+		self,
+		ctx: &mut Context<F>,
+		quads: &mut Vec<LocQuad<F>>
+	) -> Result<Self::Target, Loc<Error<F>, F>> {
+		let Loc(ty, loc) = self;
+
+		match ty {
+			crate::InnerLayoutExpr::Id(id) => {
 				let Loc(id, _) = id.build(ctx, quads)?;
 				Ok(Loc(Object::Iri(id), loc))
 			}
-			crate::LayoutExpr::Reference(r) => {
+			crate::InnerLayoutExpr::Reference(r) => {
 				let deref_layout = r.build(ctx, quads)?;
 				let layout = ctx.vocabulary.new_blank_label();
 
@@ -981,14 +1018,9 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 
 				Ok(Loc(Object::Blank(layout), loc))
 			}
-			crate::LayoutExpr::Literal(lit) => {
+			crate::InnerLayoutExpr::Literal(lit) => {
 				let layout = ctx.insert_literal(quads, Loc(lit, loc.clone()));
 				Ok(Loc(Object::Blank(layout), loc))
-			}
-			crate::LayoutExpr::Union(options) => {
-				let label = ctx.insert_union(loc.clone());
-				ctx.generate_union_layout(label, quads, Loc(options, loc.clone()))?;
-				Ok(Loc(Object::Blank(label), loc))
 			}
 		}
 	}
