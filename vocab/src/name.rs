@@ -74,22 +74,14 @@ fn normalize(id: &str) -> Result<String, InvalidName> {
 	let mut result = String::new();
 	let mut prev = None;
 	let mut boundary = true;
-	let mut separated = true;
 	let mut chars = id.chars().peekable();
 
 	while let Some(c) = chars.next() {
 		match c {
 			c if c.is_digit(10) && result.is_empty() => break,
-			'%' => {
-				// authorized in first position.
-				if !result.is_empty() {
-					break;
-				}
-			}
 			'_' | ' ' | '-' => {
 				if !boundary {
-					boundary = true;
-					separated = false
+					boundary = true
 				}
 			}
 			c if c.is_alphanumeric() => {
@@ -97,13 +89,14 @@ fn normalize(id: &str) -> Result<String, InvalidName> {
 					boundary = true
 				}
 
-				if boundary && !separated {
-					result.push('_');
-					separated = true
+				if boundary {
+					if !result.is_empty() {
+						result.push('_');
+					}
+					boundary = false
 				}
 
 				result.push(c.to_lowercase().next().unwrap());
-				boundary = false
 			}
 			_ => {
 				return Err(InvalidName);
@@ -159,7 +152,7 @@ impl Name {
 	/// ## Example
 	///
 	/// ```
-	/// # use vocab::Name;
+	/// # use treeldr_vocab::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
 	/// assert_eq!(name.to_snake_case(), "file_not_found_exception")
 	/// ```
@@ -172,7 +165,7 @@ impl Name {
 	/// ## Example
 	///
 	/// ```
-	/// # use vocab::Name;
+	/// # use treeldr_vocab::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
 	/// assert_eq!(name.to_camel_case(), "fileNotFoundException")
 	/// ```
@@ -201,7 +194,7 @@ impl Name {
 	/// ## Example
 	///
 	/// ```
-	/// # use vocab::Name;
+	/// # use treeldr_vocab::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
 	/// assert_eq!(name.to_pascal_case(), "FileNotFoundException")
 	/// ```
@@ -225,7 +218,7 @@ impl Name {
 	/// ## Example
 	///
 	/// ```
-	/// # use vocab::Name;
+	/// # use treeldr_vocab::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
 	/// assert_eq!(name.to_kebab_case(), "file-not-found-exception")
 	/// ```
