@@ -1,5 +1,5 @@
 use super::{error, Error};
-use crate::{vocab::Name, Caused, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
+use crate::{vocab::Name, Caused, Documentation, Id, MaybeSet, WithCauses};
 use locspan::Location;
 
 /// Layout field definition.
@@ -37,15 +37,31 @@ impl<F> Definition<F> {
 		})
 	}
 
-	pub fn default_name(&self, vocab: &Vocabulary) -> Option<Name> {
-		self.id
-			.as_iri()
-			.and_then(|term| term.iri(vocab))
-			.and_then(|iri| {
-				iri.path()
-					.file_name()
-					.and_then(|name| Name::try_from(name).ok())
-			})
+	/// Build a default name for this layout.
+	pub fn default_name(
+		&self,
+		context: &crate::build::Context<F>,
+		cause: Option<Location<F>>,
+	) -> Result<Option<Caused<Name, F>>, Error<F>>
+	where
+		F: Clone,
+	{
+		if let Id::Iri(iri) = self.id {
+			if let Some(name) = iri.iri(context.vocabulary()).unwrap().path().file_name() {
+				if let Ok(name) = Name::new(name) {
+					return Ok(Some(Caused::new(name, cause)));
+				}
+			}
+		}
+
+		if let Some(layout_id) = self.layout.with_causes() {
+			let layout = context.require_layout(*layout_id.inner(), layout_id.causes().preferred().cloned())?;
+			if let Some(name) = layout.name() {
+				return Ok(Some(Caused::new(name.inner().clone(), cause)));
+			}
+		}
+
+		Ok(None)
 	}
 
 	pub fn layout(&self) -> Option<&WithCauses<Id, F>> {
@@ -70,17 +86,15 @@ impl<F> Definition<F> {
 }
 
 impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
-	pub fn require_name(&self, vocab: &Vocabulary) -> Result<WithCauses<Name, F>, Error<F>>
+	pub fn require_name(&self) -> Result<WithCauses<Name, F>, Error<F>>
 	where
 		F: Clone,
 	{
-		self.name.clone().unwrap_or_else_try(|| {
-			self.default_name(vocab).ok_or_else(|| {
-				Caused::new(
-					error::LayoutFieldMissingName(self.id).into(),
-					self.causes().preferred().cloned(),
-				)
-			})
+		self.name.clone().ok_or_else(|| {
+			Caused::new(
+				error::LayoutFieldMissingName(self.id).into(),
+				self.causes().preferred().cloned(),
+			)
 		})
 	}
 
@@ -88,10 +102,9 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 		&self,
 		label: Option<String>,
 		doc: Documentation,
-		vocab: &Vocabulary,
 		nodes: &super::super::context::AllocatedNodes<F>,
 	) -> Result<crate::layout::Variant<F>, Error<F>> {
-		let name = self.require_name(vocab)?;
+		let name = self.require_name()?;
 
 		let layout = self.layout.clone().try_map_with_causes(|layout_id| {
 			Ok(*nodes

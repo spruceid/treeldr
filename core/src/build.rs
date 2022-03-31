@@ -79,6 +79,9 @@ impl<F: Clone + Ord> Context<F> {
 					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Field)) => {
 						self.declare_layout_field(id, Some(loc.cloned()));
 					}
+					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Variant)) => {
+						self.declare_layout_variant(id, Some(loc.cloned()));
+					}
 					_ => (),
 				}
 			}

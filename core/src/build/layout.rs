@@ -16,7 +16,7 @@ pub struct Definition<F> {
 
 	/// Optional name.
 	///
-	/// If not provided, the name is generated using the `generate_default_name`
+	/// If not provided, the name is generated using the `default_name`
 	/// method. If it conflicts with another name or failed to be generated,
 	/// then a name must be explicitly defined by the user.
 	name: MaybeSet<vocab::Name, F>,
@@ -101,7 +101,7 @@ impl<F> Definition<F> {
 	}
 
 	/// Build a default name for this layout.
-	pub fn compute_default_name(
+	pub fn default_name(
 		&self,
 		context: &super::Context<F>,
 		cause: Option<Location<F>>,
@@ -400,7 +400,7 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 							let label = node.label().map(String::from);
 							let doc = node.documentation().clone();
 							Ok(WithCauses::new(
-								variant.build(label, doc, vocab, nodes)?,
+								variant.build(label, doc, nodes)?,
 								variant_causes,
 							))
 						})

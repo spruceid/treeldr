@@ -213,25 +213,44 @@ impl<F> Context<F> {
 		Ok(())
 	}
 
-	/// Assigns default name for layout that don't have a name yet.
+	/// Assigns default name for layouts/variants that don't have a name yet.
 	pub fn assign_default_names(&mut self) -> Result<(), Error<F>>
 	where
 		F: Ord + Clone,
 	{
-		let mut default_names = HashMap::new();
+		// Start with the layouts.
+		let mut default_layout_names = HashMap::new();
 		for (id, node) in &self.nodes {
 			if let Some(layout) = node.as_layout() {
 				if let Some(name) =
-					layout.compute_default_name(self, layout.causes().preferred().cloned())?
+					layout.default_name(self, layout.causes().preferred().cloned())?
 				{
-					default_names.insert(*id, name);
+					default_layout_names.insert(*id, name);
 				}
 			}
 		}
-
-		for (id, name) in default_names {
+		for (id, name) in default_layout_names {
 			let (name, cause) = name.into_parts();
 			let layout = self.require_layout_mut(id, cause.clone())?;
+			if layout.name().is_none() {
+				layout.set_name(name, cause)?;
+			}
+		}
+
+		// Now the layouts variants.
+		let mut default_variant_names = HashMap::new();
+		for (id, node) in &self.nodes {
+			if let Some(layout) = node.as_layout_variant() {
+				if let Some(name) =
+					layout.default_name(self, layout.causes().preferred().cloned())?
+				{
+					default_variant_names.insert(*id, name);
+				}
+			}
+		}
+		for (id, name) in default_variant_names {
+			let (name, cause) = name.into_parts();
+			let layout = self.require_layout_variant_mut(id, cause.clone())?;
 			if layout.name().is_none() {
 				layout.set_name(name, cause)?;
 			}
@@ -391,7 +410,7 @@ impl<F> Context<F> {
 		}
 	}
 
-	/// Declare the given `id` as a layout.
+	/// Declare the given `id` as a layout field.
 	pub fn declare_layout_field(&mut self, id: Id, cause: Option<Location<F>>)
 	where
 		F: Ord,
@@ -400,6 +419,19 @@ impl<F> Context<F> {
 			Some(node) => node.declare_layout_field(cause),
 			None => {
 				self.nodes.insert(id, Node::new_layout_field(id, cause));
+			}
+		}
+	}
+
+	/// Declare the given `id` as a layout variant.
+	pub fn declare_layout_variant(&mut self, id: Id, cause: Option<Location<F>>)
+	where
+		F: Ord,
+	{
+		match self.nodes.get_mut(&id) {
+			Some(node) => node.declare_layout_variant(cause),
+			None => {
+				self.nodes.insert(id, Node::new_layout_variant(id, cause));
 			}
 		}
 	}
@@ -560,6 +592,27 @@ impl<F> Context<F> {
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::LayoutField),
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
+	pub fn require_layout_variant_mut(
+		&mut self,
+		id: Id,
+		cause: Option<Location<F>>,
+	) -> Result<&mut WithCauses<layout::variant::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		match self.get_mut(id) {
+			Some(node) => node.require_layout_variant_mut(cause),
+			None => Err(Caused::new(
+				error::NodeUnknown {
+					id,
+					expected_ty: Some(node::Type::LayoutVariant),
 				}
 				.into(),
 				cause,

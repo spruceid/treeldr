@@ -337,6 +337,15 @@ impl<F> Node<Components<F>> {
 			.set_once(cause, || layout::field::Definition::new(self.id))
 	}
 
+	pub fn declare_layout_variant(&mut self, cause: Option<Location<F>>)
+	where
+		F: Ord,
+	{
+		self.value
+			.layout_variant
+			.set_once(cause, || layout::variant::Definition::new(self.id))
+	}
+
 	pub fn declare_list(&mut self, cause: Option<Location<F>>)
 	where
 		F: Ord,

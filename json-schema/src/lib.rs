@@ -130,8 +130,9 @@ fn generate_layout<F>(
 			Ok(())
 		}
 		Description::Struct(s) => generate_struct(json, model, embedding, type_property, s),
-		Description::Enum(_) => {
-			todo!("json-schema enum layout")
+		Description::Enum(enm) => {
+			generate_enum_type(json, model, enm)?;
+			Ok(())
 		}
 		Description::Literal(lit) => {
 			generate_literal_type(json, lit);
@@ -268,8 +269,9 @@ fn generate_layout_ref<F>(
 			);
 			Ok(())
 		}
-		Description::Enum(_) => {
-			todo!("json-schema enum layout")
+		Description::Enum(enm) => {
+			generate_enum_type(json, model, enm)?;
+			Ok(())
 		}
 		Description::Literal(lit) => {
 			generate_literal_type(json, lit);
@@ -280,6 +282,27 @@ fn generate_layout_ref<F>(
 			Ok(())
 		}
 	}
+}
+
+fn generate_enum_type<F>(
+	def: &mut serde_json::Map<String, serde_json::Value>,
+	model: &treeldr::Model<F>,
+	enm: &layout::Enum<F>
+) -> Result<(), Error<F>> {
+	let mut variants = Vec::with_capacity(enm.variants().len());
+	for variant in enm.variants() {
+		let layout_ref = variant.layout().unwrap();
+		let mut variant_json = serde_json::Map::new();
+		generate_layout_ref(&mut variant_json, model, layout_ref)?;
+		variants.push(serde_json::Value::Object(variant_json))
+	}
+	
+	def.insert(
+		"oneOf".into(),
+		variants.into()
+	);
+
+	Ok(())
 }
 
 fn generate_literal_type<F>(
