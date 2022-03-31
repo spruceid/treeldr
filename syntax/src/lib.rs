@@ -151,6 +151,7 @@ pub enum TypeExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<TypeExpr<F>, F>>),
 	Literal(Literal),
+	Union(Vec<Loc<TypeExpr<F>, F>>)
 }
 
 impl<F: Clone> TypeExpr<F> {
@@ -162,6 +163,9 @@ impl<F: Clone> TypeExpr<F> {
 				r.location().clone(),
 			))),
 			Self::Literal(lit) => LayoutExpr::Literal(lit.clone()),
+			Self::Union(options) => LayoutExpr::Union(options.iter().map(|Loc(ty_expr, loc)| {
+				Loc(ty_expr.implicit_layout_expr(), loc.clone())
+			}).collect()),
 		}
 	}
 }
@@ -202,6 +206,7 @@ pub enum LayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<LayoutExpr<F>, F>>),
 	Literal(Literal),
+	Union(Vec<Loc<LayoutExpr<F>, F>>)
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]

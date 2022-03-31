@@ -99,6 +99,9 @@ pub struct Context<'v, F> {
 
 	/// Associates each literal type/value to a blank node label.
 	literal: BTreeMap<Loc<crate::Literal, F>, BlankLabel>,
+
+	/// Associates each union type (location) to a blank node label.
+	unions: BTreeMap<Location<F>, BlankLabel>
 }
 
 impl<'v, F> Context<'v, F> {
@@ -109,6 +112,7 @@ impl<'v, F> Context<'v, F> {
 			prefixes: HashMap::new(),
 			scope: None,
 			literal: BTreeMap::new(),
+			unions: BTreeMap::new()
 		}
 	}
 
@@ -208,6 +212,117 @@ impl<'v, F> Context<'v, F> {
 				label
 			}
 		}
+	}
+	
+	fn generate_union_type(
+		&mut self,
+		label: BlankLabel,
+		quads: &mut Vec<LocQuad<F>>,
+		Loc(options, loc): Loc<Vec<Loc<crate::TypeExpr<F>, F>>, F>
+	) -> Result<(), Loc<Error<F>, F>>
+	where
+		F: Clone + Ord
+	{
+		let options_list = options.into_iter().try_into_rdf_list(self, quads, loc.clone(), |ty_expr, ctx, quads| {
+			ty_expr.build(ctx, quads)
+		})?;
+		quads.push(Loc(
+			Quad(
+				Loc(Id::Blank(label), loc.clone()),
+				Loc(Term::Rdf(Rdf::Type), loc.clone()),
+				Loc(Object::Iri(Term::Rdfs(Rdfs::Class)), loc.clone()),
+				None,
+			),
+			loc.clone(),
+		));
+		quads.push(Loc(
+			Quad(
+				Loc(Id::Blank(label), options_list.location().clone()),
+				Loc(Term::Owl(Owl::UnionOf), options_list.location().clone()),
+				options_list,
+				None,
+			),
+			loc.clone(),
+		));
+
+		Ok(())
+	}
+
+	fn generate_union_layout(
+		&mut self,
+		label: BlankLabel,
+		quads: &mut Vec<LocQuad<F>>,
+		Loc(options, loc): Loc<Vec<Loc<crate::LayoutExpr<F>, F>>, F>
+	) -> Result<(), Loc<Error<F>, F>>
+	where
+		F: Clone + Ord
+	{
+		let variants_list = options.into_iter().try_into_rdf_list(self, quads, loc.clone(), |ty_expr, ctx, quads| {
+			let loc = ty_expr.location().clone();
+			let variant_label = ctx.vocabulary.new_blank_label();
+			let ty = ty_expr.build(ctx, quads)?;
+
+			quads.push(Loc(
+				Quad(
+					Loc(Id::Blank(variant_label), loc.clone()),
+					Loc(Term::Rdf(Rdf::Type), loc.clone()),
+					Loc(Object::Iri(Term::TreeLdr(TreeLdr::Variant)), loc.clone()),
+					None,
+				),
+				loc.clone(),
+			));
+			quads.push(Loc(
+				Quad(
+					Loc(Id::Blank(variant_label), loc.clone()),
+					Loc(Term::TreeLdr(TreeLdr::Format), loc.clone()),
+					ty,
+					None,
+				),
+				loc.clone(),
+			));
+
+			Ok(Loc(Object::Blank(variant_label), loc))
+		})?;
+		
+		quads.push(Loc(
+			Quad(
+				Loc(Id::Blank(label), loc.clone()),
+				Loc(Term::Rdf(Rdf::Type), loc.clone()),
+				Loc(Object::Iri(Term::TreeLdr(TreeLdr::Layout)), loc.clone()),
+				None,
+			),
+			loc.clone(),
+		));
+		quads.push(Loc(
+			Quad(
+				Loc(Id::Blank(label), loc.clone()),
+				Loc(Term::TreeLdr(TreeLdr::LayoutFor), loc.clone()),
+				Loc(Object::Blank(label), loc.clone()),
+				None,
+			),
+			loc.clone(),
+		));
+		quads.push(Loc(
+			Quad(
+				Loc(Id::Blank(label), loc.clone()),
+				Loc(Term::TreeLdr(TreeLdr::Enumeration), loc.clone()),
+				variants_list,
+				None,
+			),
+			loc.clone(),
+		));
+
+		Ok(())
+	}
+
+	pub fn insert_union(
+		&mut self,
+		loc: Location<F>,
+	) -> BlankLabel
+	where
+		F: Clone + Ord
+	{
+		*self.unions.entry(loc.clone()).or_insert_with(|| self.vocabulary.new_blank_label())
 	}
 }
 
@@ -563,6 +678,11 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::TypeExpr<F>, F> {
 				let label = ctx.insert_literal(quads, Loc(lit, loc.clone()));
 				Ok(Loc(Object::Blank(label), loc))
 			}
+			crate::TypeExpr::Union(options) => {
+				let label = ctx.insert_union(loc.clone());
+				ctx.generate_union_type(label, quads, Loc(options, loc.clone()))?;
+				Ok(Loc(Object::Blank(label), loc))
+			}
 		}
 	}
 }
@@ -627,56 +747,18 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 		}
 
 		let Loc(fields, fields_loc) = def.fields;
-		let mut fields_head = Loc(Object::Iri(Term::Rdf(Rdf::Nil)), fields_loc);
-		for field in fields.into_iter().rev() {
+		let fields_list = fields.into_iter().try_into_rdf_list(ctx, quads, fields_loc, |field, ctx, quads| {
 			ctx.scope = Some(ty_id);
-
-			let item_label = ctx.vocabulary.new_blank_label();
-
-			let first = field.build(ctx, quads)?;
-			let first_loc = first.location().clone();
-			let list_loc = fields_head.location().clone().with(fields_head.span());
-
-			quads.push(Loc(
-				Quad(
-					Loc(Id::Blank(item_label), list_loc.clone()),
-					Loc(Term::Rdf(Rdf::Type), list_loc.clone()),
-					Loc(Object::Iri(Term::Rdf(Rdf::List)), list_loc.clone()),
-					None,
-				),
-				first_loc.clone(),
-			));
-
-			quads.push(Loc(
-				Quad(
-					Loc(Id::Blank(item_label), first_loc.clone()),
-					Loc(Term::Rdf(Rdf::First), first_loc.clone()),
-					first,
-					None,
-				),
-				first_loc.clone(),
-			));
-
-			quads.push(Loc(
-				Quad(
-					Loc(Id::Blank(item_label), fields_head.location().clone()),
-					Loc(Term::Rdf(Rdf::Rest), fields_head.location().clone()),
-					fields_head,
-					None,
-				),
-				first_loc.clone(),
-			));
-
-			fields_head = Loc(Object::Blank(item_label), list_loc);
-
+			let item = field.build(ctx, quads)?;
 			ctx.scope = None;
-		}
+			Ok(item)
+		})?;
 
 		quads.push(Loc(
 			Quad(
 				Loc(Id::Iri(id), id_loc.clone()),
 				Loc(Term::TreeLdr(TreeLdr::Fields), id_loc.clone()),
-				fields_head,
+				fields_list,
 				None,
 			),
 			id_loc,
@@ -684,6 +766,71 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 
 		Ok(())
 	}
+}
+
+pub trait TryIntoRdfList<F, T> {
+	fn try_into_rdf_list<E, K>(
+		self,
+		ctx: &mut Context<F>,
+		quads: &mut Vec<LocQuad<F>>,
+		loc: Location<F>,
+		f: K
+	) -> Result<Loc<Object<F>, F>, E> where
+	K: FnMut(T, &mut Context<F>, &mut Vec<LocQuad<F>>) -> Result<Loc<Object<F>, F>, E>;
+}
+
+impl<F: Clone, I: DoubleEndedIterator> TryIntoRdfList<F, I::Item> for I {
+	fn try_into_rdf_list<E, K>(
+		self,
+		ctx: &mut Context<F>,
+		quads: &mut Vec<LocQuad<F>>,
+		loc: Location<F>,
+		mut f: K
+	) -> Result<Loc<Object<F>, F>, E> where
+	K: FnMut(I::Item, &mut Context<F>, &mut Vec<LocQuad<F>>) -> Result<Loc<Object<F>, F>, E>
+	{
+		let mut head = Loc(Object::Iri(Term::Rdf(Rdf::Nil)), loc);
+		for item in self.rev() {
+			let item = f(item, ctx, quads)?;
+			let item_label = ctx.vocabulary.new_blank_label();
+			let item_loc = item.location().clone();
+			let list_loc = head.location().clone().with(item_loc.span());
+	
+			quads.push(Loc(
+				Quad(
+					Loc(Id::Blank(item_label), list_loc.clone()),
+					Loc(Term::Rdf(Rdf::Type), list_loc.clone()),
+					Loc(Object::Iri(Term::Rdf(Rdf::List)), list_loc.clone()),
+					None,
+				),
+				item_loc.clone(),
+			));
+	
+			quads.push(Loc(
+				Quad(
+					Loc(Id::Blank(item_label), item_loc.clone()),
+					Loc(Term::Rdf(Rdf::First), item_loc.clone()),
+					item,
+					None,
+				),
+				item_loc.clone(),
+			));
+	
+			quads.push(Loc(
+				Quad(
+					Loc(Id::Blank(item_label), head.location().clone()),
+					Loc(Term::Rdf(Rdf::Rest), head.location().clone()),
+					head,
+					None,
+				),
+				item_loc.clone(),
+			));
+	
+			head = Loc(Object::Blank(item_label), list_loc);
+		}
+
+		Ok(head)
+	}	
 }
 
 impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
@@ -837,6 +984,11 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutExpr<F>, F> {
 			crate::LayoutExpr::Literal(lit) => {
 				let layout = ctx.insert_literal(quads, Loc(lit, loc.clone()));
 				Ok(Loc(Object::Blank(layout), loc))
+			}
+			crate::LayoutExpr::Union(options) => {
+				let label = ctx.insert_union(loc.clone());
+				ctx.generate_union_layout(label, quads, Loc(options, loc.clone()))?;
+				Ok(Loc(Object::Blank(label), loc))
 			}
 		}
 	}
