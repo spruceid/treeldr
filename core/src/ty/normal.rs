@@ -32,7 +32,9 @@ impl<F> Normal<F> {
 	}
 }
 
-pub struct Properties<'a, F>(std::collections::hash_map::Iter<'a, Ref<prop::Definition<F>>, Causes<F>>);
+pub struct Properties<'a, F>(
+	std::collections::hash_map::Iter<'a, Ref<prop::Definition<F>>, Causes<F>>,
+);
 
 impl<'a, F> Iterator for Properties<'a, F> {
 	type Item = (Ref<prop::Definition<F>>, &'a Causes<F>);

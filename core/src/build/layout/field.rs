@@ -1,5 +1,5 @@
 use super::{error, Error};
-use crate::{Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses, vocab::Name};
+use crate::{vocab::Name, Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
 use locspan::Location;
 
 /// Layout field definition.
@@ -64,7 +64,14 @@ impl<F> Definition<F> {
 	}
 
 	pub fn default_name(&self, vocab: &Vocabulary) -> Option<Name> {
-		self.id.as_iri().and_then(|term| term.iri(vocab)).and_then(|iri| iri.path().file_name().and_then(|name| Name::try_from(name).ok()))
+		self.id
+			.as_iri()
+			.and_then(|term| term.iri(vocab))
+			.and_then(|iri| {
+				iri.path()
+					.file_name()
+					.and_then(|name| Name::try_from(name).ok())
+			})
 	}
 
 	pub fn layout(&self) -> Option<&WithCauses<Id, F>> {
@@ -87,7 +94,10 @@ impl<F> Definition<F> {
 			})
 	}
 
-	pub fn require_layout(&self, causes: &Causes<F>) -> Result<&WithCauses<Id, F>, Error<F>> where F: Clone {
+	pub fn require_layout(&self, causes: &Causes<F>) -> Result<&WithCauses<Id, F>, Error<F>>
+	where
+		F: Clone,
+	{
 		self.layout.value_or_else(|| {
 			Caused::new(
 				error::LayoutFieldMissingLayout(self.id).into(),
@@ -142,12 +152,17 @@ impl<F> Definition<F> {
 }
 
 impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
-	pub fn require_name(&self, vocab: &Vocabulary) -> Result<WithCauses<Name, F>, Error<F>> where F: Clone {
+	pub fn require_name(&self, vocab: &Vocabulary) -> Result<WithCauses<Name, F>, Error<F>>
+	where
+		F: Clone,
+	{
 		self.name.clone().unwrap_or_else_try(|| {
-			self.default_name(vocab).ok_or_else(|| Caused::new(
-				error::LayoutFieldMissingName(self.id).into(),
-				self.causes().preferred().cloned(),
-			))
+			self.default_name(vocab).ok_or_else(|| {
+				Caused::new(
+					error::LayoutFieldMissingName(self.id).into(),
+					self.causes().preferred().cloned(),
+				)
+			})
 		})
 	}
 

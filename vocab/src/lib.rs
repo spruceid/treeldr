@@ -19,9 +19,19 @@ pub enum TreeLdr {
 	#[iri("tldr:layoutFor")]
 	LayoutFor,
 
+	/// Gives the layout of a field or enumeration variant.
+	#[iri("tldr:format")]
+	Format,
+
 	#[iri("tldr:fields")]
 	Fields,
 
+	/// Structure layout field.
+	///
+	/// The name of the field (required) is given by the `treeldr:name`
+	/// property.
+	/// The payload of the variant (required) is given by the `treeldr:format`
+	/// property.
 	#[iri("tldr:Field")]
 	Field,
 
@@ -31,6 +41,10 @@ pub enum TreeLdr {
 	#[iri("tldr:fieldFor")]
 	FieldFor,
 
+	/// Reference layout target.
+	///
+	/// Used to declare that a layout is a reference, and to what layout it
+	/// dereferences.
 	#[iri("tldr:derefTo")]
 	DerefTo,
 
@@ -46,13 +60,29 @@ pub enum TreeLdr {
 	/// expression object.
 	#[iri("tldr:matches")]
 	Matches,
+
+	/// Enumeration layout.
+	///
+	/// Declares that a layout is an enumeration, and what list defined the
+	/// items of the enumeration. List object must be a list of layouts.
+	#[iri("tldr:enumeration")]
+	Enumeration,
+
+	/// Enumeration layout variant.
+	///
+	/// The name of the variant (required) is given by the `treeldr:name`
+	/// property.
+	/// The payload of the variant (optional) is given by the `treeldr:format`
+	/// property.
+	#[iri("tldr:Variant")]
+	Variant,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("owl" = "http://www.w3.org/2002/07/owl#")]
 pub enum Owl {
 	#[iri("owl:unionOf")]
-	UnionOf
+	UnionOf,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

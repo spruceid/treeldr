@@ -19,6 +19,14 @@ impl<F> Struct<F> {
 	pub fn fields(&self) -> &[Field<F>] {
 		&self.fields
 	}
+
+	pub fn as_sum_option(&self) -> Option<Ref<super::Definition<F>>> {
+		if self.fields.len() == 1 {
+			Some(self.fields[0].layout())
+		} else {
+			None
+		}
+	}
 }
 
 /// Layout field.

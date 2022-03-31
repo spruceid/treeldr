@@ -54,13 +54,10 @@ fn generate_layout_term_definition<F>(
 				generate_struct_context(model, s.fields())?.into(),
 			);
 
-			ld_context.insert(s.name().to_pascal_case().into(), def.into());
+			ld_context.insert(s.name().to_pascal_case(), def.into());
 		}
 		Description::Enum(_) => {
 			todo!("ld-context enum layout")
-		}
-		Description::Sum(_) => {
-			todo!("ld-context sum layout")
 		}
 		Description::Literal(lit) => {
 			let ty_ref = layout.ty();
@@ -72,7 +69,7 @@ fn generate_layout_term_definition<F>(
 					"@id".into(),
 					ty.id().display(model.vocabulary()).to_string().into(),
 				);
-				ld_context.insert(lit.name().to_pascal_case().into(), def.into());
+				ld_context.insert(lit.name().to_pascal_case(), def.into());
 			}
 		}
 		Description::Reference(_, _) => (),
@@ -96,9 +93,6 @@ fn generate_layout_type<F>(
 		}
 		Description::Enum(_) => {
 			todo!("ld-context enum layout")
-		}
-		Description::Sum(_) => {
-			todo!("ld-context sum layout")
 		}
 		Description::Literal(_) => {
 			let ty_ref = layout.ty();
@@ -142,7 +136,7 @@ fn generate_struct_context<F>(
 			field_def.into()
 		};
 
-		json.insert(field.name().to_camel_case().into(), field_def);
+		json.insert(field.name().to_camel_case(), field_def);
 	}
 
 	Ok(json)

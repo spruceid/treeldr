@@ -1,8 +1,11 @@
-use crate::{error, utils::TryCollect, vocab, Caused, Causes, Error, Id, MaybeSet, Vocabulary, WithCauses};
-use std::collections::HashSet;
+use crate::{
+	error, utils::TryCollect, vocab, Caused, Causes, Error, Id, MaybeSet, Vocabulary, WithCauses,
+};
 use locspan::Location;
+use std::collections::HashSet;
 
 pub mod field;
+pub mod variant;
 
 pub use crate::layout::{literal::RegExp, Native, Type};
 
@@ -12,7 +15,7 @@ pub struct Definition<F> {
 	id: Id,
 
 	/// Optional name.
-	/// 
+	///
 	/// If not provided, the name is generated using the `generate_default_name`
 	/// method. If it conflicts with another name or failed to be generated,
 	/// then a name must be explicitly defined by the user.
@@ -25,26 +28,30 @@ pub struct Definition<F> {
 	desc: MaybeSet<Description, F>,
 
 	/// The fields having this layout as layout.
-	/// 
+	///
 	/// This is used to generate a default name for the layout if necessary.
-	/// 
+	///
 	/// ## Example
-	/// 
+	///
 	/// ```treeldr
 	/// layout Struct {
 	///   foo: Layout
 	/// }
 	/// ```
-	/// 
+	///
 	/// Here, `Layout` is only used in `foo` which is a field of `Struct`.
 	/// A possible default name for `Layout` is hence `StructFoo`.
-	uses: HashSet<Use>
+	uses: HashSet<UsedBy>,
 }
 
+/// Layout usage.
+///
+/// For a given layout, this structure states that the layout is used by the
+/// given `field`, itself defined inside the given `user_layout`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Use {
-	layout: Id,
-	field: Id
+pub struct UsedBy {
+	user_layout: Id,
+	field: Id,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -53,7 +60,7 @@ pub enum Description {
 	Struct(Id),
 	Reference(Id),
 	Literal(RegExp),
-	Sum(Id)
+	Enum(Id),
 }
 
 impl Description {
@@ -63,7 +70,7 @@ impl Description {
 			Self::Struct(_) => Type::Struct,
 			Self::Native(n) => Type::Native(*n),
 			Self::Literal(_) => Type::Literal,
-			Self::Sum(_) => Type::Sum
+			Self::Enum(_) => Type::Enum,
 		}
 	}
 }
@@ -75,7 +82,7 @@ impl<F> Definition<F> {
 			name: MaybeSet::default(),
 			ty: MaybeSet::default(),
 			desc: MaybeSet::default(),
-			uses: HashSet::new()
+			uses: HashSet::new(),
 		}
 	}
 
@@ -89,20 +96,23 @@ impl<F> Definition<F> {
 			.value_or_else(|| Caused::new(error::LayoutMissingType(self.id).into(), cause))
 	}
 
-	pub fn add_use(&mut self, layout: Id, field: Id) {
-		self.uses.insert(Use { layout, field });
+	pub fn add_use(&mut self, user_layout: Id, field: Id) {
+		self.uses.insert(UsedBy { user_layout, field });
 	}
 
 	/// Build a default name for this layout.
 	pub fn compute_default_name(
 		&self,
 		context: &super::Context<F>,
-		cause: Option<Location<F>>
-	) -> Result<Option<Caused<vocab::Name, F>>, Error<F>> where F: Clone {
+		cause: Option<Location<F>>,
+	) -> Result<Option<Caused<vocab::Name, F>>, Error<F>>
+	where
+		F: Clone,
+	{
 		if let Id::Iri(iri) = self.id {
 			if let Some(name) = iri.iri(context.vocabulary()).unwrap().path().file_name() {
 				if let Ok(name) = vocab::Name::new(name) {
-					return Ok(Some(Caused::new(name, cause)))
+					return Ok(Some(Caused::new(name, cause)));
 				}
 			}
 		}
@@ -111,25 +121,26 @@ impl<F> Definition<F> {
 		if let Id::Iri(iri) = ty.inner() {
 			if let Some(name) = iri.iri(context.vocabulary()).unwrap().path().file_name() {
 				if let Ok(name) = vocab::Name::new(name) {
-					return Ok(Some(Caused::new(name, cause)))
+					return Ok(Some(Caused::new(name, cause)));
 				}
 			}
 		}
 
 		if self.uses.len() == 1 {
 			let u = self.uses.iter().next().unwrap();
-			let layout = context.require_layout(u.layout, cause.clone())?.inner();
-			let field = context.require_layout_field(u.field, cause.clone())?.inner();
+			let layout = context
+				.require_layout(u.user_layout, cause.clone())?
+				.inner();
+			let field = context
+				.require_layout_field(u.field, cause.clone())?
+				.inner();
 
 			if let Some(layout_name) = layout.name() {
 				if let Some(field_name) = field.name() {
 					let mut name = layout_name.inner().clone();
 					name.push_ident(field_name);
 
-					return Ok(Some(Caused::new(
-						name,
-						cause
-					)))
+					return Ok(Some(Caused::new(name, cause)));
 				}
 			}
 		}
@@ -141,7 +152,11 @@ impl<F> Definition<F> {
 		self.name.with_causes()
 	}
 
-	pub fn set_name(&mut self, name: vocab::Name, cause: Option<Location<F>>) -> Result<(), Error<F>>
+	pub fn set_name(
+		&mut self,
+		name: vocab::Name,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>>
 	where
 		F: Ord + Clone,
 	{
@@ -155,7 +170,6 @@ impl<F> Definition<F> {
 			.into()
 		})
 	}
-
 
 	pub fn description(&self) -> Option<&WithCauses<Description, F>> {
 		self.desc.with_causes()
@@ -227,15 +241,36 @@ impl<F> Definition<F> {
 	{
 		self.set_description(Description::Literal(regexp), cause)
 	}
+
+	pub fn set_enum(&mut self, items: Id, cause: Option<Location<F>>) -> Result<(), Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.set_description(Description::Enum(items), cause)
+	}
+}
+
+/// Field/layout usage.
+///
+/// For a given layout, this structure define a field used inside the layout,
+/// and the layout of this field.
+pub struct Using<F> {
+	/// Layout field.
+	pub field: Id,
+
+	/// Field layout.
+	pub field_layout: WithCauses<Id, F>,
 }
 
 impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
-	pub fn compute_uses(&self, nodes: &super::Context<F>) -> Result<Vec<(Id, WithCauses<Id, F>)>, Error<F>> {
+	pub fn compute_uses(&self, nodes: &super::Context<F>) -> Result<Vec<Using<F>>, Error<F>> {
 		let mut uses = Vec::new();
-		
+
 		if let Some(desc) = self.desc.with_causes() {
 			if let Description::Struct(fields_id) = desc.inner() {
-				let fields = nodes.require_list(*fields_id, desc.causes().preferred().cloned())?.iter(nodes);
+				let fields = nodes
+					.require_list(*fields_id, desc.causes().preferred().cloned())?
+					.iter(nodes);
 				for item in fields {
 					let (object, causes) = item?.clone().into_parts();
 					let field_id = match object {
@@ -251,7 +286,10 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 
 					// let field_layout = nodes.require_layout_mut(*field_layout_id.inner(), field_layout_id.causes().preferred().cloned())?;
 					// field_layout.add_use(self.id, field_id);
-					uses.push((field_id, field_layout_id.clone()));
+					uses.push(Using {
+						field: field_id,
+						field_layout: field_layout_id.clone(),
+					});
 				}
 			}
 		}
@@ -287,8 +325,11 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 		fn require_name<F>(
 			id: Id,
 			name: MaybeSet<vocab::Name, F>,
-			causes: &Causes<F>
-		) -> Result<WithCauses<vocab::Name, F>, Error<F>> where F: Clone {
+			causes: &Causes<F>,
+		) -> Result<WithCauses<vocab::Name, F>, Error<F>>
+		where
+			F: Clone,
+		{
 			name.ok_or_else(|| {
 				Caused::new(
 					error::LayoutMissingName(id).into(),
@@ -306,16 +347,16 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 						.inner();
 					Ok(crate::layout::Description::Reference(layout_ref, def.name))
 				}
-				Description::Struct(id) => {
+				Description::Struct(fields_id) => {
 					let name = require_name(def.id, def.name, &causes)?;
 					let fields = nodes
-						.require_list(id, desc_causes.preferred().cloned())?
+						.require_list(fields_id, desc_causes.preferred().cloned())?
 						.iter(nodes)
 						.map(|item| {
 							let (object, causes) = item?.clone().into_parts();
 							let field_id = match object {
 								vocab::Object::Literal(_) => Err(Caused::new(
-									error::LayoutLiteralField(id).into(),
+									error::LayoutLiteralField(fields_id).into(),
 									causes.preferred().cloned(),
 								)),
 								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
@@ -332,13 +373,41 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 						.try_collect()?;
 
 					let strct = crate::layout::Struct::new(name, fields);
-
 					Ok(crate::layout::Description::Struct(strct))
 				}
-				Description::Sum(options) => {
+				Description::Enum(options_id) => {
 					let name = require_name(def.id, def.name, &causes)?;
 
-					todo!()
+					let variants: Vec<_> = nodes
+						.require_list(options_id, desc_causes.preferred().cloned())?
+						.iter(nodes)
+						.map(|item| {
+							let (object, variant_causes) = item?.clone().into_parts();
+							let variant_id = match object {
+								vocab::Object::Literal(_) => Err(Caused::new(
+									error::LayoutLiteralField(id).into(),
+									causes.preferred().cloned(),
+								)),
+								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+							}?;
+
+							let variant = nodes.require_layout_variant(
+								variant_id,
+								variant_causes.preferred().cloned(),
+							)?;
+							let node = nodes.get(variant_id).unwrap();
+							let label = node.label().map(String::from);
+							let doc = node.documentation().clone();
+							Ok(WithCauses::new(
+								variant.build(label, doc, vocab, nodes)?,
+								variant_causes,
+							))
+						})
+						.try_collect()?;
+
+					let enm = crate::layout::Enum::new(name, variants);
+					Ok(crate::layout::Description::Enum(enm))
 				}
 				Description::Literal(regexp) => {
 					let name = require_name(def.id, def.name, &causes)?;

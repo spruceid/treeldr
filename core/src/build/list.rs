@@ -67,36 +67,24 @@ impl<'l, F> ListRef<'l, F> {
 }
 
 pub trait RequireList<F> {
-	fn require_list(
-		&self,
-		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<ListRef<F>, Error<F>>
+	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
 	where
 		F: Clone;
 }
 
 impl<'l, F> RequireList<F> for super::Context<F> {
-	fn require_list(
-		&self,
-		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<ListRef<F>, Error<F>>
+	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
 	where
-		F: Clone
+		F: Clone,
 	{
 		self.require_list(id, cause)
 	}
 }
 
 impl<'l, F> RequireList<F> for super::context::AllocatedNodes<F> {
-	fn require_list(
-		&self,
-		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<ListRef<F>, Error<F>>
+	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
 	where
-		F: Clone
+		F: Clone,
 	{
 		self.require_list(id, cause)
 	}
@@ -104,10 +92,7 @@ impl<'l, F> RequireList<F> for super::context::AllocatedNodes<F> {
 
 pub enum Iter<'l, F, C> {
 	Nil,
-	Cons(
-		&'l C,
-		&'l WithCauses<Definition<F>, F>,
-	),
+	Cons(&'l C, &'l WithCauses<Definition<F>, F>),
 }
 
 impl<'l, F: Clone, C: RequireList<F>> Iterator for Iter<'l, F, C> {

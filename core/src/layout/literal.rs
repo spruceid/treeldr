@@ -1,4 +1,4 @@
-use crate::{WithCauses, vocab::Name};
+use crate::{vocab::Name, WithCauses};
 
 pub mod regexp;
 
@@ -13,12 +13,16 @@ pub struct Literal<F> {
 	regexp: RegExp,
 
 	/// Should the literal type be inlined in the code?
-	should_inline: bool
+	should_inline: bool,
 }
 
 impl<F> Literal<F> {
 	pub fn new(regexp: RegExp, name: WithCauses<Name, F>, should_inline: bool) -> Self {
-		Self { name, regexp, should_inline }
+		Self {
+			name,
+			regexp,
+			should_inline,
+		}
 	}
 
 	pub fn name(&self) -> &Name {

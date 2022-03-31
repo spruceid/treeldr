@@ -1,17 +1,17 @@
 use std::{
+	borrow::Borrow,
 	cmp::Ordering,
 	convert::TryFrom,
 	fmt,
 	hash::{Hash, Hasher},
 	ops::Deref,
-	borrow::Borrow
 };
 
 /// Name.
-/// 
+///
 /// A name is a string that can serve as type/function/variable identifier in
 /// a source code.
-/// 
+///
 /// See [Unicode Standard Annex #31 (Unicode Identifier and Pattern Syntax)](https://www.unicode.org/reports/tr31/)
 #[derive(Clone, Eq, Debug)]
 pub struct Name {
@@ -155,9 +155,9 @@ impl Name {
 	}
 
 	/// Converts this name into a snake-cased identifier.
-	/// 
+	///
 	/// ## Example
-	/// 
+	///
 	/// ```
 	/// # use vocab::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
@@ -168,29 +168,26 @@ impl Name {
 	}
 
 	/// Converts this name into a camel-cased identifier.
-	/// 
+	///
 	/// ## Example
-	/// 
+	///
 	/// ```
 	/// # use vocab::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
 	/// assert_eq!(name.to_camel_case(), "fileNotFoundException")
 	/// ```
 	pub fn to_camel_case(&self) -> String {
-		let segments = self.normalized
-			.split('_')
-			.enumerate()
-			.map(|(i, segment)| {
-				if i > 0 {
-					let c = segment.chars().next().unwrap(); // segment is never empty.
-					let (_, rest) = segment.split_at(c.len_utf8());
-					let mut pascal_case_segment = c.to_uppercase().next().unwrap().to_string();
-					pascal_case_segment.push_str(rest);
-					pascal_case_segment
-				} else {
-					segment.to_string()
-				}
-			});
+		let segments = self.normalized.split('_').enumerate().map(|(i, segment)| {
+			if i > 0 {
+				let c = segment.chars().next().unwrap(); // segment is never empty.
+				let (_, rest) = segment.split_at(c.len_utf8());
+				let mut pascal_case_segment = c.to_uppercase().next().unwrap().to_string();
+				pascal_case_segment.push_str(rest);
+				pascal_case_segment
+			} else {
+				segment.to_string()
+			}
+		});
 
 		let mut result = String::new();
 		for segment in segments {
@@ -200,24 +197,22 @@ impl Name {
 	}
 
 	/// Converts this name into a pascal-cased identifier.
-	/// 
+	///
 	/// ## Example
-	/// 
+	///
 	/// ```
 	/// # use vocab::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
 	/// assert_eq!(name.to_pascal_case(), "FileNotFoundException")
 	/// ```
 	pub fn to_pascal_case(&self) -> String {
-		let segments = self.normalized
-			.split('_')
-			.map(|segment| {
-				let c = segment.chars().next().unwrap(); // segment is never empty.
-				let (_, rest) = segment.split_at(c.len_utf8());
-				let mut pascal_case_segment = c.to_uppercase().next().unwrap().to_string();
-				pascal_case_segment.push_str(rest);
-				pascal_case_segment
-			});
+		let segments = self.normalized.split('_').map(|segment| {
+			let c = segment.chars().next().unwrap(); // segment is never empty.
+			let (_, rest) = segment.split_at(c.len_utf8());
+			let mut pascal_case_segment = c.to_uppercase().next().unwrap().to_string();
+			pascal_case_segment.push_str(rest);
+			pascal_case_segment
+		});
 		let mut result = String::new();
 		for segment in segments {
 			result.push_str(&segment)
@@ -226,9 +221,9 @@ impl Name {
 	}
 
 	/// Converts this name into a kebab-cased identifier.
-	/// 
+	///
 	/// ## Example
-	/// 
+	///
 	/// ```
 	/// # use vocab::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();

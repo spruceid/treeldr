@@ -1,7 +1,7 @@
 use iref::{IriBuf, IriRef, IriRefBuf};
 use locspan::{Loc, Location};
 use rdf_types::{loc::Literal, Quad};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 
 use crate::vocab::*;
@@ -596,7 +596,13 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 						Quad(
 							Loc(Id::Iri(id), id_loc.clone()),
 							Loc(Term::TreeLdr(TreeLdr::Name), id_loc.clone()),
-							Loc(Object::Literal(Literal::String(Loc(name.to_string().into(), id_loc.clone()))), id_loc.clone()),
+							Loc(
+								Object::Literal(Literal::String(Loc(
+									name.to_string().into(),
+									id_loc.clone(),
+								))),
+								id_loc.clone(),
+							),
 							None,
 						),
 						id_loc.clone(),

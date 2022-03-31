@@ -1,11 +1,10 @@
-use crate::{layout, ty, Causes, Documentation, Id, MaybeSet, WithCauses, vocab::Name};
+use crate::{layout, ty, vocab::Name, Causes, Documentation, Id, MaybeSet, WithCauses};
 use shelves::Ref;
 
-mod enumeration;
+pub mod enumeration;
 pub mod literal;
 mod native;
 mod structure;
-mod sum;
 
 mod strongly_connected;
 mod usages;
@@ -14,7 +13,6 @@ pub use enumeration::{Enum, Variant};
 pub use literal::Literal;
 pub use native::Native;
 pub use structure::{Field, Struct};
-pub use sum::Sum;
 
 pub use strongly_connected::StronglyConnectedLayouts;
 pub use usages::Usages;
@@ -26,7 +24,6 @@ pub enum Type {
 	Struct,
 	Enum,
 	Reference,
-	Sum,
 	Literal,
 }
 
@@ -52,9 +49,6 @@ pub enum Description<F> {
 	/// Reference.
 	Reference(Ref<layout::Definition<F>>, MaybeSet<Name, F>),
 
-	/// Sum type.
-	Sum(Sum<F>),
-
 	/// Literal layout.
 	Literal(Literal<F>),
 }
@@ -66,7 +60,6 @@ impl<F> Description<F> {
 			Self::Struct(_) => Type::Struct,
 			Self::Enum(_) => Type::Enum,
 			Self::Native(n, _) => Type::Native(*n),
-			Self::Sum(_) => Type::Sum,
 			Self::Literal(_) => Type::Literal,
 		}
 	}
@@ -103,7 +96,6 @@ impl<F> Definition<F> {
 			Description::Enum(e) => Some(e.name()),
 			Description::Reference(_, n) => n.value(),
 			Description::Native(_, n) => n.value(),
-			Description::Sum(s) => Some(s.name()),
 			Description::Literal(l) => Some(l.name()),
 		}
 	}
@@ -147,8 +139,7 @@ impl<F> Definition<F> {
 	pub fn composing_layouts(&self) -> ComposingLayouts<F> {
 		match self.description() {
 			Description::Struct(s) => ComposingLayouts::Struct(s.fields().iter()),
-			Description::Enum(e) => ComposingLayouts::Enum(e.fields()),
-			Description::Sum(s) => ComposingLayouts::Sum(s.options().iter()),
+			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts()),
 			Description::Literal(_) => ComposingLayouts::None,
 			Description::Reference(_, _) => ComposingLayouts::None,
 			Description::Native(_, _) => ComposingLayouts::None,
@@ -158,8 +149,7 @@ impl<F> Definition<F> {
 
 pub enum ComposingLayouts<'a, F> {
 	Struct(std::slice::Iter<'a, Field<F>>),
-	Enum(enumeration::Fields<'a, F>),
-	Sum(std::slice::Iter<'a, Ref<Definition<F>>>),
+	Enum(enumeration::ComposingLayouts<'a, F>),
 	None,
 }
 
@@ -169,8 +159,7 @@ impl<'a, F> Iterator for ComposingLayouts<'a, F> {
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
 			Self::Struct(fields) => Some(fields.next()?.layout()),
-			Self::Enum(fields) => Some(fields.next()?.layout()),
-			Self::Sum(layouts) => layouts.next().cloned(),
+			Self::Enum(layouts) => layouts.next(),
 			Self::None => None,
 		}
 	}

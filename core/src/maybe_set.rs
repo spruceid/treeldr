@@ -178,4 +178,22 @@ impl<T, F> MaybeSet<T, F> {
 			}),
 		}
 	}
+
+	pub fn try_map_with_causes<U, E>(
+		self,
+		f: impl FnOnce(WithCauses<T, F>) -> Result<U, E>,
+	) -> Result<MaybeSet<U, F>, E>
+	where
+		F: Clone,
+	{
+		let value = match self.value {
+			Some(t) => {
+				let causes = t.causes().clone();
+				Some(WithCauses::new(f(t)?, causes))
+			}
+			None => None,
+		};
+
+		Ok(MaybeSet { value })
+	}
 }

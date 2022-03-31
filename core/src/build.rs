@@ -1,6 +1,6 @@
 use crate::{
 	error,
-	vocab::{self, GraphLabel, Term, Object},
+	vocab::{self, GraphLabel, Object, Term},
 	Error, Id, Vocabulary,
 };
 use locspan::Loc;
@@ -140,7 +140,7 @@ impl<F: Clone + Ord> Context<F> {
 					if let Some(prop) = prop {
 						prop.set_domain(object, Some(loc.clone()));
 						let ty = self.require_type_mut(object, Some(object_loc))?;
-						ty.declare_property(id, Some(loc))
+						ty.declare_property(object, id, Some(loc))?
 					}
 				}
 				Term::Rdfs(vocab::Rdfs::Range) => {
@@ -182,22 +182,26 @@ impl<F: Clone + Ord> Context<F> {
 						field.set_functional(!multiple, Some(loc))?
 					}
 				}
+				Term::Owl(vocab::Owl::UnionOf) => {
+					let ty = self.require_type_mut(id, Some(id_loc))?;
+					let Loc(options_id, options_loc) = expect_id(object)?;
+					ty.declare_union(id, options_id, Some(options_loc))?
+				}
 				Term::TreeLdr(vocab::TreeLdr::Name) => {
 					let node = self.require_mut(id, Some(id_loc))?;
 					let Loc(name, name_loc) = expect_raw_string(object)?;
 
-					let name = vocab::Name::new(&name).map_err(|vocab::InvalidName| Error::new(
-						error::NameInvalid(name).into(),
-						Some(name_loc),
-					))?;
+					let name = vocab::Name::new(&name).map_err(|vocab::InvalidName| {
+						Error::new(error::NameInvalid(name).into(), Some(name_loc))
+					})?;
 
 					if node.is_layout() || node.is_layout_field() {
 						if let Some(layout) = node.as_layout_mut() {
-							layout.set_name(name.clone().into(), Some(loc.clone()))?
+							layout.set_name(name.clone(), Some(loc.clone()))?
 						}
 
 						if let Some(field) = node.as_layout_field_mut() {
-							field.set_name(name.into(), Some(loc))?
+							field.set_name(name, Some(loc))?
 						}
 					} else {
 						log::warn!("unapplicable <treelrd:name> property")
@@ -240,6 +244,11 @@ impl<F: Clone + Ord> Context<F> {
 					)?;
 					let layout = self.require_layout_mut(id, Some(id_loc))?;
 					layout.set_literal(regexp, Some(loc))?
+				}
+				Term::TreeLdr(vocab::TreeLdr::Enumeration) => {
+					let Loc(fields_id, _) = expect_id(object)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_enum(fields_id, Some(loc))?
 				}
 				_ => (),
 			}

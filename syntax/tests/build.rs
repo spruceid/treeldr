@@ -2,7 +2,7 @@ use locspan::Loc;
 use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;
-use treeldr_vocab::{GraphLabel, Id, Term, StrippedObject, Vocabulary};
+use treeldr_vocab::{GraphLabel, Id, StrippedObject, Term, Vocabulary};
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)

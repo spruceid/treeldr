@@ -1,5 +1,6 @@
 use derivative::Derivative;
 use locspan::Location;
+use std::borrow::{Borrow, BorrowMut};
 use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
 
@@ -119,6 +120,31 @@ impl<F: Ord> From<Option<Location<F>>> for Causes<F> {
 	}
 }
 
+impl<F: Ord> Extend<Location<F>> for Causes<F> {
+	fn extend<I: IntoIterator<Item = Location<F>>>(&mut self, iter: I) {
+		for cause in iter {
+			self.add(cause);
+		}
+	}
+}
+
+impl<F: Ord> Extend<Option<Location<F>>> for Causes<F> {
+	fn extend<I: IntoIterator<Item = Option<Location<F>>>>(&mut self, iter: I) {
+		for cause in iter.into_iter().flatten() {
+			self.add(cause)
+		}
+	}
+}
+
+impl<F> IntoIterator for Causes<F> {
+	type Item = Location<F>;
+	type IntoIter = std::collections::btree_set::IntoIter<Location<F>>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.set.into_iter()
+	}
+}
+
 #[derive(Clone, Debug)]
 pub struct WithCauses<T, F> {
 	t: T,
@@ -202,6 +228,10 @@ impl<T, F> WithCauses<T, F> {
 		}
 	}
 
+	pub fn into_inner(self) -> T {
+		self.t
+	}
+
 	pub fn into_parts(self) -> (T, Causes<F>) {
 		(self.t, self.causes)
 	}
@@ -227,6 +257,18 @@ impl<T, F> Deref for WithCauses<T, F> {
 
 impl<T, F> DerefMut for WithCauses<T, F> {
 	fn deref_mut(&mut self) -> &mut T {
+		self.inner_mut()
+	}
+}
+
+impl<T, F> Borrow<T> for WithCauses<T, F> {
+	fn borrow(&self) -> &T {
+		self.inner()
+	}
+}
+
+impl<T, F> BorrowMut<T> for WithCauses<T, F> {
+	fn borrow_mut(&mut self) -> &mut T {
 		self.inner_mut()
 	}
 }

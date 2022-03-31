@@ -133,9 +133,6 @@ fn generate_layout<F>(
 		Description::Enum(_) => {
 			todo!("json-schema enum layout")
 		}
-		Description::Sum(_) => {
-			todo!("json-schema sum layout")
-		}
 		Description::Literal(lit) => {
 			generate_literal_type(json, lit);
 			Ok(())
@@ -212,7 +209,7 @@ fn generate_struct<F>(
 			);
 		}
 
-		properties.insert(field.name().to_camel_case().into(), field_schema.into());
+		properties.insert(field.name().to_camel_case(), field_schema.into());
 
 		if field.is_required() {
 			required_properties.push(serde_json::Value::from(field.name().to_camel_case()));
@@ -273,9 +270,6 @@ fn generate_layout_ref<F>(
 		}
 		Description::Enum(_) => {
 			todo!("json-schema enum layout")
-		}
-		Description::Sum(_) => {
-			todo!("json-schema sum layout")
 		}
 		Description::Literal(lit) => {
 			generate_literal_type(json, lit);
