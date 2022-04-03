@@ -21,7 +21,7 @@ use treeldr::{
 use vocab::{
 	Object,
 	LocQuad,
-	Name
+	Term
 };
 
 /// Import error.
@@ -81,14 +81,14 @@ pub fn import_schema<F: Clone>(
 		Some(id) => {
 			let id = id.as_str().ok_or(Error::InvalidIdValue)?;
 			let iri = IriBuf::new(id).map_err(|_| Error::InvalidIdValue)?;
-			Id::Iri(vocab::Name::from_iri(iri, vocabulary))
+			Id::Iri(vocab::Term::from_iri(iri, vocabulary))
 		},
 		None => match schema.get("$ref") {
 			Some(iri) => {
 				is_ref = true;
 				let iri = iri.as_str().ok_or(Error::InvalidRefValue)?;
 				let iri = IriBuf::new(iri).map_err(|_| Error::InvalidRefValue)?;
-				Id::Iri(vocab::Name::from_iri(iri, vocabulary))
+				Id::Iri(vocab::Term::from_iri(iri, vocabulary))
 			}
 			None => {
 				Id::Blank(vocabulary.new_blank_label())
@@ -101,8 +101,8 @@ pub fn import_schema<F: Clone>(
 		quads.push(Loc(
 			Quad(
 				Loc(id, loc(file)),
-				Loc(Name::Rdf(vocab::Rdf::Type), loc(file)),
-				Loc(Object::Iri(Name::TreeLdr(vocab::TreeLdr::Layout)), loc(file)),
+				Loc(Term::Rdf(vocab::Rdf::Type), loc(file)),
+				Loc(Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)), loc(file)),
 				None
 			),
 			loc(file)
@@ -169,8 +169,8 @@ pub fn import_schema<F: Clone>(
 					quads.push(Loc(
 						Quad(
 							Loc(Id::Blank(prop_label), loc(file)),
-							Loc(Name::Rdf(vocab::Rdf::Type), loc(file)),
-							Loc(Object::Iri(Name::TreeLdr(vocab::TreeLdr::Field)), loc(file)),
+							Loc(Term::Rdf(vocab::Rdf::Type), loc(file)),
+							Loc(Object::Iri(Term::TreeLdr(vocab::TreeLdr::Field)), loc(file)),
 							None
 						),
 						loc(file)
@@ -179,7 +179,7 @@ pub fn import_schema<F: Clone>(
 					quads.push(Loc(
 						Quad(
 							Loc(Id::Blank(prop_label), loc(file)),
-							Loc(Name::TreeLdr(vocab::TreeLdr::Name), loc(file)),
+							Loc(Term::TreeLdr(vocab::TreeLdr::Name), loc(file)),
 							Loc(Object::Literal(vocab::Literal::String(
 								Loc(
 									prop.to_string().into(),
@@ -195,7 +195,7 @@ pub fn import_schema<F: Clone>(
 					// quads.push(Loc(
 					// 	Quad(
 					// 		Loc(Id::Blank(prop_label), loc(file)),
-					// 		Loc(Name::TreeLdr(vocab::TreeLdr::Format), loc(file)),
+					// 		Loc(Term::TreeLdr(vocab::TreeLdr::Format), loc(file)),
 					// 		Loc(Object::Literal(vocab::Literal::String(
 					// 			Loc(
 					// 				prop.to_string().into(),
@@ -213,8 +213,8 @@ pub fn import_schema<F: Clone>(
 				quads.push(Loc(
 					Quad(
 						Loc(id, loc(file)),
-						Loc(Name::Rdf(vocab::Rdf::Type), loc(file)),
-						Loc(Object::Iri(Name::TreeLdr(vocab::TreeLdr::Layout)), loc(file)),
+						Loc(Term::Rdf(vocab::Rdf::Type), loc(file)),
+						Loc(Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)), loc(file)),
 						None
 					),
 					loc(file)
@@ -339,7 +339,7 @@ pub fn import_schema<F: Clone>(
 			"examples" => {
 				todo!()
 			}
-			// Unknown Name.
+			// Unknown Term.
 			unknown => {
 				return Err(Error::UnknownKey(unknown.to_string()))
 			}
@@ -357,13 +357,13 @@ pub fn import_schema<F: Clone>(
 fn value_into_object<F: Clone>(file: &F, vocab: &mut Vocabulary, quads: &mut Vec<LocQuad<F>>, value: Value) -> Result<Loc<Object<F>, F>, Error> {
 	match value {
 		Value::Null => todo!(),
-		Value::Bool(true) => Ok(Loc(Object::Iri(vocab::Name::Schema(vocab::Schema::True)), loc(file))),
-		Value::Bool(false) => Ok(Loc(Object::Iri(vocab::Name::Schema(vocab::Schema::False)), loc(file))),
+		Value::Bool(true) => Ok(Loc(Object::Iri(vocab::Term::Schema(vocab::Schema::True)), loc(file))),
+		Value::Bool(false) => Ok(Loc(Object::Iri(vocab::Term::Schema(vocab::Schema::False)), loc(file))),
 		Value::Number(n) => Ok(Loc(
 			Object::Literal(
 				vocab::Literal::TypedString(
 					Loc(n.to_string().into(), loc(file)),
-					Loc(vocab::Name::Xsd(vocab::Xsd::Integer), loc(file))
+					Loc(vocab::Term::Xsd(vocab::Xsd::Integer), loc(file))
 				)
 			),
 			loc(file)
@@ -404,7 +404,7 @@ impl<F: Clone, C, I: DoubleEndedIterator> TryIntoRdfList<F, C, I::Item> for I {
 		K: FnMut(I::Item, &mut C, &mut Vocabulary, &mut Vec<LocQuad<F>>) -> Result<Loc<Object<F>, F>, E>,
 	{
 		use vocab::Rdf;
-		let mut head = Loc(Object::Iri(Name::Rdf(Rdf::Nil)), loc);
+		let mut head = Loc(Object::Iri(Term::Rdf(Rdf::Nil)), loc);
 		for item in self.rev() {
 			let item = f(item, ctx, vocab, quads)?;
 			let item_label = vocab.new_blank_label();
@@ -414,8 +414,8 @@ impl<F: Clone, C, I: DoubleEndedIterator> TryIntoRdfList<F, C, I::Item> for I {
 			quads.push(Loc(
 				Quad(
 					Loc(Id::Blank(item_label), list_loc.clone()),
-					Loc(Name::Rdf(Rdf::Type), list_loc.clone()),
-					Loc(Object::Iri(Name::Rdf(Rdf::List)), list_loc.clone()),
+					Loc(Term::Rdf(Rdf::Type), list_loc.clone()),
+					Loc(Object::Iri(Term::Rdf(Rdf::List)), list_loc.clone()),
 					None,
 				),
 				item_loc.clone(),
@@ -424,7 +424,7 @@ impl<F: Clone, C, I: DoubleEndedIterator> TryIntoRdfList<F, C, I::Item> for I {
 			quads.push(Loc(
 				Quad(
 					Loc(Id::Blank(item_label), item_loc.clone()),
-					Loc(Name::Rdf(Rdf::First), item_loc.clone()),
+					Loc(Term::Rdf(Rdf::First), item_loc.clone()),
 					item,
 					None,
 				),
@@ -434,7 +434,7 @@ impl<F: Clone, C, I: DoubleEndedIterator> TryIntoRdfList<F, C, I::Item> for I {
 			quads.push(Loc(
 				Quad(
 					Loc(Id::Blank(item_label), head.location().clone()),
-					Loc(Name::Rdf(Rdf::Rest), head.location().clone()),
+					Loc(Term::Rdf(Rdf::Rest), head.location().clone()),
 					head,
 					None,
 				),

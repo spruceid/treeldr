@@ -35,6 +35,26 @@
 			"name": "string.quoted.other.uri.treeldr",
 			"begin": "<",
 			"end": ">"
+		},
+		{
+			"name": "string.quoted.double.treeldr",
+			"match": "\"[^\"\\\\]*(?:\\\\.[^\"\\\\]*)*\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.treeldr",
+					"match": "\\."
+				}
+			]
+		},
+		{
+			"name": "string.regexp.treeldr",
+			"match": "/[^/\\\\]*(?:\\\\.[^/\\\\]*)*/",
+			"patterns": [
+				{
+					"name": "constant.character.escape.treeldr",
+					"match": "\\."
+				}
+			]
 		}
 	]
 }

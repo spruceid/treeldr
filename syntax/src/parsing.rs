@@ -596,7 +596,7 @@ impl<F: Clone> Parse<F> for AnnotatedTypeExpr<F> {
 			token => Some(Loc(token, loc.clone())),
 		};
 
-		let expr = TypeExpr::parse_from_continuation(lexer, k)?;
+		let expr = OuterTypeExpr::parse_from_continuation(lexer, k)?;
 		loc.span_mut().append(expr.span());
 
 		while let locspan::Loc(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) =
@@ -611,8 +611,42 @@ impl<F: Clone> Parse<F> for AnnotatedTypeExpr<F> {
 	}
 }
 
-impl<F: Clone> Parse<F> for TypeExpr<F> {
-	const FIRST: &'static [TokenKind] = &[TokenKind::Id, TokenKind::Punct(Punct::Ampersand)];
+impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
+	const FIRST: &'static [TokenKind] = &[
+		TokenKind::Id,
+		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+	];
+
+	fn parse_from<L: Tokens<F>>(
+		lexer: &mut L,
+		token: Token,
+		mut loc: Location<F>,
+	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+		let Loc(first, first_loc) = InnerTypeExpr::parse_from(lexer, token, loc.clone())?;
+
+		if let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
+			let mut options = vec![Loc(first, first_loc)];
+			while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
+				next_token(lexer)?;
+				let item = InnerTypeExpr::parse(lexer)?;
+				loc.span_mut().append(item.span());
+				options.push(item);
+			}
+
+			Ok(Loc(Self::Union(options), loc))
+		} else {
+			Ok(Loc(Self::Inner(first), first_loc))
+		}
+	}
+}
+
+impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
+	const FIRST: &'static [TokenKind] = &[
+		TokenKind::Id,
+		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+	];
 
 	fn parse_from<L: Tokens<F>>(
 		lexer: &mut L,
@@ -626,6 +660,7 @@ impl<F: Clone> Parse<F> for TypeExpr<F> {
 				loc.span_mut().set_end(arg.span().end());
 				Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
 			}
+			Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
 			unexpected => Err(Loc::new(
 				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
 				loc,
@@ -665,7 +700,7 @@ impl<F: Clone> Parse<F> for AnnotatedLayoutExpr<F> {
 			token => Some(Loc(token, loc.clone())),
 		};
 
-		let expr = LayoutExpr::parse_from_continuation(lexer, k)?;
+		let expr = OuterLayoutExpr::parse_from_continuation(lexer, k)?;
 		loc.span_mut().append(expr.span());
 
 		while let locspan::Loc(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) =
@@ -680,8 +715,42 @@ impl<F: Clone> Parse<F> for AnnotatedLayoutExpr<F> {
 	}
 }
 
-impl<F: Clone> Parse<F> for LayoutExpr<F> {
-	const FIRST: &'static [TokenKind] = &[TokenKind::Id, TokenKind::Punct(Punct::Ampersand)];
+impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
+	const FIRST: &'static [TokenKind] = &[
+		TokenKind::Id,
+		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+	];
+
+	fn parse_from<L: Tokens<F>>(
+		lexer: &mut L,
+		token: Token,
+		mut loc: Location<F>,
+	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+		let Loc(first, first_loc) = InnerLayoutExpr::parse_from(lexer, token, loc.clone())?;
+
+		if let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
+			let mut options = vec![Loc(first, first_loc)];
+			while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
+				next_token(lexer)?;
+				let item = InnerLayoutExpr::parse(lexer)?;
+				loc.span_mut().append(item.span());
+				options.push(item);
+			}
+
+			Ok(Loc(Self::Union(options), loc))
+		} else {
+			Ok(Loc(Self::Inner(first), first_loc))
+		}
+	}
+}
+
+impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
+	const FIRST: &'static [TokenKind] = &[
+		TokenKind::Id,
+		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+	];
 
 	fn parse_from<L: Tokens<F>>(
 		lexer: &mut L,
@@ -695,6 +764,7 @@ impl<F: Clone> Parse<F> for LayoutExpr<F> {
 				loc.span_mut().append(arg.span());
 				Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
 			}
+			Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
 			unexpected => Err(Loc::new(
 				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
 				loc,

@@ -8,6 +8,7 @@ pub enum Type {
 	Property,
 	Layout,
 	LayoutField,
+	LayoutVariant,
 	List,
 }
 
@@ -17,6 +18,7 @@ pub struct Types {
 	pub property: bool,
 	pub layout: bool,
 	pub layout_field: bool,
+	pub layout_variant: bool,
 	pub list: bool,
 }
 
@@ -27,6 +29,7 @@ impl Types {
 			Type::Property => self.property,
 			Type::Layout => self.layout,
 			Type::LayoutField => self.layout_field,
+			Type::LayoutVariant => self.layout_variant,
 			Type::List => self.list,
 		}
 	}
@@ -38,6 +41,7 @@ pub struct CausedTypes<F> {
 	pub property: Option<Option<Location<F>>>,
 	pub layout: Option<Option<Location<F>>>,
 	pub layout_field: Option<Option<Location<F>>>,
+	pub layout_variant: Option<Option<Location<F>>>,
 	pub list: Option<Option<Location<F>>>,
 }
 
@@ -52,6 +56,7 @@ impl<F> CausedTypes<F> {
 			Type::Property => self.property.as_ref(),
 			Type::Layout => self.layout.as_ref(),
 			Type::LayoutField => self.layout_field.as_ref(),
+			Type::LayoutVariant => self.layout_variant.as_ref(),
 			Type::List => self.list.as_ref(),
 		}
 	}
@@ -62,6 +67,7 @@ impl<F> CausedTypes<F> {
 			property: self.property.as_ref(),
 			layout: self.layout.as_ref(),
 			layout_field: self.layout_field.as_ref(),
+			layout_variant: self.layout_variant.as_ref(),
 			list: self.list.as_ref(),
 		}
 	}
@@ -81,6 +87,7 @@ pub struct CausedTypesIter<'a, F> {
 	property: Option<&'a Option<Location<F>>>,
 	layout: Option<&'a Option<Location<F>>>,
 	layout_field: Option<&'a Option<Location<F>>>,
+	layout_variant: Option<&'a Option<Location<F>>>,
 	list: Option<&'a Option<Location<F>>>,
 }
 
@@ -96,10 +103,13 @@ impl<'a, F: Clone> Iterator for CausedTypesIter<'a, F> {
 					Some(cause) => Some(Caused::new(Type::Layout, cause.clone())),
 					None => match self.layout_field.take() {
 						Some(cause) => Some(Caused::new(Type::LayoutField, cause.clone())),
-						None => self
-							.list
-							.take()
-							.map(|cause| Caused::new(Type::List, cause.clone())),
+						None => match self.layout_variant.take() {
+							Some(cause) => Some(Caused::new(Type::LayoutVariant, cause.clone())),
+							None => self
+								.list
+								.take()
+								.map(|cause| Caused::new(Type::List, cause.clone())),
+						},
 					},
 				},
 			},
@@ -110,6 +120,7 @@ impl<'a, F: Clone> Iterator for CausedTypesIter<'a, F> {
 #[derive(Debug)]
 pub struct Node<F> {
 	id: Id,
+	label: Option<String>,
 	ty: MaybeSet<Ref<ty::Definition<F>>, F>,
 	property: MaybeSet<Ref<prop::Definition<F>>, F>,
 	layout: MaybeSet<Ref<layout::Definition<F>>, F>,
@@ -120,6 +131,7 @@ impl<F> Node<F> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
+			label: None,
 			ty: MaybeSet::default(),
 			property: MaybeSet::default(),
 			layout: MaybeSet::default(),
@@ -129,6 +141,7 @@ impl<F> Node<F> {
 
 	pub fn from_parts(
 		id: Id,
+		label: Option<String>,
 		ty: MaybeSet<Ref<ty::Definition<F>>, F>,
 		property: MaybeSet<Ref<prop::Definition<F>>, F>,
 		layout: MaybeSet<Ref<layout::Definition<F>>, F>,
@@ -136,6 +149,7 @@ impl<F> Node<F> {
 	) -> Self {
 		Self {
 			id,
+			label,
 			ty,
 			property,
 			layout,
@@ -145,6 +159,10 @@ impl<F> Node<F> {
 
 	pub fn id(&self) -> Id {
 		self.id
+	}
+
+	pub fn label(&self) -> Option<&str> {
+		self.label.as_deref()
 	}
 
 	pub fn documentation(&self) -> &Documentation {
@@ -194,6 +212,7 @@ impl<F> Node<F> {
 				.causes()
 				.map(|causes| causes.preferred().cloned()),
 			layout_field: None,
+			layout_variant: None,
 			list: None,
 		}
 	}

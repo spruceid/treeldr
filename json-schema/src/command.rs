@@ -45,7 +45,7 @@ fn find_layout<F: Clone>(
 	model: &treeldr::Model<F>,
 	iri: Iri,
 ) -> Result<Ref<layout::Definition<F>>, Error<F>> {
-	let name = treeldr::vocab::Name::try_from_iri(iri, model.vocabulary())
+	let name = treeldr::vocab::Term::try_from_iri(iri, model.vocabulary())
 		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
 	model
 		.require_layout(treeldr::Id::Iri(name))

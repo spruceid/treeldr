@@ -131,7 +131,7 @@ impl Annotation {
 
 /// Annotated type expression.
 pub struct AnnotatedTypeExpr<F> {
-	pub expr: Loc<TypeExpr<F>, F>,
+	pub expr: Loc<OuterTypeExpr<F>, F>,
 	pub annotations: Vec<Loc<Annotation, F>>,
 }
 
@@ -147,19 +147,40 @@ impl<F: Clone> AnnotatedTypeExpr<F> {
 	}
 }
 
-pub enum TypeExpr<F> {
-	Id(Loc<Id, F>),
-	Reference(Box<Loc<TypeExpr<F>, F>>),
+pub enum OuterTypeExpr<F> {
+	Inner(InnerTypeExpr<F>),
+	Union(Vec<Loc<InnerTypeExpr<F>, F>>),
 }
 
-impl<F: Clone> TypeExpr<F> {
-	pub fn implicit_layout_expr(&self) -> LayoutExpr<F> {
+impl<F: Clone> OuterTypeExpr<F> {
+	pub fn implicit_layout_expr(&self) -> OuterLayoutExpr<F> {
 		match self {
-			Self::Id(id) => LayoutExpr::Id(id.clone()),
-			Self::Reference(r) => LayoutExpr::Reference(Box::new(Loc(
+			Self::Inner(i) => OuterLayoutExpr::Inner(i.implicit_layout_expr()),
+			Self::Union(options) => OuterLayoutExpr::Union(
+				options
+					.iter()
+					.map(|Loc(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
+					.collect(),
+			),
+		}
+	}
+}
+
+pub enum InnerTypeExpr<F> {
+	Id(Loc<Id, F>),
+	Reference(Box<Loc<Self, F>>),
+	Literal(Literal),
+}
+
+impl<F: Clone> InnerTypeExpr<F> {
+	pub fn implicit_layout_expr(&self) -> InnerLayoutExpr<F> {
+		match self {
+			Self::Id(id) => InnerLayoutExpr::Id(id.clone()),
+			Self::Reference(r) => InnerLayoutExpr::Reference(Box::new(Loc(
 				r.implicit_layout_expr(),
 				r.location().clone(),
 			))),
+			Self::Literal(lit) => InnerLayoutExpr::Literal(lit.clone()),
 		}
 	}
 }
@@ -192,11 +213,23 @@ impl Alias {
 
 /// Annotated layout expression.
 pub struct AnnotatedLayoutExpr<F> {
-	pub expr: Loc<LayoutExpr<F>, F>,
+	pub expr: Loc<OuterLayoutExpr<F>, F>,
 	pub annotations: Vec<Loc<Annotation, F>>,
 }
 
-pub enum LayoutExpr<F> {
+pub enum OuterLayoutExpr<F> {
+	Inner(InnerLayoutExpr<F>),
+	Union(Vec<Loc<InnerLayoutExpr<F>, F>>),
+}
+
+pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
-	Reference(Box<Loc<LayoutExpr<F>, F>>),
+	Reference(Box<Loc<Self, F>>),
+	Literal(Literal),
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum Literal {
+	String(String),
+	RegExp(String),
 }

@@ -6,6 +6,7 @@ pub use crate::node::{CausedTypes, Type, Types};
 
 pub struct Node<T> {
 	id: Id,
+	label: Option<String>,
 	doc: Documentation,
 	value: T,
 }
@@ -15,12 +16,21 @@ pub struct Components<F> {
 	pub property: MaybeSet<prop::Definition<F>, F>,
 	pub layout: MaybeSet<layout::Definition<F>, F>,
 	pub layout_field: MaybeSet<layout::field::Definition<F>, F>,
+	pub layout_variant: MaybeSet<layout::variant::Definition<F>, F>,
 	pub list: MaybeSet<list::Definition<F>, F>,
 }
 
 impl<T> Node<T> {
 	pub fn id(&self) -> Id {
 		self.id
+	}
+
+	pub fn label(&self) -> Option<&str> {
+		self.label.as_deref()
+	}
+
+	pub fn add_label(&mut self, label: String) {
+		self.label = Some(label)
 	}
 
 	pub fn documentation(&self) -> &Documentation {
@@ -38,13 +48,14 @@ impl<T> Node<T> {
 	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Node<U> {
 		Node {
 			id: self.id,
+			label: self.label,
 			doc: self.doc,
 			value: f(self.value),
 		}
 	}
 
-	pub fn into_parts(self) -> (Id, Documentation, T) {
-		(self.id, self.doc, self.value)
+	pub fn into_parts(self) -> (Id, Option<String>, Documentation, T) {
+		(self.id, self.label, self.doc, self.value)
 	}
 }
 
@@ -53,16 +64,23 @@ pub type PropertyOrLayoutField<'a, F> = (
 	Option<&'a mut WithCauses<layout::field::Definition<F>, F>>,
 );
 
+pub type LayoutFieldOrVariant<'a, F> = (
+	Option<&'a mut WithCauses<layout::field::Definition<F>, F>>,
+	Option<&'a mut WithCauses<layout::variant::Definition<F>, F>>,
+);
+
 impl<F> Node<Components<F>> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),
 				property: MaybeSet::default(),
 				layout: MaybeSet::default(),
 				layout_field: MaybeSet::default(),
+				layout_variant: MaybeSet::default(),
 				list: MaybeSet::default(),
 			},
 		}
@@ -71,12 +89,14 @@ impl<F> Node<Components<F>> {
 	pub fn new_type(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::new(ty::Definition::new(), causes),
 				property: MaybeSet::default(),
 				layout: MaybeSet::default(),
 				layout_field: MaybeSet::default(),
+				layout_variant: MaybeSet::default(),
 				list: MaybeSet::default(),
 			},
 		}
@@ -85,12 +105,14 @@ impl<F> Node<Components<F>> {
 	pub fn new_property(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),
 				property: MaybeSet::new(prop::Definition::new(id), causes),
 				layout: MaybeSet::default(),
 				layout_field: MaybeSet::default(),
+				layout_variant: MaybeSet::default(),
 				list: MaybeSet::default(),
 			},
 		}
@@ -99,12 +121,14 @@ impl<F> Node<Components<F>> {
 	pub fn new_layout(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),
 				property: MaybeSet::default(),
 				layout: MaybeSet::new(layout::Definition::new(id), causes),
 				layout_field: MaybeSet::default(),
+				layout_variant: MaybeSet::default(),
 				list: MaybeSet::default(),
 			},
 		}
@@ -113,12 +137,30 @@ impl<F> Node<Components<F>> {
 	pub fn new_layout_field(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),
 				property: MaybeSet::default(),
 				layout: MaybeSet::default(),
 				layout_field: MaybeSet::new(layout::field::Definition::new(id), causes),
+				layout_variant: MaybeSet::default(),
+				list: MaybeSet::default(),
+			},
+		}
+	}
+
+	pub fn new_layout_variant(id: Id, causes: impl Into<Causes<F>>) -> Self {
+		Self {
+			id,
+			label: None,
+			doc: Documentation::default(),
+			value: Components {
+				ty: MaybeSet::default(),
+				property: MaybeSet::default(),
+				layout: MaybeSet::default(),
+				layout_field: MaybeSet::default(),
+				layout_variant: MaybeSet::new(layout::variant::Definition::new(id), causes),
 				list: MaybeSet::default(),
 			},
 		}
@@ -127,12 +169,14 @@ impl<F> Node<Components<F>> {
 	pub fn new_list(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
+			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),
 				property: MaybeSet::default(),
 				layout: MaybeSet::default(),
 				layout_field: MaybeSet::default(),
+				layout_variant: MaybeSet::default(),
 				list: MaybeSet::new(list::Definition::new(id), causes),
 			},
 		}
@@ -144,6 +188,7 @@ impl<F> Node<Components<F>> {
 			property: self.value.property.is_set(),
 			layout: self.value.layout.is_set(),
 			layout_field: self.value.layout_field.is_set(),
+			layout_variant: self.value.layout_variant.is_set(),
 			list: self.value.list.is_set(),
 		}
 	}
@@ -171,6 +216,11 @@ impl<F> Node<Components<F>> {
 			layout_field: self
 				.value
 				.layout_field
+				.causes()
+				.map(|causes| causes.preferred().cloned()),
+			layout_variant: self
+				.value
+				.layout_variant
 				.causes()
 				.map(|causes| causes.preferred().cloned()),
 			list: self
@@ -217,6 +267,10 @@ impl<F> Node<Components<F>> {
 		self.value.layout_field.with_causes()
 	}
 
+	pub fn as_layout_variant(&self) -> Option<&WithCauses<layout::variant::Definition<F>, F>> {
+		self.value.layout_variant.with_causes()
+	}
+
 	pub fn as_list(&self) -> Option<&WithCauses<list::Definition<F>, F>> {
 		self.value.list.with_causes()
 	}
@@ -237,6 +291,12 @@ impl<F> Node<Components<F>> {
 		&mut self,
 	) -> Option<&mut WithCauses<layout::field::Definition<F>, F>> {
 		self.value.layout_field.with_causes_mut()
+	}
+
+	pub fn as_layout_variant_mut(
+		&mut self,
+	) -> Option<&mut WithCauses<layout::variant::Definition<F>, F>> {
+		self.value.layout_variant.with_causes_mut()
 	}
 
 	pub fn as_list_mut(&mut self) -> Option<&mut WithCauses<list::Definition<F>, F>> {
@@ -275,6 +335,15 @@ impl<F> Node<Components<F>> {
 		self.value
 			.layout_field
 			.set_once(cause, || layout::field::Definition::new(self.id))
+	}
+
+	pub fn declare_layout_variant(&mut self, cause: Option<Location<F>>)
+	where
+		F: Ord,
+	{
+		self.value
+			.layout_variant
+			.set_once(cause, || layout::variant::Definition::new(self.id))
 	}
 
 	pub fn declare_list(&mut self, cause: Option<Location<F>>)
@@ -374,6 +443,28 @@ impl<F> Node<Components<F>> {
 		}
 	}
 
+	pub fn require_layout_field(
+		&self,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<layout::field::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		let types = self.caused_types();
+		match self.value.layout_field.with_causes() {
+			Some(field) => Ok(field),
+			None => Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id,
+					expected: Type::LayoutField,
+					found: types,
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
 	pub fn require_layout_field_mut(
 		&mut self,
 		cause: Option<Location<F>>,
@@ -388,6 +479,50 @@ impl<F> Node<Components<F>> {
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::LayoutField,
+					found: types,
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
+	pub fn require_layout_variant(
+		&self,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<layout::variant::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		let types = self.caused_types();
+		match self.value.layout_variant.with_causes() {
+			Some(variant) => Ok(variant),
+			None => Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id,
+					expected: Type::LayoutVariant,
+					found: types,
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
+	pub fn require_layout_variant_mut(
+		&mut self,
+		cause: Option<Location<F>>,
+	) -> Result<&mut WithCauses<layout::variant::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		let types = self.caused_types();
+		match self.value.layout_variant.with_causes_mut() {
+			Some(variant) => Ok(variant),
+			None => Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id,
+					expected: Type::LayoutVariant,
 					found: types,
 				}
 				.into(),
@@ -422,6 +557,57 @@ impl<F> Node<Components<F>> {
 				.into(),
 				cause,
 			))
+		}
+	}
+
+	pub fn require_layout_field_or_variant_mut(
+		&mut self,
+		cause: Option<Location<F>>,
+	) -> Result<LayoutFieldOrVariant<F>, Error<F>>
+	where
+		F: Clone,
+	{
+		let types = self.caused_types();
+
+		let (layout_field, layout_variant) = (
+			self.value.layout_field.with_causes_mut(),
+			self.value.layout_variant.with_causes_mut(),
+		);
+
+		if layout_field.is_some() || layout_variant.is_some() {
+			Ok((layout_field, layout_variant))
+		} else {
+			Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id,
+					expected: Type::LayoutField,
+					found: types,
+				}
+				.into(),
+				cause,
+			))
+		}
+	}
+
+	pub fn require_list(
+		&self,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<list::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		let types = self.caused_types();
+		match self.value.list.with_causes() {
+			Some(list) => Ok(list),
+			None => Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id,
+					expected: Type::List,
+					found: types,
+				}
+				.into(),
+				cause,
+			)),
 		}
 	}
 

@@ -44,7 +44,12 @@ pub fn generate<F>(
 		"$schema".into(),
 		"https://json-schema.org/draft/2020-12/schema".into(),
 	);
-	json_schema.insert("title".into(), name.into());
+
+	let title = match layout.preferred_label(model) {
+		Some(label) => label.to_string(),
+		None => name.to_pascal_case(),
+	};
+	json_schema.insert("title".into(), title.into());
 	generate_layout(
 		&mut json_schema,
 		model,
@@ -85,6 +90,20 @@ pub fn generate<F>(
 	Ok(())
 }
 
+fn remove_newlines(s: &str) -> String {
+	let mut result = String::new();
+
+	for (i, line) in s.lines().enumerate() {
+		if i > 0 {
+			result.push(' ');
+		}
+
+		result.push_str(line);
+	}
+
+	result
+}
+
 fn generate_layout<F>(
 	json: &mut serde_json::Map<String, serde_json::Value>,
 	model: &treeldr::Model<F>,
@@ -99,7 +118,10 @@ fn generate_layout<F>(
 	);
 
 	if let Some(description) = layout.preferred_documentation(model).short_description() {
-		json.insert("description".into(), description.trim().into());
+		json.insert(
+			"description".into(),
+			remove_newlines(description.trim()).into(),
+		);
 	}
 
 	use treeldr::layout::Description;
@@ -109,6 +131,14 @@ fn generate_layout<F>(
 			Ok(())
 		}
 		Description::Struct(s) => generate_struct(json, model, embedding, type_property, s),
+		Description::Enum(enm) => {
+			generate_enum_type(json, model, enm)?;
+			Ok(())
+		}
+		Description::Literal(lit) => {
+			generate_literal_type(json, lit);
+			Ok(())
+		}
 		Description::Native(n, _) => {
 			generate_native_type(json, *n);
 			Ok(())
@@ -130,9 +160,10 @@ fn generate_struct<F>(
 		let mut type_schema = serde_json::Map::new();
 
 		type_schema.insert("type".into(), "string".into());
-		type_schema.insert("pattern".into(), s.name().into());
+		type_schema.insert("pattern".into(), s.name().to_pascal_case().into());
 
 		properties.insert(name.into(), type_schema.into());
+		required_properties.push(name.into());
 	}
 
 	for field in s.fields() {
@@ -173,14 +204,17 @@ fn generate_struct<F>(
 			field_schema
 		};
 
-		if let Some(description) = field.preferred_documentation(model).short_description() {
-			field_schema.insert("description".into(), description.trim().into());
+		if let Some(description) = field.preferred_label(model) {
+			field_schema.insert(
+				"description".into(),
+				remove_newlines(description.trim()).into(),
+			);
 		}
 
-		properties.insert(field.name().into(), field_schema.into());
+		properties.insert(field.name().to_camel_case(), field_schema.into());
 
 		if field.is_required() {
-			required_properties.push(serde_json::Value::from(field.name()));
+			required_properties.push(serde_json::Value::from(field.name().to_camel_case()));
 		}
 	}
 
@@ -221,9 +255,6 @@ fn generate_layout_ref<F>(
 	layout_ref: Ref<layout::Definition<F>>,
 ) -> Result<(), Error<F>> {
 	let layout = model.layouts().get(layout_ref).unwrap();
-	// if let Some(description) = layout.preferred_documentation(model).short_description() {
-	// 	json.insert("description".into(), description.trim().into());
-	// }
 
 	use treeldr::layout::Description;
 	match layout.description() {
@@ -239,9 +270,51 @@ fn generate_layout_ref<F>(
 			);
 			Ok(())
 		}
+		Description::Enum(enm) => {
+			generate_enum_type(json, model, enm)?;
+			Ok(())
+		}
+		Description::Literal(lit) => {
+			generate_literal_type(json, lit);
+			Ok(())
+		}
 		Description::Native(n, _) => {
 			generate_native_type(json, *n);
 			Ok(())
+		}
+	}
+}
+
+fn generate_enum_type<F>(
+	def: &mut serde_json::Map<String, serde_json::Value>,
+	model: &treeldr::Model<F>,
+	enm: &layout::Enum<F>,
+) -> Result<(), Error<F>> {
+	let mut variants = Vec::with_capacity(enm.variants().len());
+	for variant in enm.variants() {
+		let layout_ref = variant.layout().unwrap();
+		let mut variant_json = serde_json::Map::new();
+		generate_layout_ref(&mut variant_json, model, layout_ref)?;
+		variants.push(serde_json::Value::Object(variant_json))
+	}
+
+	def.insert("oneOf".into(), variants.into());
+
+	Ok(())
+}
+
+fn generate_literal_type<F>(
+	def: &mut serde_json::Map<String, serde_json::Value>,
+	lit: &layout::Literal<F>,
+) {
+	def.insert("type".into(), "string".into());
+	match lit.regexp().as_singleton() {
+		Some(singleton) => {
+			def.insert("const".into(), singleton.into());
+		}
+		None => {
+			// TODO: convert to ECMA-262 regular expression?
+			def.insert("pattern".into(), lit.regexp().to_string().into());
 		}
 	}
 }

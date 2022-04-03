@@ -1,5 +1,6 @@
 <http://www.example.com/Foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
-<http://www.example.com/Foo> <http://www.w3.org/2000/01/rdf-schema#comment> "Foo." .
+<http://www.example.com/Foo> <http://www.w3.org/2000/01/rdf-schema#label> "Foo." .
+<http://www.example.com/Foo> <https://treeldr.org/name> "foo" .
 <http://www.example.com/Foo/bar> <http://www.w3.org/2000/01/rdf-schema#domain> <http://www.example.com/Foo> .
 <http://www.example.com/Foo/bar> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2001/XMLSchema#anyURI> .
 <http://www.example.com/Foo/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
@@ -13,4 +14,4 @@ _:11 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/0
 _:12 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Field> .
 _:12 <https://treeldr.org/fieldFor> <http://www.example.com/Foo/bar> .
 _:12 <https://treeldr.org/name> "bar" .
-_:12 <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2001/XMLSchema#anyURI> .
+_:12 <https://treeldr.org/format> <http://www.w3.org/2001/XMLSchema#anyURI> .

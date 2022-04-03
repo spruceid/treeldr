@@ -1,33 +1,30 @@
-use crate::{layout, prop, ty, Causes, Documentation, Id, MaybeSet, WithCauses};
+use crate::{layout, ty, vocab::Name, Causes, Documentation, Id, MaybeSet, WithCauses};
 use shelves::Ref;
+
+pub mod enumeration;
+pub mod literal;
+mod native;
+mod structure;
 
 mod strongly_connected;
 mod usages;
 
+pub use enumeration::{Enum, Variant};
+pub use literal::Literal;
+pub use native::Native;
+pub use structure::{Field, Struct};
+
 pub use strongly_connected::StronglyConnectedLayouts;
 pub use usages::Usages;
 
+/// Layout type.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Type {
 	Native(Native),
 	Struct,
+	Enum,
 	Reference,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Native {
-	Boolean,
-	Integer,
-	PositiveInteger,
-	Float,
-	Double,
-	String,
-	Time,
-	Date,
-	DateTime,
-	Iri,
-	Uri,
-	Url,
+	Literal,
 }
 
 /// Layout definition.
@@ -38,10 +35,22 @@ pub struct Definition<F> {
 	causes: Causes<F>,
 }
 
+/// Layout description.
 pub enum Description<F> {
-	Native(Native, MaybeSet<String, F>),
+	/// Native layout, such as a number, a string, etc.
+	Native(Native, MaybeSet<Name, F>),
+
+	/// Structure.
 	Struct(Struct<F>),
-	Reference(Ref<layout::Definition<F>>, MaybeSet<String, F>),
+
+	/// Enumeration.
+	Enum(Enum<F>),
+
+	/// Reference.
+	Reference(Ref<layout::Definition<F>>, MaybeSet<Name, F>),
+
+	/// Literal layout.
+	Literal(Literal<F>),
 }
 
 impl<F> Description<F> {
@@ -49,7 +58,9 @@ impl<F> Description<F> {
 		match self {
 			Self::Reference(_, _) => Type::Reference,
 			Self::Struct(_) => Type::Struct,
+			Self::Enum(_) => Type::Enum,
 			Self::Native(n, _) => Type::Native(*n),
+			Self::Literal(_) => Type::Literal,
 		}
 	}
 }
@@ -79,11 +90,13 @@ impl<F> Definition<F> {
 		self.id
 	}
 
-	pub fn name(&self) -> Option<&str> {
+	pub fn name(&self) -> Option<&Name> {
 		match self.desc.inner() {
 			Description::Struct(s) => Some(s.name()),
-			Description::Reference(_, n) => n.value().map(String::as_str),
-			Description::Native(_, n) => n.value().map(String::as_str),
+			Description::Enum(e) => Some(e.name()),
+			Description::Reference(_, n) => n.value(),
+			Description::Native(_, n) => n.value(),
+			Description::Literal(l) => Some(l.name()),
 		}
 	}
 
@@ -93,6 +106,20 @@ impl<F> Definition<F> {
 
 	pub fn description(&self) -> &Description<F> {
 		&self.desc
+	}
+
+	pub fn label<'m>(&self, model: &'m crate::Model<F>) -> Option<&'m str> {
+		model.get(self.id).unwrap().label()
+	}
+
+	pub fn preferred_label<'a>(&'a self, model: &'a crate::Model<F>) -> Option<&'a str> {
+		let label = self.label(model);
+		if label.is_none() {
+			let ty_id = model.types().get(*self.ty).unwrap().id();
+			model.get(ty_id).unwrap().label()
+		} else {
+			label
+		}
 	}
 
 	pub fn documentation<'m>(&self, model: &'m crate::Model<F>) -> &'m Documentation {
@@ -112,16 +139,18 @@ impl<F> Definition<F> {
 	pub fn composing_layouts(&self) -> ComposingLayouts<F> {
 		match self.description() {
 			Description::Struct(s) => ComposingLayouts::Struct(s.fields().iter()),
-			Description::Reference(_, _) => ComposingLayouts::Reference,
-			Description::Native(_, _) => ComposingLayouts::Native,
+			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts()),
+			Description::Literal(_) => ComposingLayouts::None,
+			Description::Reference(_, _) => ComposingLayouts::None,
+			Description::Native(_, _) => ComposingLayouts::None,
 		}
 	}
 }
 
 pub enum ComposingLayouts<'a, F> {
 	Struct(std::slice::Iter<'a, Field<F>>),
-	Reference,
-	Native,
+	Enum(enumeration::ComposingLayouts<'a, F>),
+	None,
 }
 
 impl<'a, F> Iterator for ComposingLayouts<'a, F> {
@@ -130,91 +159,8 @@ impl<'a, F> Iterator for ComposingLayouts<'a, F> {
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
 			Self::Struct(fields) => Some(fields.next()?.layout()),
-			Self::Reference => None,
-			Self::Native => None,
-		}
-	}
-}
-
-/// Structure layout.
-pub struct Struct<F> {
-	name: WithCauses<String, F>,
-	fields: Vec<Field<F>>,
-}
-
-impl<F> Struct<F> {
-	pub fn new(name: WithCauses<String, F>, fields: Vec<Field<F>>) -> Self {
-		Self { name, fields }
-	}
-
-	pub fn name(&self) -> &str {
-		self.name.as_str()
-	}
-
-	pub fn fields(&self) -> &[Field<F>] {
-		&self.fields
-	}
-}
-
-/// Layout field.
-pub struct Field<F> {
-	prop: WithCauses<Ref<prop::Definition<F>>, F>,
-	name: WithCauses<String, F>,
-	layout: WithCauses<Ref<Definition<F>>, F>,
-	required: WithCauses<bool, F>,
-	functional: WithCauses<bool, F>,
-	doc: Documentation,
-}
-
-impl<F> Field<F> {
-	pub fn new(
-		prop: WithCauses<Ref<prop::Definition<F>>, F>,
-		name: WithCauses<String, F>,
-		layout: WithCauses<Ref<Definition<F>>, F>,
-		required: WithCauses<bool, F>,
-		functional: WithCauses<bool, F>,
-		doc: Documentation,
-	) -> Self {
-		Self {
-			prop,
-			name,
-			layout,
-			required,
-			functional,
-			doc,
-		}
-	}
-
-	pub fn property(&self) -> Ref<prop::Definition<F>> {
-		*self.prop.inner()
-	}
-
-	pub fn name(&self) -> &str {
-		self.name.inner().as_str()
-	}
-
-	pub fn layout(&self) -> Ref<layout::Definition<F>> {
-		*self.layout.inner()
-	}
-
-	pub fn is_required(&self) -> bool {
-		*self.required.inner()
-	}
-
-	pub fn is_functional(&self) -> bool {
-		*self.functional.inner()
-	}
-
-	pub fn documentation(&self) -> &Documentation {
-		&self.doc
-	}
-
-	pub fn preferred_documentation<'a>(&'a self, model: &'a crate::Model<F>) -> &'a Documentation {
-		if self.doc.is_empty() {
-			let prop_id = model.properties().get(*self.prop).unwrap().id();
-			model.get(prop_id).unwrap().documentation()
-		} else {
-			&self.doc
+			Self::Enum(layouts) => layouts.next(),
+			Self::None => None,
 		}
 	}
 }
