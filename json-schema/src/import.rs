@@ -1,28 +1,12 @@
 //! JSON Schema import functions.
-//! 
+//!
 //! Semantics follows <https://www.w3.org/2019/wot/json-schema>.
-use serde_json::{
-	Value
-};
-use locspan::{
-	Location,
-	Span,
-	Loc
-};
 use iref::IriBuf;
-use rdf_types::{
-	Quad
-};
-use treeldr::{
-	vocab,
-	Vocabulary,
-	Id
-};
-use vocab::{
-	Object,
-	LocQuad,
-	Term
-};
+use locspan::{Loc, Location, Span};
+use rdf_types::Quad;
+use serde_json::Value;
+use treeldr::{vocab, Id, Vocabulary};
+use vocab::{LocQuad, Object, Term};
 
 /// Import error.
 pub enum Error {
@@ -33,7 +17,9 @@ pub enum Error {
 	InvalidIdValue,
 	InvalidRefValue,
 	UnknownKey(String),
-	InvalidProperties
+	InvalidProperties,
+	InvalidTitle,
+	InvalidDescription,
 }
 
 impl From<serde_json::error::Error> for Error {
@@ -47,10 +33,15 @@ fn loc<F: Clone>(file: &F) -> Location<F> {
 	Location::new(file.clone(), Span::default())
 }
 
-pub fn import<F: Clone>(content: &str, file: F, vocabulary: &mut Vocabulary, quads: &mut Vec<LocQuad<F>>) -> Result<(), Error> {
+pub fn import<F: Clone>(
+	content: &str,
+	file: F,
+	vocabulary: &mut Vocabulary,
+	quads: &mut Vec<LocQuad<F>>,
+) -> Result<(), Error> {
 	let schema = serde_json::from_str(content)?;
 
-	import_schema(&schema, &file, vocabulary, quads);
+	import_schema(&schema, &file, vocabulary, quads)?;
 
 	Ok(())
 }
@@ -59,8 +50,8 @@ pub fn import_schema<F: Clone>(
 	schema: &Value,
 	file: &F,
 	vocabulary: &mut Vocabulary,
-	quads: &mut Vec<LocQuad<F>>
-) -> Result<Object<F>, Error> {
+	quads: &mut Vec<LocQuad<F>>,
+) -> Result<Loc<Object<F>, F>, Error> {
 	let schema = schema.as_object().ok_or(Error::InvalidSchema)?;
 
 	if let Some(uri) = schema.get("$schema") {
@@ -69,7 +60,7 @@ pub fn import_schema<F: Clone>(
 
 	if let Some(object) = schema.get("$vocabulary") {
 		let object = object.as_object().ok_or(Error::InvalidVocabularyValue)?;
-		
+
 		for (uri, required) in object {
 			let required = required.as_bool().ok_or(Error::InvalidVocabularyValue)?;
 			todo!()
@@ -82,7 +73,7 @@ pub fn import_schema<F: Clone>(
 			let id = id.as_str().ok_or(Error::InvalidIdValue)?;
 			let iri = IriBuf::new(id).map_err(|_| Error::InvalidIdValue)?;
 			Id::Iri(vocab::Term::from_iri(iri, vocabulary))
-		},
+		}
 		None => match schema.get("$ref") {
 			Some(iri) => {
 				is_ref = true;
@@ -90,10 +81,8 @@ pub fn import_schema<F: Clone>(
 				let iri = IriBuf::new(iri).map_err(|_| Error::InvalidRefValue)?;
 				Id::Iri(vocab::Term::from_iri(iri, vocabulary))
 			}
-			None => {
-				Id::Blank(vocabulary.new_blank_label())
-			}
-		}
+			None => Id::Blank(vocabulary.new_blank_label()),
+		},
 	};
 
 	// Declare the layout.
@@ -102,10 +91,13 @@ pub fn import_schema<F: Clone>(
 			Quad(
 				Loc(id, loc(file)),
 				Loc(Term::Rdf(vocab::Rdf::Type), loc(file)),
-				Loc(Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)), loc(file)),
-				None
+				Loc(
+					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)),
+					loc(file),
+				),
+				None,
 			),
-			loc(file)
+			loc(file),
 		));
 	}
 
@@ -118,7 +110,7 @@ pub fn import_schema<F: Clone>(
 			"$comment" => (),
 			"$defs" => {
 				todo!()
-			},
+			}
 			// 10. A Vocabulary for Applying Subschemas
 			"allOf" => {
 				todo!()
@@ -132,9 +124,9 @@ pub fn import_schema<F: Clone>(
 			"not" => {
 				todo!()
 			}
-			// 10.2.2. Keywords for Applying Subschemas Conditionally 
+			// 10.2.2. Keywords for Applying Subschemas Conditionally
 			"if" => {
-				todo!()	
+				todo!()
 			}
 			"then" => {
 				todo!()
@@ -171,53 +163,58 @@ pub fn import_schema<F: Clone>(
 							Loc(Id::Blank(prop_label), loc(file)),
 							Loc(Term::Rdf(vocab::Rdf::Type), loc(file)),
 							Loc(Object::Iri(Term::TreeLdr(vocab::TreeLdr::Field)), loc(file)),
-							None
+							None,
 						),
-						loc(file)
+						loc(file),
 					));
 					// <prop> treeldr:name <name>
 					quads.push(Loc(
 						Quad(
 							Loc(Id::Blank(prop_label), loc(file)),
 							Loc(Term::TreeLdr(vocab::TreeLdr::Name), loc(file)),
-							Loc(Object::Literal(vocab::Literal::String(
-								Loc(
+							Loc(
+								Object::Literal(vocab::Literal::String(Loc(
 									prop.to_string().into(),
-									loc(file)
-								)
-							)), loc(file)),
-							None
+									loc(file),
+								))),
+								loc(file),
+							),
+							None,
 						),
-						loc(file)
+						loc(file),
 					));
 
 					let prop_schema = import_schema(prop_schema, file, vocabulary, quads)?;
-					// quads.push(Loc(
-					// 	Quad(
-					// 		Loc(Id::Blank(prop_label), loc(file)),
-					// 		Loc(Term::TreeLdr(vocab::TreeLdr::Format), loc(file)),
-					// 		Loc(Object::Literal(vocab::Literal::String(
-					// 			Loc(
-					// 				prop.to_string().into(),
-					// 				loc(file)
-					// 			)
-					// 		)), loc(file)),
-					// 		None
-					// 	),
-					// 	loc(file)
-					// ));
-					todo!()
+					quads.push(Loc(
+						Quad(
+							Loc(Id::Blank(prop_label), loc(file)),
+							Loc(Term::TreeLdr(vocab::TreeLdr::Format), loc(file)),
+							prop_schema,
+							None,
+						),
+						loc(file),
+					));
+
+					fields.push(Loc(Object::Blank(prop_label), loc(file)))
 				}
+
+				let fields = fields.into_iter().try_into_rdf_list::<Error, _>(
+					&mut (),
+					vocabulary,
+					quads,
+					loc(file),
+					|field, _, _, _| Ok(field),
+				)?;
 
 				// Then we declare the structure content.
 				quads.push(Loc(
 					Quad(
 						Loc(id, loc(file)),
-						Loc(Term::Rdf(vocab::Rdf::Type), loc(file)),
-						Loc(Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)), loc(file)),
-						None
+						Loc(Term::TreeLdr(vocab::TreeLdr::Fields), loc(file)),
+						fields,
+						None,
 					),
-					loc(file)
+					loc(file),
 				));
 			}
 			"patternProperties" => {
@@ -246,7 +243,17 @@ pub fn import_schema<F: Clone>(
 				todo!()
 			}
 			"const" => {
-				todo!()
+				// The presence of this key means that the schema represents a TreeLDR literal/singleton layout.
+				let singleton = value_into_object(file, vocabulary, quads, value)?;
+				quads.push(Loc(
+					Quad(
+						Loc(id, loc(file)),
+						Loc(Term::TreeLdr(vocab::TreeLdr::Singleton), loc(file)),
+						singleton,
+						None,
+					),
+					loc(file),
+				));
 			}
 			// 6.2. Validation Keywords for Numeric Instances (number and integer)
 			"multipleOf" => {
@@ -319,10 +326,42 @@ pub fn import_schema<F: Clone>(
 			}
 			// 9. A Vocabulary for Basic Meta-Data Annotations
 			"title" => {
-				todo!()
+				// The title of a schema is translated in an rdfs:label.
+				let label = value.as_str().ok_or(Error::InvalidTitle)?;
+				quads.push(Loc(
+					Quad(
+						Loc(id, loc(file)),
+						Loc(Term::Rdfs(vocab::Rdfs::Label), loc(file)),
+						Loc(
+							Object::Literal(vocab::Literal::String(Loc(
+								label.to_string().into(),
+								loc(file),
+							))),
+							loc(file),
+						),
+						None,
+					),
+					loc(file),
+				));
 			}
 			"description" => {
-				todo!()
+				// The title of a schema is translated in an rdfs:comment.
+				let comment = value.as_str().ok_or(Error::InvalidDescription)?;
+				quads.push(Loc(
+					Quad(
+						Loc(id, loc(file)),
+						Loc(Term::Rdfs(vocab::Rdfs::Comment), loc(file)),
+						Loc(
+							Object::Literal(vocab::Literal::String(Loc(
+								comment.to_string().into(),
+								loc(file),
+							))),
+							loc(file),
+						),
+						None,
+					),
+					loc(file),
+				));
 			}
 			"default" => {
 				todo!()
@@ -340,41 +379,53 @@ pub fn import_schema<F: Clone>(
 				todo!()
 			}
 			// Unknown Term.
-			unknown => {
-				return Err(Error::UnknownKey(unknown.to_string()))
-			}
+			unknown => return Err(Error::UnknownKey(unknown.to_string())),
 		}
 	}
 
 	let result = match id {
 		Id::Iri(id) => Object::Iri(id),
-		Id::Blank(id) => Object::Blank(id)
+		Id::Blank(id) => Object::Blank(id),
 	};
 
-	Ok(result)
+	Ok(Loc(result, loc(file)))
 }
 
-fn value_into_object<F: Clone>(file: &F, vocab: &mut Vocabulary, quads: &mut Vec<LocQuad<F>>, value: Value) -> Result<Loc<Object<F>, F>, Error> {
+fn value_into_object<F: Clone>(
+	file: &F,
+	vocab: &mut Vocabulary,
+	quads: &mut Vec<LocQuad<F>>,
+	value: &Value,
+) -> Result<Loc<Object<F>, F>, Error> {
 	match value {
 		Value::Null => todo!(),
-		Value::Bool(true) => Ok(Loc(Object::Iri(vocab::Term::Schema(vocab::Schema::True)), loc(file))),
-		Value::Bool(false) => Ok(Loc(Object::Iri(vocab::Term::Schema(vocab::Schema::False)), loc(file))),
-		Value::Number(n) => Ok(Loc(
-			Object::Literal(
-				vocab::Literal::TypedString(
-					Loc(n.to_string().into(), loc(file)),
-					Loc(vocab::Term::Xsd(vocab::Xsd::Integer), loc(file))
-				)
-			),
-			loc(file)
+		Value::Bool(true) => Ok(Loc(
+			Object::Iri(vocab::Term::Schema(vocab::Schema::True)),
+			loc(file),
 		)),
-		Value::String(s) => Ok(Loc(Object::Literal(vocab::Literal::String(Loc(s.to_string().into(), loc(file)))), loc(file))),
-		Value::Array(items) => {
-			items.into_iter().try_into_rdf_list(&mut (), vocab, quads, loc(file), |item, _, vocab, quads| {
-				value_into_object(file, vocab, quads, item)
-			})
-		}
-		Value::Object(_) => todo!()
+		Value::Bool(false) => Ok(Loc(
+			Object::Iri(vocab::Term::Schema(vocab::Schema::False)),
+			loc(file),
+		)),
+		Value::Number(n) => Ok(Loc(
+			Object::Literal(vocab::Literal::TypedString(
+				Loc(n.to_string().into(), loc(file)),
+				Loc(vocab::Term::Xsd(vocab::Xsd::Integer), loc(file)),
+			)),
+			loc(file),
+		)),
+		Value::String(s) => Ok(Loc(
+			Object::Literal(vocab::Literal::String(Loc(s.to_string().into(), loc(file)))),
+			loc(file),
+		)),
+		Value::Array(items) => items.iter().try_into_rdf_list(
+			&mut (),
+			vocab,
+			quads,
+			loc(file),
+			|item, _, vocab, quads| value_into_object(file, vocab, quads, item),
+		),
+		Value::Object(_) => todo!(),
 	}
 }
 
@@ -401,7 +452,12 @@ impl<F: Clone, C, I: DoubleEndedIterator> TryIntoRdfList<F, C, I::Item> for I {
 		mut f: K,
 	) -> Result<Loc<Object<F>, F>, E>
 	where
-		K: FnMut(I::Item, &mut C, &mut Vocabulary, &mut Vec<LocQuad<F>>) -> Result<Loc<Object<F>, F>, E>,
+		K: FnMut(
+			I::Item,
+			&mut C,
+			&mut Vocabulary,
+			&mut Vec<LocQuad<F>>,
+		) -> Result<Loc<Object<F>, F>, E>,
 	{
 		use vocab::Rdf;
 		let mut head = Loc(Object::Iri(Term::Rdf(Rdf::Nil)), loc);

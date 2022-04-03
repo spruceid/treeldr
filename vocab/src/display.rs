@@ -1,7 +1,7 @@
 use super::Vocabulary;
 use fmt::Display as StdDisplay;
-use std::fmt;
 use locspan::Loc;
+use std::fmt;
 
 pub trait Display {
 	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result;
@@ -32,7 +32,9 @@ impl<F> Display for super::Literal<F> {
 	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::String(s) => s.fmt(f),
-			Self::TypedString(Loc(s, _), Loc(ty, _)) => write!(f, "{}^^<{}>", s, ty.display(namespace)),
+			Self::TypedString(Loc(s, _), Loc(ty, _)) => {
+				write!(f, "{}^^<{}>", s, ty.display(namespace))
+			}
 			Self::LangString(Loc(s, _), Loc(tag, _)) => write!(f, "{}@{}", s, tag),
 		}
 	}

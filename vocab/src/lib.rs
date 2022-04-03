@@ -109,16 +109,16 @@ pub enum Xsd {
 
 	#[iri("xsd:int")]
 	Int,
-	
+
 	#[iri("xsd:integer")]
 	Integer,
-	
+
 	#[iri("xsd:positiveInteger")]
 	PositiveInteger,
 
 	#[iri("xsd:float")]
 	Float,
-	
+
 	#[iri("xsd:double")]
 	Double,
 
@@ -135,7 +135,7 @@ pub enum Xsd {
 	DateTime,
 
 	#[iri("xsd:anyURI")]
-	AnyUri
+	AnyUri,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -210,7 +210,7 @@ impl Term {
 								let iri_buf: IriBuf = iri.into();
 								ns.get(&iri_buf).map(Term::Unknown)
 							}
-						}
+						},
 					},
 				},
 			},
@@ -336,12 +336,14 @@ pub fn object_from_rdf<F>(
 		rdf_types::Object::Literal(lit) => {
 			let lit = match lit {
 				rdf_types::loc::Literal::String(s) => Literal::String(s),
-				rdf_types::loc::Literal::TypedString(s, Loc(ty, ty_loc)) => Literal::TypedString(s, Loc(Term::from_iri(ty, ns), ty_loc)),
-				rdf_types::loc::Literal::LangString(s, l) => Literal::LangString(s, l)
+				rdf_types::loc::Literal::TypedString(s, Loc(ty, ty_loc)) => {
+					Literal::TypedString(s, Loc(Term::from_iri(ty, ns), ty_loc))
+				}
+				rdf_types::loc::Literal::LangString(s, l) => Literal::LangString(s, l),
 			};
 
 			Object::Literal(lit)
-		},
+		}
 	}
 }
 
@@ -356,12 +358,14 @@ pub fn stripped_object_from_rdf(
 		rdf_types::Object::Literal(lit) => {
 			let lit = match lit {
 				rdf_types::Literal::String(s) => rdf_types::Literal::String(s),
-				rdf_types::Literal::TypedString(s, ty) => rdf_types::Literal::TypedString(s, Term::from_iri(ty, ns)),
-				rdf_types::Literal::LangString(s, l) => rdf_types::Literal::LangString(s, l)
+				rdf_types::Literal::TypedString(s, ty) => {
+					rdf_types::Literal::TypedString(s, Term::from_iri(ty, ns))
+				}
+				rdf_types::Literal::LangString(s, l) => rdf_types::Literal::LangString(s, l),
 			};
 
 			StrippedObject::Literal(lit)
-		},
+		}
 	}
 }
 
