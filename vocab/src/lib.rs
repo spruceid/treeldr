@@ -1,7 +1,7 @@
 use iref::{Iri, IriBuf};
 use iref_enum::IriEnum;
 use locspan::Loc;
-use rdf_types::{loc::Literal, Quad};
+use rdf_types::{Quad, StringLiteral};
 use std::{collections::HashMap, fmt};
 
 mod display;
@@ -47,6 +47,43 @@ pub enum Schema {
 
 	#[iri("schema:valueRequired")]
 	ValueRequired,
+}
+
+#[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[iri_prefix("xsd" = "http://www.w3.org/2001/XMLSchema#")]
+pub enum Xsd {
+	#[iri("xsd:boolean")]
+	Boolean,
+
+	#[iri("xsd:int")]
+	Int,
+	
+	#[iri("xsd:integer")]
+	Integer,
+	
+	#[iri("xsd:positiveInteger")]
+	PositiveInteger,
+
+	#[iri("xsd:float")]
+	Float,
+	
+	#[iri("xsd:double")]
+	Double,
+
+	#[iri("xsd:string")]
+	String,
+
+	#[iri("xsd:time")]
+	Time,
+
+	#[iri("xsd:date")]
+	Date,
+
+	#[iri("xsd:dateTime")]
+	DateTime,
+
+	#[iri("xsd:anyURI")]
+	AnyUri
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -98,6 +135,7 @@ pub struct UnknownName(usize);
 pub enum Name {
 	Rdf(Rdf),
 	Rdfs(Rdfs),
+	Xsd(Xsd),
 	Schema(Schema),
 	TreeLdr(TreeLdr),
 	Unknown(UnknownName),
@@ -109,13 +147,16 @@ impl Name {
 			Ok(id) => Some(Name::Rdf(id)),
 			Err(_) => match Rdfs::try_from(iri) {
 				Ok(id) => Some(Name::Rdfs(id)),
-				Err(_) => match Schema::try_from(iri) {
-					Ok(id) => Some(Name::Schema(id)),
-					Err(_) => match TreeLdr::try_from(iri) {
-						Ok(id) => Some(Name::TreeLdr(id)),
-						Err(_) => {
-							let iri_buf: IriBuf = iri.into();
-							ns.get(&iri_buf).map(Name::Unknown)
+				Err(_) => match Xsd::try_from(iri) {
+					Ok(id) => Some(Name::Xsd(id)),
+					Err(_) => match Schema::try_from(iri) {
+						Ok(id) => Some(Name::Schema(id)),
+						Err(_) => match TreeLdr::try_from(iri) {
+							Ok(id) => Some(Name::TreeLdr(id)),
+							Err(_) => {
+								let iri_buf: IriBuf = iri.into();
+								ns.get(&iri_buf).map(Name::Unknown)
+							}
 						}
 					},
 				},
@@ -143,6 +184,7 @@ impl Name {
 		match self {
 			Self::Rdf(id) => Some(id.into()),
 			Self::Rdfs(id) => Some(id.into()),
+			Self::Xsd(id) => Some(id.into()),
 			Self::Schema(id) => Some(id.into()),
 			Self::TreeLdr(id) => Some(id.into()),
 			Self::Unknown(name) => ns.iri(*name),
@@ -153,7 +195,7 @@ impl Name {
 impl rdf_types::AsTerm for Name {
 	type Iri = Self;
 	type BlankId = BlankLabel;
-	type Literal = rdf_types::Literal;
+	type Literal = rdf_types::Literal<StringLiteral, Self>;
 
 	fn as_term(&self) -> rdf_types::Term<&Self::Iri, &Self::BlankId, &Self::Literal> {
 		rdf_types::Term::Iri(self)
@@ -163,7 +205,7 @@ impl rdf_types::AsTerm for Name {
 impl rdf_types::IntoTerm for Name {
 	type Iri = Self;
 	type BlankId = BlankLabel;
-	type Literal = rdf_types::Literal;
+	type Literal = rdf_types::Literal<StringLiteral, Self>;
 
 	fn into_term(self) -> rdf_types::Term<Self::Iri, Self::BlankId, Self::Literal> {
 		rdf_types::Term::Iri(self)
@@ -193,11 +235,15 @@ pub type Id = rdf_types::Subject<Name, BlankLabel>;
 
 pub type GraphLabel = rdf_types::GraphLabel<Name, BlankLabel>;
 
+pub type Literal<F> = rdf_types::loc::Literal<F, StringLiteral, Name>;
+
 pub type Object<F> = rdf_types::Object<Name, BlankLabel, Literal<F>>;
 
 pub type LocQuad<F> = rdf_types::loc::LocQuad<Id, Name, Object<F>, GraphLabel, F>;
 
-pub type StrippedObject = rdf_types::Object<Name, BlankLabel, rdf_types::Literal>;
+pub type StrippedLiteral = rdf_types::Literal<StringLiteral, Name>;
+
+pub type StrippedObject = rdf_types::Object<Name, BlankLabel, StrippedLiteral>;
 
 pub type StrippedQuad = rdf_types::Quad<Id, Name, StrippedObject, GraphLabel>;
 
@@ -230,7 +276,15 @@ pub fn object_from_rdf<F>(
 	match object {
 		rdf_types::Object::Iri(iri) => Object::Iri(Name::from_iri(iri, ns)),
 		rdf_types::Object::Blank(label) => Object::Blank(blank_label(label)),
-		rdf_types::Object::Literal(lit) => Object::Literal(lit),
+		rdf_types::Object::Literal(lit) => {
+			let lit = match lit {
+				rdf_types::loc::Literal::String(s) => Literal::String(s),
+				rdf_types::loc::Literal::TypedString(s, Loc(ty, ty_loc)) => Literal::TypedString(s, Loc(Name::from_iri(ty, ns), ty_loc)),
+				rdf_types::loc::Literal::LangString(s, l) => Literal::LangString(s, l)
+			};
+
+			Object::Literal(lit)
+		},
 	}
 }
 
@@ -242,7 +296,15 @@ pub fn stripped_object_from_rdf(
 	match object {
 		rdf_types::Object::Iri(iri) => StrippedObject::Iri(Name::from_iri(iri, ns)),
 		rdf_types::Object::Blank(label) => StrippedObject::Blank(blank_label(label)),
-		rdf_types::Object::Literal(lit) => StrippedObject::Literal(lit),
+		rdf_types::Object::Literal(lit) => {
+			let lit = match lit {
+				rdf_types::Literal::String(s) => rdf_types::Literal::String(s),
+				rdf_types::Literal::TypedString(s, ty) => rdf_types::Literal::TypedString(s, Name::from_iri(ty, ns)),
+				rdf_types::Literal::LangString(s, l) => rdf_types::Literal::LangString(s, l)
+			};
+
+			StrippedObject::Literal(lit)
+		},
 	}
 }
 
