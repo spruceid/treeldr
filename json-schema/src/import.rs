@@ -1,10 +1,11 @@
 //! JSON Schema import functions.
 //!
 //! Semantics follows <https://www.w3.org/2019/wot/json-schema>.
-use iref::IriBuf;
+use iref::{Iri, IriBuf, IriRefBuf};
 use locspan::{Loc, Location, Span};
 use rdf_types::Quad;
 use serde_json::Value;
+use std::collections::HashMap;
 use treeldr::{vocab, Id, Vocabulary};
 use vocab::{LocQuad, Object, Term};
 
@@ -14,12 +15,18 @@ pub enum Error {
 	InvalidSchema,
 	InvalidVocabularyValue,
 	InvalidSchemaValue,
+	UnknownSchemaDialect,
 	InvalidIdValue,
 	InvalidRefValue,
 	UnknownKey(String),
 	InvalidProperties,
 	InvalidTitle,
 	InvalidDescription,
+	InvalidFormat,
+	UnknownFormat,
+	InvalidRequired,
+	InvalidRequiredProperty,
+	InvalidPattern,
 }
 
 impl From<serde_json::error::Error> for Error {
@@ -41,7 +48,7 @@ pub fn import<F: Clone>(
 ) -> Result<(), Error> {
 	let schema = serde_json::from_str(content)?;
 
-	import_schema(&schema, &file, vocabulary, quads)?;
+	import_schema(&schema, &file, None, vocabulary, quads)?;
 
 	Ok(())
 }
@@ -49,6 +56,7 @@ pub fn import<F: Clone>(
 pub fn import_schema<F: Clone>(
 	schema: &Value,
 	file: &F,
+	base_iri: Option<Iri>,
 	vocabulary: &mut Vocabulary,
 	quads: &mut Vec<LocQuad<F>>,
 ) -> Result<Loc<Object<F>, F>, Error> {
@@ -56,6 +64,9 @@ pub fn import_schema<F: Clone>(
 
 	if let Some(uri) = schema.get("$schema") {
 		let uri = uri.as_str().ok_or(Error::InvalidVocabularyValue)?;
+		if uri != "https://json-schema.org/draft/2020-12/schema" {
+			return Err(Error::UnknownSchemaDialect);
+		}
 	}
 
 	if let Some(object) = schema.get("$vocabulary") {
@@ -68,20 +79,27 @@ pub fn import_schema<F: Clone>(
 	}
 
 	let mut is_ref = false;
-	let id = match schema.get("$id") {
+	let (id, base_iri) = match schema.get("$id") {
 		Some(id) => {
 			let id = id.as_str().ok_or(Error::InvalidIdValue)?;
 			let iri = IriBuf::new(id).map_err(|_| Error::InvalidIdValue)?;
-			Id::Iri(vocab::Term::from_iri(iri, vocabulary))
+			let id = Id::Iri(vocab::Term::from_iri(iri.clone(), vocabulary));
+			(id, Some(iri))
 		}
 		None => match schema.get("$ref") {
-			Some(iri) => {
+			Some(iri_ref) => {
 				is_ref = true;
-				let iri = iri.as_str().ok_or(Error::InvalidRefValue)?;
-				let iri = IriBuf::new(iri).map_err(|_| Error::InvalidRefValue)?;
-				Id::Iri(vocab::Term::from_iri(iri, vocabulary))
+				let iri_ref = iri_ref.as_str().ok_or(Error::InvalidRefValue)?;
+				let iri_ref = IriRefBuf::new(iri_ref).map_err(|_| Error::InvalidRefValue)?;
+				let iri = iri_ref.resolved(base_iri.unwrap());
+				let id = Id::Iri(vocab::Term::from_iri(iri.clone(), vocabulary));
+				(id, Some(iri))
 			}
-			None => Id::Blank(vocabulary.new_blank_label()),
+			None => {
+				let id = Id::Blank(vocabulary.new_blank_label());
+				let base_iri = base_iri.map(IriBuf::from);
+				(id, base_iri)
+			}
 		},
 	};
 
@@ -100,6 +118,9 @@ pub fn import_schema<F: Clone>(
 			loc(file),
 		));
 	}
+
+	let mut property_fields: HashMap<&str, _> = HashMap::new();
+	let mut required_properties = Vec::new();
 
 	for (key, value) in schema {
 		match key.as_str() {
@@ -184,7 +205,13 @@ pub fn import_schema<F: Clone>(
 						loc(file),
 					));
 
-					let prop_schema = import_schema(prop_schema, file, vocabulary, quads)?;
+					let prop_schema = import_schema(
+						prop_schema,
+						file,
+						base_iri.as_ref().map(IriBuf::as_iri),
+						vocabulary,
+						quads,
+					)?;
 					quads.push(Loc(
 						Quad(
 							Loc(Id::Blank(prop_label), loc(file)),
@@ -195,7 +222,10 @@ pub fn import_schema<F: Clone>(
 						loc(file),
 					));
 
-					fields.push(Loc(Object::Blank(prop_label), loc(file)))
+					let field = Loc(Object::Blank(prop_label), loc(file));
+
+					fields.push(field);
+					property_fields.insert(prop, Loc(Id::Blank(prop_label), loc(file)));
 				}
 
 				let fields = fields.into_iter().try_into_rdf_list::<Error, _>(
@@ -279,7 +309,23 @@ pub fn import_schema<F: Clone>(
 				todo!()
 			}
 			"pattern" => {
-				todo!()
+				// The presence of this key means that the schema represents a TreeLDR literal regular expression layout.
+				let pattern = value.as_str().ok_or(Error::InvalidPattern)?;
+				quads.push(Loc(
+					Quad(
+						Loc(id, loc(file)),
+						Loc(Term::TreeLdr(vocab::TreeLdr::Matches), loc(file)),
+						Loc(
+							Object::Literal(vocab::Literal::String(Loc(
+								pattern.to_string().into(),
+								loc(file),
+							))),
+							loc(file),
+						),
+						None,
+					),
+					loc(file),
+				));
 			}
 			// 6.4. Validation Keywords for Arrays
 			"maxItems" => {
@@ -305,14 +351,27 @@ pub fn import_schema<F: Clone>(
 				todo!()
 			}
 			"required" => {
-				todo!()
+				let required = value.as_array().ok_or(Error::InvalidRequired)?;
+				for prop in required {
+					required_properties.push(prop.as_str().ok_or(Error::InvalidRequiredProperty)?)
+				}
 			}
 			"dependentRequired" => {
 				todo!()
 			}
 			// 7. Vocabularies for Semantic Content With "format"
 			"format" => {
-				todo!()
+				let format = value.as_str().ok_or(Error::InvalidFormat)?;
+				let layout = format_layout(file, format)?;
+				quads.push(Loc(
+					Quad(
+						Loc(id, loc(file)),
+						Loc(Term::TreeLdr(vocab::TreeLdr::Native), loc(file)),
+						layout,
+						None,
+					),
+					loc(file),
+				));
 			}
 			// 8. A Vocabulary for the Contents of String-Encoded Data
 			"contentEncoding" => {
@@ -383,6 +442,19 @@ pub fn import_schema<F: Clone>(
 		}
 	}
 
+	for prop in required_properties {
+		let field = property_fields.get(prop).unwrap();
+		quads.push(Loc(
+			Quad(
+				field.clone(),
+				Loc(Term::Schema(vocab::Schema::ValueRequired), loc(file)),
+				Loc(Object::Iri(Term::Schema(vocab::Schema::True)), loc(file)),
+				None,
+			),
+			loc(file),
+		));
+	}
+
 	let result = match id {
 		Id::Iri(id) => Object::Iri(id),
 		Id::Blank(id) => Object::Blank(id),
@@ -427,6 +499,33 @@ fn value_into_object<F: Clone>(
 		),
 		Value::Object(_) => todo!(),
 	}
+}
+
+fn format_layout<F: Clone>(file: &F, format: &str) -> Result<Loc<Object<F>, F>, Error> {
+	let layout = match format {
+		"date-time" => Term::Xsd(vocab::Xsd::DateTime),
+		"date" => Term::Xsd(vocab::Xsd::Date),
+		"time" => Term::Xsd(vocab::Xsd::Time),
+		"duration" => todo!(),
+		"email" => todo!(),
+		"idn-email" => todo!(),
+		"hostname" => todo!(),
+		"idn-hostname" => todo!(),
+		"ipv4" => todo!(),
+		"ipv6" => todo!(),
+		"uri" => todo!(),
+		"uri-reference" => todo!(),
+		"iri" => Term::Xsd(vocab::Xsd::AnyUri),
+		"iri-reference" => todo!(),
+		"uuid" => todo!(),
+		"uri-template" => todo!(),
+		"json-pointer" => todo!(),
+		"relative-json-pointer" => todo!(),
+		"regex" => todo!(),
+		_ => return Err(Error::UnknownFormat),
+	};
+
+	Ok(Loc(Object::Iri(layout), loc(file)))
 }
 
 pub trait TryIntoRdfList<F, C, T> {

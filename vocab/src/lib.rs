@@ -13,9 +13,15 @@ pub use name::*;
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]
 pub enum TreeLdr {
+	/// TreeLDR Layout.
 	#[iri("tldr:Layout")]
 	Layout,
 
+	/// Defines the name of a layout, field or variant.
+	#[iri("tldr:name")]
+	Name,
+
+	/// Associates a layout to the type its represents.
 	#[iri("tldr:layoutFor")]
 	LayoutFor,
 
@@ -23,6 +29,7 @@ pub enum TreeLdr {
 	#[iri("tldr:format")]
 	Format,
 
+	/// Structure layout.
 	#[iri("tldr:fields")]
 	Fields,
 
@@ -32,11 +39,8 @@ pub enum TreeLdr {
 	/// property.
 	/// The payload of the variant (required) is given by the `treeldr:format`
 	/// property.
-	#[iri("tldr:Field")]
+	#[iri("tldr:Layout/Field")]
 	Field,
-
-	#[iri("tldr:name")]
-	Name,
 
 	#[iri("tldr:fieldFor")]
 	FieldFor,
@@ -48,7 +52,7 @@ pub enum TreeLdr {
 	#[iri("tldr:derefTo")]
 	DerefTo,
 
-	/// Layout equality constraint.
+	/// Singleton layout.
 	///
 	/// The only possible instance of the subject layout is the given object.
 	#[iri("tldr:singleton")]
@@ -76,6 +80,10 @@ pub enum TreeLdr {
 	/// property.
 	#[iri("tldr:Variant")]
 	Variant,
+
+	/// Native layout.
+	#[iri("tldr:native")]
+	Native,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
