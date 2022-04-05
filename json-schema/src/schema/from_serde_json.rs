@@ -1,0 +1,419 @@
+use super::*;
+use iref::{IriBuf, IriRefBuf};
+use serde_json::Value;
+
+pub enum Error {
+	InvalidSchema,
+	InvalidUri,
+	InvalidUriRef,
+	InvalidType,
+	NotABoolean,
+	NotAString,
+	NotAnArray,
+	NotAnObject,
+	UnknownFormat,
+}
+
+trait ValueTryInto: Sized {
+	fn try_into_bool(self) -> Result<bool, Error>;
+	fn try_into_string(self) -> Result<String, Error>;
+	fn try_into_array(self) -> Result<Vec<Value>, Error>;
+
+	fn try_into_schema_array(self) -> Result<Vec<Schema>, Error> {
+		let mut schemas = Vec::new();
+		for v in self.try_into_array()? {
+			schemas.push(v.try_into_schema()?)
+		}
+		Ok(schemas)
+	}
+
+	fn try_into_schema(self) -> Result<Schema, Error>;
+
+	fn try_into_boxed_schema(self) -> Result<Box<Schema>, Error> {
+		Ok(Box::new(self.try_into_schema()?))
+	}
+
+	fn try_into_object(self) -> Result<serde_json::Map<String, Value>, Error>;
+
+	fn try_into_uri(self) -> Result<IriBuf, Error> {
+		IriBuf::from_string(self.try_into_string()?).map_err(|_| Error::InvalidUri)
+	}
+
+	fn try_into_uri_ref(self) -> Result<IriRefBuf, Error> {
+		IriRefBuf::from_string(self.try_into_string()?).map_err(|_| Error::InvalidUriRef)
+	}
+}
+
+impl ValueTryInto for Value {
+	fn try_into_bool(self) -> Result<bool, Error> {
+		match self {
+			Self::Bool(b) => Ok(b),
+			_ => Err(Error::NotABoolean),
+		}
+	}
+
+	fn try_into_string(self) -> Result<String, Error> {
+		match self {
+			Self::String(s) => Ok(s),
+			_ => Err(Error::NotAString),
+		}
+	}
+
+	fn try_into_array(self) -> Result<Vec<Value>, Error> {
+		match self {
+			Self::Array(a) => Ok(a),
+			_ => Err(Error::NotAnArray),
+		}
+	}
+
+	fn try_into_object(self) -> Result<serde_json::Map<String, Value>, Error> {
+		match self {
+			Self::Object(o) => Ok(o),
+			_ => Err(Error::NotAnObject),
+		}
+	}
+
+	fn try_into_schema(self) -> Result<Schema, Error> {
+		Schema::try_from(self)
+	}
+}
+
+fn read_meta_data(value: &mut serde_json::Map<String, Value>) -> Result<MetaData, Error> {
+	Ok(MetaData {
+		title: value
+			.remove("title")
+			.map(|t| t.try_into_string())
+			.transpose()?,
+		description: value
+			.remove("description")
+			.map(|t| t.try_into_string())
+			.transpose()?,
+		default: value.remove("default"),
+		deprecated: value
+			.remove("deprecated")
+			.map(|t| t.try_into_bool())
+			.transpose()?,
+		read_only: value
+			.remove("readOnly")
+			.map(|t| t.try_into_bool())
+			.transpose()?,
+		write_only: value
+			.remove("writeOnly")
+			.map(|t| t.try_into_bool())
+			.transpose()?,
+		examples: value
+			.remove("examples")
+			.map(|t| t.try_into_array())
+			.transpose()?,
+	})
+}
+
+fn read_meta_schema(value: &mut serde_json::Map<String, Value>) -> Result<MetaSchema, Error> {
+	Ok(MetaSchema {
+		schema: value
+			.remove("schema")
+			.map(|t| t.try_into_uri())
+			.transpose()?,
+		vocabulary: value
+			.remove("vocabulary")
+			.map(|t| {
+				let obj = t.try_into_object()?;
+				let mut vocab = HashMap::new();
+				for (key, value) in obj {
+					let uri = IriBuf::from_string(key).map_err(|_| Error::InvalidUriRef)?;
+					vocab.insert(uri, value.try_into_bool()?);
+				}
+				Ok(vocab)
+			})
+			.transpose()?,
+	})
+}
+
+fn read_description(value: &mut serde_json::Map<String, Value>) -> Result<Description, Error> {
+	if let Some(all_of) = value.remove("allOf") {
+		Ok(Description::AllOf(all_of.try_into_schema_array()?))
+	} else if let Some(any_of) = value.remove("anyOf") {
+		Ok(Description::AnyOf(any_of.try_into_schema_array()?))
+	} else if let Some(one_of) = value.remove("oneOf") {
+		Ok(Description::OneOf(one_of.try_into_schema_array()?))
+	} else if let Some(not) = value.remove("not") {
+		Ok(Description::Not(not.try_into_boxed_schema()?))
+	} else if let Some(condition) = value.remove("if") {
+		Ok(Description::If {
+			condition: Box::new(Schema::try_from(condition)?),
+			then: value
+				.remove("then")
+				.map(|s| Ok(Box::new(s.try_into()?)))
+				.transpose()?,
+			els: value
+				.remove("els")
+				.map(|s| Ok(Box::new(s.try_into()?)))
+				.transpose()?,
+		})
+	} else {
+		Ok(Description::Definition {
+			string: read_string_encoded_data_schema(value)?,
+			array: read_array_schema(value)?,
+			object: read_object_schema(value)?,
+		})
+	}
+}
+
+fn read_string_encoded_data_schema(
+	value: &mut serde_json::Map<String, Value>,
+) -> Result<StringEncodedData, Error> {
+	Ok(StringEncodedData {
+		content_encoding: value
+			.remove("contentEncoding")
+			.map(ValueTryInto::try_into_string)
+			.transpose()?,
+		content_media_type: value
+			.remove("contentMediaType")
+			.map(ValueTryInto::try_into_string)
+			.transpose()?,
+		content_schema: value
+			.remove("contentSchema")
+			.map(|s| Ok(Box::new(s.try_into()?)))
+			.transpose()?,
+	})
+}
+
+fn read_array_schema(value: &mut serde_json::Map<String, Value>) -> Result<ArraySchema, Error> {
+	Ok(ArraySchema {
+		prefix_items: value
+			.remove("prefixItems")
+			.map(ValueTryInto::try_into_schema_array)
+			.transpose()?,
+		items: value
+			.remove("items")
+			.map(ValueTryInto::try_into_boxed_schema)
+			.transpose()?,
+		contains: value
+			.remove("contains")
+			.map(ValueTryInto::try_into_boxed_schema)
+			.transpose()?,
+		unevaluated_items: value
+			.remove("unevaluatedItems")
+			.map(ValueTryInto::try_into_boxed_schema)
+			.transpose()?,
+	})
+}
+
+fn read_object_schema(value: &mut serde_json::Map<String, Value>) -> Result<ObjectSchema, Error> {
+	Ok(ObjectSchema {
+		properties: value
+			.remove("properties")
+			.map(|v| {
+				let obj = v.try_into_object()?;
+				let mut properties = HashMap::new();
+				for (key, value) in obj {
+					properties.insert(key, value.try_into_schema()?);
+				}
+				Ok(properties)
+			})
+			.transpose()?,
+		pattern_properties: value
+			.remove("patternProperties")
+			.map(|v| {
+				let obj = v.try_into_object()?;
+				let mut properties = HashMap::new();
+				for (key, value) in obj {
+					properties.insert(key, value.try_into_schema()?);
+				}
+				Ok(properties)
+			})
+			.transpose()?,
+		additional_properties: value
+			.remove("additionalProperties")
+			.map(ValueTryInto::try_into_boxed_schema)
+			.transpose()?,
+		dependent_schemas: value
+			.remove("dependentSchemas")
+			.map(|v| {
+				let obj = v.try_into_object()?;
+				let mut properties = HashMap::new();
+				for (key, value) in obj {
+					properties.insert(key, value.try_into_schema()?);
+				}
+				Ok(properties)
+			})
+			.transpose()?,
+		unevaluated_properties: value
+			.remove("unevaluatedProperties")
+			.map(ValueTryInto::try_into_boxed_schema)
+			.transpose()?,
+	})
+}
+
+fn read_validation(value: &mut serde_json::Map<String, Value>) -> Result<Validation, Error> {
+	Ok(Validation {
+		any: read_any_validation(value)?,
+		numeric: read_numeric_validation(value)?,
+		string: read_string_validation(value)?,
+		array: read_array_validation(value)?,
+		object: read_object_validation(value)?,
+		format: value.remove("format").map(Format::try_from).transpose()?,
+	})
+}
+
+fn read_any_validation(value: &mut serde_json::Map<String, Value>) -> Result<AnyValidation, Error> {
+	Ok(AnyValidation {
+		ty: value
+			.remove("type")
+			.map(|t| {
+				Ok(match t {
+					Value::Array(items) => {
+						let mut types = Vec::with_capacity(items.len());
+						for i in items {
+							types.push(i.try_into()?);
+						}
+						types
+					}
+					t => vec![t.try_into()?],
+				})
+			})
+			.transpose()?,
+		enm: value
+			.remove("enum")
+			.map(ValueTryInto::try_into_array)
+			.transpose()?,
+		cnst: value.remove("const"),
+	})
+}
+
+fn read_numeric_validation(
+	value: &mut serde_json::Map<String, Value>,
+) -> Result<NumericValidation, Error> {
+	todo!()
+}
+
+fn read_string_validation(
+	value: &mut serde_json::Map<String, Value>,
+) -> Result<StringValidation, Error> {
+	todo!()
+}
+
+fn read_array_validation(
+	value: &mut serde_json::Map<String, Value>,
+) -> Result<ArrayValidation, Error> {
+	todo!()
+}
+
+fn read_object_validation(
+	value: &mut serde_json::Map<String, Value>,
+) -> Result<ObjectValidation, Error> {
+	todo!()
+}
+
+impl TryFrom<Value> for Type {
+	type Error = Error;
+
+	fn try_from(v: Value) -> Result<Self, Self::Error> {
+		let s = v.try_into_string()?;
+		let t = match s.as_str() {
+			"null" => Self::Null,
+			"boolean" => Self::Boolean,
+			"number" => Self::Number,
+			"integer" => Self::Integer,
+			"string" => Self::String,
+			"array" => Self::Array,
+			"object" => Self::Object,
+			_ => return Err(Error::InvalidType),
+		};
+
+		Ok(t)
+	}
+}
+
+impl TryFrom<Value> for Format {
+	type Error = Error;
+
+	fn try_from(v: Value) -> Result<Self, Self::Error> {
+		let s = v.try_into_string()?;
+		let f = match s.as_str() {
+			"date-time" => Self::DateTime,
+			"date" => Self::Date,
+			"time" => Self::Time,
+			"duration" => Self::Duration,
+			"email" => Self::Email,
+			"idn-email" => Self::IdnEmail,
+			"hostname" => Self::Hostname,
+			"idn-hostname" => Self::IdnHostname,
+			"ipv4" => Self::Ipv4,
+			"ipv6" => Self::Ipv6,
+			"uri" => Self::Uri,
+			"uri-reference" => Self::UriReference,
+			"iri" => Self::Iri,
+			"iri-reference" => Self::IriReference,
+			"uuid" => Self::Uuid,
+			"uri-template" => Self::UriTemplate,
+			"json-pointer" => Self::JsonPointer,
+			"relative-json-pointer" => Self::RelativeJsonPointer,
+			"regex" => Self::Regex,
+			_ => return Err(Error::UnknownFormat),
+		};
+
+		Ok(f)
+	}
+}
+
+impl TryFrom<Value> for Schema {
+	type Error = Error;
+
+	fn try_from(v: Value) -> Result<Self, Self::Error> {
+		match v {
+			Value::Bool(true) => Ok(Self::True),
+			Value::Bool(false) => Ok(Self::False),
+			Value::Object(mut obj) => {
+				if let Some(value) = obj.remove("$ref") {
+					let value = value.as_str().ok_or(Error::NotAString)?;
+					let uri_ref = IriRefBuf::new(value).map_err(|_| Error::InvalidUriRef)?;
+					Ok(Self::Ref(RefSchema {
+						meta_data: read_meta_data(&mut obj)?,
+						target: uri_ref,
+					}))
+				} else if let Some(value) = obj.remove("$dynamicRef") {
+					let value = value.as_str().ok_or(Error::NotAString)?;
+					let uri_ref = IriRefBuf::new(value).map_err(|_| Error::InvalidUriRef)?;
+					Ok(Self::DynamicRef(DynamicRefSchema {
+						meta_data: read_meta_data(&mut obj)?,
+						target: uri_ref,
+					}))
+				} else {
+					let meta_schema = read_meta_schema(&mut obj)?;
+					let meta_data = read_meta_data(&mut obj)?;
+					let id = obj
+						.remove("$id")
+						.map(ValueTryInto::try_into_uri)
+						.transpose()
+						.map_err(|_| Error::InvalidUri)?;
+					let defs = obj
+						.remove("$defs")
+						.map(|t| {
+							let obj = t.try_into_object()?;
+							let mut defs = HashMap::new();
+							for (key, value) in obj {
+								let schema: Schema = value.try_into()?;
+								defs.insert(key, schema);
+							}
+							Ok(defs)
+						})
+						.transpose()?;
+
+					let desc = read_description(&mut obj)?;
+					let validation = read_validation(&mut obj)?;
+
+					Ok(Self::Regular(RegularSchema {
+						meta_schema,
+						id,
+						meta_data,
+						desc,
+						validation,
+						defs,
+					}))
+				}
+			}
+			_ => Err(Error::InvalidSchema),
+		}
+	}
+}

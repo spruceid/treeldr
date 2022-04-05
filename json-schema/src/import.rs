@@ -27,7 +27,7 @@ pub enum Error {
 	InvalidRequired,
 	InvalidRequiredProperty,
 	InvalidPattern,
-	InvalidType
+	InvalidType,
 }
 
 impl From<serde_json::error::Error> for Error {
@@ -52,42 +52,6 @@ pub fn import<F: Clone>(
 	import_schema(&schema, &file, None, vocabulary, quads)?;
 
 	Ok(())
-}
-
-pub struct Schema {
-	id: Option<IriBuf>,
-	desc: Description
-}
-
-pub enum Description {
-	Type {
-		null: bool,
-		boolean: bool,
-		number: bool,
-		integer: bool,
-		string: bool,
-		array: Option<ArraySchema>,
-		object: Option<ObjectSchema>
-	},
-	AllOf(Vec<Schema>),
-	AnyOf(Vec<Schema>),
-	OneOf(Vec<Schema>),
-	Not(Box<Schema>),
-	If {
-		condition: Box<Schema>,
-		then: Option<Box<Schema>>,
-		els: Option<Box<Schema>>
-	}
-}
-
-pub struct ArraySchema {
-	prefix_items: Vec<Schema>,
-	items: Option<Box<Schema>>,
-	contains: Option<Box<Schema>>
-}
-
-pub struct ObjectSchema {
-	properties: HashMap<String, Schema>
 }
 
 pub fn import_schema<F: Clone>(
@@ -208,7 +172,8 @@ pub fn import_schema<F: Clone>(
 			}
 			// 10.3.2. Keywords for Applying Subschemas to Objects
 			"properties" => {
-				// The presence of this key means that the schema represents a TreeLDR structure layout.
+				// The presence of this key means that the schema represents a TreeLDR structure
+				// layout.
 				let properties = value.as_object().ok_or(Error::InvalidProperties)?;
 
 				// First, we build each field.
@@ -313,14 +278,15 @@ pub fn import_schema<F: Clone>(
 					"number" => todo!(),
 					"integer" => todo!(),
 					"string" => todo!(),
-					_ => return Err(Error::InvalidType)
+					_ => return Err(Error::InvalidType),
 				}
 			}
 			"enum" => {
 				todo!()
 			}
 			"const" => {
-				// The presence of this key means that the schema represents a TreeLDR literal/singleton layout.
+				// The presence of this key means that the schema represents a TreeLDR
+				// literal/singleton layout.
 				let singleton = value_into_object(file, vocabulary, quads, value)?;
 				quads.push(Loc(
 					Quad(
@@ -356,7 +322,8 @@ pub fn import_schema<F: Clone>(
 				todo!()
 			}
 			"pattern" => {
-				// The presence of this key means that the schema represents a TreeLDR literal regular expression layout.
+				// The presence of this key means that the schema represents a TreeLDR literal
+				// regular expression layout.
 				let pattern = value.as_str().ok_or(Error::InvalidPattern)?;
 				quads.push(Loc(
 					Quad(
