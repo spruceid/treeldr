@@ -27,6 +27,7 @@ pub enum Error {
 	InvalidRequired,
 	InvalidRequiredProperty,
 	InvalidPattern,
+	InvalidType
 }
 
 impl From<serde_json::error::Error> for Error {
@@ -51,6 +52,42 @@ pub fn import<F: Clone>(
 	import_schema(&schema, &file, None, vocabulary, quads)?;
 
 	Ok(())
+}
+
+pub struct Schema {
+	id: Option<IriBuf>,
+	desc: Description
+}
+
+pub enum Description {
+	Type {
+		null: bool,
+		boolean: bool,
+		number: bool,
+		integer: bool,
+		string: bool,
+		array: Option<ArraySchema>,
+		object: Option<ObjectSchema>
+	},
+	AllOf(Vec<Schema>),
+	AnyOf(Vec<Schema>),
+	OneOf(Vec<Schema>),
+	Not(Box<Schema>),
+	If {
+		condition: Box<Schema>,
+		then: Option<Box<Schema>>,
+		els: Option<Box<Schema>>
+	}
+}
+
+pub struct ArraySchema {
+	prefix_items: Vec<Schema>,
+	items: Option<Box<Schema>>,
+	contains: Option<Box<Schema>>
+}
+
+pub struct ObjectSchema {
+	properties: HashMap<String, Schema>
 }
 
 pub fn import_schema<F: Clone>(
@@ -267,7 +304,17 @@ pub fn import_schema<F: Clone>(
 			// Validation
 			// 6. A Vocabulary for Structural Validation
 			"type" => {
-				todo!()
+				let ty = value.as_str().ok_or(Error::InvalidType)?;
+				match ty {
+					"null" => todo!(),
+					"boolean" => todo!(),
+					"object" => todo!(),
+					"array" => todo!(),
+					"number" => todo!(),
+					"integer" => todo!(),
+					"string" => todo!(),
+					_ => return Err(Error::InvalidType)
+				}
 			}
 			"enum" => {
 				todo!()
