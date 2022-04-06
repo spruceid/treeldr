@@ -8,6 +8,8 @@ pub enum Error {
 	InvalidUriRef,
 	InvalidType,
 	NotABoolean,
+	NotANumber,
+	NotAPositiveInteger,
 	NotAString,
 	NotAnArray,
 	NotAnObject,
@@ -16,6 +18,12 @@ pub enum Error {
 
 trait ValueTryInto: Sized {
 	fn try_into_bool(self) -> Result<bool, Error>;
+	fn try_into_number(self) -> Result<serde_json::Number, Error>;
+	fn try_into_u64(self) -> Result<u64, Error> {
+		self.try_into_number()?
+			.as_u64()
+			.ok_or(Error::NotAPositiveInteger)
+	}
 	fn try_into_string(self) -> Result<String, Error>;
 	fn try_into_array(self) -> Result<Vec<Value>, Error>;
 
@@ -23,6 +31,14 @@ trait ValueTryInto: Sized {
 		let mut schemas = Vec::new();
 		for v in self.try_into_array()? {
 			schemas.push(v.try_into_schema()?)
+		}
+		Ok(schemas)
+	}
+
+	fn try_into_string_array(self) -> Result<Vec<String>, Error> {
+		let mut schemas = Vec::new();
+		for v in self.try_into_array()? {
+			schemas.push(v.try_into_string()?)
 		}
 		Ok(schemas)
 	}
@@ -49,6 +65,13 @@ impl ValueTryInto for Value {
 		match self {
 			Self::Bool(b) => Ok(b),
 			_ => Err(Error::NotABoolean),
+		}
+	}
+
+	fn try_into_number(self) -> Result<serde_json::Number, Error> {
+		match self {
+			Self::Number(n) => Ok(n),
+			_ => Err(Error::NotANumber),
 		}
 	}
 
@@ -111,11 +134,11 @@ fn read_meta_data(value: &mut serde_json::Map<String, Value>) -> Result<MetaData
 fn read_meta_schema(value: &mut serde_json::Map<String, Value>) -> Result<MetaSchema, Error> {
 	Ok(MetaSchema {
 		schema: value
-			.remove("schema")
+			.remove("$schema")
 			.map(|t| t.try_into_uri())
 			.transpose()?,
 		vocabulary: value
-			.remove("vocabulary")
+			.remove("$vocabulary")
 			.map(|t| {
 				let obj = t.try_into_object()?;
 				let mut vocab = HashMap::new();
@@ -284,25 +307,104 @@ fn read_any_validation(value: &mut serde_json::Map<String, Value>) -> Result<Any
 fn read_numeric_validation(
 	value: &mut serde_json::Map<String, Value>,
 ) -> Result<NumericValidation, Error> {
-	todo!()
+	Ok(NumericValidation {
+		multiple_of: value
+			.remove("multipleOf")
+			.map(ValueTryInto::try_into_number)
+			.transpose()?,
+		maximum: value
+			.remove("maximum")
+			.map(ValueTryInto::try_into_number)
+			.transpose()?,
+		exclusive_maximum: value
+			.remove("exclusiveMaximum")
+			.map(ValueTryInto::try_into_number)
+			.transpose()?,
+		minimum: value
+			.remove("minimum")
+			.map(ValueTryInto::try_into_number)
+			.transpose()?,
+		exclusive_minimum: value
+			.remove("exclusiveMinimum")
+			.map(ValueTryInto::try_into_number)
+			.transpose()?,
+	})
 }
 
 fn read_string_validation(
 	value: &mut serde_json::Map<String, Value>,
 ) -> Result<StringValidation, Error> {
-	todo!()
+	Ok(StringValidation {
+		max_length: value
+			.remove("maxLength")
+			.map(ValueTryInto::try_into_u64)
+			.transpose()?,
+		min_length: value
+			.remove("minLength")
+			.map(ValueTryInto::try_into_u64)
+			.transpose()?,
+		pattern: value
+			.remove("pattern")
+			.map(ValueTryInto::try_into_string)
+			.transpose()?,
+	})
 }
 
 fn read_array_validation(
 	value: &mut serde_json::Map<String, Value>,
 ) -> Result<ArrayValidation, Error> {
-	todo!()
+	Ok(ArrayValidation {
+		max_items: value
+			.remove("maxItems")
+			.map(ValueTryInto::try_into_u64)
+			.transpose()?,
+		min_items: value
+			.remove("minItems")
+			.map(ValueTryInto::try_into_u64)
+			.transpose()?,
+		unique_items: value
+			.remove("uniqueItems")
+			.map(ValueTryInto::try_into_bool)
+			.transpose()?,
+		max_contains: value
+			.remove("maxContains")
+			.map(ValueTryInto::try_into_u64)
+			.transpose()?,
+		min_contains: value
+			.remove("minContains")
+			.map(ValueTryInto::try_into_u64)
+			.transpose()?,
+	})
 }
 
 fn read_object_validation(
 	value: &mut serde_json::Map<String, Value>,
 ) -> Result<ObjectValidation, Error> {
-	todo!()
+	Ok(ObjectValidation {
+		max_properties: value
+			.remove("maxProperties")
+			.map(ValueTryInto::try_into_u64)
+			.transpose()?,
+		min_properties: value
+			.remove("minProperties")
+			.map(ValueTryInto::try_into_u64)
+			.transpose()?,
+		required: value
+			.remove("required")
+			.map(ValueTryInto::try_into_string_array)
+			.transpose()?,
+		dependent_required: value
+			.remove("dependentRequired")
+			.map(|v| {
+				let obj = v.try_into_object()?;
+				let mut map = HashMap::new();
+				for (key, value) in obj {
+					map.insert(key, value.try_into_string_array()?);
+				}
+				Ok(map)
+			})
+			.transpose()?,
+	})
 }
 
 impl TryFrom<Value> for Type {
