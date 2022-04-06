@@ -1,38 +1,33 @@
 //! JSON Schema import functions.
 //!
 //! Semantics follows <https://www.w3.org/2019/wot/json-schema>.
-use iref::{Iri, IriBuf, IriRefBuf};
+use iref::{Iri, IriBuf};
 use locspan::{Loc, Location, Span};
 use rdf_types::Quad;
 use serde_json::Value;
-use std::collections::HashMap;
 use treeldr::{vocab, Id, Vocabulary};
 use vocab::{LocQuad, Object, Term};
+use crate::schema::{
+	self,
+	Schema,
+	RegularSchema
+};
 
 /// Import error.
 pub enum Error {
 	InvalidJson(serde_json::error::Error),
-	InvalidSchema,
-	InvalidVocabularyValue,
-	InvalidSchemaValue,
-	UnknownSchemaDialect,
-	InvalidIdValue,
-	InvalidRefValue,
-	UnknownKey(String),
-	InvalidProperties,
-	InvalidTitle,
-	InvalidDescription,
-	InvalidFormat,
-	UnknownFormat,
-	InvalidRequired,
-	InvalidRequiredProperty,
-	InvalidPattern,
-	InvalidType,
+	InvalidSchema(crate::schema::from_serde_json::Error),
 }
 
 impl From<serde_json::error::Error> for Error {
 	fn from(e: serde_json::error::Error) -> Self {
 		Self::InvalidJson(e)
+	}
+}
+
+impl From<crate::schema::from_serde_json::Error> for Error {
+	fn from(e: crate::schema::from_serde_json::Error) -> Self {
+		Self::InvalidSchema(e)
 	}
 }
 
@@ -47,7 +42,8 @@ pub fn import<F: Clone>(
 	vocabulary: &mut Vocabulary,
 	quads: &mut Vec<LocQuad<F>>,
 ) -> Result<(), Error> {
-	let schema = serde_json::from_str(content)?;
+	let json: Value = serde_json::from_str(content)?;
+	let schema: Schema = json.try_into()?;
 
 	import_schema(&schema, &file, None, vocabulary, quads)?;
 
@@ -55,63 +51,71 @@ pub fn import<F: Clone>(
 }
 
 pub fn import_schema<F: Clone>(
-	schema: &Value,
+	schema: &Schema,
 	file: &F,
 	base_iri: Option<Iri>,
 	vocabulary: &mut Vocabulary,
 	quads: &mut Vec<LocQuad<F>>,
 ) -> Result<Loc<Object<F>, F>, Error> {
-	let schema = schema.as_object().ok_or(Error::InvalidSchema)?;
-
-	if let Some(uri) = schema.get("$schema") {
-		let uri = uri.as_str().ok_or(Error::InvalidVocabularyValue)?;
-		if uri != "https://json-schema.org/draft/2020-12/schema" {
-			return Err(Error::UnknownSchemaDialect);
+	match schema {
+		Schema::True => todo!(),
+		Schema::False => todo!(),
+		Schema::Ref(r) => {
+			let iri = r.target.resolved(base_iri.unwrap());
+			let id = vocab::Term::from_iri(iri.clone(), vocabulary);
+			Ok(Loc(Object::Iri(id), loc(file)))
+		}
+		Schema::DynamicRef(_) => todo!(),
+		Schema::Regular(schema) => {
+			import_regular_schema(schema, file, base_iri, vocabulary, quads)
 		}
 	}
+}
 
-	if let Some(object) = schema.get("$vocabulary") {
-		let object = object.as_object().ok_or(Error::InvalidVocabularyValue)?;
-
-		for (uri, required) in object {
-			let required = required.as_bool().ok_or(Error::InvalidVocabularyValue)?;
-			todo!()
-		}
-	}
-
-	let mut is_ref = false;
-	let (id, base_iri) = match schema.get("$id") {
-		Some(id) => {
-			let id = id.as_str().ok_or(Error::InvalidIdValue)?;
-			let iri = IriBuf::new(id).map_err(|_| Error::InvalidIdValue)?;
+pub fn import_regular_schema<F: Clone>(
+	schema: &RegularSchema,
+	file: &F,
+	base_iri: Option<Iri>,
+	vocabulary: &mut Vocabulary,
+	quads: &mut Vec<LocQuad<F>>,
+) -> Result<Loc<Object<F>, F>, Error> {
+	let (id, base_iri) = match &schema.id {
+		Some(iri) => {
 			let id = Id::Iri(vocab::Term::from_iri(iri.clone(), vocabulary));
-			(id, Some(iri))
+			(id, Some(iri.clone()))
 		}
-		None => match schema.get("$ref") {
-			Some(iri_ref) => {
-				is_ref = true;
-				let iri_ref = iri_ref.as_str().ok_or(Error::InvalidRefValue)?;
-				let iri_ref = IriRefBuf::new(iri_ref).map_err(|_| Error::InvalidRefValue)?;
-				let iri = iri_ref.resolved(base_iri.unwrap());
-				let id = Id::Iri(vocab::Term::from_iri(iri.clone(), vocabulary));
-				(id, Some(iri))
-			}
-			None => {
-				let id = Id::Blank(vocabulary.new_blank_label());
-				let base_iri = base_iri.map(IriBuf::from);
-				(id, base_iri)
-			}
-		},
+		None => {
+			let id = Id::Blank(vocabulary.new_blank_label());
+			let base_iri = base_iri.map(IriBuf::from);
+			(id, base_iri)
+		}
 	};
 
 	// Declare the layout.
-	if !is_ref {
+	quads.push(Loc(
+		Quad(
+			Loc(id, loc(file)),
+			Loc(Term::Rdf(vocab::Rdf::Type), loc(file)),
+			Loc(
+				Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)),
+				loc(file),
+			),
+			None,
+		),
+		loc(file),
+	));
+
+	if let Some(title) = &schema.meta_data.title {
+		// The title of a schema is translated in an rdfs:label.
 		quads.push(Loc(
 			Quad(
 				Loc(id, loc(file)),
-				Loc(Term::Rdf(vocab::Rdf::Type), loc(file)),
+				Loc(Term::Rdfs(vocab::Rdfs::Label), loc(file)),
 				Loc(
-					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)),
+					Object::Literal(vocab::Literal::String(Loc(
+						title.clone().into(),
+						loc(file),
+					))),
 					loc(file),
 				),
 				None,
@@ -120,62 +124,30 @@ pub fn import_schema<F: Clone>(
 		));
 	}
 
-	let mut property_fields: HashMap<&str, _> = HashMap::new();
-	let mut required_properties = Vec::new();
+	if let Some(description) = &schema.meta_data.description {
+		// The title of a schema is translated in an rdfs:comment.
+		quads.push(Loc(
+			Quad(
+				Loc(id, loc(file)),
+				Loc(Term::Rdfs(vocab::Rdfs::Comment), loc(file)),
+				Loc(
+					Object::Literal(vocab::Literal::String(Loc(
+						description.clone().into(),
+						loc(file),
+					))),
+					loc(file),
+				),
+				None,
+			),
+			loc(file),
+		));
+	}
 
-	for (key, value) in schema {
-		match key.as_str() {
-			"$ref" => (),
-			"$dynamicRef" => {
-				todo!()
-			}
-			"$comment" => (),
-			"$defs" => {
-				todo!()
-			}
-			// 10. A Vocabulary for Applying Subschemas
-			"allOf" => {
-				todo!()
-			}
-			"anyOf" => {
-				todo!()
-			}
-			"oneOf" => {
-				todo!()
-			}
-			"not" => {
-				todo!()
-			}
-			// 10.2.2. Keywords for Applying Subschemas Conditionally
-			"if" => {
-				todo!()
-			}
-			"then" => {
-				todo!()
-			}
-			"else" => {
-				todo!()
-			}
-			"dependentSchemas" => {
-				todo!()
-			}
-			// 10.3. Keywords for Applying Subschemas to Child Instances
-			// 10.3.1. Keywords for Applying Subschemas to Arrays
-			"prefixItems" => {
-				todo!()
-			}
-			"items" => {
-				todo!()
-			}
-			"contains" => {
-				todo!()
-			}
-			// 10.3.2. Keywords for Applying Subschemas to Objects
-			"properties" => {
+	match &schema.desc {
+		schema::Description::Definition { string, array, object } => {
+			if let Some(properties) = &object.properties {
 				// The presence of this key means that the schema represents a TreeLDR structure
 				// layout.
-				let properties = value.as_object().ok_or(Error::InvalidProperties)?;
-
 				// First, we build each field.
 				let mut fields: Vec<Loc<Object<F>, F>> = Vec::with_capacity(properties.len());
 				for (prop, prop_schema) in properties {
@@ -227,7 +199,21 @@ pub fn import_schema<F: Clone>(
 					let field = Loc(Object::Blank(prop_label), loc(file));
 
 					fields.push(field);
-					property_fields.insert(prop, Loc(Id::Blank(prop_label), loc(file)));
+
+					// property_fields.insert(prop, Loc(Id::Blank(prop_label), loc(file)));
+					if let Some(required) = &schema.validation.object.required {
+						if required.contains(prop) {
+							quads.push(Loc(
+								Quad(
+									Loc(Id::Blank(prop_label), loc(file)),
+									Loc(Term::Schema(vocab::Schema::ValueRequired), loc(file)),
+									Loc(Object::Iri(Term::Schema(vocab::Schema::True)), loc(file)),
+									None,
+								),
+								loc(file),
+							));
+						}
+					}
 				}
 
 				let fields = fields.into_iter().try_into_rdf_list::<Error, _>(
@@ -249,220 +235,55 @@ pub fn import_schema<F: Clone>(
 					loc(file),
 				));
 			}
-			"patternProperties" => {
-				todo!()
-			}
-			"additionalProperties" => {
-				todo!()
-			}
-			"propertyNames" => {
-				todo!()
-			}
-			// 11. A Vocabulary for Unevaluated Locations
-			// 11.1. Keyword Independence
-			"unevaluatedItems" => {
-				todo!()
-			}
-			"unevaluatedProperties" => {
-				todo!()
-			}
-			// Validation
-			// 6. A Vocabulary for Structural Validation
-			"type" => {
-				let ty = value.as_str().ok_or(Error::InvalidType)?;
-				match ty {
-					"null" => todo!(),
-					"boolean" => todo!(),
-					"object" => todo!(),
-					"array" => todo!(),
-					"number" => todo!(),
-					"integer" => todo!(),
-					"string" => todo!(),
-					_ => return Err(Error::InvalidType),
-				}
-			}
-			"enum" => {
-				todo!()
-			}
-			"const" => {
-				// The presence of this key means that the schema represents a TreeLDR
-				// literal/singleton layout.
-				let singleton = value_into_object(file, vocabulary, quads, value)?;
-				quads.push(Loc(
-					Quad(
-						Loc(id, loc(file)),
-						Loc(Term::TreeLdr(vocab::TreeLdr::Singleton), loc(file)),
-						singleton,
-						None,
-					),
-					loc(file),
-				));
-			}
-			// 6.2. Validation Keywords for Numeric Instances (number and integer)
-			"multipleOf" => {
-				todo!()
-			}
-			"maximum" => {
-				todo!()
-			}
-			"exclusiveMaximum" => {
-				todo!()
-			}
-			"minimum" => {
-				todo!()
-			}
-			"exclusiveMinimum" => {
-				todo!()
-			}
-			// 6.3. Validation Keywords for Strings
-			"maxLength" => {
-				todo!()
-			}
-			"minLength" => {
-				todo!()
-			}
-			"pattern" => {
-				// The presence of this key means that the schema represents a TreeLDR literal
-				// regular expression layout.
-				let pattern = value.as_str().ok_or(Error::InvalidPattern)?;
-				quads.push(Loc(
-					Quad(
-						Loc(id, loc(file)),
-						Loc(Term::TreeLdr(vocab::TreeLdr::Matches), loc(file)),
-						Loc(
-							Object::Literal(vocab::Literal::String(Loc(
-								pattern.to_string().into(),
-								loc(file),
-							))),
-							loc(file),
-						),
-						None,
-					),
-					loc(file),
-				));
-			}
-			// 6.4. Validation Keywords for Arrays
-			"maxItems" => {
-				todo!()
-			}
-			"minItems" => {
-				todo!()
-			}
-			"uniqueItems" => {
-				todo!()
-			}
-			"maxContains" => {
-				todo!()
-			}
-			"minContains" => {
-				todo!()
-			}
-			// 6.5. Validation Keywords for Objects
-			"maxProperties" => {
-				todo!()
-			}
-			"minProperties" => {
-				todo!()
-			}
-			"required" => {
-				let required = value.as_array().ok_or(Error::InvalidRequired)?;
-				for prop in required {
-					required_properties.push(prop.as_str().ok_or(Error::InvalidRequiredProperty)?)
-				}
-			}
-			"dependentRequired" => {
-				todo!()
-			}
-			// 7. Vocabularies for Semantic Content With "format"
-			"format" => {
-				let format = value.as_str().ok_or(Error::InvalidFormat)?;
-				let layout = format_layout(file, format)?;
-				quads.push(Loc(
-					Quad(
-						Loc(id, loc(file)),
-						Loc(Term::TreeLdr(vocab::TreeLdr::Native), loc(file)),
-						layout,
-						None,
-					),
-					loc(file),
-				));
-			}
-			// 8. A Vocabulary for the Contents of String-Encoded Data
-			"contentEncoding" => {
-				todo!()
-			}
-			"contentMediaType" => {
-				todo!()
-			}
-			"contentSchema" => {
-				todo!()
-			}
-			// 9. A Vocabulary for Basic Meta-Data Annotations
-			"title" => {
-				// The title of a schema is translated in an rdfs:label.
-				let label = value.as_str().ok_or(Error::InvalidTitle)?;
-				quads.push(Loc(
-					Quad(
-						Loc(id, loc(file)),
-						Loc(Term::Rdfs(vocab::Rdfs::Label), loc(file)),
-						Loc(
-							Object::Literal(vocab::Literal::String(Loc(
-								label.to_string().into(),
-								loc(file),
-							))),
-							loc(file),
-						),
-						None,
-					),
-					loc(file),
-				));
-			}
-			"description" => {
-				// The title of a schema is translated in an rdfs:comment.
-				let comment = value.as_str().ok_or(Error::InvalidDescription)?;
-				quads.push(Loc(
-					Quad(
-						Loc(id, loc(file)),
-						Loc(Term::Rdfs(vocab::Rdfs::Comment), loc(file)),
-						Loc(
-							Object::Literal(vocab::Literal::String(Loc(
-								comment.to_string().into(),
-								loc(file),
-							))),
-							loc(file),
-						),
-						None,
-					),
-					loc(file),
-				));
-			}
-			"default" => {
-				todo!()
-			}
-			"deprecated" => {
-				todo!()
-			}
-			"readOnly" => {
-				todo!()
-			}
-			"writeOnly" => {
-				todo!()
-			}
-			"examples" => {
-				todo!()
-			}
-			// Unknown Term.
-			unknown => return Err(Error::UnknownKey(unknown.to_string())),
 		}
+		schema::Description::OneOf(schemas) => {
+			todo!()
+		}
+		_ => todo!()
 	}
 
-	for prop in required_properties {
-		let field = property_fields.get(prop).unwrap();
+	if let Some(cnst) = &schema.validation.any.cnst {
+		// The presence of this key means that the schema represents a TreeLDR
+		// literal/singleton layout.
+		let singleton = value_into_object(file, vocabulary, quads, cnst)?;
 		quads.push(Loc(
 			Quad(
-				field.clone(),
-				Loc(Term::Schema(vocab::Schema::ValueRequired), loc(file)),
-				Loc(Object::Iri(Term::Schema(vocab::Schema::True)), loc(file)),
+				Loc(id, loc(file)),
+				Loc(Term::TreeLdr(vocab::TreeLdr::Singleton), loc(file)),
+				singleton,
+				None,
+			),
+			loc(file),
+		));
+	}
+
+	if let Some(pattern) = &schema.validation.string.pattern {
+		// The presence of this key means that the schema represents a TreeLDR literal
+		// regular expression layout.
+		quads.push(Loc(
+			Quad(
+				Loc(id, loc(file)),
+				Loc(Term::TreeLdr(vocab::TreeLdr::Matches), loc(file)),
+				Loc(
+					Object::Literal(vocab::Literal::String(Loc(
+						pattern.clone().into(),
+						loc(file),
+					))),
+					loc(file),
+				),
+				None,
+			),
+			loc(file),
+		));
+	}
+
+	if let Some(format) = schema.validation.format {
+		let layout = format_layout(file, format)?;
+		quads.push(Loc(
+			Quad(
+				Loc(id, loc(file)),
+				Loc(Term::TreeLdr(vocab::TreeLdr::Native), loc(file)),
+				layout,
 				None,
 			),
 			loc(file),
@@ -515,28 +336,27 @@ fn value_into_object<F: Clone>(
 	}
 }
 
-fn format_layout<F: Clone>(file: &F, format: &str) -> Result<Loc<Object<F>, F>, Error> {
+fn format_layout<F: Clone>(file: &F, format: schema::Format) -> Result<Loc<Object<F>, F>, Error> {
 	let layout = match format {
-		"date-time" => Term::Xsd(vocab::Xsd::DateTime),
-		"date" => Term::Xsd(vocab::Xsd::Date),
-		"time" => Term::Xsd(vocab::Xsd::Time),
-		"duration" => todo!(),
-		"email" => todo!(),
-		"idn-email" => todo!(),
-		"hostname" => todo!(),
-		"idn-hostname" => todo!(),
-		"ipv4" => todo!(),
-		"ipv6" => todo!(),
-		"uri" => todo!(),
-		"uri-reference" => todo!(),
-		"iri" => Term::Xsd(vocab::Xsd::AnyUri),
-		"iri-reference" => todo!(),
-		"uuid" => todo!(),
-		"uri-template" => todo!(),
-		"json-pointer" => todo!(),
-		"relative-json-pointer" => todo!(),
-		"regex" => todo!(),
-		_ => return Err(Error::UnknownFormat),
+		schema::Format::DateTime => Term::Xsd(vocab::Xsd::DateTime),
+		schema::Format::Date => Term::Xsd(vocab::Xsd::Date),
+		schema::Format::Time => Term::Xsd(vocab::Xsd::Time),
+		schema::Format::Duration => todo!(),
+		schema::Format::Email => todo!(),
+		schema::Format::IdnEmail => todo!(),
+		schema::Format::Hostname => todo!(),
+		schema::Format::IdnHostname => todo!(),
+		schema::Format::Ipv4 => todo!(),
+		schema::Format::Ipv6 => todo!(),
+		schema::Format::Uri => todo!(),
+		schema::Format::UriReference => todo!(),
+		schema::Format::Iri => Term::Xsd(vocab::Xsd::AnyUri),
+		schema::Format::IriReference => todo!(),
+		schema::Format::Uuid => todo!(),
+		schema::Format::UriTemplate => todo!(),
+		schema::Format::JsonPointer => todo!(),
+		schema::Format::RelativeJsonPointer => todo!(),
+		schema::Format::Regex => todo!()
 	};
 
 	Ok(Loc(Object::Iri(layout), loc(file)))

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 mod validation;
 pub use validation::*;
 
-mod from_serde_json;
+pub mod from_serde_json;
 
 #[allow(clippy::large_enum_variant)]
 pub enum Schema {
