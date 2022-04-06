@@ -73,6 +73,10 @@ pub struct RegularSchema {
 	/// Schema validation.
 	pub validation: Validation,
 
+	pub anchor: Option<String>,
+
+	pub dynamic_anchor: Option<String>,
+
 	/// The "$defs" keyword reserves a location for schema authors to inline
 	/// re-usable JSON Schemas into a more general schema. The keyword does not
 	/// directly affect the validation result.

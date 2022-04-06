@@ -489,6 +489,14 @@ impl TryFrom<Value> for Schema {
 						.map(ValueTryInto::try_into_uri)
 						.transpose()
 						.map_err(|_| Error::InvalidUri)?;
+					let anchor = obj
+						.remove("$anchor")
+						.map(ValueTryInto::try_into_string)
+						.transpose()?;
+					let dynamic_anchor = obj
+						.remove("$dynamicAnchor")
+						.map(ValueTryInto::try_into_string)
+						.transpose()?;
 					let defs = obj
 						.remove("$defs")
 						.map(|t| {
@@ -511,6 +519,8 @@ impl TryFrom<Value> for Schema {
 						meta_data,
 						desc,
 						validation,
+						anchor,
+						dynamic_anchor,
 						defs,
 					}))
 				}
