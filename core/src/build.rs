@@ -261,6 +261,30 @@ impl<F: Clone + Ord> Context<F> {
 					let layout = self.require_layout_mut(id, Some(id_loc))?;
 					layout.set_list(item_layout_id, Some(loc))?
 				}
+				Term::TreeLdr(vocab::TreeLdr::Native) => {
+					let Loc(native_layout_id, layout_id_loc) = expect_id(object)?;
+
+					let native_layout = match native_layout_id {
+						Id::Iri(Term::Xsd(vocab::Xsd::AnyUri)) => layout::Native::Uri,
+						Id::Iri(Term::Xsd(vocab::Xsd::Boolean)) => layout::Native::Boolean,
+						Id::Iri(Term::Xsd(vocab::Xsd::Date)) => layout::Native::Date,
+						Id::Iri(Term::Xsd(vocab::Xsd::DateTime)) => layout::Native::DateTime,
+						Id::Iri(Term::Xsd(vocab::Xsd::Double)) => layout::Native::Double,
+						Id::Iri(Term::Xsd(vocab::Xsd::Float)) => layout::Native::Float,
+						Id::Iri(Term::Xsd(vocab::Xsd::Int)) => layout::Native::Integer,
+						Id::Iri(Term::Xsd(vocab::Xsd::Integer)) => layout::Native::Integer,
+						Id::Iri(Term::Xsd(vocab::Xsd::PositiveInteger)) => layout::Native::PositiveInteger,
+						Id::Iri(Term::Xsd(vocab::Xsd::String)) => layout::Native::String,
+						Id::Iri(Term::Xsd(vocab::Xsd::Time)) => layout::Native::Time,
+						_ => return Err(Error::new(
+							error::LayoutNativeInvalid(native_layout_id).into(),
+							Some(layout_id_loc),
+						))
+					};
+
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_native(native_layout, Some(loc))?
+				}
 				_ => (),
 			}
 		}
