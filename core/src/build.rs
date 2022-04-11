@@ -273,13 +273,17 @@ impl<F: Clone + Ord> Context<F> {
 						Id::Iri(Term::Xsd(vocab::Xsd::Float)) => layout::Native::Float,
 						Id::Iri(Term::Xsd(vocab::Xsd::Int)) => layout::Native::Integer,
 						Id::Iri(Term::Xsd(vocab::Xsd::Integer)) => layout::Native::Integer,
-						Id::Iri(Term::Xsd(vocab::Xsd::PositiveInteger)) => layout::Native::PositiveInteger,
+						Id::Iri(Term::Xsd(vocab::Xsd::PositiveInteger)) => {
+							layout::Native::PositiveInteger
+						}
 						Id::Iri(Term::Xsd(vocab::Xsd::String)) => layout::Native::String,
 						Id::Iri(Term::Xsd(vocab::Xsd::Time)) => layout::Native::Time,
-						_ => return Err(Error::new(
-							error::LayoutNativeInvalid(native_layout_id).into(),
-							Some(layout_id_loc),
-						))
+						_ => {
+							return Err(Error::new(
+								error::LayoutNativeInvalid(native_layout_id).into(),
+								Some(layout_id_loc),
+							))
+						}
 					};
 
 					let layout = self.require_layout_mut(id, Some(id_loc))?;

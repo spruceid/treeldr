@@ -47,26 +47,28 @@ fn main() {
 	let mut quads = Vec::new();
 	for filename in args.filenames {
 		match files.load(&filename, None, None) {
-			Ok(file_id) => {
-				match files.get(file_id).unwrap().mime_type() {
-					Some(source::MimeType::TreeLdr) => {
-						import_treeldr(&mut vocab, &mut quads, &files, file_id);
-					}
-					#[cfg(feature = "json-schema")]
-					Some(source::MimeType::JsonSchema) => {
-						import_json_schema(&mut vocab, &mut quads, &files, file_id);
-					}
-					#[allow(unreachable_patterns)]
-					Some(mime_type) => {
-						log::error!("unsupported mime type `{}` for file `{}`", mime_type, filename.display());
-						std::process::exit(1);
-					}
-					None => {
-						log::error!("unknown format for file `{}`", filename.display());
-						std::process::exit(1);
-					}
+			Ok(file_id) => match files.get(file_id).unwrap().mime_type() {
+				Some(source::MimeType::TreeLdr) => {
+					import_treeldr(&mut vocab, &mut quads, &files, file_id);
 				}
-			}
+				#[cfg(feature = "json-schema")]
+				Some(source::MimeType::JsonSchema) => {
+					import_json_schema(&mut vocab, &mut quads, &files, file_id);
+				}
+				#[allow(unreachable_patterns)]
+				Some(mime_type) => {
+					log::error!(
+						"unsupported mime type `{}` for file `{}`",
+						mime_type,
+						filename.display()
+					);
+					std::process::exit(1);
+				}
+				None => {
+					log::error!("unknown format for file `{}`", filename.display());
+					std::process::exit(1);
+				}
+			},
 			Err(e) => {
 				log::error!("unable to read file `{}`: {}", filename.display(), e);
 				std::process::exit(1);
@@ -162,28 +164,30 @@ fn import_json_schema(
 	let file = files.get(source_id).unwrap();
 
 	match serde_json::from_str::<serde_json::Value>(file.buffer()) {
-		Ok(json) => {
-			match treeldr_json_schema::Schema::try_from(json) {
-				Ok(schema) => {
-					if let Err(e) = treeldr_json_schema::import_schema(&schema, &source_id, None, vocab, quads) {
-						let diagnostic = codespan_reporting::diagnostic::Diagnostic::error()
-							.with_message(format!("JSON Schema import failed: {}", e));
-						let writer = StandardStream::stderr(ColorChoice::Always);
-						let config = codespan_reporting::term::Config::default();
-						term::emit(&mut writer.lock(), &config, files, &diagnostic).expect("diagnostic failed");
-						std::process::exit(1);
-					}
-				}
-				Err(e) => {
+		Ok(json) => match treeldr_json_schema::Schema::try_from(json) {
+			Ok(schema) => {
+				if let Err(e) =
+					treeldr_json_schema::import_schema(&schema, &source_id, None, vocab, quads)
+				{
 					let diagnostic = codespan_reporting::diagnostic::Diagnostic::error()
-						.with_message(format!("JSON Schema error: {}", e));
+						.with_message(format!("JSON Schema import failed: {}", e));
 					let writer = StandardStream::stderr(ColorChoice::Always);
 					let config = codespan_reporting::term::Config::default();
-					term::emit(&mut writer.lock(), &config, files, &diagnostic).expect("diagnostic failed");
+					term::emit(&mut writer.lock(), &config, files, &diagnostic)
+						.expect("diagnostic failed");
 					std::process::exit(1);
 				}
 			}
-		}
+			Err(e) => {
+				let diagnostic = codespan_reporting::diagnostic::Diagnostic::error()
+					.with_message(format!("JSON Schema error: {}", e));
+				let writer = StandardStream::stderr(ColorChoice::Always);
+				let config = codespan_reporting::term::Config::default();
+				term::emit(&mut writer.lock(), &config, files, &diagnostic)
+					.expect("diagnostic failed");
+				std::process::exit(1);
+			}
+		},
 		Err(e) => {
 			let diagnostic = codespan_reporting::diagnostic::Diagnostic::error()
 				.with_message(format!("JSON parse error: {}", e));

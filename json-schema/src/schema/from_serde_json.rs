@@ -31,7 +31,7 @@ impl fmt::Display for Error {
 			Self::NotAString => write!(f, "expected a string"),
 			Self::NotAnArray => write!(f, "expected an array"),
 			Self::NotAnObject => write!(f, "expected an object"),
-			Self::UnknownFormat => write!(f, "unknown `format` value")
+			Self::UnknownFormat => write!(f, "unknown `format` value"),
 		}
 	}
 }

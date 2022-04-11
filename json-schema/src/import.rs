@@ -6,9 +6,9 @@ use iref::{Iri, IriBuf};
 use locspan::{Loc, Location, Span};
 use rdf_types::Quad;
 use serde_json::Value;
+use std::fmt;
 use treeldr::{vocab, Id, Vocabulary};
 use vocab::{LocQuad, Object, Term};
-use std::fmt;
 
 /// Import error.
 #[derive(Debug)]
@@ -19,7 +19,7 @@ pub enum Error {
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			Self::UnsupportedType => write!(f, "unsupported schema `type` value.")
+			Self::UnsupportedType => write!(f, "unsupported schema `type` value."),
 		}
 	}
 }
@@ -100,7 +100,7 @@ pub fn import_regular_schema<F: Clone>(
 			let name = iri.path().file_name().and_then(|name| {
 				match std::path::Path::new(name).file_stem() {
 					Some(stem) => vocab::Name::new(stem.to_string_lossy()).ok(),
-					None => vocab::Name::new(name.to_string()).ok()
+					None => vocab::Name::new(name).ok(),
 				}
 			});
 
@@ -141,7 +141,10 @@ pub fn import_regular_schema<F: Clone>(
 				Loc(id, loc(file)),
 				Loc(Term::TreeLdr(vocab::TreeLdr::Name), loc(file)),
 				Loc(
-					Object::Literal(vocab::Literal::String(Loc(name.to_string().into(), loc(file)))),
+					Object::Literal(vocab::Literal::String(Loc(
+						name.to_string().into(),
+						loc(file),
+					))),
 					loc(file),
 				),
 				None,

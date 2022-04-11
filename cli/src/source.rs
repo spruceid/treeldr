@@ -1,8 +1,8 @@
 use iref::{Iri, IriBuf};
 use std::collections::HashMap;
+use std::fmt;
 use std::ops::{Deref, Range};
 use std::path::{Path, PathBuf};
-use std::fmt;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct FileId(usize);
@@ -11,7 +11,7 @@ pub struct File {
 	source: PathBuf,
 	base_iri: Option<IriBuf>,
 	buffer: Buffer,
-	mime_type: Option<MimeType>
+	mime_type: Option<MimeType>,
 }
 
 impl File {
@@ -38,25 +38,26 @@ pub enum MimeType {
 	TreeLdr,
 
 	/// application/schema+json
-	JsonSchema
+	JsonSchema,
 }
 
 impl MimeType {
 	fn name(&self) -> &'static str {
 		match self {
 			Self::TreeLdr => "application/treeldr",
-			Self::JsonSchema => "application/schema+json"
+			Self::JsonSchema => "application/schema+json",
 		}
 	}
 
 	fn infer(source: &Path, _content: &str) -> Option<MimeType> {
-		source.extension().and_then(std::ffi::OsStr::to_str).and_then(|ext| {
-			match ext {
+		source
+			.extension()
+			.and_then(std::ffi::OsStr::to_str)
+			.and_then(|ext| match ext {
 				"tldr" => Some(MimeType::TreeLdr),
 				"json" => Some(MimeType::JsonSchema),
-				_ => None
-			}
-		})
+				_ => None,
+			})
 	}
 }
 
@@ -93,7 +94,7 @@ impl Files {
 		&mut self,
 		source: &impl AsRef<Path>,
 		base_iri: Option<IriBuf>,
-		mime_type: Option<MimeType>
+		mime_type: Option<MimeType>,
 	) -> std::io::Result<FileId> {
 		let source = source.as_ref();
 		match self.sources.get(source).cloned() {
@@ -106,7 +107,7 @@ impl Files {
 					source: source.into(),
 					base_iri,
 					buffer: Buffer::new(content),
-					mime_type
+					mime_type,
 				});
 				self.sources.insert(source.into(), id);
 				Ok(id)
