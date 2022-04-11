@@ -8,44 +8,25 @@ use rdf_types::Quad;
 use serde_json::Value;
 use treeldr::{vocab, Id, Vocabulary};
 use vocab::{LocQuad, Object, Term};
+use std::fmt;
 
 /// Import error.
 #[derive(Debug)]
 pub enum Error {
-	InvalidJson(serde_json::error::Error),
-	InvalidSchema(crate::schema::from_serde_json::Error),
 	UnsupportedType,
 }
 
-impl From<serde_json::error::Error> for Error {
-	fn from(e: serde_json::error::Error) -> Self {
-		Self::InvalidJson(e)
-	}
-}
-
-impl From<crate::schema::from_serde_json::Error> for Error {
-	fn from(e: crate::schema::from_serde_json::Error) -> Self {
-		Self::InvalidSchema(e)
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::UnsupportedType => write!(f, "unsupported schema `type` value.")
+		}
 	}
 }
 
 /// Create a dummy location.
 fn loc<F: Clone>(file: &F) -> Location<F> {
 	Location::new(file.clone(), Span::default())
-}
-
-pub fn import<F: Clone>(
-	content: &str,
-	file: F,
-	vocabulary: &mut Vocabulary,
-	quads: &mut Vec<LocQuad<F>>,
-) -> Result<(), Error> {
-	let json: Value = serde_json::from_str(content)?;
-	let schema: Schema = json.try_into()?;
-
-	import_schema(&schema, &file, None, vocabulary, quads)?;
-
-	Ok(())
 }
 
 pub fn import_schema<F: Clone>(

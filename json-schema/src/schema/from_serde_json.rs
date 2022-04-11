@@ -1,6 +1,7 @@
 use super::*;
 use iref::{IriBuf, IriRefBuf};
 use serde_json::Value;
+use std::fmt;
 
 #[derive(Debug)]
 pub enum Error {
@@ -15,6 +16,24 @@ pub enum Error {
 	NotAnArray,
 	NotAnObject,
 	UnknownFormat,
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::InvalidSchema => write!(f, "invalid `$schema` value"),
+			Self::InvalidUri => write!(f, "invalid URI"),
+			Self::InvalidUriRef => write!(f, "invalid URI reference"),
+			Self::InvalidType => write!(f, "invalid `type` value"),
+			Self::NotABoolean => write!(f, "expected a boolean"),
+			Self::NotANumber => write!(f, "expected a number"),
+			Self::NotAPositiveInteger => write!(f, "expected a positive integer"),
+			Self::NotAString => write!(f, "expected a string"),
+			Self::NotAnArray => write!(f, "expected an array"),
+			Self::NotAnObject => write!(f, "expected an object"),
+			Self::UnknownFormat => write!(f, "unknown `format` value")
+		}
+	}
 }
 
 trait ValueTryInto: Sized {
