@@ -94,17 +94,32 @@ pub fn import_regular_schema<F: Clone>(
 	vocabulary: &mut Vocabulary,
 	quads: &mut Vec<LocQuad<F>>,
 ) -> Result<Loc<Object<F>, F>, Error> {
-	let (id, base_iri) = match &schema.id {
+	let (id, mut name, base_iri) = match &schema.id {
 		Some(iri) => {
 			let id = Id::Iri(vocab::Term::from_iri(iri.clone(), vocabulary));
-			(id, Some(iri.clone()))
+			let name = iri.path().file_name().and_then(|name| {
+				match std::path::Path::new(name).file_stem() {
+					Some(stem) => vocab::Name::new(stem.to_string_lossy()).ok(),
+					None => vocab::Name::new(name.to_string()).ok()
+				}
+			});
+
+			(id, name, Some(iri.clone()))
 		}
 		None => {
 			let id = Id::Blank(vocabulary.new_blank_label());
 			let base_iri = base_iri.map(IriBuf::from);
-			(id, base_iri)
+			(id, None, base_iri)
 		}
 	};
+
+	if name.is_none() {
+		if let Some(title) = &schema.meta_data.title {
+			if let Ok(n) = vocab::Name::new(title) {
+				name = Some(n)
+			}
+		}
+	}
 
 	// Declare the layout.
 	quads.push(Loc(
@@ -119,6 +134,21 @@ pub fn import_regular_schema<F: Clone>(
 		),
 		loc(file),
 	));
+
+	if let Some(name) = name {
+		quads.push(Loc(
+			Quad(
+				Loc(id, loc(file)),
+				Loc(Term::TreeLdr(vocab::TreeLdr::Name), loc(file)),
+				Loc(
+					Object::Literal(vocab::Literal::String(Loc(name.to_string().into(), loc(file)))),
+					loc(file),
+				),
+				None,
+			),
+			loc(file),
+		));
+	}
 
 	if let Some(title) = &schema.meta_data.title {
 		// The title of a schema is translated in an rdfs:label.
