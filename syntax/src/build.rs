@@ -926,32 +926,42 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 			name_loc,
 		));
 
-		if let Some(Loc(layout, _)) = def.layout {
+		if let Some(Loc(layout, layout_loc)) = def.layout {
 			let scope = ctx.scope.take();
-			let object = layout.expr.build(ctx, quads)?;
+
+			let mut object = layout.expr.build(ctx, quads)?;
 			let object_loc = object.location().clone();
 			ctx.scope = scope;
-			quads.push(Loc(
-				Quad(
-					Loc(Id::Blank(label), prop_id_loc.clone()),
-					Loc(Term::TreeLdr(TreeLdr::Format), object_loc.clone()),
-					object,
-					None,
-				),
-				object_loc,
-			));
 
 			for Loc(ann, ann_loc) in layout.annotations {
 				match ann {
-					crate::Annotation::Multiple => quads.push(Loc(
-						Quad(
-							Loc(Id::Blank(label), prop_id_loc.clone()),
-							Loc(Term::Schema(Schema::MultipleValues), ann_loc.clone()),
-							Loc(Object::Iri(Term::Schema(Schema::True)), ann_loc.clone()),
-							None,
-						),
-						ann_loc,
-					)),
+					crate::Annotation::Multiple => {
+						// Create a new orphan container layout to store the multiple values.
+						let container_label = ctx.vocabulary.new_blank_label();
+						quads.push(Loc(
+							Quad(
+								Loc(Id::Blank(container_label), layout_loc.clone()),
+								Loc(Term::Rdf(Rdf::Type), layout_loc.clone()),
+								Loc(
+									Object::Iri(Term::TreeLdr(TreeLdr::Layout)),
+									layout_loc.clone(),
+								),
+								None,
+							),
+							layout_loc.clone(),
+						));
+						quads.push(Loc(
+							Quad(
+								Loc(Id::Blank(container_label), layout_loc.clone()),
+								Loc(Term::TreeLdr(TreeLdr::Set), layout_loc.clone()),
+								object,
+								None,
+							),
+							layout_loc.clone(),
+						));
+
+						object = Loc(Object::Blank(container_label), layout_loc.clone());
+					}
 					crate::Annotation::Required => quads.push(Loc(
 						Quad(
 							Loc(Id::Blank(label), prop_id_loc.clone()),
@@ -963,6 +973,16 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 					)),
 				}
 			}
+
+			quads.push(Loc(
+				Quad(
+					Loc(Id::Blank(label), prop_id_loc),
+					Loc(Term::TreeLdr(TreeLdr::Format), object_loc.clone()),
+					object,
+					None,
+				),
+				object_loc,
+			));
 		}
 
 		Ok(Loc(Object::Blank(label), loc))

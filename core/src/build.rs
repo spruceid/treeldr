@@ -178,17 +178,10 @@ impl<F: Clone + Ord> Context<F> {
 					}
 				}
 				Term::Schema(vocab::Schema::MultipleValues) => {
-					let (prop, field) =
-						self.require_property_or_layout_field_mut(id, Some(id_loc))?;
+					let prop = self.require_property_mut(id, Some(id_loc))?;
 					let Loc(multiple, _) = expect_boolean(object)?;
 
-					if let Some(prop) = prop {
-						prop.set_functional(!multiple, Some(loc.clone()))?
-					}
-
-					if let Some(field) = field {
-						field.set_functional(!multiple, Some(loc))?
-					}
+					prop.set_functional(!multiple, Some(loc.clone()))?
 				}
 				Term::Owl(vocab::Owl::UnionOf) => {
 					let ty = self.require_type_mut(id, Some(id_loc))?;
@@ -257,6 +250,16 @@ impl<F: Clone + Ord> Context<F> {
 					let Loc(fields_id, _) = expect_id(object)?;
 					let layout = self.require_layout_mut(id, Some(id_loc))?;
 					layout.set_enum(fields_id, Some(loc))?
+				}
+				Term::TreeLdr(vocab::TreeLdr::Set) => {
+					let Loc(item_layout_id, _) = expect_id(object)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_set(item_layout_id, Some(loc))?
+				}
+				Term::TreeLdr(vocab::TreeLdr::List) => {
+					let Loc(item_layout_id, _) = expect_id(object)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_list(item_layout_id, Some(loc))?
 				}
 				_ => (),
 			}

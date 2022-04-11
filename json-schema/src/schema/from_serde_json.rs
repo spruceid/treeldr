@@ -2,6 +2,7 @@ use super::*;
 use iref::{IriBuf, IriRefBuf};
 use serde_json::Value;
 
+#[derive(Debug)]
 pub enum Error {
 	InvalidSchema,
 	InvalidUri,
@@ -141,7 +142,7 @@ fn read_meta_schema(value: &mut serde_json::Map<String, Value>) -> Result<MetaSc
 			.remove("$vocabulary")
 			.map(|t| {
 				let obj = t.try_into_object()?;
-				let mut vocab = HashMap::new();
+				let mut vocab = BTreeMap::new();
 				for (key, value) in obj {
 					let uri = IriBuf::from_string(key).map_err(|_| Error::InvalidUriRef)?;
 					vocab.insert(uri, value.try_into_bool()?);
@@ -228,7 +229,7 @@ fn read_object_schema(value: &mut serde_json::Map<String, Value>) -> Result<Obje
 			.remove("properties")
 			.map(|v| {
 				let obj = v.try_into_object()?;
-				let mut properties = HashMap::new();
+				let mut properties = BTreeMap::new();
 				for (key, value) in obj {
 					properties.insert(key, value.try_into_schema()?);
 				}
@@ -239,7 +240,7 @@ fn read_object_schema(value: &mut serde_json::Map<String, Value>) -> Result<Obje
 			.remove("patternProperties")
 			.map(|v| {
 				let obj = v.try_into_object()?;
-				let mut properties = HashMap::new();
+				let mut properties = BTreeMap::new();
 				for (key, value) in obj {
 					properties.insert(key, value.try_into_schema()?);
 				}
@@ -254,7 +255,7 @@ fn read_object_schema(value: &mut serde_json::Map<String, Value>) -> Result<Obje
 			.remove("dependentSchemas")
 			.map(|v| {
 				let obj = v.try_into_object()?;
-				let mut properties = HashMap::new();
+				let mut properties = BTreeMap::new();
 				for (key, value) in obj {
 					properties.insert(key, value.try_into_schema()?);
 				}
@@ -397,7 +398,7 @@ fn read_object_validation(
 			.remove("dependentRequired")
 			.map(|v| {
 				let obj = v.try_into_object()?;
-				let mut map = HashMap::new();
+				let mut map = BTreeMap::new();
 				for (key, value) in obj {
 					map.insert(key, value.try_into_string_array()?);
 				}
@@ -501,7 +502,7 @@ impl TryFrom<Value> for Schema {
 						.remove("$defs")
 						.map(|t| {
 							let obj = t.try_into_object()?;
-							let mut defs = HashMap::new();
+							let mut defs = BTreeMap::new();
 							for (key, value) in obj {
 								let schema: Schema = value.try_into()?;
 								defs.insert(key, schema);

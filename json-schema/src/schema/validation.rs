@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Type {
@@ -64,6 +64,16 @@ pub struct NumericValidation {
 	pub exclusive_minimum: Option<serde_json::Number>,
 }
 
+impl NumericValidation {
+	pub fn is_empty(&self) -> bool {
+		self.multiple_of.is_some()
+			|| self.maximum.is_some()
+			|| self.exclusive_maximum.is_some()
+			|| self.minimum.is_some()
+			|| self.exclusive_minimum.is_some()
+	}
+}
+
 /// Validation Keywords for Strings
 pub struct StringValidation {
 	/// A string instance is valid against this keyword if its length is less
@@ -90,6 +100,12 @@ pub struct StringValidation {
 	/// the instance successfully. Recall: regular expressions are not
 	/// implicitly anchored.
 	pub pattern: Option<String>,
+}
+
+impl StringValidation {
+	pub fn is_empty(&self) -> bool {
+		self.max_length.is_none() && self.min_length.is_none() && self.pattern.is_none()
+	}
 }
 
 /// Validation Keywords for Arrays
@@ -143,6 +159,16 @@ pub struct ArrayValidation {
 	pub min_contains: Option<u64>,
 }
 
+impl ArrayValidation {
+	pub fn is_empty(&self) -> bool {
+		self.max_items.is_none()
+			&& self.min_items.is_none()
+			&& self.unique_items.is_none()
+			&& self.max_contains.is_none()
+			&& self.min_contains.is_none()
+	}
+}
+
 /// Validation Keywords for Objects
 pub struct ObjectValidation {
 	/// An object instance is valid against "maxProperties" if its number of
@@ -174,7 +200,16 @@ pub struct ObjectValidation {
 	/// corresponding array is also the name of a property in the instance.
 	///
 	/// Omitting this keyword has the same behavior as an empty object.
-	pub dependent_required: Option<HashMap<String, Vec<String>>>,
+	pub dependent_required: Option<BTreeMap<String, Vec<String>>>,
+}
+
+impl ObjectValidation {
+	pub fn is_empty(&self) -> bool {
+		self.max_properties.is_none()
+			&& self.min_properties.is_none()
+			&& self.required.is_none()
+			&& self.dependent_required.is_none()
+	}
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]

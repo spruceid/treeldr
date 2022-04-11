@@ -61,6 +61,8 @@ pub enum Description {
 	Reference(Id),
 	Literal(RegExp),
 	Enum(Id),
+	Set(Id),
+	List(Id),
 }
 
 impl Description {
@@ -71,6 +73,8 @@ impl Description {
 			Self::Native(n) => Type::Native(*n),
 			Self::Literal(_) => Type::Literal,
 			Self::Enum(_) => Type::Enum,
+			Self::Set(_) => Type::Set,
+			Self::List(_) => Type::List,
 		}
 	}
 }
@@ -89,11 +93,6 @@ impl<F> Definition<F> {
 	/// Type for which the layout is defined.
 	pub fn ty(&self) -> Option<&WithCauses<Id, F>> {
 		self.ty.with_causes()
-	}
-
-	pub fn require_ty(&self, cause: Option<Location<F>>) -> Result<&WithCauses<Id, F>, Error<F>> {
-		self.ty
-			.value_or_else(|| Caused::new(error::LayoutMissingType(self.id).into(), cause))
 	}
 
 	pub fn add_use(&mut self, user_layout: Id, field: Id) {
@@ -249,6 +248,20 @@ impl<F> Definition<F> {
 	{
 		self.set_description(Description::Enum(items), cause)
 	}
+
+	pub fn set_set(&mut self, item_layout: Id, cause: Option<Location<F>>) -> Result<(), Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.set_description(Description::Set(item_layout), cause)
+	}
+
+	pub fn set_list(&mut self, item_layout: Id, cause: Option<Location<F>>) -> Result<(), Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.set_description(Description::List(item_layout), cause)
+	}
 }
 
 /// Field/layout usage.
@@ -306,15 +319,11 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 	) -> Result<crate::layout::Definition<F>, Error<F>> {
 		let (def, causes) = self.into_parts();
 
-		let ty_id = def.ty.ok_or_else(|| {
-			Caused::new(
-				error::LayoutMissingType(id).into(),
-				causes.preferred().cloned(),
-			)
+		let ty = def.ty.try_map_with_causes(|ty_id| {
+			Ok(*nodes
+				.require_type(*ty_id, ty_id.causes().preferred().cloned())?
+				.inner())
 		})?;
-		let ty = nodes
-			.require_type(*ty_id, ty_id.causes().preferred().cloned())?
-			.clone_with_causes(ty_id.into_causes());
 
 		let def_desc = def.desc.ok_or_else(|| {
 			Caused::new(
@@ -414,6 +423,18 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 					let name = require_name(def.id, def.name, &causes)?;
 					let lit = crate::layout::Literal::new(regexp, name, def.id.is_blank());
 					Ok(crate::layout::Description::Literal(lit))
+				}
+				Description::Set(layout_id) => {
+					let layout_ref = *nodes
+						.require_layout(layout_id, desc_causes.preferred().cloned())?
+						.inner();
+					Ok(crate::layout::Description::Set(layout_ref, def.name))
+				}
+				Description::List(layout_id) => {
+					let layout_ref = *nodes
+						.require_layout(layout_id, desc_causes.preferred().cloned())?
+						.inner();
+					Ok(crate::layout::Description::List(layout_ref, def.name))
 				}
 			})
 			.map_err(Caused::flatten)?;

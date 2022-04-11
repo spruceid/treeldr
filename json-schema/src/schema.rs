@@ -1,5 +1,5 @@
 use iref::{IriBuf, IriRefBuf};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 mod validation;
 pub use validation::*;
@@ -80,7 +80,7 @@ pub struct RegularSchema {
 	/// The "$defs" keyword reserves a location for schema authors to inline
 	/// re-usable JSON Schemas into a more general schema. The keyword does not
 	/// directly affect the validation result.
-	pub defs: Option<HashMap<String, Schema>>,
+	pub defs: Option<BTreeMap<String, Schema>>,
 }
 
 /// A Vocabulary for Basic Meta-Data Annotations.
@@ -110,7 +110,7 @@ pub struct MetaSchema {
 	/// understood by the implementation MUST be processed in a manner
 	/// consistent with the semantic definitions contained within the
 	/// vocabulary.
-	pub vocabulary: Option<HashMap<IriBuf, bool>>,
+	pub vocabulary: Option<BTreeMap<IriBuf, bool>>,
 }
 
 /// Schema defined with the `$ref` keyword.
@@ -186,6 +186,15 @@ pub struct ArraySchema {
 	pub unevaluated_items: Option<Box<Schema>>,
 }
 
+impl ArraySchema {
+	pub fn is_empty(&self) -> bool {
+		self.prefix_items.is_none()
+			&& self.items.is_none()
+			&& self.contains.is_none()
+			&& self.unevaluated_items.is_none()
+	}
+}
+
 /// Keywords for Applying Subschemas to Objects.
 pub struct ObjectSchema {
 	/// Validation succeeds if, for each name that appears in both the instance
@@ -195,13 +204,13 @@ pub struct ObjectSchema {
 	/// names matched by this keyword.
 	/// Omitting this keyword has the same assertion behavior as an empty
 	/// object.
-	pub properties: Option<HashMap<String, Schema>>,
+	pub properties: Option<BTreeMap<String, Schema>>,
 
 	/// The value of "patternProperties" MUST be an object.
 	/// Each property name of this object SHOULD be a valid regular expression,
 	/// according to the ECMA-262 regular expression dialect.
 	/// Each property value of this object MUST be a valid JSON Schema.
-	pub pattern_properties: Option<HashMap<String, Schema>>,
+	pub pattern_properties: Option<BTreeMap<String, Schema>>,
 
 	/// The behavior of this keyword depends on the presence and annotation
 	/// results of "properties" and "patternProperties" within the same schema
@@ -221,7 +230,7 @@ pub struct ObjectSchema {
 	/// presence of the property.
 	///
 	/// Omitting this keyword has the same behavior as an empty object.
-	pub dependent_schemas: Option<HashMap<String, Schema>>,
+	pub dependent_schemas: Option<BTreeMap<String, Schema>>,
 
 	/// The behavior of this keyword depends on the annotation results of
 	/// adjacent keywords that apply to the instance location being validated.
@@ -248,6 +257,16 @@ pub struct ObjectSchema {
 	pub unevaluated_properties: Option<Box<Schema>>,
 }
 
+impl ObjectSchema {
+	pub fn is_empty(&self) -> bool {
+		self.properties.is_none()
+			&& self.pattern_properties.is_none()
+			&& self.additional_properties.is_none()
+			&& self.dependent_schemas.is_none()
+			&& self.unevaluated_properties.is_none()
+	}
+}
+
 /// A Vocabulary for the Contents of String-Encoded Data
 pub struct StringEncodedData {
 	/// Defines that the string SHOULD be interpreted as binary data and decoded
@@ -271,4 +290,12 @@ pub struct StringEncodedData {
 	/// The value of this property MUST be a valid JSON schema. It SHOULD be
 	/// ignored if "contentMediaType" is not present.
 	pub content_schema: Option<Box<Schema>>,
+}
+
+impl StringEncodedData {
+	pub fn is_empty(&self) -> bool {
+		self.content_encoding.is_none()
+			&& self.content_media_type.is_none()
+			&& self.content_schema.is_none()
+	}
 }

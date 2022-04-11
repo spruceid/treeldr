@@ -117,7 +117,7 @@ impl<F> Context<F> {
 
 	/// Resolve all the reference layouts.
 	///
-	/// Checks that the type of a reference layout (`&T`) is equal to the type of the target layout (`T`).
+	/// Checks that the type of a reference layout (`&T`) is equal to the type of the target layout (`T`), if any.
 	/// If no type is defined for the reference layout, it is set to the correct type.
 	pub fn resolve_references(&mut self) -> Result<(), Error<F>>
 	where
@@ -165,12 +165,15 @@ impl<F> Context<F> {
 		for (id, target_layout_id) in by_depth {
 			let (target_layout_id, cause) = target_layout_id.into_parts();
 			let target_layout = self.require_layout(target_layout_id, cause.clone())?;
-			let (target_ty_id, ty_cause) = target_layout.require_ty(cause)?.clone().into_parts();
-			self.get_mut(id)
-				.unwrap()
-				.as_layout_mut()
-				.unwrap()
-				.set_type(target_ty_id, ty_cause.into_preferred())?
+
+			if let Some(target_ty) = target_layout.ty().cloned() {
+				let (target_ty_id, ty_cause) = target_ty.into_parts();
+				self.get_mut(id)
+					.unwrap()
+					.as_layout_mut()
+					.unwrap()
+					.set_type(target_ty_id, ty_cause.into_preferred())?
+			}
 		}
 
 		Ok(())

@@ -1,4 +1,4 @@
-use crate::{layout, prop, vocab::Name, Documentation, WithCauses};
+use crate::{layout, prop, vocab::Name, Documentation, MaybeSet, WithCauses};
 use shelves::Ref;
 
 /// Structure layout.
@@ -31,23 +31,23 @@ impl<F> Struct<F> {
 
 /// Layout field.
 pub struct Field<F> {
-	prop: WithCauses<Ref<prop::Definition<F>>, F>,
+	prop: MaybeSet<Ref<prop::Definition<F>>, F>,
 	name: WithCauses<Name, F>,
 	label: Option<String>,
 	layout: WithCauses<Ref<super::Definition<F>>, F>,
 	required: WithCauses<bool, F>,
-	functional: WithCauses<bool, F>,
+	// functional: WithCauses<bool, F>,
 	doc: Documentation,
 }
 
 impl<F> Field<F> {
 	pub fn new(
-		prop: WithCauses<Ref<prop::Definition<F>>, F>,
+		prop: MaybeSet<Ref<prop::Definition<F>>, F>,
 		name: WithCauses<Name, F>,
 		label: Option<String>,
 		layout: WithCauses<Ref<super::Definition<F>>, F>,
 		required: WithCauses<bool, F>,
-		functional: WithCauses<bool, F>,
+		// functional: WithCauses<bool, F>,
 		doc: Documentation,
 	) -> Self {
 		Self {
@@ -56,13 +56,13 @@ impl<F> Field<F> {
 			label,
 			layout,
 			required,
-			functional,
+			// functional,
 			doc,
 		}
 	}
 
-	pub fn property(&self) -> Ref<prop::Definition<F>> {
-		*self.prop.inner()
+	pub fn property(&self) -> Option<Ref<prop::Definition<F>>> {
+		self.prop.value().cloned()
 	}
 
 	pub fn name(&self) -> &Name {
@@ -75,8 +75,10 @@ impl<F> Field<F> {
 
 	pub fn preferred_label<'a>(&'a self, model: &'a crate::Model<F>) -> Option<&'a str> {
 		if self.label.is_none() {
-			let prop_id = model.properties().get(*self.prop).unwrap().id();
-			model.get(prop_id).unwrap().label()
+			self.property().and_then(|prop| {
+				let prop_id = model.properties().get(prop).unwrap().id();
+				model.get(prop_id).unwrap().label()
+			})
 		} else {
 			self.label.as_deref()
 		}
@@ -90,9 +92,9 @@ impl<F> Field<F> {
 		*self.required.inner()
 	}
 
-	pub fn is_functional(&self) -> bool {
-		*self.functional.inner()
-	}
+	// pub fn is_functional(&self) -> bool {
+	// 	*self.functional.inner()
+	// }
 
 	pub fn documentation(&self) -> &Documentation {
 		&self.doc
@@ -100,8 +102,13 @@ impl<F> Field<F> {
 
 	pub fn preferred_documentation<'a>(&'a self, model: &'a crate::Model<F>) -> &'a Documentation {
 		if self.doc.is_empty() {
-			let prop_id = model.properties().get(*self.prop).unwrap().id();
-			model.get(prop_id).unwrap().documentation()
+			match self.property() {
+				Some(prop) => {
+					let prop_id = model.properties().get(prop).unwrap().id();
+					model.get(prop_id).unwrap().documentation()
+				}
+				None => &self.doc,
+			}
 		} else {
 			&self.doc
 		}

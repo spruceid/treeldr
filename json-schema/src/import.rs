@@ -1,22 +1,20 @@
 //! JSON Schema import functions.
 //!
 //! Semantics follows <https://www.w3.org/2019/wot/json-schema>.
+use crate::schema::{self, RegularSchema, Schema};
 use iref::{Iri, IriBuf};
 use locspan::{Loc, Location, Span};
 use rdf_types::Quad;
 use serde_json::Value;
 use treeldr::{vocab, Id, Vocabulary};
 use vocab::{LocQuad, Object, Term};
-use crate::schema::{
-	self,
-	Schema,
-	RegularSchema
-};
 
 /// Import error.
+#[derive(Debug)]
 pub enum Error {
 	InvalidJson(serde_json::error::Error),
 	InvalidSchema(crate::schema::from_serde_json::Error),
+	UnsupportedType,
 }
 
 impl From<serde_json::error::Error> for Error {
@@ -62,13 +60,49 @@ pub fn import_schema<F: Clone>(
 		Schema::False => todo!(),
 		Schema::Ref(r) => {
 			let iri = r.target.resolved(base_iri.unwrap());
-			let id = vocab::Term::from_iri(iri.clone(), vocabulary);
+			let id = vocab::Term::from_iri(iri, vocabulary);
 			Ok(Loc(Object::Iri(id), loc(file)))
 		}
 		Schema::DynamicRef(_) => todo!(),
-		Schema::Regular(schema) => {
-			import_regular_schema(schema, file, base_iri, vocabulary, quads)
-		}
+		Schema::Regular(schema) => import_regular_schema(schema, file, base_iri, vocabulary, quads),
+	}
+}
+
+#[derive(Clone, Copy)]
+enum LayoutKind {
+	Unknown,
+	Boolean,
+	Integer,
+	Number,
+	String,
+	ArrayOrSet,
+	Array,
+	Set,
+	Struct,
+}
+
+impl LayoutKind {
+	pub fn is_struct(&self) -> bool {
+		matches!(self, Self::Struct)
+	}
+
+	pub fn refine(&mut self, other: Self) -> Result<(), Error> {
+		*self = match (*self, other) {
+			(Self::Unknown, k) => k,
+			(Self::Boolean, Self::Boolean) => Self::Boolean,
+			(Self::Integer, Self::Integer) => Self::Integer,
+			(Self::Number, Self::Integer) => Self::Number,
+			(Self::Number, Self::Number) => Self::Number,
+			(Self::ArrayOrSet, Self::Array) => Self::Array,
+			(Self::ArrayOrSet, Self::Set) => Self::Set,
+			(Self::ArrayOrSet, Self::ArrayOrSet) => Self::ArrayOrSet,
+			(Self::Array, Self::Array) => Self::Array,
+			(Self::Set, Self::Set) => Self::Set,
+			(Self::Struct, Self::Struct) => Self::Struct,
+			_ => return Err(Error::UnsupportedType),
+		};
+
+		Ok(())
 	}
 }
 
@@ -112,10 +146,7 @@ pub fn import_regular_schema<F: Clone>(
 				Loc(id, loc(file)),
 				Loc(Term::Rdfs(vocab::Rdfs::Label), loc(file)),
 				Loc(
-					Object::Literal(vocab::Literal::String(Loc(
-						title.clone().into(),
-						loc(file),
-					))),
+					Object::Literal(vocab::Literal::String(Loc(title.clone().into(), loc(file)))),
 					loc(file),
 				),
 				None,
@@ -143,103 +174,64 @@ pub fn import_regular_schema<F: Clone>(
 		));
 	}
 
+	let mut kind = LayoutKind::Unknown;
+	if let Some(types) = &schema.validation.any.ty {
+		for ty in types {
+			let k = match ty {
+				schema::Type::Null => todo!(),
+				schema::Type::Boolean => LayoutKind::Boolean,
+				schema::Type::Integer => LayoutKind::Integer,
+				schema::Type::Number => LayoutKind::Number,
+				schema::Type::String => LayoutKind::String,
+				schema::Type::Array => LayoutKind::ArrayOrSet,
+				schema::Type::Object => LayoutKind::Struct,
+			};
+
+			kind.refine(k)?
+		}
+	}
+
 	match &schema.desc {
-		schema::Description::Definition { string, array, object } => {
-			if let Some(properties) = &object.properties {
-				// The presence of this key means that the schema represents a TreeLDR structure
-				// layout.
-				// First, we build each field.
-				let mut fields: Vec<Loc<Object<F>, F>> = Vec::with_capacity(properties.len());
-				for (prop, prop_schema) in properties {
-					let prop_label = vocabulary.new_blank_label();
-					// <prop> rdf:type treeldr:Field
-					quads.push(Loc(
-						Quad(
-							Loc(Id::Blank(prop_label), loc(file)),
-							Loc(Term::Rdf(vocab::Rdf::Type), loc(file)),
-							Loc(Object::Iri(Term::TreeLdr(vocab::TreeLdr::Field)), loc(file)),
-							None,
-						),
-						loc(file),
-					));
-					// <prop> treeldr:name <name>
-					quads.push(Loc(
-						Quad(
-							Loc(Id::Blank(prop_label), loc(file)),
-							Loc(Term::TreeLdr(vocab::TreeLdr::Name), loc(file)),
-							Loc(
-								Object::Literal(vocab::Literal::String(Loc(
-									prop.to_string().into(),
-									loc(file),
-								))),
-								loc(file),
-							),
-							None,
-						),
-						loc(file),
-					));
+		schema::Description::Definition {
+			string,
+			array,
+			object,
+		} => {
+			if !string.is_empty() {
+				todo!()
+			}
 
-					let prop_schema = import_schema(
-						prop_schema,
-						file,
-						base_iri.as_ref().map(IriBuf::as_iri),
-						vocabulary,
-						quads,
-					)?;
-					quads.push(Loc(
-						Quad(
-							Loc(Id::Blank(prop_label), loc(file)),
-							Loc(Term::TreeLdr(vocab::TreeLdr::Format), loc(file)),
-							prop_schema,
-							None,
-						),
-						loc(file),
-					));
-
-					let field = Loc(Object::Blank(prop_label), loc(file));
-
-					fields.push(field);
-
-					// property_fields.insert(prop, Loc(Id::Blank(prop_label), loc(file)));
-					if let Some(required) = &schema.validation.object.required {
-						if required.contains(prop) {
-							quads.push(Loc(
-								Quad(
-									Loc(Id::Blank(prop_label), loc(file)),
-									Loc(Term::Schema(vocab::Schema::ValueRequired), loc(file)),
-									Loc(Object::Iri(Term::Schema(vocab::Schema::True)), loc(file)),
-									None,
-								),
-								loc(file),
-							));
-						}
-					}
-				}
-
-				let fields = fields.into_iter().try_into_rdf_list::<Error, _>(
-					&mut (),
+			if !array.is_empty() || !schema.validation.array.is_empty() {
+				kind.refine(LayoutKind::ArrayOrSet)?;
+				import_array_schema(
+					id,
+					schema,
+					array,
+					&mut kind,
+					file,
+					base_iri.as_ref().map(IriBuf::as_iri),
 					vocabulary,
 					quads,
-					loc(file),
-					|field, _, _, _| Ok(field),
 				)?;
+			}
 
-				// Then we declare the structure content.
-				quads.push(Loc(
-					Quad(
-						Loc(id, loc(file)),
-						Loc(Term::TreeLdr(vocab::TreeLdr::Fields), loc(file)),
-						fields,
-						None,
-					),
-					loc(file),
-				));
+			if kind.is_struct() || !object.is_empty() || !schema.validation.object.is_empty() {
+				kind.refine(LayoutKind::Struct)?;
+				import_object_schema(
+					id,
+					schema,
+					object,
+					file,
+					base_iri.as_ref().map(IriBuf::as_iri),
+					vocabulary,
+					quads,
+				)?;
 			}
 		}
-		schema::Description::OneOf(schemas) => {
-			todo!()
-		}
-		_ => todo!()
+		// schema::Description::OneOf(schemas) => {
+		// 	todo!()
+		// }
+		_ => todo!(),
 	}
 
 	if let Some(cnst) = &schema.validation.any.cnst {
@@ -277,8 +269,23 @@ pub fn import_regular_schema<F: Clone>(
 		));
 	}
 
-	if let Some(format) = schema.validation.format {
-		let layout = format_layout(file, format)?;
+	let native_layout = if let Some(format) = schema.validation.format {
+		Some(format_layout(file, format)?)
+	} else {
+		match kind {
+			LayoutKind::Boolean => {
+				Some(Loc(Object::Iri(Term::Xsd(vocab::Xsd::Boolean)), loc(file)))
+			}
+			LayoutKind::Integer => {
+				Some(Loc(Object::Iri(Term::Xsd(vocab::Xsd::Integer)), loc(file)))
+			}
+			LayoutKind::Number => Some(Loc(Object::Iri(Term::Xsd(vocab::Xsd::Double)), loc(file))),
+			LayoutKind::String => Some(Loc(Object::Iri(Term::Xsd(vocab::Xsd::String)), loc(file))),
+			_ => None,
+		}
+	};
+
+	if let Some(layout) = native_layout {
 		quads.push(Loc(
 			Quad(
 				Loc(id, loc(file)),
@@ -296,6 +303,135 @@ pub fn import_regular_schema<F: Clone>(
 	};
 
 	Ok(Loc(result, loc(file)))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn import_array_schema<F: Clone>(
+	id: Id,
+	schema: &RegularSchema,
+	array: &schema::ArraySchema,
+	kind: &mut LayoutKind,
+	file: &F,
+	base_iri: Option<Iri>,
+	vocabulary: &mut Vocabulary,
+	quads: &mut Vec<LocQuad<F>>,
+) -> Result<(), Error> {
+	let layout_kind = if matches!(schema.validation.array.unique_items, Some(true)) {
+		kind.refine(LayoutKind::Set)?;
+		Loc(Term::TreeLdr(vocab::TreeLdr::Set), loc(file))
+	} else {
+		kind.refine(LayoutKind::Array)?;
+		Loc(Term::TreeLdr(vocab::TreeLdr::List), loc(file))
+	};
+
+	let item_type = match &array.items {
+		Some(items) => import_schema(items, file, base_iri, vocabulary, quads)?,
+		None => todo!(),
+	};
+
+	quads.push(Loc(
+		Quad(Loc(id, loc(file)), layout_kind, item_type, None),
+		loc(file),
+	));
+
+	Ok(())
+}
+
+fn import_object_schema<F: Clone>(
+	id: Id,
+	schema: &RegularSchema,
+	object: &schema::ObjectSchema,
+	file: &F,
+	base_iri: Option<Iri>,
+	vocabulary: &mut Vocabulary,
+	quads: &mut Vec<LocQuad<F>>,
+) -> Result<(), Error> {
+	let mut fields: Vec<Loc<Object<F>, F>> = Vec::new();
+
+	if let Some(properties) = &object.properties {
+		fields.reserve(properties.len());
+
+		// First, we build each field.
+		for (prop, prop_schema) in properties {
+			let prop_label = vocabulary.new_blank_label();
+			// <prop> rdf:type treeldr:Field
+			quads.push(Loc(
+				Quad(
+					Loc(Id::Blank(prop_label), loc(file)),
+					Loc(Term::Rdf(vocab::Rdf::Type), loc(file)),
+					Loc(Object::Iri(Term::TreeLdr(vocab::TreeLdr::Field)), loc(file)),
+					None,
+				),
+				loc(file),
+			));
+			// <prop> treeldr:name <name>
+			quads.push(Loc(
+				Quad(
+					Loc(Id::Blank(prop_label), loc(file)),
+					Loc(Term::TreeLdr(vocab::TreeLdr::Name), loc(file)),
+					Loc(
+						Object::Literal(vocab::Literal::String(Loc(
+							prop.to_string().into(),
+							loc(file),
+						))),
+						loc(file),
+					),
+					None,
+				),
+				loc(file),
+			));
+
+			let prop_schema = import_schema(prop_schema, file, base_iri, vocabulary, quads)?;
+			quads.push(Loc(
+				Quad(
+					Loc(Id::Blank(prop_label), loc(file)),
+					Loc(Term::TreeLdr(vocab::TreeLdr::Format), loc(file)),
+					prop_schema,
+					None,
+				),
+				loc(file),
+			));
+
+			let field = Loc(Object::Blank(prop_label), loc(file));
+			fields.push(field);
+
+			// property_fields.insert(prop, Loc(Id::Blank(prop_label), loc(file)));
+			if let Some(required) = &schema.validation.object.required {
+				if required.contains(prop) {
+					quads.push(Loc(
+						Quad(
+							Loc(Id::Blank(prop_label), loc(file)),
+							Loc(Term::Schema(vocab::Schema::ValueRequired), loc(file)),
+							Loc(Object::Iri(Term::Schema(vocab::Schema::True)), loc(file)),
+							None,
+						),
+						loc(file),
+					));
+				}
+			}
+		}
+	}
+
+	let fields = fields.into_iter().try_into_rdf_list::<Error, _>(
+		&mut (),
+		vocabulary,
+		quads,
+		loc(file),
+		|field, _, _, _| Ok(field),
+	)?;
+
+	// Then we declare the structure content.
+	quads.push(Loc(
+		Quad(
+			Loc(id, loc(file)),
+			Loc(Term::TreeLdr(vocab::TreeLdr::Fields), loc(file)),
+			fields,
+			None,
+		),
+		loc(file),
+	));
+
+	Ok(())
 }
 
 fn value_into_object<F: Clone>(
@@ -356,7 +492,7 @@ fn format_layout<F: Clone>(file: &F, format: schema::Format) -> Result<Loc<Objec
 		schema::Format::UriTemplate => todo!(),
 		schema::Format::JsonPointer => todo!(),
 		schema::Format::RelativeJsonPointer => todo!(),
-		schema::Format::Regex => todo!()
+		schema::Format::Regex => todo!(),
 	};
 
 	Ok(Loc(Object::Iri(layout), loc(file)))

@@ -39,7 +39,7 @@ pub enum TreeLdr {
 	/// property.
 	/// The payload of the variant (required) is given by the `treeldr:format`
 	/// property.
-	#[iri("tldr:Layout/Field")]
+	#[iri("tldr:Field")]
 	Field,
 
 	#[iri("tldr:fieldFor")]
@@ -84,6 +84,14 @@ pub enum TreeLdr {
 	/// Native layout.
 	#[iri("tldr:native")]
 	Native,
+
+	/// List layout.
+	#[iri("tldr:list")]
+	List,
+
+	/// Set layout.
+	#[iri("tldr:set")]
+	Set,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -203,6 +211,28 @@ pub enum Term {
 }
 
 impl Term {
+	pub fn try_from_known_iri(iri: Iri) -> Option<Self> {
+		match Rdf::try_from(iri) {
+			Ok(id) => Some(Term::Rdf(id)),
+			Err(_) => match Rdfs::try_from(iri) {
+				Ok(id) => Some(Term::Rdfs(id)),
+				Err(_) => match Xsd::try_from(iri) {
+					Ok(id) => Some(Term::Xsd(id)),
+					Err(_) => match Schema::try_from(iri) {
+						Ok(id) => Some(Term::Schema(id)),
+						Err(_) => match Owl::try_from(iri) {
+							Ok(id) => Some(Term::Owl(id)),
+							Err(_) => match TreeLdr::try_from(iri) {
+								Ok(id) => Some(Term::TreeLdr(id)),
+								Err(_) => None,
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
 	pub fn try_from_iri(iri: Iri, ns: &Vocabulary) -> Option<Self> {
 		match Rdf::try_from(iri) {
 			Ok(id) => Some(Term::Rdf(id)),
@@ -212,12 +242,15 @@ impl Term {
 					Ok(id) => Some(Term::Xsd(id)),
 					Err(_) => match Schema::try_from(iri) {
 						Ok(id) => Some(Term::Schema(id)),
-						Err(_) => match TreeLdr::try_from(iri) {
-							Ok(id) => Some(Term::TreeLdr(id)),
-							Err(_) => {
-								let iri_buf: IriBuf = iri.into();
-								ns.get(&iri_buf).map(Term::Unknown)
-							}
+						Err(_) => match Owl::try_from(iri) {
+							Ok(id) => Some(Term::Owl(id)),
+							Err(_) => match TreeLdr::try_from(iri) {
+								Ok(id) => Some(Term::TreeLdr(id)),
+								Err(_) => {
+									let iri_buf: IriBuf = iri.into();
+									ns.get(&iri_buf).map(Term::Unknown)
+								}
+							},
 						},
 					},
 				},
@@ -230,13 +263,16 @@ impl Term {
 			Ok(id) => Term::Rdf(id),
 			Err(_) => match Rdfs::try_from(iri.as_iri()) {
 				Ok(id) => Term::Rdfs(id),
-				Err(_) => match Schema::try_from(iri.as_iri()) {
-					Ok(id) => Term::Schema(id),
-					Err(_) => match Owl::try_from(iri.as_iri()) {
-						Ok(id) => Term::Owl(id),
-						Err(_) => match TreeLdr::try_from(iri.as_iri()) {
-							Ok(id) => Term::TreeLdr(id),
-							Err(_) => Term::Unknown(ns.insert(iri)),
+				Err(_) => match Xsd::try_from(iri.as_iri()) {
+					Ok(id) => Term::Xsd(id),
+					Err(_) => match Schema::try_from(iri.as_iri()) {
+						Ok(id) => Term::Schema(id),
+						Err(_) => match Owl::try_from(iri.as_iri()) {
+							Ok(id) => Term::Owl(id),
+							Err(_) => match TreeLdr::try_from(iri.as_iri()) {
+								Ok(id) => Term::TreeLdr(id),
+								Err(_) => Term::Unknown(ns.insert(iri)),
+							},
 						},
 					},
 				},
@@ -449,6 +485,7 @@ impl Vocabulary {
 		match self.reverse.entry(iri) {
 			Entry::Occupied(entry) => *entry.get(),
 			Entry::Vacant(entry) => {
+				debug_assert!(Term::try_from_known_iri(entry.key().as_iri()).is_none());
 				let name = UnknownTerm(self.map.len());
 				self.map.push(entry.key().clone());
 				entry.insert(name);

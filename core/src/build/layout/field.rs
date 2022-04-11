@@ -9,7 +9,7 @@ pub struct Definition<F> {
 	name: MaybeSet<Name, F>,
 	layout: MaybeSet<Id, F>,
 	required: MaybeSet<bool, F>,
-	functional: MaybeSet<bool, F>,
+	// functional: MaybeSet<bool, F>,
 }
 
 impl<F> Definition<F> {
@@ -20,7 +20,7 @@ impl<F> Definition<F> {
 			name: MaybeSet::default(),
 			layout: MaybeSet::default(),
 			required: MaybeSet::default(),
-			functional: MaybeSet::default(),
+			// functional: MaybeSet::default(),
 		}
 	}
 
@@ -126,29 +126,29 @@ impl<F> Definition<F> {
 			})
 	}
 
-	pub fn is_functional(&self) -> bool {
-		self.functional.value().cloned().unwrap_or(true)
-	}
+	// pub fn is_functional(&self) -> bool {
+	// 	self.functional.value().cloned().unwrap_or(true)
+	// }
 
-	pub fn set_functional(
-		&mut self,
-		value: bool,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
-	where
-		F: Ord + Clone,
-	{
-		self.functional
-			.try_set(value, cause, |expected, because, found| {
-				error::LayoutFieldMismatchFunctional {
-					id: self.id,
-					expected: *expected,
-					found,
-					because: because.cloned(),
-				}
-				.into()
-			})
-	}
+	// pub fn set_functional(
+	// 	&mut self,
+	// 	value: bool,
+	// 	cause: Option<Location<F>>,
+	// ) -> Result<(), Error<F>>
+	// where
+	// 	F: Ord + Clone,
+	// {
+	// 	self.functional
+	// 		.try_set(value, cause, |expected, because, found| {
+	// 			error::LayoutFieldMismatchFunctional {
+	// 				id: self.id,
+	// 				expected: *expected,
+	// 				found,
+	// 				because: because.cloned(),
+	// 			}
+	// 			.into()
+	// 		})
+	// }
 }
 
 impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
@@ -173,15 +173,21 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 		vocab: &Vocabulary,
 		nodes: &super::super::context::AllocatedNodes<F>,
 	) -> Result<crate::layout::Field<F>, Error<F>> {
-		let prop_id = self.prop.value_or_else(|| {
-			Caused::new(
-				error::LayoutFieldMissingProperty(self.id).into(),
-				self.causes().preferred().cloned(),
-			)
+		let prop = self.prop.clone().try_map_with_causes(|prop_id| {
+			Ok(*nodes
+				.require_property(*prop_id.inner(), prop_id.causes().preferred().cloned())?
+				.inner())
 		})?;
-		let prop = nodes
-			.require_property(*prop_id.inner(), prop_id.causes().preferred().cloned())?
-			.clone_with_causes(prop_id.causes().clone());
+
+		// let prop_id = self.prop.value_or_else(|| {
+		// 	Caused::new(
+		// 		error::LayoutFieldMissingProperty(self.id).into(),
+		// 		self.causes().preferred().cloned(),
+		// 	)
+		// })?;
+		// let prop = nodes
+		// 	.require_property(*prop_id.inner(), prop_id.causes().preferred().cloned())?
+		// 	.clone_with_causes(prop_id.causes().clone());
 
 		let name = self.require_name(vocab)?;
 
@@ -191,10 +197,10 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 			.clone_with_causes(layout_id.causes().clone());
 
 		let required = self.required.clone().unwrap_or(false);
-		let functional = self.functional.clone().unwrap_or(true);
+		// let functional = self.functional.clone().unwrap_or(true);
 
 		Ok(crate::layout::Field::new(
-			prop, name, label, layout, required, functional, doc,
+			prop, name, label, layout, required, doc,
 		))
 	}
 }
