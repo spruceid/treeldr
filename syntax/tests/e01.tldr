@@ -1,0 +1,2 @@
+type A {}
+type B = A // Type aliases are forbidden

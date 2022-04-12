@@ -77,6 +77,15 @@ fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) 
 	assert!(output.is_isomorphic_to(&expected_output))
 }
 
+fn negative_test<I: AsRef<Path>>(input_path: I) {
+	use treeldr_vocab::RdfDisplay;
+	let mut vocabulary = Vocabulary::new();
+	let output = parse_treeldr(&mut vocabulary, input_path);
+	for quad in output.quads() {
+		println!("{} .", quad.rdf_display(&vocabulary))
+	}
+}
+
 #[test]
 fn t001() {
 	test("tests/001-in.tldr", "tests/001-out.nq")
@@ -110,4 +119,21 @@ fn t007() {
 #[test]
 fn t008() {
 	test("tests/008-in.tldr", "tests/008-out.nq")
+}
+
+#[test]
+fn t009() {
+	test("tests/009-in.tldr", "tests/009-out.nq")
+}
+
+#[test]
+#[should_panic]
+fn e01() {
+	negative_test("tests/e01.tldr")
+}
+
+#[test]
+#[should_panic]
+fn e02() {
+	negative_test("tests/e02.tldr")
 }

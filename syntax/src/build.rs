@@ -1127,12 +1127,12 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 				Ok(Loc(Object::Iri(id), loc))
 			}
 			crate::InnerLayoutExpr::Reference(r) => {
+				let id = ctx.next_id(loc.clone());
 				let deref_layout = r.build(ctx, quads)?;
-				let layout = ctx.vocabulary.new_blank_label();
 
 				quads.push(Loc(
 					Quad(
-						Loc(Id::Blank(layout), loc.clone()),
+						id.clone(),
 						Loc(Term::Rdf(Rdf::Type), loc.clone()),
 						Loc(Object::Iri(Term::TreeLdr(TreeLdr::Layout)), loc.clone()),
 						None,
@@ -1142,7 +1142,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 
 				quads.push(Loc(
 					Quad(
-						Loc(Id::Blank(layout), loc.clone()),
+						id.clone(),
 						Loc(Term::TreeLdr(TreeLdr::DerefTo), loc.clone()),
 						deref_layout,
 						None,
@@ -1150,7 +1150,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 					loc.clone(),
 				));
 
-				Ok(Loc(Object::Blank(layout), loc))
+				Ok(Loc(id.into_value().into_term(), loc))
 			}
 			crate::InnerLayoutExpr::Literal(lit) => {
 				let id = ctx.insert_literal(quads, Loc(lit, loc.clone()));
