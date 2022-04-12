@@ -13,7 +13,8 @@ impl node::Type {
 			node::Type::Type => "type",
 			node::Type::Property => "property",
 			node::Type::Layout => "layout",
-			node::Type::LayoutField => "layout field",
+			node::Type::LayoutField => "structure layout field",
+			node::Type::LayoutVariant => "enum layout variant",
 			node::Type::List => "list"
 		}
 	}

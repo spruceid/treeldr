@@ -18,7 +18,7 @@ json-ld-context = [
 treeldr = { path = "../core" }
 treeldr-syntax = { path = "../syntax" }
 iref = "2.1.2"
-grdf = { version = "0.6.1", features = ["loc"] }
+grdf = { version = "0.7.3", features = ["loc"] }
 log = "0.4"
 locspan = "*"
 codespan-reporting = "0.11"

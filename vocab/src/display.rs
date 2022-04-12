@@ -47,7 +47,7 @@ impl Display for super::StrippedObject {
 	}
 }
 
-impl Display for super::Name {
+impl Display for super::Term {
 	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
 		self.iri(namespace).unwrap().fmt(f)
 	}
@@ -110,7 +110,7 @@ impl RdfDisplay for super::StrippedObject {
 	}
 }
 
-impl RdfDisplay for super::Name {
+impl RdfDisplay for super::Term {
 	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "<{}>", self.iri(namespace).unwrap())
 	}

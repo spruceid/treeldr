@@ -1,53 +1,59 @@
-use super::Field;
-use crate::{Documentation, MaybeSet, WithCauses};
+use crate::{vocab::Name, Documentation, MaybeSet, Ref, WithCauses};
 
 /// Enum layout.
 pub struct Enum<F> {
-	name: WithCauses<String, F>,
-	variants: Vec<Variant<F>>,
+	name: WithCauses<Name, F>,
+	variants: Vec<WithCauses<Variant<F>, F>>,
 }
 
 impl<F> Enum<F> {
-	pub fn name(&self) -> &str {
+	pub fn new(name: WithCauses<Name, F>, variants: Vec<WithCauses<Variant<F>, F>>) -> Self {
+		Self { name, variants }
+	}
+
+	pub fn name(&self) -> &Name {
 		&self.name
 	}
 
-	pub fn variants(&self) -> &[Variant<F>] {
+	pub fn variants(&self) -> &[WithCauses<Variant<F>, F>] {
 		&self.variants
 	}
 
-	pub fn fields(&self) -> Fields<F> {
-		Fields {
-			variants: self.variants.iter(),
-			current_fields: None,
-		}
+	// pub fn fields(&self) -> Fields<F> {
+	// 	Fields {
+	// 		variants: self.variants.iter(),
+	// 		current_fields: None,
+	// 	}
+	// }
+
+	pub fn composing_layouts(&self) -> ComposingLayouts<F> {
+		ComposingLayouts(self.variants.iter())
 	}
 }
 
-/// Enum layout variant.
 pub struct Variant<F> {
-	name: WithCauses<String, F>,
+	name: WithCauses<Name, F>,
+	layout: MaybeSet<Ref<super::Definition<F>>, F>,
 	label: Option<String>,
-	payload: MaybeSet<Vec<Field<F>>, F>,
 	doc: Documentation,
 }
 
 impl<F> Variant<F> {
 	pub fn new(
-		name: WithCauses<String, F>,
+		name: WithCauses<Name, F>,
+		layout: MaybeSet<Ref<super::Definition<F>>, F>,
 		label: Option<String>,
-		payload: MaybeSet<Vec<Field<F>>, F>,
 		doc: Documentation,
 	) -> Self {
 		Self {
 			name,
+			layout,
 			label,
-			payload,
 			doc,
 		}
 	}
 
-	pub fn name(&self) -> &str {
+	pub fn name(&self) -> &Name {
 		&self.name
 	}
 
@@ -55,8 +61,8 @@ impl<F> Variant<F> {
 		self.label.as_deref()
 	}
 
-	pub fn payload(&self) -> Option<&[Field<F>]> {
-		self.payload.value().map(Vec::as_slice)
+	pub fn layout(&self) -> Option<Ref<super::Definition<F>>> {
+		self.layout.value().cloned()
 	}
 
 	pub fn documentation(&self) -> &Documentation {
@@ -64,24 +70,40 @@ impl<F> Variant<F> {
 	}
 }
 
-pub struct Fields<'a, F> {
-	variants: std::slice::Iter<'a, Variant<F>>,
-	current_fields: Option<std::slice::Iter<'a, Field<F>>>,
-}
+pub struct ComposingLayouts<'a, F>(std::slice::Iter<'a, WithCauses<Variant<F>, F>>);
 
-impl<'a, F> Iterator for Fields<'a, F> {
-	type Item = &'a Field<F>;
+impl<'a, F> Iterator for ComposingLayouts<'a, F> {
+	type Item = Ref<super::Definition<F>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		loop {
-			match self.current_fields.as_mut().map(Iterator::next) {
-				Some(Some(item)) => break Some(item),
-				Some(None) => self.current_fields = None,
-				None => match self.variants.next() {
-					Some(variant) => self.current_fields = variant.payload().map(|f| f.iter()),
-					None => break None,
-				},
+		for variant in self.0.by_ref() {
+			if let Some(layout_ref) = variant.layout() {
+				return Some(layout_ref);
 			}
 		}
+
+		None
 	}
 }
+
+// pub struct Fields<'a, F> {
+// 	variants: std::slice::Iter<'a, WithCauses<Ref<super::Definition<F>>, F>>,
+// 	current_fields: Option<std::slice::Iter<'a, Field<F>>>,
+// }
+
+// impl<'a, F> Iterator for Fields<'a, F> {
+// 	type Item = &'a Field<F>;
+
+// 	fn next(&mut self) -> Option<Self::Item> {
+// 		loop {
+// 			match self.current_fields.as_mut().map(Iterator::next) {
+// 				Some(Some(item)) => break Some(item),
+// 				Some(None) => self.current_fields = None,
+// 				None => match self.variants.next() {
+// 					Some(variant) => self.current_fields = Some(variant.fields().iter()),
+// 					None => break None,
+// 				},
+// 			}
+// 		}
+// 	}
+// }

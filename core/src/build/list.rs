@@ -58,7 +58,7 @@ pub enum ListRef<'l, F> {
 }
 
 impl<'l, F> ListRef<'l, F> {
-	pub fn iter(&self, nodes: &'l super::context::AllocatedNodes<F>) -> Iter<'l, F> {
+	pub fn iter<C: RequireList<F>>(&self, nodes: &'l C) -> Iter<'l, F, C> {
 		match self {
 			Self::Nil => Iter::Nil,
 			Self::Cons(l) => Iter::Cons(nodes, l),
@@ -66,15 +66,36 @@ impl<'l, F> ListRef<'l, F> {
 	}
 }
 
-pub enum Iter<'l, F> {
-	Nil,
-	Cons(
-		&'l super::context::AllocatedNodes<F>,
-		&'l WithCauses<Definition<F>, F>,
-	),
+pub trait RequireList<F> {
+	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
+	where
+		F: Clone;
 }
 
-impl<'l, F: Clone> Iterator for Iter<'l, F> {
+impl<'l, F> RequireList<F> for super::Context<F> {
+	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
+	where
+		F: Clone,
+	{
+		self.require_list(id, cause)
+	}
+}
+
+impl<'l, F> RequireList<F> for super::context::AllocatedNodes<F> {
+	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
+	where
+		F: Clone,
+	{
+		self.require_list(id, cause)
+	}
+}
+
+pub enum Iter<'l, F, C> {
+	Nil,
+	Cons(&'l C, &'l WithCauses<Definition<F>, F>),
+}
+
+impl<'l, F: Clone, C: RequireList<F>> Iterator for Iter<'l, F, C> {
 	type Item = Result<&'l WithCauses<Object<F>, F>, Error<F>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
@@ -100,7 +121,7 @@ impl<'l, F: Clone> Iterator for Iter<'l, F> {
 						match nodes
 							.require_list(*rest_id.inner(), rest_id.causes().preferred().cloned())
 						{
-							Ok(ListRef::Cons(rest)) => *self = Self::Cons(nodes, rest),
+							Ok(ListRef::Cons(rest)) => *self = Self::Cons(*nodes, rest),
 							Ok(ListRef::Nil) => *self = Self::Nil,
 							Err(e) => return Some(Err(e)),
 						}

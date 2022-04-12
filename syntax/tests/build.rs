@@ -2,7 +2,7 @@ use locspan::Loc;
 use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;
-use treeldr_vocab::{GraphLabel, Id, Name, StrippedObject, Vocabulary};
+use treeldr_vocab::{GraphLabel, Id, StrippedObject, Term, Vocabulary};
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
@@ -29,7 +29,7 @@ impl BlankIdGenerator {
 fn parse_nquads<P: AsRef<Path>>(
 	vocabulary: &mut Vocabulary,
 	path: P,
-) -> grdf::HashDataset<Id, Name, StrippedObject, GraphLabel> {
+) -> grdf::HashDataset<Id, Term, StrippedObject, GraphLabel> {
 	use nquads_syntax::{lexing::Utf8Decoded, Document, Lexer, Parse};
 
 	let buffer = std::fs::read_to_string(path).expect("unable to read file");
@@ -51,7 +51,7 @@ fn parse_nquads<P: AsRef<Path>>(
 fn parse_treeldr<P: AsRef<Path>>(
 	vocab: &mut Vocabulary,
 	path: P,
-) -> grdf::HashDataset<Id, Name, StrippedObject, GraphLabel> {
+) -> grdf::HashDataset<Id, Term, StrippedObject, GraphLabel> {
 	use treeldr_syntax::{build, Build, Document, Lexer, Parse};
 
 	let input = std::fs::read_to_string(path).expect("unable to read input file");
@@ -77,6 +77,15 @@ fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) 
 	assert!(output.is_isomorphic_to(&expected_output))
 }
 
+fn negative_test<I: AsRef<Path>>(input_path: I) {
+	use treeldr_vocab::RdfDisplay;
+	let mut vocabulary = Vocabulary::new();
+	let output = parse_treeldr(&mut vocabulary, input_path);
+	for quad in output.quads() {
+		println!("{} .", quad.rdf_display(&vocabulary))
+	}
+}
+
 #[test]
 fn t001() {
 	test("tests/001-in.tldr", "tests/001-out.nq")
@@ -95,4 +104,36 @@ fn t003() {
 #[test]
 fn t004() {
 	test("tests/004-in.tldr", "tests/004-out.nq")
+}
+
+#[test]
+fn t005() {
+	test("tests/005-in.tldr", "tests/005-out.nq")
+}
+
+#[test]
+fn t007() {
+	test("tests/007-in.tldr", "tests/007-out.nq")
+}
+
+#[test]
+fn t008() {
+	test("tests/008-in.tldr", "tests/008-out.nq")
+}
+
+#[test]
+fn t009() {
+	test("tests/009-in.tldr", "tests/009-out.nq")
+}
+
+#[test]
+#[should_panic]
+fn e01() {
+	negative_test("tests/e01.tldr")
+}
+
+#[test]
+#[should_panic]
+fn e02() {
+	negative_test("tests/e02.tldr")
 }

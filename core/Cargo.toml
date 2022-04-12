@@ -16,6 +16,6 @@ derivative = "2.2.0"
 locspan = { version = "0.3.2", features = ["reporting"] }
 codespan-reporting = "0.11"
 pct-str = "1.1"
-rdf-types = { version = "0.3.6", features = ["loc"] }
-grdf = { version = "0.6.1", features = ["loc"] }
+rdf-types = { version = "0.4.1", features = ["loc"] }
+grdf = { version = "0.7.3", features = ["loc"] }
 btree-range-map = "0.2.5"

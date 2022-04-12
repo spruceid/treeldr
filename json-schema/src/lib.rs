@@ -45,8 +45,8 @@ pub fn generate<F>(
 	);
 
 	let title = match layout.preferred_label(model) {
-		Some(label) => label,
-		None => name,
+		Some(label) => label.to_string(),
+		None => name.to_pascal_case(),
 	};
 	json_schema.insert("title".into(), title.into());
 	generate_layout(
@@ -130,11 +130,9 @@ fn generate_layout<F>(
 			Ok(())
 		}
 		Description::Struct(s) => generate_struct(json, model, embedding, type_property, s),
-		Description::Enum(_) => {
-			todo!("json-schema enum layout")
-		}
-		Description::Sum(_) => {
-			todo!("json-schema sum layout")
+		Description::Enum(enm) => {
+			generate_enum_type(json, model, enm)?;
+			Ok(())
 		}
 		Description::Literal(lit) => {
 			generate_literal_type(json, lit);
@@ -161,7 +159,7 @@ fn generate_struct<F>(
 		let mut type_schema = serde_json::Map::new();
 
 		type_schema.insert("type".into(), "string".into());
-		type_schema.insert("pattern".into(), s.name().into());
+		type_schema.insert("pattern".into(), s.name().to_pascal_case().into());
 
 		properties.insert(name.into(), type_schema.into());
 		required_properties.push(name.into());
@@ -212,10 +210,10 @@ fn generate_struct<F>(
 			);
 		}
 
-		properties.insert(field.name().into(), field_schema.into());
+		properties.insert(field.name().to_camel_case(), field_schema.into());
 
 		if field.is_required() {
-			required_properties.push(serde_json::Value::from(field.name()));
+			required_properties.push(serde_json::Value::from(field.name().to_camel_case()));
 		}
 	}
 
@@ -271,11 +269,9 @@ fn generate_layout_ref<F>(
 			);
 			Ok(())
 		}
-		Description::Enum(_) => {
-			todo!("json-schema enum layout")
-		}
-		Description::Sum(_) => {
-			todo!("json-schema sum layout")
+		Description::Enum(enm) => {
+			generate_enum_type(json, model, enm)?;
+			Ok(())
 		}
 		Description::Literal(lit) => {
 			generate_literal_type(json, lit);
@@ -286,6 +282,24 @@ fn generate_layout_ref<F>(
 			Ok(())
 		}
 	}
+}
+
+fn generate_enum_type<F>(
+	def: &mut serde_json::Map<String, serde_json::Value>,
+	model: &treeldr::Model<F>,
+	enm: &layout::Enum<F>,
+) -> Result<(), Error<F>> {
+	let mut variants = Vec::with_capacity(enm.variants().len());
+	for variant in enm.variants() {
+		let layout_ref = variant.layout().unwrap();
+		let mut variant_json = serde_json::Map::new();
+		generate_layout_ref(&mut variant_json, model, layout_ref)?;
+		variants.push(serde_json::Value::Object(variant_json))
+	}
+
+	def.insert("oneOf".into(), variants.into());
+
+	Ok(())
 }
 
 fn generate_literal_type<F>(

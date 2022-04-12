@@ -86,6 +86,9 @@ errors! {
 	unimplemented_feature::UnimplementedFeature,
 	node_unknown::NodeUnknown,
 	node_invalid_type::NodeInvalidType<F>,
+	type_mismatch_kind::TypeMismatchKind<F>,
+	type_mismatch_union::TypeMismatchUnion<F>,
+	type_union_literal_option::TypeUnionLiteralOption,
 	property_mismatch_functional::PropertyMismatchFunctional<F>,
 	property_mismatch_required::PropertyMismatchRequired<F>,
 	property_mismatch_type::PropertyMismatchType<F>,
@@ -105,11 +108,13 @@ errors! {
 	layout_field_missing_layout::LayoutFieldMissingLayout,
 	layout_field_missing_property::LayoutFieldMissingProperty,
 	layout_field_missing_name::LayoutFieldMissingName,
+	layout_variant_missing_name::LayoutVariantMissingName,
 	list_mismatch_item::ListMismatchItem<F>,
 	list_mismatch_rest::ListMismatchRest<F>,
 	list_missing_item::ListMissingItem,
 	list_missing_rest::ListMissingRest,
-	regexp_invalid::RegExpInvalid
+	regexp_invalid::RegExpInvalid,
+	name_invalid::NameInvalid
 }
 
 impl<F> Caused<Description<F>, F> {

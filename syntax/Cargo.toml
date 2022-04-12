@@ -10,9 +10,9 @@ treeldr-vocab = { path = "../vocab" }
 iref = "2.1.1"
 locspan = "0.3"
 codespan-reporting = "0.11"
-rdf-types = { version = "0.3.4", features = ["loc"] }
+rdf-types = { version = "0.4.1", features = ["loc"] }
 
 [dev-dependencies]
 static-iref = "2.0"
-nquads-syntax = "0.1.7"
-grdf = "0.5.0"
+nquads-syntax = "0.2.0"
+grdf = "0.7.3"

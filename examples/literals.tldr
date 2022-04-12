@@ -4,3 +4,5 @@ type Type {
 	singleton: "Unique possible value",
 	ident: /[A-Za-z][A-Za-z0-9]*/
 }
+
+type Literal = "hi"

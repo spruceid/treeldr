@@ -1,0 +1,5 @@
+type Foo {
+	union: Foo as FooVariant | Bar
+}
+
+type Bar {}

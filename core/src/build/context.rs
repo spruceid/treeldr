@@ -43,7 +43,7 @@ impl<F> Context<F> {
 	where
 		F: Clone + Ord,
 	{
-		let id = Id::Iri(vocab::Name::from_iri(iri, self.vocabulary_mut()));
+		let id = Id::Iri(vocab::Term::from_iri(iri, self.vocabulary_mut()));
 		self.declare_type(id, cause.clone());
 		self.declare_layout(id, cause.clone());
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
@@ -176,11 +176,102 @@ impl<F> Context<F> {
 		Ok(())
 	}
 
+	/// Compute the `use` relation between all the layouts.
+	///
+	/// A layout is used by another layout if it is the layout of one of its
+	/// fields.
+	/// The purpose of this function is to declare to each layout how it it used
+	/// using the `layout::Definition::add_use` method.
+	pub fn compute_uses(&mut self) -> Result<(), Error<F>>
+	where
+		F: Ord + Clone,
+	{
+		// In a first pass, we collect the `use` relation.
+		let mut uses = HashMap::new();
+		for (id, node) in &self.nodes {
+			if let Some(layout) = node.value().layout.with_causes() {
+				uses.insert(*id, layout.compute_uses(self)?);
+			}
+		}
+
+		// Then we declare the uses of each layout using the `add_use` method.
+		for (using_layout_id, using_layout_uses) in uses {
+			for layout::Using {
+				field: used_field_id,
+				field_layout: used_layout_id,
+			} in using_layout_uses
+			{
+				let used_layout = self.require_layout_mut(
+					*used_layout_id,
+					used_layout_id.causes().preferred().cloned(),
+				)?;
+				used_layout.add_use(using_layout_id, used_field_id);
+			}
+		}
+
+		// Now each layout knows how it is used.
+		Ok(())
+	}
+
+	/// Assigns default name for layouts/variants that don't have a name yet.
+	pub fn assign_default_names(&mut self) -> Result<(), Error<F>>
+	where
+		F: Ord + Clone,
+	{
+		// Start with the layouts.
+		let mut default_layout_names = HashMap::new();
+		for (id, node) in &self.nodes {
+			if let Some(layout) = node.as_layout() {
+				if let Some(name) =
+					layout.default_name(self, layout.causes().preferred().cloned())?
+				{
+					default_layout_names.insert(*id, name);
+				}
+			}
+		}
+		for (id, name) in default_layout_names {
+			let (name, cause) = name.into_parts();
+			let layout = self.require_layout_mut(id, cause.clone())?;
+			if layout.name().is_none() {
+				layout.set_name(name, cause)?;
+			}
+		}
+
+		// Now the layouts variants.
+		let mut default_variant_names = HashMap::new();
+		for (id, node) in &self.nodes {
+			if let Some(layout) = node.as_layout_variant() {
+				if let Some(name) =
+					layout.default_name(self, layout.causes().preferred().cloned())?
+				{
+					default_variant_names.insert(*id, name);
+				}
+			}
+		}
+		for (id, name) in default_variant_names {
+			let (name, cause) = name.into_parts();
+			let layout = self.require_layout_variant_mut(id, cause.clone())?;
+			if layout.name().is_none() {
+				layout.set_name(name, cause)?;
+			}
+		}
+
+		Ok(())
+	}
+
 	pub fn build(mut self) -> Result<Model<F>, (Error<F>, Vocabulary)>
 	where
 		F: Ord + Clone,
 	{
 		if let Err(e) = self.resolve_references() {
+			return Err((e, self.into_vocabulary()));
+		}
+
+		if let Err(e) = self.compute_uses() {
+			return Err((e, self.into_vocabulary()));
+		}
+
+		if let Err(e) = self.assign_default_names() {
 			return Err((e, self.into_vocabulary()));
 		}
 
@@ -319,7 +410,7 @@ impl<F> Context<F> {
 		}
 	}
 
-	/// Declare the given `id` as a layout.
+	/// Declare the given `id` as a layout field.
 	pub fn declare_layout_field(&mut self, id: Id, cause: Option<Location<F>>)
 	where
 		F: Ord,
@@ -332,13 +423,26 @@ impl<F> Context<F> {
 		}
 	}
 
+	/// Declare the given `id` as a layout variant.
+	pub fn declare_layout_variant(&mut self, id: Id, cause: Option<Location<F>>)
+	where
+		F: Ord,
+	{
+		match self.nodes.get_mut(&id) {
+			Some(node) => node.declare_layout_variant(cause),
+			None => {
+				self.nodes.insert(id, Node::new_layout_variant(id, cause));
+			}
+		}
+	}
+
 	/// Declare the given `id` as a list.
 	pub fn declare_list(&mut self, id: Id, cause: Option<Location<F>>)
 	where
 		F: Ord,
 	{
 		match id {
-			Id::Iri(vocab::Name::Rdf(vocab::Rdf::Nil)) => (),
+			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => (),
 			id => match self.nodes.get_mut(&id) {
 				Some(node) => node.declare_list(cause),
 				None => {
@@ -453,6 +557,27 @@ impl<F> Context<F> {
 		}
 	}
 
+	pub fn require_layout_field(
+		&self,
+		id: Id,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<layout::field::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		match self.get(id) {
+			Some(node) => node.require_layout_field(cause),
+			None => Err(Caused::new(
+				error::NodeUnknown {
+					id,
+					expected_ty: Some(node::Type::LayoutField),
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
 	pub fn require_layout_field_mut(
 		&mut self,
 		id: Id,
@@ -467,6 +592,27 @@ impl<F> Context<F> {
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::LayoutField),
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
+	pub fn require_layout_variant_mut(
+		&mut self,
+		id: Id,
+		cause: Option<Location<F>>,
+	) -> Result<&mut WithCauses<layout::variant::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		match self.get_mut(id) {
+			Some(node) => node.require_layout_variant_mut(cause),
+			None => Err(Caused::new(
+				error::NodeUnknown {
+					id,
+					expected_ty: Some(node::Type::LayoutVariant),
 				}
 				.into(),
 				cause,
@@ -495,6 +641,47 @@ impl<F> Context<F> {
 		}
 	}
 
+	pub fn require_layout_field_or_variant_mut(
+		&mut self,
+		id: Id,
+		cause: Option<Location<F>>,
+	) -> Result<node::LayoutFieldOrVariant<F>, Error<F>>
+	where
+		F: Clone,
+	{
+		match self.get_mut(id) {
+			Some(node) => node.require_layout_field_or_variant_mut(cause),
+			None => Err(Caused::new(
+				error::NodeUnknown {
+					id,
+					expected_ty: Some(node::Type::Property),
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
+	pub fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
+	where
+		F: Clone,
+	{
+		match id {
+			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
+			id => match self.get(id) {
+				Some(node) => Ok(ListRef::Cons(node.require_list(cause)?)),
+				None => Err(Caused::new(
+					error::NodeUnknown {
+						id,
+						expected_ty: Some(node::Type::List),
+					}
+					.into(),
+					cause,
+				)),
+			},
+		}
+	}
+
 	pub fn require_list_mut(
 		&mut self,
 		id: Id,
@@ -504,7 +691,7 @@ impl<F> Context<F> {
 		F: Clone,
 	{
 		match id {
-			Id::Iri(vocab::Name::Rdf(vocab::Rdf::Nil)) => Ok(ListMut::Nil),
+			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListMut::Nil),
 			id => match self.get_mut(id) {
 				Some(node) => Ok(ListMut::Cons(node.require_list_mut(cause)?)),
 				None => Err(Caused::new(
@@ -525,6 +712,7 @@ pub struct AllocatedComponents<F> {
 	property: MaybeSet<Ref<crate::prop::Definition<F>>, F>,
 	layout: MaybeSet<Ref<crate::layout::Definition<F>>, F>,
 	layout_field: MaybeSet<layout::field::Definition<F>, F>,
+	layout_variant: MaybeSet<layout::variant::Definition<F>, F>,
 	list: MaybeSet<list::Definition<F>, F>,
 }
 
@@ -552,6 +740,11 @@ impl<F> Node<AllocatedComponents<F>> {
 			layout_field: self
 				.value()
 				.layout_field
+				.causes()
+				.map(|causes| causes.preferred().cloned()),
+			layout_variant: self
+				.value()
+				.layout_variant
 				.causes()
 				.map(|causes| causes.preferred().cloned()),
 			list: self
@@ -646,6 +839,27 @@ impl<F> Node<AllocatedComponents<F>> {
 		}
 	}
 
+	pub fn require_layout_variant(
+		&self,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<layout::variant::Definition<F>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		match self.value().layout_variant.with_causes() {
+			Some(variant) => Ok(variant),
+			None => Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id(),
+					expected: node::Type::LayoutVariant,
+					found: self.caused_types(),
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
 	pub fn require_list(
 		&self,
 		cause: Option<Location<F>>,
@@ -716,6 +930,7 @@ impl<F: Clone> AllocatedNodes<F> {
 					.layout
 					.map_with_causes(|layout| shelves.layouts.insert((id, layout)).cast()),
 				layout_field: components.layout_field,
+				layout_variant: components.layout_variant,
 				list: components.list,
 			});
 
@@ -785,9 +1000,18 @@ impl<F: Clone> AllocatedNodes<F> {
 			.require_layout_field(cause)
 	}
 
+	pub fn require_layout_variant(
+		&self,
+		id: Id,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<layout::variant::Definition<F>, F>, Error<F>> {
+		self.require(id, Some(node::Type::LayoutVariant), cause.clone())?
+			.require_layout_variant(cause)
+	}
+
 	pub fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>> {
 		match id {
-			Id::Iri(vocab::Name::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
+			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
 			id => Ok(ListRef::Cons(
 				self.require(id, Some(node::Type::List), cause.clone())?
 					.require_list(cause)?,
