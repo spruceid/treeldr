@@ -101,3 +101,8 @@ fn t004() {
 fn t005() {
 	test("tests/005-in.tldr", "tests/005-out.nq")
 }
+
+#[test]
+fn t007() {
+	test("tests/007-in.tldr", "tests/007-out.nq")
+}

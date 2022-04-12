@@ -623,13 +623,13 @@ impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
 		token: Token,
 		mut loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
-		let Loc(first, first_loc) = InnerTypeExpr::parse_from(lexer, token, loc.clone())?;
+		let Loc(first, first_loc) = NamedInnerTypeExpr::parse_from(lexer, token, loc.clone())?;
 
 		if let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
 			let mut options = vec![Loc(first, first_loc)];
 			while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
 				next_token(lexer)?;
-				let item = InnerTypeExpr::parse(lexer)?;
+				let item = NamedInnerTypeExpr::parse(lexer)?;
 				loc.span_mut().append(item.span());
 				options.push(item);
 			}
@@ -638,6 +638,33 @@ impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
 		} else {
 			Ok(Loc(Self::Inner(first), first_loc))
 		}
+	}
+}
+
+impl<F: Clone> Parse<F> for NamedInnerTypeExpr<F> {
+	const FIRST: &'static [TokenKind] = &[
+		TokenKind::Id,
+		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+	];
+
+	fn parse_from<L: Tokens<F>>(
+		lexer: &mut L,
+		token: Token,
+		loc: Location<F>,
+	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+		let expr = InnerTypeExpr::parse_from(lexer, token, loc)?;
+		let mut loc = expr.location().clone();
+		let name = if let Loc(Some(Token::Keyword(Keyword::As)), _) = peek_token(lexer)? {
+			next_token(lexer)?;
+			let name = Alias::parse(lexer)?;
+			loc.span_mut().append(name.span());
+			Some(name)
+		} else {
+			None
+		};
+
+		Ok(Loc(Self { expr, name }, loc))
 	}
 }
 
@@ -727,13 +754,13 @@ impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
 		token: Token,
 		mut loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
-		let Loc(first, first_loc) = InnerLayoutExpr::parse_from(lexer, token, loc.clone())?;
+		let Loc(first, first_loc) = NamedInnerLayoutExpr::parse_from(lexer, token, loc.clone())?;
 
 		if let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
 			let mut options = vec![Loc(first, first_loc)];
 			while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
 				next_token(lexer)?;
-				let item = InnerLayoutExpr::parse(lexer)?;
+				let item = NamedInnerLayoutExpr::parse(lexer)?;
 				loc.span_mut().append(item.span());
 				options.push(item);
 			}
@@ -742,6 +769,33 @@ impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
 		} else {
 			Ok(Loc(Self::Inner(first), first_loc))
 		}
+	}
+}
+
+impl<F: Clone> Parse<F> for NamedInnerLayoutExpr<F> {
+	const FIRST: &'static [TokenKind] = &[
+		TokenKind::Id,
+		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+	];
+
+	fn parse_from<L: Tokens<F>>(
+		lexer: &mut L,
+		token: Token,
+		loc: Location<F>,
+	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+		let expr = InnerLayoutExpr::parse_from(lexer, token, loc)?;
+		let mut loc = expr.location().clone();
+		let name = if let Loc(Some(Token::Keyword(Keyword::As)), _) = peek_token(lexer)? {
+			next_token(lexer)?;
+			let name = Alias::parse(lexer)?;
+			loc.span_mut().append(name.span());
+			Some(name)
+		} else {
+			None
+		};
+
+		Ok(Loc(Self { expr, name }, loc))
 	}
 }
 

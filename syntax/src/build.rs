@@ -218,7 +218,7 @@ impl<'v, F> Context<'v, F> {
 		&mut self,
 		label: BlankLabel,
 		quads: &mut Vec<LocQuad<F>>,
-		Loc(options, loc): Loc<Vec<Loc<crate::InnerTypeExpr<F>, F>>, F>,
+		Loc(options, loc): Loc<Vec<Loc<crate::NamedInnerTypeExpr<F>, F>>, F>,
 	) -> Result<(), Loc<Error<F>, F>>
 	where
 		F: Clone + Ord,
@@ -255,7 +255,7 @@ impl<'v, F> Context<'v, F> {
 		&mut self,
 		label: BlankLabel,
 		quads: &mut Vec<LocQuad<F>>,
-		Loc(options, loc): Loc<Vec<Loc<crate::InnerLayoutExpr<F>, F>>, F>,
+		Loc(options, loc): Loc<Vec<Loc<crate::NamedInnerLayoutExpr<F>, F>>, F>,
 	) -> Result<(), Loc<Error<F>, F>>
 	where
 		F: Clone + Ord,
@@ -267,6 +267,7 @@ impl<'v, F> Context<'v, F> {
 			|ty_expr, ctx, quads| {
 				let loc = ty_expr.location().clone();
 				let variant_label = ctx.vocabulary.new_blank_label();
+				let variant_name = ty_expr.name.clone();
 				let ty = ty_expr.build(ctx, quads)?;
 
 				quads.push(Loc(
@@ -287,6 +288,24 @@ impl<'v, F> Context<'v, F> {
 					),
 					loc.clone(),
 				));
+
+				if let Some(Loc(name, name_loc)) = variant_name {
+					quads.push(Loc(
+						Quad(
+							Loc(Id::Blank(variant_label), loc.clone()),
+							Loc(Term::TreeLdr(TreeLdr::Name), loc.clone()),
+							Loc(
+								Object::Literal(Literal::String(Loc(
+									name.into_string().into(),
+									name_loc.clone(),
+								))),
+								name_loc,
+							),
+							None,
+						),
+						loc.clone(),
+					));
+				}
 
 				Ok(Loc(Object::Blank(variant_label), loc))
 			},
@@ -687,6 +706,18 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterTypeExpr<F>, F> {
 	}
 }
 
+impl<F: Clone + Ord> Build<F> for Loc<crate::NamedInnerTypeExpr<F>, F> {
+	type Target = Loc<Object<F>, F>;
+
+	fn build(
+		self,
+		ctx: &mut Context<F>,
+		quads: &mut Vec<LocQuad<F>>,
+	) -> Result<Self::Target, Loc<Error<F>, F>> {
+		self.into_value().expr.build(ctx, quads)
+	}
+}
+
 impl<F: Clone + Ord> Build<F> for Loc<crate::InnerTypeExpr<F>, F> {
 	type Target = Loc<Object<F>, F>;
 
@@ -987,6 +1018,48 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 				Ok(Loc(Object::Blank(label), loc))
 			}
 		}
+	}
+}
+
+impl<F: Clone + Ord> Build<F> for Loc<crate::NamedInnerLayoutExpr<F>, F> {
+	type Target = Loc<Object<F>, F>;
+
+	fn build(
+		self,
+		ctx: &mut Context<F>,
+		quads: &mut Vec<LocQuad<F>>,
+	) -> Result<Self::Target, Loc<Error<F>, F>> {
+		let Loc(this, loc) = self;
+		let is_namable = this.expr.is_namable();
+		let Loc(object, object_loc) = this.expr.build(ctx, quads)?;
+
+		if let Some(Loc(name, name_loc)) = this.name {
+			if is_namable {
+				let id = match object {
+					rdf_types::Object::Iri(id) => Id::Iri(id),
+					rdf_types::Object::Blank(id) => Id::Blank(id),
+					_ => unreachable!(),
+				};
+
+				quads.push(Loc(
+					Quad(
+						Loc(id, object_loc),
+						Loc(Term::TreeLdr(TreeLdr::Name), loc.clone()),
+						Loc(
+							Object::Literal(Literal::String(Loc(
+								name.into_string().into(),
+								name_loc.clone(),
+							))),
+							name_loc,
+						),
+						None,
+					),
+					loc.clone(),
+				));
+			}
+		}
+
+		Ok(Loc(object, loc))
 	}
 }
 
