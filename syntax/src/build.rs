@@ -160,36 +160,39 @@ impl<'v, F> Context<'v, F> {
 					Loc(Id::Blank(self.vocabulary.new_blank_label()), loc.clone())
 				});
 
-				// Define the type.
-				quads.push(Loc(
-					Quad(
-						id.clone(),
-						Loc(Term::Rdf(Rdf::Type), loc.clone()),
-						Loc(Object::Iri(Term::Rdfs(Rdfs::Class)), loc.clone()),
-						None,
-					),
-					loc.clone(),
-				));
+				if id.is_blank() {
+					// Define the type.
+					quads.push(Loc(
+						Quad(
+							id.clone(),
+							Loc(Term::Rdf(Rdf::Type), loc.clone()),
+							Loc(Object::Iri(Term::Rdfs(Rdfs::Class)), loc.clone()),
+							None,
+						),
+						loc.clone(),
+					));
 
-				// Define the associated layout.
-				quads.push(Loc(
-					Quad(
-						id.clone(),
-						Loc(Term::Rdf(Rdf::Type), loc.clone()),
-						Loc(Object::Iri(Term::TreeLdr(TreeLdr::Layout)), loc.clone()),
-						None,
-					),
-					loc.clone(),
-				));
-				quads.push(Loc(
-					Quad(
-						id.clone(),
-						Loc(Term::TreeLdr(TreeLdr::LayoutFor), loc.clone()),
-						Loc(id.value().into_term(), loc.clone()),
-						None,
-					),
-					loc.clone(),
-				));
+					// Define the associated layout.
+					quads.push(Loc(
+						Quad(
+							id.clone(),
+							Loc(Term::Rdf(Rdf::Type), loc.clone()),
+							Loc(Object::Iri(Term::TreeLdr(TreeLdr::Layout)), loc.clone()),
+							None,
+						),
+						loc.clone(),
+					));
+
+					quads.push(Loc(
+						Quad(
+							id.clone(),
+							Loc(Term::TreeLdr(TreeLdr::LayoutFor), loc.clone()),
+							Loc(id.value().into_term(), loc.clone()),
+							None,
+						),
+						loc.clone(),
+					));
+				}
 
 				match entry.key().value() {
 					crate::Literal::String(s) => {
@@ -249,15 +252,19 @@ impl<'v, F> Context<'v, F> {
 			loc.clone(),
 			|ty_expr, ctx, quads| ty_expr.build(ctx, quads),
 		)?;
-		quads.push(Loc(
-			Quad(
-				id.clone(),
-				Loc(Term::Rdf(Rdf::Type), loc.clone()),
-				Loc(Object::Iri(Term::Rdfs(Rdfs::Class)), loc.clone()),
-				None,
-			),
-			loc.clone(),
-		));
+
+		if id.is_blank() {
+			quads.push(Loc(
+				Quad(
+					id.clone(),
+					Loc(Term::Rdf(Rdf::Type), loc.clone()),
+					Loc(Object::Iri(Term::Rdfs(Rdfs::Class)), loc.clone()),
+					None,
+				),
+				loc.clone(),
+			));
+		}
+
 		quads.push(Loc(
 			Quad(
 				id,
@@ -331,24 +338,27 @@ impl<'v, F> Context<'v, F> {
 			},
 		)?;
 
-		quads.push(Loc(
-			Quad(
-				id.clone(),
-				Loc(Term::Rdf(Rdf::Type), loc.clone()),
-				Loc(Object::Iri(Term::TreeLdr(TreeLdr::Layout)), loc.clone()),
-				None,
-			),
-			loc.clone(),
-		));
-		quads.push(Loc(
-			Quad(
-				id.clone(),
-				Loc(Term::TreeLdr(TreeLdr::LayoutFor), loc.clone()),
-				Loc(id.into_term(), loc.clone()),
-				None,
-			),
-			loc.clone(),
-		));
+		if id.is_blank() {
+			quads.push(Loc(
+				Quad(
+					id.clone(),
+					Loc(Term::Rdf(Rdf::Type), loc.clone()),
+					Loc(Object::Iri(Term::TreeLdr(TreeLdr::Layout)), loc.clone()),
+					None,
+				),
+				loc.clone(),
+			));
+			quads.push(Loc(
+				Quad(
+					id.clone(),
+					Loc(Term::TreeLdr(TreeLdr::LayoutFor), loc.clone()),
+					Loc(id.into_term(), loc.clone()),
+					None,
+				),
+				loc.clone(),
+			));
+		}
+
 		quads.push(Loc(
 			Quad(
 				id,
@@ -603,18 +613,18 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::TypeDefinition<F>, F> {
 		let Loc(def, _) = self;
 		let Loc(id, id_loc) = def.id.build(ctx, quads)?;
 
+		quads.push(Loc(
+			Quad(
+				Loc(Id::Iri(id), id_loc.clone()),
+				Loc(Term::Rdf(Rdf::Type), id_loc.clone()),
+				Loc(Object::Iri(Term::Rdfs(Rdfs::Class)), id_loc.clone()),
+				None,
+			),
+			id_loc.clone(),
+		));
+
 		match def.description {
 			Loc(crate::TypeDescription::Normal(properties), _) => {
-				quads.push(Loc(
-					Quad(
-						Loc(Id::Iri(id), id_loc.clone()),
-						Loc(Term::Rdf(Rdf::Type), id_loc.clone()),
-						Loc(Object::Iri(Term::Rdfs(Rdfs::Class)), id_loc.clone()),
-						None,
-					),
-					id_loc.clone(),
-				));
-
 				for property in properties {
 					ctx.scope = Some(id);
 					let Loc(prop, prop_loc) = property.build(ctx, quads)?;
@@ -788,18 +798,18 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 		let Loc(id, id_loc) = def.id.build(ctx, quads)?;
 		let Loc(ty_id, ty_id_loc) = def.ty_id.build(ctx, quads)?;
 
+		quads.push(Loc(
+			Quad(
+				Loc(Id::Iri(id), id_loc.clone()),
+				Loc(Term::Rdf(Rdf::Type), id_loc.clone()),
+				Loc(Object::Iri(Term::TreeLdr(TreeLdr::Layout)), id_loc.clone()),
+				None,
+			),
+			id_loc.clone(),
+		));
+
 		match def.description {
 			Loc(crate::LayoutDescription::Normal(fields), fields_loc) => {
-				quads.push(Loc(
-					Quad(
-						Loc(Id::Iri(id), id_loc.clone()),
-						Loc(Term::Rdf(Rdf::Type), id_loc.clone()),
-						Loc(Object::Iri(Term::TreeLdr(TreeLdr::Layout)), id_loc.clone()),
-						None,
-					),
-					id_loc.clone(),
-				));
-
 				let fields_list = fields.into_iter().try_into_rdf_list(
 					ctx,
 					quads,
