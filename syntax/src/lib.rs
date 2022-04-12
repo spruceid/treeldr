@@ -59,7 +59,7 @@ pub struct Use<F> {
 
 pub struct TypeDefinition<F> {
 	pub id: Loc<Id, F>,
-	pub properties: Loc<Vec<Loc<PropertyDefinition<F>, F>>, F>,
+	pub description: Loc<TypeDescription<F>, F>,
 	pub doc: Option<Loc<Documentation<F>, F>>,
 }
 
@@ -68,16 +68,32 @@ impl<F: Clone> TypeDefinition<F> {
 		LayoutDefinition {
 			id: self.id.clone(),
 			ty_id: self.id.clone(),
-			fields: Loc(
-				self.properties
+			description: Loc(
+				self.description.implicit_layout_description(),
+				self.description.location().clone(),
+			),
+			doc: self.doc.clone(),
+		}
+	}
+}
+
+pub enum TypeDescription<F> {
+	Normal(Vec<Loc<PropertyDefinition<F>, F>>),
+	Alias(OuterTypeExpr<F>),
+}
+
+impl<F: Clone> TypeDescription<F> {
+	pub fn implicit_layout_description(&self) -> LayoutDescription<F> {
+		match self {
+			Self::Normal(properties) => LayoutDescription::Normal(
+				properties
 					.iter()
 					.map(|Loc(prop, prop_loc)| {
 						Loc(prop.implicit_field_definition(), prop_loc.clone())
 					})
 					.collect(),
-				self.properties.location().clone(),
 			),
-			doc: self.doc.clone(),
+			Self::Alias(expr) => LayoutDescription::Alias(expr.implicit_layout_expr()),
 		}
 	}
 }
@@ -205,8 +221,13 @@ impl<F: Clone> InnerTypeExpr<F> {
 pub struct LayoutDefinition<F> {
 	pub id: Loc<Id, F>,
 	pub ty_id: Loc<Id, F>,
-	pub fields: Loc<Vec<Loc<FieldDefinition<F>, F>>, F>,
+	pub description: Loc<LayoutDescription<F>, F>,
 	pub doc: Option<Loc<Documentation<F>, F>>,
+}
+
+pub enum LayoutDescription<F> {
+	Normal(Vec<Loc<FieldDefinition<F>, F>>),
+	Alias(OuterLayoutExpr<F>),
 }
 
 pub struct FieldDefinition<F> {

@@ -373,10 +373,9 @@ impl<F: Clone> Parse<F> for Item<F> {
 		token: Token,
 		token_loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
-		let (doc, next_token) = Documentation::try_parse_from(lexer, token, token_loc)?;
+		let (doc, k) = Documentation::try_parse_from(lexer, token, token_loc)?;
 
-		let Loc(token, mut loc) =
-			next_expected_token_from(lexer, next_token, || Self::FIRST.to_vec())?;
+		let Loc(token, mut loc) = next_expected_token_from(lexer, k, || Self::FIRST.to_vec())?;
 
 		match token {
 			Token::Keyword(lexing::Keyword::Base) => {
@@ -417,13 +416,38 @@ impl<F: Clone> Parse<F> for Item<F> {
 			}
 			Token::Keyword(lexing::Keyword::Type) => {
 				let id = Id::parse(lexer)?;
-				let properties = parse_block(lexer)?;
-				loc.span_mut().append(properties.span());
+
+				let description = match peek_token(lexer)?.value() {
+					Some(Token::Begin(Delimiter::Brace)) => {
+						let Loc(properties, properties_loc) = parse_block(lexer)?;
+						Loc(TypeDescription::Normal(properties), properties_loc)
+					}
+					Some(Token::Punct(Punct::Equal)) => {
+						next_token(lexer)?;
+						let Loc(expr, expr_loc) = OuterTypeExpr::parse(lexer)?;
+						Loc(TypeDescription::Alias(expr), expr_loc)
+					}
+					_ => {
+						let Loc(unexpected, loc) = next_token(lexer)?;
+						return Err(Loc::new(
+							Error::Unexpected(
+								unexpected,
+								vec![
+									TokenKind::Begin(Delimiter::Brace),
+									TokenKind::Punct(Punct::Equal),
+								],
+							),
+							loc,
+						));
+					}
+				};
+
+				loc.span_mut().append(description.span());
 				Ok(Loc::new(
 					Item::Type(Loc::new(
 						TypeDefinition {
 							id,
-							properties,
+							description,
 							doc,
 						},
 						loc.clone(),
@@ -435,14 +459,39 @@ impl<F: Clone> Parse<F> for Item<F> {
 				let id = Id::parse(lexer)?;
 				parse_keyword(lexer, lexing::Keyword::For)?;
 				let ty_id = Id::parse(lexer)?;
-				let fields = parse_block(lexer)?;
-				loc.span_mut().append(fields.span());
+
+				let description = match peek_token(lexer)?.value() {
+					Some(Token::Begin(Delimiter::Brace)) => {
+						let Loc(fields, fields_loc) = parse_block(lexer)?;
+						Loc(LayoutDescription::Normal(fields), fields_loc)
+					}
+					Some(Token::Punct(Punct::Equal)) => {
+						next_token(lexer)?;
+						let Loc(expr, expr_loc) = OuterLayoutExpr::parse(lexer)?;
+						Loc(LayoutDescription::Alias(expr), expr_loc)
+					}
+					_ => {
+						let Loc(unexpected, loc) = next_token(lexer)?;
+						return Err(Loc::new(
+							Error::Unexpected(
+								unexpected,
+								vec![
+									TokenKind::Begin(Delimiter::Brace),
+									TokenKind::Punct(Punct::Equal),
+								],
+							),
+							loc,
+						));
+					}
+				};
+
+				loc.span_mut().append(description.span());
 				Ok(Loc::new(
 					Item::Layout(Loc::new(
 						LayoutDefinition {
 							id,
 							ty_id,
-							fields,
+							description,
 							doc,
 						},
 						loc.clone(),
