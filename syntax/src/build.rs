@@ -27,6 +27,8 @@ pub enum Error<F> {
 		found: Box<IriBuf>,
 		because: Location<F>,
 	},
+	TypeAlias(Id, Location<F>),
+	LayoutAlias(Id, Location<F>),
 }
 
 impl<'c, 't, F: Clone> crate::reporting::Diagnose<F> for Loc<Error<F>, F> {
@@ -34,9 +36,11 @@ impl<'c, 't, F: Clone> crate::reporting::Diagnose<F> for Loc<Error<F>, F> {
 		match self.value() {
 			Error::InvalidExpandedCompactIri(_) => "invalid expanded compact IRI".to_string(),
 			Error::UndefinedPrefix(_) => "undefined prefix".to_string(),
-			Error::AlreadyDefinedPrefix(_, _) => "aready defined prefix".to_string(),
+			Error::AlreadyDefinedPrefix(_, _) => "already defined prefix".to_string(),
 			Error::NoBaseIri => "no base IRI".to_string(),
 			Error::BaseIriMismatch { .. } => "base IRI mismatch".to_string(),
+			Error::TypeAlias(_, _) => "type aliases are not supported".to_string(),
+			Error::LayoutAlias(_, _) => "layout aliases are not supported".to_string(),
 		}
 	}
 
@@ -79,6 +83,8 @@ impl<F> fmt::Display for Error<F> {
 			}
 			Self::NoBaseIri => "cannot resolve the IRI reference without a base IRI".fmt(f),
 			Self::BaseIriMismatch { expected, .. } => write!(f, "should be `{}`", expected),
+			Self::TypeAlias(_, _) => write!(f, "type aliases are not supported"),
+			Self::LayoutAlias(_, _) => write!(f, "layout aliases are not supported"),
 		}
 	}
 }
@@ -144,7 +150,10 @@ impl<'v, F> Context<'v, F> {
 	{
 		use std::collections::btree_map::Entry;
 		match self.literal.entry(lit) {
-			Entry::Occupied(entry) => entry.get().clone(),
+			Entry::Occupied(entry) => {
+				self.next_id.take();
+				entry.get().clone()
+			}
 			Entry::Vacant(entry) => {
 				let loc = entry.key().location();
 				let id = self.next_id.take().unwrap_or_else(|| {
@@ -357,14 +366,12 @@ impl<'v, F> Context<'v, F> {
 	where
 		F: Clone + Ord,
 	{
-		self.unions
-			.entry(loc.clone())
-			.or_insert_with(|| {
-				self.next_id
-					.take()
-					.unwrap_or_else(|| Loc(Id::Blank(self.vocabulary.new_blank_label()), loc))
-			})
-			.clone()
+		self.next_id.take().unwrap_or_else(|| {
+			self.unions
+				.entry(loc.clone())
+				.or_insert_with(|| Loc(Id::Blank(self.vocabulary.new_blank_label()), loc))
+				.clone()
+		})
 	}
 }
 
@@ -753,6 +760,10 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerTypeExpr<F>, F> {
 
 		match ty {
 			crate::InnerTypeExpr::Id(id) => {
+				if let Some(Loc(id, id_loc)) = ctx.next_id.take() {
+					return Err(Loc(Error::TypeAlias(id, id_loc), loc));
+				}
+
 				let Loc(id, _) = id.build(ctx, quads)?;
 				Ok(Loc(Object::Iri(id), loc))
 			}
@@ -1108,6 +1119,10 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 
 		match ty {
 			crate::InnerLayoutExpr::Id(id) => {
+				if let Some(Loc(id, id_loc)) = ctx.next_id.take() {
+					return Err(Loc(Error::LayoutAlias(id, id_loc), loc));
+				}
+
 				let Loc(id, _) = id.build(ctx, quads)?;
 				Ok(Loc(Object::Iri(id), loc))
 			}
