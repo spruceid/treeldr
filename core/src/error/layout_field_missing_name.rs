@@ -11,10 +11,10 @@ impl<F> super::AnyError<F> for LayoutFieldMissingName {
 	fn notes(&self, _vocab: &Vocabulary) -> Vec<String> {
 		match self.0 {
 			Id::Blank(_) => {
-				vec!["field name cannot be derived from a blank node identifier.".to_string()]
+				vec!["field name could not be derived from a blank node identifier.".to_string()]
 			}
 			Id::Iri(_) => {
-				vec!["field name cannot be derived from its IRI.".to_string()]
+				vec!["field name could not be derived from its IRI.".to_string()]
 			}
 		}
 	}

@@ -93,7 +93,7 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 	{
 		self.name.clone().ok_or_else(|| {
 			Caused::new(
-				error::LayoutFieldMissingName(self.id).into(),
+				error::LayoutVariantMissingName(self.id).into(),
 				self.causes().preferred().cloned(),
 			)
 		})

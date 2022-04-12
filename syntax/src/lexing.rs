@@ -173,6 +173,7 @@ pub enum Punct {
 	Colon,
 	Ampersand,
 	Pipe,
+	Equal,
 }
 
 impl Punct {
@@ -182,6 +183,7 @@ impl Punct {
 			':' => Some(Self::Colon),
 			'&' => Some(Self::Ampersand),
 			'|' => Some(Self::Pipe),
+			'=' => Some(Self::Equal),
 			_ => None,
 		}
 	}
@@ -194,6 +196,7 @@ impl fmt::Display for Punct {
 			Self::Colon => write!(f, ":"),
 			Self::Ampersand => write!(f, "&"),
 			Self::Pipe => write!(f, "|"),
+			Self::Equal => write!(f, "="),
 		}
 	}
 }

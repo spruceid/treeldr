@@ -4,6 +4,7 @@ _:1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:0 .
 <https://example.com/foo.schema.json> <http://www.w3.org/2000/01/rdf-schema#comment> "A layout with a reference" .
 <https://example.com/foo.schema.json> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 <https://example.com/foo.schema.json> <http://www.w3.org/2000/01/rdf-schema#label> "Foo" .
+<https://example.com/foo.schema.json> <https://treeldr.org/name> "foo" .
 <https://example.com/foo.schema.json> <https://treeldr.org/fields> _:1 .
 _:0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Field> .
 _:0 <https://treeldr.org/name> "bar" .

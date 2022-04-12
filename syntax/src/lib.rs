@@ -59,7 +59,7 @@ pub struct Use<F> {
 
 pub struct TypeDefinition<F> {
 	pub id: Loc<Id, F>,
-	pub properties: Loc<Vec<Loc<PropertyDefinition<F>, F>>, F>,
+	pub description: Loc<TypeDescription<F>, F>,
 	pub doc: Option<Loc<Documentation<F>, F>>,
 }
 
@@ -68,16 +68,32 @@ impl<F: Clone> TypeDefinition<F> {
 		LayoutDefinition {
 			id: self.id.clone(),
 			ty_id: self.id.clone(),
-			fields: Loc(
-				self.properties
+			description: Loc(
+				self.description.implicit_layout_description(),
+				self.description.location().clone(),
+			),
+			doc: self.doc.clone(),
+		}
+	}
+}
+
+pub enum TypeDescription<F> {
+	Normal(Vec<Loc<PropertyDefinition<F>, F>>),
+	Alias(OuterTypeExpr<F>),
+}
+
+impl<F: Clone> TypeDescription<F> {
+	pub fn implicit_layout_description(&self) -> LayoutDescription<F> {
+		match self {
+			Self::Normal(properties) => LayoutDescription::Normal(
+				properties
 					.iter()
 					.map(|Loc(prop, prop_loc)| {
 						Loc(prop.implicit_field_definition(), prop_loc.clone())
 					})
 					.collect(),
-				self.properties.location().clone(),
 			),
-			doc: self.doc.clone(),
+			Self::Alias(expr) => LayoutDescription::Alias(expr.implicit_layout_expr()),
 		}
 	}
 }
@@ -148,8 +164,8 @@ impl<F: Clone> AnnotatedTypeExpr<F> {
 }
 
 pub enum OuterTypeExpr<F> {
-	Inner(InnerTypeExpr<F>),
-	Union(Vec<Loc<InnerTypeExpr<F>, F>>),
+	Inner(NamedInnerTypeExpr<F>),
+	Union(Vec<Loc<NamedInnerTypeExpr<F>, F>>),
 }
 
 impl<F: Clone> OuterTypeExpr<F> {
@@ -162,6 +178,23 @@ impl<F: Clone> OuterTypeExpr<F> {
 					.map(|Loc(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
 					.collect(),
 			),
+		}
+	}
+}
+
+pub struct NamedInnerTypeExpr<F> {
+	pub expr: Loc<InnerTypeExpr<F>, F>,
+	pub name: Option<Loc<Alias, F>>,
+}
+
+impl<F: Clone> NamedInnerTypeExpr<F> {
+	pub fn implicit_layout_expr(&self) -> NamedInnerLayoutExpr<F> {
+		NamedInnerLayoutExpr {
+			expr: Loc(
+				self.expr.implicit_layout_expr(),
+				self.expr.location().clone(),
+			),
+			name: self.name.clone(),
 		}
 	}
 }
@@ -188,8 +221,13 @@ impl<F: Clone> InnerTypeExpr<F> {
 pub struct LayoutDefinition<F> {
 	pub id: Loc<Id, F>,
 	pub ty_id: Loc<Id, F>,
-	pub fields: Loc<Vec<Loc<FieldDefinition<F>, F>>, F>,
+	pub description: Loc<LayoutDescription<F>, F>,
 	pub doc: Option<Loc<Documentation<F>, F>>,
+}
+
+pub enum LayoutDescription<F> {
+	Normal(Vec<Loc<FieldDefinition<F>, F>>),
+	Alias(OuterLayoutExpr<F>),
 }
 
 pub struct FieldDefinition<F> {
@@ -199,6 +237,7 @@ pub struct FieldDefinition<F> {
 	pub doc: Option<Loc<Documentation<F>, F>>,
 }
 
+#[derive(Clone, Debug)]
 pub struct Alias(String);
 
 impl Alias {
@@ -218,14 +257,25 @@ pub struct AnnotatedLayoutExpr<F> {
 }
 
 pub enum OuterLayoutExpr<F> {
-	Inner(InnerLayoutExpr<F>),
-	Union(Vec<Loc<InnerLayoutExpr<F>, F>>),
+	Inner(NamedInnerLayoutExpr<F>),
+	Union(Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
+}
+
+pub struct NamedInnerLayoutExpr<F> {
+	pub expr: Loc<InnerLayoutExpr<F>, F>,
+	pub name: Option<Loc<Alias, F>>,
 }
 
 pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
+}
+
+impl<F> InnerLayoutExpr<F> {
+	fn is_namable(&self) -> bool {
+		!matches!(self, Self::Id(_))
+	}
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]

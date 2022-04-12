@@ -107,6 +107,7 @@ errors! {
 	layout_field_missing_layout::LayoutFieldMissingLayout,
 	layout_field_missing_name::LayoutFieldMissingName,
 	layout_native_invalid::LayoutNativeInvalid,
+	layout_variant_missing_name::LayoutVariantMissingName,
 	list_mismatch_item::ListMismatchItem<F>,
 	list_mismatch_rest::ListMismatchRest<F>,
 	list_missing_item::ListMissingItem,
