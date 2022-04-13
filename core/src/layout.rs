@@ -8,6 +8,7 @@ pub mod literal;
 mod native;
 mod set;
 mod structure;
+pub mod list;
 
 mod strongly_connected;
 mod usages;
@@ -18,6 +19,7 @@ pub use literal::Literal;
 pub use native::Native;
 pub use set::Set;
 pub use structure::{Field, Struct};
+pub use list::List;
 
 pub use strongly_connected::StronglyConnectedLayouts;
 pub use usages::Usages;
