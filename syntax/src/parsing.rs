@@ -107,7 +107,7 @@ pub trait Parse<F>: Sized {
 	) -> Result<Option<Loc<Self, F>>, Loc<Error<L::Error>, F>> {
 		match lexer.peek().map_loc_err(Error::Lexer)? {
 			Loc(Some(token), _) => {
-				if Self::FIRST.contains(&token.kind()) {
+				if token.kind().matches_any(Self::FIRST) {
 					Ok(Some(Self::parse(lexer)?))
 				} else {
 					Ok(None)
@@ -124,7 +124,7 @@ pub trait Parse<F>: Sized {
 	) -> Result<Option<Loc<Self, F>>, Loc<Error<L::Error>, F>> {
 		match token_opt {
 			Some(Loc(token, loc)) => {
-				if Self::FIRST.contains(&token.kind()) {
+				if token.kind().matches_any(Self::FIRST) {
 					Ok(Some(Self::parse_from(lexer, token, loc)?))
 				} else {
 					Ok(None)
@@ -140,7 +140,7 @@ pub trait Parse<F>: Sized {
 		token: Token,
 		loc: Location<F>,
 	) -> Result<(Option<Loc<Self, F>>, Option<Loc<Token, F>>), Loc<Error<L::Error>, F>> {
-		if Self::FIRST.contains(&token.kind()) {
+		if token.kind().matches_any(Self::FIRST) {
 			Ok((Some(Self::parse_from(lexer, token, loc)?), None))
 		} else {
 			Ok((None, Some(Loc(token, loc))))
@@ -321,6 +321,7 @@ impl<F> Parse<F> for Id {
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
 		match token {
 			Token::Id(id) => Ok(Loc::new(id, loc)),
+			Token::Keyword(kw) => Ok(Loc::new(Id::Name(kw.to_string()), loc)),
 			unexpected => Err(Loc::new(
 				Error::Unexpected(Some(unexpected), vec![TokenKind::Id]),
 				loc,
@@ -729,7 +730,7 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 		token: Token,
 		mut loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
-		match token {
+		match token.no_keyword() {
 			Token::Id(id) => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
 			Token::Punct(lexing::Punct::Ampersand) => {
 				let arg = Self::parse(lexer)?;
@@ -860,7 +861,7 @@ impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
 		token: Token,
 		mut loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
-		match token {
+		match token.no_keyword() {
 			Token::Id(id) => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
 			Token::Punct(lexing::Punct::Ampersand) => {
 				let arg = Self::parse(lexer)?;

@@ -127,6 +127,16 @@ fn t009() {
 }
 
 #[test]
+fn t010() {
+	test("tests/010-in.tldr", "tests/010-out.nq")
+}
+
+#[test]
+fn t011() {
+	test("tests/011-in.tldr", "tests/011-out.nq")
+}
+
+#[test]
 #[should_panic]
 fn e01() {
 	negative_test("tests/e01.tldr")

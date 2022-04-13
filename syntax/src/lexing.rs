@@ -43,6 +43,19 @@ pub enum TokenKind {
 	Literal,
 }
 
+impl TokenKind {
+	pub fn matches_any(&self, list: &[Self]) -> bool {
+		list.iter().any(|b| self.matches(b))
+	}
+
+	pub fn matches(&self, other: &Self) -> bool {
+		match (self, other) {
+			(Self::Keyword(_), Self::Id) => true,
+			(a, b) => a == b,
+		}
+	}
+}
+
 impl fmt::Display for TokenKind {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
@@ -103,6 +116,15 @@ impl Token {
 			Self::Keyword(k) => TokenKind::Keyword(*k),
 			Self::Id(_) => TokenKind::Id,
 			Self::Literal(_) => TokenKind::Literal,
+		}
+	}
+
+	/// If this token is a keyword, returns the keyword as an identifier.
+	/// Otherwise, return the token unchanged.
+	pub fn no_keyword(self) -> Self {
+		match self {
+			Self::Keyword(kw) => Self::Id(Id::Name(kw.to_string())),
+			token => token,
 		}
 	}
 }
