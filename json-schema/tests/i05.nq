@@ -1,0 +1,46 @@
+_:2 <https://treeldr.org/name> "productId" .
+_:2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Field> .
+_:2 <https://treeldr.org/format> _:3 .
+_:2 <https://schema.org/valueRequired> <https://schema.org/True> .
+_:0 <https://treeldr.org/name> "price" .
+_:0 <https://schema.org/valueRequired> <https://schema.org/True> .
+_:0 <https://treeldr.org/format> _:1 .
+_:0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Field> .
+_:9 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+_:9 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:6 .
+_:9 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
+_:10 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:4 .
+_:10 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:9 .
+_:10 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+_:11 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:10 .
+_:11 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:2 .
+_:11 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+_:12 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+_:12 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:0 .
+_:12 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:11 .
+_:5 <https://treeldr.org/native> <http://www.w3.org/2001/XMLSchema#string> .
+_:5 <http://www.w3.org/2000/01/rdf-schema#comment> "Name of the product" .
+_:5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<https://example.com/product.schema.json> <http://www.w3.org/2000/01/rdf-schema#comment> "A product from Acme's catalog" .
+<https://example.com/product.schema.json> <https://treeldr.org/fields> _:12 .
+<https://example.com/product.schema.json> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<https://example.com/product.schema.json> <http://www.w3.org/2000/01/rdf-schema#label> "Product" .
+<https://example.com/product.schema.json> <https://treeldr.org/name> "product" .
+_:1 <http://www.w3.org/2000/01/rdf-schema#comment> "The price of the product" .
+_:1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+_:1 <https://treeldr.org/native> <http://www.w3.org/2001/XMLSchema#double> .
+_:3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+_:3 <http://www.w3.org/2000/01/rdf-schema#comment> "The unique identifier for a product" .
+_:3 <https://treeldr.org/native> <http://www.w3.org/2001/XMLSchema#integer> .
+_:4 <https://schema.org/valueRequired> <https://schema.org/True> .
+_:4 <https://treeldr.org/format> _:5 .
+_:4 <https://treeldr.org/name> "productName" .
+_:4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Field> .
+_:7 <https://treeldr.org/set> _:8 .
+_:7 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+_:7 <http://www.w3.org/2000/01/rdf-schema#comment> "Tags for the product" .
+_:6 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Field> .
+_:6 <https://treeldr.org/name> "tags" .
+_:6 <https://treeldr.org/format> _:7 .
+_:8 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+_:8 <https://treeldr.org/native> <http://www.w3.org/2001/XMLSchema#string> .

@@ -1,5 +1,4 @@
 use locspan::Loc;
-use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;
 use treeldr_vocab::{GraphLabel, Id, StrippedObject, Term, Vocabulary};
@@ -48,18 +47,20 @@ fn parse_nquads<P: AsRef<Path>>(
 		.collect()
 }
 
-fn parse_treeldr<P: AsRef<Path>>(
-	vocab: &mut Vocabulary,
+fn parse_json_schema<P: AsRef<Path>>(path: P) -> treeldr_json_schema::Schema {
+	let buffer = std::fs::read_to_string(path).expect("unable to read file");
+	let json: serde_json::Value = serde_json::from_str(&buffer).expect("invalid JSON");
+	treeldr_json_schema::Schema::try_from(json).expect("invalid JSON Schema")
+}
+
+fn import_json_schema<P: AsRef<Path>>(
+	vocabulary: &mut Vocabulary,
 	path: P,
 ) -> grdf::HashDataset<Id, Term, StrippedObject, GraphLabel> {
-	use treeldr_syntax::{build, Build, Document, Lexer, Parse};
-
-	let input = std::fs::read_to_string(path).expect("unable to read input file");
-	let mut lexer = Lexer::new((), input.chars().map(infallible));
-	let ast = Document::parse(&mut lexer).expect("parse error");
-	let mut context = build::Context::new(vocab, Some(iri!("http://www.example.com").into()));
+	let input = parse_json_schema(path);
 	let mut quads = Vec::new();
-	ast.build(&mut context, &mut quads).expect("build error");
+	treeldr_json_schema::import_schema(&input, &(), None, vocabulary, &mut quads)
+		.expect("import failed");
 
 	quads.into_iter().map(treeldr_vocab::strip_quad).collect()
 }
@@ -67,7 +68,8 @@ fn parse_treeldr<P: AsRef<Path>>(
 fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) {
 	use treeldr_vocab::RdfDisplay;
 	let mut vocabulary = Vocabulary::new();
-	let output = parse_treeldr(&mut vocabulary, input_path);
+
+	let output = import_json_schema(&mut vocabulary, input_path);
 	let expected_output = parse_nquads(&mut vocabulary, expected_output_path);
 
 	for quad in output.quads() {
@@ -77,78 +79,32 @@ fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) 
 	assert!(output.is_isomorphic_to(&expected_output))
 }
 
-fn negative_test<I: AsRef<Path>>(input_path: I) {
-	use treeldr_vocab::RdfDisplay;
-	let mut vocabulary = Vocabulary::new();
-	let output = parse_treeldr(&mut vocabulary, input_path);
-	for quad in output.quads() {
-		println!("{} .", quad.rdf_display(&vocabulary))
-	}
-}
-
 #[test]
 fn t001() {
-	test("tests/001-in.tldr", "tests/001-out.nq")
+	test("tests/i01.json", "tests/i01.nq")
 }
 
 #[test]
 fn t002() {
-	test("tests/002-in.tldr", "tests/002-out.nq")
+	test("tests/i02.json", "tests/i02.nq")
 }
 
 #[test]
 fn t003() {
-	test("tests/003-in.tldr", "tests/003-out.nq")
+	test("tests/i03.json", "tests/i03.nq")
 }
 
 #[test]
 fn t004() {
-	test("tests/004-in.tldr", "tests/004-out.nq")
+	test("tests/i04.json", "tests/i04.nq")
 }
 
 #[test]
 fn t005() {
-	test("tests/005-in.tldr", "tests/005-out.nq")
+	test("tests/i05.json", "tests/i05.nq")
 }
 
 #[test]
 fn t006() {
-	test("tests/006-in.tldr", "tests/006-out.nq")
-}
-
-#[test]
-fn t007() {
-	test("tests/007-in.tldr", "tests/007-out.nq")
-}
-
-#[test]
-fn t008() {
-	test("tests/008-in.tldr", "tests/008-out.nq")
-}
-
-#[test]
-fn t009() {
-	test("tests/009-in.tldr", "tests/009-out.nq")
-}
-
-#[test]
-fn t010() {
-	test("tests/010-in.tldr", "tests/010-out.nq")
-}
-
-#[test]
-fn t011() {
-	test("tests/011-in.tldr", "tests/011-out.nq")
-}
-
-#[test]
-#[should_panic]
-fn e01() {
-	negative_test("tests/e01.tldr")
-}
-
-#[test]
-#[should_panic]
-fn e02() {
-	negative_test("tests/e02.tldr")
+	test("tests/i06.json", "tests/i06.nq")
 }

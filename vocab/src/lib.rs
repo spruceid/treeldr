@@ -1,7 +1,7 @@
 use iref::{Iri, IriBuf};
 use iref_enum::IriEnum;
 use locspan::Loc;
-use rdf_types::{loc::Literal, Quad};
+use rdf_types::{Quad, StringLiteral};
 use std::{collections::HashMap, fmt};
 
 mod display;
@@ -13,9 +13,15 @@ pub use name::*;
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]
 pub enum TreeLdr {
+	/// TreeLDR Layout.
 	#[iri("tldr:Layout")]
 	Layout,
 
+	/// Defines the name of a layout, field or variant.
+	#[iri("tldr:name")]
+	Name,
+
+	/// Associates a layout to the type its represents.
 	#[iri("tldr:layoutFor")]
 	LayoutFor,
 
@@ -23,6 +29,7 @@ pub enum TreeLdr {
 	#[iri("tldr:format")]
 	Format,
 
+	/// Structure layout.
 	#[iri("tldr:fields")]
 	Fields,
 
@@ -35,9 +42,6 @@ pub enum TreeLdr {
 	#[iri("tldr:Field")]
 	Field,
 
-	#[iri("tldr:name")]
-	Name,
-
 	#[iri("tldr:fieldFor")]
 	FieldFor,
 
@@ -48,7 +52,7 @@ pub enum TreeLdr {
 	#[iri("tldr:derefTo")]
 	DerefTo,
 
-	/// Layout equality constraint.
+	/// Singleton layout.
 	///
 	/// The only possible instance of the subject layout is the given object.
 	#[iri("tldr:singleton")]
@@ -76,6 +80,18 @@ pub enum TreeLdr {
 	/// property.
 	#[iri("tldr:Variant")]
 	Variant,
+
+	/// Native layout.
+	#[iri("tldr:native")]
+	Native,
+
+	/// List layout.
+	#[iri("tldr:list")]
+	List,
+
+	/// Set layout.
+	#[iri("tldr:set")]
+	Set,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -99,6 +115,43 @@ pub enum Schema {
 
 	#[iri("schema:valueRequired")]
 	ValueRequired,
+}
+
+#[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[iri_prefix("xsd" = "http://www.w3.org/2001/XMLSchema#")]
+pub enum Xsd {
+	#[iri("xsd:boolean")]
+	Boolean,
+
+	#[iri("xsd:int")]
+	Int,
+
+	#[iri("xsd:integer")]
+	Integer,
+
+	#[iri("xsd:positiveInteger")]
+	PositiveInteger,
+
+	#[iri("xsd:float")]
+	Float,
+
+	#[iri("xsd:double")]
+	Double,
+
+	#[iri("xsd:string")]
+	String,
+
+	#[iri("xsd:time")]
+	Time,
+
+	#[iri("xsd:date")]
+	Date,
+
+	#[iri("xsd:dateTime")]
+	DateTime,
+
+	#[iri("xsd:anyURI")]
+	AnyUri,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -150,6 +203,7 @@ pub struct UnknownTerm(usize);
 pub enum Term {
 	Rdf(Rdf),
 	Rdfs(Rdfs),
+	Xsd(Xsd),
 	Schema(Schema),
 	Owl(Owl),
 	TreeLdr(TreeLdr),
@@ -157,19 +211,47 @@ pub enum Term {
 }
 
 impl Term {
+	pub fn try_from_known_iri(iri: Iri) -> Option<Self> {
+		match Rdf::try_from(iri) {
+			Ok(id) => Some(Term::Rdf(id)),
+			Err(_) => match Rdfs::try_from(iri) {
+				Ok(id) => Some(Term::Rdfs(id)),
+				Err(_) => match Xsd::try_from(iri) {
+					Ok(id) => Some(Term::Xsd(id)),
+					Err(_) => match Schema::try_from(iri) {
+						Ok(id) => Some(Term::Schema(id)),
+						Err(_) => match Owl::try_from(iri) {
+							Ok(id) => Some(Term::Owl(id)),
+							Err(_) => match TreeLdr::try_from(iri) {
+								Ok(id) => Some(Term::TreeLdr(id)),
+								Err(_) => None,
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
 	pub fn try_from_iri(iri: Iri, ns: &Vocabulary) -> Option<Self> {
 		match Rdf::try_from(iri) {
 			Ok(id) => Some(Term::Rdf(id)),
 			Err(_) => match Rdfs::try_from(iri) {
 				Ok(id) => Some(Term::Rdfs(id)),
-				Err(_) => match Schema::try_from(iri) {
-					Ok(id) => Some(Term::Schema(id)),
-					Err(_) => match TreeLdr::try_from(iri) {
-						Ok(id) => Some(Term::TreeLdr(id)),
-						Err(_) => {
-							let iri_buf: IriBuf = iri.into();
-							ns.get(&iri_buf).map(Term::Unknown)
-						}
+				Err(_) => match Xsd::try_from(iri) {
+					Ok(id) => Some(Term::Xsd(id)),
+					Err(_) => match Schema::try_from(iri) {
+						Ok(id) => Some(Term::Schema(id)),
+						Err(_) => match Owl::try_from(iri) {
+							Ok(id) => Some(Term::Owl(id)),
+							Err(_) => match TreeLdr::try_from(iri) {
+								Ok(id) => Some(Term::TreeLdr(id)),
+								Err(_) => {
+									let iri_buf: IriBuf = iri.into();
+									ns.get(&iri_buf).map(Term::Unknown)
+								}
+							},
+						},
 					},
 				},
 			},
@@ -181,13 +263,16 @@ impl Term {
 			Ok(id) => Term::Rdf(id),
 			Err(_) => match Rdfs::try_from(iri.as_iri()) {
 				Ok(id) => Term::Rdfs(id),
-				Err(_) => match Schema::try_from(iri.as_iri()) {
-					Ok(id) => Term::Schema(id),
-					Err(_) => match Owl::try_from(iri.as_iri()) {
-						Ok(id) => Term::Owl(id),
-						Err(_) => match TreeLdr::try_from(iri.as_iri()) {
-							Ok(id) => Term::TreeLdr(id),
-							Err(_) => Term::Unknown(ns.insert(iri)),
+				Err(_) => match Xsd::try_from(iri.as_iri()) {
+					Ok(id) => Term::Xsd(id),
+					Err(_) => match Schema::try_from(iri.as_iri()) {
+						Ok(id) => Term::Schema(id),
+						Err(_) => match Owl::try_from(iri.as_iri()) {
+							Ok(id) => Term::Owl(id),
+							Err(_) => match TreeLdr::try_from(iri.as_iri()) {
+								Ok(id) => Term::TreeLdr(id),
+								Err(_) => Term::Unknown(ns.insert(iri)),
+							},
 						},
 					},
 				},
@@ -199,6 +284,7 @@ impl Term {
 		match self {
 			Self::Rdf(id) => Some(id.into()),
 			Self::Rdfs(id) => Some(id.into()),
+			Self::Xsd(id) => Some(id.into()),
 			Self::Schema(id) => Some(id.into()),
 			Self::Owl(id) => Some(id.into()),
 			Self::TreeLdr(id) => Some(id.into()),
@@ -210,7 +296,7 @@ impl Term {
 impl rdf_types::AsTerm for Term {
 	type Iri = Self;
 	type BlankId = BlankLabel;
-	type Literal = rdf_types::Literal;
+	type Literal = rdf_types::Literal<StringLiteral, Self>;
 
 	fn as_term(&self) -> rdf_types::Term<&Self::Iri, &Self::BlankId, &Self::Literal> {
 		rdf_types::Term::Iri(self)
@@ -220,7 +306,7 @@ impl rdf_types::AsTerm for Term {
 impl rdf_types::IntoTerm for Term {
 	type Iri = Self;
 	type BlankId = BlankLabel;
-	type Literal = rdf_types::Literal;
+	type Literal = rdf_types::Literal<StringLiteral, Self>;
 
 	fn into_term(self) -> rdf_types::Term<Self::Iri, Self::BlankId, Self::Literal> {
 		rdf_types::Term::Iri(self)
@@ -250,11 +336,15 @@ pub type Id = rdf_types::Subject<Term, BlankLabel>;
 
 pub type GraphLabel = rdf_types::GraphLabel<Term, BlankLabel>;
 
+pub type Literal<F> = rdf_types::loc::Literal<F, StringLiteral, Term>;
+
 pub type Object<F> = rdf_types::Object<Term, BlankLabel, Literal<F>>;
 
 pub type LocQuad<F> = rdf_types::loc::LocQuad<Id, Term, Object<F>, GraphLabel, F>;
 
-pub type StrippedObject = rdf_types::Object<Term, BlankLabel, rdf_types::Literal>;
+pub type StrippedLiteral = rdf_types::Literal<StringLiteral, Term>;
+
+pub type StrippedObject = rdf_types::Object<Term, BlankLabel, StrippedLiteral>;
 
 pub type StrippedQuad = rdf_types::Quad<Id, Term, StrippedObject, GraphLabel>;
 
@@ -287,7 +377,17 @@ pub fn object_from_rdf<F>(
 	match object {
 		rdf_types::Object::Iri(iri) => Object::Iri(Term::from_iri(iri, ns)),
 		rdf_types::Object::Blank(label) => Object::Blank(blank_label(label)),
-		rdf_types::Object::Literal(lit) => Object::Literal(lit),
+		rdf_types::Object::Literal(lit) => {
+			let lit = match lit {
+				rdf_types::loc::Literal::String(s) => Literal::String(s),
+				rdf_types::loc::Literal::TypedString(s, Loc(ty, ty_loc)) => {
+					Literal::TypedString(s, Loc(Term::from_iri(ty, ns), ty_loc))
+				}
+				rdf_types::loc::Literal::LangString(s, l) => Literal::LangString(s, l),
+			};
+
+			Object::Literal(lit)
+		}
 	}
 }
 
@@ -299,7 +399,17 @@ pub fn stripped_object_from_rdf(
 	match object {
 		rdf_types::Object::Iri(iri) => StrippedObject::Iri(Term::from_iri(iri, ns)),
 		rdf_types::Object::Blank(label) => StrippedObject::Blank(blank_label(label)),
-		rdf_types::Object::Literal(lit) => StrippedObject::Literal(lit),
+		rdf_types::Object::Literal(lit) => {
+			let lit = match lit {
+				rdf_types::Literal::String(s) => rdf_types::Literal::String(s),
+				rdf_types::Literal::TypedString(s, ty) => {
+					rdf_types::Literal::TypedString(s, Term::from_iri(ty, ns))
+				}
+				rdf_types::Literal::LangString(s, l) => rdf_types::Literal::LangString(s, l),
+			};
+
+			StrippedObject::Literal(lit)
+		}
 	}
 }
 
@@ -375,6 +485,7 @@ impl Vocabulary {
 		match self.reverse.entry(iri) {
 			Entry::Occupied(entry) => *entry.get(),
 			Entry::Vacant(entry) => {
+				debug_assert!(Term::try_from_known_iri(entry.key().as_iri()).is_none());
 				let name = UnknownTerm(self.map.len());
 				self.map.push(entry.key().clone());
 				entry.insert(name);

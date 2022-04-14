@@ -25,12 +25,18 @@ pub enum Type {
 	Enum,
 	Reference,
 	Literal,
+	Set,
+	List,
 }
 
 /// Layout definition.
 pub struct Definition<F> {
 	id: Id,
-	ty: WithCauses<Ref<ty::Definition<F>>, F>,
+
+	/// Type for witch this layout is defined.
+	///
+	/// If unset, this layout is an "orphan" layout.
+	ty: MaybeSet<Ref<ty::Definition<F>>, F>,
 	desc: WithCauses<Description<F>, F>,
 	causes: Causes<F>,
 }
@@ -51,6 +57,12 @@ pub enum Description<F> {
 
 	/// Literal layout.
 	Literal(Literal<F>),
+
+	/// Set layout.
+	Set(Ref<layout::Definition<F>>, MaybeSet<Name, F>),
+
+	/// List/array layout.
+	List(Ref<layout::Definition<F>>, MaybeSet<Name, F>),
 }
 
 impl<F> Description<F> {
@@ -61,6 +73,8 @@ impl<F> Description<F> {
 			Self::Enum(_) => Type::Enum,
 			Self::Native(n, _) => Type::Native(*n),
 			Self::Literal(_) => Type::Literal,
+			Self::Set(_, _) => Type::Set,
+			Self::List(_, _) => Type::List,
 		}
 	}
 }
@@ -68,7 +82,7 @@ impl<F> Description<F> {
 impl<F> Definition<F> {
 	pub fn new(
 		id: Id,
-		ty: WithCauses<Ref<ty::Definition<F>>, F>,
+		ty: MaybeSet<Ref<ty::Definition<F>>, F>,
 		desc: WithCauses<Description<F>, F>,
 		causes: impl Into<Causes<F>>,
 	) -> Self {
@@ -81,8 +95,8 @@ impl<F> Definition<F> {
 	}
 
 	/// Type for which the layout is defined.
-	pub fn ty(&self) -> Ref<ty::Definition<F>> {
-		*self.ty
+	pub fn ty(&self) -> Option<Ref<ty::Definition<F>>> {
+		self.ty.value().cloned()
 	}
 
 	/// Returns the identifier of the defined layout.
@@ -97,6 +111,8 @@ impl<F> Definition<F> {
 			Description::Reference(_, n) => n.value(),
 			Description::Native(_, n) => n.value(),
 			Description::Literal(l) => Some(l.name()),
+			Description::Set(_, n) => n.value(),
+			Description::List(_, n) => n.value(),
 		}
 	}
 
@@ -115,8 +131,10 @@ impl<F> Definition<F> {
 	pub fn preferred_label<'a>(&'a self, model: &'a crate::Model<F>) -> Option<&'a str> {
 		let label = self.label(model);
 		if label.is_none() {
-			let ty_id = model.types().get(*self.ty).unwrap().id();
-			model.get(ty_id).unwrap().label()
+			self.ty().and_then(|ty| {
+				let ty_id = model.types().get(ty).unwrap().id();
+				model.get(ty_id).unwrap().label()
+			})
 		} else {
 			label
 		}
@@ -129,8 +147,13 @@ impl<F> Definition<F> {
 	pub fn preferred_documentation<'m>(&self, model: &'m crate::Model<F>) -> &'m Documentation {
 		let doc = self.documentation(model);
 		if doc.is_empty() {
-			let ty_id = model.types().get(*self.ty).unwrap().id();
-			model.get(ty_id).unwrap().documentation()
+			match self.ty() {
+				Some(ty) => {
+					let ty_id = model.types().get(ty).unwrap().id();
+					model.get(ty_id).unwrap().documentation()
+				}
+				None => doc,
+			}
 		} else {
 			doc
 		}
@@ -143,6 +166,8 @@ impl<F> Definition<F> {
 			Description::Literal(_) => ComposingLayouts::None,
 			Description::Reference(_, _) => ComposingLayouts::None,
 			Description::Native(_, _) => ComposingLayouts::None,
+			Description::Set(i, _) => ComposingLayouts::One(Some(*i)),
+			Description::List(i, _) => ComposingLayouts::One(Some(*i)),
 		}
 	}
 }
@@ -150,6 +175,7 @@ impl<F> Definition<F> {
 pub enum ComposingLayouts<'a, F> {
 	Struct(std::slice::Iter<'a, Field<F>>),
 	Enum(enumeration::ComposingLayouts<'a, F>),
+	One(Option<Ref<Definition<F>>>),
 	None,
 }
 
@@ -160,6 +186,7 @@ impl<'a, F> Iterator for ComposingLayouts<'a, F> {
 		match self {
 			Self::Struct(fields) => Some(fields.next()?.layout()),
 			Self::Enum(layouts) => layouts.next(),
+			Self::One(r) => r.take(),
 			Self::None => None,
 		}
 	}

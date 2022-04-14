@@ -1,5 +1,6 @@
 use super::Vocabulary;
 use fmt::Display as StdDisplay;
+use locspan::Loc;
 use std::fmt;
 
 pub trait Display {
@@ -27,12 +28,34 @@ impl Display for super::Id {
 	}
 }
 
+impl<F> Display for super::Literal<F> {
+	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::String(s) => s.fmt(f),
+			Self::TypedString(Loc(s, _), Loc(ty, _)) => {
+				write!(f, "{}^^<{}>", s, ty.display(namespace))
+			}
+			Self::LangString(Loc(s, _), Loc(tag, _)) => write!(f, "{}@{}", s, tag),
+		}
+	}
+}
+
 impl<F> Display for super::Object<F> {
 	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::Iri(id) => id.fmt(namespace, f),
 			Self::Blank(id) => id.fmt(f),
-			Self::Literal(lit) => lit.fmt(f),
+			Self::Literal(lit) => lit.fmt(namespace, f),
+		}
+	}
+}
+
+impl Display for super::StrippedLiteral {
+	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::String(s) => s.fmt(f),
+			Self::TypedString(s, ty) => write!(f, "{}^^<{}>", s, ty.display(namespace)),
+			Self::LangString(s, tag) => write!(f, "{}@{}", s, tag),
 		}
 	}
 }
@@ -42,7 +65,7 @@ impl Display for super::StrippedObject {
 		match self {
 			Self::Iri(id) => id.fmt(namespace, f),
 			Self::Blank(id) => id.fmt(f),
-			Self::Literal(lit) => lit.fmt(f),
+			Self::Literal(lit) => lit.fmt(namespace, f),
 		}
 	}
 }
@@ -95,7 +118,7 @@ impl<F> RdfDisplay for super::Object<F> {
 		match self {
 			Self::Iri(id) => id.rdf_fmt(namespace, f),
 			Self::Blank(id) => id.fmt(f),
-			Self::Literal(lit) => lit.fmt(f),
+			Self::Literal(lit) => lit.fmt(namespace, f),
 		}
 	}
 }
@@ -105,7 +128,7 @@ impl RdfDisplay for super::StrippedObject {
 		match self {
 			Self::Iri(id) => id.rdf_fmt(namespace, f),
 			Self::Blank(id) => id.fmt(f),
-			Self::Literal(lit) => lit.fmt(f),
+			Self::Literal(lit) => lit.fmt(namespace, f),
 		}
 	}
 }
