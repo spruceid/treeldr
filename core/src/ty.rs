@@ -1,13 +1,13 @@
 use crate::{prop, Causes, Documentation, Id, Model};
 use shelves::Ref;
 
+mod intersection;
 pub mod normal;
 mod r#union;
-mod intersection;
 
+pub use intersection::Intersection;
 pub use normal::Normal;
 pub use union::Union;
-pub use intersection::Intersection;
 
 /// Type definition.
 pub struct Definition<F> {
@@ -28,12 +28,14 @@ pub struct Definition<F> {
 pub enum Description<F> {
 	Normal(Normal<F>),
 	Union(Union<F>),
+	Intersection(Intersection<F>),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Kind {
 	Normal,
 	Union,
+	Intersection,
 }
 
 impl<F> Definition<F> {
@@ -67,56 +69,26 @@ impl<F> Definition<F> {
 		self.doc = doc
 	}
 
-	pub fn properties_with_duplicates<'m>(
-		&'m self,
-		model: &'m Model<F>,
-	) -> PropertiesWithDuplicates<'m, F> {
+	pub fn properties<'m>(&'m self, model: &'m Model<F>) -> Properties<'m, F>
+	where
+		F: Clone + Ord,
+	{
 		match &self.desc {
-			Description::Normal(n) => PropertiesWithDuplicates::Normal(n.properties()),
-			Description::Union(u) => {
-				PropertiesWithDuplicates::Union(u.properties_with_duplicates(model))
-			}
-		}
-	}
-
-	pub fn properties<'m>(&'m self, model: &'m Model<F>) -> Properties<'m, F> {
-		match &self.desc {
-			Description::Normal(n) => Properties::Normal(n.properties()),
-			Description::Union(u) => Properties::Union(u.properties(model)),
+			Description::Normal(n) => n.properties(),
+			Description::Union(u) => u.properties(model),
+			Description::Intersection(i) => i.properties(model),
 		}
 	}
 }
 
-/// Iterator over the properties of a type.
-pub enum PropertiesWithDuplicates<'a, F> {
-	Normal(normal::Properties<'a, F>),
-	Union(union::PropertiesWithDuplicates<'a, F>),
-}
-
-impl<'a, F> Iterator for PropertiesWithDuplicates<'a, F> {
-	type Item = (Ref<prop::Definition<F>>, &'a Causes<F>);
-
-	fn next(&mut self) -> Option<Self::Item> {
-		match self {
-			Self::Normal(n) => n.next(),
-			Self::Union(u) => u.next(),
-		}
-	}
-}
-
-/// Iterator over the properties of a type.
-pub enum Properties<'a, F> {
-	Normal(normal::Properties<'a, F>),
-	Union(union::Properties<'a, F>),
-}
+pub struct Properties<'a, F>(
+	std::collections::hash_map::Iter<'a, Ref<prop::Definition<F>>, Causes<F>>,
+);
 
 impl<'a, F> Iterator for Properties<'a, F> {
 	type Item = (Ref<prop::Definition<F>>, &'a Causes<F>);
 
 	fn next(&mut self) -> Option<Self::Item> {
-		match self {
-			Self::Normal(n) => n.next(),
-			Self::Union(u) => u.next(),
-		}
+		self.0.next().map(|(r, c)| (*r, c))
 	}
 }

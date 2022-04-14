@@ -1,77 +1,51 @@
+use super::Properties;
 use crate::{prop, Causes, Model, Ref};
-use std::collections::{HashMap, HashSet};
+use once_cell::unsync::OnceCell;
+use std::collections::HashMap;
 
 pub struct Union<F> {
 	options: HashMap<Ref<super::Definition<F>>, Causes<F>>,
+
+	/// Properties in the union.
+	///
+	/// Lazily computed.
+	properties: OnceCell<HashMap<Ref<prop::Definition<F>>, Causes<F>>>,
 }
 
 impl<F> Union<F> {
 	pub fn new(options: HashMap<Ref<super::Definition<F>>, Causes<F>>) -> Self {
-		Self { options }
-	}
-
-	pub fn properties_with_duplicates<'m>(
-		&'m self,
-		model: &'m Model<F>,
-	) -> PropertiesWithDuplicates<'m, F> {
-		PropertiesWithDuplicates {
-			model,
-			remaning_options: self.options.keys(),
-			current: None,
+		Self {
+			options,
+			properties: OnceCell::new(),
 		}
 	}
 
-	pub fn properties<'m>(&'m self, model: &'m Model<F>) -> Properties<'m, F> {
-		Properties {
-			visited: HashSet::new(),
-			inner: self.properties_with_duplicates(model),
-		}
-	}
-}
+	pub fn properties<'m>(&'m self, model: &'m Model<F>) -> Properties<'m, F>
+	where
+		F: Clone + Ord,
+	{
+		// Compute the properties in the intersection if not already.
+		let properties = self.properties.get_or_init(|| {
+			use std::collections::hash_map::Entry;
+			let mut properties = HashMap::new();
 
-pub struct PropertiesWithDuplicates<'a, F> {
-	model: &'a Model<F>,
-	remaning_options: std::collections::hash_map::Keys<'a, Ref<super::Definition<F>>, Causes<F>>,
-	current: Option<Box<super::PropertiesWithDuplicates<'a, F>>>,
-}
-
-impl<'a, F> Iterator for PropertiesWithDuplicates<'a, F> {
-	type Item = (Ref<prop::Definition<F>>, &'a Causes<F>);
-
-	fn next(&mut self) -> Option<Self::Item> {
-		loop {
-			match self.current.as_mut() {
-				Some(current) => match current.next() {
-					Some(next) => break Some(next),
-					None => self.current = None,
-				},
-				None => match self.remaning_options.next() {
-					Some(ty_ref) => {
-						let ty = self.model.types().get(*ty_ref).unwrap();
-						self.current = Some(Box::new(ty.properties_with_duplicates(self.model)))
+			for ty_ref in self.options.keys() {
+				let ty = model.types().get(*ty_ref).unwrap();
+				for (prop, causes) in ty.properties(model) {
+					match properties.entry(prop) {
+						Entry::Vacant(entry) => {
+							entry.insert(causes.clone());
+						}
+						Entry::Occupied(mut entry) => {
+							entry.get_mut().extend(causes.clone());
+						}
 					}
-					None => break None,
-				},
+				}
 			}
-		}
-	}
-}
 
-pub struct Properties<'a, F> {
-	visited: HashSet<Ref<prop::Definition<F>>>,
-	inner: PropertiesWithDuplicates<'a, F>,
-}
+			properties
+		});
 
-impl<'a, F> Iterator for Properties<'a, F> {
-	type Item = (Ref<prop::Definition<F>>, &'a Causes<F>);
-
-	fn next(&mut self) -> Option<Self::Item> {
-		for next in self.inner.by_ref() {
-			if self.visited.insert(next.0) {
-				return Some(next);
-			}
-		}
-
-		None
+		Properties(properties.iter())
 	}
 }
