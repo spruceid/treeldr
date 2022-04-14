@@ -1,4 +1,6 @@
-use crate::{layout, ty, vocab::Name, Causes, Documentation, Id, MaybeSet, WithCauses};
+use crate::{
+	error, layout, ty, vocab::Name, Caused, Causes, Documentation, Error, Id, MaybeSet, WithCauses,
+};
 use shelves::Ref;
 
 pub mod enumeration;
@@ -36,31 +38,77 @@ pub struct Definition<F> {
 }
 
 /// Layout description.
+#[derive(Clone)]
 pub enum Description<F> {
 	/// Native layout, such as a number, a string, etc.
 	Native(Native, MaybeSet<Name, F>),
-
-	/// Structure.
-	Struct(Struct<F>),
-
-	/// Enumeration.
-	Enum(Enum<F>),
 
 	/// Reference.
 	Reference(Ref<layout::Definition<F>>, MaybeSet<Name, F>),
 
 	/// Literal layout.
 	Literal(Literal<F>),
+
+	/// Structure.
+	Struct(Struct<F>),
+
+	/// Enumeration.
+	Enum(Enum<F>),
 }
 
 impl<F> Description<F> {
 	pub fn ty(&self) -> Type {
 		match self {
+			Self::Native(n, _) => Type::Native(*n),
+			Self::Literal(_) => Type::Literal,
 			Self::Reference(_, _) => Type::Reference,
 			Self::Struct(_) => Type::Struct,
 			Self::Enum(_) => Type::Enum,
-			Self::Native(n, _) => Type::Native(*n),
-			Self::Literal(_) => Type::Literal,
+		}
+	}
+
+	/// Intersects this type description with `other`.
+	///
+	/// If provided, `name` will override the name of the intersected type,
+	/// otherwise the name of `self` is used.
+	pub fn intersected_with(
+		self,
+		id: Id,
+		other: &WithCauses<Self, F>,
+		name: MaybeSet<Name, F>,
+	) -> Result<Self, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		match (self, other.inner()) {
+			(Self::Native(a, a_name), Self::Native(b, _)) if &a == b => {
+				Ok(Self::Native(a, name.or(a_name)))
+			}
+			(Self::Reference(a, a_name), Self::Reference(b, _)) if &a == b => {
+				Ok(Self::Reference(a, name.or(a_name)))
+			}
+			(Self::Literal(a), Self::Literal(b)) => Ok(Self::Literal(a.intersected_with(
+				id,
+				b,
+				name,
+				other.causes().preferred(),
+			)?)),
+			(Self::Struct(a), Self::Struct(b)) => Ok(Self::Struct(a.intersected_with(
+				id,
+				b,
+				name,
+				other.causes().preferred(),
+			)?)),
+			(Self::Enum(a), Self::Enum(b)) => Ok(Self::Enum(a.intersected_with(
+				id,
+				b,
+				name,
+				other.causes().preferred(),
+			)?)),
+			_ => Err(Caused::new(
+				error::LayoutIntersectionFailed { id }.into(),
+				other.causes().preferred().cloned(),
+			)),
 		}
 	}
 }
@@ -105,6 +153,10 @@ impl<F> Definition<F> {
 	}
 
 	pub fn description(&self) -> &Description<F> {
+		&self.desc
+	}
+
+	pub fn description_with_causes(&self) -> &WithCauses<Description<F>, F> {
 		&self.desc
 	}
 

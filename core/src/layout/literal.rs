@@ -1,10 +1,12 @@
-use crate::{vocab::Name, WithCauses};
+use crate::{error, vocab::Name, Caused, Error, Id, MaybeSet, WithCauses};
+use locspan::Location;
 
 pub mod regexp;
 
 pub use regexp::RegExp;
 
 /// Literal value layout.
+#[derive(Clone)]
 pub struct Literal<F> {
 	/// Layout name.
 	name: WithCauses<Name, F>,
@@ -35,5 +37,29 @@ impl<F> Literal<F> {
 
 	pub fn should_inline(&self) -> bool {
 		self.should_inline
+	}
+
+	pub fn intersected_with(
+		self,
+		id: Id,
+		other: &Self,
+		name: MaybeSet<Name, F>,
+		cause: Option<&Location<F>>,
+	) -> Result<Self, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		if self.regexp == other.regexp {
+			Ok(Self {
+				name: name.unwrap().unwrap_or(self.name),
+				regexp: self.regexp,
+				should_inline: self.should_inline && other.should_inline,
+			})
+		} else {
+			Err(Caused::new(
+				error::LayoutIntersectionFailed { id }.into(),
+				cause.cloned(),
+			))
+		}
 	}
 }

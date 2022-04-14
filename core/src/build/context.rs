@@ -294,22 +294,79 @@ impl<F> Context<F> {
 					.try_collect()
 				{
 					Ok(properties) => {
-						match allocated_shelves
+						// Because there are composite layouts, they must be
+						// built in a specific order to ensure that composed
+						// layout are built before the composing ones.
+						use crate::utils::SccGraph;
+
+						struct LayoutGraph<F> {
+							layouts: Vec<Ref<crate::layout::Definition<F>>>,
+							dependencies: Vec<Vec<Ref<crate::layout::Definition<F>>>>,
+						}
+
+						impl<F> crate::utils::SccGraph for LayoutGraph<F> {
+							type Vertex = Ref<crate::layout::Definition<F>>;
+
+							fn vertices(&self) -> &[Self::Vertex] {
+								&self.layouts
+							}
+
+							fn successors(&self, v: Self::Vertex) -> &[Self::Vertex] {
+								&self.dependencies[v.index()]
+							}
+						}
+
+						let mut graph: LayoutGraph<F> = LayoutGraph {
+							layouts: Vec::with_capacity(allocated_shelves.layouts.len()),
+							dependencies: Vec::with_capacity(allocated_shelves.layouts.len()),
+						};
+
+						for (layout_ref, (id, layout)) in &allocated_shelves.layouts {
+							graph.layouts.push(layout_ref.cast());
+							match layout.dependencies(*id, &allocated_nodes) {
+								Ok(dependencies) => graph.dependencies.push(dependencies),
+								Err(e) => return Err((e, self.vocab)),
+							}
+						}
+
+						let components = graph.strongly_connected_components();
+						let ordered_components = components.order_by_depth();
+
+						let mut layouts_to_build: Vec<_> = allocated_shelves
 							.layouts
 							.into_storage()
 							.into_iter()
-							.map(|(id, layout)| layout.build(id, &self.vocab, &allocated_nodes))
-							.try_collect()
-						{
-							Ok(layouts) => Ok(Model::from_parts(
-								self.vocab,
-								allocated_nodes.into_model_nodes(),
-								Shelf::new(types),
-								Shelf::new(properties),
-								Shelf::new(layouts),
-							)),
-							Err(e) => Err((e, self.vocab)),
+							.map(Option::Some)
+							.collect();
+						let mut built_layouts = Vec::new();
+						built_layouts.resize_with(layouts_to_build.len(), || None);
+
+						for i in ordered_components.into_iter().rev() {
+							let component = components.get(i).unwrap();
+							for layout_ref in component {
+								let (id, layout) =
+									layouts_to_build[layout_ref.index()].take().unwrap();
+								match layout.build(
+									id,
+									&self.vocab,
+									&allocated_nodes,
+									&built_layouts,
+								) {
+									Ok(built_layout) => {
+										built_layouts[layout_ref.index()] = Some(built_layout);
+									}
+									Err(e) => return Err((e, self.vocab)),
+								}
+							}
 						}
+
+						Ok(Model::from_parts(
+							self.vocab,
+							allocated_nodes.into_model_nodes(),
+							Shelf::new(types),
+							Shelf::new(properties),
+							Shelf::new(built_layouts.into_iter().map(Option::unwrap).collect()),
+						))
 					}
 					Err(e) => Err((e, self.vocab)),
 				}
@@ -734,7 +791,7 @@ impl<F> Node<AllocatedComponents<F>> {
 				.map(|causes| causes.preferred().cloned()),
 			layout: self
 				.value()
-				.layout
+				.property
 				.causes()
 				.map(|causes| causes.preferred().cloned()),
 			layout_field: self

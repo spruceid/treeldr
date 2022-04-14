@@ -100,6 +100,8 @@ errors! {
 	layout_missing_description::LayoutMissingDescription,
 	layout_missing_type::LayoutMissingType,
 	layout_literal_field::LayoutLiteralField,
+	layout_literal_intersection::LayoutLiteralIntersection,
+	layout_intersection_failed::LayoutIntersectionFailed,
 	layout_field_mismatch_functional::LayoutFieldMismatchFunctional<F>,
 	layout_field_mismatch_layout::LayoutFieldMismatchLayout<F>,
 	layout_field_mismatch_name::LayoutFieldMismatchName<F>,

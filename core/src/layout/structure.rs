@@ -1,7 +1,11 @@
-use crate::{layout, prop, vocab::Name, Documentation, WithCauses};
+use crate::{
+	error, layout, prop, vocab::Name, Caused, Documentation, Error, Id, MaybeSet, WithCauses,
+};
+use locspan::Location;
 use shelves::Ref;
 
 /// Structure layout.
+#[derive(Clone)]
 pub struct Struct<F> {
 	name: WithCauses<Name, F>,
 	fields: Vec<Field<F>>,
@@ -27,9 +31,79 @@ impl<F> Struct<F> {
 			None
 		}
 	}
+
+	pub fn intersected_with(
+		self,
+		id: Id,
+		other: &Self,
+		name: MaybeSet<Name, F>,
+		cause: Option<&Location<F>>,
+	) -> Result<Self, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		let mut fields = Vec::new();
+
+		let mut j = 0;
+		for field in &self.fields {
+			for (k, other_field) in other.fields[j..].iter().enumerate() {
+				if field.name() == other_field.name() {
+					if field.property() != other_field.property() {
+						return Err(Caused::new(
+							error::LayoutIntersectionFailed { id }.into(),
+							cause.cloned(),
+						));
+					}
+
+					if field.layout() != other_field.layout() {
+						return Err(Caused::new(
+							error::LayoutIntersectionFailed { id }.into(),
+							cause.cloned(),
+						));
+					}
+
+					let required = if *field.required || !*other_field.required {
+						field.required.clone()
+					} else {
+						other_field.required.clone()
+					};
+
+					let functional = if !*field.functional && *other_field.functional {
+						field.functional.clone()
+					} else {
+						other_field.functional.clone()
+					};
+
+					let doc = if field.doc.is_empty() || other_field.doc.is_empty() {
+						field.doc.clone()
+					} else {
+						other_field.doc.clone()
+					};
+
+					fields.push(Field {
+						prop: field.prop.clone(),
+						name: field.name.clone(),
+						label: field.label.clone().or_else(|| other_field.label.clone()),
+						layout: field.layout.clone(),
+						required,
+						functional,
+						doc,
+					});
+
+					j += k;
+				}
+			}
+		}
+
+		Ok(Self {
+			name: name.unwrap().unwrap_or(self.name),
+			fields,
+		})
+	}
 }
 
 /// Layout field.
+#[derive(Clone)]
 pub struct Field<F> {
 	prop: WithCauses<Ref<prop::Definition<F>>, F>,
 	name: WithCauses<Name, F>,

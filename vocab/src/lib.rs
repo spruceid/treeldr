@@ -83,6 +83,9 @@ pub enum TreeLdr {
 pub enum Owl {
 	#[iri("owl:unionOf")]
 	UnionOf,
+
+	#[iri("owl:intersectionOf")]
+	IntersectionOf,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

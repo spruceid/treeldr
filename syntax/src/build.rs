@@ -109,7 +109,7 @@ pub struct Context<'v, F> {
 	literal: BTreeMap<Loc<crate::Literal, F>, Loc<Id, F>>,
 
 	/// Associates each union type (location) to a blank node label.
-	unions: BTreeMap<Location<F>, Loc<Id, F>>,
+	anonymous_types: BTreeMap<Location<F>, Loc<Id, F>>,
 }
 
 impl<'v, F> Context<'v, F> {
@@ -121,7 +121,7 @@ impl<'v, F> Context<'v, F> {
 			scope: None,
 			next_id: None,
 			literal: BTreeMap::new(),
-			unions: BTreeMap::new(),
+			anonymous_types: BTreeMap::new(),
 		}
 	}
 
@@ -372,12 +372,100 @@ impl<'v, F> Context<'v, F> {
 		Ok(())
 	}
 
-	pub fn insert_union(&mut self, loc: Location<F>) -> Loc<Id, F>
+	fn generate_intersection_type(
+		&mut self,
+		id: Loc<Id, F>,
+		quads: &mut Vec<LocQuad<F>>,
+		Loc(types, loc): Loc<Vec<Loc<crate::NamedInnerTypeExpr<F>, F>>, F>,
+	) -> Result<(), Loc<Error<F>, F>>
+	where
+		F: Clone + Ord,
+	{
+		let types_list = types.into_iter().try_into_rdf_list(
+			self,
+			quads,
+			loc.clone(),
+			|ty_expr, ctx, quads| ty_expr.build(ctx, quads),
+		)?;
+
+		if id.is_blank() {
+			quads.push(Loc(
+				Quad(
+					id.clone(),
+					Loc(Term::Rdf(Rdf::Type), loc.clone()),
+					Loc(Object::Iri(Term::Rdfs(Rdfs::Class)), loc.clone()),
+					None,
+				),
+				loc.clone(),
+			));
+		}
+
+		quads.push(Loc(
+			Quad(
+				id,
+				Loc(
+					Term::Owl(Owl::IntersectionOf),
+					types_list.location().clone(),
+				),
+				types_list,
+				None,
+			),
+			loc,
+		));
+
+		Ok(())
+	}
+
+	fn generate_intersection_layout(
+		&mut self,
+		id: Loc<Id, F>,
+		quads: &mut Vec<LocQuad<F>>,
+		Loc(layouts, loc): Loc<Vec<Loc<crate::NamedInnerLayoutExpr<F>, F>>, F>,
+	) -> Result<(), Loc<Error<F>, F>>
+	where
+		F: Clone + Ord,
+	{
+		let layouts_list = layouts.into_iter().try_into_rdf_list(
+			self,
+			quads,
+			loc.clone(),
+			|layout_expr, ctx, quads| layout_expr.build(ctx, quads),
+		)?;
+
+		if id.is_blank() {
+			quads.push(Loc(
+				Quad(
+					id.clone(),
+					Loc(Term::Rdf(Rdf::Type), loc.clone()),
+					Loc(Object::Iri(Term::TreeLdr(TreeLdr::Layout)), loc.clone()),
+					None,
+				),
+				loc.clone(),
+			));
+		}
+
+		quads.push(Loc(
+			Quad(
+				id,
+				Loc(
+					Term::Owl(Owl::IntersectionOf),
+					layouts_list.location().clone(),
+				),
+				layouts_list,
+				None,
+			),
+			loc,
+		));
+
+		Ok(())
+	}
+
+	pub fn insert_anonymous_type(&mut self, loc: Location<F>) -> Loc<Id, F>
 	where
 		F: Clone + Ord,
 	{
 		self.next_id.take().unwrap_or_else(|| {
-			self.unions
+			self.anonymous_types
 				.entry(loc.clone())
 				.or_insert_with(|| Loc(Id::Blank(self.vocabulary.new_blank_label()), loc))
 				.clone()
@@ -738,8 +826,13 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterTypeExpr<F>, F> {
 		match ty {
 			crate::OuterTypeExpr::Inner(e) => Loc(e, loc).build(ctx, quads),
 			crate::OuterTypeExpr::Union(options) => {
-				let id = ctx.insert_union(loc.clone());
+				let id = ctx.insert_anonymous_type(loc.clone());
 				ctx.generate_union_type(id.clone(), quads, Loc(options, loc.clone()))?;
+				Ok(Loc(id.into_value().into_term(), loc))
+			}
+			crate::OuterTypeExpr::Intersection(types) => {
+				let id = ctx.insert_anonymous_type(loc.clone());
+				ctx.generate_intersection_type(id.clone(), quads, Loc(types, loc.clone()))?;
 				Ok(Loc(id.into_value().into_term(), loc))
 			}
 		}
@@ -1067,8 +1160,13 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 		match ty {
 			crate::OuterLayoutExpr::Inner(e) => Loc(e, loc).build(ctx, quads),
 			crate::OuterLayoutExpr::Union(options) => {
-				let id = ctx.insert_union(loc.clone());
+				let id = ctx.insert_anonymous_type(loc.clone());
 				ctx.generate_union_layout(id.clone(), quads, Loc(options, loc.clone()))?;
+				Ok(Loc(id.into_value().into_term(), loc))
+			}
+			crate::OuterLayoutExpr::Intersection(types) => {
+				let id = ctx.insert_anonymous_type(loc.clone());
+				ctx.generate_intersection_layout(id.clone(), quads, Loc(types, loc.clone()))?;
 				Ok(Loc(id.into_value().into_term(), loc))
 			}
 		}

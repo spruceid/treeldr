@@ -1,6 +1,8 @@
-use crate::{vocab::Name, Documentation, MaybeSet, Ref, WithCauses};
+use crate::{error, vocab::Name, Caused, Documentation, Error, Id, MaybeSet, Ref, WithCauses};
+use locspan::Location;
 
 /// Enum layout.
+#[derive(Clone)]
 pub struct Enum<F> {
 	name: WithCauses<Name, F>,
 	variants: Vec<WithCauses<Variant<F>, F>>,
@@ -29,8 +31,65 @@ impl<F> Enum<F> {
 	pub fn composing_layouts(&self) -> ComposingLayouts<F> {
 		ComposingLayouts(self.variants.iter())
 	}
+
+	pub fn intersected_with(
+		self,
+		id: Id,
+		other: &Self,
+		name: MaybeSet<Name, F>,
+		cause: Option<&Location<F>>,
+	) -> Result<Self, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		let mut variants = Vec::new();
+
+		let mut j = 0;
+		for variant in &self.variants {
+			for (k, other_variant) in other.variants[j..].iter().enumerate() {
+				if variant.name() == other_variant.name() {
+					if variant.layout() != other_variant.layout() {
+						return Err(Caused::new(
+							error::LayoutIntersectionFailed { id }.into(),
+							cause.cloned(),
+						));
+					}
+
+					let doc = if variant.doc.is_empty() || other_variant.doc.is_empty() {
+						variant.doc.clone()
+					} else {
+						other_variant.doc.clone()
+					};
+
+					variants.push(WithCauses::new(
+						Variant {
+							name: variant.name.clone(),
+							label: variant
+								.label
+								.clone()
+								.or_else(|| other_variant.label.clone()),
+							layout: variant.layout.clone(),
+							doc,
+						},
+						variant
+							.causes()
+							.clone()
+							.with(other_variant.causes().iter().cloned()),
+					));
+
+					j += k;
+				}
+			}
+		}
+
+		Ok(Self {
+			name: name.unwrap().unwrap_or(self.name),
+			variants,
+		})
+	}
 }
 
+#[derive(Clone)]
 pub struct Variant<F> {
 	name: WithCauses<Name, F>,
 	layout: MaybeSet<Ref<super::Definition<F>>, F>,

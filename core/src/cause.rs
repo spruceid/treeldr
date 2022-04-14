@@ -79,6 +79,14 @@ impl<F> Causes<F> {
 		self.set.insert(cause);
 	}
 
+	pub fn with<I: IntoIterator<Item = Location<F>>>(mut self, other: I) -> Self
+	where
+		F: Ord,
+	{
+		self.extend(other);
+		self
+	}
+
 	/// Picks the preferred cause, unless there are no causes.
 	pub fn preferred(&self) -> Option<&Location<F>> {
 		self.set.iter().next()

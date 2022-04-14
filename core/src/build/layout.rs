@@ -1,13 +1,15 @@
 use crate::{
-	error, utils::TryCollect, vocab, Caused, Causes, Error, Id, MaybeSet, Vocabulary, WithCauses,
+	error, utils::TryCollect, vocab, Caused, Causes, Error, Id, MaybeSet, Ref, Vocabulary,
+	WithCauses,
 };
 use locspan::Location;
 use std::collections::HashSet;
 
 pub mod field;
 pub mod variant;
+// pub mod pseudo;
 
-pub use crate::layout::{literal::RegExp, Native, Type};
+pub use crate::layout::{literal::RegExp, Native};
 
 /// Layout definition.
 pub struct Definition<F> {
@@ -61,6 +63,17 @@ pub enum Description {
 	Reference(Id),
 	Literal(RegExp),
 	Enum(Id),
+	Intersection(Id),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Type {
+	Native(Native),
+	Reference,
+	Literal,
+	Struct,
+	Enum,
+	Intersection,
 }
 
 impl Description {
@@ -71,6 +84,7 @@ impl Description {
 			Self::Native(n) => Type::Native(*n),
 			Self::Literal(_) => Type::Literal,
 			Self::Enum(_) => Type::Enum,
+			Self::Intersection(_) => Type::Intersection,
 		}
 	}
 }
@@ -298,13 +312,51 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 		Ok(uses)
 	}
 
+	pub fn dependencies(
+		&self,
+		id: Id,
+		nodes: &super::context::AllocatedNodes<F>,
+	) -> Result<Vec<Ref<crate::layout::Definition<F>>>, Error<F>> {
+		let desc = self.desc.with_causes().ok_or_else(|| {
+			Caused::new(
+				error::LayoutMissingDescription(id).into(),
+				self.causes().preferred().cloned(),
+			)
+		})?;
+
+		match desc.inner() {
+			Description::Intersection(layout_list_id) => {
+				let layouts = nodes
+					.require_list(*layout_list_id, desc.causes().preferred().cloned())?
+					.iter(nodes)
+					.map(|item| {
+						let (object, causes) = item?.clone().into_parts();
+						let layout_id = match object {
+							vocab::Object::Literal(_) => Err(Caused::new(
+								error::LayoutLiteralIntersection(*layout_list_id).into(),
+								causes.preferred().cloned(),
+							)),
+							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+							vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+						}?;
+
+						Ok(**nodes.require_layout(layout_id, causes.into_preferred())?)
+					})
+					.try_collect()?;
+				Ok(layouts)
+			}
+			_ => Ok(Vec::new()),
+		}
+	}
+
 	pub fn build(
 		self,
 		id: Id,
 		vocab: &Vocabulary,
 		nodes: &super::context::AllocatedNodes<F>,
+		built_layouts: &[Option<crate::layout::Definition<F>>],
 	) -> Result<crate::layout::Definition<F>, Error<F>> {
-		let (def, causes) = self.into_parts();
+		let (mut def, causes) = self.into_parts();
 
 		let ty_id = def.ty.ok_or_else(|| {
 			Caused::new(
@@ -414,6 +466,42 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 					let name = require_name(def.id, def.name, &causes)?;
 					let lit = crate::layout::Literal::new(regexp, name, def.id.is_blank());
 					Ok(crate::layout::Description::Literal(lit))
+				}
+				Description::Intersection(layout_list_id) => {
+					let layouts = nodes
+						.require_list(layout_list_id, desc_causes.preferred().cloned())?
+						.iter(nodes)
+						.map(|item| {
+							let (object, causes) = item?.clone().into_parts();
+							let layout_id = match object {
+								vocab::Object::Literal(_) => Err(Caused::new(
+									error::LayoutLiteralIntersection(layout_list_id).into(),
+									causes.preferred().cloned(),
+								)),
+								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+							}?;
+
+							let layout_ref =
+								nodes.require_layout(layout_id, causes.into_preferred())?;
+							Ok(built_layouts[layout_ref.index()].as_ref().unwrap())
+						});
+
+					let mut desc: Option<crate::layout::Description<F>> = None;
+					for layout in layouts {
+						let layout = layout?;
+
+						desc = Some(match desc {
+							Some(desc) => desc.intersected_with(
+								id,
+								layout.description_with_causes(),
+								def.name.take(),
+							)?,
+							None => layout.description().clone(),
+						})
+					}
+
+					Ok(desc.unwrap())
 				}
 			})
 			.map_err(Caused::flatten)?;

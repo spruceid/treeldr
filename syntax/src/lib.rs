@@ -166,6 +166,7 @@ impl<F: Clone> AnnotatedTypeExpr<F> {
 pub enum OuterTypeExpr<F> {
 	Inner(NamedInnerTypeExpr<F>),
 	Union(Vec<Loc<NamedInnerTypeExpr<F>, F>>),
+	Intersection(Vec<Loc<NamedInnerTypeExpr<F>, F>>),
 }
 
 impl<F: Clone> OuterTypeExpr<F> {
@@ -174,6 +175,12 @@ impl<F: Clone> OuterTypeExpr<F> {
 			Self::Inner(i) => OuterLayoutExpr::Inner(i.implicit_layout_expr()),
 			Self::Union(options) => OuterLayoutExpr::Union(
 				options
+					.iter()
+					.map(|Loc(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
+					.collect(),
+			),
+			Self::Intersection(types) => OuterLayoutExpr::Intersection(
+				types
 					.iter()
 					.map(|Loc(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
 					.collect(),
@@ -259,6 +266,7 @@ pub struct AnnotatedLayoutExpr<F> {
 pub enum OuterLayoutExpr<F> {
 	Inner(NamedInnerLayoutExpr<F>),
 	Union(Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
+	Intersection(Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
 }
 
 pub struct NamedInnerLayoutExpr<F> {

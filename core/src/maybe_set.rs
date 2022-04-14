@@ -6,6 +6,12 @@ pub struct MaybeSet<T, F> {
 	value: Option<WithCauses<T, F>>,
 }
 
+impl<T, F> From<Option<WithCauses<T, F>>> for MaybeSet<T, F> {
+	fn from(value: Option<WithCauses<T, F>>) -> Self {
+		Self { value }
+	}
+}
+
 impl<T, F> Default for MaybeSet<T, F> {
 	fn default() -> Self {
 		Self { value: None }
@@ -21,6 +27,12 @@ impl<T, F> MaybeSet<T, F> {
 
 	pub fn is_set(&self) -> bool {
 		self.value.is_some()
+	}
+
+	pub fn take(&mut self) -> Self {
+		Self {
+			value: self.value.take(),
+		}
 	}
 
 	pub fn replace(&mut self, value: T, cause: Option<Location<F>>) -> Option<WithCauses<T, F>>
@@ -139,6 +151,10 @@ impl<T, F> MaybeSet<T, F> {
 		self.value.as_ref().map(|v| v.inner().deref())
 	}
 
+	pub fn unwrap(self) -> Option<WithCauses<T, F>> {
+		self.value
+	}
+
 	pub fn unwrap_or(self, default: T) -> WithCauses<T, F> {
 		self.value
 			.unwrap_or_else(|| WithCauses::without_causes(default))
@@ -151,6 +167,22 @@ impl<T, F> MaybeSet<T, F> {
 		self.value
 			.map(Ok)
 			.unwrap_or_else(|| f().map(WithCauses::without_causes))
+	}
+
+	pub fn or(self, other: Self) -> Self {
+		if self.is_set() {
+			self
+		} else {
+			other
+		}
+	}
+
+	pub fn or_else(self, other: impl FnOnce() -> Self) -> Self {
+		if self.is_set() {
+			self
+		} else {
+			other()
+		}
 	}
 
 	pub fn ok_or_else<E>(self, f: impl FnOnce() -> E) -> Result<WithCauses<T, F>, E> {
