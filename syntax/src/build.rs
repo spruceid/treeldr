@@ -448,7 +448,7 @@ impl<'v, F> Context<'v, F> {
 			Quad(
 				id,
 				Loc(
-					Term::Owl(Owl::IntersectionOf),
+					Term::TreeLdr(TreeLdr::Intersection),
 					layouts_list.location().clone(),
 				),
 				layouts_list,
