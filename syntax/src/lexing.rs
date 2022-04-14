@@ -635,6 +635,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		// PN_LOCAL
 		let mut suffix = String::new();
 		let mut suffix_span = self.pos.current_span().next();
+
 		let c = self.expect_char()?;
 		if is_pn_chars_u(c) || c.is_ascii_digit() || matches!(c, ':' | '%' | '\\') {
 			let c = match c {
@@ -655,7 +656,12 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 				match self.peek_char()? {
 					Some(c)
 						if is_pn_chars(c)
-							|| c.is_ascii_digit() || matches!(c, ':' | '%' | '\\') =>
+							|| c.is_ascii_digit() || matches!(c, '%' | '\\')
+							|| (c == ':'
+								&& !self
+									.peek_char2()?
+									.map(|c| c.is_whitespace())
+									.unwrap_or(true)) =>
 					{
 						let c = match self.expect_char()? {
 							'%' => {
