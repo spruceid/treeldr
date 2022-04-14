@@ -3,9 +3,11 @@ use shelves::Ref;
 
 pub mod normal;
 mod r#union;
+mod intersection;
 
 pub use normal::Normal;
 pub use union::Union;
+pub use intersection::Intersection;
 
 /// Type definition.
 pub struct Definition<F> {
