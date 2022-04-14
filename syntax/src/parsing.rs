@@ -675,18 +675,30 @@ impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
 		let Loc(first, first_loc) = NamedInnerTypeExpr::parse_from(lexer, token, loc.clone())?;
 
-		if let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
-			let mut options = vec![Loc(first, first_loc)];
-			while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
-				next_token(lexer)?;
-				let item = NamedInnerTypeExpr::parse(lexer)?;
-				loc.span_mut().append(item.span());
-				options.push(item);
-			}
+		match peek_token(lexer)? {
+			Loc(Some(Token::Punct(Punct::Pipe)), _) => {
+				let mut options = vec![Loc(first, first_loc)];
+				while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
+					next_token(lexer)?;
+					let item = NamedInnerTypeExpr::parse(lexer)?;
+					loc.span_mut().append(item.span());
+					options.push(item);
+				}
 
-			Ok(Loc(Self::Union(options), loc))
-		} else {
-			Ok(Loc(Self::Inner(first), first_loc))
+				Ok(Loc(Self::Union(options), loc))
+			}
+			Loc(Some(Token::Punct(Punct::Ampersand)), _) => {
+				let mut types = vec![Loc(first, first_loc)];
+				while let Loc(Some(Token::Punct(Punct::Ampersand)), _) = peek_token(lexer)? {
+					next_token(lexer)?;
+					let item = NamedInnerTypeExpr::parse(lexer)?;
+					loc.span_mut().append(item.span());
+					types.push(item);
+				}
+
+				Ok(Loc(Self::Intersection(types), loc))
+			}
+			_ => Ok(Loc(Self::Inner(first), first_loc)),
 		}
 	}
 }
@@ -806,18 +818,30 @@ impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
 		let Loc(first, first_loc) = NamedInnerLayoutExpr::parse_from(lexer, token, loc.clone())?;
 
-		if let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
-			let mut options = vec![Loc(first, first_loc)];
-			while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
-				next_token(lexer)?;
-				let item = NamedInnerLayoutExpr::parse(lexer)?;
-				loc.span_mut().append(item.span());
-				options.push(item);
-			}
+		match peek_token(lexer)? {
+			Loc(Some(Token::Punct(Punct::Pipe)), _) => {
+				let mut options = vec![Loc(first, first_loc)];
+				while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
+					next_token(lexer)?;
+					let item = NamedInnerLayoutExpr::parse(lexer)?;
+					loc.span_mut().append(item.span());
+					options.push(item);
+				}
 
-			Ok(Loc(Self::Union(options), loc))
-		} else {
-			Ok(Loc(Self::Inner(first), first_loc))
+				Ok(Loc(Self::Union(options), loc))
+			}
+			Loc(Some(Token::Punct(Punct::Ampersand)), _) => {
+				let mut layouts = vec![Loc(first, first_loc)];
+				while let Loc(Some(Token::Punct(Punct::Ampersand)), _) = peek_token(lexer)? {
+					next_token(lexer)?;
+					let item = NamedInnerLayoutExpr::parse(lexer)?;
+					loc.span_mut().append(item.span());
+					layouts.push(item);
+				}
+
+				Ok(Loc(Self::Intersection(layouts), loc))
+			}
+			_ => Ok(Loc(Self::Inner(first), first_loc)),
 		}
 	}
 }
