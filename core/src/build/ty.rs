@@ -13,6 +13,9 @@ pub enum Definition<F> {
 
 	/// Union/sum type.
 	Union(WithCauses<Id, F>),
+
+	/// Intersection type.
+	Intersection(WithCauses<Id, F>),
 }
 
 impl<F> Default for Definition<F> {
@@ -35,6 +38,15 @@ impl<F> Definition<F> {
 		match self {
 			Self::Normal(_) => Kind::Normal,
 			Self::Union(_) => Kind::Union,
+			Self::Intersection(_) => Kind::Intersection,
+		}
+	}
+
+	pub fn causes(&self) -> &Causes<F> {
+		match self {
+			Self::Normal(n) => n.causes(),
+			Self::Union(u) => u.causes(),
+			Self::Intersection(i) => i.causes(),
 		}
 	}
 
@@ -56,12 +68,12 @@ impl<F> Definition<F> {
 				n.declare_property(prop_ref, cause);
 				Ok(())
 			}
-			Self::Union(u) => Err(Error::new(
+			_ => Err(Error::new(
 				error::TypeMismatchKind {
 					id,
-					expected: Kind::Union,
+					expected: self.kind(),
 					found: Kind::Normal,
-					because: u.causes().preferred().cloned(),
+					because: self.causes().preferred().cloned(),
 				}
 				.into(),
 				cause,
@@ -113,6 +125,73 @@ impl<F> Definition<F> {
 					))
 				}
 			}
+			Self::Intersection(i) => Err(Error::new(
+				error::TypeMismatchKind {
+					id,
+					expected: Kind::Intersection,
+					found: Kind::Union,
+					because: i.causes().preferred().cloned(),
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
+	pub fn declare_intersection(
+		&mut self,
+		id: Id,
+		types_ref: Id,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>>
+	where
+		F: Ord + Clone,
+	{
+		match self {
+			Self::Intersection(i) => {
+				if *i.inner() == types_ref {
+					i.add_opt_cause(cause);
+					Ok(())
+				} else {
+					Err(Error::new(
+						error::TypeMismatchIntersection {
+							id,
+							expected: *i.inner(),
+							found: types_ref,
+							because: i.causes().preferred().cloned(),
+						}
+						.into(),
+						cause,
+					))
+				}
+			}
+			Self::Normal(n) => {
+				if n.is_empty() {
+					*self = Self::Intersection(WithCauses::new(types_ref, cause));
+					Ok(())
+				} else {
+					Err(Error::new(
+						error::TypeMismatchKind {
+							id,
+							expected: Kind::Normal,
+							found: Kind::Intersection,
+							because: n.causes().preferred().cloned(),
+						}
+						.into(),
+						cause,
+					))
+				}
+			}
+			Self::Union(u) => Err(Error::new(
+				error::TypeMismatchKind {
+					id,
+					expected: Kind::Union,
+					found: Kind::Intersection,
+					because: u.causes().preferred().cloned(),
+				}
+				.into(),
+				cause,
+			)),
 		}
 	}
 }
@@ -162,6 +241,42 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 				}
 
 				crate::ty::Description::Union(crate::ty::Union::new(options))
+			}
+			Definition::Intersection(types_id) => {
+				use std::collections::hash_map::Entry;
+				let (types_id, types_causes) = types_id.into_parts();
+				let mut types = HashMap::new();
+
+				let items = nodes
+					.require_list(types_id, types_causes.preferred().cloned())?
+					.iter(nodes);
+				for item in items {
+					let (object, causes) = item?.clone().into_parts();
+					let option_id = match object {
+						vocab::Object::Literal(_) => Err(Caused::new(
+							error::TypeUnionLiteralOption(id).into(),
+							causes.preferred().cloned(),
+						)),
+						vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+						vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+					}?;
+
+					let (ty, ty_causes) = nodes
+						.require_type(option_id, causes.into_preferred())?
+						.clone()
+						.into_parts();
+
+					match types.entry(ty) {
+						Entry::Vacant(entry) => {
+							entry.insert(ty_causes);
+						}
+						Entry::Occupied(mut entry) => {
+							entry.get_mut().extend(ty_causes);
+						}
+					}
+				}
+
+				crate::ty::Description::Intersection(crate::ty::Intersection::new(types))
 			}
 		};
 

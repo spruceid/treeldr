@@ -195,6 +195,11 @@ impl<F: Clone + Ord> Context<F> {
 					let Loc(options_id, options_loc) = expect_id(object)?;
 					ty.declare_union(id, options_id, Some(options_loc))?
 				}
+				Term::Owl(vocab::Owl::IntersectionOf) => {
+					let ty = self.require_type_mut(id, Some(id_loc))?;
+					let Loc(types_id, types_loc) = expect_id(object)?;
+					ty.declare_intersection(id, types_id, Some(types_loc))?
+				}
 				Term::TreeLdr(vocab::TreeLdr::Name) => {
 					let node = self.require_mut(id, Some(id_loc))?;
 					let Loc(name, name_loc) = expect_raw_string(object)?;
@@ -257,6 +262,11 @@ impl<F: Clone + Ord> Context<F> {
 					let Loc(fields_id, _) = expect_id(object)?;
 					let layout = self.require_layout_mut(id, Some(id_loc))?;
 					layout.set_enum(fields_id, Some(loc))?
+				}
+				Term::TreeLdr(vocab::TreeLdr::Intersection) => {
+					let Loc(types_id, _) = expect_id(object)?;
+					let layout = self.require_layout_mut(id, Some(id_loc))?;
+					layout.set_intersection(types_id, Some(loc))?
 				}
 				_ => (),
 			}

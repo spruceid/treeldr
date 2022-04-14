@@ -101,7 +101,7 @@ impl<V> Components<V> {
 		let mut stack: Vec<_> = depth.iter().cloned().enumerate().collect();
 
 		while let Some((i, new_depth)) = stack.pop() {
-			if new_depth == 0 || new_depth > depth[i] {
+			if depth[i] == 0 || new_depth > depth[i] {
 				depth[i] = new_depth;
 				for c in self.successors(i).unwrap() {
 					stack.push((c, new_depth + 1))

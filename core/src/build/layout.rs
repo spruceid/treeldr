@@ -263,6 +263,17 @@ impl<F> Definition<F> {
 	{
 		self.set_description(Description::Enum(items), cause)
 	}
+
+	pub fn set_intersection(
+		&mut self,
+		types_list: Id,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.set_description(Description::Intersection(types_list), cause)
+	}
 }
 
 /// Field/layout usage.
