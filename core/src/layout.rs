@@ -1,6 +1,7 @@
 use crate::{
 	error, layout, ty, vocab::Name, Caused, Causes, Documentation, Error, Id, MaybeSet, WithCauses,
 };
+use locspan::Location;
 use shelves::Ref;
 
 pub mod enumeration;
@@ -67,6 +68,23 @@ impl<F> Description<F> {
 		}
 	}
 
+	pub fn set_name(
+		&mut self,
+		new_name: Name,
+		cause: Option<Location<F>>,
+	) -> Option<WithCauses<Name, F>>
+	where
+		F: Ord,
+	{
+		match self {
+			Self::Native(_, name) => name.replace(new_name, cause),
+			Self::Literal(lit) => Some(lit.set_name(new_name, cause)),
+			Self::Reference(_, name) => name.replace(new_name, cause),
+			Self::Struct(s) => Some(s.set_name(new_name, cause)),
+			Self::Enum(e) => Some(e.set_name(new_name, cause)),
+		}
+	}
+
 	/// Intersects this type description with `other`.
 	///
 	/// If provided, `name` will override the name of the intersected type,
@@ -76,6 +94,7 @@ impl<F> Description<F> {
 		id: Id,
 		other: &WithCauses<Self, F>,
 		name: MaybeSet<Name, F>,
+		built_layouts: &[Option<Definition<F>>],
 	) -> Result<Self, Error<F>>
 	where
 		F: Clone + Ord,
@@ -99,12 +118,22 @@ impl<F> Description<F> {
 				name,
 				other.causes().preferred(),
 			)?)),
-			(Self::Enum(a), Self::Enum(b)) => Ok(Self::Enum(a.intersected_with(
-				id,
-				b,
-				name,
-				other.causes().preferred(),
-			)?)),
+			(Self::Enum(a), Self::Enum(b)) => {
+				let e = a.intersected_with(id, b, name, other.causes().preferred())?;
+
+				if e.variants().len() == 1 && e.variants()[0].layout().is_some() {
+					let layout_ref = e.variants()[0].layout().unwrap();
+					let mut desc = built_layouts[layout_ref.index()]
+						.as_ref()
+						.unwrap()
+						.description()
+						.clone();
+					desc.set_name(e.name().clone(), e.name_causes().preferred().cloned());
+					Ok(desc)
+				} else {
+					Ok(Self::Enum(e))
+				}
+			}
 			_ => Err(Caused::new(
 				error::LayoutIntersectionFailed { id }.into(),
 				other.causes().preferred().cloned(),

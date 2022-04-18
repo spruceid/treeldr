@@ -1,6 +1,7 @@
 use crate::{
-	error, utils::TryCollect, vocab, Caused, Causes, Error, Id, MaybeSet, Ref, Vocabulary,
-	WithCauses,
+	error,
+	utils::{TryCollect, TryFilterCollect},
+	vocab, Caused, Causes, Error, Id, MaybeSet, Ref, Vocabulary, WithCauses,
 };
 use locspan::Location;
 use std::collections::HashSet;
@@ -336,6 +337,40 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 		})?;
 
 		match desc.inner() {
+			Description::Enum(variant_list_id) => {
+				let layouts = nodes
+					.require_list(*variant_list_id, desc.causes().preferred().cloned())?
+					.iter(nodes)
+					.map(|item| {
+						let (object, variant_causes) = item?.clone().into_parts();
+						let variant_id = match object {
+							vocab::Object::Literal(_) => Err(Caused::new(
+								error::LayoutLiteralField(id).into(),
+								desc.causes().preferred().cloned(),
+							)),
+							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+							vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+						}?;
+
+						let variant = nodes.require_layout_variant(
+							variant_id,
+							variant_causes.preferred().cloned(),
+						)?;
+
+						let layout = variant.layout().clone().try_map_with_causes(|layout_id| {
+							Ok(*nodes
+								.require_layout(
+									*layout_id.inner(),
+									layout_id.causes().preferred().cloned(),
+								)?
+								.inner())
+						})?;
+
+						Ok(layout.into_value())
+					})
+					.try_filter_collect()?;
+				Ok(layouts)
+			}
 			Description::Intersection(layout_list_id) => {
 				let layouts = nodes
 					.require_list(*layout_list_id, desc.causes().preferred().cloned())?
@@ -507,6 +542,7 @@ impl<F: Ord + Clone> WithCauses<Definition<F>, F> {
 								id,
 								layout.description_with_causes(),
 								def.name.take(),
+								built_layouts,
 							)?,
 							None => layout.description().clone(),
 						})

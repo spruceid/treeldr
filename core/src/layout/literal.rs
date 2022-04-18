@@ -31,6 +31,13 @@ impl<F> Literal<F> {
 		&self.name
 	}
 
+	pub fn set_name(&mut self, new_name: Name, cause: Option<Location<F>>) -> WithCauses<Name, F>
+	where
+		F: Ord,
+	{
+		std::mem::replace(&mut self.name, WithCauses::new(new_name, cause))
+	}
+
 	pub fn regexp(&self) -> &RegExp {
 		&self.regexp
 	}

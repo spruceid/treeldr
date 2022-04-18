@@ -144,6 +144,10 @@ impl<T, F> MaybeSet<T, F> {
 		self.value.as_mut().map(|v| v.inner_mut())
 	}
 
+	pub fn into_value(self) -> Option<T> {
+		self.value.map(WithCauses::into_inner)
+	}
+
 	pub fn as_deref(&self) -> Option<&T::Target>
 	where
 		T: std::ops::Deref,

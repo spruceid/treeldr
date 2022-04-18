@@ -65,8 +65,8 @@ impl<F> Definition<F> {
 		Ok(None)
 	}
 
-	pub fn layout(&self) -> Option<&WithCauses<Id, F>> {
-		self.layout.with_causes()
+	pub fn layout(&self) -> &MaybeSet<Id, F> {
+		&self.layout
 	}
 
 	pub fn set_layout(&mut self, layout_ref: Id, cause: Option<Location<F>>) -> Result<(), Error<F>>

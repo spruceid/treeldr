@@ -20,6 +20,13 @@ impl<F> Struct<F> {
 		&self.name
 	}
 
+	pub fn set_name(&mut self, new_name: Name, cause: Option<Location<F>>) -> WithCauses<Name, F>
+	where
+		F: Ord,
+	{
+		std::mem::replace(&mut self.name, WithCauses::new(new_name, cause))
+	}
+
 	pub fn fields(&self) -> &[Field<F>] {
 		&self.fields
 	}

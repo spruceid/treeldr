@@ -1,4 +1,6 @@
-use crate::{error, vocab::Name, Caused, Documentation, Error, Id, MaybeSet, Ref, WithCauses};
+use crate::{
+	error, vocab::Name, Caused, Causes, Documentation, Error, Id, MaybeSet, Ref, WithCauses,
+};
 use locspan::Location;
 
 /// Enum layout.
@@ -15,6 +17,17 @@ impl<F> Enum<F> {
 
 	pub fn name(&self) -> &Name {
 		&self.name
+	}
+
+	pub fn name_causes(&self) -> &Causes<F> {
+		self.name.causes()
+	}
+
+	pub fn set_name(&mut self, new_name: Name, cause: Option<Location<F>>) -> WithCauses<Name, F>
+	where
+		F: Ord,
+	{
+		std::mem::replace(&mut self.name, WithCauses::new(new_name, cause))
 	}
 
 	pub fn variants(&self) -> &[WithCauses<Variant<F>, F>] {
