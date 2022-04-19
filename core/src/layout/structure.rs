@@ -1,5 +1,5 @@
 use crate::{
-	error, layout, prop, vocab::Name, Caused, Documentation, Error, Id, MaybeSet, WithCauses,
+	layout, prop, vocab::Name, Documentation, WithCauses,
 };
 use locspan::Location;
 use shelves::Ref;
@@ -11,9 +11,20 @@ pub struct Struct<F> {
 	fields: Vec<Field<F>>,
 }
 
+/// Structure layout parts.
+#[derive(Clone)]
+pub struct Parts<F> {
+	pub name: WithCauses<Name, F>,
+	pub fields: Vec<Field<F>>,
+}
+
 impl<F> Struct<F> {
 	pub fn new(name: WithCauses<Name, F>, fields: Vec<Field<F>>) -> Self {
 		Self { name, fields }
+	}
+
+	pub fn into_parts(self) -> Parts<F> {
+		unsafe { std::mem::transmute(self) }
 	}
 
 	pub fn name(&self) -> &Name {
@@ -38,75 +49,6 @@ impl<F> Struct<F> {
 			None
 		}
 	}
-
-	pub fn intersected_with(
-		self,
-		id: Id,
-		other: &Self,
-		name: MaybeSet<Name, F>,
-		cause: Option<&Location<F>>,
-	) -> Result<Self, Error<F>>
-	where
-		F: Clone + Ord,
-	{
-		let mut fields = Vec::new();
-
-		let mut j = 0;
-		for field in &self.fields {
-			for (k, other_field) in other.fields[j..].iter().enumerate() {
-				if field.name() == other_field.name() {
-					if field.property() != other_field.property() {
-						return Err(Caused::new(
-							error::LayoutIntersectionFailed { id }.into(),
-							cause.cloned(),
-						));
-					}
-
-					if field.layout() != other_field.layout() {
-						return Err(Caused::new(
-							error::LayoutIntersectionFailed { id }.into(),
-							cause.cloned(),
-						));
-					}
-
-					let required = if *field.required || !*other_field.required {
-						field.required.clone()
-					} else {
-						other_field.required.clone()
-					};
-
-					let functional = if !*field.functional && *other_field.functional {
-						field.functional.clone()
-					} else {
-						other_field.functional.clone()
-					};
-
-					let doc = if field.doc.is_empty() || other_field.doc.is_empty() {
-						field.doc.clone()
-					} else {
-						other_field.doc.clone()
-					};
-
-					fields.push(Field {
-						prop: field.prop.clone(),
-						name: field.name.clone(),
-						label: field.label.clone().or_else(|| other_field.label.clone()),
-						layout: field.layout.clone(),
-						required,
-						functional,
-						doc,
-					});
-
-					j += k;
-				}
-			}
-		}
-
-		Ok(Self {
-			name: name.unwrap().unwrap_or(self.name),
-			fields,
-		})
-	}
 }
 
 /// Layout field.
@@ -119,6 +61,18 @@ pub struct Field<F> {
 	required: WithCauses<bool, F>,
 	functional: WithCauses<bool, F>,
 	doc: Documentation,
+}
+
+/// Layout field parts.
+#[derive(Clone)]
+pub struct FieldsParts<F> {
+	pub prop: WithCauses<Ref<prop::Definition<F>>, F>,
+	pub name: WithCauses<Name, F>,
+	pub label: Option<String>,
+	pub layout: WithCauses<Ref<super::Definition<F>>, F>,
+	pub required: WithCauses<bool, F>,
+	pub functional: WithCauses<bool, F>,
+	pub doc: Documentation,
 }
 
 impl<F> Field<F> {
@@ -142,11 +96,23 @@ impl<F> Field<F> {
 		}
 	}
 
+	pub fn into_parts(self) -> FieldsParts<F> {
+		unsafe { std::mem::transmute(self) }
+	} 
+
 	pub fn property(&self) -> Ref<prop::Definition<F>> {
 		*self.prop.inner()
 	}
 
+	pub fn property_with_causes(&self) -> &WithCauses<Ref<prop::Definition<F>>, F> {
+		&self.prop
+	}
+
 	pub fn name(&self) -> &Name {
+		&self.name
+	}
+
+	pub fn name_with_causes(&self) -> &WithCauses<Name, F> {
 		&self.name
 	}
 
@@ -167,12 +133,24 @@ impl<F> Field<F> {
 		*self.layout.inner()
 	}
 
+	pub fn layout_with_causes(&self) -> &WithCauses<Ref<super::Definition<F>>, F> {
+		&self.layout
+	}
+
 	pub fn is_required(&self) -> bool {
 		*self.required.inner()
 	}
 
+	pub fn is_required_with_causes(&self) -> &WithCauses<bool, F> {
+		&self.required
+	}
+
 	pub fn is_functional(&self) -> bool {
 		*self.functional.inner()
+	}
+
+	pub fn is_functional_with_causes(&self) -> &WithCauses<bool, F> {
+		&self.functional
 	}
 
 	pub fn documentation(&self) -> &Documentation {

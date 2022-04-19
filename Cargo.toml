@@ -2,6 +2,7 @@
 members = [
 	"vocab",
 	"core",
+	"build",
 	"syntax",
 	"cli",
 	"json-schema",

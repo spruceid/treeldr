@@ -1,5 +1,5 @@
 use crate::{
-	error, vocab::Name, Caused, Causes, Documentation, Error, Id, MaybeSet, Ref, WithCauses,
+	vocab::Name, Causes, Documentation, MaybeSet, Ref, WithCauses,
 };
 use locspan::Location;
 
@@ -10,9 +10,21 @@ pub struct Enum<F> {
 	variants: Vec<WithCauses<Variant<F>, F>>,
 }
 
+pub struct Parts<F> {
+	pub name: WithCauses<Name, F>,
+	pub variants: Vec<WithCauses<Variant<F>, F>>,
+}
+
 impl<F> Enum<F> {
 	pub fn new(name: WithCauses<Name, F>, variants: Vec<WithCauses<Variant<F>, F>>) -> Self {
 		Self { name, variants }
+	}
+
+	pub fn into_parts(self) -> Parts<F> {
+		Parts {
+			name: self.name,
+			variants: self.variants
+		}
 	}
 
 	pub fn name(&self) -> &Name {
@@ -44,62 +56,6 @@ impl<F> Enum<F> {
 	pub fn composing_layouts(&self) -> ComposingLayouts<F> {
 		ComposingLayouts(self.variants.iter())
 	}
-
-	pub fn intersected_with(
-		self,
-		id: Id,
-		other: &Self,
-		name: MaybeSet<Name, F>,
-		cause: Option<&Location<F>>,
-	) -> Result<Self, Error<F>>
-	where
-		F: Clone + Ord,
-	{
-		let mut variants = Vec::new();
-
-		let mut j = 0;
-		for variant in &self.variants {
-			for (k, other_variant) in other.variants[j..].iter().enumerate() {
-				if variant.name() == other_variant.name() {
-					if variant.layout() != other_variant.layout() {
-						return Err(Caused::new(
-							error::LayoutIntersectionFailed { id }.into(),
-							cause.cloned(),
-						));
-					}
-
-					let doc = if variant.doc.is_empty() || other_variant.doc.is_empty() {
-						variant.doc.clone()
-					} else {
-						other_variant.doc.clone()
-					};
-
-					variants.push(WithCauses::new(
-						Variant {
-							name: variant.name.clone(),
-							label: variant
-								.label
-								.clone()
-								.or_else(|| other_variant.label.clone()),
-							layout: variant.layout.clone(),
-							doc,
-						},
-						variant
-							.causes()
-							.clone()
-							.with(other_variant.causes().iter().cloned()),
-					));
-
-					j += k;
-				}
-			}
-		}
-
-		Ok(Self {
-			name: name.unwrap().unwrap_or(self.name),
-			variants,
-		})
-	}
 }
 
 #[derive(Clone)]
@@ -108,6 +64,13 @@ pub struct Variant<F> {
 	layout: MaybeSet<Ref<super::Definition<F>>, F>,
 	label: Option<String>,
 	doc: Documentation,
+}
+
+pub struct VariantParts<F> {
+	pub name: WithCauses<Name, F>,
+	pub layout: MaybeSet<Ref<super::Definition<F>>, F>,
+	pub label: Option<String>,
+	pub doc: Documentation,
 }
 
 impl<F> Variant<F> {
@@ -122,6 +85,15 @@ impl<F> Variant<F> {
 			layout,
 			label,
 			doc,
+		}
+	}
+
+	pub fn into_parts(self) -> VariantParts<F> {
+		VariantParts {
+			name: self.name,
+			layout: self.layout,
+			label: self.label,
+			doc: self.doc
 		}
 	}
 

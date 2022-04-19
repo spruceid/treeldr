@@ -1,4 +1,4 @@
-use crate::{Id, node, Vocabulary, vocab::Display};
+use treeldr::{Id, node, Vocabulary, vocab::Display};
 
 #[derive(Debug)]
 pub struct NodeInvalidType<F> {
@@ -29,7 +29,7 @@ impl<F: Clone> super::AnyError<F> for NodeInvalidType<F> {
 		format!("invalid type for {}", self.id.display(vocab))
 	}
 
-	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
 		let mut labels = Vec::new();
 
 		for ty in self.found.iter() {

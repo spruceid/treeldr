@@ -39,11 +39,10 @@ fn find_layout<F: Clone>(
 	model
 		.require_layout(treeldr::Id::Iri(name))
 		.map_err(|e| match e {
-			treeldr::error::Description::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
-			treeldr::error::Description::NodeInvalidType(e) => {
+			treeldr::Error::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
+			treeldr::Error::NodeInvalidType(e) => {
 				Error::NotALayout(iri.into(), e.found)
 			}
-			_ => unreachable!(),
 		})
 }
 

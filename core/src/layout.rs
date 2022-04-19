@@ -1,5 +1,5 @@
 use crate::{
-	error, layout, ty, vocab::Name, Caused, Causes, Documentation, Error, Id, MaybeSet, WithCauses,
+	layout, ty, vocab::Name, Causes, Documentation, Id, MaybeSet, WithCauses,
 };
 use locspan::Location;
 use shelves::Ref;
@@ -82,62 +82,6 @@ impl<F> Description<F> {
 			Self::Reference(_, name) => name.replace(new_name, cause),
 			Self::Struct(s) => Some(s.set_name(new_name, cause)),
 			Self::Enum(e) => Some(e.set_name(new_name, cause)),
-		}
-	}
-
-	/// Intersects this type description with `other`.
-	///
-	/// If provided, `name` will override the name of the intersected type,
-	/// otherwise the name of `self` is used.
-	pub fn intersected_with(
-		self,
-		id: Id,
-		other: &WithCauses<Self, F>,
-		name: MaybeSet<Name, F>,
-		built_layouts: &[Option<Definition<F>>],
-	) -> Result<Self, Error<F>>
-	where
-		F: Clone + Ord,
-	{
-		match (self, other.inner()) {
-			(Self::Native(a, a_name), Self::Native(b, _)) if &a == b => {
-				Ok(Self::Native(a, name.or(a_name)))
-			}
-			(Self::Reference(a, a_name), Self::Reference(b, _)) if &a == b => {
-				Ok(Self::Reference(a, name.or(a_name)))
-			}
-			(Self::Literal(a), Self::Literal(b)) => Ok(Self::Literal(a.intersected_with(
-				id,
-				b,
-				name,
-				other.causes().preferred(),
-			)?)),
-			(Self::Struct(a), Self::Struct(b)) => Ok(Self::Struct(a.intersected_with(
-				id,
-				b,
-				name,
-				other.causes().preferred(),
-			)?)),
-			(Self::Enum(a), Self::Enum(b)) => {
-				let e = a.intersected_with(id, b, name, other.causes().preferred())?;
-
-				if e.variants().len() == 1 && e.variants()[0].layout().is_some() {
-					let layout_ref = e.variants()[0].layout().unwrap();
-					let mut desc = built_layouts[layout_ref.index()]
-						.as_ref()
-						.unwrap()
-						.description()
-						.clone();
-					desc.set_name(e.name().clone(), e.name_causes().preferred().cloned());
-					Ok(desc)
-				} else {
-					Ok(Self::Enum(e))
-				}
-			}
-			_ => Err(Caused::new(
-				error::LayoutIntersectionFailed { id }.into(),
-				other.causes().preferred().cloned(),
-			)),
 		}
 	}
 }

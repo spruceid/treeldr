@@ -210,6 +210,7 @@ pub enum InnerTypeExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
+	PropertyRestriction(TypePropertyRestriction<F>)
 }
 
 impl<F: Clone> InnerTypeExpr<F> {
@@ -221,6 +222,57 @@ impl<F: Clone> InnerTypeExpr<F> {
 				r.location().clone(),
 			))),
 			Self::Literal(lit) => InnerLayoutExpr::Literal(lit.clone()),
+			Self::PropertyRestriction(r) => InnerLayoutExpr::FieldRestriction(r.implicit_field_restriction())
+		}
+	}
+}
+
+pub enum TypePropertyRangeRestriction<F> {
+	Any(Box<Loc<InnerTypeExpr<F>, F>>),
+	All(Box<Loc<InnerTypeExpr<F>, F>>),
+}
+
+impl<F: Clone> TypePropertyRangeRestriction<F> {
+	pub fn implicit_field_range_restriction(&self) -> LayoutFieldRangeRestriction<F> {
+		match self {
+			Self::Any(ty) => LayoutFieldRangeRestriction::Any(Box::new(Loc(
+				ty.implicit_layout_expr(),
+				ty.location().clone()
+			))),
+			Self::All(ty) => LayoutFieldRangeRestriction::All(Box::new(Loc(
+				ty.implicit_layout_expr(),
+				ty.location().clone()
+			)))
+		}
+	}
+}
+
+pub enum TypePropertyCardinalityRestriction {
+	AtLeast(u32),
+	AtMost(u32),
+	Exactly(u32)
+}
+
+impl TypePropertyCardinalityRestriction {
+	pub fn implicit_field_cardinality_restriction(&self) -> LayoutFieldCardinalityRestriction {
+		match self {
+			Self::AtLeast(n) => LayoutFieldCardinalityRestriction::AtLeast(*n),
+			Self::AtMost(n) => LayoutFieldCardinalityRestriction::AtMost(*n),
+			Self::Exactly(n) => LayoutFieldCardinalityRestriction::Exactly(*n)
+		}
+	}
+}
+
+pub enum TypePropertyRestriction<F> {
+	Range(TypePropertyRangeRestriction<F>),
+	Cardinality(TypePropertyCardinalityRestriction)
+}
+
+impl<F: Clone> TypePropertyRestriction<F> {
+	pub fn implicit_field_restriction(&self) -> LayoutFieldRestriction<F> {
+		match self {
+			Self::Range(r) => LayoutFieldRestriction::Range(r.implicit_field_range_restriction()),
+			Self::Cardinality(c) => LayoutFieldRestriction::Cardinality(c.implicit_field_cardinality_restriction())
 		}
 	}
 }
@@ -278,12 +330,32 @@ pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
+	FieldRestriction(LayoutFieldRestriction<F>)
 }
 
 impl<F> InnerLayoutExpr<F> {
 	fn is_namable(&self) -> bool {
 		!matches!(self, Self::Id(_))
 	}
+}
+
+pub enum LayoutFieldRangeRestriction<F> {
+	Any(Box<Loc<InnerLayoutExpr<F>, F>>),
+	All(Box<Loc<InnerLayoutExpr<F>, F>>),
+}
+
+pub enum LayoutFieldCardinalityRestriction {
+	AtLeast(u32),
+	AtMost(u32),
+	Exactly(u32)
+}
+
+pub enum LayoutFieldRestriction<F> {
+	/// Affects the item of a collection layout?
+	Range(LayoutFieldRangeRestriction<F>),
+
+	/// Affects the size of a collection layout.
+	Cardinality(LayoutFieldCardinalityRestriction)
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]

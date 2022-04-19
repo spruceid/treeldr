@@ -1,4 +1,4 @@
-use crate::{error, vocab::Name, Caused, Error, Id, MaybeSet, WithCauses};
+use crate::{vocab::Name, WithCauses};
 use locspan::Location;
 
 pub mod regexp;
@@ -18,12 +18,31 @@ pub struct Literal<F> {
 	should_inline: bool,
 }
 
+pub struct Parts<F> {
+	/// Layout name.
+	pub name: WithCauses<Name, F>,
+
+	/// Regular expression defining the members of the layout.
+	pub regexp: RegExp,
+
+	/// Should the literal type be inlined in the code?
+	pub should_inline: bool,
+}
+
 impl<F> Literal<F> {
 	pub fn new(regexp: RegExp, name: WithCauses<Name, F>, should_inline: bool) -> Self {
 		Self {
 			name,
 			regexp,
 			should_inline,
+		}
+	}
+
+	pub fn into_parts(self) -> Parts<F> {
+		Parts {
+			name: self.name,
+			regexp: self.regexp,
+			should_inline: self.should_inline
 		}
 	}
 
@@ -44,29 +63,5 @@ impl<F> Literal<F> {
 
 	pub fn should_inline(&self) -> bool {
 		self.should_inline
-	}
-
-	pub fn intersected_with(
-		self,
-		id: Id,
-		other: &Self,
-		name: MaybeSet<Name, F>,
-		cause: Option<&Location<F>>,
-	) -> Result<Self, Error<F>>
-	where
-		F: Clone + Ord,
-	{
-		if self.regexp == other.regexp {
-			Ok(Self {
-				name: name.unwrap().unwrap_or(self.name),
-				regexp: self.regexp,
-				should_inline: self.should_inline && other.should_inline,
-			})
-		} else {
-			Err(Caused::new(
-				error::LayoutIntersectionFailed { id }.into(),
-				cause.cloned(),
-			))
-		}
 	}
 }
