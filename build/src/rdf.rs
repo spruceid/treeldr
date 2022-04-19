@@ -8,6 +8,8 @@ use treeldr::{
 pub struct GrdfDefinitions;
 
 impl<F: Clone + Ord> Definitions<F> for GrdfDefinitions {
+	type Error = Error<F>;
+	
 	type Type = crate::ty::Definition<F>;
 	type Property = crate::prop::Definition<F>;
 	type Layout = crate::layout::Definition<F>;
@@ -41,7 +43,10 @@ fn expect_raw_string<F>(
 impl<F: Clone + Ord> Document<F, GrdfDefinitions>
 	for grdf::loc::BTreeDataset<Id, Term, Object<F>, GraphLabel, F>
 {
-	fn declare(&self, context: &mut Context<F, GrdfDefinitions>) -> Result<(), Error<F>> {
+	type LocalContext = ();
+	type Error = Error<F>;
+
+	fn declare(&self, _: &mut (), context: &mut Context<F, GrdfDefinitions>) -> Result<(), Error<F>> {
 		// Step 1: find out the type of each node.
 		for Loc(quad, loc) in self.loc_quads() {
 			let Loc(id, _) = quad.subject().cloned_value();
@@ -79,7 +84,7 @@ impl<F: Clone + Ord> Document<F, GrdfDefinitions>
 		Ok(())
 	}
 
-	fn relate(self, context: &mut Context<F, GrdfDefinitions>) -> Result<(), Error<F>> {
+	fn relate(self, _: &mut (), context: &mut Context<F, GrdfDefinitions>) -> Result<(), Error<F>> {
 		// Step 2: find out the properties of each node.
 		for Loc(rdf_types::Quad(subject, predicate, object, _graph), loc) in self.into_loc_quads() {
 			let Loc(id, id_loc) = subject;

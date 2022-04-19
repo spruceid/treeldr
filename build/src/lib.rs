@@ -2,7 +2,7 @@ use derivative::Derivative;
 use locspan::Location;
 use treeldr::{vocab::Name, Caused, Causes, Id, Ref, Vocabulary, WithCauses};
 
-mod context;
+pub mod context;
 pub mod error;
 pub mod layout;
 pub mod list;
@@ -20,6 +20,8 @@ pub use node::Node;
 pub use rdf::GrdfDefinitions;
 
 pub trait Definitions<F>: Sized {
+	type Error: From<Error<F>> + From<<Self::Type as Build<F>>::Error> + From<<Self::Property as Build<F>>::Error> + From<<Self::Layout as Build<F>>::Error>;
+
 	type Type: Build<F, Target = treeldr::ty::Definition<F>>;
 	type Property: Build<F, Target = treeldr::prop::Definition<F>>;
 	type Layout: Layout<F, Self>;
@@ -44,13 +46,14 @@ pub trait Layout<F, D: Definitions<F>>: Build<F, Target = treeldr::layout::Defin
 
 pub trait Build<F> {
 	type Target;
+	type Error;
 
 	fn dependencies(
 		&self,
 		_id: Id,
 		_nodes: &context::AllocatedNodes<F>,
 		_causes: &Causes<F>,
-	) -> Result<Vec<Item<F>>, Error<F>> {
+	) -> Result<Vec<Item<F>>, Self::Error> {
 		Ok(Vec::new())
 	}
 
@@ -61,7 +64,7 @@ pub trait Build<F> {
 		nodes: &context::AllocatedNodes<F>,
 		dependencies: Dependencies<F>,
 		causes: Causes<F>,
-	) -> Result<Self::Target, Error<F>>;
+	) -> Result<Self::Target, Self::Error>;
 }
 
 #[derive(Derivative)]
@@ -85,7 +88,10 @@ pub struct Dependencies<'a, F> {
 }
 
 pub trait Document<F, D: Definitions<F>> {
-	fn declare(&self, context: &mut Context<F, D>) -> Result<(), Error<F>>;
+	type LocalContext;
+	type Error;
 
-	fn relate(self, context: &mut Context<F, D>) -> Result<(), Error<F>>;
+	fn declare(&self, local_context: &mut Self::LocalContext, context: &mut Context<F, D>) -> Result<(), Self::Error>;
+
+	fn relate(self, local_context: &mut Self::LocalContext, context: &mut Context<F, D>) -> Result<(), Self::Error>;
 }

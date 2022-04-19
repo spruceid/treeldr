@@ -336,6 +336,7 @@ impl<F: Ord + Clone, D: crate::Definitions<F>> crate::Layout<F, D> for Definitio
 
 impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 	type Target = treeldr::layout::Definition<F>;
+	type Error = Error<F>;
 
 	fn dependencies(
 		&self,

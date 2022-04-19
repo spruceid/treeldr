@@ -277,7 +277,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 		Ok(())
 	}
 
-	pub fn build(mut self) -> Result<Model<F>, (Error<F>, Vocabulary)>
+	pub fn build(mut self) -> Result<Model<F>, (D::Error, Vocabulary)>
 	where
 		F: Ord + Clone,
 	{
@@ -287,11 +287,11 @@ impl<F, D: Definitions<F>> Context<F, D> {
 		// }
 
 		if let Err(e) = self.compute_uses() {
-			return Err((e, self.into_vocabulary()));
+			return Err((e.into(), self.into_vocabulary()));
 		}
 
 		if let Err(e) = self.assign_default_names() {
-			return Err((e, self.into_vocabulary()));
+			return Err((e.into(), self.into_vocabulary()));
 		}
 
 		let mut allocated_shelves = AllocatedShelves::default();
@@ -337,7 +337,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 			graph.items.push(crate::Item::Type(ty_ref.cast()));
 			match ty.dependencies(*id, &allocated_nodes, ty.causes()) {
 				Ok(dependencies) => graph.ty_dependencies.push(dependencies),
-				Err(e) => return Err((e, self.vocab)),
+				Err(e) => return Err((e.into(), self.vocab)),
 			}
 		}
 
@@ -345,7 +345,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 			graph.items.push(crate::Item::Property(prop_ref.cast()));
 			match prop.dependencies(*id, &allocated_nodes, prop.causes()) {
 				Ok(dependencies) => graph.prop_dependencies.push(dependencies),
-				Err(e) => return Err((e, self.vocab)),
+				Err(e) => return Err((e.into(), self.vocab)),
 			}
 		}
 
@@ -353,7 +353,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 			graph.items.push(crate::Item::Layout(layout_ref.cast()));
 			match layout.dependencies(*id, &allocated_nodes, layout.causes()) {
 				Ok(dependencies) => graph.layout_dependencies.push(dependencies),
-				Err(e) => return Err((e, self.vocab)),
+				Err(e) => return Err((e.into(), self.vocab)),
 			}
 		}
 
@@ -403,7 +403,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 							Ok(built_ty) => {
 								built_types[ty_ref.index()] = Some(built_ty);
 							}
-							Err(e) => return Err((e, self.vocab)),
+							Err(e) => return Err((e.into(), self.vocab)),
 						}
 					}
 					crate::Item::Property(prop_ref) => {
@@ -413,7 +413,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 							Ok(built_prop) => {
 								built_properties[prop_ref.index()] = Some(built_prop);
 							}
-							Err(e) => return Err((e, self.vocab)),
+							Err(e) => return Err((e.into(), self.vocab)),
 						}
 					}
 					crate::Item::Layout(layout_ref) => {
@@ -424,7 +424,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 							Ok(built_layout) => {
 								built_layouts[layout_ref.index()] = Some(built_layout);
 							}
-							Err(e) => return Err((e, self.vocab)),
+							Err(e) => return Err((e.into(), self.vocab)),
 						}
 					}
 				}

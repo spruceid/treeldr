@@ -198,6 +198,7 @@ impl<F> Definition<F> {
 
 impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 	type Target = treeldr::ty::Definition<F>;
+	type Error = Error<F>;
 
 	fn build(
 		self,
