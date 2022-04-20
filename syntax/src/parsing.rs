@@ -2,6 +2,7 @@ use super::*;
 use lexing::{Delimiter, Keyword, Punct, Token, TokenKind, Tokens};
 use locspan::{Loc, Location, MapLocErr};
 use std::{fmt, fmt::Debug};
+use treeldr::reporting;
 
 /// Parse error.
 #[derive(Debug)]
@@ -13,27 +14,32 @@ pub enum Error<E> {
 	Lexer(E),
 }
 
-impl<E: Debug + fmt::Display, F: Clone> reporting::Diagnose<F> for Loc<Error<E>, F> {
-	fn message(&self) -> String {
-		match self.value() {
-			Error::Unexpected(_, _) => "parsing error".to_owned(),
-			Error::InvalidUseId(_) => "invalid use IRI".to_owned(),
-			Error::InvalidPrefix(_) => "invalid prefix".to_owned(),
-			Error::InvalidAlias(_) => "invalid alias".to_owned(),
-			Error::Lexer(_) => "lexing error".to_owned(),
+impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithCause<F> for Error<E> {
+	fn message(&self, _cause: Option<&Location<F>>) -> String {
+		match self {
+			Self::Unexpected(_, _) => "parsing error".to_owned(),
+			Self::InvalidUseId(_) => "invalid use IRI".to_owned(),
+			Self::InvalidPrefix(_) => "invalid prefix".to_owned(),
+			Self::InvalidAlias(_) => "invalid alias".to_owned(),
+			Self::Lexer(_) => "lexing error".to_owned(),
 		}
 	}
 
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
-		vec![codespan_reporting::diagnostic::Label::primary(
-			self.location().file().clone(),
-			self.location().span(),
-		)
-		.with_message(self.to_string())]
+	fn labels(&self, cause: Option<&Location<F>>) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+		match cause {
+			Some(loc) => {
+				vec![codespan_reporting::diagnostic::Label::primary(
+					loc.file().clone(),
+					loc.span(),
+				)
+				.with_message(self.to_string())]
+			}
+			None => Vec::new()
+		}
 	}
 
-	fn notes(&self) -> Vec<String> {
-		if let Error::Unexpected(_, expected) = self.value() {
+	fn notes(&self, _cause: Option<&Location<F>>) -> Vec<String> {
+		if let Error::Unexpected(_, expected) = self {
 			if !expected.is_empty() {
 				let mut note = "expected ".to_owned();
 

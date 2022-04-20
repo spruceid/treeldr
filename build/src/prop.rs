@@ -1,7 +1,7 @@
 use crate::{error, Error};
 use locspan::Location;
 use std::collections::HashMap;
-use treeldr::{Caused, Causes, Documentation, Id, MaybeSet, WithCauses};
+use treeldr::{Caused, Causes, Id, MaybeSet, WithCauses};
 
 /// Property definition.
 pub struct Definition<F> {
@@ -9,8 +9,7 @@ pub struct Definition<F> {
 	domain: HashMap<Id, Causes<F>>,
 	range: MaybeSet<Id, F>,
 	required: MaybeSet<bool, F>,
-	functional: MaybeSet<bool, F>,
-	doc: Documentation,
+	functional: MaybeSet<bool, F>
 }
 
 impl<F> Definition<F> {
@@ -20,8 +19,7 @@ impl<F> Definition<F> {
 			domain: HashMap::new(),
 			range: MaybeSet::default(),
 			required: MaybeSet::default(),
-			functional: MaybeSet::default(),
-			doc: Documentation::default(),
+			functional: MaybeSet::default()
 		}
 	}
 
@@ -75,18 +73,6 @@ impl<F> Definition<F> {
 			})
 	}
 
-	pub fn documentation(&self) -> &Documentation {
-		&self.doc
-	}
-
-	pub fn documentation_mut(&mut self) -> &mut Documentation {
-		&mut self.doc
-	}
-
-	pub fn set_documentation(&mut self, doc: Documentation) {
-		self.doc = doc
-	}
-
 	pub fn set_domain(&mut self, ty_ref: Id, cause: Option<Location<F>>)
 	where
 		F: Ord,
@@ -118,6 +104,14 @@ impl<F> Definition<F> {
 			.into()
 		})
 	}
+
+	pub fn dependencies(
+		&self,
+		_nodes: &super::context::AllocatedNodes<F>,
+		_causes: &Causes<F>,
+	) -> Result<Vec<crate::Item<F>>, Error<F>> where F: Clone + Ord {
+		Ok(Vec::new())
+	}
 }
 
 impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
@@ -126,7 +120,6 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 
 	fn build(
 		self,
-		id: Id,
 		_vocab: &crate::Vocabulary,
 		nodes: &super::context::AllocatedNodes<F>,
 		_dependencies: crate::Dependencies<F>,
@@ -145,7 +138,7 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 		let required = self.required.unwrap_or(false);
 		let functional = self.functional.unwrap_or(true);
 
-		let mut result = treeldr::prop::Definition::new(id, range, required, functional, causes);
+		let mut result = treeldr::prop::Definition::new(self.id, range, required, functional, causes);
 
 		for (domain_id, domain_causes) in self.domain {
 			let domain_ref = nodes.require_type(domain_id, domain_causes.preferred().cloned())?;

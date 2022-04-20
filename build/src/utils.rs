@@ -1,4 +1,5 @@
 pub mod scc;
+mod list;
 
 pub use scc::SccGraph;
 
@@ -55,3 +56,4 @@ impl<T, E, I: Iterator<Item = Result<Option<T>, E>>> TryFilterCollect<T, E> for 
 		B::try_from_filtered_iterator(self)
 	}
 }
+

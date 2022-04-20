@@ -8,8 +8,6 @@ pub mod lexing;
 pub mod parsing;
 mod peekable3;
 
-pub mod reporting;
-
 pub use lexing::{Id, Lexer};
 pub use parsing::Parse;
 
@@ -325,6 +323,12 @@ pub struct NamedInnerLayoutExpr<F> {
 	pub name: Option<Loc<Alias, F>>,
 }
 
+impl<F> NamedInnerLayoutExpr<F> {
+	pub fn into_parts(self) -> (Loc<InnerLayoutExpr<F>, F>, Option<Loc<Alias, F>>) {
+		(self.expr, self.name)
+	}
+}
+
 pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
@@ -333,7 +337,7 @@ pub enum InnerLayoutExpr<F> {
 }
 
 impl<F> InnerLayoutExpr<F> {
-	fn is_namable(&self) -> bool {
+	pub fn is_namable(&self) -> bool {
 		!matches!(self, Self::Id(_))
 	}
 }

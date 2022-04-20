@@ -1,4 +1,4 @@
-use crate::{error, Context, Definitions, Error};
+use crate::{error, Context, Descriptions, Error};
 use locspan::Location;
 use treeldr::{vocab::Name, Caused, Documentation, Id, MaybeSet, WithCauses};
 
@@ -38,7 +38,7 @@ impl<F> Definition<F> {
 	}
 
 	/// Build a default name for this layout.
-	pub fn default_name<D: Definitions<F>>(
+	pub fn default_name<D: Descriptions<F>>(
 		&self,
 		context: &Context<F, D>,
 		cause: Option<Location<F>>,
@@ -46,8 +46,6 @@ impl<F> Definition<F> {
 	where
 		F: Clone,
 	{
-		use crate::Layout;
-
 		if let Id::Iri(iri) = self.id {
 			if let Some(name) = iri.iri(context.vocabulary()).unwrap().path().file_name() {
 				if let Ok(name) = Name::new(name) {

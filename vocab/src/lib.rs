@@ -390,3 +390,23 @@ impl Vocabulary {
 		}
 	}
 }
+
+pub trait BorrowWithVocabulary {
+	fn with_vocabulary<'v>(&self, vocabulary: &'v Vocabulary) -> WithVocabulary<'_, 'v, Self> {
+		WithVocabulary(self, vocabulary)
+	}
+}
+
+impl<T> BorrowWithVocabulary for T {}
+
+pub struct WithVocabulary<'t, 'v, T: ?Sized>(&'t T, &'v Vocabulary);
+
+impl<'t, 'v, T: ?Sized> WithVocabulary<'t, 'v, T> {
+	pub fn value(&self) -> &'t T {
+		self.0
+	}
+
+	pub fn vocabulary(&self) -> &'v Vocabulary {
+		self.1
+	}
+}

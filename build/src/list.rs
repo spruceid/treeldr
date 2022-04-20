@@ -1,4 +1,4 @@
-use crate::{error, Context, Definitions, Error};
+use crate::{error, Context, Descriptions, Error};
 use locspan::Location;
 use treeldr::{vocab::Object, Caused, Id, MaybeSet, WithCauses};
 
@@ -73,7 +73,7 @@ pub trait RequireList<F> {
 		F: Clone;
 }
 
-impl<'l, F, D: Definitions<F>> RequireList<F> for Context<F, D> {
+impl<'l, F, D: Descriptions<F>> RequireList<F> for Context<F, D> {
 	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
 	where
 		F: Clone,

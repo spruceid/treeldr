@@ -1,19 +1,9 @@
-use crate::{error, list::ListMut, Context, Definitions, Document, Error};
+use crate::{error, list::ListMut, Context, Descriptions, Document, Error};
 use locspan::Loc;
 use treeldr::{
 	vocab::{self, GraphLabel, Object, Term},
 	Id,
 };
-
-pub struct GrdfDefinitions;
-
-impl<F: Clone + Ord> Definitions<F> for GrdfDefinitions {
-	type Error = Error<F>;
-	
-	type Type = crate::ty::Definition<F>;
-	type Property = crate::prop::Definition<F>;
-	type Layout = crate::layout::Definition<F>;
-}
 
 fn expect_id<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<Id, F>, Error<F>> {
 	match value {
@@ -40,13 +30,13 @@ fn expect_raw_string<F>(
 	}
 }
 
-impl<F: Clone + Ord> Document<F, GrdfDefinitions>
+impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 	for grdf::loc::BTreeDataset<Id, Term, Object<F>, GraphLabel, F>
 {
 	type LocalContext = ();
 	type Error = Error<F>;
 
-	fn declare(&self, _: &mut (), context: &mut Context<F, GrdfDefinitions>) -> Result<(), Error<F>> {
+	fn declare(&self, _: &mut (), context: &mut Context<F, D>) -> Result<(), Error<F>> {
 		// Step 1: find out the type of each node.
 		for Loc(quad, loc) in self.loc_quads() {
 			let Loc(id, _) = quad.subject().cloned_value();
@@ -54,21 +44,16 @@ impl<F: Clone + Ord> Document<F, GrdfDefinitions>
 			if let Term::Rdf(vocab::Rdf::Type) = quad.predicate().value() {
 				match quad.object().value() {
 					Object::Iri(Term::Rdf(vocab::Rdf::Property)) => {
-						context.declare_property(id, Some(loc.cloned()), |id| {
-							crate::prop::Definition::new(id)
-						});
+						context.declare_property(id, Some(loc.cloned()));
 					}
 					Object::Iri(Term::Rdf(vocab::Rdf::List)) => {
 						context.declare_list(id, Some(loc.cloned()));
 					}
 					Object::Iri(Term::Rdfs(vocab::Rdfs::Class)) => {
-						context
-							.declare_type(id, Some(loc.cloned()), |_| crate::ty::Definition::new());
+						context.declare_type(id, Some(loc.cloned()));
 					}
 					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)) => {
-						context.declare_layout(id, Some(loc.cloned()), |id| {
-							crate::layout::Definition::new(id)
-						});
+						context.declare_layout(id, Some(loc.cloned()));
 					}
 					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Field)) => {
 						context.declare_layout_field(id, Some(loc.cloned()));
@@ -84,7 +69,7 @@ impl<F: Clone + Ord> Document<F, GrdfDefinitions>
 		Ok(())
 	}
 
-	fn relate(self, _: &mut (), context: &mut Context<F, GrdfDefinitions>) -> Result<(), Error<F>> {
+	fn relate(self, _: &mut (), context: &mut Context<F, D>) -> Result<(), Error<F>> {
 		// Step 2: find out the properties of each node.
 		for Loc(rdf_types::Quad(subject, predicate, object, _graph), loc) in self.into_loc_quads() {
 			let Loc(id, id_loc) = subject;
@@ -139,7 +124,7 @@ impl<F: Clone + Ord> Document<F, GrdfDefinitions>
 					if let Some(prop) = prop {
 						prop.set_domain(object, Some(loc.clone()));
 						let ty = context.require_type_mut(object, Some(object_loc))?;
-						ty.declare_property(object, id, Some(loc))?
+						ty.declare_property(id, Some(loc))?
 					}
 				}
 				Term::Rdfs(vocab::Rdfs::Range) => {
@@ -189,28 +174,32 @@ impl<F: Clone + Ord> Document<F, GrdfDefinitions>
 				Term::Owl(vocab::Owl::UnionOf) => {
 					let ty = context.require_type_mut(id, Some(id_loc))?;
 					let Loc(options_id, options_loc) = expect_id(object)?;
-					ty.declare_union(id, options_id, Some(options_loc))?
+					ty.declare_union(options_id, Some(options_loc))?
 				}
 				Term::Owl(vocab::Owl::IntersectionOf) => {
 					let ty = context.require_type_mut(id, Some(id_loc))?;
 					let Loc(types_id, types_loc) = expect_id(object)?;
-					ty.declare_intersection(id, types_id, Some(types_loc))?
+					ty.declare_intersection(types_id, Some(types_loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::Name) => {
 					let node = context.require_mut(id, Some(id_loc))?;
 					let Loc(name, name_loc) = expect_raw_string(object)?;
 
 					let name = vocab::Name::new(&name).map_err(|vocab::InvalidName| {
-						Error::new(error::NameInvalid(name).into(), Some(name_loc))
+						Error::new(error::NameInvalid(name.into()).into(), Some(name_loc))
 					})?;
 
-					if node.is_layout() || node.is_layout_field() {
+					if node.is_layout() || node.is_layout_field() || node.is_layout_variant() {
 						if let Some(layout) = node.as_layout_mut() {
 							layout.set_name(name.clone(), Some(loc.clone()))?
 						}
 
 						if let Some(field) = node.as_layout_field_mut() {
-							field.set_name(name, Some(loc))?
+							field.set_name(name.clone(), Some(loc.clone()))?
+						}
+
+						if let Some(variant) = node.as_layout_variant_mut() {
+							variant.set_name(name, Some(loc))?
 						}
 					} else {
 						log::warn!("unapplicable <treelrd:name> property")
@@ -246,7 +235,7 @@ impl<F: Clone + Ord> Document<F, GrdfDefinitions>
 					let regexp = treeldr::layout::literal::RegExp::parse(&regexp_string).map_err(
 						move |e| {
 							Error::new(
-								error::RegExpInvalid(regexp_string, e).into(),
+								error::RegExpInvalid(regexp_string.into(), e).into(),
 								Some(regexp_loc),
 							)
 						},

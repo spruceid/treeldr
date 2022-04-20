@@ -203,6 +203,12 @@ impl<T, F> MaybeSet<T, F> {
 		}
 	}
 
+	pub fn try_map<U, E>(self, f: impl FnOnce(T) -> Result<U, E>) -> Result<MaybeSet<U, F>, E> {
+		Ok(MaybeSet {
+			value: self.value.map(|t| t.try_map(f)).transpose()?,
+		})
+	}
+
 	pub fn map_with_causes<U>(self, f: impl FnOnce(WithCauses<T, F>) -> U) -> MaybeSet<U, F>
 	where
 		F: Clone,

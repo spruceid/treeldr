@@ -1,6 +1,5 @@
 use derivative::Derivative;
-use locspan::Location;
-use treeldr::{vocab::Name, Caused, Causes, Id, Ref, Vocabulary, WithCauses};
+use treeldr::{Causes, Ref, Vocabulary};
 
 pub mod context;
 pub mod error;
@@ -13,53 +12,33 @@ pub mod ty;
 pub mod utils;
 
 pub use context::Context;
-pub use error::{Error, ErrorWithVocabulary};
+pub use error::Error;
 pub use layout::{ParentLayout, SubLayout};
 pub use list::{ListMut, ListRef};
 pub use node::Node;
-pub use rdf::GrdfDefinitions;
 
-pub trait Definitions<F>: Sized {
-	type Error: From<Error<F>> + From<<Self::Type as Build<F>>::Error> + From<<Self::Property as Build<F>>::Error> + From<<Self::Layout as Build<F>>::Error>;
-
-	type Type: Build<F, Target = treeldr::ty::Definition<F>>;
-	type Property: Build<F, Target = treeldr::prop::Definition<F>>;
-	type Layout: Layout<F, Self>;
+pub trait Descriptions<F>: Sized {
+	type Error: From<Error<F>> + From<<Self::Type as ty::PseudoDescription<F>>::Error> + From<<Self::Layout as layout::PseudoDescription<F>>::Error>;
+	
+	type Type: ty::PseudoDescription<F>;
+	type Layout: layout::PseudoDescription<F>;
 }
 
-pub trait Layout<F, D: Definitions<F>>: Build<F, Target = treeldr::layout::Definition<F>> {
-	/// Computes the list of sub layouts used by this layout.
-	fn sub_layouts(&self, context: &Context<F, D>) -> Result<Vec<SubLayout<F>>, Error<F>>;
+pub struct StandardDescriptions;
 
-	fn name(&self) -> Option<&WithCauses<Name, F>>;
+impl<F: Clone + Ord> Descriptions<F> for StandardDescriptions {
+	type Error = Error<F>;
 
-	fn set_name(&mut self, name: Name, cause: Option<Location<F>>) -> Result<(), Error<F>>;
-
-	/// Computes a default name for the layout.
-	fn default_name(
-		&self,
-		context: &Context<F, D>,
-		parent_layouts: &[WithCauses<ParentLayout, F>],
-		cause: Option<Location<F>>,
-	) -> Result<Option<Caused<Name, F>>, Error<F>>;
+	type Type = ty::Description<F>;
+	type Layout = layout::Description;
 }
 
 pub trait Build<F> {
 	type Target;
 	type Error;
 
-	fn dependencies(
-		&self,
-		_id: Id,
-		_nodes: &context::AllocatedNodes<F>,
-		_causes: &Causes<F>,
-	) -> Result<Vec<Item<F>>, Self::Error> {
-		Ok(Vec::new())
-	}
-
 	fn build(
 		self,
-		id: Id,
 		vocab: &Vocabulary,
 		nodes: &context::AllocatedNodes<F>,
 		dependencies: Dependencies<F>,
@@ -87,7 +66,7 @@ pub struct Dependencies<'a, F> {
 	pub layouts: &'a [Option<treeldr::layout::Definition<F>>],
 }
 
-pub trait Document<F, D: Definitions<F>> {
+pub trait Document<F, D: Descriptions<F>> {
 	type LocalContext;
 	type Error;
 

@@ -1,4 +1,5 @@
-use treeldr::{reporting::Diagnose, Caused, Vocabulary};
+use treeldr::{reporting::DiagnoseWithCauseAndVocabulary, Caused, Vocabulary};
+use locspan::Location;
 
 pub type Error<F> = Caused<Description<F>, F>;
 
@@ -19,7 +20,7 @@ pub trait AnyError<F> {
 }
 
 macro_rules! errors {
-	{ $( $mod_id:ident :: $id:ident $(<$arg:ident>)? ),* } => {
+	{ $( $mod_id:ident :: $id:ident $(<$($arg:ident),+>)? ),* } => {
 		$(
 			pub mod $mod_id;
 			pub use $mod_id::$id;
@@ -28,36 +29,36 @@ macro_rules! errors {
 		#[derive(Debug)]
 		pub enum Description<F> {
 			$(
-				$id( $id $(<$arg>)? )
+				$id( $id $(<$($arg),+>)? )
 			),*
 		}
 
 		$(
-			impl<F> From<$id $(<$arg>)?> for Description<F> {
-				fn from(e: $id $(<$arg>)?) -> Self {
+			impl<F> From<$id $(<$($arg),+>)?> for Description<F> {
+				fn from(e: $id $(<$($arg),+>)?) -> Self {
 					Self::$id(e)
 				}
 			}
 		)*
 
-		impl<'c, 'a, F: Clone> Diagnose<F> for WithVocabulary<'c, 'a, F> {
-			fn message(&self) -> String {
-				match self.error().inner() {
+		impl<'c, 'a, F: Clone> DiagnoseWithCauseAndVocabulary<F> for Description<F> {
+			fn message(&self, _cause: Option<&Location<F>>, vocabulary: &Vocabulary) -> String {
+				match self {
 					$(
-						Description::$id(e) => AnyError::<F>::message(e, self.vocabulary())
+						Self::$id(e) => AnyError::<F>::message(e, vocabulary)
 					),*
 				}
 			}
 
-			fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
-				match self.error().inner() {
+			fn labels(&self, cause: Option<&Location<F>>, vocabulary: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+				match self {
 					$(
-						Description::$id(e) => {
-							let mut labels = e.other_labels(self.vocabulary());
+						Self::$id(e) => {
+							let mut labels = e.other_labels(vocabulary);
 
-							if let Some(cause) = self.error().cause() {
+							if let Some(cause) = cause {
 								let label = cause.clone().into_primary_label();
-								let label = match AnyError::<F>::primary_label(e, self.vocabulary()) {
+								let label = match AnyError::<F>::primary_label(e, vocabulary) {
 									Some(msg) => label.with_message(msg),
 									None => label
 								};
@@ -71,10 +72,10 @@ macro_rules! errors {
 				}
 			}
 
-			fn notes(&self) -> Vec<String> {
-				match self.error().inner() {
+			fn notes(&self, _cause: Option<&Location<F>>, vocabulary: &Vocabulary) -> Vec<String> {
+				match self {
 					$(
-						Description::$id(e) => AnyError::<F>::notes(e, self.vocabulary())
+						Self::$id(e) => AnyError::<F>::notes(e, vocabulary)
 					),*
 				}
 			}
@@ -119,27 +120,4 @@ errors! {
 	list_missing_rest::ListMissingRest,
 	regexp_invalid::RegExpInvalid,
 	name_invalid::NameInvalid
-}
-
-pub trait ErrorWithVocabulary<F> {
-	fn with_vocabulary<'c>(&self, vocab: &'c Vocabulary) -> WithVocabulary<'c, '_, F>;
-}
-
-impl<F> ErrorWithVocabulary<F> for Caused<Description<F>, F> {
-	fn with_vocabulary<'c>(&self, vocab: &'c Vocabulary) -> WithVocabulary<'c, '_, F> {
-		WithVocabulary(vocab, self)
-	}
-}
-
-/// Caused error with contextual information.
-pub struct WithVocabulary<'c, 'a, F>(&'c Vocabulary, &'a Caused<Description<F>, F>);
-
-impl<'c, 'a, F> WithVocabulary<'c, 'a, F> {
-	fn vocabulary(&self) -> &'c Vocabulary {
-		self.0
-	}
-
-	fn error(&self) -> &'a Caused<Description<F>, F> {
-		self.1
-	}
 }

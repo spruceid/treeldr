@@ -209,10 +209,10 @@ impl<T, F> WithCauses<T, F> {
 	pub fn try_map<U, E>(
 		self,
 		f: impl FnOnce(T) -> Result<U, E>,
-	) -> Result<WithCauses<U, F>, Caused<E, F>> {
+	) -> Result<WithCauses<U, F>, E> {
 		match f(self.t) {
 			Ok(value) => Ok(WithCauses::new(value, self.causes)),
-			Err(e) => Err(Caused::new(e, self.causes.into_preferred())),
+			Err(e) => Err(e),
 		}
 	}
 

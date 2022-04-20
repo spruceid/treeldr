@@ -1,4 +1,4 @@
-use crate::{error, layout, list, Definitions, Error};
+use crate::{error, ty, prop, layout, list, Descriptions, Error};
 use locspan::Location;
 use treeldr::{Caused, Causes, Documentation, Id, MaybeSet, WithCauses};
 
@@ -11,10 +11,10 @@ pub struct Node<T> {
 	value: T,
 }
 
-pub struct Components<F, D: Definitions<F>> {
-	pub ty: MaybeSet<D::Type, F>,
-	pub property: MaybeSet<D::Property, F>,
-	pub layout: MaybeSet<D::Layout, F>,
+pub struct Components<F, D: Descriptions<F>> {
+	pub ty: MaybeSet<ty::Definition<F, D::Type>, F>,
+	pub property: MaybeSet<prop::Definition<F>, F>,
+	pub layout: MaybeSet<layout::Definition<F, D::Layout>, F>,
 	pub layout_field: MaybeSet<layout::field::Definition<F>, F>,
 	pub layout_variant: MaybeSet<layout::variant::Definition<F>, F>,
 	pub list: MaybeSet<list::Definition<F>, F>,
@@ -59,8 +59,8 @@ impl<T> Node<T> {
 	}
 }
 
-pub type PropertyOrLayoutField<'a, F, D> = (
-	Option<&'a mut WithCauses<<D as Definitions<F>>::Property, F>>,
+pub type PropertyOrLayoutField<'a, F> = (
+	Option<&'a mut WithCauses<prop::Definition<F>, F>>,
 	Option<&'a mut WithCauses<layout::field::Definition<F>, F>>,
 );
 
@@ -69,7 +69,7 @@ pub type LayoutFieldOrVariant<'a, F> = (
 	Option<&'a mut WithCauses<layout::variant::Definition<F>, F>>,
 );
 
-impl<F, D: Definitions<F>> Node<Components<F, D>> {
+impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
@@ -86,13 +86,13 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 		}
 	}
 
-	pub fn new_type(id: Id, definition: D::Type, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_type(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::new(definition, causes),
+				ty: MaybeSet::new(ty::Definition::new(id), causes),
 				property: MaybeSet::default(),
 				layout: MaybeSet::default(),
 				layout_field: MaybeSet::default(),
@@ -102,14 +102,14 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 		}
 	}
 
-	pub fn new_property(id: Id, definition: D::Property, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_property(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
 				ty: MaybeSet::default(),
-				property: MaybeSet::new(definition, causes),
+				property: MaybeSet::new(prop::Definition::new(id), causes),
 				layout: MaybeSet::default(),
 				layout_field: MaybeSet::default(),
 				layout_variant: MaybeSet::default(),
@@ -118,7 +118,7 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 		}
 	}
 
-	pub fn new_layout(id: Id, definition: D::Layout, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_layout(id: Id, causes: impl Into<Causes<F>>) -> Self {
 		Self {
 			id,
 			label: None,
@@ -126,7 +126,7 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 			value: Components {
 				ty: MaybeSet::default(),
 				property: MaybeSet::default(),
-				layout: MaybeSet::new(definition, causes),
+				layout: MaybeSet::new(layout::Definition::new(id), causes),
 				layout_field: MaybeSet::default(),
 				layout_variant: MaybeSet::default(),
 				list: MaybeSet::default(),
@@ -247,19 +247,23 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 		self.value.layout_field.is_set()
 	}
 
+	pub fn is_layout_variant(&self) -> bool {
+		self.value.layout_variant.is_set()
+	}
+
 	pub fn is_list(&self) -> bool {
 		self.value.list.is_set()
 	}
 
-	pub fn as_type(&self) -> Option<&WithCauses<D::Type, F>> {
+	pub fn as_type(&self) -> Option<&WithCauses<ty::Definition<F, D::Type>, F>> {
 		self.value.ty.with_causes()
 	}
 
-	pub fn as_property(&self) -> Option<&WithCauses<D::Property, F>> {
+	pub fn as_property(&self) -> Option<&WithCauses<prop::Definition<F>, F>> {
 		self.value.property.with_causes()
 	}
 
-	pub fn as_layout(&self) -> Option<&WithCauses<D::Layout, F>> {
+	pub fn as_layout(&self) -> Option<&WithCauses<layout::Definition<F, D::Layout>, F>> {
 		self.value.layout.with_causes()
 	}
 
@@ -275,15 +279,15 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 		self.value.list.with_causes()
 	}
 
-	pub fn as_type_mut(&mut self) -> Option<&mut WithCauses<D::Type, F>> {
+	pub fn as_type_mut(&mut self) -> Option<&mut WithCauses<ty::Definition<F, D::Type>, F>> {
 		self.value.ty.with_causes_mut()
 	}
 
-	pub fn as_property_mut(&mut self) -> Option<&mut WithCauses<D::Property, F>> {
+	pub fn as_property_mut(&mut self) -> Option<&mut WithCauses<prop::Definition<F>, F>> {
 		self.value.property.with_causes_mut()
 	}
 
-	pub fn as_layout_mut(&mut self) -> Option<&mut WithCauses<D::Layout, F>> {
+	pub fn as_layout_mut(&mut self) -> Option<&mut WithCauses<layout::Definition<F, D::Layout>, F>> {
 		self.value.layout.with_causes_mut()
 	}
 
@@ -303,28 +307,27 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 		self.value.list.with_causes_mut()
 	}
 
-	pub fn declare_type(&mut self, cause: Option<Location<F>>, f: impl FnOnce(Id) -> D::Type)
+	pub fn declare_type(&mut self, cause: Option<Location<F>>)
 	where
 		F: Ord,
 	{
-		self.value.ty.set_once(cause, || f(self.id))
+		self.value.ty.set_once(cause, || ty::Definition::new(self.id))
 	}
 
 	pub fn declare_property(
 		&mut self,
-		cause: Option<Location<F>>,
-		f: impl FnOnce(Id) -> D::Property,
+		cause: Option<Location<F>>
 	) where
 		F: Ord,
 	{
-		self.value.property.set_once(cause, || f(self.id))
+		self.value.property.set_once(cause, || prop::Definition::new(self.id))
 	}
 
-	pub fn declare_layout(&mut self, cause: Option<Location<F>>, f: impl FnOnce(Id) -> D::Layout)
+	pub fn declare_layout(&mut self, cause: Option<Location<F>>)
 	where
 		F: Ord,
 	{
-		self.value.layout.set_once(cause, || f(self.id))
+		self.value.layout.set_once(cause, || layout::Definition::new(self.id))
 	}
 
 	pub fn declare_layout_field(&mut self, cause: Option<Location<F>>)
@@ -357,7 +360,7 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 	pub fn require_type_mut(
 		&mut self,
 		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<D::Type, F>, Error<F>>
+	) -> Result<&mut WithCauses<ty::Definition<F, D::Type>, F>, Error<F>>
 	where
 		F: Clone,
 	{
@@ -379,7 +382,7 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 	pub fn require_property_mut(
 		&mut self,
 		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<D::Property, F>, Error<F>>
+	) -> Result<&mut WithCauses<prop::Definition<F>, F>, Error<F>>
 	where
 		F: Clone,
 	{
@@ -401,7 +404,7 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 	pub fn require_layout(
 		&self,
 		cause: Option<Location<F>>,
-	) -> Result<&WithCauses<D::Layout, F>, Error<F>>
+	) -> Result<&WithCauses<layout::Definition<F, D::Layout>, F>, Error<F>>
 	where
 		F: Clone,
 	{
@@ -423,7 +426,7 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 	pub fn require_layout_mut(
 		&mut self,
 		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<D::Layout, F>, Error<F>>
+	) -> Result<&mut WithCauses<layout::Definition<F, D::Layout>, F>, Error<F>>
 	where
 		F: Clone,
 	{
@@ -533,7 +536,7 @@ impl<F, D: Definitions<F>> Node<Components<F, D>> {
 	pub fn require_property_or_layout_field_mut(
 		&mut self,
 		cause: Option<Location<F>>,
-	) -> Result<PropertyOrLayoutField<F, D>, Error<F>>
+	) -> Result<PropertyOrLayoutField<F>, Error<F>>
 	where
 		F: Clone,
 	{

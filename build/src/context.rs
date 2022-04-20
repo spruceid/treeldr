@@ -1,6 +1,7 @@
 use crate::{
-	error, layout, list, node, Definitions, Error, ListMut, ListRef, Node, ParentLayout, SubLayout,
+	error, ty, prop, layout, list, node, Descriptions, Error, ListMut, ListRef, Node, ParentLayout, SubLayout,
 };
+use iref::IriBuf;
 use derivative::Derivative;
 use locspan::Location;
 use shelves::{Ref, Shelf};
@@ -10,7 +11,7 @@ use treeldr::{vocab, Caused, Id, MaybeSet, Model, Vocabulary, WithCauses};
 /// TreeLDR build context.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct Context<F, D: Definitions<F>> {
+pub struct Context<F, D: Descriptions<F>> {
 	/// Vocabulary.
 	vocab: Vocabulary,
 
@@ -27,7 +28,7 @@ struct LayoutRelations<F> {
 	parent: Vec<WithCauses<ParentLayout, F>>,
 }
 
-impl<F, D: Definitions<F>> Context<F, D> {
+impl<F, D: Descriptions<F>> Context<F, D> {
 	/// Creates a new empty context.
 	pub fn new() -> Self {
 		Self::default()
@@ -45,149 +46,148 @@ impl<F, D: Definitions<F>> Context<F, D> {
 		self.vocab
 	}
 
-	// pub fn define_native_type(
-	// 	&mut self,
-	// 	iri: IriBuf,
-	// 	native_layout: layout::Native,
-	// 	cause: Option<Location<F>>,
-	// ) -> Result<Id, Error<F>>
-	// where
-	// 	F: Clone + Ord,
-	// 	D::Type: From<ty::Definition<F>>,
-	// 	D::Layout: From<layout::Definition<F>>
-	// {
-	// 	let id = Id::Iri(vocab::Term::from_iri(iri, self.vocabulary_mut()));
-	// 	self.declare_type(id, cause.clone(), |_| ty::Definition::new().into());
-	// 	self.declare_layout(id, cause.clone(), |id| layout::Definition::new(id).into());
-	// 	let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
-	// 	layout.set_native(native_layout, cause.clone())?;
-	// 	layout.set_type(id, cause)?;
-	// 	Ok(id)
-	// }
+	pub fn define_native_type(
+		&mut self,
+		iri: IriBuf,
+		native_layout: layout::Native,
+		cause: Option<Location<F>>,
+	) -> Result<Id, Error<F>>
+	where
+		F: Clone + Ord
+	{
+		let id = Id::Iri(vocab::Term::from_iri(iri, self.vocabulary_mut()));
+		self.declare_type(id, cause.clone());
+		self.declare_layout(id, cause.clone());
+		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
+		layout.set_native(native_layout, cause.clone())?;
+		layout.set_type(id, cause)?;
+		Ok(id)
+	}
 
-	// pub fn define_xml_types(&mut self) -> Result<(), Error<F>>
-	// where
-	// 	F: Clone + Ord,
-	// {
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
-	// 		layout::Native::Boolean,
-	// 		None,
-	// 	)?;
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#int").unwrap(),
-	// 		layout::Native::Integer,
-	// 		None,
-	// 	)?;
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
-	// 		layout::Native::Integer,
-	// 		None,
-	// 	)?;
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#positiveInteger").unwrap(),
-	// 		layout::Native::PositiveInteger,
-	// 		None,
-	// 	)?;
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#float").unwrap(),
-	// 		layout::Native::Float,
-	// 		None,
-	// 	)?;
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
-	// 		layout::Native::Double,
-	// 		None,
-	// 	)?;
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
-	// 		layout::Native::String,
-	// 		None,
-	// 	)?;
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#time").unwrap(),
-	// 		layout::Native::Time,
-	// 		None,
-	// 	)?;
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#date").unwrap(),
-	// 		layout::Native::Date,
-	// 		None,
-	// 	)?;
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(),
-	// 		layout::Native::DateTime,
-	// 		None,
-	// 	)?;
-	// 	self.define_native_type(
-	// 		IriBuf::new("http://www.w3.org/2001/XMLSchema#anyURI").unwrap(),
-	// 		layout::Native::Uri,
-	// 		None,
-	// 	)?;
+	pub fn define_xml_types(&mut self) -> Result<(), Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+			layout::Native::Boolean,
+			None,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#int").unwrap(),
+			layout::Native::Integer,
+			None,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+			layout::Native::Integer,
+			None,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#positiveInteger").unwrap(),
+			layout::Native::PositiveInteger,
+			None,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#float").unwrap(),
+			layout::Native::Float,
+			None,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+			layout::Native::Double,
+			None,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
+			layout::Native::String,
+			None,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#time").unwrap(),
+			layout::Native::Time,
+			None,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#date").unwrap(),
+			layout::Native::Date,
+			None,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(),
+			layout::Native::DateTime,
+			None,
+		)?;
+		self.define_native_type(
+			IriBuf::new("http://www.w3.org/2001/XMLSchema#anyURI").unwrap(),
+			layout::Native::Uri,
+			None,
+		)?;
 
-	// 	Ok(())
-	// }
+		Ok(())
+	}
 
-	// /// Resolve all the reference layouts.
-	// ///
-	// /// Checks that the type of a reference layout (`&T`) is equal to the type of the target layout (`T`).
-	// /// If no type is defined for the reference layout, it is set to the correct type.
-	// pub fn resolve_references(&mut self) -> Result<(), Error<F>>
-	// where
-	// 	F: Ord + Clone,
-	// {
-	// 	let mut deref_map = HashMap::new();
+	/// Resolve all the reference layouts.
+	///
+	/// Checks that the type of a reference layout (`&T`) is equal to the type of the target layout (`T`).
+	/// If no type is defined for the reference layout, it is set to the correct type.
+	pub fn resolve_references(&mut self) -> Result<(), Error<F>>
+	where
+		F: Ord + Clone,
+	{
+		use layout::PseudoDescription;
+		let mut deref_map = HashMap::new();
 
-	// 	for (id, node) in &self.nodes {
-	// 		if let Some(layout) = node.as_layout() {
-	// 			if let Some(desc) = layout.description() {
-	// 				if let layout::Description::Reference(target_layout_id) = desc.inner() {
-	// 					deref_map.insert(
-	// 						*id,
-	// 						Caused::new(*target_layout_id, desc.causes().preferred().cloned()),
-	// 					);
-	// 				}
-	// 			}
-	// 		}
-	// 	}
+		for (id, node) in &self.nodes {
+			if let Some(layout) = node.as_layout() {
+				if let Some(desc) = layout.description() {
+					if let Some(layout::Description::Reference(target_layout_id)) = desc.inner().as_standard() {
+						deref_map.insert(
+							*id,
+							Caused::new(*target_layout_id, desc.causes().preferred().cloned()),
+						);
+					}
+				}
+			}
+		}
 
-	// 	// Assign a depth to each reference.
-	// 	// The depth correspond the the reference nesting level (`&&&&T` => 4 nesting level => depth 3).
-	// 	// References with higher depth must be resolved first.
-	// 	let mut depth_map: HashMap<_, _> = deref_map.keys().map(|id| (*id, 0)).collect();
-	// 	let mut stack: Vec<_> = deref_map.keys().map(|id| (*id, 0)).collect();
-	// 	while let Some((id, depth)) = stack.pop() {
-	// 		let current_depth = depth_map[&id];
-	// 		if depth > current_depth {
-	// 			if current_depth > 0 {
-	// 				panic!("cycling reference")
-	// 			}
+		// Assign a depth to each reference.
+		// The depth correspond the the reference nesting level (`&&&&T` => 4 nesting level => depth 3).
+		// References with higher depth must be resolved first.
+		let mut depth_map: HashMap<_, _> = deref_map.keys().map(|id| (*id, 0)).collect();
+		let mut stack: Vec<_> = deref_map.keys().map(|id| (*id, 0)).collect();
+		while let Some((id, depth)) = stack.pop() {
+			let current_depth = depth_map[&id];
+			if depth > current_depth {
+				if current_depth > 0 {
+					panic!("cycling reference")
+				}
 
-	// 			depth_map.insert(id, depth);
-	// 			if let Some(target_layout_id) = deref_map.get(&id) {
-	// 				stack.push((*target_layout_id.inner(), depth + 1));
-	// 			}
-	// 		}
-	// 	}
+				depth_map.insert(id, depth);
+				if let Some(target_layout_id) = deref_map.get(&id) {
+					stack.push((*target_layout_id.inner(), depth + 1));
+				}
+			}
+		}
 
-	// 	// Sort references by depth (highest first).
-	// 	let mut by_depth: Vec<_> = deref_map.into_iter().collect();
-	// 	by_depth.sort_by(|(a, _), (b, _)| depth_map[b].cmp(&depth_map[a]));
+		// Sort references by depth (highest first).
+		let mut by_depth: Vec<_> = deref_map.into_iter().collect();
+		by_depth.sort_by(|(a, _), (b, _)| depth_map[b].cmp(&depth_map[a]));
 
-	// 	// Actually resolve the references.
-	// 	for (id, target_layout_id) in by_depth {
-	// 		let (target_layout_id, cause) = target_layout_id.into_parts();
-	// 		let target_layout = self.require_layout(target_layout_id, cause.clone())?;
-	// 		let (target_ty_id, ty_cause) = target_layout.require_ty(cause)?.clone().into_parts();
-	// 		self.get_mut(id)
-	// 			.unwrap()
-	// 			.as_layout_mut()
-	// 			.unwrap()
-	// 			.set_type(target_ty_id, ty_cause.into_preferred())?
-	// 	}
+		// Actually resolve the references.
+		for (id, target_layout_id) in by_depth {
+			let (target_layout_id, cause) = target_layout_id.into_parts();
+			let target_layout = self.require_layout(target_layout_id, cause.clone())?;
+			let (target_ty_id, ty_cause) = target_layout.require_ty(cause)?.clone().into_parts();
+			self.get_mut(id)
+				.unwrap()
+				.as_layout_mut()
+				.unwrap()
+				.set_type(target_ty_id, ty_cause.into_preferred())?
+		}
 
-	// 	Ok(())
-	// }
+		Ok(())
+	}
 
 	/// Compute the `use` relation between all the layouts.
 	///
@@ -195,12 +195,10 @@ impl<F, D: Definitions<F>> Context<F, D> {
 	/// fields.
 	/// The purpose of this function is to declare to each layout how it it used
 	/// using the `layout::Definition::add_use` method.
-	pub fn compute_uses(&mut self) -> Result<(), Error<F>>
+	pub fn compute_uses(&mut self) -> Result<(), D::Error>
 	where
 		F: Ord + Clone,
 	{
-		use crate::Layout;
-
 		for (id, node) in &self.nodes {
 			if let Some(layout) = node.value().layout.with_causes() {
 				let sub_layouts = layout.sub_layouts(self)?;
@@ -231,8 +229,6 @@ impl<F, D: Definitions<F>> Context<F, D> {
 	where
 		F: Ord + Clone,
 	{
-		use crate::Layout;
-
 		// Start with the layouts.
 		let mut default_layout_names = HashMap::new();
 		for (id, node) in &self.nodes {
@@ -282,9 +278,9 @@ impl<F, D: Definitions<F>> Context<F, D> {
 		F: Ord + Clone,
 	{
 		use crate::Build;
-		// if let Err(e) = self.resolve_references() {
-		// 	return Err((e, self.into_vocabulary()));
-		// }
+		if let Err(e) = self.resolve_references() {
+			return Err((e.into(), self.into_vocabulary()));
+		}
 
 		if let Err(e) = self.compute_uses() {
 			return Err((e.into(), self.into_vocabulary()));
@@ -333,25 +329,25 @@ impl<F, D: Definitions<F>> Context<F, D> {
 			layout_dependencies: Vec::with_capacity(allocated_shelves.layouts.len()),
 		};
 
-		for (ty_ref, (id, ty)) in &allocated_shelves.types {
+		for (ty_ref, (_, ty)) in &allocated_shelves.types {
 			graph.items.push(crate::Item::Type(ty_ref.cast()));
-			match ty.dependencies(*id, &allocated_nodes, ty.causes()) {
+			match ty.dependencies(&allocated_nodes, ty.causes()) {
 				Ok(dependencies) => graph.ty_dependencies.push(dependencies),
 				Err(e) => return Err((e.into(), self.vocab)),
 			}
 		}
 
-		for (prop_ref, (id, prop)) in &allocated_shelves.properties {
+		for (prop_ref, (_, prop)) in &allocated_shelves.properties {
 			graph.items.push(crate::Item::Property(prop_ref.cast()));
-			match prop.dependencies(*id, &allocated_nodes, prop.causes()) {
+			match prop.dependencies(&allocated_nodes, prop.causes()) {
 				Ok(dependencies) => graph.prop_dependencies.push(dependencies),
 				Err(e) => return Err((e.into(), self.vocab)),
 			}
 		}
 
-		for (layout_ref, (id, layout)) in &allocated_shelves.layouts {
+		for (layout_ref, (_, layout)) in &allocated_shelves.layouts {
 			graph.items.push(crate::Item::Layout(layout_ref.cast()));
-			match layout.dependencies(*id, &allocated_nodes, layout.causes()) {
+			match layout.dependencies(&allocated_nodes, layout.causes()) {
 				Ok(dependencies) => graph.layout_dependencies.push(dependencies),
 				Err(e) => return Err((e.into(), self.vocab)),
 			}
@@ -397,34 +393,44 @@ impl<F, D: Definitions<F>> Context<F, D> {
 
 				match item {
 					crate::Item::Type(ty_ref) => {
-						let (id, ty) = types_to_build[ty_ref.index()].take().unwrap();
+						let (_, ty) = types_to_build[ty_ref.index()].take().unwrap();
 						let (ty, causes) = ty.into_parts();
-						match ty.build(id, &self.vocab, &allocated_nodes, dependencies, causes) {
-							Ok(built_ty) => {
-								built_types[ty_ref.index()] = Some(built_ty);
+						match ty.reduce() {
+							Ok(ty) => {
+								match ty.build(&self.vocab, &allocated_nodes, dependencies, causes) {
+									Ok(built_ty) => {
+										built_types[ty_ref.index()] = Some(built_ty);
+									}
+									Err(e) => return Err((e.into(), self.vocab)),
+								}
 							}
-							Err(e) => return Err((e.into(), self.vocab)),
+							Err(e) => return Err((e.into(), self.vocab))
 						}
 					}
 					crate::Item::Property(prop_ref) => {
-						let (id, prop) = properties_to_build[prop_ref.index()].take().unwrap();
+						let (_, prop) = properties_to_build[prop_ref.index()].take().unwrap();
 						let (prop, causes) = prop.into_parts();
-						match prop.build(id, &self.vocab, &allocated_nodes, dependencies, causes) {
+						match prop.build(&self.vocab, &allocated_nodes, dependencies, causes) {
 							Ok(built_prop) => {
 								built_properties[prop_ref.index()] = Some(built_prop);
 							}
-							Err(e) => return Err((e.into(), self.vocab)),
+							Err(e) => return Err((e.into(), self.vocab))
 						}
 					}
 					crate::Item::Layout(layout_ref) => {
-						let (id, layout) = layouts_to_build[layout_ref.index()].take().unwrap();
+						let (_, layout) = layouts_to_build[layout_ref.index()].take().unwrap();
 						let (layout, causes) = layout.into_parts();
-						match layout.build(id, &self.vocab, &allocated_nodes, dependencies, causes)
-						{
-							Ok(built_layout) => {
-								built_layouts[layout_ref.index()] = Some(built_layout);
+						match layout.reduce() {
+							Ok(layout) => {
+								match layout.build(&self.vocab, &allocated_nodes, dependencies, causes)
+								{
+									Ok(built_layout) => {
+										built_layouts[layout_ref.index()] = Some(built_layout);
+									}
+									Err(e) => return Err((e.into(), self.vocab)),
+								}
 							}
-							Err(e) => return Err((e.into(), self.vocab)),
+							Err(e) => return Err((e.into(), self.vocab))
 						}
 					}
 				}
@@ -500,15 +506,14 @@ impl<F, D: Definitions<F>> Context<F, D> {
 	pub fn declare_type(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-		f: impl FnOnce(Id) -> D::Type,
+		cause: Option<Location<F>>
 	) where
 		F: Ord,
 	{
 		match self.nodes.get_mut(&id) {
-			Some(node) => node.declare_type(cause, f),
+			Some(node) => node.declare_type(cause),
 			None => {
-				self.nodes.insert(id, Node::new_type(id, f(id), cause));
+				self.nodes.insert(id, Node::new_type(id, cause));
 			}
 		}
 	}
@@ -517,15 +522,14 @@ impl<F, D: Definitions<F>> Context<F, D> {
 	pub fn declare_property(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-		f: impl FnOnce(Id) -> D::Property,
+		cause: Option<Location<F>>
 	) where
 		F: Ord,
 	{
 		match self.nodes.get_mut(&id) {
-			Some(node) => node.declare_property(cause, f),
+			Some(node) => node.declare_property(cause),
 			None => {
-				self.nodes.insert(id, Node::new_property(id, f(id), cause));
+				self.nodes.insert(id, Node::new_property(id, cause));
 			}
 		}
 	}
@@ -534,15 +538,14 @@ impl<F, D: Definitions<F>> Context<F, D> {
 	pub fn declare_layout(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-		f: impl FnOnce(Id) -> D::Layout,
+		cause: Option<Location<F>>
 	) where
 		F: Ord,
 	{
 		match self.nodes.get_mut(&id) {
-			Some(node) => node.declare_layout(cause, f),
+			Some(node) => node.declare_layout(cause),
 			None => {
-				self.nodes.insert(id, Node::new_layout(id, f(id), cause));
+				self.nodes.insert(id, Node::new_layout(id, cause));
 			}
 		}
 	}
@@ -614,7 +617,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 		&mut self,
 		id: Id,
 		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<D::Type, F>, Error<F>>
+	) -> Result<&mut WithCauses<ty::Definition<F, D::Type>, F>, Error<F>>
 	where
 		F: Clone,
 	{
@@ -635,7 +638,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 		&mut self,
 		id: Id,
 		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<D::Property, F>, Error<F>>
+	) -> Result<&mut WithCauses<prop::Definition<F>, F>, Error<F>>
 	where
 		F: Clone,
 	{
@@ -656,7 +659,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 		&self,
 		id: Id,
 		cause: Option<Location<F>>,
-	) -> Result<&WithCauses<D::Layout, F>, Error<F>>
+	) -> Result<&WithCauses<layout::Definition<F, D::Layout>, F>, Error<F>>
 	where
 		F: Clone,
 	{
@@ -677,7 +680,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 		&mut self,
 		id: Id,
 		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<D::Layout, F>, Error<F>>
+	) -> Result<&mut WithCauses<layout::Definition<F, D::Layout>, F>, Error<F>>
 	where
 		F: Clone,
 	{
@@ -761,7 +764,7 @@ impl<F, D: Definitions<F>> Context<F, D> {
 		&mut self,
 		id: Id,
 		cause: Option<Location<F>>,
-	) -> Result<node::PropertyOrLayoutField<F, D>, Error<F>>
+	) -> Result<node::PropertyOrLayoutField<F>, Error<F>>
 	where
 		F: Clone,
 	{
@@ -841,6 +844,68 @@ impl<F, D: Definitions<F>> Context<F, D> {
 				)),
 			},
 		}
+	}
+
+	pub fn create_list<I: IntoIterator<Item=Caused<vocab::Object<F>, F>>>(
+		&mut self,
+		list: I
+	) -> Result<Id, Error<F>> where F: Clone + Ord, I::IntoIter: DoubleEndedIterator {
+		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
+
+		for item in list.into_iter().rev() {
+			let id = Id::Blank(self.vocab.new_blank_label());
+			let (item, cause) = item.into_parts();
+
+			self.declare_list(id, cause.clone());
+			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
+			node.set_first(item, cause.clone())?;
+			node.set_rest(head, cause)?;
+			head = id;
+		}
+
+		Ok(head)
+	}
+
+	pub fn create_list_with<I: IntoIterator, C>(
+		&mut self,
+		list: I,
+		mut f: C
+	) -> Result<Id, Error<F>> where F: Clone + Ord, I::IntoIter: DoubleEndedIterator, C: FnMut(I::Item, &mut Self) -> Caused<vocab::Object<F>, F> {
+		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
+
+		for item in list.into_iter().rev() {
+			let id = Id::Blank(self.vocab.new_blank_label());
+			let (item, cause) = f(item, self).into_parts();
+
+			self.declare_list(id, cause.clone());
+			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
+			node.set_first(item, cause.clone())?;
+			node.set_rest(head, cause)?;
+			head = id;
+		}
+
+		Ok(head)
+	}
+
+	pub fn try_create_list_with<E, I: IntoIterator, C>(
+		&mut self,
+		list: I,
+		mut f: C
+	) -> Result<Id, E> where F: Clone + Ord, E: From<Error<F>>, I::IntoIter: DoubleEndedIterator, C: FnMut(I::Item, &mut Self) -> Result<Caused<vocab::Object<F>, F>, E> {
+		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
+
+		for item in list.into_iter().rev() {
+			let id = Id::Blank(self.vocab.new_blank_label());
+			let (item, cause) = f(item, self)?.into_parts();
+
+			self.declare_list(id, cause.clone());
+			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
+			node.set_first(item, cause.clone())?;
+			node.set_rest(head, cause)?;
+			head = id;
+		}
+
+		Ok(head)
 	}
 }
 
@@ -1028,13 +1093,13 @@ impl<F> From<Node<AllocatedComponents<F>>> for treeldr::Node<F> {
 }
 
 #[allow(clippy::type_complexity)]
-pub struct AllocatedShelves<F, D: Definitions<F>> {
-	types: Shelf<Vec<(Id, WithCauses<D::Type, F>)>>,
-	properties: Shelf<Vec<(Id, WithCauses<D::Property, F>)>>,
-	layouts: Shelf<Vec<(Id, WithCauses<D::Layout, F>)>>,
+pub struct AllocatedShelves<F, D: Descriptions<F>> {
+	types: Shelf<Vec<(Id, WithCauses<ty::Definition<F, D::Type>, F>)>>,
+	properties: Shelf<Vec<(Id, WithCauses<prop::Definition<F>, F>)>>,
+	layouts: Shelf<Vec<(Id, WithCauses<layout::Definition<F, D::Layout>, F>)>>,
 }
 
-impl<F, D: Definitions<F>> Default for AllocatedShelves<F, D> {
+impl<F, D: Descriptions<F>> Default for AllocatedShelves<F, D> {
 	fn default() -> Self {
 		Self {
 			types: Shelf::default(),
@@ -1049,7 +1114,7 @@ pub struct AllocatedNodes<F> {
 }
 
 impl<F: Clone> AllocatedNodes<F> {
-	pub fn new<D: Definitions<F>>(
+	pub fn new<D: Descriptions<F>>(
 		shelves: &mut AllocatedShelves<F, D>,
 		nodes: HashMap<Id, Node<node::Components<F, D>>>,
 	) -> Self {
