@@ -12,7 +12,12 @@ pub trait Tokens<F> {
 
 	#[allow(clippy::type_complexity)]
 	fn next(&mut self) -> Result<Loc<Option<Token>, F>, Loc<Self::Error, F>>;
+
+	fn next_label(&mut self) -> Label;
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Label(usize);
 
 /// Identifier.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -367,6 +372,7 @@ pub struct Lexer<F, E, C: Iterator<Item = Result<char, E>>> {
 	chars: Chars<C>,
 	pos: Position<F>,
 	lookahead: Option<Loc<Token, F>>,
+	label_count: usize
 }
 
 pub enum PrefixedName {
@@ -390,7 +396,14 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 				last_span: Span::default(),
 			},
 			lookahead: None,
+			label_count: 0
 		}
+	}
+
+	pub fn next_label(&mut self) -> Label {
+		let l = self.label_count;
+		self.label_count += 1;
+		Label(l)
 	}
 
 	fn peek_char(&mut self) -> Result<Option<char>, Loc<Error<E>, F>> {
@@ -798,6 +811,10 @@ impl<F: Clone, E: fmt::Debug, C: Iterator<Item = Result<char, E>>> Tokens<F> for
 
 	fn next(&mut self) -> Result<Loc<Option<Token>, F>, Loc<Error<E>, F>> {
 		self.next()
+	}
+
+	fn next_label(&mut self) -> Label {
+		self.next_label()
 	}
 }
 

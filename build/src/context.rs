@@ -229,25 +229,59 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	where
 		F: Ord + Clone,
 	{
-		// Start with the layouts.
-		let mut default_layout_names = HashMap::new();
+		use treeldr::utils::SccGraph;
+
+		struct LayoutGraph {
+			layouts: Vec<Id>,
+			dependencies: HashMap<Id, Vec<Id>>,
+		}
+
+		impl SccGraph for LayoutGraph {
+			type Vertex = Id;
+
+			fn vertices(&self) -> &[Self::Vertex] {
+				&self.layouts
+			}
+
+			fn successors(&self, v: Self::Vertex) -> &[Self::Vertex] {
+				self.dependencies.get(&v).unwrap()
+			}
+		}
+
+		// Start by computing layout parent-child graph.
+		let mut graph = LayoutGraph {
+			layouts: Vec::new(),
+			dependencies: HashMap::new()
+		};
+
 		for (id, node) in &self.nodes {
-			if let Some(layout) = node.as_layout() {
+			if node.is_layout() {
+				let parent_layouts = &self.layout_relations.get(id).unwrap().parent;
+				let dependencies: Vec<_> = parent_layouts.iter().map(|p| p.layout).collect();
+				graph.layouts.push(*id);
+				graph.dependencies.insert(*id, dependencies);
+			}
+		}
+
+		let components = graph.strongly_connected_components();
+		let ordered_components = components.order_by_depth();
+		for i in ordered_components.into_iter().rev() {
+			let component = components.get(i).unwrap();
+			for id in component {
+				let layout = self.nodes.get(id).unwrap().as_layout().unwrap();
 				let parent_layouts = &self.layout_relations.get(id).unwrap().parent;
 				if let Some(name) = layout.default_name(
 					self,
 					parent_layouts,
 					layout.causes().preferred().cloned(),
 				)? {
-					default_layout_names.insert(*id, name);
+					use treeldr::vocab::Display;
+					let (name, cause) = name.into_parts();
+					let layout = self.get_mut(*id).unwrap().as_layout_mut().unwrap();
+					if layout.name().is_none() {
+						layout.set_name(name, cause)?;
+					}
 				}
-			}
-		}
-		for (id, name) in default_layout_names {
-			let (name, cause) = name.into_parts();
-			let layout = self.require_layout_mut(id, cause.clone())?;
-			if layout.name().is_none() {
-				layout.set_name(name, cause)?;
 			}
 		}
 
@@ -302,7 +336,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 			layout_dependencies: Vec<Vec<crate::Item<F>>>,
 		}
 
-		impl<F> treeldr::utils::SccGraph for Graph<F> {
+		impl<F> SccGraph for Graph<F> {
 			type Vertex = crate::Item<F>;
 
 			fn vertices(&self) -> &[Self::Vertex] {

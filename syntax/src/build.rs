@@ -160,7 +160,7 @@ pub struct LocalContext<F> {
 
 	next_id: Option<Loc<Id, F>>,
 
-	anonymous_nodes: BTreeMap<Location<F>, Loc<Id, F>>,
+	label_id: HashMap<crate::Label, Loc<Id, F>>,
 
 	/// Associates each literal type/value to a blank node label.
 	literal: BTreeMap<Loc<crate::Literal, F>, LiteralData<F>>,
@@ -185,22 +185,36 @@ impl<F> LocalContext<F> {
 			prefixes: HashMap::new(),
 			scope: None,
 			next_id: None,
-			anonymous_nodes: BTreeMap::new(),
+			label_id: HashMap::new(),
 			literal: BTreeMap::new(),
 			implicit_definition: false
 		}
 	}
 
-	pub fn anonymous_id(&mut self, vocabulary: &mut Vocabulary, loc: Location<F>) -> Loc<Id, F> where F: Clone + Ord {
-		use std::collections::btree_map::Entry;
-		match self.anonymous_nodes.entry(loc) {
-			Entry::Occupied(entry) => entry.get().clone(),
-			Entry::Vacant(entry) => {
+	pub fn anonymous_id(&mut self, label: Option<crate::Label>, vocabulary: &mut Vocabulary, loc: Location<F>) -> Loc<Id, F> where F: Clone + Ord {
+		let id = match label {
+			Some(label) => {
+				use std::collections::hash_map::Entry;
+				match self.label_id.entry(label) {
+					Entry::Occupied(entry) => entry.get().clone(),
+					Entry::Vacant(entry) => {
+						let id = self.next_id
+							.take()
+							.unwrap_or_else(|| Loc(Id::Blank(vocabulary.new_blank_label()), loc));
+						entry.insert(id.clone());
+						id
+					}
+				}
+			}
+			None => {
 				self.next_id
 					.take()
-					.unwrap_or_else(|| Loc(Id::Blank(vocabulary.new_blank_label()), entry.key().clone()))
+					.unwrap_or_else(|| Loc(Id::Blank(vocabulary.new_blank_label()), loc))
 			}
-		}
+		};
+
+		self.next_id.take();
+		id
 	}
 }
 
@@ -646,8 +660,8 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterTypeExpr<F>, F> {
 			crate::OuterTypeExpr::Inner(e) => {
 				Loc(e, loc).build(local_context, context)
 			},
-			crate::OuterTypeExpr::Union(options) => {
-				let Loc(id, _) = local_context.anonymous_id(context.vocabulary_mut(), loc.clone());
+			crate::OuterTypeExpr::Union(label, options) => {
+				let Loc(id, _) = local_context.anonymous_id(Some(label), context.vocabulary_mut(), loc.clone());
 				if id.is_blank() {
 					context.declare_type(id, Some(loc.clone()));
 				}
@@ -662,8 +676,8 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterTypeExpr<F>, F> {
 
 				Ok(Loc(id, loc))
 			}
-			crate::OuterTypeExpr::Intersection(types) => {
-				let Loc(id, _) = local_context.anonymous_id(context.vocabulary_mut(), loc.clone());
+			crate::OuterTypeExpr::Intersection(label, types) => {
+				let Loc(id, _) = local_context.anonymous_id(Some(label), context.vocabulary_mut(), loc.clone());
 				if id.is_blank() {
 					context.declare_type(id, Some(loc.clone()));
 				}
@@ -891,8 +905,8 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 
 		match ty {
 			crate::OuterLayoutExpr::Inner(e) => Loc(e, loc).build(local_context, context),
-			crate::OuterLayoutExpr::Union(options) => {
-				let Loc(id, _) = local_context.anonymous_id(context.vocabulary_mut(), loc.clone());
+			crate::OuterLayoutExpr::Union(label, options) => {
+				let Loc(id, _) = local_context.anonymous_id(Some(label), context.vocabulary_mut(), loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, Some(loc.clone()));
 				}
@@ -936,8 +950,8 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 				
 				Ok(Loc(id, loc))
 			}
-			crate::OuterLayoutExpr::Intersection(types) => {
-				let Loc(id, _) = local_context.anonymous_id(context.vocabulary_mut(), loc.clone());
+			crate::OuterLayoutExpr::Intersection(label, types) => {
+				let Loc(id, _) = local_context.anonymous_id(Some(label), context.vocabulary_mut(), loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, Some(loc.clone()));
 				}
@@ -1003,7 +1017,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 				id.build(local_context, context)
 			}
 			crate::InnerLayoutExpr::Reference(r) => {
-				let Loc(id, _) = local_context.anonymous_id(context.vocabulary_mut(), loc.clone());
+				let Loc(id, _) = local_context.anonymous_id(None, context.vocabulary_mut(), loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, Some(loc.clone()));
 				}

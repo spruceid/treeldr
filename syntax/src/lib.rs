@@ -8,7 +8,7 @@ pub mod lexing;
 pub mod parsing;
 mod peekable3;
 
-pub use lexing::{Id, Lexer};
+pub use lexing::{Id, Label, Lexer};
 pub use parsing::Parse;
 
 #[derive(Clone)]
@@ -97,6 +97,7 @@ impl<F: Clone> TypeDescription<F> {
 
 pub struct PropertyDefinition<F> {
 	pub id: Loc<Id, F>,
+	pub alias: Option<Loc<Alias, F>>,
 	pub ty: Option<Loc<AnnotatedTypeExpr<F>, F>>,
 	pub doc: Option<Loc<Documentation<F>, F>>,
 }
@@ -162,21 +163,23 @@ impl<F: Clone> AnnotatedTypeExpr<F> {
 
 pub enum OuterTypeExpr<F> {
 	Inner(NamedInnerTypeExpr<F>),
-	Union(Vec<Loc<NamedInnerTypeExpr<F>, F>>),
-	Intersection(Vec<Loc<NamedInnerTypeExpr<F>, F>>),
+	Union(Label, Vec<Loc<NamedInnerTypeExpr<F>, F>>),
+	Intersection(Label, Vec<Loc<NamedInnerTypeExpr<F>, F>>),
 }
 
 impl<F: Clone> OuterTypeExpr<F> {
 	pub fn implicit_layout_expr(&self) -> OuterLayoutExpr<F> {
 		match self {
 			Self::Inner(i) => OuterLayoutExpr::Inner(i.implicit_layout_expr()),
-			Self::Union(options) => OuterLayoutExpr::Union(
+			Self::Union(label, options) => OuterLayoutExpr::Union(
+				*label,
 				options
 					.iter()
 					.map(|Loc(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
 					.collect(),
 			),
-			Self::Intersection(types) => OuterLayoutExpr::Intersection(
+			Self::Intersection(label, types) => OuterLayoutExpr::Intersection(
+				*label,
 				types
 					.iter()
 					.map(|Loc(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
@@ -314,8 +317,8 @@ pub struct AnnotatedLayoutExpr<F> {
 
 pub enum OuterLayoutExpr<F> {
 	Inner(NamedInnerLayoutExpr<F>),
-	Union(Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
-	Intersection(Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
+	Union(Label, Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
+	Intersection(Label, Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
 }
 
 pub struct NamedInnerLayoutExpr<F> {

@@ -104,7 +104,9 @@ impl<V> Components<V> {
 			if depth[i] == 0 || new_depth > depth[i] {
 				depth[i] = new_depth;
 				for c in self.successors(i).unwrap() {
-					stack.push((c, new_depth + 1))
+					if c != i {
+						stack.push((c, new_depth + 1))
+					}
 				}
 			}
 		}

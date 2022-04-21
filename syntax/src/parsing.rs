@@ -535,7 +535,7 @@ impl<F: Clone> Parse<F> for PropertyDefinition<F> {
 			_ => None,
 		};
 
-		Ok(Loc::new(Self { id, ty, doc }, loc))
+		Ok(Loc::new(Self { id, alias: None, ty, doc }, loc))
 	}
 }
 
@@ -691,7 +691,7 @@ impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
 					options.push(item);
 				}
 
-				Ok(Loc(Self::Union(options), loc))
+				Ok(Loc(Self::Union(lexer.next_label(), options), loc))
 			}
 			Loc(Some(Token::Punct(Punct::Ampersand)), _) => {
 				let mut types = vec![Loc(first, first_loc)];
@@ -702,7 +702,7 @@ impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
 					types.push(item);
 				}
 
-				Ok(Loc(Self::Intersection(types), loc))
+				Ok(Loc(Self::Intersection(lexer.next_label(), types), loc))
 			}
 			_ => Ok(Loc(Self::Inner(first), first_loc)),
 		}
@@ -834,7 +834,7 @@ impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
 					options.push(item);
 				}
 
-				Ok(Loc(Self::Union(options), loc))
+				Ok(Loc(Self::Union(lexer.next_label(), options), loc))
 			}
 			Loc(Some(Token::Punct(Punct::Ampersand)), _) => {
 				let mut layouts = vec![Loc(first, first_loc)];
@@ -845,7 +845,7 @@ impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
 					layouts.push(item);
 				}
 
-				Ok(Loc(Self::Intersection(layouts), loc))
+				Ok(Loc(Self::Intersection(lexer.next_label(), layouts), loc))
 			}
 			_ => Ok(Loc(Self::Inner(first), first_loc)),
 		}
