@@ -1,5 +1,5 @@
-use treeldr::{reporting::DiagnoseWithCauseAndVocabulary, Caused, Vocabulary};
 use locspan::Location;
+use treeldr::{reporting::DiagnoseWithCauseAndVocabulary, Caused, Vocabulary};
 
 pub type Error<F> = Caused<Description<F>, F>;
 

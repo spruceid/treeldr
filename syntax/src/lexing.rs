@@ -372,7 +372,7 @@ pub struct Lexer<F, E, C: Iterator<Item = Result<char, E>>> {
 	chars: Chars<C>,
 	pos: Position<F>,
 	lookahead: Option<Loc<Token, F>>,
-	label_count: usize
+	label_count: usize,
 }
 
 pub enum PrefixedName {
@@ -396,7 +396,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 				last_span: Span::default(),
 			},
 			lookahead: None,
-			label_count: 0
+			label_count: 0,
 		}
 	}
 

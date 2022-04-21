@@ -28,13 +28,12 @@ impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithCause<F> for Erro
 	fn labels(&self, cause: Option<&Location<F>>) -> Vec<codespan_reporting::diagnostic::Label<F>> {
 		match cause {
 			Some(loc) => {
-				vec![codespan_reporting::diagnostic::Label::primary(
-					loc.file().clone(),
-					loc.span(),
-				)
-				.with_message(self.to_string())]
+				vec![
+					codespan_reporting::diagnostic::Label::primary(loc.file().clone(), loc.span())
+						.with_message(self.to_string()),
+				]
 			}
-			None => Vec::new()
+			None => Vec::new(),
 		}
 	}
 
@@ -535,7 +534,15 @@ impl<F: Clone> Parse<F> for PropertyDefinition<F> {
 			_ => None,
 		};
 
-		Ok(Loc::new(Self { id, alias: None, ty, doc }, loc))
+		Ok(Loc::new(
+			Self {
+				id,
+				alias: None,
+				ty,
+				doc,
+			},
+			loc,
+		))
 	}
 }
 

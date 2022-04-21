@@ -42,7 +42,7 @@ impl<F> Literal<F> {
 		Parts {
 			name: self.name,
 			regexp: self.regexp,
-			should_inline: self.should_inline
+			should_inline: self.should_inline,
 		}
 	}
 

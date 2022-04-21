@@ -1,4 +1,4 @@
-use crate::{error, ty, prop, layout, list, Descriptions, Error};
+use crate::{error, layout, list, prop, ty, Descriptions, Error};
 use locspan::Location;
 use treeldr::{Caused, Causes, Documentation, Id, MaybeSet, WithCauses};
 
@@ -287,7 +287,9 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 		self.value.property.with_causes_mut()
 	}
 
-	pub fn as_layout_mut(&mut self) -> Option<&mut WithCauses<layout::Definition<F, D::Layout>, F>> {
+	pub fn as_layout_mut(
+		&mut self,
+	) -> Option<&mut WithCauses<layout::Definition<F, D::Layout>, F>> {
 		self.value.layout.with_causes_mut()
 	}
 
@@ -311,23 +313,27 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 	where
 		F: Ord,
 	{
-		self.value.ty.set_once(cause, || ty::Definition::new(self.id))
+		self.value
+			.ty
+			.set_once(cause, || ty::Definition::new(self.id))
 	}
 
-	pub fn declare_property(
-		&mut self,
-		cause: Option<Location<F>>
-	) where
+	pub fn declare_property(&mut self, cause: Option<Location<F>>)
+	where
 		F: Ord,
 	{
-		self.value.property.set_once(cause, || prop::Definition::new(self.id))
+		self.value
+			.property
+			.set_once(cause, || prop::Definition::new(self.id))
 	}
 
 	pub fn declare_layout(&mut self, cause: Option<Location<F>>)
 	where
 		F: Ord,
 	{
-		self.value.layout.set_once(cause, || layout::Definition::new(self.id))
+		self.value
+			.layout
+			.set_once(cause, || layout::Definition::new(self.id))
 	}
 
 	pub fn declare_layout_field(&mut self, cause: Option<Location<F>>)
@@ -357,6 +363,7 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 			.set_once(cause, || list::Definition::new(self.id))
 	}
 
+	#[allow(clippy::type_complexity)]
 	pub fn require_type_mut(
 		&mut self,
 		cause: Option<Location<F>>,
@@ -401,6 +408,7 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 		}
 	}
 
+	#[allow(clippy::type_complexity)]
 	pub fn require_layout(
 		&self,
 		cause: Option<Location<F>>,
@@ -423,6 +431,7 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 		}
 	}
 
+	#[allow(clippy::type_complexity)]
 	pub fn require_layout_mut(
 		&mut self,
 		cause: Option<Location<F>>,

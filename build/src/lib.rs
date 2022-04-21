@@ -18,8 +18,10 @@ pub use list::{ListMut, ListRef};
 pub use node::Node;
 
 pub trait Descriptions<F>: Sized {
-	type Error: From<Error<F>> + From<<Self::Type as ty::PseudoDescription<F>>::Error> + From<<Self::Layout as layout::PseudoDescription<F>>::Error>;
-	
+	type Error: From<Error<F>>
+		+ From<<Self::Type as ty::PseudoDescription<F>>::Error>
+		+ From<<Self::Layout as layout::PseudoDescription<F>>::Error>;
+
 	type Type: ty::PseudoDescription<F>;
 	type Layout: layout::PseudoDescription<F>;
 }
@@ -70,7 +72,15 @@ pub trait Document<F, D: Descriptions<F>> {
 	type LocalContext;
 	type Error;
 
-	fn declare(&self, local_context: &mut Self::LocalContext, context: &mut Context<F, D>) -> Result<(), Self::Error>;
+	fn declare(
+		&self,
+		local_context: &mut Self::LocalContext,
+		context: &mut Context<F, D>,
+	) -> Result<(), Self::Error>;
 
-	fn relate(self, local_context: &mut Self::LocalContext, context: &mut Context<F, D>) -> Result<(), Self::Error>;
+	fn relate(
+		self,
+		local_context: &mut Self::LocalContext,
+		context: &mut Context<F, D>,
+	) -> Result<(), Self::Error>;
 }

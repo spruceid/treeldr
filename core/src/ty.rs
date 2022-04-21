@@ -3,13 +3,13 @@ use shelves::Ref;
 
 mod intersection;
 pub mod normal;
-mod r#union;
 pub mod restriction;
+mod r#union;
 
 pub use intersection::Intersection;
 pub use normal::Normal;
-pub use union::Union;
 pub use restriction::Restricted;
+pub use union::Union;
 
 /// Type definition.
 pub struct Definition<F> {

@@ -1,8 +1,9 @@
 use crate::{
-	error, ty, prop, layout, list, node, Descriptions, Error, ListMut, ListRef, Node, ParentLayout, SubLayout,
+	error, layout, list, node, prop, ty, Descriptions, Error, ListMut, ListRef, Node, ParentLayout,
+	SubLayout,
 };
-use iref::IriBuf;
 use derivative::Derivative;
+use iref::IriBuf;
 use locspan::Location;
 use shelves::{Ref, Shelf};
 use std::collections::HashMap;
@@ -53,7 +54,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		cause: Option<Location<F>>,
 	) -> Result<Id, Error<F>>
 	where
-		F: Clone + Ord
+		F: Clone + Ord,
 	{
 		let id = Id::Iri(vocab::Term::from_iri(iri, self.vocabulary_mut()));
 		self.declare_type(id, cause.clone());
@@ -141,7 +142,9 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		for (id, node) in &self.nodes {
 			if let Some(layout) = node.as_layout() {
 				if let Some(desc) = layout.description() {
-					if let Some(layout::Description::Reference(target_layout_id)) = desc.inner().as_standard() {
+					if let Some(layout::Description::Reference(target_layout_id)) =
+						desc.inner().as_standard()
+					{
 						deref_map.insert(
 							*id,
 							Caused::new(*target_layout_id, desc.causes().preferred().cloned()),
@@ -251,7 +254,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		// Start by computing layout parent-child graph.
 		let mut graph = LayoutGraph {
 			layouts: Vec::new(),
-			dependencies: HashMap::new()
+			dependencies: HashMap::new(),
 		};
 
 		for (id, node) in &self.nodes {
@@ -275,7 +278,6 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 					parent_layouts,
 					layout.causes().preferred().cloned(),
 				)? {
-					use treeldr::vocab::Display;
 					let (name, cause) = name.into_parts();
 					let layout = self.get_mut(*id).unwrap().as_layout_mut().unwrap();
 					if layout.name().is_none() {
@@ -317,7 +319,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		}
 
 		if let Err(e) = self.compute_uses() {
-			return Err((e.into(), self.into_vocabulary()));
+			return Err((e, self.into_vocabulary()));
 		}
 
 		if let Err(e) = self.assign_default_names() {
@@ -431,14 +433,15 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 						let (ty, causes) = ty.into_parts();
 						match ty.reduce() {
 							Ok(ty) => {
-								match ty.build(&self.vocab, &allocated_nodes, dependencies, causes) {
+								match ty.build(&self.vocab, &allocated_nodes, dependencies, causes)
+								{
 									Ok(built_ty) => {
 										built_types[ty_ref.index()] = Some(built_ty);
 									}
 									Err(e) => return Err((e.into(), self.vocab)),
 								}
 							}
-							Err(e) => return Err((e.into(), self.vocab))
+							Err(e) => return Err((e.into(), self.vocab)),
 						}
 					}
 					crate::Item::Property(prop_ref) => {
@@ -448,7 +451,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 							Ok(built_prop) => {
 								built_properties[prop_ref.index()] = Some(built_prop);
 							}
-							Err(e) => return Err((e.into(), self.vocab))
+							Err(e) => return Err((e.into(), self.vocab)),
 						}
 					}
 					crate::Item::Layout(layout_ref) => {
@@ -456,15 +459,19 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 						let (layout, causes) = layout.into_parts();
 						match layout.reduce() {
 							Ok(layout) => {
-								match layout.build(&self.vocab, &allocated_nodes, dependencies, causes)
-								{
+								match layout.build(
+									&self.vocab,
+									&allocated_nodes,
+									dependencies,
+									causes,
+								) {
 									Ok(built_layout) => {
 										built_layouts[layout_ref.index()] = Some(built_layout);
 									}
 									Err(e) => return Err((e.into(), self.vocab)),
 								}
 							}
-							Err(e) => return Err((e.into(), self.vocab))
+							Err(e) => return Err((e.into(), self.vocab)),
 						}
 					}
 				}
@@ -537,11 +544,8 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	}
 
 	/// Declare the given `id` as a type.
-	pub fn declare_type(
-		&mut self,
-		id: Id,
-		cause: Option<Location<F>>
-	) where
+	pub fn declare_type(&mut self, id: Id, cause: Option<Location<F>>)
+	where
 		F: Ord,
 	{
 		match self.nodes.get_mut(&id) {
@@ -553,11 +557,8 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	}
 
 	/// Declare the given `id` as a property.
-	pub fn declare_property(
-		&mut self,
-		id: Id,
-		cause: Option<Location<F>>
-	) where
+	pub fn declare_property(&mut self, id: Id, cause: Option<Location<F>>)
+	where
 		F: Ord,
 	{
 		match self.nodes.get_mut(&id) {
@@ -569,11 +570,8 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	}
 
 	/// Declare the given `id` as a layout.
-	pub fn declare_layout(
-		&mut self,
-		id: Id,
-		cause: Option<Location<F>>
-	) where
+	pub fn declare_layout(&mut self, id: Id, cause: Option<Location<F>>)
+	where
 		F: Ord,
 	{
 		match self.nodes.get_mut(&id) {
@@ -647,6 +645,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		}
 	}
 
+	#[allow(clippy::type_complexity)]
 	pub fn require_type_mut(
 		&mut self,
 		id: Id,
@@ -689,6 +688,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		}
 	}
 
+	#[allow(clippy::type_complexity)]
 	pub fn require_layout(
 		&self,
 		id: Id,
@@ -710,6 +710,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		}
 	}
 
+	#[allow(clippy::type_complexity)]
 	pub fn require_layout_mut(
 		&mut self,
 		id: Id,
@@ -880,10 +881,14 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		}
 	}
 
-	pub fn create_list<I: IntoIterator<Item=Caused<vocab::Object<F>, F>>>(
+	pub fn create_list<I: IntoIterator<Item = Caused<vocab::Object<F>, F>>>(
 		&mut self,
-		list: I
-	) -> Result<Id, Error<F>> where F: Clone + Ord, I::IntoIter: DoubleEndedIterator {
+		list: I,
+	) -> Result<Id, Error<F>>
+	where
+		F: Clone + Ord,
+		I::IntoIter: DoubleEndedIterator,
+	{
 		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
 
 		for item in list.into_iter().rev() {
@@ -903,8 +908,13 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn create_list_with<I: IntoIterator, C>(
 		&mut self,
 		list: I,
-		mut f: C
-	) -> Result<Id, Error<F>> where F: Clone + Ord, I::IntoIter: DoubleEndedIterator, C: FnMut(I::Item, &mut Self) -> Caused<vocab::Object<F>, F> {
+		mut f: C,
+	) -> Result<Id, Error<F>>
+	where
+		F: Clone + Ord,
+		I::IntoIter: DoubleEndedIterator,
+		C: FnMut(I::Item, &mut Self) -> Caused<vocab::Object<F>, F>,
+	{
 		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
 
 		for item in list.into_iter().rev() {
@@ -924,8 +934,14 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn try_create_list_with<E, I: IntoIterator, C>(
 		&mut self,
 		list: I,
-		mut f: C
-	) -> Result<Id, E> where F: Clone + Ord, E: From<Error<F>>, I::IntoIter: DoubleEndedIterator, C: FnMut(I::Item, &mut Self) -> Result<Caused<vocab::Object<F>, F>, E> {
+		mut f: C,
+	) -> Result<Id, E>
+	where
+		F: Clone + Ord,
+		E: From<Error<F>>,
+		I::IntoIter: DoubleEndedIterator,
+		C: FnMut(I::Item, &mut Self) -> Result<Caused<vocab::Object<F>, F>, E>,
+	{
 		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
 
 		for item in list.into_iter().rev() {

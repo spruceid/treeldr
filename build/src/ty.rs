@@ -87,7 +87,7 @@ impl<F, D> Definition<F, D> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
-			desc: MaybeSet::default()
+			desc: MaybeSet::default(),
 		}
 	}
 
@@ -105,15 +105,25 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 		&self,
 		nodes: &super::context::AllocatedNodes<F>,
 		_causes: &Causes<F>,
-	) -> Result<Vec<crate::Item<F>>, D::Error> where F: Clone + Ord {
+	) -> Result<Vec<crate::Item<F>>, D::Error>
+	where
+		F: Clone + Ord,
+	{
 		match self.desc.with_causes() {
 			Some(desc) => desc.dependencies(self.id, nodes, desc.causes()),
-			None => Ok(Vec::new())
+			None => Ok(Vec::new()),
 		}
 	}
 
-	pub fn require_normal_mut(&mut self, cause: Option<Location<F>>) -> Result<&mut Normal<F>, Error<F>> where F: Clone + Ord {
-		self.desc.set_once(cause.clone(), || Description::Normal(Normal::new()).into());
+	pub fn require_normal_mut(
+		&mut self,
+		cause: Option<Location<F>>,
+	) -> Result<&mut Normal<F>, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.desc
+			.set_once(cause.clone(), || Description::Normal(Normal::new()).into());
 		let because = self.desc.causes().unwrap().preferred().cloned();
 		match self.desc.value_mut().unwrap().as_standard_mut() {
 			Some(Description::Normal(n)) => Ok(n),
@@ -122,7 +132,7 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					id: self.id,
 					expected: Some(other.kind()),
 					found: Some(Kind::Normal),
-					because
+					because,
 				}
 				.into(),
 				cause,
@@ -132,11 +142,11 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					id: self.id,
 					expected: None,
 					found: Some(Kind::Normal),
-					because
+					because,
 				}
 				.into(),
 				cause,
-			))
+			)),
 		}
 	}
 
@@ -164,7 +174,8 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 	where
 		F: Ord + Clone,
 	{
-		self.desc.set_once(cause.clone(), || Description::Union(options_ref).into());
+		self.desc
+			.set_once(cause.clone(), || Description::Union(options_ref).into());
 		let because = self.desc.causes().unwrap().preferred().cloned();
 		match self.desc.value_mut().unwrap().as_standard() {
 			Some(Description::Union(_)) => Ok(()),
@@ -173,7 +184,7 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					id: self.id,
 					expected: Some(other.kind()),
 					found: Some(Kind::Union),
-					because
+					because,
 				}
 				.into(),
 				cause,
@@ -183,11 +194,11 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					id: self.id,
 					expected: None,
 					found: Some(Kind::Union),
-					because
+					because,
 				}
 				.into(),
 				cause,
-			))
+			)),
 		}
 	}
 
@@ -199,7 +210,9 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 	where
 		F: Ord + Clone,
 	{
-		self.desc.set_once(cause.clone(), || Description::Intersection(types_ref).into());
+		self.desc.set_once(cause.clone(), || {
+			Description::Intersection(types_ref).into()
+		});
 		let because = self.desc.causes().unwrap().preferred().cloned();
 		match self.desc.value_mut().unwrap().as_standard() {
 			Some(Description::Intersection(_)) => Ok(()),
@@ -208,7 +221,7 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					id: self.id,
 					expected: Some(other.kind()),
 					found: Some(Kind::Intersection),
-					because
+					because,
 				}
 				.into(),
 				cause,
@@ -218,18 +231,18 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					id: self.id,
 					expected: None,
 					found: Some(Kind::Intersection),
-					because
+					because,
 				}
 				.into(),
 				cause,
-			))
+			)),
 		}
 	}
 
 	pub fn reduce(self) -> Result<Definition<F>, D::Error> {
 		Ok(Definition {
 			id: self.id,
-			desc: self.desc.try_map(|d| d.reduce())?
+			desc: self.desc.try_map(|d| d.reduce())?,
 		})
 	}
 }
@@ -253,7 +266,7 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 					Description::Union(options_id) => {
 						use std::collections::hash_map::Entry;
 						let mut options = HashMap::new();
-		
+
 						let items = nodes
 							.require_list(options_id, desc_causes.preferred().cloned())?
 							.iter(nodes);
@@ -267,12 +280,12 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
 								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
 							}?;
-		
+
 							let (option_ty, option_causes) = nodes
 								.require_type(option_id, causes.into_preferred())?
 								.clone()
 								.into_parts();
-		
+
 							match options.entry(option_ty) {
 								Entry::Vacant(entry) => {
 									entry.insert(option_causes);
@@ -282,13 +295,13 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 								}
 							}
 						}
-		
+
 						treeldr::ty::Description::Union(treeldr::ty::Union::new(options))
 					}
 					Description::Intersection(types_id) => {
 						use std::collections::hash_map::Entry;
 						let mut types = HashMap::new();
-		
+
 						let items = nodes
 							.require_list(types_id, desc_causes.preferred().cloned())?
 							.iter(nodes);
@@ -302,12 +315,12 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
 								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
 							}?;
-		
+
 							let (ty, ty_causes) = nodes
 								.require_type(option_id, causes.into_preferred())?
 								.clone()
 								.into_parts();
-		
+
 							match types.entry(ty) {
 								Entry::Vacant(entry) => {
 									entry.insert(ty_causes);
@@ -317,14 +330,14 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 								}
 							}
 						}
-		
-						treeldr::ty::Description::Intersection(treeldr::ty::Intersection::new(types))
+
+						treeldr::ty::Description::Intersection(treeldr::ty::Intersection::new(
+							types,
+						))
 					}
 				}
 			}
-			None => {
-				treeldr::ty::Description::Normal(treeldr::ty::Normal::new())
-			}
+			None => treeldr::ty::Description::Normal(treeldr::ty::Normal::new()),
 		};
 
 		Ok(treeldr::ty::Definition::new(self.id, desc, causes))

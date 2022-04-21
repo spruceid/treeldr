@@ -1,5 +1,5 @@
-use locspan::{Loc, Location};
 use crate::Vocabulary;
+use locspan::{Loc, Location};
 
 /// Error with diagnostic reporting support.
 pub trait Diagnose<F> {
@@ -25,7 +25,10 @@ pub trait Diagnose<F> {
 pub trait DiagnoseWithCause<F> {
 	fn message(&self, cause: Option<&Location<F>>) -> String;
 
-	fn labels(&self, _cause: Option<&Location<F>>) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn labels(
+		&self,
+		_cause: Option<&Location<F>>,
+	) -> Vec<codespan_reporting::diagnostic::Label<F>> {
 		Vec::new()
 	}
 
@@ -33,7 +36,10 @@ pub trait DiagnoseWithCause<F> {
 		Vec::new()
 	}
 
-	fn diagnostic(&self, cause: Option<&Location<F>>) -> codespan_reporting::diagnostic::Diagnostic<F> {
+	fn diagnostic(
+		&self,
+		cause: Option<&Location<F>>,
+	) -> codespan_reporting::diagnostic::Diagnostic<F> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message(cause))
 			.with_labels(self.labels(cause))
@@ -45,7 +51,11 @@ pub trait DiagnoseWithCause<F> {
 pub trait DiagnoseWithCauseAndVocabulary<F> {
 	fn message(&self, cause: Option<&Location<F>>, vocabulary: &Vocabulary) -> String;
 
-	fn labels(&self, _cause: Option<&Location<F>>, _vocabulary: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn labels(
+		&self,
+		_cause: Option<&Location<F>>,
+		_vocabulary: &Vocabulary,
+	) -> Vec<codespan_reporting::diagnostic::Label<F>> {
 		Vec::new()
 	}
 
@@ -53,7 +63,11 @@ pub trait DiagnoseWithCauseAndVocabulary<F> {
 		Vec::new()
 	}
 
-	fn diagnostic(&self, cause: Option<&Location<F>>, vocabulary: &Vocabulary) -> codespan_reporting::diagnostic::Diagnostic<F> {
+	fn diagnostic(
+		&self,
+		cause: Option<&Location<F>>,
+		vocabulary: &Vocabulary,
+	) -> codespan_reporting::diagnostic::Diagnostic<F> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message(cause, vocabulary))
 			.with_labels(self.labels(cause, vocabulary))
@@ -81,7 +95,9 @@ pub trait DiagnoseWithVocabulary<F> {
 	}
 }
 
-impl<'t, 'v, F, T: DiagnoseWithVocabulary<F>> Diagnose<F> for treeldr_vocab::WithVocabulary<'t, 'v, T> {
+impl<'t, 'v, F, T: DiagnoseWithVocabulary<F>> Diagnose<F>
+	for treeldr_vocab::WithVocabulary<'t, 'v, T>
+{
 	fn message(&self) -> String {
 		self.value().message(self.vocabulary())
 	}
@@ -117,7 +133,9 @@ impl<'t, 'v, F, T: DiagnoseWithCause<F>> Diagnose<F> for crate::Caused<T, F> {
 	}
 }
 
-impl<'t, 'v, F, T: DiagnoseWithCauseAndVocabulary<F>> DiagnoseWithVocabulary<F> for crate::Caused<T, F> {
+impl<'t, 'v, F, T: DiagnoseWithCauseAndVocabulary<F>> DiagnoseWithVocabulary<F>
+	for crate::Caused<T, F>
+{
 	fn message(&self, vocabulary: &Vocabulary) -> String {
 		self.inner().message(self.cause(), vocabulary)
 	}

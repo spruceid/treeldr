@@ -1,4 +1,4 @@
-use crate::{layout, prop, ty, error, Error, Caused, Documentation, Id, MaybeSet};
+use crate::{error, layout, prop, ty, Caused, Documentation, Error, Id, MaybeSet};
 use locspan::Location;
 use shelves::Ref;
 

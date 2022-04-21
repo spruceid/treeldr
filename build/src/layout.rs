@@ -55,7 +55,11 @@ pub trait PseudoDescription<F>: PartialEq + From<Description> {
 
 	fn as_standard(&self) -> Option<&Description>;
 
-	fn sub_layouts<D: Descriptions<F>>(&self, context: &Context<F, D>, causes: &Causes<F>) -> Result<Vec<SubLayout<F>>, Self::Error>;
+	fn sub_layouts<D: Descriptions<F>>(
+		&self,
+		context: &Context<F, D>,
+		causes: &Causes<F>,
+	) -> Result<Vec<SubLayout<F>>, Self::Error>;
 
 	fn dependencies(
 		&self,
@@ -64,7 +68,12 @@ pub trait PseudoDescription<F>: PartialEq + From<Description> {
 		causes: &Causes<F>,
 	) -> Result<Vec<crate::Item<F>>, Self::Error>;
 
-	fn reduce(self, id: Id, name: &MaybeSet<vocab::Name, F>, ty: &MaybeSet<Id, F>) -> Result<Description, Self::Error>;
+	fn reduce(
+		self,
+		id: Id,
+		name: &MaybeSet<vocab::Name, F>,
+		ty: &MaybeSet<Id, F>,
+	) -> Result<Description, Self::Error>;
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -99,7 +108,14 @@ impl Description {
 		}
 	}
 
-	pub fn sub_layouts<F, D: Descriptions<F>>(&self, context: &Context<F, D>, causes: &Causes<F>) -> Result<Vec<SubLayout<F>>, Error<F>> where F: Clone + Ord {
+	pub fn sub_layouts<F, D: Descriptions<F>>(
+		&self,
+		context: &Context<F, D>,
+		causes: &Causes<F>,
+	) -> Result<Vec<SubLayout<F>>, Error<F>>
+	where
+		F: Clone + Ord,
+	{
 		let mut sub_layouts = Vec::new();
 
 		if let Description::Struct(fields_id) = self {
@@ -204,7 +220,11 @@ impl<F: Clone + Ord> PseudoDescription<F> for Description {
 		Some(self)
 	}
 
-	fn sub_layouts<D: Descriptions<F>>(&self, context: &Context<F, D>, causes: &Causes<F>) -> Result<Vec<SubLayout<F>>, Self::Error> {
+	fn sub_layouts<D: Descriptions<F>>(
+		&self,
+		context: &Context<F, D>,
+		causes: &Causes<F>,
+	) -> Result<Vec<SubLayout<F>>, Self::Error> {
 		self.sub_layouts(context, causes)
 	}
 
@@ -217,7 +237,12 @@ impl<F: Clone + Ord> PseudoDescription<F> for Description {
 		self.dependencies(id, nodes, causes)
 	}
 
-	fn reduce(self, _id: Id, _name: &MaybeSet<vocab::Name, F>, _ty: &MaybeSet<Id, F>) -> Result<Description, Self::Error> {
+	fn reduce(
+		self,
+		_id: Id,
+		_name: &MaybeSet<vocab::Name, F>,
+		_ty: &MaybeSet<Id, F>,
+	) -> Result<Description, Self::Error> {
 		Ok(self)
 	}
 }
@@ -285,27 +310,28 @@ impl<F, D> Definition<F, D> {
 		})
 	}
 
-	pub fn set_description(
-		&mut self,
-		desc: D,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
+	pub fn set_description(&mut self, desc: D, cause: Option<Location<F>>) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
-		D: PartialEq
+		D: PartialEq,
 	{
-		self.desc.try_set(desc, cause, |_expected, because, _found| {
-			error::LayoutMismatchDescription {
-				id: self.id,
-				because: because.cloned(),
-			}
-			.into()
-		})
+		self.desc
+			.try_set(desc, cause, |_expected, because, _found| {
+				error::LayoutMismatchDescription {
+					id: self.id,
+					because: because.cloned(),
+				}
+				.into()
+			})
 	}
 }
 
 impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
-	pub fn set_native(&mut self, native: Native, cause: Option<Location<F>>) -> Result<(), Error<F>> {
+	pub fn set_native(
+		&mut self,
+		native: Native,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>> {
 		self.set_description(Description::Native(native).into(), cause)
 	}
 
@@ -337,10 +363,13 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 		self.set_description(Description::Intersection(types_list).into(), cause)
 	}
 
-	pub fn sub_layouts<C: Descriptions<F>>(&self, context: &Context<F, C>) -> Result<Vec<SubLayout<F>>, D::Error> {
+	pub fn sub_layouts<C: Descriptions<F>>(
+		&self,
+		context: &Context<F, C>,
+	) -> Result<Vec<SubLayout<F>>, D::Error> {
 		match self.desc.with_causes() {
 			Some(desc) => desc.sub_layouts(context, desc.causes()),
-			None => Ok(Vec::new())
+			None => Ok(Vec::new()),
 		}
 	}
 
@@ -410,12 +439,14 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 	}
 
 	pub fn reduce(self) -> Result<Definition<F>, D::Error> {
-		let desc = self.desc.try_map(|d| d.reduce(self.id, &self.name, &self.ty))?;
+		let desc = self
+			.desc
+			.try_map(|d| d.reduce(self.id, &self.name, &self.ty))?;
 		Ok(Definition {
 			id: self.id,
 			name: self.name,
 			ty: self.ty,
-			desc
+			desc,
 		})
 	}
 }

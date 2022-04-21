@@ -1,6 +1,4 @@
-use crate::{
-	layout, prop, vocab::Name, Documentation, WithCauses,
-};
+use crate::{layout, prop, vocab::Name, Documentation, WithCauses};
 use locspan::Location;
 use shelves::Ref;
 
@@ -98,7 +96,7 @@ impl<F> Field<F> {
 
 	pub fn into_parts(self) -> FieldsParts<F> {
 		unsafe { std::mem::transmute(self) }
-	} 
+	}
 
 	pub fn property(&self) -> Ref<prop::Definition<F>> {
 		*self.prop.inner()

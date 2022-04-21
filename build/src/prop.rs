@@ -9,7 +9,7 @@ pub struct Definition<F> {
 	domain: HashMap<Id, Causes<F>>,
 	range: MaybeSet<Id, F>,
 	required: MaybeSet<bool, F>,
-	functional: MaybeSet<bool, F>
+	functional: MaybeSet<bool, F>,
 }
 
 impl<F> Definition<F> {
@@ -19,7 +19,7 @@ impl<F> Definition<F> {
 			domain: HashMap::new(),
 			range: MaybeSet::default(),
 			required: MaybeSet::default(),
-			functional: MaybeSet::default()
+			functional: MaybeSet::default(),
 		}
 	}
 
@@ -109,7 +109,10 @@ impl<F> Definition<F> {
 		&self,
 		_nodes: &super::context::AllocatedNodes<F>,
 		_causes: &Causes<F>,
-	) -> Result<Vec<crate::Item<F>>, Error<F>> where F: Clone + Ord {
+	) -> Result<Vec<crate::Item<F>>, Error<F>>
+	where
+		F: Clone + Ord,
+	{
 		Ok(Vec::new())
 	}
 }
@@ -138,7 +141,8 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 		let required = self.required.unwrap_or(false);
 		let functional = self.functional.unwrap_or(true);
 
-		let mut result = treeldr::prop::Definition::new(self.id, range, required, functional, causes);
+		let mut result =
+			treeldr::prop::Definition::new(self.id, range, required, functional, causes);
 
 		for (domain_id, domain_causes) in self.domain {
 			let domain_ref = nodes.require_type(domain_id, domain_causes.preferred().cloned())?;

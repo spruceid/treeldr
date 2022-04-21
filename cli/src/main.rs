@@ -114,44 +114,50 @@ fn main() {
 
 pub struct TreeLdrDocument {
 	doc: syntax::Document<source::FileId>,
-	local_context: syntax::build::LocalContext<source::FileId>
+	local_context: syntax::build::LocalContext<source::FileId>,
 }
 
 impl TreeLdrDocument {
-	fn declare(&mut self, context: &mut BuildContext) -> Result<(), syntax::build::Error<source::FileId>> {
+	fn declare(
+		&mut self,
+		context: &mut BuildContext,
+	) -> Result<(), syntax::build::Error<source::FileId>> {
 		use treeldr_build::Document;
 		self.doc.declare(&mut self.local_context, context)
 	}
 
-	fn build(mut self, context: &mut BuildContext) -> Result<(), syntax::build::Error<source::FileId>> {
+	fn build(
+		mut self,
+		context: &mut BuildContext,
+	) -> Result<(), syntax::build::Error<source::FileId>> {
 		use treeldr_build::Document;
 		self.doc.relate(&mut self.local_context, context)
 	}
 }
 
 pub enum Document {
-	TreeLdr(TreeLdrDocument)
+	TreeLdr(TreeLdrDocument),
 }
 
 impl Document {
-	fn declare(&mut self, context: &mut BuildContext) -> Result<(), syntax::build::Error<source::FileId>> {
+	fn declare(
+		&mut self,
+		context: &mut BuildContext,
+	) -> Result<(), syntax::build::Error<source::FileId>> {
 		match self {
-			Self::TreeLdr(d) => d.declare(context)
+			Self::TreeLdr(d) => d.declare(context),
 		}
 	}
 
 	fn build(self, context: &mut BuildContext) -> Result<(), syntax::build::Error<source::FileId>> {
 		match self {
-			Self::TreeLdr(d) => d.build(context)
+			Self::TreeLdr(d) => d.build(context),
 		}
 	}
 }
 
 /// Import a TreeLDR file.
-fn import_treeldr(
-	files: &source::Files,
-	source_id: source::FileId,
-) -> TreeLdrDocument {
+fn import_treeldr(files: &source::Files, source_id: source::FileId) -> TreeLdrDocument {
 	use syntax::Parse;
 	use treeldr::reporting::Diagnose;
 	let file = files.get(source_id).unwrap();
@@ -165,7 +171,9 @@ fn import_treeldr(
 			log::debug!("parsing succeeded.");
 			TreeLdrDocument {
 				doc: doc.into_value(),
-				local_context: syntax::build::LocalContext::new(file.base_iri().map(|iri| iri.into())),
+				local_context: syntax::build::LocalContext::new(
+					file.base_iri().map(|iri| iri.into()),
+				),
 			}
 		}
 		Err(e) => {

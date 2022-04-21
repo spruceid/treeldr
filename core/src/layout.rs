@@ -1,6 +1,4 @@
-use crate::{
-	layout, ty, vocab::Name, Causes, Documentation, Id, MaybeSet, WithCauses,
-};
+use crate::{layout, ty, vocab::Name, Causes, Documentation, Id, MaybeSet, WithCauses};
 use locspan::Location;
 use shelves::Ref;
 

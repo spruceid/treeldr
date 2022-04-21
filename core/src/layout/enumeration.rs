@@ -1,6 +1,4 @@
-use crate::{
-	vocab::Name, Causes, Documentation, MaybeSet, Ref, WithCauses,
-};
+use crate::{vocab::Name, Causes, Documentation, MaybeSet, Ref, WithCauses};
 use locspan::Location;
 
 /// Enum layout.
@@ -23,7 +21,7 @@ impl<F> Enum<F> {
 	pub fn into_parts(self) -> Parts<F> {
 		Parts {
 			name: self.name,
-			variants: self.variants
+			variants: self.variants,
 		}
 	}
 
@@ -93,7 +91,7 @@ impl<F> Variant<F> {
 			name: self.name,
 			layout: self.layout,
 			label: self.label,
-			doc: self.doc
+			doc: self.doc,
 		}
 	}
 

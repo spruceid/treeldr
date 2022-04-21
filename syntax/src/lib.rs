@@ -210,7 +210,7 @@ pub enum InnerTypeExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
-	PropertyRestriction(TypePropertyRestriction<F>)
+	PropertyRestriction(TypePropertyRestriction<F>),
 }
 
 impl<F: Clone> InnerTypeExpr<F> {
@@ -222,7 +222,9 @@ impl<F: Clone> InnerTypeExpr<F> {
 				r.location().clone(),
 			))),
 			Self::Literal(lit) => InnerLayoutExpr::Literal(lit.clone()),
-			Self::PropertyRestriction(r) => InnerLayoutExpr::FieldRestriction(r.implicit_field_restriction())
+			Self::PropertyRestriction(r) => {
+				InnerLayoutExpr::FieldRestriction(r.implicit_field_restriction())
+			}
 		}
 	}
 }
@@ -237,12 +239,12 @@ impl<F: Clone> TypePropertyRangeRestriction<F> {
 		match self {
 			Self::Any(ty) => LayoutFieldRangeRestriction::Any(Box::new(Loc(
 				ty.implicit_layout_expr(),
-				ty.location().clone()
+				ty.location().clone(),
 			))),
 			Self::All(ty) => LayoutFieldRangeRestriction::All(Box::new(Loc(
 				ty.implicit_layout_expr(),
-				ty.location().clone()
-			)))
+				ty.location().clone(),
+			))),
 		}
 	}
 }
@@ -250,7 +252,7 @@ impl<F: Clone> TypePropertyRangeRestriction<F> {
 pub enum TypePropertyCardinalityRestriction {
 	AtLeast(u32),
 	AtMost(u32),
-	Exactly(u32)
+	Exactly(u32),
 }
 
 impl TypePropertyCardinalityRestriction {
@@ -258,21 +260,23 @@ impl TypePropertyCardinalityRestriction {
 		match self {
 			Self::AtLeast(n) => LayoutFieldCardinalityRestriction::AtLeast(*n),
 			Self::AtMost(n) => LayoutFieldCardinalityRestriction::AtMost(*n),
-			Self::Exactly(n) => LayoutFieldCardinalityRestriction::Exactly(*n)
+			Self::Exactly(n) => LayoutFieldCardinalityRestriction::Exactly(*n),
 		}
 	}
 }
 
 pub enum TypePropertyRestriction<F> {
 	Range(TypePropertyRangeRestriction<F>),
-	Cardinality(TypePropertyCardinalityRestriction)
+	Cardinality(TypePropertyCardinalityRestriction),
 }
 
 impl<F: Clone> TypePropertyRestriction<F> {
 	pub fn implicit_field_restriction(&self) -> LayoutFieldRestriction<F> {
 		match self {
 			Self::Range(r) => LayoutFieldRestriction::Range(r.implicit_field_range_restriction()),
-			Self::Cardinality(c) => LayoutFieldRestriction::Cardinality(c.implicit_field_cardinality_restriction())
+			Self::Cardinality(c) => {
+				LayoutFieldRestriction::Cardinality(c.implicit_field_cardinality_restriction())
+			}
 		}
 	}
 }
@@ -327,6 +331,7 @@ pub struct NamedInnerLayoutExpr<F> {
 }
 
 impl<F> NamedInnerLayoutExpr<F> {
+	#[allow(clippy::type_complexity)]
 	pub fn into_parts(self) -> (Loc<InnerLayoutExpr<F>, F>, Option<Loc<Alias, F>>) {
 		(self.expr, self.name)
 	}
@@ -336,7 +341,7 @@ pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
-	FieldRestriction(LayoutFieldRestriction<F>)
+	FieldRestriction(LayoutFieldRestriction<F>),
 }
 
 impl<F> InnerLayoutExpr<F> {
@@ -353,7 +358,7 @@ pub enum LayoutFieldRangeRestriction<F> {
 pub enum LayoutFieldCardinalityRestriction {
 	AtLeast(u32),
 	AtMost(u32),
-	Exactly(u32)
+	Exactly(u32),
 }
 
 pub enum LayoutFieldRestriction<F> {
@@ -361,7 +366,7 @@ pub enum LayoutFieldRestriction<F> {
 	Range(LayoutFieldRangeRestriction<F>),
 
 	/// Affects the size of a collection layout.
-	Cardinality(LayoutFieldCardinalityRestriction)
+	Cardinality(LayoutFieldCardinalityRestriction),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]

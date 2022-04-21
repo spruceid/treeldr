@@ -206,10 +206,7 @@ impl<T, F> WithCauses<T, F> {
 		WithCauses::new(f(self.t), self.causes)
 	}
 
-	pub fn try_map<U, E>(
-		self,
-		f: impl FnOnce(T) -> Result<U, E>,
-	) -> Result<WithCauses<U, F>, E> {
+	pub fn try_map<U, E>(self, f: impl FnOnce(T) -> Result<U, E>) -> Result<WithCauses<U, F>, E> {
 		match f(self.t) {
 			Ok(value) => Ok(WithCauses::new(value, self.causes)),
 			Err(e) => Err(e),

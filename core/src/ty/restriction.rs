@@ -1,9 +1,9 @@
-use crate::{prop, WithCauses, Ref};
+use crate::{prop, Ref, WithCauses};
 
 /// Restricted type.
 pub enum Restricted<F> {
 	/// Restricted on property.
-	Property(RestrictedProperty<F>)
+	Property(RestrictedProperty<F>),
 }
 
 /// Property restriction.
@@ -12,7 +12,7 @@ pub enum PropertyRestriction<F> {
 	Range(Range<F>),
 
 	/// Cardinality restriction.
-	Cardinality(Cardinality)
+	Cardinality(Cardinality),
 }
 
 /// Property range restriction.
@@ -33,11 +33,11 @@ pub enum Cardinality {
 	AtMost(u32),
 
 	/// The property must have exactly the given number of values.
-	Exactly(u32)
+	Exactly(u32),
 }
 
 /// Type restricted on a property.
-/// 
+///
 /// Puts a restriction on a given property.
 /// A restricted type is a subset of the domain of the property which
 /// includes every instance for which the given property satisfies the
@@ -47,5 +47,15 @@ pub struct RestrictedProperty<F> {
 	prop: WithCauses<Ref<prop::Definition<F>>, F>,
 
 	/// Restriction.
-	restriction: PropertyRestriction<F>
+	restriction: PropertyRestriction<F>,
+}
+
+impl<F> RestrictedProperty<F> {
+	pub fn property(&self) -> Ref<prop::Definition<F>> {
+		*self.prop
+	}
+
+	pub fn restriction(&self) -> &PropertyRestriction<F> {
+		&self.restriction
+	}
 }
