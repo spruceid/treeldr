@@ -1,4 +1,4 @@
-use crate::{error, Error};
+use crate::{error, Error, utils::TryCollect};
 use derivative::Derivative;
 use locspan::Location;
 use std::collections::HashMap;
@@ -28,7 +28,13 @@ pub trait PseudoDescription<F>: From<Description<F>> {
 		causes: &Causes<F>,
 	) -> Result<Vec<crate::Item<F>>, Self::Error>;
 
-	fn reduce(self) -> Result<Description<F>, Self::Error>;
+	fn build(
+		self,
+		id: Id,
+		nodes: &super::context::AllocatedNodes<F>,
+		dependencies: crate::Dependencies<F>,
+		causes: Causes<F>,
+	) -> Result<treeldr::ty::Description<F>, Self::Error>;
 }
 
 /// Type definition.
@@ -43,7 +49,7 @@ pub enum Description<F> {
 	Intersection(Id),
 }
 
-impl<F> Description<F> {
+impl<F: Clone + Ord> Description<F> {
 	pub fn kind(&self) -> Kind {
 		match self {
 			Self::Normal(_) => Kind::Normal,
@@ -51,9 +57,146 @@ impl<F> Description<F> {
 			Self::Intersection(_) => Kind::Intersection,
 		}
 	}
+
+	fn dependencies(
+		&self,
+		_id: Id,
+		nodes: &super::context::AllocatedNodes<F>,
+		causes: &Causes<F>,
+	) -> Result<Vec<crate::Item<F>>, Error<F>> {
+		let list_id = match self {
+			Description::Union(list_id) => Some(*list_id),
+			Description::Intersection(list_id) => Some(*list_id),
+			_ => None
+		};
+
+		match list_id {
+			Some(list_id) => {
+				let dependencies = nodes
+					.require_list(list_id, causes.preferred().cloned())?
+					.iter(nodes)
+					.map(|item| {
+						let (object, ty_causes) = item?.clone().into_parts();
+						let ty_id = match object {
+							vocab::Object::Literal(lit) => Err(Caused::new(
+								error::LiteralUnexpected(lit).into(),
+								causes.preferred().cloned(),
+							)),
+							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+							vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+						}?;
+		
+						let ty_ref = *nodes
+							.require_type(
+								ty_id,
+								ty_causes.preferred().cloned(),
+							)?
+							.inner();
+		
+						Ok(crate::Item::Type(ty_ref))
+					})
+					.try_collect()?;
+				Ok(dependencies)
+			}
+			None => Ok(Vec::new())
+		}
+	}
+
+	fn build(
+		self,
+		_id: Id,
+		nodes: &super::context::AllocatedNodes<F>,
+		dependencies: crate::Dependencies<F>,
+		causes: Causes<F>,
+	) -> Result<treeldr::ty::Description<F>, Error<F>> where F: Clone + Ord {
+		let desc = match self {
+			Self::Normal(n) => n.build(nodes)?,
+			Self::Union(options_id) => {
+				use std::collections::hash_map::Entry;
+				let mut options = HashMap::new();
+
+				let items = nodes
+					.require_list(options_id, causes.preferred().cloned())?
+					.iter(nodes);
+				for item in items {
+					let (object, causes) = item?.clone().into_parts();
+					let option_id = match object {
+						vocab::Object::Literal(lit) => Err(Caused::new(
+							error::LiteralUnexpected(lit).into(),
+							causes.preferred().cloned(),
+						)),
+						vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+						vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+					}?;
+
+					let (option_ty, option_causes) = nodes
+						.require_type(option_id, causes.into_preferred())?
+						.clone()
+						.into_parts();
+
+					match options.entry(option_ty) {
+						Entry::Vacant(entry) => {
+							entry.insert(option_causes);
+						}
+						Entry::Occupied(mut entry) => {
+							entry.get_mut().extend(option_causes);
+						}
+					}
+				}
+
+				treeldr::ty::Description::Union(treeldr::ty::Union::new(
+					options,
+					|ty_ref| dependencies.ty(ty_ref)
+				))
+			}
+			Description::Intersection(types_id) => {
+				use std::collections::hash_map::Entry;
+				let mut types = HashMap::new();
+
+				let items = nodes
+					.require_list(types_id, causes.preferred().cloned())?
+					.iter(nodes);
+				for item in items {
+					let (object, causes) = item?.clone().into_parts();
+					let option_id = match object {
+						vocab::Object::Literal(lit) => Err(Caused::new(
+							error::LiteralUnexpected(lit).into(),
+							causes.preferred().cloned(),
+						)),
+						vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+						vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+					}?;
+
+					let (ty, ty_causes) = nodes
+						.require_type(option_id, causes.into_preferred())?
+						.clone()
+						.into_parts();
+
+					match types.entry(ty) {
+						Entry::Vacant(entry) => {
+							entry.insert(ty_causes);
+						}
+						Entry::Occupied(mut entry) => {
+							entry.get_mut().extend(ty_causes);
+						}
+					}
+				}
+
+				match treeldr::ty::Intersection::new(
+					types,
+					|ty_ref| dependencies.ty(ty_ref)
+				) {
+					Ok(intersection) => treeldr::ty::Description::Intersection(intersection),
+					Err(_) => treeldr::ty::Description::Empty
+				}
+			}
+		};
+
+		Ok(desc)
+	}
 }
 
-impl<F> PseudoDescription<F> for Description<F> {
+impl<F: Clone + Ord> PseudoDescription<F> for Description<F> {
 	type Error = Error<F>;
 
 	fn as_standard(&self) -> Option<&Description<F>> {
@@ -66,15 +209,21 @@ impl<F> PseudoDescription<F> for Description<F> {
 
 	fn dependencies(
 		&self,
-		_id: Id,
-		_nodes: &super::context::AllocatedNodes<F>,
-		_causes: &Causes<F>,
+		id: Id,
+		nodes: &super::context::AllocatedNodes<F>,
+		causes: &Causes<F>,
 	) -> Result<Vec<crate::Item<F>>, Error<F>> {
-		Ok(Vec::new())
+		self.dependencies(id, nodes, causes)
 	}
 
-	fn reduce(self) -> Result<Description<F>, Self::Error> {
-		Ok(self)
+	fn build(
+		self,
+		id: Id,
+		nodes: &super::context::AllocatedNodes<F>,
+		dependencies: crate::Dependencies<F>,
+		causes: Causes<F>,
+	) -> Result<treeldr::ty::Description<F>, Self::Error> {
+		self.build(id, nodes, dependencies, causes)
 	}
 }
 
@@ -238,104 +387,27 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 			)),
 		}
 	}
-
-	pub fn reduce(self) -> Result<Definition<F>, D::Error> {
-		Ok(Definition {
-			id: self.id,
-			desc: self.desc.try_map(|d| d.reduce())?,
-		})
-	}
 }
 
-impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
+impl<F, D: PseudoDescription<F>> crate::Build<F> for Definition<F, D> {
 	type Target = treeldr::ty::Definition<F>;
-	type Error = Error<F>;
+	type Error = D::Error;
 
 	fn build(
 		self,
-		_vocab: &crate::Vocabulary,
 		nodes: &super::context::AllocatedNodes<F>,
-		_dependencies: crate::Dependencies<F>,
+		dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
-	) -> Result<Self::Target, Error<F>> {
+	) -> Result<Self::Target, Self::Error> {
 		let desc = match self.desc.unwrap() {
 			Some(desc) => {
 				let (desc, desc_causes) = desc.into_parts();
-				match desc {
-					Description::Normal(n) => n.build(nodes)?,
-					Description::Union(options_id) => {
-						use std::collections::hash_map::Entry;
-						let mut options = HashMap::new();
-
-						let items = nodes
-							.require_list(options_id, desc_causes.preferred().cloned())?
-							.iter(nodes);
-						for item in items {
-							let (object, causes) = item?.clone().into_parts();
-							let option_id = match object {
-								vocab::Object::Literal(_) => Err(Caused::new(
-									error::TypeUnionLiteralOption(self.id).into(),
-									causes.preferred().cloned(),
-								)),
-								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-							}?;
-
-							let (option_ty, option_causes) = nodes
-								.require_type(option_id, causes.into_preferred())?
-								.clone()
-								.into_parts();
-
-							match options.entry(option_ty) {
-								Entry::Vacant(entry) => {
-									entry.insert(option_causes);
-								}
-								Entry::Occupied(mut entry) => {
-									entry.get_mut().extend(option_causes);
-								}
-							}
-						}
-
-						treeldr::ty::Description::Union(treeldr::ty::Union::new(options))
-					}
-					Description::Intersection(types_id) => {
-						use std::collections::hash_map::Entry;
-						let mut types = HashMap::new();
-
-						let items = nodes
-							.require_list(types_id, desc_causes.preferred().cloned())?
-							.iter(nodes);
-						for item in items {
-							let (object, causes) = item?.clone().into_parts();
-							let option_id = match object {
-								vocab::Object::Literal(_) => Err(Caused::new(
-									error::TypeUnionLiteralOption(self.id).into(),
-									causes.preferred().cloned(),
-								)),
-								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-							}?;
-
-							let (ty, ty_causes) = nodes
-								.require_type(option_id, causes.into_preferred())?
-								.clone()
-								.into_parts();
-
-							match types.entry(ty) {
-								Entry::Vacant(entry) => {
-									entry.insert(ty_causes);
-								}
-								Entry::Occupied(mut entry) => {
-									entry.get_mut().extend(ty_causes);
-								}
-							}
-						}
-
-						treeldr::ty::Description::Intersection(treeldr::ty::Intersection::new(
-							types,
-						))
-					}
-				}
+				desc.build(
+					self.id,
+					nodes,
+					dependencies,
+					desc_causes
+				)?
 			}
 			None => treeldr::ty::Description::Normal(treeldr::ty::Normal::new()),
 		};

@@ -248,11 +248,6 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_enum(fields_id, Some(loc))?
 				}
-				Term::TreeLdr(vocab::TreeLdr::Intersection) => {
-					let Loc(types_id, _) = expect_id(object)?;
-					let layout = context.require_layout_mut(id, Some(id_loc))?;
-					layout.set_intersection(types_id, Some(loc))?
-				}
 				_ => (),
 			}
 		}

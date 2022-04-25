@@ -123,7 +123,6 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 
 	fn build(
 		self,
-		_vocab: &crate::Vocabulary,
 		nodes: &super::context::AllocatedNodes<F>,
 		_dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,

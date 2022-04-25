@@ -1,6 +1,7 @@
 use super::{error, Error};
 use locspan::Location;
-use treeldr::{vocab::Name, Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
+use treeldr::{vocab::Name, Caused, Causes, Documentation, Id, MaybeSet, WithCauses};
+use crate::{Context, Descriptions};
 
 /// Layout field definition.
 pub struct Definition<F> {
@@ -44,6 +45,25 @@ impl<F> Definition<F> {
 			})
 	}
 
+	pub fn default_name<D: Descriptions<F>>(
+		&self,
+		context: &Context<F, D>,
+		cause: Option<Location<F>>,
+	) -> Option<Caused<Name, F>>
+	where
+		F: Clone,
+	{
+		self.id
+			.as_iri()
+			.and_then(|term| term.iri(context.vocabulary()))
+			.and_then(|iri| {
+				iri.path()
+					.file_name()
+					.and_then(|name| Name::try_from(name).ok())
+			})
+			.map(|name| Caused::new(name, cause))
+	}
+
 	pub fn name(&self) -> Option<&WithCauses<Name, F>> {
 		self.name.with_causes()
 	}
@@ -61,17 +81,6 @@ impl<F> Definition<F> {
 			}
 			.into()
 		})
-	}
-
-	pub fn default_name(&self, vocab: &Vocabulary) -> Option<Name> {
-		self.id
-			.as_iri()
-			.and_then(|term| term.iri(vocab))
-			.and_then(|iri| {
-				iri.path()
-					.file_name()
-					.and_then(|name| Name::try_from(name).ok())
-			})
 	}
 
 	pub fn layout(&self) -> Option<&WithCauses<Id, F>> {
@@ -152,26 +161,23 @@ impl<F> Definition<F> {
 }
 
 pub trait Build<F> {
-	fn require_name(&self, vocab: &Vocabulary) -> Result<WithCauses<Name, F>, Error<F>>;
+	fn require_name(&self) -> Result<WithCauses<Name, F>, Error<F>>;
 
 	fn build(
 		&self,
 		label: Option<String>,
 		doc: Documentation,
-		vocab: &Vocabulary,
 		nodes: &super::super::context::AllocatedNodes<F>,
 	) -> Result<treeldr::layout::Field<F>, Error<F>>;
 }
 
 impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
-	fn require_name(&self, vocab: &Vocabulary) -> Result<WithCauses<Name, F>, Error<F>> {
-		self.name.clone().unwrap_or_else_try(|| {
-			self.default_name(vocab).ok_or_else(|| {
-				Caused::new(
-					error::LayoutFieldMissingName(self.id).into(),
-					self.causes().preferred().cloned(),
-				)
-			})
+	fn require_name(&self) -> Result<WithCauses<Name, F>, Error<F>> {
+		self.name.clone().ok_or_else(|| {
+			Caused::new(
+				error::LayoutFieldMissingName(self.id).into(),
+				self.causes().preferred().cloned(),
+			)
 		})
 	}
 
@@ -179,7 +185,6 @@ impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
 		&self,
 		label: Option<String>,
 		doc: Documentation,
-		vocab: &Vocabulary,
 		nodes: &super::super::context::AllocatedNodes<F>,
 	) -> Result<treeldr::layout::Field<F>, Error<F>> {
 		let prop_id = self.prop.value_or_else(|| {
@@ -192,7 +197,7 @@ impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
 			.require_property(*prop_id.inner(), prop_id.causes().preferred().cloned())?
 			.clone_with_causes(prop_id.causes().clone());
 
-		let name = self.require_name(vocab)?;
+		let name = self.require_name()?;
 
 		let layout_id = self.require_layout(self.causes())?;
 		let layout = nodes

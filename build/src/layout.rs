@@ -68,12 +68,14 @@ pub trait PseudoDescription<F>: PartialEq + From<Description> {
 		causes: &Causes<F>,
 	) -> Result<Vec<crate::Item<F>>, Self::Error>;
 
-	fn reduce(
+	fn build(
 		self,
 		id: Id,
-		name: &MaybeSet<vocab::Name, F>,
-		ty: &MaybeSet<Id, F>,
-	) -> Result<Description, Self::Error>;
+		name: MaybeSet<Name, F>,
+		nodes: &super::context::AllocatedNodes<F>,
+		dependencies: crate::Dependencies<F>,
+		causes: &Causes<F>,
+	) -> Result<treeldr::layout::Description<F>, Self::Error>;
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -82,8 +84,7 @@ pub enum Description {
 	Struct(Id),
 	Reference(Id),
 	Literal(RegExp),
-	Enum(Id),
-	Intersection(Id),
+	Enum(Id)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -92,8 +93,7 @@ pub enum Type {
 	Reference,
 	Literal,
 	Struct,
-	Enum,
-	Intersection,
+	Enum
 }
 
 impl Description {
@@ -103,8 +103,7 @@ impl Description {
 			Self::Struct(_) => Type::Struct,
 			Self::Native(n) => Type::Native(*n),
 			Self::Literal(_) => Type::Literal,
-			Self::Enum(_) => Type::Enum,
-			Self::Intersection(_) => Type::Intersection,
+			Self::Enum(_) => Type::Enum
 		}
 	}
 
@@ -125,8 +124,8 @@ impl Description {
 			for item in fields {
 				let (object, causes) = item?.clone().into_parts();
 				let field_id = match object {
-					vocab::Object::Literal(_) => Err(Caused::new(
-						error::LayoutLiteralField(*fields_id).into(),
+					vocab::Object::Literal(lit) => Err(Caused::new(
+						error::LiteralUnexpected(lit).into(),
 						causes.preferred().cloned(),
 					)),
 					vocab::Object::Iri(id) => Ok(Id::Iri(id)),
@@ -147,7 +146,7 @@ impl Description {
 
 	pub fn dependencies<F: Clone + Ord>(
 		&self,
-		id: Id,
+		_id: Id,
 		nodes: &super::context::AllocatedNodes<F>,
 		causes: &Causes<F>,
 	) -> Result<Vec<crate::Item<F>>, Error<F>> {
@@ -159,8 +158,8 @@ impl Description {
 					.map(|item| {
 						let (object, variant_causes) = item?.clone().into_parts();
 						let variant_id = match object {
-							vocab::Object::Literal(_) => Err(Caused::new(
-								error::LayoutLiteralField(id).into(),
+							vocab::Object::Literal(lit) => Err(Caused::new(
+								error::LiteralUnexpected(lit).into(),
 								causes.preferred().cloned(),
 							)),
 							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
@@ -186,29 +185,114 @@ impl Description {
 					.try_filter_collect()?;
 				Ok(layouts)
 			}
-			Description::Intersection(layout_list_id) => {
-				let layouts = nodes
-					.require_list(*layout_list_id, causes.preferred().cloned())?
+			_ => Ok(Vec::new()),
+		}
+	}
+
+	pub fn build<F>(
+		self,
+		id: Id,
+		name: MaybeSet<Name, F>,
+		nodes: &super::context::AllocatedNodes<F>,
+		_dependencies: crate::Dependencies<F>,
+		causes: &Causes<F>,
+	) -> Result<treeldr::layout::Description<F>, Error<F>> where F: Clone + Ord {
+		use field::Build as BuildField;
+		use variant::Build as BuildVariant;
+
+		fn require_name<F>(
+			id: Id,
+			name: MaybeSet<vocab::Name, F>,
+			causes: &Causes<F>,
+		) -> Result<WithCauses<vocab::Name, F>, Error<F>>
+		where
+			F: Clone,
+		{
+			name.ok_or_else(|| {
+				Caused::new(
+					error::LayoutMissingName(id).into(),
+					causes.preferred().cloned(),
+				)
+			})
+		}
+
+		match self {
+			Description::Native(n) => Ok(treeldr::layout::Description::Native(n, name)),
+			Description::Reference(layout_id) => {
+				let layout_ref = *nodes
+					.require_layout(layout_id, causes.preferred().cloned())?
+					.inner();
+				Ok(treeldr::layout::Description::Reference(
+					layout_ref, name,
+				))
+			}
+			Description::Struct(fields_id) => {
+				let name = require_name(id, name, &causes)?;
+				let fields = nodes
+					.require_list(fields_id, causes.preferred().cloned())?
 					.iter(nodes)
 					.map(|item| {
 						let (object, causes) = item?.clone().into_parts();
-						let layout_id = match object {
-							vocab::Object::Literal(_) => Err(Caused::new(
-								error::LayoutLiteralIntersection(*layout_list_id).into(),
+						let field_id = match object {
+							vocab::Object::Literal(lit) => Err(Caused::new(
+								error::LiteralUnexpected(lit).into(),
 								causes.preferred().cloned(),
 							)),
 							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
 							vocab::Object::Blank(id) => Ok(Id::Blank(id)),
 						}?;
 
-						Ok(crate::Item::Layout(
-							**nodes.require_layout(layout_id, causes.into_preferred())?,
+						let field =
+							nodes.require_layout_field(field_id, causes.into_preferred())?;
+						let node = nodes.get(field_id).unwrap();
+						let label = node.label().map(String::from);
+						let doc = node.documentation().clone();
+						field.build(label, doc, nodes)
+					})
+					.try_collect()?;
+
+				let strct = treeldr::layout::Struct::new(name, fields);
+				Ok(treeldr::layout::Description::Struct(strct))
+			}
+			Description::Enum(options_id) => {
+				let name = require_name(id, name, &causes)?;
+
+				let variants: Vec<_> = nodes
+					.require_list(options_id, causes.preferred().cloned())?
+					.iter(nodes)
+					.map(|item| {
+						let (object, variant_causes) = item?.clone().into_parts();
+						let variant_id = match object {
+							vocab::Object::Literal(lit) => Err(Caused::new(
+								error::LiteralUnexpected(lit).into(),
+								causes.preferred().cloned(),
+							)),
+							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+							vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+						}?;
+
+						let variant = nodes.require_layout_variant(
+							variant_id,
+							variant_causes.preferred().cloned(),
+						)?;
+						let node = nodes.get(variant_id).unwrap();
+						let label = node.label().map(String::from);
+						let doc = node.documentation().clone();
+						Ok(WithCauses::new(
+							variant.build(label, doc, nodes)?,
+							variant_causes,
 						))
 					})
 					.try_collect()?;
-				Ok(layouts)
+
+				let enm = treeldr::layout::Enum::new(name, variants);
+				Ok(treeldr::layout::Description::Enum(enm))
 			}
-			_ => Ok(Vec::new()),
+			Description::Literal(regexp) => {
+				let name = require_name(id, name, &causes)?;
+				let lit = treeldr::layout::Literal::new(regexp, name, id.is_blank());
+				Ok(treeldr::layout::Description::Literal(lit))
+			}
 		}
 	}
 }
@@ -237,13 +321,15 @@ impl<F: Clone + Ord> PseudoDescription<F> for Description {
 		self.dependencies(id, nodes, causes)
 	}
 
-	fn reduce(
+	fn build(
 		self,
-		_id: Id,
-		_name: &MaybeSet<vocab::Name, F>,
-		_ty: &MaybeSet<Id, F>,
-	) -> Result<Description, Self::Error> {
-		Ok(self)
+		id: Id,
+		name: MaybeSet<Name, F>,
+		nodes: &super::context::AllocatedNodes<F>,
+		dependencies: crate::Dependencies<F>,
+		causes: &Causes<F>,
+	) -> Result<treeldr::layout::Description<F>, Error<F>> {
+		self.build(id, name, nodes, dependencies, causes)
 	}
 }
 
@@ -355,14 +441,6 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 		self.set_description(Description::Enum(items).into(), cause)
 	}
 
-	pub fn set_intersection(
-		&mut self,
-		types_list: Id,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>> {
-		self.set_description(Description::Intersection(types_list).into(), cause)
-	}
-
 	pub fn sub_layouts<C: Descriptions<F>>(
 		&self,
 		context: &Context<F, C>,
@@ -437,18 +515,6 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 
 		Ok(None)
 	}
-
-	pub fn reduce(self) -> Result<Definition<F>, D::Error> {
-		let desc = self
-			.desc
-			.try_map(|d| d.reduce(self.id, &self.name, &self.ty))?;
-		Ok(Definition {
-			id: self.id,
-			name: self.name,
-			ty: self.ty,
-			desc,
-		})
-	}
 }
 
 /// Field/layout usage.
@@ -463,20 +529,16 @@ pub struct Using<F> {
 	pub field_layout: WithCauses<Id, F>,
 }
 
-impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
+impl<F: Ord + Clone, D: PseudoDescription<F>> crate::Build<F> for Definition<F, D> {
 	type Target = treeldr::layout::Definition<F>;
-	type Error = Error<F>;
+	type Error = D::Error;
 
 	fn build(
-		mut self,
-		vocab: &crate::Vocabulary,
+		self,
 		nodes: &super::context::AllocatedNodes<F>,
 		dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
-	) -> Result<Self::Target, Error<F>> {
-		use field::Build as BuildField;
-		use variant::Build as BuildVariant;
-
+	) -> Result<Self::Target, Self::Error> {
 		let ty_id = self.ty.ok_or_else(|| {
 			Caused::new(
 				error::LayoutMissingType(self.id).into(),
@@ -487,146 +549,22 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 			.require_type(*ty_id, ty_id.causes().preferred().cloned())?
 			.clone_with_causes(ty_id.into_causes());
 
-		let def_desc = self.desc.ok_or_else(|| {
+		let desc = self.desc.ok_or_else(|| {
 			Caused::new(
 				error::LayoutMissingDescription(self.id).into(),
 				causes.preferred().cloned(),
 			)
 		})?;
 
-		fn require_name<F>(
-			id: Id,
-			name: MaybeSet<vocab::Name, F>,
-			causes: &Causes<F>,
-		) -> Result<WithCauses<vocab::Name, F>, Error<F>>
-		where
-			F: Clone,
-		{
-			name.ok_or_else(|| {
-				Caused::new(
-					error::LayoutMissingName(id).into(),
-					causes.preferred().cloned(),
-				)
-			})
-		}
-
-		let desc = def_desc
-			.try_map_with_causes::<_, Error<F>, _>(|d, desc_causes| match d {
-				Description::Native(n) => Ok(treeldr::layout::Description::Native(n, self.name)),
-				Description::Reference(layout_id) => {
-					let layout_ref = *nodes
-						.require_layout(layout_id, desc_causes.preferred().cloned())?
-						.inner();
-					Ok(treeldr::layout::Description::Reference(
-						layout_ref, self.name,
-					))
-				}
-				Description::Struct(fields_id) => {
-					let name = require_name(self.id, self.name, &causes)?;
-					let fields = nodes
-						.require_list(fields_id, desc_causes.preferred().cloned())?
-						.iter(nodes)
-						.map(|item| {
-							let (object, causes) = item?.clone().into_parts();
-							let field_id = match object {
-								vocab::Object::Literal(_) => Err(Caused::new(
-									error::LayoutLiteralField(fields_id).into(),
-									causes.preferred().cloned(),
-								)),
-								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-							}?;
-
-							let field =
-								nodes.require_layout_field(field_id, causes.into_preferred())?;
-							let node = nodes.get(field_id).unwrap();
-							let label = node.label().map(String::from);
-							let doc = node.documentation().clone();
-							field.build(label, doc, vocab, nodes)
-						})
-						.try_collect()?;
-
-					let strct = treeldr::layout::Struct::new(name, fields);
-					Ok(treeldr::layout::Description::Struct(strct))
-				}
-				Description::Enum(options_id) => {
-					let name = require_name(self.id, self.name, &causes)?;
-
-					let variants: Vec<_> = nodes
-						.require_list(options_id, desc_causes.preferred().cloned())?
-						.iter(nodes)
-						.map(|item| {
-							let (object, variant_causes) = item?.clone().into_parts();
-							let variant_id = match object {
-								vocab::Object::Literal(_) => Err(Caused::new(
-									error::LayoutLiteralField(self.id).into(),
-									causes.preferred().cloned(),
-								)),
-								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-							}?;
-
-							let variant = nodes.require_layout_variant(
-								variant_id,
-								variant_causes.preferred().cloned(),
-							)?;
-							let node = nodes.get(variant_id).unwrap();
-							let label = node.label().map(String::from);
-							let doc = node.documentation().clone();
-							Ok(WithCauses::new(
-								variant.build(label, doc, nodes)?,
-								variant_causes,
-							))
-						})
-						.try_collect()?;
-
-					let enm = treeldr::layout::Enum::new(name, variants);
-					Ok(treeldr::layout::Description::Enum(enm))
-				}
-				Description::Literal(regexp) => {
-					let name = require_name(self.id, self.name, &causes)?;
-					let lit = treeldr::layout::Literal::new(regexp, name, self.id.is_blank());
-					Ok(treeldr::layout::Description::Literal(lit))
-				}
-				Description::Intersection(layout_list_id) => {
-					let layouts = nodes
-						.require_list(layout_list_id, desc_causes.preferred().cloned())?
-						.iter(nodes)
-						.map(|item| {
-							let (object, causes) = item?.clone().into_parts();
-							let layout_id = match object {
-								vocab::Object::Literal(_) => Err(Caused::new(
-									error::LayoutLiteralIntersection(layout_list_id).into(),
-									causes.preferred().cloned(),
-								)),
-								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-							}?;
-
-							let layout_ref =
-								nodes.require_layout(layout_id, causes.into_preferred())?;
-							Ok(dependencies.layouts[layout_ref.index()].as_ref().unwrap())
-						});
-
-					let mut desc: Option<treeldr::layout::Description<F>> = None;
-					for layout in layouts {
-						let layout = layout?;
-
-						desc = Some(match desc {
-							Some(desc) => desc.intersected_with(
-								self.id,
-								layout.description_with_causes(),
-								self.name.take(),
-								dependencies.layouts,
-							)?,
-							None => layout.description().clone(),
-						})
-					}
-
-					Ok(desc.unwrap())
-				}
-			})
-			.map_err(Caused::flatten)?;
+		let desc = desc.try_map_with_causes(|desc, desc_causes| {
+			desc.build(
+				self.id,
+				self.name,
+				nodes,
+				dependencies,
+				desc_causes
+			)
+		})?;
 
 		Ok(treeldr::layout::Definition::new(self.id, ty, desc, causes))
 	}

@@ -37,7 +37,7 @@ impl<F> Definition<F> {
 		})
 	}
 
-	/// Build a default name for this layout.
+	/// Build a default name for this layout variant.
 	pub fn default_name<D: Descriptions<F>>(
 		&self,
 		context: &Context<F, D>,

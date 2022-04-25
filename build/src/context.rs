@@ -232,8 +232,27 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	where
 		F: Ord + Clone,
 	{
-		use treeldr::utils::SccGraph;
+		// Start with the fields.
+		let mut default_field_names = HashMap::new();
+		for (id, node) in &self.nodes {
+			if let Some(field) = node.as_layout_field() {
+				if let Some(name) =
+				field.default_name(self, field.causes().preferred().cloned())
+				{
+					default_field_names.insert(*id, name);
+				}
+			}
+		}
+		for (id, name) in default_field_names {
+			let (name, cause) = name.into_parts();
+			let field = self.require_layout_field_mut(id, cause.clone())?;
+			if field.name().is_none() {
+				field.set_name(name, cause)?;
+			}
+		}
 
+		// Now the layouts.
+		use treeldr::utils::SccGraph;
 		struct LayoutGraph {
 			layouts: Vec<Id>,
 			dependencies: HashMap<Id, Vec<Id>>,
@@ -251,7 +270,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 			}
 		}
 
-		// Start by computing layout parent-child graph.
+		// Compute layout parent-child graph.
 		let mut graph = LayoutGraph {
 			layouts: Vec::new(),
 			dependencies: HashMap::new(),
@@ -431,15 +450,9 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 					crate::Item::Type(ty_ref) => {
 						let (_, ty) = types_to_build[ty_ref.index()].take().unwrap();
 						let (ty, causes) = ty.into_parts();
-						match ty.reduce() {
-							Ok(ty) => {
-								match ty.build(&self.vocab, &allocated_nodes, dependencies, causes)
-								{
-									Ok(built_ty) => {
-										built_types[ty_ref.index()] = Some(built_ty);
-									}
-									Err(e) => return Err((e.into(), self.vocab)),
-								}
+						match ty.build(&allocated_nodes, dependencies, causes) {
+							Ok(built_ty) => {
+								built_types[ty_ref.index()] = Some(built_ty);
 							}
 							Err(e) => return Err((e.into(), self.vocab)),
 						}
@@ -447,7 +460,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 					crate::Item::Property(prop_ref) => {
 						let (_, prop) = properties_to_build[prop_ref.index()].take().unwrap();
 						let (prop, causes) = prop.into_parts();
-						match prop.build(&self.vocab, &allocated_nodes, dependencies, causes) {
+						match prop.build(&allocated_nodes, dependencies, causes) {
 							Ok(built_prop) => {
 								built_properties[prop_ref.index()] = Some(built_prop);
 							}
@@ -457,19 +470,13 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 					crate::Item::Layout(layout_ref) => {
 						let (_, layout) = layouts_to_build[layout_ref.index()].take().unwrap();
 						let (layout, causes) = layout.into_parts();
-						match layout.reduce() {
-							Ok(layout) => {
-								match layout.build(
-									&self.vocab,
-									&allocated_nodes,
-									dependencies,
-									causes,
-								) {
-									Ok(built_layout) => {
-										built_layouts[layout_ref.index()] = Some(built_layout);
-									}
-									Err(e) => return Err((e.into(), self.vocab)),
-								}
+						match layout.build(
+							&allocated_nodes,
+							dependencies,
+							causes,
+						) {
+							Ok(built_layout) => {
+								built_layouts[layout_ref.index()] = Some(built_layout);
 							}
 							Err(e) => return Err((e.into(), self.vocab)),
 						}

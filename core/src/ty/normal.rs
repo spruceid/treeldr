@@ -2,14 +2,13 @@ use super::Properties;
 use crate::{prop, Causes};
 use derivative::Derivative;
 use shelves::Ref;
-use std::collections::HashMap;
 
 /// Normal type.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Normal<F> {
 	/// Properties.
-	properties: HashMap<Ref<prop::Definition<F>>, Causes<F>>,
+	properties: Properties<F>,
 }
 
 impl<F> Normal<F> {
@@ -17,8 +16,8 @@ impl<F> Normal<F> {
 		Self::default()
 	}
 
-	pub fn properties(&self) -> Properties<F> {
-		Properties(self.properties.iter())
+	pub fn properties(&self) -> &Properties<F> {
+		&self.properties
 	}
 
 	/// Insert a property.
@@ -29,6 +28,6 @@ impl<F> Normal<F> {
 	) where
 		F: Ord,
 	{
-		self.properties.insert(prop_ref, causes.into());
+		self.properties.insert(prop_ref, None, causes.into());
 	}
 }

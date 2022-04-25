@@ -1,5 +1,5 @@
 use derivative::Derivative;
-use treeldr::{Causes, Ref, Vocabulary};
+use treeldr::{Causes, Ref};
 
 pub mod context;
 pub mod error;
@@ -41,7 +41,6 @@ pub trait Build<F> {
 
 	fn build(
 		self,
-		vocab: &Vocabulary,
 		nodes: &context::AllocatedNodes<F>,
 		dependencies: Dependencies<F>,
 		causes: Causes<F>,
@@ -66,6 +65,20 @@ pub struct Dependencies<'a, F> {
 	pub types: &'a [Option<treeldr::ty::Definition<F>>],
 	pub properties: &'a [Option<treeldr::prop::Definition<F>>],
 	pub layouts: &'a [Option<treeldr::layout::Definition<F>>],
+}
+
+impl<'a, F> Dependencies<'a, F> {
+	pub fn ty(&self, ty: Ref<treeldr::ty::Definition<F>>) -> &treeldr::ty::Definition<F> {
+		self.types[ty.index()].as_ref().unwrap()
+	}
+
+	pub fn property(&self, prop: Ref<treeldr::prop::Definition<F>>) -> &treeldr::prop::Definition<F> {
+		self.properties[prop.index()].as_ref().unwrap()
+	}
+
+	pub fn layout(&self, layout: Ref<treeldr::layout::Definition<F>>) -> &treeldr::layout::Definition<F> {
+		self.layouts[layout.index()].as_ref().unwrap()
+	}
 }
 
 pub trait Document<F, D: Descriptions<F>> {

@@ -1,51 +1,41 @@
 use super::Properties;
-use crate::{prop, Causes, Model, Ref};
-use once_cell::unsync::OnceCell;
+use crate::{Causes, Ref};
 use std::collections::HashMap;
 
 pub struct Union<F> {
 	options: HashMap<Ref<super::Definition<F>>, Causes<F>>,
 
 	/// Properties in the union.
-	///
-	/// Lazily computed.
-	properties: OnceCell<HashMap<Ref<prop::Definition<F>>, Causes<F>>>,
+	properties: Properties<F>,
 }
 
 impl<F> Union<F> {
-	pub fn new(options: HashMap<Ref<super::Definition<F>>, Causes<F>>) -> Self {
+	pub fn new<'a, G>(
+		options: HashMap<Ref<super::Definition<F>>, Causes<F>>,
+		get: G
+	) -> Self
+	where
+		F: 'a + Clone + Ord,
+		G: 'a + Fn(Ref<super::Definition<F>>) -> &'a super::Definition<F>
+	{
+		let mut properties = Properties::none();
+		for &ty_ref in options.keys() {
+			if let Some(ty_properties) = get(ty_ref).properties() {
+				properties.unite_with(ty_properties);
+			}
+		}
+
 		Self {
 			options,
-			properties: OnceCell::new(),
+			properties
 		}
 	}
 
-	pub fn properties<'m>(&'m self, model: &'m Model<F>) -> Properties<'m, F>
-	where
-		F: Clone + Ord,
-	{
-		// Compute the properties in the intersection if not already.
-		let properties = self.properties.get_or_init(|| {
-			use std::collections::hash_map::Entry;
-			let mut properties = HashMap::new();
+	pub fn options(&self) -> impl '_ + Iterator<Item=Ref<super::Definition<F>>> {
+		self.options.keys().cloned()
+	}
 
-			for ty_ref in self.options.keys() {
-				let ty = model.types().get(*ty_ref).unwrap();
-				for (prop, causes) in ty.properties(model) {
-					match properties.entry(prop) {
-						Entry::Vacant(entry) => {
-							entry.insert(causes.clone());
-						}
-						Entry::Occupied(mut entry) => {
-							entry.get_mut().extend(causes.clone());
-						}
-					}
-				}
-			}
-
-			properties
-		});
-
-		Properties(properties.iter())
+	pub fn properties(&self) -> &Properties<F> {
+		&self.properties
 	}
 }

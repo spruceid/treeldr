@@ -1,14 +1,15 @@
-use crate::{prop, Causes, Documentation, Id, Model};
-use shelves::Ref;
+use crate::{Causes, Documentation, Id};
 
+pub mod properties;
 mod intersection;
 pub mod normal;
 pub mod restriction;
 mod r#union;
 
+pub use properties::{Properties, PseudoProperty};
 pub use intersection::Intersection;
 pub use normal::Normal;
-pub use restriction::Restricted;
+pub use restriction::Restriction;
 pub use union::Union;
 
 /// Type definition.
@@ -28,9 +29,11 @@ pub struct Definition<F> {
 
 /// Type definition.
 pub enum Description<F> {
+	Empty,
 	Normal(Normal<F>),
 	Union(Union<F>),
 	Intersection(Intersection<F>),
+	Restriction(Restriction<F>)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -71,26 +74,13 @@ impl<F> Definition<F> {
 		self.doc = doc
 	}
 
-	pub fn properties<'m>(&'m self, model: &'m Model<F>) -> Properties<'m, F>
-	where
-		F: Clone + Ord,
-	{
+	pub fn properties(&self) -> Option<&Properties<F>> {
 		match &self.desc {
-			Description::Normal(n) => n.properties(),
-			Description::Union(u) => u.properties(model),
-			Description::Intersection(i) => i.properties(model),
+			Description::Empty => None,
+			Description::Normal(n) => Some(n.properties()),
+			Description::Union(u) => Some(u.properties()),
+			Description::Intersection(i) => Some(i.properties()),
+			Description::Restriction(r) => Some(r.properties())
 		}
-	}
-}
-
-pub struct Properties<'a, F>(
-	std::collections::hash_map::Iter<'a, Ref<prop::Definition<F>>, Causes<F>>,
-);
-
-impl<'a, F> Iterator for Properties<'a, F> {
-	type Item = (Ref<prop::Definition<F>>, &'a Causes<F>);
-
-	fn next(&mut self) -> Option<Self::Item> {
-		self.0.next().map(|(r, c)| (*r, c))
 	}
 }

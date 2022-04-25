@@ -90,8 +90,6 @@ errors! {
 	type_mismatch_kind::TypeMismatchKind<F>,
 	type_mismatch_union::TypeMismatchUnion<F>,
 	type_mismatch_intersection::TypeMismatchIntersection<F>,
-	type_union_literal_option::TypeUnionLiteralOption,
-	type_intersection_literal_type::TypeIntersectionLiteralType,
 	property_mismatch_functional::PropertyMismatchFunctional<F>,
 	property_mismatch_required::PropertyMismatchRequired<F>,
 	property_mismatch_type::PropertyMismatchType<F>,
@@ -102,8 +100,6 @@ errors! {
 	layout_missing_name::LayoutMissingName,
 	layout_missing_description::LayoutMissingDescription,
 	layout_missing_type::LayoutMissingType,
-	layout_literal_field::LayoutLiteralField,
-	layout_literal_intersection::LayoutLiteralIntersection,
 	layout_intersection_failed::LayoutIntersectionFailed,
 	layout_field_mismatch_functional::LayoutFieldMismatchFunctional<F>,
 	layout_field_mismatch_layout::LayoutFieldMismatchLayout<F>,
@@ -119,5 +115,6 @@ errors! {
 	list_missing_item::ListMissingItem,
 	list_missing_rest::ListMissingRest,
 	regexp_invalid::RegExpInvalid,
-	name_invalid::NameInvalid
+	name_invalid::NameInvalid,
+	literal_unexpected::LiteralUnexpected<F>
 }

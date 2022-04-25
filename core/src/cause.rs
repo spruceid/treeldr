@@ -213,13 +213,13 @@ impl<T, F> WithCauses<T, F> {
 		}
 	}
 
-	pub fn try_map_with_causes<U, E, M>(self, f: M) -> Result<WithCauses<U, F>, Caused<E, F>>
+	pub fn try_map_with_causes<U, E, M>(self, f: M) -> Result<WithCauses<U, F>, E>
 	where
 		M: FnOnce(T, &Causes<F>) -> Result<U, E>,
 	{
 		match f(self.t, &self.causes) {
 			Ok(value) => Ok(WithCauses::new(value, self.causes)),
-			Err(e) => Err(Caused::new(e, self.causes.into_preferred())),
+			Err(e) => Err(e),
 		}
 	}
 

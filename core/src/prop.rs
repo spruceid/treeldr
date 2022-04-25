@@ -2,6 +2,13 @@ use crate::{ty, Causes, Documentation, Id, WithCauses};
 use shelves::Ref;
 use std::collections::HashMap;
 
+pub mod restriction;
+
+pub use restriction::{
+	Restriction,
+	Restrictions
+};
+
 /// Property definition.
 pub struct Definition<F> {
 	id: Id,

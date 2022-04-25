@@ -76,10 +76,6 @@ pub enum TreeLdr {
 	/// property.
 	#[iri("tldr:Variant")]
 	Variant,
-
-	/// Intersection layout.
-	#[iri("tldr:intersection")]
-	Intersection,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

@@ -3,7 +3,7 @@ use locspan::{Loc, Location};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use treeldr::{reporting, vocab::*, Caused, Causes, Id, MaybeSet, Vocabulary};
-use treeldr_build::{context, Context, Item, SubLayout};
+use treeldr_build::{context, Context, Item, SubLayout, Dependencies, utils::TryCollect};
 
 pub enum Error<F> {
 	Global(treeldr_build::Error<F>),
@@ -1043,7 +1043,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 				)?;
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
-				layout.set_intersection(layouts_list, Some(loc.clone()))?;
+				layout.set_description(LayoutDescription::Intersection(layouts_list), Some(loc.clone()))?;
 				if local_context.implicit_definition {
 					layout.set_type(id, Some(loc.clone()))?;
 				}
@@ -1220,6 +1220,8 @@ pub enum LayoutDescription {
 	/// Standard layout description.
 	Standard(treeldr_build::layout::Description),
 
+	Intersection(Id),
+
 	/// Pseudo layout definition.
 	Restriction,
 }
@@ -1247,6 +1249,7 @@ impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescr
 	) -> Result<Vec<SubLayout<F>>, Self::Error> {
 		match self {
 			Self::Standard(s) => Ok(s.sub_layouts(context, causes)?),
+			Self::Intersection(_) => Ok(Vec::new()),
 			Self::Restriction => todo!(),
 		}
 	}
@@ -1259,18 +1262,80 @@ impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescr
 	) -> Result<Vec<Item<F>>, Error<F>> {
 		match self {
 			Self::Standard(s) => Ok(s.dependencies(id, nodes, causes)?),
+			Self::Intersection(layout_list_id) => {
+				let layouts = nodes
+					.require_list(*layout_list_id, causes.preferred().cloned())?
+					.iter(nodes)
+					.map(|item| -> Result<_, Error<F>> {
+						let (object, causes) = item?.clone().into_parts();
+						let layout_id = match object {
+							Object::Literal(lit) => return Err(treeldr_build::Error::new(
+								treeldr_build::error::LiteralUnexpected(lit).into(),
+								causes.preferred().cloned(),
+							).into()),
+							Object::Iri(id) => Id::Iri(id),
+							Object::Blank(id) => Id::Blank(id),
+						};
+
+						Ok(Item::Layout(
+							**nodes.require_layout(layout_id, causes.into_preferred())?,
+						))
+					})
+					.try_collect()?;
+				Ok(layouts)
+			}
 			_ => todo!(),
 		}
 	}
 
-	fn reduce(
+	fn build(
 		self,
-		_id: Id,
-		_name: &MaybeSet<Name, F>,
-		_ty: &MaybeSet<Id, F>,
-	) -> Result<treeldr_build::layout::Description, Self::Error> {
+		id: Id,
+		mut name: MaybeSet<Name, F>,
+		nodes: &context::AllocatedNodes<F>,
+		dependencies: Dependencies<F>,
+		causes: &Causes<F>,
+	) -> Result<treeldr::layout::Description<F>, Self::Error> {
 		match self {
-			Self::Standard(s) => Ok(s),
+			Self::Standard(s) => Ok(s.build(id, name, nodes, dependencies, causes)?),
+			Self::Intersection(layout_list_id) => {
+				use treeldr_build::layout::ComputeIntersection;
+				let layouts = nodes
+					.require_list(layout_list_id, causes.preferred().cloned())?
+					.iter(nodes)
+					.map(|item| {
+						let (object, causes) = item?.clone().into_parts();
+						let layout_id = match object {
+							Object::Literal(lit) => return Err(Caused::new(
+								treeldr_build::error::LiteralUnexpected(lit).into(),
+								causes.preferred().cloned(),
+							)),
+							Object::Iri(id) => Id::Iri(id),
+							Object::Blank(id) => Id::Blank(id),
+						};
+
+						let layout_ref =
+							nodes.require_layout(layout_id, causes.into_preferred())?;
+						Ok(dependencies.layouts[layout_ref.index()].as_ref().unwrap())
+					});
+
+				let mut desc: Option<treeldr::layout::Description<F>> = None;
+				for layout in layouts {
+					let layout = layout?;
+
+					desc = Some(match desc {
+						Some(desc) => desc.intersected_with(
+							id,
+							layout.description_with_causes(),
+							name.take(),
+							dependencies.layouts,
+						)?,
+						None => layout.description().clone(),
+					})
+				}
+
+				Ok(desc.unwrap())
+			}
 			_ => todo!(),
 		}
 	}
