@@ -5,6 +5,7 @@ use std::fmt;
 use treeldr::{reporting, vocab::*, Caused, Causes, Id, MaybeSet, Vocabulary};
 use treeldr_build::{context, Context, Item, SubLayout, Dependencies, utils::TryCollect};
 
+#[derive(Debug)]
 pub enum Error<F> {
 	Global(treeldr_build::Error<F>),
 	Local(Loc<LocalError<F>, F>),
