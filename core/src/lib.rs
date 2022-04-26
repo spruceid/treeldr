@@ -17,6 +17,7 @@ pub mod reporting;
 pub mod ty;
 pub mod utils;
 pub use treeldr_vocab as vocab;
+mod to_rdf;
 
 pub use cause::*;
 pub use doc::Documentation;
@@ -86,6 +87,10 @@ impl<F> Model<F> {
 	/// Returns a mutable reference to the vocabulary.
 	pub fn vocabulary_mut(&mut self) -> &mut Vocabulary {
 		&mut self.vocab
+	}
+
+	pub fn into_vocabulary(self) -> Vocabulary {
+		self.vocab
 	}
 
 	/// Returns the node associated to the given `Id`, if any.
