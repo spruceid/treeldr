@@ -16,9 +16,11 @@ trait KindName {
 impl KindName for Kind {
 	fn name(&self) -> &str {
 		match self {
+			Self::Empty => "the empty type",
 			Self::Normal => "a normal type",
 			Self::Union => "an union",
-			Self::Intersection => "an intersection"
+			Self::Intersection => "an intersection",
+			Self::Restriction => "a restriction"
 		}
 	}
 }

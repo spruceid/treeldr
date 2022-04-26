@@ -36,11 +36,25 @@ pub enum Description<F> {
 	Restriction(Restriction<F>)
 }
 
+impl<F> Description<F> {
+	pub fn kind(&self) -> Kind {
+		match self {
+			Self::Empty => Kind::Empty,
+			Self::Normal(_) => Kind::Normal,
+			Self::Union(_) => Kind::Union,
+			Self::Intersection(_) => Kind::Intersection,
+			Self::Restriction(_) => Kind::Restriction
+		}
+	}
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Kind {
+	Empty,
 	Normal,
 	Union,
 	Intersection,
+	Restriction
 }
 
 impl<F> Definition<F> {
