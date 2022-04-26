@@ -4,10 +4,7 @@ use std::collections::HashMap;
 
 pub mod restriction;
 
-pub use restriction::{
-	Restriction,
-	Restrictions
-};
+pub use restriction::{Restriction, Restrictions};
 
 /// Property definition.
 pub struct Definition<F> {
@@ -16,7 +13,6 @@ pub struct Definition<F> {
 	range: WithCauses<Ref<ty::Definition<F>>, F>,
 	required: WithCauses<bool, F>,
 	functional: WithCauses<bool, F>,
-	doc: Documentation,
 	causes: Causes<F>,
 }
 
@@ -35,7 +31,6 @@ impl<F> Definition<F> {
 			range,
 			required,
 			functional,
-			doc: Documentation::default(),
 		}
 	}
 
@@ -59,6 +54,10 @@ impl<F> Definition<F> {
 		&self.range
 	}
 
+	pub fn domain(&self) -> impl '_ + Iterator<Item = Ref<ty::Definition<F>>> {
+		self.domain.keys().cloned()
+	}
+
 	pub fn is_required(&self) -> bool {
 		*self.required.inner()
 	}
@@ -69,15 +68,11 @@ impl<F> Definition<F> {
 		*self.functional.inner()
 	}
 
-	pub fn documentation(&self) -> &Documentation {
-		&self.doc
+	pub fn label<'m>(&self, model: &'m crate::Model<F>) -> Option<&'m str> {
+		model.get(self.id).unwrap().label()
 	}
 
-	pub fn documentation_mut(&mut self) -> &mut Documentation {
-		&mut self.doc
-	}
-
-	pub fn set_documentation(&mut self, doc: Documentation) {
-		self.doc = doc
+	pub fn documentation<'m>(&self, model: &'m crate::Model<F>) -> &'m Documentation {
+		model.get(self.id).unwrap().documentation()
 	}
 }

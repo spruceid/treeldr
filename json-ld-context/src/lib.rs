@@ -1,4 +1,4 @@
-use treeldr::{layout, vocab::Display, Ref};
+use treeldr::{layout, vocab::Display, Ref, Vocabulary};
 
 mod command;
 pub use command::Command;
@@ -9,6 +9,7 @@ pub enum Error {
 
 /// Generate a JSON Schema from a TreeLDR model.
 pub fn generate<F>(
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	layouts: Vec<Ref<layout::Definition<F>>>,
 	type_property: Option<String>,
@@ -16,7 +17,7 @@ pub fn generate<F>(
 	let mut ld_context = serde_json::Map::new();
 
 	for layout_ref in layouts {
-		generate_layout_term_definition(model, layout_ref, &mut ld_context)?;
+		generate_layout_term_definition(vocabulary, model, layout_ref, &mut ld_context)?;
 	}
 
 	if let Some(name) = type_property {
@@ -32,6 +33,7 @@ pub fn generate<F>(
 }
 
 fn generate_layout_term_definition<F>(
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	layout_ref: Ref<layout::Definition<F>>,
 	ld_context: &mut serde_json::Map<String, serde_json::Value>,
@@ -45,13 +47,10 @@ fn generate_layout_term_definition<F>(
 			let ty = model.types().get(ty_ref).unwrap();
 
 			let mut def = serde_json::Map::new();
-			def.insert(
-				"@id".into(),
-				ty.id().display(model.vocabulary()).to_string().into(),
-			);
+			def.insert("@id".into(), ty.id().display(vocabulary).to_string().into());
 			def.insert(
 				"@context".into(),
-				generate_struct_context(model, s.fields())?.into(),
+				generate_struct_context(vocabulary, model, s.fields())?.into(),
 			);
 
 			ld_context.insert(s.name().to_pascal_case(), def.into());
@@ -63,10 +62,7 @@ fn generate_layout_term_definition<F>(
 
 			if !lit.should_inline() {
 				let mut def = serde_json::Map::new();
-				def.insert(
-					"@id".into(),
-					ty.id().display(model.vocabulary()).to_string().into(),
-				);
+				def.insert("@id".into(), ty.id().display(vocabulary).to_string().into());
 				ld_context.insert(lit.name().to_pascal_case(), def.into());
 			}
 		}
@@ -78,6 +74,7 @@ fn generate_layout_term_definition<F>(
 }
 
 fn generate_layout_type<F>(
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	layout_ref: Ref<layout::Definition<F>>,
 ) -> Option<serde_json::Value> {
@@ -87,7 +84,7 @@ fn generate_layout_type<F>(
 		Description::Struct(_) => {
 			let ty_ref = layout.ty();
 			let ty = model.types().get(ty_ref).unwrap();
-			Some(ty.id().display(model.vocabulary()).to_string().into())
+			Some(ty.id().display(vocabulary).to_string().into())
 		}
 		Description::Enum(_) => {
 			let ty_ref = layout.ty();
@@ -95,7 +92,7 @@ fn generate_layout_type<F>(
 			if ty.id().is_blank() {
 				None
 			} else {
-				Some(ty.id().display(model.vocabulary()).to_string().into())
+				Some(ty.id().display(vocabulary).to_string().into())
 			}
 		}
 		Description::Literal(_) => {
@@ -104,7 +101,7 @@ fn generate_layout_type<F>(
 			if ty.id().is_blank() {
 				None
 			} else {
-				Some(ty.id().display(model.vocabulary()).to_string().into())
+				Some(ty.id().display(vocabulary).to_string().into())
 			}
 		}
 		Description::Reference(_, _) => Some("@id".into()),
@@ -113,6 +110,7 @@ fn generate_layout_type<F>(
 }
 
 fn generate_struct_context<F>(
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	fields: &[treeldr::layout::Field<F>],
 ) -> Result<serde_json::Map<String, serde_json::Value>, Error> {
@@ -123,14 +121,14 @@ fn generate_struct_context<F>(
 		let property = model.properties().get(property_ref).unwrap();
 
 		let field_layout_ref = field.layout();
-		let field_type = generate_layout_type(model, field_layout_ref);
+		let field_type = generate_layout_type(vocabulary, model, field_layout_ref);
 		let field_def: serde_json::Value = if field_type.is_none() {
-			property.id().display(model.vocabulary()).to_string().into()
+			property.id().display(vocabulary).to_string().into()
 		} else {
 			let mut field_def = serde_json::Map::new();
 			field_def.insert(
 				"@id".into(),
-				property.id().display(model.vocabulary()).to_string().into(),
+				property.id().display(vocabulary).to_string().into(),
 			);
 
 			if let Some(field_type) = field_type {

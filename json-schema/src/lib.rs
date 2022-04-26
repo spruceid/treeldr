@@ -1,4 +1,4 @@
-use treeldr::{layout, vocab::Display, Ref};
+use treeldr::{layout, vocab::Display, Ref, Vocabulary};
 
 mod command;
 pub mod embedding;
@@ -14,6 +14,7 @@ pub enum Error<F> {
 
 /// Generate a JSON Schema from a TreeLDR model.
 pub fn generate<F>(
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -51,6 +52,7 @@ pub fn generate<F>(
 	json_schema.insert("title".into(), title.into());
 	generate_layout(
 		&mut json_schema,
+		vocabulary,
 		model,
 		embedding,
 		type_property,
@@ -70,6 +72,7 @@ pub fn generate<F>(
 			.to_string();
 		generate_layout(
 			&mut json_schema,
+			vocabulary,
 			model,
 			embedding,
 			type_property,
@@ -105,6 +108,7 @@ fn remove_newlines(s: &str) -> String {
 
 fn generate_layout<F>(
 	json: &mut serde_json::Map<String, serde_json::Value>,
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -113,7 +117,7 @@ fn generate_layout<F>(
 	let layout = model.layouts().get(layout_ref).unwrap();
 	json.insert(
 		"$id".into(),
-		layout.id().display(model.vocabulary()).to_string().into(),
+		layout.id().display(vocabulary).to_string().into(),
 	);
 
 	if let Some(description) = layout.preferred_documentation(model).short_description() {
@@ -129,9 +133,11 @@ fn generate_layout<F>(
 			json.insert("type".into(), "string".into());
 			Ok(())
 		}
-		Description::Struct(s) => generate_struct(json, model, embedding, type_property, s),
+		Description::Struct(s) => {
+			generate_struct(json, vocabulary, model, embedding, type_property, s)
+		}
 		Description::Enum(enm) => {
-			generate_enum_type(json, model, enm)?;
+			generate_enum_type(json, vocabulary, model, enm)?;
 			Ok(())
 		}
 		Description::Literal(lit) => {
@@ -147,6 +153,7 @@ fn generate_layout<F>(
 
 fn generate_struct<F>(
 	json: &mut serde_json::Map<String, serde_json::Value>,
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -172,7 +179,7 @@ fn generate_struct<F>(
 
 		match embedding.get(field_layout_ref) {
 			Embedding::Reference => {
-				generate_layout_ref(&mut layout_schema, model, field_layout_ref)?;
+				generate_layout_ref(&mut layout_schema, vocabulary, model, field_layout_ref)?;
 			}
 			Embedding::Indirect => {
 				generate_layout_defs_ref(&mut layout_schema, model, field_layout_ref)?;
@@ -180,6 +187,7 @@ fn generate_struct<F>(
 			Embedding::Direct => {
 				generate_layout(
 					&mut layout_schema,
+					vocabulary,
 					model,
 					embedding,
 					type_property,
@@ -250,6 +258,7 @@ fn generate_layout_defs_ref<F>(
 
 fn generate_layout_ref<F>(
 	json: &mut serde_json::Map<String, serde_json::Value>,
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	layout_ref: Ref<layout::Definition<F>>,
 ) -> Result<(), Error<F>> {
@@ -265,12 +274,12 @@ fn generate_layout_ref<F>(
 			let layout = model.layouts().get(layout_ref).unwrap();
 			json.insert(
 				"$ref".into(),
-				layout.id().display(model.vocabulary()).to_string().into(),
+				layout.id().display(vocabulary).to_string().into(),
 			);
 			Ok(())
 		}
 		Description::Enum(enm) => {
-			generate_enum_type(json, model, enm)?;
+			generate_enum_type(json, vocabulary, model, enm)?;
 			Ok(())
 		}
 		Description::Literal(lit) => {
@@ -286,6 +295,7 @@ fn generate_layout_ref<F>(
 
 fn generate_enum_type<F>(
 	def: &mut serde_json::Map<String, serde_json::Value>,
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	enm: &layout::Enum<F>,
 ) -> Result<(), Error<F>> {
@@ -293,7 +303,7 @@ fn generate_enum_type<F>(
 	for variant in enm.variants() {
 		let layout_ref = variant.layout().unwrap();
 		let mut variant_json = serde_json::Map::new();
-		generate_layout_ref(&mut variant_json, model, layout_ref)?;
+		generate_layout_ref(&mut variant_json, vocabulary, model, layout_ref)?;
 		variants.push(serde_json::Value::Object(variant_json))
 	}
 

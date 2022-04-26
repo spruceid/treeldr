@@ -1,7 +1,7 @@
 use super::{error, Error};
+use crate::{Context, Descriptions};
 use locspan::Location;
 use treeldr::{vocab::Name, Caused, Causes, Documentation, Id, MaybeSet, WithCauses};
-use crate::{Context, Descriptions};
 
 /// Layout field definition.
 pub struct Definition<F> {

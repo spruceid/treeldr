@@ -1,18 +1,15 @@
-use crate::{
-	Ref,
-	ty
-};
-use std::collections::HashSet;
+use crate::{ty, Ref};
 use derivative::Derivative;
+use std::collections::HashSet;
 
 #[derive(Clone, Copy)]
 pub struct Contradiction;
 
 #[derive(Derivative)]
-#[derivative(Default(bound=""), Clone(bound=""))]
+#[derivative(Default(bound = ""), Clone(bound = ""))]
 pub struct Restrictions<F> {
 	range: RangeRestrictions<F>,
-	cardinality: CardinalityRestrictions
+	cardinality: CardinalityRestrictions,
 }
 
 impl<F> Restrictions<F> {
@@ -22,9 +19,7 @@ impl<F> Restrictions<F> {
 				self.range.restrict(r);
 				Ok(())
 			}
-			Restriction::Cardinality(c) => {
-				self.cardinality.restrict(c)
-			}
+			Restriction::Cardinality(c) => self.cardinality.restrict(c),
 		}
 	}
 
@@ -36,23 +31,23 @@ impl<F> Restrictions<F> {
 	pub fn union_with(&self, other: &Self) -> Self {
 		Self {
 			range: self.range.union_with(&other.range),
-			cardinality: self.cardinality.union_with(&other.cardinality)
+			cardinality: self.cardinality.union_with(&other.cardinality),
 		}
 	}
 
 	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction> {
 		Ok(Self {
 			range: self.range.intersection_with(&other.range),
-			cardinality: self.cardinality.intersection_with(&other.cardinality)?
+			cardinality: self.cardinality.intersection_with(&other.cardinality)?,
 		})
 	}
 }
 
 #[derive(Derivative)]
-#[derivative(Default(bound=""), Clone(bound=""))]
+#[derivative(Default(bound = ""), Clone(bound = ""))]
 pub struct RangeRestrictions<F> {
 	all: HashSet<Ref<ty::Definition<F>>>,
-	any: HashSet<Ref<ty::Definition<F>>>
+	any: HashSet<Ref<ty::Definition<F>>>,
 }
 
 impl<F> RangeRestrictions<F> {
@@ -75,14 +70,14 @@ impl<F> RangeRestrictions<F> {
 	pub fn union_with(&self, other: &Self) -> Self {
 		Self {
 			all: self.all.intersection(&other.all).cloned().collect(),
-			any: self.any.intersection(&other.any).cloned().collect()
+			any: self.any.intersection(&other.any).cloned().collect(),
 		}
 	}
 
 	pub fn intersection_with(&self, other: &Self) -> Self {
 		Self {
 			all: self.all.union(&other.all).cloned().collect(),
-			any: self.any.union(&other.any).cloned().collect()
+			any: self.any.union(&other.any).cloned().collect(),
 		}
 	}
 }
@@ -90,7 +85,7 @@ impl<F> RangeRestrictions<F> {
 #[derive(Default, Clone)]
 pub struct CardinalityRestrictions {
 	min: Option<u32>,
-	max: Option<u32>
+	max: Option<u32>,
 }
 
 impl CardinalityRestrictions {
@@ -99,7 +94,7 @@ impl CardinalityRestrictions {
 			Cardinality::AtLeast(min) => {
 				if let Some(max) = self.max {
 					if min > max {
-						return Err(Contradiction)
+						return Err(Contradiction);
 					}
 				}
 
@@ -108,7 +103,7 @@ impl CardinalityRestrictions {
 			Cardinality::AtMost(max) => {
 				if let Some(min) = self.min {
 					if min > max {
-						return Err(Contradiction)
+						return Err(Contradiction);
 					}
 				}
 
@@ -117,13 +112,13 @@ impl CardinalityRestrictions {
 			Cardinality::Exactly(n) => {
 				if let Some(min) = self.min {
 					if min > n {
-						return Err(Contradiction)
+						return Err(Contradiction);
 					}
 				}
 
 				if let Some(max) = self.max {
 					if n > max {
-						return Err(Contradiction)
+						return Err(Contradiction);
 					}
 				}
 
@@ -143,45 +138,39 @@ impl CardinalityRestrictions {
 	pub fn union_with(&self, other: &Self) -> Self {
 		let min = match (self.min, other.min) {
 			(Some(a), Some(b)) => Some(std::cmp::min(a, b)),
-			_ => None
+			_ => None,
 		};
 
 		let max = match (self.max, other.max) {
 			(Some(a), Some(b)) => Some(std::cmp::max(a, b)),
-			_ => None
+			_ => None,
 		};
 
-		Self {
-			min,
-			max
-		}
+		Self { min, max }
 	}
 
 	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction> {
 		let min = match (self.min, other.min) {
 			(Some(a), Some(b)) => Some(std::cmp::max(a, b)),
 			(Some(min), None) => Some(min),
-			(None, Some(min)) => Some(min), 
-			(None, None) => None
+			(None, Some(min)) => Some(min),
+			(None, None) => None,
 		};
 
 		let max = match (self.max, other.max) {
 			(Some(a), Some(b)) => Some(std::cmp::min(a, b)),
 			(Some(max), None) => Some(max),
 			(None, Some(max)) => Some(max),
-			_ => None
+			_ => None,
 		};
 
 		if let (Some(min), Some(max)) = (min, max) {
 			if min > max {
-				return Err(Contradiction)
+				return Err(Contradiction);
 			}
 		}
 
-		Ok(Self {
-			min,
-			max
-		})
+		Ok(Self { min, max })
 	}
 }
 

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use treeldr_vocab::{GraphLabel, Id, StrippedObject, Term, Vocabulary};
 
-type BuildContext = treeldr_build::Context<(), treeldr_syntax::build::Descriptions>;
+type BuildContext<'v> = treeldr_build::Context<'v, (), treeldr_syntax::build::Descriptions>;
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
@@ -31,7 +31,7 @@ impl BlankIdGenerator {
 fn parse_nquads<P: AsRef<Path>>(
 	vocabulary: &mut Vocabulary,
 	path: P,
-) -> grdf::HashDataset<Id, Term, StrippedObject, GraphLabel> {
+) -> grdf::BTreeDataset<Id, Term, StrippedObject, GraphLabel> {
 	use nquads_syntax::{lexing::Utf8Decoded, Document, Lexer, Parse};
 
 	let buffer = std::fs::read_to_string(path).expect("unable to read file");
@@ -51,33 +51,38 @@ fn parse_nquads<P: AsRef<Path>>(
 }
 
 fn parse_treeldr<P: AsRef<Path>>(
-	vocabulary: Vocabulary,
+	vocabulary: &mut Vocabulary,
 	path: P,
-) -> (grdf::HashDataset<Id, Term, StrippedObject, GraphLabel>, Vocabulary) {
-	use treeldr_syntax::{Lexer, Parse};
+) -> grdf::BTreeDataset<Id, Term, StrippedObject, GraphLabel> {
 	use treeldr_build::Document;
+	use treeldr_syntax::{Lexer, Parse};
 
 	let input = std::fs::read_to_string(path).expect("unable to read input file");
 	let mut lexer = Lexer::new((), input.chars().map(infallible));
 	let ast = treeldr_syntax::Document::parse(&mut lexer).expect("parse error");
-	let mut context = BuildContext::with_vocabulary(vocabulary);
-	let mut local_context = treeldr_syntax::build::LocalContext::new(Some(iri!("http://www.example.com").into()));
-	ast.declare(&mut local_context, &mut context).expect("build error");
-	ast.into_value().relate(&mut local_context, &mut context).expect("build error");
+	let mut context = BuildContext::new(vocabulary);
+	context.define_xml_types().unwrap();
+	let mut local_context =
+		treeldr_syntax::build::LocalContext::new(Some(iri!("http://www.example.com").into()));
+	ast.declare(&mut local_context, &mut context)
+		.expect("build error");
+	ast.into_value()
+		.relate(&mut local_context, &mut context)
+		.expect("build error");
 
-	let model = context.build().map_err(|t| t.0).expect("build error");
+	let model = context.build().expect("build error");
 
 	let mut quads = Vec::new();
-	model.to_rdf(&mut quads);
+	model.to_rdf(vocabulary, &mut quads);
 
-	(quads.into_iter().map(treeldr_vocab::strip_quad).collect(), model.into_vocabulary())
+	quads.into_iter().collect()
 }
 
 fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) {
 	use treeldr_vocab::RdfDisplay;
 	let mut vocabulary = Vocabulary::new();
+	let output = parse_treeldr(&mut vocabulary, input_path);
 	let expected_output = parse_nquads(&mut vocabulary, expected_output_path);
-	let (output, vocabulary) = parse_treeldr(vocabulary, input_path);
 
 	for quad in output.quads() {
 		println!("{} .", quad.rdf_display(&vocabulary))
@@ -88,7 +93,8 @@ fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) 
 
 fn negative_test<I: AsRef<Path>>(input_path: I) {
 	use treeldr_vocab::RdfDisplay;
-	let (output, vocabulary) = parse_treeldr(Vocabulary::new(), input_path);
+	let mut vocabulary = Vocabulary::new();
+	let output = parse_treeldr(&mut vocabulary, input_path);
 	for quad in output.quads() {
 		println!("{} .", quad.rdf_display(&vocabulary))
 	}

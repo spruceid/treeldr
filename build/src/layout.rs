@@ -84,7 +84,7 @@ pub enum Description {
 	Struct(Id),
 	Reference(Id),
 	Literal(RegExp),
-	Enum(Id)
+	Enum(Id),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -93,7 +93,7 @@ pub enum Type {
 	Reference,
 	Literal,
 	Struct,
-	Enum
+	Enum,
 }
 
 impl Description {
@@ -103,7 +103,7 @@ impl Description {
 			Self::Struct(_) => Type::Struct,
 			Self::Native(n) => Type::Native(*n),
 			Self::Literal(_) => Type::Literal,
-			Self::Enum(_) => Type::Enum
+			Self::Enum(_) => Type::Enum,
 		}
 	}
 
@@ -196,7 +196,10 @@ impl Description {
 		nodes: &super::context::AllocatedNodes<F>,
 		_dependencies: crate::Dependencies<F>,
 		causes: &Causes<F>,
-	) -> Result<treeldr::layout::Description<F>, Error<F>> where F: Clone + Ord {
+	) -> Result<treeldr::layout::Description<F>, Error<F>>
+	where
+		F: Clone + Ord,
+	{
 		use field::Build as BuildField;
 		use variant::Build as BuildVariant;
 
@@ -222,12 +225,10 @@ impl Description {
 				let layout_ref = *nodes
 					.require_layout(layout_id, causes.preferred().cloned())?
 					.inner();
-				Ok(treeldr::layout::Description::Reference(
-					layout_ref, name,
-				))
+				Ok(treeldr::layout::Description::Reference(layout_ref, name))
 			}
 			Description::Struct(fields_id) => {
-				let name = require_name(id, name, &causes)?;
+				let name = require_name(id, name, causes)?;
 				let fields = nodes
 					.require_list(fields_id, causes.preferred().cloned())?
 					.iter(nodes)
@@ -255,7 +256,7 @@ impl Description {
 				Ok(treeldr::layout::Description::Struct(strct))
 			}
 			Description::Enum(options_id) => {
-				let name = require_name(id, name, &causes)?;
+				let name = require_name(id, name, causes)?;
 
 				let variants: Vec<_> = nodes
 					.require_list(options_id, causes.preferred().cloned())?
@@ -289,7 +290,7 @@ impl Description {
 				Ok(treeldr::layout::Description::Enum(enm))
 			}
 			Description::Literal(regexp) => {
-				let name = require_name(id, name, &causes)?;
+				let name = require_name(id, name, causes)?;
 				let lit = treeldr::layout::Literal::new(regexp, name, id.is_blank());
 				Ok(treeldr::layout::Description::Literal(lit))
 			}
@@ -557,13 +558,7 @@ impl<F: Ord + Clone, D: PseudoDescription<F>> crate::Build<F> for Definition<F, 
 		})?;
 
 		let desc = desc.try_map_with_causes(|desc, desc_causes| {
-			desc.build(
-				self.id,
-				self.name,
-				nodes,
-				dependencies,
-				desc_causes
-			)
+			desc.build(self.id, self.name, nodes, dependencies, desc_causes)
 		})?;
 
 		Ok(treeldr::layout::Definition::new(self.id, ty, desc, causes))

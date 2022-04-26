@@ -72,11 +72,17 @@ impl<'a, F> Dependencies<'a, F> {
 		self.types[ty.index()].as_ref().unwrap()
 	}
 
-	pub fn property(&self, prop: Ref<treeldr::prop::Definition<F>>) -> &treeldr::prop::Definition<F> {
+	pub fn property(
+		&self,
+		prop: Ref<treeldr::prop::Definition<F>>,
+	) -> &treeldr::prop::Definition<F> {
 		self.properties[prop.index()].as_ref().unwrap()
 	}
 
-	pub fn layout(&self, layout: Ref<treeldr::layout::Definition<F>>) -> &treeldr::layout::Definition<F> {
+	pub fn layout(
+		&self,
+		layout: Ref<treeldr::layout::Definition<F>>,
+	) -> &treeldr::layout::Definition<F> {
 		self.layouts[layout.index()].as_ref().unwrap()
 	}
 }

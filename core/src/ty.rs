@@ -1,14 +1,14 @@
 use crate::{Causes, Documentation, Id};
 
-pub mod properties;
 mod intersection;
 pub mod normal;
+pub mod properties;
 pub mod restriction;
 mod r#union;
 
-pub use properties::{Properties, PseudoProperty};
 pub use intersection::Intersection;
 pub use normal::Normal;
+pub use properties::{Properties, PseudoProperty};
 pub use restriction::Restriction;
 pub use union::Union;
 
@@ -20,9 +20,6 @@ pub struct Definition<F> {
 	/// Causes of the definition.
 	causes: Causes<F>,
 
-	/// Documentation.
-	doc: Documentation,
-
 	/// Type description.
 	desc: Description<F>,
 }
@@ -33,7 +30,7 @@ pub enum Description<F> {
 	Normal(Normal<F>),
 	Union(Union<F>),
 	Intersection(Intersection<F>),
-	Restriction(Restriction<F>)
+	Restriction(Restriction<F>),
 }
 
 impl<F> Description<F> {
@@ -43,7 +40,7 @@ impl<F> Description<F> {
 			Self::Normal(_) => Kind::Normal,
 			Self::Union(_) => Kind::Union,
 			Self::Intersection(_) => Kind::Intersection,
-			Self::Restriction(_) => Kind::Restriction
+			Self::Restriction(_) => Kind::Restriction,
 		}
 	}
 }
@@ -54,7 +51,7 @@ pub enum Kind {
 	Normal,
 	Union,
 	Intersection,
-	Restriction
+	Restriction,
 }
 
 impl<F> Definition<F> {
@@ -62,7 +59,6 @@ impl<F> Definition<F> {
 		Self {
 			id,
 			causes: causes.into(),
-			doc: Documentation::default(),
 			desc,
 		}
 	}
@@ -76,16 +72,16 @@ impl<F> Definition<F> {
 		&self.causes
 	}
 
-	pub fn documentation(&self) -> &Documentation {
-		&self.doc
+	pub fn description(&self) -> &Description<F> {
+		&self.desc
 	}
 
-	pub fn documentation_mut(&mut self) -> &mut Documentation {
-		&mut self.doc
+	pub fn label<'m>(&self, model: &'m crate::Model<F>) -> Option<&'m str> {
+		model.get(self.id).unwrap().label()
 	}
 
-	pub fn set_documentation(&mut self, doc: Documentation) {
-		self.doc = doc
+	pub fn documentation<'m>(&self, model: &'m crate::Model<F>) -> &'m Documentation {
+		model.get(self.id).unwrap().documentation()
 	}
 
 	pub fn properties(&self) -> Option<&Properties<F>> {
@@ -94,7 +90,7 @@ impl<F> Definition<F> {
 			Description::Normal(n) => Some(n.properties()),
 			Description::Union(u) => Some(u.properties()),
 			Description::Intersection(i) => Some(i.properties()),
-			Description::Restriction(r) => Some(r.properties())
+			Description::Restriction(r) => Some(r.properties()),
 		}
 	}
 }

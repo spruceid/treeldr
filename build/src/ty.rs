@@ -1,7 +1,7 @@
-use crate::{error, Error, utils::TryCollect};
+use crate::{error, utils::TryCollect, Error};
 use derivative::Derivative;
 use locspan::Location;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use treeldr::{vocab, Caused, Causes, Id, MaybeSet};
 
 pub use treeldr::ty::Kind;
@@ -67,7 +67,7 @@ impl<F: Clone + Ord> Description<F> {
 		let list_id = match self {
 			Description::Union(list_id) => Some(*list_id),
 			Description::Intersection(list_id) => Some(*list_id),
-			_ => None
+			_ => None,
 		};
 
 		match list_id {
@@ -85,20 +85,17 @@ impl<F: Clone + Ord> Description<F> {
 							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
 							vocab::Object::Blank(id) => Ok(Id::Blank(id)),
 						}?;
-		
+
 						let ty_ref = *nodes
-							.require_type(
-								ty_id,
-								ty_causes.preferred().cloned(),
-							)?
+							.require_type(ty_id, ty_causes.preferred().cloned())?
 							.inner();
-		
+
 						Ok(crate::Item::Type(ty_ref))
 					})
 					.try_collect()?;
 				Ok(dependencies)
 			}
-			None => Ok(Vec::new())
+			None => Ok(Vec::new()),
 		}
 	}
 
@@ -108,12 +105,15 @@ impl<F: Clone + Ord> Description<F> {
 		nodes: &super::context::AllocatedNodes<F>,
 		dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
-	) -> Result<treeldr::ty::Description<F>, Error<F>> where F: Clone + Ord {
+	) -> Result<treeldr::ty::Description<F>, Error<F>>
+	where
+		F: Clone + Ord,
+	{
 		let desc = match self {
 			Self::Normal(n) => n.build(nodes)?,
 			Self::Union(options_id) => {
-				use std::collections::hash_map::Entry;
-				let mut options = HashMap::new();
+				use std::collections::btree_map::Entry;
+				let mut options = BTreeMap::new();
 
 				let items = nodes
 					.require_list(options_id, causes.preferred().cloned())?
@@ -144,14 +144,13 @@ impl<F: Clone + Ord> Description<F> {
 					}
 				}
 
-				treeldr::ty::Description::Union(treeldr::ty::Union::new(
-					options,
-					|ty_ref| dependencies.ty(ty_ref)
-				))
+				treeldr::ty::Description::Union(treeldr::ty::Union::new(options, |ty_ref| {
+					dependencies.ty(ty_ref)
+				}))
 			}
 			Description::Intersection(types_id) => {
-				use std::collections::hash_map::Entry;
-				let mut types = HashMap::new();
+				use std::collections::btree_map::Entry;
+				let mut types = BTreeMap::new();
 
 				let items = nodes
 					.require_list(types_id, causes.preferred().cloned())?
@@ -182,12 +181,9 @@ impl<F: Clone + Ord> Description<F> {
 					}
 				}
 
-				match treeldr::ty::Intersection::new(
-					types,
-					|ty_ref| dependencies.ty(ty_ref)
-				) {
+				match treeldr::ty::Intersection::new(types, |ty_ref| dependencies.ty(ty_ref)) {
 					Ok(intersection) => treeldr::ty::Description::Intersection(intersection),
-					Err(_) => treeldr::ty::Description::Empty
+					Err(_) => treeldr::ty::Description::Empty,
 				}
 			}
 		};
@@ -402,12 +398,7 @@ impl<F, D: PseudoDescription<F>> crate::Build<F> for Definition<F, D> {
 		let desc = match self.desc.unwrap() {
 			Some(desc) => {
 				let (desc, desc_causes) = desc.into_parts();
-				desc.build(
-					self.id,
-					nodes,
-					dependencies,
-					desc_causes
-				)?
+				desc.build(self.id, nodes, dependencies, desc_causes)?
 			}
 			None => treeldr::ty::Description::Normal(treeldr::ty::Normal::new()),
 		};

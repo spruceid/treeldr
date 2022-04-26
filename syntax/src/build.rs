@@ -3,7 +3,7 @@ use locspan::{Loc, Location};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use treeldr::{reporting, vocab::*, Caused, Causes, Id, MaybeSet, Vocabulary};
-use treeldr_build::{context, Context, Item, SubLayout, Dependencies, utils::TryCollect};
+use treeldr_build::{context, utils::TryCollect, Context, Dependencies, Item, SubLayout};
 
 #[derive(Debug)]
 pub enum Error<F> {
@@ -861,8 +861,14 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::PropertyDefinition<F>, F> {
 		if let Some(Loc(range, range_loc)) = range {
 			prop.set_range(range, Some(range_loc))?;
 		}
-		prop.set_functional(functional, functional_loc)?;
-		prop.set_required(required, required_loc)?;
+
+		if let Some(functional_loc) = functional_loc {
+			prop.set_functional(functional, Some(functional_loc))?;
+		}
+
+		if let Some(required_loc) = required_loc {
+			prop.set_required(required, Some(required_loc))?;
+		}
 
 		Ok(Loc(id, id_loc))
 	}
@@ -1044,7 +1050,10 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 				)?;
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
-				layout.set_description(LayoutDescription::Intersection(layouts_list), Some(loc.clone()))?;
+				layout.set_description(
+					LayoutDescription::Intersection(layouts_list),
+					Some(loc.clone()),
+				)?;
 				if local_context.implicit_definition {
 					layout.set_type(id, Some(loc.clone()))?;
 				}
@@ -1161,7 +1170,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 
 		let mut functional = true;
 		let mut functional_loc = None;
-		let mut required = true;
+		let mut required = false;
 		let mut required_loc = None;
 
 		let Loc(layout, layout_loc) = match def.layout {
@@ -1209,8 +1218,14 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 		field.set_property(prop_id, Some(prop_id_loc))?;
 		field.set_name(name, Some(name_loc))?;
 		field.set_layout(layout, Some(layout_loc))?;
-		field.set_functional(functional, functional_loc)?;
-		field.set_required(required, required_loc)?;
+
+		if let Some(functional_loc) = functional_loc {
+			field.set_functional(functional, Some(functional_loc))?;
+		}
+
+		if let Some(required_loc) = required_loc {
+			field.set_required(required, Some(required_loc))?;
+		}
 
 		Ok(Loc(id, loc))
 	}
@@ -1270,10 +1285,13 @@ impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescr
 					.map(|item| -> Result<_, Error<F>> {
 						let (object, causes) = item?.clone().into_parts();
 						let layout_id = match object {
-							Object::Literal(lit) => return Err(treeldr_build::Error::new(
-								treeldr_build::error::LiteralUnexpected(lit).into(),
-								causes.preferred().cloned(),
-							).into()),
+							Object::Literal(lit) => {
+								return Err(treeldr_build::Error::new(
+									treeldr_build::error::LiteralUnexpected(lit).into(),
+									causes.preferred().cloned(),
+								)
+								.into())
+							}
 							Object::Iri(id) => Id::Iri(id),
 							Object::Blank(id) => Id::Blank(id),
 						};
@@ -1307,10 +1325,12 @@ impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescr
 					.map(|item| {
 						let (object, causes) = item?.clone().into_parts();
 						let layout_id = match object {
-							Object::Literal(lit) => return Err(Caused::new(
-								treeldr_build::error::LiteralUnexpected(lit).into(),
-								causes.preferred().cloned(),
-							)),
+							Object::Literal(lit) => {
+								return Err(Caused::new(
+									treeldr_build::error::LiteralUnexpected(lit).into(),
+									causes.preferred().cloned(),
+								))
+							}
 							Object::Iri(id) => Id::Iri(id),
 							Object::Blank(id) => Id::Blank(id),
 						};

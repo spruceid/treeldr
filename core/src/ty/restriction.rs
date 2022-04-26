@@ -1,5 +1,5 @@
-use crate::{prop, Ref, WithCauses};
 use super::Properties;
+use crate::{prop, Ref, WithCauses};
 
 /// Type restricted on a property.
 ///
@@ -14,15 +14,16 @@ pub struct Restriction<F> {
 impl<F> Restriction<F> {
 	pub fn new(
 		prop: WithCauses<Ref<prop::Definition<F>>, F>,
-		restriction: prop::Restrictions<F>
-	) -> Self where F: Ord {
+		restriction: prop::Restrictions<F>,
+	) -> Self
+	where
+		F: Ord,
+	{
 		let mut properties = Properties::none();
 		let (prop, causes) = prop.into_parts();
 		properties.insert(prop, Some(restriction), causes);
 
-		Self {
-			properties
-		}
+		Self { properties }
 	}
 
 	pub fn properties(&self) -> &Properties<F> {

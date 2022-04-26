@@ -23,6 +23,10 @@ pub enum TreeLdr {
 	#[iri("tldr:format")]
 	Format,
 
+	/// Native layout definition.
+	#[iri("tldr:native")]
+	Native,
+
 	#[iri("tldr:fields")]
 	Fields,
 
@@ -86,6 +90,43 @@ pub enum Owl {
 
 	#[iri("owl:intersectionOf")]
 	IntersectionOf,
+}
+
+#[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[iri_prefix("xsd" = "http://www.w3.org/2001/XMLSchema#")]
+pub enum Xsd {
+	#[iri("xsd:boolean")]
+	Boolean,
+
+	#[iri("xsd:int")]
+	Int,
+
+	#[iri("xsd:integer")]
+	Integer,
+
+	#[iri("xsd:positiveInteger")]
+	PositiveInteger,
+
+	#[iri("xsd:float")]
+	Float,
+
+	#[iri("xsd:double")]
+	Double,
+
+	#[iri("xsd:string")]
+	String,
+
+	#[iri("xsd:time")]
+	Time,
+
+	#[iri("xsd:date")]
+	Date,
+
+	#[iri("xsd:dateTime")]
+	DateTime,
+
+	#[iri("xsd:anyURI")]
+	AnyUri,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -153,6 +194,7 @@ pub struct UnknownTerm(usize);
 pub enum Term {
 	Rdf(Rdf),
 	Rdfs(Rdfs),
+	Xsd(Xsd),
 	Schema(Schema),
 	Owl(Owl),
 	TreeLdr(TreeLdr),
@@ -165,14 +207,17 @@ impl Term {
 			Ok(id) => Some(Term::Rdf(id)),
 			Err(_) => match Rdfs::try_from(iri) {
 				Ok(id) => Some(Term::Rdfs(id)),
-				Err(_) => match Schema::try_from(iri) {
-					Ok(id) => Some(Term::Schema(id)),
-					Err(_) => match TreeLdr::try_from(iri) {
-						Ok(id) => Some(Term::TreeLdr(id)),
-						Err(_) => {
-							let iri_buf: IriBuf = iri.into();
-							ns.get(&iri_buf).map(Term::Unknown)
-						}
+				Err(_) => match Xsd::try_from(iri) {
+					Ok(id) => Some(Term::Xsd(id)),
+					Err(_) => match Schema::try_from(iri) {
+						Ok(id) => Some(Term::Schema(id)),
+						Err(_) => match TreeLdr::try_from(iri) {
+							Ok(id) => Some(Term::TreeLdr(id)),
+							Err(_) => {
+								let iri_buf: IriBuf = iri.into();
+								ns.get(&iri_buf).map(Term::Unknown)
+							}
+						},
 					},
 				},
 			},
@@ -184,13 +229,16 @@ impl Term {
 			Ok(id) => Term::Rdf(id),
 			Err(_) => match Rdfs::try_from(iri.as_iri()) {
 				Ok(id) => Term::Rdfs(id),
-				Err(_) => match Schema::try_from(iri.as_iri()) {
-					Ok(id) => Term::Schema(id),
-					Err(_) => match Owl::try_from(iri.as_iri()) {
-						Ok(id) => Term::Owl(id),
-						Err(_) => match TreeLdr::try_from(iri.as_iri()) {
-							Ok(id) => Term::TreeLdr(id),
-							Err(_) => Term::Unknown(ns.insert(iri)),
+				Err(_) => match Xsd::try_from(iri.as_iri()) {
+					Ok(id) => Term::Xsd(id),
+					Err(_) => match Schema::try_from(iri.as_iri()) {
+						Ok(id) => Term::Schema(id),
+						Err(_) => match Owl::try_from(iri.as_iri()) {
+							Ok(id) => Term::Owl(id),
+							Err(_) => match TreeLdr::try_from(iri.as_iri()) {
+								Ok(id) => Term::TreeLdr(id),
+								Err(_) => Term::Unknown(ns.insert(iri)),
+							},
 						},
 					},
 				},
@@ -202,6 +250,7 @@ impl Term {
 		match self {
 			Self::Rdf(id) => Some(id.into()),
 			Self::Rdfs(id) => Some(id.into()),
+			Self::Xsd(id) => Some(id.into()),
 			Self::Schema(id) => Some(id.into()),
 			Self::Owl(id) => Some(id.into()),
 			Self::TreeLdr(id) => Some(id.into()),

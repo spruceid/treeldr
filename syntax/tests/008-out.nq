@@ -1,5 +1,6 @@
 _:4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Variant> .
 _:4 <https://treeldr.org/format> <http://www.example.com/Foo> .
+_:4 <https://treeldr.org/name> "foo" .
 _:5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:4 .
 _:5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:3 .
 _:5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
@@ -30,3 +31,4 @@ _:1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <http://www.example.com/F
 _:1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:0 .
 _:2 <https://treeldr.org/format> <http://www.example.com/Bar> .
 _:2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Variant> .
+_:2 <https://treeldr.org/name> "bar" .

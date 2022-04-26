@@ -31,9 +31,6 @@ pub use vocab::{Id, Vocabulary};
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Model<F> {
-	/// Vocabulary.
-	vocab: Vocabulary,
-
 	/// Nodes.
 	nodes: HashMap<Id, Node<F>>,
 
@@ -53,44 +50,18 @@ impl<F> Model<F> {
 		Self::default()
 	}
 
-	pub fn with_vocabulary(vocab: Vocabulary) -> Self {
-		Self {
-			vocab,
-			nodes: HashMap::new(),
-			types: Shelf::default(),
-			properties: Shelf::default(),
-			layouts: Shelf::default(),
-		}
-	}
-
 	pub fn from_parts(
-		vocab: Vocabulary,
 		nodes: HashMap<Id, Node<F>>,
 		types: Shelf<Vec<ty::Definition<F>>>,
 		properties: Shelf<Vec<prop::Definition<F>>>,
 		layouts: Shelf<Vec<layout::Definition<F>>>,
 	) -> Self {
 		Self {
-			vocab,
 			nodes,
 			types,
 			properties,
 			layouts,
 		}
-	}
-
-	/// Returns a reference to the vocabulary.
-	pub fn vocabulary(&self) -> &Vocabulary {
-		&self.vocab
-	}
-
-	/// Returns a mutable reference to the vocabulary.
-	pub fn vocabulary_mut(&mut self) -> &mut Vocabulary {
-		&mut self.vocab
-	}
-
-	pub fn into_vocabulary(self) -> Vocabulary {
-		self.vocab
 	}
 
 	/// Returns the node associated to the given `Id`, if any.

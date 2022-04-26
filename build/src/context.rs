@@ -3,21 +3,18 @@ use crate::{
 	SubLayout,
 };
 use derivative::Derivative;
-use iref::IriBuf;
 use locspan::Location;
 use shelves::{Ref, Shelf};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use treeldr::{vocab, Caused, Id, MaybeSet, Model, Vocabulary, WithCauses};
 
 /// TreeLDR build context.
-#[derive(Derivative)]
-#[derivative(Default(bound = ""))]
-pub struct Context<F, D: Descriptions<F>> {
+pub struct Context<'v, F, D: Descriptions<F>> {
 	/// Vocabulary.
-	vocab: Vocabulary,
+	vocab: &'v mut Vocabulary,
 
 	/// Nodes.
-	nodes: HashMap<Id, Node<node::Components<F, D>>>,
+	nodes: BTreeMap<Id, Node<node::Components<F, D>>>,
 
 	layout_relations: HashMap<Id, LayoutRelations<F>>,
 }
@@ -29,34 +26,24 @@ struct LayoutRelations<F> {
 	parent: Vec<WithCauses<ParentLayout, F>>,
 }
 
-impl<F, D: Descriptions<F>> Context<F, D> {
-	/// Creates a new empty context.
-	pub fn new() -> Self {
-		Self::default()
-	}
-
-	pub fn with_vocabulary(vocab: Vocabulary) -> Self {
+impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
+	pub fn new(vocab: &'v mut Vocabulary) -> Self {
 		Self {
 			vocab,
-			nodes: HashMap::new(),
+			nodes: BTreeMap::new(),
 			layout_relations: HashMap::new(),
 		}
 	}
 
-	pub fn into_vocabulary(self) -> Vocabulary {
-		self.vocab
-	}
-
 	pub fn define_native_type(
 		&mut self,
-		iri: IriBuf,
+		id: Id,
 		native_layout: layout::Native,
 		cause: Option<Location<F>>,
 	) -> Result<Id, Error<F>>
 	where
 		F: Clone + Ord,
 	{
-		let id = Id::Iri(vocab::Term::from_iri(iri, self.vocabulary_mut()));
 		self.declare_type(id, cause.clone());
 		self.declare_layout(id, cause.clone());
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
@@ -70,57 +57,57 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		F: Clone + Ord,
 	{
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Boolean)),
 			layout::Native::Boolean,
 			None,
 		)?;
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#int").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Int)),
 			layout::Native::Integer,
 			None,
 		)?;
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Integer)),
 			layout::Native::Integer,
 			None,
 		)?;
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#positiveInteger").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::PositiveInteger)),
 			layout::Native::PositiveInteger,
 			None,
 		)?;
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#float").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Float)),
 			layout::Native::Float,
 			None,
 		)?;
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Double)),
 			layout::Native::Double,
 			None,
 		)?;
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::String)),
 			layout::Native::String,
 			None,
 		)?;
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#time").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Time)),
 			layout::Native::Time,
 			None,
 		)?;
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#date").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Date)),
 			layout::Native::Date,
 			None,
 		)?;
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::DateTime)),
 			layout::Native::DateTime,
 			None,
 		)?;
 		self.define_native_type(
-			IriBuf::new("http://www.w3.org/2001/XMLSchema#anyURI").unwrap(),
+			Id::Iri(vocab::Term::Xsd(vocab::Xsd::AnyUri)),
 			layout::Native::Uri,
 			None,
 		)?;
@@ -137,7 +124,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		F: Ord + Clone,
 	{
 		use layout::PseudoDescription;
-		let mut deref_map = HashMap::new();
+		let mut deref_map = BTreeMap::new();
 
 		for (id, node) in &self.nodes {
 			if let Some(layout) = node.as_layout() {
@@ -157,7 +144,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		// Assign a depth to each reference.
 		// The depth correspond the the reference nesting level (`&&&&T` => 4 nesting level => depth 3).
 		// References with higher depth must be resolved first.
-		let mut depth_map: HashMap<_, _> = deref_map.keys().map(|id| (*id, 0)).collect();
+		let mut depth_map: BTreeMap<_, _> = deref_map.keys().map(|id| (*id, 0)).collect();
 		let mut stack: Vec<_> = deref_map.keys().map(|id| (*id, 0)).collect();
 		while let Some((id, depth)) = stack.pop() {
 			let current_depth = depth_map[&id];
@@ -233,12 +220,10 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		F: Ord + Clone,
 	{
 		// Start with the fields.
-		let mut default_field_names = HashMap::new();
+		let mut default_field_names = BTreeMap::new();
 		for (id, node) in &self.nodes {
 			if let Some(field) = node.as_layout_field() {
-				if let Some(name) =
-				field.default_name(self, field.causes().preferred().cloned())
-				{
+				if let Some(name) = field.default_name(self, field.causes().preferred().cloned()) {
 					default_field_names.insert(*id, name);
 				}
 			}
@@ -307,7 +292,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		}
 
 		// Now the layouts variants.
-		let mut default_variant_names = HashMap::new();
+		let mut default_variant_names = BTreeMap::new();
 		for (id, node) in &self.nodes {
 			if let Some(layout) = node.as_layout_variant() {
 				if let Some(name) =
@@ -328,22 +313,14 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		Ok(())
 	}
 
-	pub fn build(mut self) -> Result<Model<F>, (D::Error, Vocabulary)>
+	pub fn build(mut self) -> Result<Model<F>, D::Error>
 	where
 		F: Ord + Clone,
 	{
 		use crate::Build;
-		if let Err(e) = self.resolve_references() {
-			return Err((e.into(), self.into_vocabulary()));
-		}
-
-		if let Err(e) = self.compute_uses() {
-			return Err((e, self.into_vocabulary()));
-		}
-
-		if let Err(e) = self.assign_default_names() {
-			return Err((e.into(), self.into_vocabulary()));
-		}
+		self.resolve_references()?;
+		self.compute_uses()?;
+		self.assign_default_names()?;
 
 		let mut allocated_shelves = AllocatedShelves::default();
 		let allocated_nodes = AllocatedNodes::new(&mut allocated_shelves, self.nodes);
@@ -386,26 +363,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 
 		for (ty_ref, (_, ty)) in &allocated_shelves.types {
 			graph.items.push(crate::Item::Type(ty_ref.cast()));
-			match ty.dependencies(&allocated_nodes, ty.causes()) {
-				Ok(dependencies) => graph.ty_dependencies.push(dependencies),
-				Err(e) => return Err((e.into(), self.vocab)),
-			}
+			let dependencies = ty.dependencies(&allocated_nodes, ty.causes())?;
+			graph.ty_dependencies.push(dependencies)
 		}
 
 		for (prop_ref, (_, prop)) in &allocated_shelves.properties {
 			graph.items.push(crate::Item::Property(prop_ref.cast()));
-			match prop.dependencies(&allocated_nodes, prop.causes()) {
-				Ok(dependencies) => graph.prop_dependencies.push(dependencies),
-				Err(e) => return Err((e.into(), self.vocab)),
-			}
+			let dependencies = prop.dependencies(&allocated_nodes, prop.causes())?;
+			graph.prop_dependencies.push(dependencies)
 		}
 
 		for (layout_ref, (_, layout)) in &allocated_shelves.layouts {
 			graph.items.push(crate::Item::Layout(layout_ref.cast()));
-			match layout.dependencies(&allocated_nodes, layout.causes()) {
-				Ok(dependencies) => graph.layout_dependencies.push(dependencies),
-				Err(e) => return Err((e.into(), self.vocab)),
-			}
+			let dependencies = layout.dependencies(&allocated_nodes, layout.causes())?;
+			graph.layout_dependencies.push(dependencies)
 		}
 
 		let components = graph.strongly_connected_components();
@@ -450,43 +421,26 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 					crate::Item::Type(ty_ref) => {
 						let (_, ty) = types_to_build[ty_ref.index()].take().unwrap();
 						let (ty, causes) = ty.into_parts();
-						match ty.build(&allocated_nodes, dependencies, causes) {
-							Ok(built_ty) => {
-								built_types[ty_ref.index()] = Some(built_ty);
-							}
-							Err(e) => return Err((e.into(), self.vocab)),
-						}
+						let built_ty = ty.build(&allocated_nodes, dependencies, causes)?;
+						built_types[ty_ref.index()] = Some(built_ty)
 					}
 					crate::Item::Property(prop_ref) => {
 						let (_, prop) = properties_to_build[prop_ref.index()].take().unwrap();
 						let (prop, causes) = prop.into_parts();
-						match prop.build(&allocated_nodes, dependencies, causes) {
-							Ok(built_prop) => {
-								built_properties[prop_ref.index()] = Some(built_prop);
-							}
-							Err(e) => return Err((e.into(), self.vocab)),
-						}
+						let built_prop = prop.build(&allocated_nodes, dependencies, causes)?;
+						built_properties[prop_ref.index()] = Some(built_prop)
 					}
 					crate::Item::Layout(layout_ref) => {
 						let (_, layout) = layouts_to_build[layout_ref.index()].take().unwrap();
 						let (layout, causes) = layout.into_parts();
-						match layout.build(
-							&allocated_nodes,
-							dependencies,
-							causes,
-						) {
-							Ok(built_layout) => {
-								built_layouts[layout_ref.index()] = Some(built_layout);
-							}
-							Err(e) => return Err((e.into(), self.vocab)),
-						}
+						let built_layout = layout.build(&allocated_nodes, dependencies, causes)?;
+						built_layouts[layout_ref.index()] = Some(built_layout)
 					}
 				}
 			}
 		}
 
 		Ok(Model::from_parts(
-			self.vocab,
 			allocated_nodes.into_model_nodes(),
 			Shelf::new(built_types.into_iter().map(Option::unwrap).collect()),
 			Shelf::new(built_properties.into_iter().map(Option::unwrap).collect()),
@@ -496,12 +450,12 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 
 	/// Returns a reference to the vocabulary.
 	pub fn vocabulary(&self) -> &Vocabulary {
-		&self.vocab
+		self.vocab
 	}
 
 	/// Returns a mutable reference to the vocabulary.
 	pub fn vocabulary_mut(&mut self) -> &mut Vocabulary {
-		&mut self.vocab
+		self.vocab
 	}
 
 	/// Returns the node associated to the given `Id`, if any.
@@ -1167,16 +1121,16 @@ impl<F, D: Descriptions<F>> Default for AllocatedShelves<F, D> {
 }
 
 pub struct AllocatedNodes<F> {
-	nodes: HashMap<Id, Node<AllocatedComponents<F>>>,
+	nodes: BTreeMap<Id, Node<AllocatedComponents<F>>>,
 }
 
 impl<F: Clone> AllocatedNodes<F> {
 	pub fn new<D: Descriptions<F>>(
 		shelves: &mut AllocatedShelves<F, D>,
-		nodes: HashMap<Id, Node<node::Components<F, D>>>,
+		nodes: BTreeMap<Id, Node<node::Components<F, D>>>,
 	) -> Self {
 		// Step 1: allocate each type/property/layout.
-		let mut allocated_nodes = HashMap::new();
+		let mut allocated_nodes = BTreeMap::new();
 		for (id, node) in nodes {
 			let allocated_node = node.map(|components| AllocatedComponents {
 				ty: components

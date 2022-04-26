@@ -8,7 +8,7 @@ use treeldr_syntax as syntax;
 
 mod source;
 
-type BuildContext = treeldr_build::Context<source::FileId, syntax::build::Descriptions>;
+type BuildContext<'v> = treeldr_build::Context<'v, source::FileId, syntax::build::Descriptions>;
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -65,7 +65,8 @@ fn main() {
 		command => {
 			use treeldr::reporting::Diagnose;
 			use treeldr::vocab::BorrowWithVocabulary;
-			let mut build_context = BuildContext::new();
+			let mut vocabulary = treeldr::Vocabulary::new();
+			let mut build_context = BuildContext::new(&mut vocabulary);
 			build_context.define_xml_types().unwrap();
 
 			for doc in &mut documents {
@@ -94,13 +95,13 @@ fn main() {
 				#[allow(unused_variables)]
 				Ok(model) => match command {
 					#[cfg(feature = "json-schema")]
-					Some(Command::JsonSchema(command)) => command.execute(&model),
+					Some(Command::JsonSchema(command)) => command.execute(&vocabulary, &model),
 					#[cfg(feature = "json-ld-context")]
-					Some(Command::JsonLdContext(command)) => command.execute(&model),
+					Some(Command::JsonLdContext(command)) => command.execute(&vocabulary, &model),
 					_ => (),
 				},
-				Err((e, vocab)) => {
-					let diagnostic = e.with_vocabulary(&vocab).diagnostic();
+				Err(e) => {
+					let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
 					let writer = StandardStream::stderr(ColorChoice::Always);
 					let config = codespan_reporting::term::Config::default();
 					term::emit(&mut writer.lock(), &config, &files, &diagnostic)
