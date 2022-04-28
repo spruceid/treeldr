@@ -205,10 +205,9 @@ impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
 			.clone_with_causes(layout_id.causes().clone());
 
 		let required = self.required.clone().unwrap_or(false);
-		let functional = self.functional.clone().unwrap_or(true);
 
 		Ok(treeldr::layout::Field::new(
-			prop, name, label, layout, required, functional, doc,
+			prop, name, label, layout, required, doc,
 		))
 	}
 }

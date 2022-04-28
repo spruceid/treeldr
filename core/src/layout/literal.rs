@@ -50,6 +50,10 @@ impl<F> Literal<F> {
 		&self.name
 	}
 
+	pub fn into_name(self) -> WithCauses<Name, F> {
+		self.name
+	}
+
 	pub fn set_name(&mut self, new_name: Name, cause: Option<Location<F>>) -> WithCauses<Name, F>
 	where
 		F: Ord,

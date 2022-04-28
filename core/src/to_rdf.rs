@@ -260,12 +260,14 @@ impl<F> layout::Definition<F> {
 			None,
 		));
 
-		quads.push(Quad(
-			self.id(),
-			Term::TreeLdr(vocab::TreeLdr::LayoutFor),
-			model.types().get(self.ty()).unwrap().id().into_term(),
-			None,
-		));
+		if let Some(ty_ref) = self.ty() {
+			quads.push(Quad(
+				self.id(),
+				Term::TreeLdr(vocab::TreeLdr::LayoutFor),
+				model.types().get(ty_ref).unwrap().id().into_term(),
+				None,
+			));
+		}
 
 		if let Some(name) = self.name() {
 			quads.push(Quad(
@@ -277,10 +279,13 @@ impl<F> layout::Definition<F> {
 		}
 
 		match self.description() {
+			layout::Description::Never(_) => todo!(),
 			layout::Description::Native(n, _) => n.to_rdf(self.id(), quads),
 			layout::Description::Literal(l) => l.to_rdf(self.id(), quads),
 			layout::Description::Struct(s) => s.to_rdf(model, self.id(), generator, quads),
 			layout::Description::Enum(e) => e.to_rdf(model, self.id(), generator, quads),
+			layout::Description::Array(_) => todo!(),
+			layout::Description::Set(_) => todo!(),
 			layout::Description::Reference(layout_ref, _) => {
 				quads.push(Quad(
 					self.id(),
@@ -404,15 +409,6 @@ impl<F> layout::Field<F> {
 			quads.push(Quad(
 				id,
 				Term::Schema(vocab::Schema::ValueRequired),
-				Object::Iri(Term::Schema(vocab::Schema::True)),
-				None,
-			));
-		}
-
-		if !self.is_functional() {
-			quads.push(Quad(
-				id,
-				Term::Schema(vocab::Schema::MultipleValues),
 				Object::Iri(Term::Schema(vocab::Schema::True)),
 				None,
 			));

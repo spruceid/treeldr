@@ -21,6 +21,15 @@ pub struct Components<F, D: Descriptions<F>> {
 }
 
 impl<T> Node<T> {
+	pub fn new_with(id: Id, value: T) -> Self {
+		Self {
+			id,
+			label: None,
+			doc: Documentation::new(),
+			value
+		}
+	}
+
 	pub fn id(&self) -> Id {
 		self.id
 	}
@@ -43,6 +52,10 @@ impl<T> Node<T> {
 
 	pub fn value(&self) -> &T {
 		&self.value
+	}
+
+	pub fn value_mut(&mut self) -> &mut T {
+		&mut self.value
 	}
 
 	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Node<U> {

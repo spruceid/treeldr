@@ -29,6 +29,10 @@ impl<F> Enum<F> {
 		&self.name
 	}
 
+	pub fn into_name(self) -> WithCauses<Name, F> {
+		self.name
+	}
+
 	pub fn name_causes(&self) -> &Causes<F> {
 		self.name.causes()
 	}

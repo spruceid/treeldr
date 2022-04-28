@@ -252,6 +252,12 @@ impl<T, F> From<T> for WithCauses<T, F> {
 	}
 }
 
+impl<T, F: Ord> From<locspan::Loc<T, F>> for WithCauses<T, F> {
+	fn from(locspan::Loc(t, loc): locspan::Loc<T, F>) -> Self {
+		Self::new(t, loc)
+	}
+}
+
 impl<T, F> Deref for WithCauses<T, F> {
 	type Target = T;
 

@@ -1,4 +1,4 @@
-use crate::{layout, prop, vocab::Name, Documentation, WithCauses};
+use crate::{layout, prop, vocab::Name, Documentation, WithCauses, Causes};
 use locspan::Location;
 use shelves::Ref;
 
@@ -29,6 +29,10 @@ impl<F> Struct<F> {
 		&self.name
 	}
 
+	pub fn into_name(self) -> WithCauses<Name, F> {
+		self.name
+	}
+
 	pub fn set_name(&mut self, new_name: Name, cause: Option<Location<F>>) -> WithCauses<Name, F>
 	where
 		F: Ord,
@@ -38,6 +42,10 @@ impl<F> Struct<F> {
 
 	pub fn fields(&self) -> &[Field<F>] {
 		&self.fields
+	}
+
+	pub fn fields_mut(&mut self) -> &mut [Field<F>] {
+		&mut self.fields
 	}
 
 	pub fn as_sum_option(&self) -> Option<Ref<super::Definition<F>>> {
@@ -57,7 +65,6 @@ pub struct Field<F> {
 	label: Option<String>,
 	layout: WithCauses<Ref<super::Definition<F>>, F>,
 	required: WithCauses<bool, F>,
-	functional: WithCauses<bool, F>,
 	doc: Documentation,
 }
 
@@ -69,7 +76,6 @@ pub struct FieldsParts<F> {
 	pub label: Option<String>,
 	pub layout: WithCauses<Ref<super::Definition<F>>, F>,
 	pub required: WithCauses<bool, F>,
-	pub functional: WithCauses<bool, F>,
 	pub doc: Documentation,
 }
 
@@ -80,7 +86,6 @@ impl<F> Field<F> {
 		label: Option<String>,
 		layout: WithCauses<Ref<super::Definition<F>>, F>,
 		required: WithCauses<bool, F>,
-		functional: WithCauses<bool, F>,
 		doc: Documentation,
 	) -> Self {
 		Self {
@@ -89,7 +94,6 @@ impl<F> Field<F> {
 			label,
 			layout,
 			required,
-			functional,
 			doc,
 		}
 	}
@@ -135,20 +139,16 @@ impl<F> Field<F> {
 		&self.layout
 	}
 
+	pub fn set_layout(&mut self, layout: Ref<layout::Definition<F>>, causes: impl Into<Causes<F>>) {
+		self.layout = WithCauses::new(layout, causes)
+	}
+
 	pub fn is_required(&self) -> bool {
 		*self.required.inner()
 	}
 
 	pub fn is_required_with_causes(&self) -> &WithCauses<bool, F> {
 		&self.required
-	}
-
-	pub fn is_functional(&self) -> bool {
-		*self.functional.inner()
-	}
-
-	pub fn is_functional_with_causes(&self) -> &WithCauses<bool, F> {
-		&self.functional
 	}
 
 	pub fn documentation(&self) -> &Documentation {

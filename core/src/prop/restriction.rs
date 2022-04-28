@@ -13,6 +13,10 @@ pub struct Restrictions<F> {
 }
 
 impl<F> Restrictions<F> {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
 	pub fn restrict(&mut self, restriction: Restriction<F>) -> Result<(), Contradiction> {
 		match restriction {
 			Restriction::Range(r) => {
@@ -175,6 +179,8 @@ impl CardinalityRestrictions {
 }
 
 /// Property restriction.
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""), Copy(bound = ""), PartialEq(bound = ""), Eq(bound = ""))]
 pub enum Restriction<F> {
 	/// Range restriction.
 	Range(Range<F>),
@@ -184,6 +190,8 @@ pub enum Restriction<F> {
 }
 
 /// Property range restriction.
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""), Copy(bound = ""), PartialEq(bound = ""), Eq(bound = ""))]
 pub enum Range<F> {
 	/// At least one value must be an instance of the given type.
 	Any(Ref<ty::Definition<F>>),
@@ -193,6 +201,7 @@ pub enum Range<F> {
 }
 
 /// Property cardinality restriction.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Cardinality {
 	/// The property must have at least the given number of values.
 	AtLeast(u32),

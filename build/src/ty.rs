@@ -2,7 +2,7 @@ use crate::{error, utils::TryCollect, Error};
 use derivative::Derivative;
 use locspan::Location;
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{vocab, Caused, Causes, Id, MaybeSet};
+use treeldr::{vocab, Caused, Causes, WithCauses, Id, MaybeSet};
 
 pub use treeldr::ty::Kind;
 
@@ -47,6 +47,9 @@ pub enum Description<F> {
 
 	/// Intersection type.
 	Intersection(Id),
+
+	/// Property restriction.
+	Restriction(Restriction<F>),
 }
 
 impl<F: Clone + Ord> Description<F> {
@@ -55,6 +58,7 @@ impl<F: Clone + Ord> Description<F> {
 			Self::Normal(_) => Kind::Normal,
 			Self::Union(_) => Kind::Union,
 			Self::Intersection(_) => Kind::Intersection,
+			Self::Restriction(_) => Kind::Restriction
 		}
 	}
 
@@ -185,6 +189,9 @@ impl<F: Clone + Ord> Description<F> {
 					Ok(intersection) => treeldr::ty::Description::Intersection(intersection),
 					Err(_) => treeldr::ty::Description::Empty,
 				}
+			}
+			Description::Restriction(r) => {
+				r.build(nodes)?
 			}
 		};
 
@@ -323,7 +330,13 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 			.set_once(cause.clone(), || Description::Union(options_ref).into());
 		let because = self.desc.causes().unwrap().preferred().cloned();
 		match self.desc.value_mut().unwrap().as_standard() {
-			Some(Description::Union(_)) => Ok(()),
+			Some(Description::Union(r)) => {
+				if *r == options_ref {
+					Ok(())
+				} else {
+					todo!()
+				}
+			},
 			Some(other) => Err(Error::new(
 				error::TypeMismatchKind {
 					id: self.id,
@@ -360,7 +373,13 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 		});
 		let because = self.desc.causes().unwrap().preferred().cloned();
 		match self.desc.value_mut().unwrap().as_standard() {
-			Some(Description::Intersection(_)) => Ok(()),
+			Some(Description::Intersection(r)) => {
+				if *r == types_ref {
+					Ok(())
+				} else {
+					todo!()
+				}
+			},
 			Some(other) => Err(Error::new(
 				error::TypeMismatchKind {
 					id: self.id,
@@ -383,6 +402,55 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 			)),
 		}
 	}
+
+	pub fn declare_restriction(
+		&mut self,
+		restriction: Restriction<F>,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>>
+	where
+		F: Ord + Clone,
+	{
+		let mut restriction = Some(restriction);
+		self.desc.set_once(cause.clone(), || {
+			Description::Restriction(restriction.take().unwrap()).into()
+		});
+		match restriction {
+			Some(restriction) => {
+				let because = self.desc.causes().unwrap().preferred().cloned();
+				match self.desc.value_mut().unwrap().as_standard() {
+					Some(Description::Restriction(r)) => {
+						if *r == restriction {
+							Ok(())
+						} else {
+							todo!()
+						}
+					},
+					Some(other) => Err(Error::new(
+						error::TypeMismatchKind {
+							id: self.id,
+							expected: Some(other.kind()),
+							found: Some(Kind::Restriction),
+							because,
+						}
+						.into(),
+						cause,
+					)),
+					None => Err(Error::new(
+						error::TypeMismatchKind {
+							id: self.id,
+							expected: None,
+							found: Some(Kind::Restriction),
+							because,
+						}
+						.into(),
+						cause,
+					)),
+				}
+			}
+			None => Ok(())
+		}
+	}
 }
 
 impl<F, D: PseudoDescription<F>> crate::Build<F> for Definition<F, D> {
@@ -391,7 +459,9 @@ impl<F, D: PseudoDescription<F>> crate::Build<F> for Definition<F, D> {
 
 	fn build(
 		self,
-		nodes: &super::context::AllocatedNodes<F>,
+		_vocab: &mut treeldr::Vocabulary,
+		nodes: &mut super::context::AllocatedNodes<F>,
+		_additional: &mut crate::AdditionalNodes<F>,
 		dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
 	) -> Result<Self::Target, Self::Error> {
@@ -460,5 +530,115 @@ impl<F> Normal<F> {
 		}
 
 		Ok(treeldr::ty::Description::Normal(result))
+	}
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RangeRestriction {
+	Any(Id),
+	All(Id)
+}
+
+pub type CardinalityRestriction = treeldr::prop::restriction::Cardinality;
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PropertyRestriction {
+	Range(RangeRestriction),
+	Cardinality(CardinalityRestriction)
+}
+
+pub struct Restriction<F> {
+	property: WithCauses<Id, F>,
+	restrictions: BTreeMap<PropertyRestriction, Causes<F>>
+}
+
+impl<F> PartialEq for Restriction<F> {
+	fn eq(&self, other: &Self) -> bool {
+		self.property.inner() == other.property.inner() && self.restrictions.len() == other.restrictions.len() && self.restrictions.keys().zip(other.restrictions.keys()).all(|(a, b)| a == b)
+	}
+}
+
+impl<F> Restriction<F> {
+	pub fn new(property: WithCauses<Id, F>) -> Self {
+		Self {
+			property,
+			restrictions: BTreeMap::new()
+		}
+	}
+
+	pub fn add_restriction(&mut self, r: PropertyRestriction, cause: Option<Location<F>>)
+	where
+		F: Ord,
+	{
+		use std::collections::btree_map::Entry;
+		match self.restrictions.entry(r) {
+			Entry::Vacant(entry) => {
+				entry.insert(cause.into());
+			}
+			Entry::Occupied(mut entry) => {
+				if let Some(cause) = cause {
+					entry.get_mut().add(cause)
+				}
+			}
+		}
+	}
+
+	pub fn build(
+		self,
+		nodes: &super::context::AllocatedNodes<F>,
+	) -> Result<treeldr::ty::Description<F>, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		let (prop_id, prop_causes) = self.property.into_parts();
+		let prop_ref = nodes.require_property(prop_id, prop_causes.preferred().cloned())?;
+		
+		let mut restrictions = treeldr::prop::Restrictions::new();
+		for (restriction, restriction_causes) in self.restrictions {
+			if let Err(treeldr::prop::restriction::Contradiction) = restrictions.restrict(restriction.build(nodes, &restriction_causes)?) {
+				return Ok(treeldr::ty::Description::Empty)
+			}
+		}
+
+		let result = treeldr::ty::Restriction::new(WithCauses::new(**prop_ref, prop_causes), restrictions);
+		Ok(treeldr::ty::Description::Restriction(result))
+	}
+}
+
+impl PropertyRestriction {
+	pub fn build<F>(
+		self,
+		nodes: &super::context::AllocatedNodes<F>,
+		causes: &Causes<F>,
+	) -> Result<treeldr::prop::Restriction<F>, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		match self {
+			Self::Range(r) => Ok(treeldr::prop::Restriction::Range(r.build(nodes, causes)?)),
+			Self::Cardinality(c) => Ok(treeldr::prop::Restriction::Cardinality(c))
+		}
+	}
+}
+
+impl RangeRestriction {
+	pub fn build<F>(
+		self,
+		nodes: &super::context::AllocatedNodes<F>,
+		causes: &Causes<F>
+	) -> Result<treeldr::prop::restriction::Range<F>, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		match self {
+			Self::Any(id) => {
+				let ty_ref = nodes.require_type(id, causes.preferred().cloned())?;
+				Ok(treeldr::prop::restriction::Range::Any(**ty_ref))
+			}
+			Self::All(id) => {
+				let ty_ref = nodes.require_type(id, causes.preferred().cloned())?;
+				Ok(treeldr::prop::restriction::Range::All(**ty_ref))
+			}
+		}
 	}
 }

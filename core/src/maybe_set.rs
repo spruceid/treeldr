@@ -223,19 +223,23 @@ impl<T, F> MaybeSet<T, F> {
 
 	pub fn try_map_with_causes<U, E>(
 		self,
-		f: impl FnOnce(WithCauses<T, F>) -> Result<U, E>,
-	) -> Result<MaybeSet<U, F>, E>
-	where
-		F: Clone,
-	{
+		f: impl FnOnce(T, &Causes<F>) -> Result<U, E>,
+	) -> Result<MaybeSet<U, F>, E> {
 		let value = match self.value {
 			Some(t) => {
-				let causes = t.causes().clone();
-				Some(WithCauses::new(f(t)?, causes))
+				let (t, causes) = t.into_parts();
+				let u = f(t, &causes)?;
+				Some(WithCauses::new(u, causes))
 			}
 			None => None,
 		};
 
 		Ok(MaybeSet { value })
+	}
+}
+
+impl<T, F> From<WithCauses<T, F>> for MaybeSet<T, F> {
+	fn from(t: WithCauses<T, F>) -> Self {
+		Self::from(Some(t))
 	}
 }

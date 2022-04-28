@@ -1,5 +1,5 @@
 use derivative::Derivative;
-use treeldr::{Causes, Ref};
+use treeldr::{Causes, Ref, Vocabulary};
 
 pub mod context;
 pub mod error;
@@ -41,7 +41,9 @@ pub trait Build<F> {
 
 	fn build(
 		self,
-		nodes: &context::AllocatedNodes<F>,
+		vocabulary: &mut Vocabulary,
+		nodes: &mut context::AllocatedNodes<F>,
+		additional: &mut AdditionalNodes<F>,
 		dependencies: Dependencies<F>,
 		causes: Causes<F>,
 	) -> Result<Self::Target, Self::Error>;
@@ -61,6 +63,11 @@ pub enum Item<F> {
 	Layout(Ref<treeldr::layout::Definition<F>>),
 }
 
+#[derive(Derivative)]
+#[derivative(
+	Clone(bound = ""),
+	Copy(bound = "")
+)]
 pub struct Dependencies<'a, F> {
 	pub types: &'a [Option<treeldr::ty::Definition<F>>],
 	pub properties: &'a [Option<treeldr::prop::Definition<F>>],
@@ -84,6 +91,62 @@ impl<'a, F> Dependencies<'a, F> {
 		layout: Ref<treeldr::layout::Definition<F>>,
 	) -> &treeldr::layout::Definition<F> {
 		self.layouts[layout.index()].as_ref().unwrap()
+	}
+}
+
+pub struct AdditionalNodes<F> {
+	types: Additional<treeldr::ty::Definition<F>>,
+	properties: Additional<treeldr::prop::Definition<F>>,
+	layouts: Additional<treeldr::layout::Definition<F>>,
+}
+
+impl<F> AdditionalNodes<F> {
+	pub fn new(
+		types_count: usize,
+		properties_count: usize,
+		layouts_count: usize
+	) -> Self {
+		Self {
+			types: Additional::new(types_count),
+			properties: Additional::new(properties_count),
+			layouts: Additional::new(layouts_count)
+		}
+	}
+
+	pub fn types_mut(&mut self) -> &mut Additional<treeldr::ty::Definition<F>> {
+		&mut self.types
+	}
+
+	pub fn properties_mut(&mut self) -> &mut Additional<treeldr::prop::Definition<F>> {
+		&mut self.properties
+	}
+
+	pub fn layouts_mut(&mut self) -> &mut Additional<treeldr::layout::Definition<F>> {
+		&mut self.layouts
+	}
+}
+
+pub struct Additional<T> {
+	offset: usize,
+	data: Vec<T>
+}
+
+impl<T> Additional<T> {
+	pub fn new(offset: usize) -> Self {
+		Self {
+			offset,
+			data: Vec::new()
+		}
+	}
+
+	pub fn insert(&mut self, value: T) -> Ref<T> {
+		let r = Ref::new(self.offset + self.data.len());
+		self.data.push(value);
+		r
+	}
+
+	pub fn into_iter(self) -> std::vec::IntoIter<T> {
+		self.data.into_iter()
 	}
 }
 

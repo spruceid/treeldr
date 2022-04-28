@@ -210,7 +210,7 @@ pub enum InnerTypeExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
-	PropertyRestriction(TypePropertyRestriction<F>),
+	PropertyRestriction(Label, TypeRestrictedProperty<F>),
 }
 
 impl<F: Clone> InnerTypeExpr<F> {
@@ -222,9 +222,25 @@ impl<F: Clone> InnerTypeExpr<F> {
 				r.location().clone(),
 			))),
 			Self::Literal(lit) => InnerLayoutExpr::Literal(lit.clone()),
-			Self::PropertyRestriction(r) => {
-				InnerLayoutExpr::FieldRestriction(r.implicit_field_restriction())
+			Self::PropertyRestriction(label, r) => {
+				InnerLayoutExpr::FieldRestriction(*label, r.implicit_layout_restricted_field())
 			}
+		}
+	}
+}
+
+pub struct TypeRestrictedProperty<F> {
+	prop: Loc<Id, F>,
+	alias: Option<Loc<Alias, F>>,
+	restriction: Loc<TypePropertyRestriction<F>, F>
+}
+
+impl<F: Clone> TypeRestrictedProperty<F> {
+	pub fn implicit_layout_restricted_field(&self) -> LayoutRestrictedField<F> {
+		LayoutRestrictedField {
+			prop: self.prop.clone(),
+			alias: self.alias.clone(),
+			restriction: Loc(self.restriction.implicit_field_restriction(), self.restriction.location().clone())
 		}
 	}
 }
@@ -325,6 +341,15 @@ pub enum OuterLayoutExpr<F> {
 	Intersection(Label, Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
 }
 
+impl<F> OuterLayoutExpr<F> {
+	pub fn into_restriction(self) -> Result<LayoutRestrictedField<F>, Self> {
+		match self {
+			Self::Inner(i) => i.into_restriction().map_err(Self::Inner),
+			other => Err(other)
+		}
+	}
+}
+
 pub struct NamedInnerLayoutExpr<F> {
 	pub expr: Loc<InnerLayoutExpr<F>, F>,
 	pub name: Option<Loc<Alias, F>>,
@@ -335,19 +360,44 @@ impl<F> NamedInnerLayoutExpr<F> {
 	pub fn into_parts(self) -> (Loc<InnerLayoutExpr<F>, F>, Option<Loc<Alias, F>>) {
 		(self.expr, self.name)
 	}
+
+	pub fn into_restriction(self) -> Result<LayoutRestrictedField<F>, Self> {
+		if self.name.is_some() {
+			Err(self)
+		} else {
+			let Loc(e, loc) = self.expr;
+			e.into_restriction().map_err(|other| Self {
+				expr: Loc(other, loc),
+				name: None
+			})
+		}
+	}
 }
 
 pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
-	FieldRestriction(LayoutFieldRestriction<F>),
+	FieldRestriction(Label, LayoutRestrictedField<F>),
 }
 
 impl<F> InnerLayoutExpr<F> {
 	pub fn is_namable(&self) -> bool {
 		!matches!(self, Self::Id(_))
 	}
+
+	pub fn into_restriction(self) -> Result<LayoutRestrictedField<F>, Self> {
+		match self {
+			Self::FieldRestriction(_, r) => Ok(r),
+			other => Err(other)
+		}
+	}
+}
+
+pub struct LayoutRestrictedField<F> {
+	prop: Loc<Id, F>,
+	alias: Option<Loc<Alias, F>>,
+	restriction: Loc<LayoutFieldRestriction<F>, F>
 }
 
 pub enum LayoutFieldRangeRestriction<F> {
@@ -355,6 +405,7 @@ pub enum LayoutFieldRangeRestriction<F> {
 	All(Box<Loc<InnerLayoutExpr<F>, F>>),
 }
 
+#[derive(PartialEq, Eq)]
 pub enum LayoutFieldCardinalityRestriction {
 	AtLeast(u32),
 	AtMost(u32),

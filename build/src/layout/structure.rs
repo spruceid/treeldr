@@ -55,12 +55,6 @@ impl<F: Ord + Clone> IntersectedWith<F> for treeldr::layout::Struct<F> {
 						other_field.is_required_with_causes().clone()
 					};
 
-					let functional = if !*field.functional && other_field.is_functional() {
-						field.functional.clone()
-					} else {
-						other_field.is_functional_with_causes().clone()
-					};
-
 					let doc = if field.doc.is_empty() || other_field.documentation().is_empty() {
 						field.doc.clone()
 					} else {
@@ -76,7 +70,6 @@ impl<F: Ord + Clone> IntersectedWith<F> for treeldr::layout::Struct<F> {
 							.or_else(|| other_field.label().map(|l| l.to_string())),
 						field.layout.clone(),
 						required,
-						functional,
 						doc,
 					));
 

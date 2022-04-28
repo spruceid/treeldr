@@ -115,10 +115,9 @@ impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
 	) -> Result<treeldr::layout::Variant<F>, Error<F>> {
 		let name = self.require_name()?;
 
-		let layout = self.layout.clone().try_map_with_causes(|layout_id| {
-			Ok(*nodes
-				.require_layout(*layout_id.inner(), layout_id.causes().preferred().cloned())?
-				.inner())
+		let layout = self.layout.clone().try_map_with_causes(|layout_id, causes| {
+			Ok(**nodes
+				.require_layout(layout_id, causes.preferred().cloned())?)
 		})?;
 
 		Ok(treeldr::layout::Variant::new(name, layout, label, doc))

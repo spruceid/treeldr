@@ -1,12 +1,13 @@
 use crate::{
 	error, layout, list, node, prop, ty, Descriptions, Error, ListMut, ListRef, Node, ParentLayout,
 	SubLayout,
+	AdditionalNodes
 };
 use derivative::Derivative;
 use locspan::Location;
 use shelves::{Ref, Shelf};
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{vocab, Caused, Id, MaybeSet, Model, Vocabulary, WithCauses};
+use treeldr::{vocab, Causes, Caused, Id, MaybeSet, Model, Vocabulary, WithCauses};
 
 /// TreeLDR build context.
 pub struct Context<'v, F, D: Descriptions<F>> {
@@ -323,7 +324,7 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 		self.assign_default_names()?;
 
 		let mut allocated_shelves = AllocatedShelves::default();
-		let allocated_nodes = AllocatedNodes::new(&mut allocated_shelves, self.nodes);
+		let mut allocated_nodes = AllocatedNodes::new(&mut allocated_shelves, self.nodes);
 
 		use treeldr::utils::SccGraph;
 
@@ -408,6 +409,12 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 		let mut built_layouts = Vec::new();
 		built_layouts.resize_with(layouts_to_build.len(), || None);
 
+		let mut additional = AdditionalNodes::new(
+			types_to_build.len(),
+			properties_to_build.len(),
+			layouts_to_build.len()
+		);
+
 		for i in ordered_components.into_iter().rev() {
 			let component = components.get(i).unwrap();
 			for item in component {
@@ -421,19 +428,19 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 					crate::Item::Type(ty_ref) => {
 						let (_, ty) = types_to_build[ty_ref.index()].take().unwrap();
 						let (ty, causes) = ty.into_parts();
-						let built_ty = ty.build(&allocated_nodes, dependencies, causes)?;
+						let built_ty = ty.build(self.vocab, &mut allocated_nodes, &mut additional, dependencies, causes)?;
 						built_types[ty_ref.index()] = Some(built_ty)
 					}
 					crate::Item::Property(prop_ref) => {
 						let (_, prop) = properties_to_build[prop_ref.index()].take().unwrap();
 						let (prop, causes) = prop.into_parts();
-						let built_prop = prop.build(&allocated_nodes, dependencies, causes)?;
+						let built_prop = prop.build(self.vocab, &mut allocated_nodes, &mut additional, dependencies, causes)?;
 						built_properties[prop_ref.index()] = Some(built_prop)
 					}
 					crate::Item::Layout(layout_ref) => {
 						let (_, layout) = layouts_to_build[layout_ref.index()].take().unwrap();
 						let (layout, causes) = layout.into_parts();
-						let built_layout = layout.build(&allocated_nodes, dependencies, causes)?;
+						let built_layout = layout.build(self.vocab, &mut allocated_nodes, &mut additional, dependencies, causes)?;
 						built_layouts[layout_ref.index()] = Some(built_layout)
 					}
 				}
@@ -442,9 +449,9 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 
 		Ok(Model::from_parts(
 			allocated_nodes.into_model_nodes(),
-			Shelf::new(built_types.into_iter().map(Option::unwrap).collect()),
-			Shelf::new(built_properties.into_iter().map(Option::unwrap).collect()),
-			Shelf::new(built_layouts.into_iter().map(Option::unwrap).collect()),
+			Shelf::new(built_types.into_iter().map(Option::unwrap).chain(additional.types.into_iter()).collect()),
+			Shelf::new(built_properties.into_iter().map(Option::unwrap).chain(additional.properties.into_iter()).collect()),
+			Shelf::new(built_layouts.into_iter().map(Option::unwrap).chain(additional.layouts.into_iter()).collect()),
 		))
 	}
 
@@ -920,6 +927,8 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 	}
 }
 
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
 pub struct AllocatedComponents<F> {
 	ty: MaybeSet<Ref<treeldr::ty::Definition<F>>, F>,
 	property: MaybeSet<Ref<treeldr::prop::Definition<F>>, F>,
@@ -1160,6 +1169,18 @@ impl<F: Clone> AllocatedNodes<F> {
 			.into_iter()
 			.map(|(id, node)| (id, node.into()))
 			.collect()
+	}
+
+	pub fn insert(&mut self, id: Id, node: Node<AllocatedComponents<F>>) -> Option<Node<AllocatedComponents<F>>> {
+		self.nodes.insert(id, node)
+	}
+
+	pub fn insert_layout(&mut self, id: Id, layout_ref: Ref<treeldr::layout::Definition<F>>, causes: impl Into<Causes<F>>) -> Option<Node<AllocatedComponents<F>>> {
+		let node = Node::new_with(id, AllocatedComponents {
+			layout: WithCauses::new(layout_ref, causes).into(),
+			..AllocatedComponents::default()
+		});
+		self.insert(id, node)
 	}
 
 	pub fn get(&self, id: Id) -> Option<&Node<AllocatedComponents<F>>> {

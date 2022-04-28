@@ -2,7 +2,7 @@ use iref::{IriBuf, IriRef, IriRefBuf};
 use locspan::{Loc, Location};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
-use treeldr::{reporting, vocab::*, Caused, Causes, Id, MaybeSet, Vocabulary};
+use treeldr::{reporting, vocab::*, Ref, Caused, Causes, WithCauses, Id, MaybeSet, Vocabulary};
 use treeldr_build::{context, utils::TryCollect, Context, Dependencies, Item, SubLayout};
 
 #[derive(Debug)]
@@ -52,6 +52,9 @@ pub enum LocalError<F> {
 	},
 	TypeAlias(Id, Location<F>),
 	LayoutAlias(Id, Location<F>),
+	PropertyRestrictionOutsideIntersection,
+	FieldRestrictionNoMatches,
+	UnexpectedFieldRestriction
 }
 
 impl<'c, 't, F: Clone> reporting::DiagnoseWithCause<F> for LocalError<F> {
@@ -64,6 +67,9 @@ impl<'c, 't, F: Clone> reporting::DiagnoseWithCause<F> for LocalError<F> {
 			Self::BaseIriMismatch { .. } => "base IRI mismatch".to_string(),
 			Self::TypeAlias(_, _) => "type aliases are not supported".to_string(),
 			Self::LayoutAlias(_, _) => "layout aliases are not supported".to_string(),
+			Self::PropertyRestrictionOutsideIntersection => "cannot define restricted field layout outside an intersection".to_string(),
+			Self::FieldRestrictionNoMatches => "no matches for field restriction".to_string(),
+			Self::UnexpectedFieldRestriction => "field restrictions can only be applied on structure layouts".to_string()
 		}
 	}
 
@@ -112,6 +118,9 @@ impl<F> fmt::Display for LocalError<F> {
 			Self::BaseIriMismatch { expected, .. } => write!(f, "should be `{}`", expected),
 			Self::TypeAlias(_, _) => write!(f, "type aliases are not supported"),
 			Self::LayoutAlias(_, _) => write!(f, "layout aliases are not supported"),
+			Self::PropertyRestrictionOutsideIntersection => write!(f, "invalid layout field restriction"),
+			Self::FieldRestrictionNoMatches => write!(f, "field not found"),
+			Self::UnexpectedFieldRestriction => write!(f, "unexpected field restriction")
 		}
 	}
 }
@@ -122,7 +131,7 @@ impl<F: Clone + Ord> treeldr_build::Descriptions<F> for Descriptions {
 	type Error = Error<F>;
 
 	type Type = treeldr_build::ty::Description<F>;
-	type Layout = LayoutDescription;
+	type Layout = LayoutDescription<F>;
 }
 
 /// Build context.
@@ -147,6 +156,36 @@ pub struct LocalContext<F> {
 	///
 	/// If `true`, then the layout will be bound to itself.
 	implicit_definition: bool,
+}
+
+#[derive(PartialEq, Eq)]
+pub struct LayoutRestrictedField<F> {
+	field_prop: Option<Loc<Id, F>>,
+	field_name: Option<Loc<Name, F>>,
+	restriction: Loc<LayoutFieldRestriction, F>
+}
+
+#[derive(PartialEq, Eq)]
+pub enum LayoutFieldRangeRestriction {
+	Any(Id),
+	All(Id),
+}
+
+impl LayoutFieldRangeRestriction {
+	pub fn layout(&self) -> Id {
+		match self {
+			Self::Any(id) => *id,
+			Self::All(id) => *id
+		}
+	}
+}
+
+pub type LayoutFieldCardinalityRestriction = crate::LayoutFieldCardinalityRestriction;
+
+#[derive(PartialEq, Eq)]
+pub enum LayoutFieldRestriction {
+	Range(LayoutFieldRangeRestriction),
+	Cardinality(LayoutFieldCardinalityRestriction),
 }
 
 #[derive(Clone)]
@@ -781,8 +820,55 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerTypeExpr<F>, F> {
 			crate::InnerTypeExpr::Literal(lit) => {
 				local_context.insert_literal_type(context, Loc(lit, loc))
 			}
-			crate::InnerTypeExpr::PropertyRestriction(_) => {
-				todo!()
+			crate::InnerTypeExpr::PropertyRestriction(label, r) => {
+				let Loc(id, loc) =
+					local_context.anonymous_id(Some(label), context.vocabulary_mut(), loc);
+				if id.is_blank() {
+					context.declare_type(id, Some(loc.clone()));
+				}
+
+				let prop_id = r.prop.build(local_context, context)?;
+				let mut restrictions = treeldr_build::ty::Restriction::new(prop_id.into());
+
+				let Loc(restriction, restriction_loc) = r.restriction;
+				let restriction = match restriction {
+					crate::TypePropertyRestriction::Range(r) => {
+						let r = match r {
+							crate::TypePropertyRangeRestriction::Any(id) => {
+								let Loc(id, _) = id.build(local_context, context)?;
+								treeldr_build::ty::RangeRestriction::Any(id)
+							}
+							crate::TypePropertyRangeRestriction::All(id) => {
+								let Loc(id, _) = id.build(local_context, context)?;
+								treeldr_build::ty::RangeRestriction::Any(id)
+							}
+						};
+
+						treeldr_build::ty::PropertyRestriction::Range(r)
+					}
+					crate::TypePropertyRestriction::Cardinality(c) => {
+						let c = match c {
+							crate::TypePropertyCardinalityRestriction::AtLeast(min) => {
+								treeldr_build::ty::CardinalityRestriction::AtLeast(min)
+							}
+							crate::TypePropertyCardinalityRestriction::AtMost(max) => {
+								treeldr_build::ty::CardinalityRestriction::AtMost(max)
+							}
+							crate::TypePropertyCardinalityRestriction::Exactly(n) => {
+								treeldr_build::ty::CardinalityRestriction::Exactly(n)
+							}
+						};
+
+						treeldr_build::ty::PropertyRestriction::Cardinality(c)
+					}
+				};
+
+				restrictions.add_restriction(restriction, Some(restriction_loc));
+
+				let ty = context.get_mut(id).unwrap().as_type_mut().unwrap();
+				ty.declare_restriction(restrictions, Some(loc.clone()))?;
+
+				Ok(Loc(id, loc))
 			}
 		}
 	}
@@ -1034,15 +1120,24 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 
 				Ok(Loc(id, loc))
 			}
-			crate::OuterLayoutExpr::Intersection(label, types) => {
+			crate::OuterLayoutExpr::Intersection(label, layouts) => {
 				let Loc(id, _) =
 					local_context.anonymous_id(Some(label), context.vocabulary_mut(), loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, Some(loc.clone()));
 				}
 
+				let mut true_layouts = Vec::with_capacity(layouts.len());
+				let mut restrictions = Vec::new();
+				for Loc(layout_expr, loc) in layouts {
+					match layout_expr.into_restriction() {
+						Ok(restriction) => restrictions.push(Loc(restriction, loc).build(local_context, context)?),
+						Err(other) => true_layouts.push(Loc(other, loc))
+					}
+				}
+
 				let layouts_list = context.try_create_list_with::<Error<F>, _, _>(
-					types,
+					true_layouts,
 					|layout_expr, context| {
 						let Loc(id, loc) = layout_expr.build(local_context, context)?;
 						Ok(Caused::new(id.into_term(), Some(loc)))
@@ -1051,7 +1146,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
 				layout.set_description(
-					LayoutDescription::Intersection(layouts_list),
+					LayoutDescription::Intersection(layouts_list, restrictions),
 					Some(loc.clone()),
 				)?;
 				if local_context.implicit_definition {
@@ -1059,6 +1154,72 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 				}
 
 				Ok(Loc(id, loc))
+			}
+		}
+	}
+}
+
+impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutRestrictedField<F>, F> {
+	type Target = Loc<LayoutRestrictedField<F>, F>;
+
+	fn build(
+		self,
+		local_context: &mut LocalContext<F>,
+		context: &mut Context<F, Descriptions>,
+	) -> Result<Self::Target, Error<F>> {
+		let Loc(r, loc) = self;
+
+		let field_name = match r.alias {
+			Some(alias) => Some(alias.build(local_context, context)?),
+			None => None
+		};
+
+		Ok(Loc(
+			LayoutRestrictedField {
+				field_prop: Some(r.prop.build(local_context, context)?),
+				field_name,
+				restriction: r.restriction.build(local_context, context)?
+			},
+			loc
+		))
+	}
+}
+
+impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutFieldRestriction<F>, F> {
+	type Target = Loc<LayoutFieldRestriction, F>;
+
+	fn build(
+		self,
+		local_context: &mut LocalContext<F>,
+		context: &mut Context<F, Descriptions>,
+	) -> Result<Self::Target, Error<F>> {
+		let Loc(r, loc) = self;
+
+		let r = match r {
+			crate::LayoutFieldRestriction::Range(r) => LayoutFieldRestriction::Range(r.build(local_context, context)?),
+			crate::LayoutFieldRestriction::Cardinality(c) => LayoutFieldRestriction::Cardinality(c)
+		};
+
+		Ok(Loc(r, loc))
+	}
+}
+
+impl<F: Clone + Ord> Build<F> for crate::LayoutFieldRangeRestriction<F> {
+	type Target = LayoutFieldRangeRestriction;
+
+	fn build(
+		self,
+		local_context: &mut LocalContext<F>,
+		context: &mut Context<F, Descriptions>,
+	) -> Result<Self::Target, Error<F>> {
+		match self {
+			Self::Any(layout_expr) => {
+				let Loc(id, _) = layout_expr.build(local_context, context)?;
+				Ok(LayoutFieldRangeRestriction::Any(id))
+			}
+			Self::All(layout_expr) => {
+				let Loc(id, _) = layout_expr.build(local_context, context)?;
+				Ok(LayoutFieldRangeRestriction::All(id))
 			}
 		}
 	}
@@ -1129,8 +1290,11 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 			crate::InnerLayoutExpr::Literal(lit) => {
 				local_context.insert_literal_layout(context, Loc(lit, loc))
 			}
-			crate::InnerLayoutExpr::FieldRestriction(_) => {
-				todo!()
+			crate::InnerLayoutExpr::FieldRestriction(_, _) => {
+				Err(Loc(
+					LocalError::PropertyRestrictionOutsideIntersection,
+					loc
+				).into())
 			}
 		}
 	}
@@ -1232,23 +1396,20 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 }
 
 #[derive(PartialEq, Eq)]
-pub enum LayoutDescription {
+pub enum LayoutDescription<F> {
 	/// Standard layout description.
 	Standard(treeldr_build::layout::Description),
 
-	Intersection(Id),
-
-	/// Pseudo layout definition.
-	Restriction,
+	Intersection(Id, Vec<Loc<LayoutRestrictedField<F>, F>>)
 }
 
-impl From<treeldr_build::layout::Description> for LayoutDescription {
+impl<F> From<treeldr_build::layout::Description> for LayoutDescription<F> {
 	fn from(d: treeldr_build::layout::Description) -> Self {
 		Self::Standard(d)
 	}
 }
 
-impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescription {
+impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescription<F> {
 	type Error = Error<F>;
 
 	fn as_standard(&self) -> Option<&treeldr_build::layout::Description> {
@@ -1265,8 +1426,7 @@ impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescr
 	) -> Result<Vec<SubLayout<F>>, Self::Error> {
 		match self {
 			Self::Standard(s) => Ok(s.sub_layouts(context, causes)?),
-			Self::Intersection(_) => Ok(Vec::new()),
-			Self::Restriction => todo!(),
+			Self::Intersection(_, _) => Ok(Vec::new())
 		}
 	}
 
@@ -1278,8 +1438,8 @@ impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescr
 	) -> Result<Vec<Item<F>>, Error<F>> {
 		match self {
 			Self::Standard(s) => Ok(s.dependencies(id, nodes, causes)?),
-			Self::Intersection(layout_list_id) => {
-				let layouts = nodes
+			Self::Intersection(layout_list_id, restrictions) => {
+				let mut layouts: Vec<Item<F>> = nodes
 					.require_list(*layout_list_id, causes.preferred().cloned())?
 					.iter(nodes)
 					.map(|item| -> Result<_, Error<F>> {
@@ -1301,9 +1461,17 @@ impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescr
 						))
 					})
 					.try_collect()?;
+
+				for restriction in restrictions {
+					if let Loc(LayoutFieldRestriction::Range(r), loc) = &restriction.restriction {
+						let layout_id = r.layout();
+						let layout_ref = **nodes.require_layout(layout_id, Some(loc.clone()))?;
+						layouts.push(Item::Layout(layout_ref))
+					}
+				}
+
 				Ok(layouts)
 			}
-			_ => todo!(),
 		}
 	}
 
@@ -1311,13 +1479,15 @@ impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescr
 		self,
 		id: Id,
 		mut name: MaybeSet<Name, F>,
-		nodes: &context::AllocatedNodes<F>,
+		vocab: &mut Vocabulary,
+		nodes: &mut context::AllocatedNodes<F>,
+		additional: &mut treeldr_build::AdditionalNodes<F>,
 		dependencies: Dependencies<F>,
 		causes: &Causes<F>,
 	) -> Result<treeldr::layout::Description<F>, Self::Error> {
 		match self {
-			Self::Standard(s) => Ok(s.build(id, name, nodes, dependencies, causes)?),
-			Self::Intersection(layout_list_id) => {
+			Self::Standard(s) => Ok(s.build(id, name, nodes, causes)?),
+			Self::Intersection(layout_list_id, restricted_layouts) => {
 				use treeldr_build::layout::ComputeIntersection;
 				let layouts = nodes
 					.require_list(layout_list_id, causes.preferred().cloned())?
@@ -1354,10 +1524,415 @@ impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescr
 						None => layout.description().clone(),
 					})
 				}
+				
+				match desc.unwrap() {
+					treeldr::layout::Description::Struct(mut s) => {
+						let mut restrictions = StructRestrictions::new(&mut s);
+						for r in restricted_layouts {
+							if !restrictions.insert(nodes, r)? {
+								return Ok(treeldr::layout::Description::Never(s.into_name().into()))
+							}
+						}
 
-				Ok(desc.unwrap())
+						restrictions.apply(vocab, nodes, additional, dependencies)?;
+
+						Ok(treeldr::layout::Description::Struct(s))
+					}
+					other => {
+						for Loc(_, loc) in restricted_layouts {
+							return Err(Loc(
+								LocalError::UnexpectedFieldRestriction,
+								loc
+							).into())
+						}
+
+						Ok(other)
+					}
+				}
 			}
-			_ => todo!(),
 		}
 	}
 }
+
+pub struct StructRestrictions<'a, F> {
+	s: &'a mut treeldr::layout::Struct<F>,
+	fields: Vec<FieldRestrictions<F>>
+}
+
+impl<'a, F> StructRestrictions<'a, F> {
+	pub fn new(s: &'a mut treeldr::layout::Struct<F>) -> Self {
+		let mut fields = Vec::new();
+		fields.resize_with(s.fields().len(), || FieldRestrictions::default());
+
+		Self {
+			s,
+			fields
+		}
+	}
+
+	pub fn insert(&mut self, nodes: &context::AllocatedNodes<F>, Loc(restriction, loc): Loc<LayoutRestrictedField<F>, F>) -> Result<bool, Error<F>> where F: Clone + Ord {
+		let prop_ref = restriction.field_prop.map(|Loc(prop_id, prop_loc)| Result::<_, Error<F>>::Ok(**nodes.require_property(prop_id, Some(prop_loc))?)).transpose()?;
+		let name = restriction.field_name.as_ref().map(|n| n.value());
+
+		for (i, field) in self.s.fields().iter().enumerate() {
+			if prop_ref == Some(field.property()) || name == Some(field.name()) {
+				match restriction.restriction {
+					Loc(LayoutFieldRestriction::Range(r), loc) => {
+						self.fields[i].range.insert(nodes, Loc(r, loc))?
+					}
+					Loc(LayoutFieldRestriction::Cardinality(c), _) => {
+						if !self.fields[i].cardinality.insert(c) {
+							return Ok(false)
+						}
+					}
+				}
+
+				return Ok(true)
+			}
+		}
+
+		Err(Loc(
+			LocalError::FieldRestrictionNoMatches,
+			loc
+		).into())
+	}
+
+	pub fn apply(
+		self,
+		vocabulary: &mut Vocabulary,
+		nodes: &mut context::AllocatedNodes<F>,
+		additional: &mut treeldr_build::AdditionalNodes<F>,
+		dependencies: Dependencies<F>,
+	) -> Result<(), Error<F>> where F: Clone + Ord {
+		for (i, field_restrictions) in self.fields.into_iter().enumerate() {
+			field_restrictions.apply(
+				vocabulary,
+				nodes,
+				additional,
+				dependencies,
+				self.s.name().clone(),
+				&mut self.s.fields_mut()[i],
+			)?
+		}
+
+		Ok(())
+	}
+}
+
+pub struct FieldRestrictions<F> {
+	range: RangeRestrictions<F>,
+	cardinality: CardinalityRestrictions
+}
+
+impl<F> Default for FieldRestrictions<F> {
+	fn default() -> Self {
+		Self {
+			range: RangeRestrictions::default(),
+			cardinality: CardinalityRestrictions::default()
+		}
+	}
+}
+
+impl<F> FieldRestrictions<F> {
+	fn apply(
+		self,
+		vocabulary: &mut Vocabulary,
+		nodes: &mut context::AllocatedNodes<F>,
+		additional: &mut treeldr_build::AdditionalNodes<F>,
+		dependencies: Dependencies<F>,
+		restricted_layout_name: Name,
+		field: &mut treeldr::layout::Field<F>
+	) -> Result<(), Error<F>> where F: Clone + Ord {
+		self.range.apply(vocabulary, nodes, additional, dependencies, restricted_layout_name, field)?;
+		self.cardinality.apply(vocabulary, nodes, additional, dependencies, field)
+	}
+}
+
+pub struct RangeRestrictions<F> {
+	any: BTreeMap<Ref<treeldr::layout::Definition<F>>, Causes<F>>,
+	all: BTreeMap<Ref<treeldr::layout::Definition<F>>, Causes<F>>
+}
+
+impl<F> Default for RangeRestrictions<F> {
+	fn default() -> Self {
+		Self {
+			any: BTreeMap::new(),
+			all: BTreeMap::new()
+		}
+	}
+}
+
+impl<F> RangeRestrictions<F> {
+	pub fn insert(&mut self, nodes: &context::AllocatedNodes<F>, Loc(restriction, loc): Loc<LayoutFieldRangeRestriction, F>) -> Result<(), Error<F>> where F: Clone + Ord {
+		match restriction {
+			LayoutFieldRangeRestriction::Any(id) => {
+				let layout_ref = nodes.require_layout(id, Some(loc.clone()))?;
+				self.any.entry(**layout_ref).or_default().add(loc);
+				Ok(())
+			}
+			LayoutFieldRangeRestriction::All(id) => {
+				let layout_ref = nodes.require_layout(id, Some(loc.clone()))?;
+				self.all.entry(**layout_ref).or_default().add(loc);
+				Ok(())
+			}
+		}
+	}
+
+	pub fn causes(&self) -> Causes<F> where F: Clone + Ord {
+		let mut all_causes = Causes::new();
+		
+		for (_, causes) in &self.any {
+			all_causes.extend(causes.iter().cloned())
+		}
+
+		for (_, causes) in &self.all {
+			all_causes.extend(causes.iter().cloned())
+		}
+		
+		all_causes
+	}
+
+	pub fn apply(
+		self,
+		vocabulary: &mut Vocabulary,
+		nodes: &mut context::AllocatedNodes<F>,
+		additional: &mut treeldr_build::AdditionalNodes<F>,
+		dependencies: Dependencies<F>,
+		restricted_layout_name: Name,
+		field: &mut treeldr::layout::Field<F>
+	) -> Result<(), Error<F>> where F: Clone + Ord {
+		let prop_ref = field.property();
+		let prop = dependencies.property(prop_ref);
+		let range_ref = prop.range().clone();
+		let all_causes = self.causes();
+		
+		let mut name = MaybeSet::new(
+			Name::new(format!(
+				"{}_{}",
+				restricted_layout_name,
+				field.name()
+			)).unwrap(),
+			all_causes.clone()
+		);
+
+		if !self.any.is_empty() {
+			todo!()
+		}
+		
+		let layout_ref = match self.all.len() {
+			0 | 1 => {
+				self.all.into_iter().next()
+			}
+			_ => {
+				let id = Id::Blank(vocabulary.new_blank_label());
+				let mut desc: Option<treeldr::layout::Description<F>> = None;
+				let mut causes = Causes::new();
+				
+				for (layout_ref, layout_causes) in self.all {
+					let layout = dependencies.layout(layout_ref);
+					causes.extend(layout_causes);
+					desc = Some(match desc {
+						Some(current_desc) => {
+							use treeldr_build::layout::ComputeIntersection;
+							current_desc.intersected_with(
+								id,
+								layout.description_with_causes(),
+								name.take(),
+								dependencies.layouts,
+							)?
+						}
+						None => layout.description().clone()
+					})
+				}
+
+				let layout_ref = additional.layouts_mut().insert(treeldr::layout::Definition::new(
+					id,
+					range_ref.into(),
+					WithCauses::new(desc.unwrap(), causes.clone()),
+					causes.clone()
+				));
+
+				nodes.insert_layout(id, layout_ref, causes.clone());
+				
+				Some((layout_ref, causes))
+			}
+		};
+
+		if let Some((layout_ref, causes)) = layout_ref {
+			if prop.is_functional() {
+				let current_layout = dependencies.layout(field.layout());
+
+				let layout_ref = match current_layout.description() {
+					treeldr::layout::Description::Set(_) => {
+						let container_name = MaybeSet::new(
+							Name::new(format!(
+								"{}_{}_set",
+								restricted_layout_name,
+								field.name()
+							)).unwrap(),
+							all_causes
+						);
+
+						let id = Id::Blank(vocabulary.new_blank_label());
+						let desc = treeldr::layout::Description::Set(treeldr::layout::Set::new(container_name, layout_ref));
+						let container_ref = additional.layouts_mut().insert(treeldr::layout::Definition::new(
+							id,
+							MaybeSet::default(),
+							WithCauses::new(desc, causes.clone()),
+							causes.clone()
+						));
+						nodes.insert_layout(id, container_ref, causes.clone());
+						container_ref
+					}
+					treeldr::layout::Description::Array(_) => {
+						let container_name = MaybeSet::new(
+							Name::new(format!(
+								"{}_{}_array",
+								restricted_layout_name,
+								field.name()
+							)).unwrap(),
+							all_causes
+						);
+
+						let id = Id::Blank(vocabulary.new_blank_label());
+						let desc = treeldr::layout::Description::Array(treeldr::layout::Array::new(container_name, layout_ref));
+						let container_ref = additional.layouts_mut().insert(treeldr::layout::Definition::new(
+							id,
+							MaybeSet::default(),
+							WithCauses::new(desc, causes.clone()),
+							causes.clone()
+						));
+						nodes.insert_layout(id, container_ref, causes.clone());
+						container_ref
+					}
+					_ => layout_ref
+				};
+
+				field.set_layout(layout_ref, causes)
+			}
+		}
+
+		Ok(())
+	}
+}
+
+#[derive(Default)]
+pub struct CardinalityRestrictions {
+	min: Option<u32>,
+	max: Option<u32>
+}
+
+impl CardinalityRestrictions {
+	pub fn insert(&mut self, restriction: LayoutFieldCardinalityRestriction) -> bool {
+		match restriction {
+			LayoutFieldCardinalityRestriction::AtLeast(min) => {
+				if let Some(max) = self.max {
+					if min > max {
+						return false
+					}
+				}
+
+				self.min = Some(match self.min {
+					Some(m) => std::cmp::max(min, m),
+					None => min
+				});
+
+				true
+			}
+			LayoutFieldCardinalityRestriction::AtMost(max) => {
+				if let Some(min) = self.min {
+					if min > max {
+						return false
+					}
+				}
+
+				self.max = Some(match self.max {
+					Some(m) => std::cmp::min(max, m),
+					None => max
+				});
+
+				true
+			}
+			LayoutFieldCardinalityRestriction::Exactly(m) => {
+				if let Some(min) = self.min {
+					if min > m {
+						return false
+					}
+				}
+
+				if let Some(max) = self.max {
+					if m > max {
+						return false
+					}
+				}
+
+				self.min = Some(m);
+				self.max = Some(m);
+
+				true
+			}
+		}
+	}
+
+	pub fn apply<F>(
+		self,
+		vocabulary: &mut Vocabulary,
+		nodes: &mut context::AllocatedNodes<F>,
+		additional: &mut treeldr_build::AdditionalNodes<F>,
+		dependencies: Dependencies<F>,
+		field: &mut treeldr::layout::Field<F>
+	) -> Result<(), Error<F>> where F: Clone + Ord {
+		todo!()
+	}
+}
+
+// pub trait ApplyLayoutRestriction<F> {
+// 	fn apply_restriction(&mut self, nodes: &context::AllocatedNodes<F>, dependencies: Dependencies<F>, restriction: Loc<LayoutRestrictedField<F>, F>) -> Result<bool, Error<F>>;
+// }
+
+// impl<F: Clone> ApplyLayoutRestriction<F> for treeldr::layout::Description<F> {
+// 	fn apply_restriction(&mut self, nodes: &context::AllocatedNodes<F>, dependencies: Dependencies<F>, Loc(restriction, loc): Loc<LayoutRestrictedField<F>, F>) -> Result<bool, Error<F>> {
+// 		match self {
+// 			Self::Struct(s) => {
+// 				let Loc(prop_id, prop_loc) = restriction.prop;
+// 				let prop_ref = **nodes.require_property(prop_id, Some(prop_loc))?;
+// 				let prop = dependencies.property(prop_ref);
+// 				let name = restriction.alias.as_ref().map(|n| n.value());
+
+// 				for field in s.fields_mut() {
+// 					if field.property() == prop_ref || name == Some(field.name()) {
+// 						match restriction.restriction {
+// 							Loc(LayoutFieldRestriction::Range(r), _) => {
+// 								// if prop.is_functional() {
+// 								// 	field.set_layout(r);
+// 								// } else {
+// 								// 	// ...
+// 								// }
+// 							}
+// 							Loc(LayoutFieldRestriction::Cardinality(c), _) => {
+// 								if prop.is_functional() {
+// 									todo!()
+// 								} else {
+// 									// ...
+// 								}
+// 							}
+// 						}
+
+// 						return Ok(true)
+// 					}
+// 				}
+
+// 				Err(Loc(
+// 					LocalError::FieldRestrictionNoMatches,
+// 					loc
+// 				).into())
+// 			},
+// 			_ => {
+// 				Err(Loc(
+// 					LocalError::UnexpectedFieldRestriction,
+// 					loc
+// 				).into())
+// 			}
+// 		}
+// 	}
+// }

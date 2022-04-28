@@ -123,7 +123,9 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 
 	fn build(
 		self,
-		nodes: &super::context::AllocatedNodes<F>,
+		_vocab: &mut treeldr::Vocabulary,
+		nodes: &mut super::context::AllocatedNodes<F>,
+		_additional: &mut crate::AdditionalNodes<F>,
 		_dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
 	) -> Result<Self::Target, Error<F>> {
