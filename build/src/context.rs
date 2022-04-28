@@ -17,6 +17,8 @@ pub struct Context<'v, F, D: Descriptions<F>> {
 	nodes: BTreeMap<Id, Node<node::Components<F, D>>>,
 
 	layout_relations: HashMap<Id, LayoutRelations<F>>,
+
+	standard_references: HashMap<Id, Id>,
 }
 
 #[derive(Derivative)]
@@ -32,6 +34,7 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 			vocab,
 			nodes: BTreeMap::new(),
 			layout_relations: HashMap::new(),
+			standard_references: HashMap::new(),
 		}
 	}
 
@@ -328,7 +331,7 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 		let mut allocated_shelves = AllocatedShelves::default();
 		let mut allocated_nodes = AllocatedNodes::new(&mut allocated_shelves, self.nodes);
 
-		use treeldr::utils::SccGraph;
+		use crate::utils::SccGraph;
 
 		struct Graph<F> {
 			items: Vec<crate::Item<F>>,
@@ -383,6 +386,23 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 		}
 
 		let components = graph.strongly_connected_components();
+
+		for (i, component) in components.iter().enumerate() {
+			if components.is_looping(i) {
+				for c in component {
+					if let crate::Item::Layout(layout_ref) = c {
+						let (id, layout) =
+							allocated_shelves.layouts.get(layout_ref.cast()).unwrap();
+						return Err(Error::new(
+							error::LayoutInfiniteSize { id: *id }.into(),
+							layout.causes().preferred().cloned(),
+						)
+						.into());
+					}
+				}
+			}
+		}
+
 		let ordered_components = components.order_by_depth();
 
 		let mut types_to_build: Vec<_> = allocated_shelves
@@ -962,6 +982,40 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 		}
 
 		Ok(head)
+	}
+
+	pub fn standard_reference(
+		&mut self,
+		deref_layout: Id,
+		cause: Option<Location<F>>,
+		deref_cause: Option<Location<F>>,
+	) -> Result<Id, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		match self.standard_references.get(&deref_layout).cloned() {
+			Some(id) => Ok(id),
+			None => {
+				let id = match deref_layout {
+					Id::Iri(term) => {
+						let mut iri = iref::IriBuf::new("https://treeldr.org/Reference").unwrap();
+						let fragment = pct_str::PctString::encode(
+							term.iri(self.vocabulary()).unwrap().as_str().chars(),
+							pct_str::URIReserved,
+						);
+						iri.set_fragment(Some(fragment.as_str().try_into().unwrap()));
+						Id::Iri(vocab::Term::from_iri(iri, self.vocabulary_mut()))
+					}
+					Id::Blank(_) => Id::Blank(self.vocabulary_mut().new_blank_label()),
+				};
+
+				self.declare_layout(id, cause);
+				let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
+				layout.set_deref_to(deref_layout, deref_cause)?;
+				self.standard_references.insert(deref_layout, id);
+				Ok(id)
+			}
+		}
 	}
 }
 

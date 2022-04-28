@@ -91,6 +91,10 @@ impl<V> Components<V> {
 		self.successors.get(i).map(|s| s.iter().cloned())
 	}
 
+	pub fn is_looping(&self, i: usize) -> bool {
+		self.successors.get(i).unwrap().contains(&i)
+	}
+
 	/// Order components by depth.
 	///
 	/// The depth of a component is the maximum of the depth of its predecessors
@@ -104,7 +108,9 @@ impl<V> Components<V> {
 			if depth[i] == 0 || new_depth > depth[i] {
 				depth[i] = new_depth;
 				for c in self.successors(i).unwrap() {
-					stack.push((c, new_depth + 1))
+					if c != i {
+						stack.push((c, new_depth + 1))
+					}
 				}
 			}
 		}

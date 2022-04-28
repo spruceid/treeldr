@@ -410,8 +410,8 @@ impl<F> layout::Definition<F> {
 			layout::Description::Literal(l) => l.to_rdf(self.id(), quads),
 			layout::Description::Struct(s) => s.to_rdf(model, self.id(), generator, quads),
 			layout::Description::Enum(e) => e.to_rdf(model, self.id(), generator, quads),
-			layout::Description::Array(_) => todo!(),
-			layout::Description::Set(_) => todo!(),
+			layout::Description::Array(a) => a.to_rdf(model, self.id(), quads),
+			layout::Description::Set(s) => s.to_rdf(model, self.id(), quads),
 			layout::Description::Reference(layout_ref, _) => {
 				quads.push(Quad(
 					self.id(),
@@ -421,6 +421,38 @@ impl<F> layout::Definition<F> {
 				));
 			}
 		}
+	}
+}
+
+impl<F> layout::Array<F> {
+	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
+		quads.push(Quad(
+			id,
+			Term::TreeLdr(vocab::TreeLdr::Array),
+			model
+				.layouts()
+				.get(self.item_layout())
+				.unwrap()
+				.id()
+				.into_term(),
+			None,
+		))
+	}
+}
+
+impl<F> layout::Set<F> {
+	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
+		quads.push(Quad(
+			id,
+			Term::TreeLdr(vocab::TreeLdr::Set),
+			model
+				.layouts()
+				.get(self.item_layout())
+				.unwrap()
+				.id()
+				.into_term(),
+			None,
+		))
 	}
 }
 

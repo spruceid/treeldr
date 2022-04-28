@@ -38,6 +38,7 @@ pub struct Definition<F, D = Description> {
 pub enum LayoutConnection {
 	Field(Id),
 	Variant(Id),
+	Item,
 }
 
 pub struct SubLayout<F> {
@@ -88,6 +89,8 @@ pub enum Description {
 	Reference(Id),
 	Literal(RegExp),
 	Enum(Id),
+	Set(Id),
+	Array(Id),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -97,6 +100,8 @@ pub enum Type {
 	Literal,
 	Struct,
 	Enum,
+	Set,
+	Array,
 }
 
 impl Description {
@@ -107,6 +112,8 @@ impl Description {
 			Self::Native(n) => Type::Native(*n),
 			Self::Literal(_) => Type::Literal,
 			Self::Enum(_) => Type::Enum,
+			Self::Set(_) => Type::Set,
+			Self::Array(_) => Type::Array,
 		}
 	}
 
@@ -120,28 +127,39 @@ impl Description {
 	{
 		let mut sub_layouts = Vec::new();
 
-		if let Description::Struct(fields_id) = self {
-			let fields = context
-				.require_list(*fields_id, causes.preferred().cloned())?
-				.iter(context);
-			for item in fields {
-				let (object, causes) = item?.clone().into_parts();
-				let field_id = match object {
-					vocab::Object::Literal(lit) => Err(Caused::new(
-						error::LiteralUnexpected(lit).into(),
-						causes.preferred().cloned(),
-					)),
-					vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-					vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-				}?;
-				let field = context.require_layout_field(field_id, causes.into_preferred())?;
-				let field_layout_id = field.require_layout(field.causes())?;
+		match self {
+			Description::Struct(fields_id) => {
+				let fields = context
+					.require_list(*fields_id, causes.preferred().cloned())?
+					.iter(context);
+				for item in fields {
+					let (object, causes) = item?.clone().into_parts();
+					let field_id = match object {
+						vocab::Object::Literal(lit) => Err(Caused::new(
+							error::LiteralUnexpected(lit).into(),
+							causes.preferred().cloned(),
+						)),
+						vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+						vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+					}?;
+					let field = context.require_layout_field(field_id, causes.into_preferred())?;
+					let field_layout_id = field.require_layout(field.causes())?;
 
-				sub_layouts.push(SubLayout {
-					layout: field_layout_id.clone(),
-					connection: LayoutConnection::Field(field_id),
-				});
+					sub_layouts.push(SubLayout {
+						layout: field_layout_id.clone(),
+						connection: LayoutConnection::Field(field_id),
+					});
+				}
 			}
+			Description::Set(item_layout_id) => sub_layouts.push(SubLayout {
+				layout: WithCauses::new(*item_layout_id, causes.clone()),
+				connection: LayoutConnection::Item,
+			}),
+			Description::Array(item_layout_id) => sub_layouts.push(SubLayout {
+				layout: WithCauses::new(*item_layout_id, causes.clone()),
+				connection: LayoutConnection::Item,
+			}),
+			_ => (),
 		}
 
 		Ok(sub_layouts)
@@ -331,6 +349,22 @@ impl Description {
 				let lit = treeldr::layout::Literal::new(regexp, name, id.is_blank());
 				Ok(treeldr::layout::Description::Literal(lit))
 			}
+			Description::Set(item_layout_id) => {
+				let item_layout_ref = *nodes
+					.require_layout(item_layout_id, causes.preferred().cloned())?
+					.inner();
+				Ok(treeldr::layout::Description::Set(
+					treeldr::layout::Set::new(name, item_layout_ref),
+				))
+			}
+			Description::Array(item_layout_id) => {
+				let item_layout_ref = *nodes
+					.require_layout(item_layout_id, causes.preferred().cloned())?
+					.inner();
+				Ok(treeldr::layout::Description::Array(
+					treeldr::layout::Array::new(name, item_layout_ref),
+				))
+			}
 		}
 	}
 }
@@ -476,6 +510,14 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 		self.set_description(Description::Enum(items).into(), cause)
 	}
 
+	pub fn set_set(&mut self, item: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
+		self.set_description(Description::Set(item).into(), cause)
+	}
+
+	pub fn set_array(&mut self, item: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
+		self.set_description(Description::Array(item).into(), cause)
+	}
+
 	pub fn sub_layouts<C: Descriptions<F>>(
 		&self,
 		context: &Context<F, C>,
@@ -528,22 +570,31 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 
 		if parent_layouts.len() == 1 {
 			let parent = &parent_layouts[0];
-			let layout = context
+			let parent_layout = context
 				.require_layout(parent.layout, cause.clone())?
 				.inner();
 
-			if let LayoutConnection::Field(field_id) = parent.connection {
-				let field = context
-					.require_layout_field(field_id, cause.clone())?
-					.inner();
+			if let Some(parent_layout_name) = parent_layout.name() {
+				match parent.connection {
+					LayoutConnection::Field(field_id) => {
+						let field = context
+							.require_layout_field(field_id, cause.clone())?
+							.inner();
 
-				if let Some(layout_name) = layout.name() {
-					if let Some(field_name) = field.name() {
-						let mut name = layout_name.inner().clone();
-						name.push_name(field_name);
+						if let Some(field_name) = field.name() {
+							let mut name = parent_layout_name.inner().clone();
+							name.push_name(field_name);
+
+							return Ok(Some(Caused::new(name, cause)));
+						}
+					}
+					LayoutConnection::Item => {
+						let mut name = parent_layout_name.inner().clone();
+						name.push_name(&vocab::Name::new("item").unwrap());
 
 						return Ok(Some(Caused::new(name, cause)));
 					}
+					_ => (),
 				}
 			}
 		}

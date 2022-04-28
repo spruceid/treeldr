@@ -1283,16 +1283,21 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 				id.build(local_context, context)
 			}
 			crate::InnerLayoutExpr::Reference(r) => {
-				let Loc(id, _) =
-					local_context.anonymous_id(None, context.vocabulary_mut(), loc.clone());
-				if id.is_blank() {
-					context.declare_layout(id, Some(loc.clone()));
-				}
-
 				let Loc(deref_layout, deref_loc) = r.build(local_context, context)?;
 
-				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
-				layout.set_deref_to(deref_layout, Some(deref_loc))?;
+				let id = if local_context.next_id.is_some() {
+					let Loc(id, _) =
+						local_context.anonymous_id(None, context.vocabulary_mut(), loc.clone());
+					if id.is_blank() {
+						context.declare_layout(id, Some(loc.clone()));
+					}
+
+					let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
+					layout.set_deref_to(deref_layout, Some(deref_loc))?;
+					id
+				} else {
+					context.standard_reference(deref_layout, Some(loc.clone()), Some(deref_loc))?
+				};
 
 				Ok(Loc(id, loc))
 			}
@@ -1338,22 +1343,29 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 			})
 			.build(local_context, context)?;
 
-		let mut functional = true;
-		let mut functional_loc = None;
 		let mut required = false;
 		let mut required_loc = None;
 
 		let Loc(layout, layout_loc) = match def.layout {
 			Some(Loc(layout, _)) => {
 				let scope = local_context.scope.take();
-				let layout_id = layout.expr.build(local_context, context)?;
+				let mut layout_id = layout.expr.build(local_context, context)?;
 				local_context.scope = scope;
 
 				for Loc(ann, ann_loc) in layout.annotations {
 					match ann {
 						crate::Annotation::Multiple => {
-							functional = false;
-							functional_loc = Some(ann_loc)
+							let container_id =
+								Id::Blank(context.vocabulary_mut().new_blank_label());
+							context.declare_layout(container_id, Some(ann_loc.clone()));
+							let container_layout = context
+								.get_mut(container_id)
+								.unwrap()
+								.as_layout_mut()
+								.unwrap();
+							let Loc(item_layout_id, item_layout_loc) = layout_id;
+							container_layout.set_set(item_layout_id, Some(ann_loc))?;
+							layout_id = Loc(container_id, item_layout_loc)
 						}
 						crate::Annotation::Required => {
 							required = true;
@@ -1388,10 +1400,6 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 		field.set_property(prop_id, Some(prop_id_loc))?;
 		field.set_name(name, Some(name_loc))?;
 		field.set_layout(layout, Some(layout_loc))?;
-
-		if let Some(functional_loc) = functional_loc {
-			field.set_functional(functional, Some(functional_loc))?;
-		}
 
 		if let Some(required_loc) = required_loc {
 			field.set_required(required, Some(required_loc))?;
@@ -1798,7 +1806,7 @@ impl<F> RangeRestrictions<F> {
 		};
 
 		if let Some((layout_ref, causes)) = layout_ref {
-			if is_functional {
+			if !is_functional {
 				let current_layout = dependencies.layout(field.layout());
 
 				let layout_ref = match current_layout.description() {
@@ -1918,54 +1926,3 @@ impl CardinalityRestrictions {
 		}
 	}
 }
-
-// pub trait ApplyLayoutRestriction<F> {
-// 	fn apply_restriction(&mut self, nodes: &context::AllocatedNodes<F>, dependencies: Dependencies<F>, restriction: Loc<LayoutRestrictedField<F>, F>) -> Result<bool, Error<F>>;
-// }
-
-// impl<F: Clone> ApplyLayoutRestriction<F> for treeldr::layout::Description<F> {
-// 	fn apply_restriction(&mut self, nodes: &context::AllocatedNodes<F>, dependencies: Dependencies<F>, Loc(restriction, loc): Loc<LayoutRestrictedField<F>, F>) -> Result<bool, Error<F>> {
-// 		match self {
-// 			Self::Struct(s) => {
-// 				let Loc(prop_id, prop_loc) = restriction.prop;
-// 				let prop_ref = **nodes.require_property(prop_id, Some(prop_loc))?;
-// 				let prop = dependencies.property(prop_ref);
-// 				let name = restriction.alias.as_ref().map(|n| n.value());
-
-// 				for field in s.fields_mut() {
-// 					if field.property() == prop_ref || name == Some(field.name()) {
-// 						match restriction.restriction {
-// 							Loc(LayoutFieldRestriction::Range(r), _) => {
-// 								// if prop.is_functional() {
-// 								// 	field.set_layout(r);
-// 								// } else {
-// 								// 	// ...
-// 								// }
-// 							}
-// 							Loc(LayoutFieldRestriction::Cardinality(c), _) => {
-// 								if prop.is_functional() {
-// 									todo!()
-// 								} else {
-// 									// ...
-// 								}
-// 							}
-// 						}
-
-// 						return Ok(true)
-// 					}
-// 				}
-
-// 				Err(Loc(
-// 					LocalError::FieldRestrictionNoMatches,
-// 					loc
-// 				).into())
-// 			},
-// 			_ => {
-// 				Err(Loc(
-// 					LocalError::UnexpectedFieldRestriction,
-// 					loc
-// 				).into())
-// 			}
-// 		}
-// 	}
-// }

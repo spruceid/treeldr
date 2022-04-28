@@ -80,6 +80,14 @@ pub enum TreeLdr {
 	/// property.
 	#[iri("tldr:Variant")]
 	Variant,
+
+	/// Array layout.
+	#[iri("tldr:array")]
+	Array,
+
+	/// Set layout.
+	#[iri("tldr:set")]
+	Set,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
