@@ -68,6 +68,7 @@ pub trait PseudoDescription<F>: PartialEq + From<Description> {
 		causes: &Causes<F>,
 	) -> Result<Vec<crate::Item<F>>, Self::Error>;
 
+	#[allow(clippy::too_many_arguments)]
 	fn build(
 		self,
 		id: Id,
@@ -155,8 +156,7 @@ impl Description {
 		match self {
 			Description::Struct(field_list_id) => {
 				let mut dependencies = Vec::new();
-				let field_list = nodes
-					.require_list(*field_list_id, causes.preferred().cloned())?;
+				let field_list = nodes.require_list(*field_list_id, causes.preferred().cloned())?;
 
 				for item in field_list.iter(nodes) {
 					let (object, field_causes) = item?.clone().into_parts();
@@ -169,66 +169,58 @@ impl Description {
 						vocab::Object::Blank(id) => Ok(Id::Blank(id)),
 					}?;
 
-					let field = nodes.require_layout_field(
-						field_id,
-						field_causes.preferred().cloned(),
-					)?;
+					let field =
+						nodes.require_layout_field(field_id, field_causes.preferred().cloned())?;
 
 					if let Some(prop_id) = field.property() {
 						let prop_ref = **nodes
-							.require_property(
-								**prop_id,
-								prop_id.causes().preferred().cloned(),
-							)?;
+							.require_property(**prop_id, prop_id.causes().preferred().cloned())?;
 
 						dependencies.push(crate::Item::Property(prop_ref));
 					}
 
 					if let Some(layout_id) = field.layout() {
 						let layout_ref = **nodes
-							.require_layout(
-								**layout_id,
-								layout_id.causes().preferred().cloned(),
-							)?;
+							.require_layout(**layout_id, layout_id.causes().preferred().cloned())?;
 
-							dependencies.push(crate::Item::Layout(layout_ref));
+						dependencies.push(crate::Item::Layout(layout_ref));
 					}
 				}
 
 				Ok(dependencies)
 			}
 			Description::Enum(variant_list_id) => {
-				let layouts = nodes
-					.require_list(*variant_list_id, causes.preferred().cloned())?
-					.iter(nodes)
-					.map(|item| {
-						let (object, variant_causes) = item?.clone().into_parts();
-						let variant_id = match object {
-							vocab::Object::Literal(lit) => Err(Caused::new(
-								error::LiteralUnexpected(lit).into(),
-								causes.preferred().cloned(),
-							)),
-							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-							vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-						}?;
-
-						let variant = nodes.require_layout_variant(
-							variant_id,
-							variant_causes.preferred().cloned(),
-						)?;
-
-						let layout = variant.layout().clone().try_map_with_causes(|layout_id, causes| {
-							Ok(*nodes
-								.require_layout(
-									layout_id,
+				let layouts =
+					nodes
+						.require_list(*variant_list_id, causes.preferred().cloned())?
+						.iter(nodes)
+						.map(|item| {
+							let (object, variant_causes) = item?.clone().into_parts();
+							let variant_id = match object {
+								vocab::Object::Literal(lit) => Err(Caused::new(
+									error::LiteralUnexpected(lit).into(),
 									causes.preferred().cloned(),
-								)?
-								.inner())
-						})?;
+								)),
+								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
+								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
+							}?;
 
-						Ok(layout.into_value().map(crate::Item::Layout))
-					})
-					.try_filter_collect()?;
+							let variant = nodes.require_layout_variant(
+								variant_id,
+								variant_causes.preferred().cloned(),
+							)?;
+
+							let layout = variant.layout().clone().try_map_with_causes(
+								|layout_id, causes| {
+									Ok(*nodes
+										.require_layout(layout_id, causes.preferred().cloned())?
+										.inner())
+								},
+							)?;
+
+							Ok(layout.into_value().map(crate::Item::Layout))
+						})
+						.try_filter_collect()?;
 				Ok(layouts)
 			}
 			_ => Ok(Vec::new()),
@@ -394,11 +386,6 @@ impl<F, D> Definition<F, D> {
 	/// Type for which the layout is defined.
 	pub fn ty(&self) -> Option<&WithCauses<Id, F>> {
 		self.ty.with_causes()
-	}
-
-	pub fn require_ty(&self, cause: Option<Location<F>>) -> Result<&WithCauses<Id, F>, Error<F>> {
-		self.ty
-			.value_or_else(|| Caused::new(error::LayoutMissingType(self.id).into(), cause))
 	}
 
 	pub fn name(&self) -> Option<&WithCauses<vocab::Name, F>> {
@@ -589,10 +576,8 @@ impl<F: Ord + Clone, D: PseudoDescription<F>> crate::Build<F> for Definition<F, 
 		dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
 	) -> Result<Self::Target, Self::Error> {
-
 		let ty = self.ty.try_map_with_causes(|ty_id, causes| {
-			Ok(**nodes
-				.require_type(ty_id, causes.preferred().cloned())?)
+			Ok(**nodes.require_type(ty_id, causes.preferred().cloned())?)
 		})?;
 
 		let desc = self.desc.ok_or_else(|| {
@@ -603,7 +588,15 @@ impl<F: Ord + Clone, D: PseudoDescription<F>> crate::Build<F> for Definition<F, 
 		})?;
 
 		let desc = desc.try_map_with_causes(|desc, desc_causes| {
-			desc.build(self.id, self.name, vocab, nodes, additional, dependencies, desc_causes)
+			desc.build(
+				self.id,
+				self.name,
+				vocab,
+				nodes,
+				additional,
+				dependencies,
+				desc_causes,
+			)
 		})?;
 
 		Ok(treeldr::layout::Definition::new(self.id, ty, desc, causes))

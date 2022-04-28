@@ -1,7 +1,7 @@
 use iref::{Iri, IriBuf};
 use iref_enum::IriEnum;
 use locspan::Loc;
-use rdf_types::{loc::Literal, Quad};
+use rdf_types::Quad;
 use std::{collections::HashMap, fmt};
 
 mod display;
@@ -90,6 +90,27 @@ pub enum Owl {
 
 	#[iri("owl:intersectionOf")]
 	IntersectionOf,
+
+	#[iri("owl:Restriction")]
+	Restriction,
+
+	#[iri("owl:onProperty")]
+	OnProperty,
+
+	#[iri("owl:allValuesFrom")]
+	AllValuesFrom,
+
+	#[iri("owl:someValuesFrom")]
+	SomeValuesFrom,
+
+	#[iri("owl:maxCardinality")]
+	MaxCardinality,
+
+	#[iri("owl:minCardinality")]
+	MinCardinality,
+
+	#[iri("owl:maxCardinality")]
+	Cardinality,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -262,7 +283,7 @@ impl Term {
 impl rdf_types::AsTerm for Term {
 	type Iri = Self;
 	type BlankId = BlankLabel;
-	type Literal = rdf_types::Literal;
+	type Literal = StrippedLiteral;
 
 	fn as_term(&self) -> rdf_types::Term<&Self::Iri, &Self::BlankId, &Self::Literal> {
 		rdf_types::Term::Iri(self)
@@ -298,6 +319,8 @@ impl fmt::Display for BlankLabel {
 	}
 }
 
+pub type Literal<F> = rdf_types::loc::Literal<F, rdf_types::StringLiteral, Term>;
+
 pub type Id = rdf_types::Subject<Term, BlankLabel>;
 
 pub type GraphLabel = rdf_types::GraphLabel<Term, BlankLabel>;
@@ -306,7 +329,9 @@ pub type Object<F> = rdf_types::Object<Term, BlankLabel, Literal<F>>;
 
 pub type LocQuad<F> = rdf_types::loc::LocQuad<Id, Term, Object<F>, GraphLabel, F>;
 
-pub type StrippedObject = rdf_types::Object<Term, BlankLabel, rdf_types::Literal>;
+pub type StrippedLiteral = rdf_types::Literal<rdf_types::StringLiteral, Term>;
+
+pub type StrippedObject = rdf_types::Object<Term, BlankLabel, StrippedLiteral>;
 
 pub type StrippedQuad = rdf_types::Quad<Id, Term, StrippedObject, GraphLabel>;
 
@@ -318,6 +343,16 @@ pub fn strip_quad<F>(Loc(rdf_types::Quad(s, p, o, g), _): LocQuad<F>) -> Strippe
 		o.strip(),
 		g.map(|g| g.into_value()),
 	)
+}
+
+pub fn literal_from_rdf<F>(literal: rdf_types::loc::Literal<F>, ns: &mut Vocabulary) -> Literal<F> {
+	match literal {
+		rdf_types::loc::Literal::String(s) => Literal::String(s),
+		rdf_types::loc::Literal::LangString(s, tag) => Literal::LangString(s, tag),
+		rdf_types::loc::Literal::TypedString(s, Loc(ty, ty_loc)) => {
+			Literal::TypedString(s, Loc(Term::from_iri(ty, ns), ty_loc))
+		}
+	}
 }
 
 pub fn subject_from_rdf(
@@ -339,7 +374,20 @@ pub fn object_from_rdf<F>(
 	match object {
 		rdf_types::Object::Iri(iri) => Object::Iri(Term::from_iri(iri, ns)),
 		rdf_types::Object::Blank(label) => Object::Blank(blank_label(label)),
-		rdf_types::Object::Literal(lit) => Object::Literal(lit),
+		rdf_types::Object::Literal(lit) => Object::Literal(literal_from_rdf(lit, ns)),
+	}
+}
+
+pub fn stripped_literal_from_rdf(
+	literal: rdf_types::Literal,
+	ns: &mut Vocabulary,
+) -> StrippedLiteral {
+	match literal {
+		rdf_types::Literal::String(s) => StrippedLiteral::String(s),
+		rdf_types::Literal::LangString(s, tag) => StrippedLiteral::LangString(s, tag),
+		rdf_types::Literal::TypedString(s, ty) => {
+			StrippedLiteral::TypedString(s, Term::from_iri(ty, ns))
+		}
 	}
 }
 
@@ -351,7 +399,9 @@ pub fn stripped_object_from_rdf(
 	match object {
 		rdf_types::Object::Iri(iri) => StrippedObject::Iri(Term::from_iri(iri, ns)),
 		rdf_types::Object::Blank(label) => StrippedObject::Blank(blank_label(label)),
-		rdf_types::Object::Literal(lit) => StrippedObject::Literal(lit),
+		rdf_types::Object::Literal(lit) => {
+			StrippedObject::Literal(stripped_literal_from_rdf(lit, ns))
+		}
 	}
 }
 

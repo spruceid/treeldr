@@ -756,7 +756,71 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 		mut loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
 		match token.no_keyword() {
-			Token::Id(id) => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
+			Token::Id(id) => {
+				#[allow(clippy::type_complexity)]
+				fn parse_property_restriction<F, L: Tokens<F>>(
+					lexer: &mut L,
+					prop: Loc<Id, F>,
+					alias: Option<Loc<Alias, F>>,
+					mut loc: Location<F>,
+				) -> Result<Loc<TypeRestrictedProperty<F>, F>, Loc<Error<L::Error>, F>>
+				where
+					F: Clone,
+				{
+					let ty = InnerTypeExpr::parse(lexer)?;
+					let restriction_loc = ty.location().clone();
+					loc.span_mut().append(ty.span());
+					Ok(Loc(
+						TypeRestrictedProperty {
+							prop,
+							alias,
+							restriction: Loc(
+								TypePropertyRestriction::Range(TypePropertyRangeRestriction::All(
+									Box::new(ty),
+								)),
+								restriction_loc,
+							),
+						},
+						loc,
+					))
+				}
+
+				match peek_token(lexer)? {
+					Loc(Some(Token::Keyword(lexing::Keyword::As)), _) => {
+						next_token(lexer)?;
+						let id_loc = loc.clone();
+						let alias = Alias::parse(lexer)?;
+						match next_expected_token(lexer, || {
+							vec![TokenKind::Punct(lexing::Punct::Colon)]
+						})? {
+							Loc(Token::Punct(lexing::Punct::Colon), _) => {
+								let restriction = parse_property_restriction(
+									lexer,
+									Loc(id, id_loc),
+									Some(alias),
+									loc,
+								)?;
+								Ok(restriction.map(Self::PropertyRestriction))
+							}
+							Loc(unexpected, loc) => Err(Loc::new(
+								Error::Unexpected(
+									Some(unexpected),
+									vec![TokenKind::Punct(lexing::Punct::Colon)],
+								),
+								loc,
+							)),
+						}
+					}
+					Loc(Some(Token::Punct(lexing::Punct::Colon)), _) => {
+						next_token(lexer)?;
+						let id_loc = loc.clone();
+						let restriction =
+							parse_property_restriction(lexer, Loc(id, id_loc), None, loc)?;
+						Ok(restriction.map(Self::PropertyRestriction))
+					}
+					_ => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
+				}
+			}
 			Token::Punct(lexing::Punct::Ampersand) => {
 				let arg = Self::parse(lexer)?;
 				loc.span_mut().set_end(arg.span().end());

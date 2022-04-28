@@ -201,6 +201,7 @@ pub enum Punct {
 	Ampersand,
 	Pipe,
 	Equal,
+	Underscore,
 }
 
 impl Punct {
@@ -224,6 +225,7 @@ impl fmt::Display for Punct {
 			Self::Ampersand => write!(f, "&"),
 			Self::Pipe => write!(f, "|"),
 			Self::Equal => write!(f, "="),
+			Self::Underscore => write!(f, "_"),
 		}
 	}
 }

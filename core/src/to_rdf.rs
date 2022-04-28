@@ -1,4 +1,4 @@
-use crate::{layout, prop, ty, vocab, Documentation, Id, Model};
+use crate::{layout, prop, ty, vocab, Documentation, Id, Model, Ref};
 use rdf_types::{Literal, Object, Quad};
 use vocab::{StrippedObject, StrippedQuad, Term};
 
@@ -137,7 +137,7 @@ impl<F> ty::Definition<F> {
 			ty::Description::Normal(_) => (),
 			ty::Description::Union(u) => u.to_rdf(model, self.id(), generator, quads),
 			ty::Description::Intersection(i) => i.to_rdf(model, self.id(), generator, quads),
-			ty::Description::Restriction(r) => r.to_rdf(self.id(), quads),
+			ty::Description::Restriction(r) => r.to_rdf(model, self.id(), generator, quads),
 		}
 	}
 }
@@ -191,8 +191,134 @@ impl<F> ty::Intersection<F> {
 }
 
 impl<F> ty::Restriction<F> {
+	pub fn to_rdf(
+		&self,
+		model: &Model<F>,
+		id: Id,
+		generator: &mut impl Generator,
+		quads: &mut Vec<StrippedQuad>,
+	) {
+		match self.restrictions().len() {
+			0 | 1 => {
+				self.restrictions()
+					.iter()
+					.next()
+					.unwrap()
+					.to_rdf(model, id, self.property(), quads)
+			}
+			_ => {
+				let restrictions: Vec<_> = self
+					.restrictions()
+					.iter()
+					.map(|restriction| {
+						let id = generator.next();
+						restriction.to_rdf(model, id, self.property(), quads);
+						id.into_term()
+					})
+					.collect();
+
+				let list_id = to_rdf_list(generator, quads, restrictions);
+
+				quads.push(Quad(
+					id,
+					Term::Owl(vocab::Owl::IntersectionOf),
+					list_id.into_term(),
+					None,
+				))
+			}
+		}
+	}
+}
+
+impl<F> prop::Restriction<F> {
+	pub fn to_rdf(
+		&self,
+		model: &Model<F>,
+		id: Id,
+		prop_ref: Ref<prop::Definition<F>>,
+		quads: &mut Vec<StrippedQuad>,
+	) {
+		quads.push(Quad(
+			id,
+			Term::Rdf(vocab::Rdf::Type),
+			Object::Iri(Term::Owl(vocab::Owl::Restriction)),
+			None,
+		));
+
+		quads.push(Quad(
+			id,
+			Term::Owl(vocab::Owl::OnProperty),
+			model.properties().get(prop_ref).unwrap().id().into_term(),
+			None,
+		));
+
+		match self {
+			Self::Range(r) => r.to_rdf(model, id, quads),
+			Self::Cardinality(c) => c.to_rdf(id, quads),
+		}
+	}
+}
+
+impl<F> prop::restriction::Range<F> {
+	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
+		match self {
+			Self::Any(ty_ref) => {
+				quads.push(Quad(
+					id,
+					Term::Owl(vocab::Owl::SomeValuesFrom),
+					model.types().get(*ty_ref).unwrap().id().into_term(),
+					None,
+				));
+			}
+			Self::All(ty_ref) => {
+				quads.push(Quad(
+					id,
+					Term::Owl(vocab::Owl::AllValuesFrom),
+					model.types().get(*ty_ref).unwrap().id().into_term(),
+					None,
+				));
+			}
+		}
+	}
+}
+
+impl prop::restriction::Cardinality {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		todo!()
+		match self {
+			Self::AtLeast(min) => {
+				quads.push(Quad(
+					id,
+					Term::Owl(vocab::Owl::MinCardinality),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						Term::Xsd(vocab::Xsd::PositiveInteger),
+					)),
+					None,
+				));
+			}
+			Self::AtMost(max) => {
+				quads.push(Quad(
+					id,
+					Term::Owl(vocab::Owl::MaxCardinality),
+					Object::Literal(Literal::TypedString(
+						max.to_string().into(),
+						Term::Xsd(vocab::Xsd::PositiveInteger),
+					)),
+					None,
+				));
+			}
+			Self::Exactly(m) => {
+				quads.push(Quad(
+					id,
+					Term::Owl(vocab::Owl::Cardinality),
+					Object::Literal(Literal::TypedString(
+						m.to_string().into(),
+						Term::Xsd(vocab::Xsd::PositiveInteger),
+					)),
+					None,
+				));
+			}
+		}
 	}
 }
 
@@ -383,13 +509,14 @@ impl<F> layout::Field<F> {
 			None,
 		));
 
-		let prop_ref = self.property();
-		quads.push(Quad(
-			id,
-			Term::TreeLdr(vocab::TreeLdr::FieldFor),
-			model.properties().get(prop_ref).unwrap().id().into_term(),
-			None,
-		));
+		if let Some(prop_ref) = self.property() {
+			quads.push(Quad(
+				id,
+				Term::TreeLdr(vocab::TreeLdr::FieldFor),
+				model.properties().get(prop_ref).unwrap().id().into_term(),
+				None,
+			))
+		}
 
 		quads.push(Quad(
 			id,

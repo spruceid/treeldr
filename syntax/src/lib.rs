@@ -195,6 +195,10 @@ pub struct NamedInnerTypeExpr<F> {
 }
 
 impl<F: Clone> NamedInnerTypeExpr<F> {
+	pub fn as_id(&self) -> Option<Loc<Id, F>> {
+		self.expr.as_id()
+	}
+
 	pub fn implicit_layout_expr(&self) -> NamedInnerLayoutExpr<F> {
 		NamedInnerLayoutExpr {
 			expr: Loc(
@@ -210,10 +214,17 @@ pub enum InnerTypeExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
-	PropertyRestriction(Label, TypeRestrictedProperty<F>),
+	PropertyRestriction(TypeRestrictedProperty<F>),
 }
 
 impl<F: Clone> InnerTypeExpr<F> {
+	pub fn as_id(&self) -> Option<Loc<Id, F>> {
+		match self {
+			Self::Id(id) => Some(id.clone()),
+			_ => None,
+		}
+	}
+
 	pub fn implicit_layout_expr(&self) -> InnerLayoutExpr<F> {
 		match self {
 			Self::Id(id) => InnerLayoutExpr::Id(id.clone()),
@@ -222,8 +233,8 @@ impl<F: Clone> InnerTypeExpr<F> {
 				r.location().clone(),
 			))),
 			Self::Literal(lit) => InnerLayoutExpr::Literal(lit.clone()),
-			Self::PropertyRestriction(label, r) => {
-				InnerLayoutExpr::FieldRestriction(*label, r.implicit_layout_restricted_field())
+			Self::PropertyRestriction(r) => {
+				InnerLayoutExpr::FieldRestriction(r.implicit_layout_restricted_field())
 			}
 		}
 	}
@@ -232,7 +243,7 @@ impl<F: Clone> InnerTypeExpr<F> {
 pub struct TypeRestrictedProperty<F> {
 	prop: Loc<Id, F>,
 	alias: Option<Loc<Alias, F>>,
-	restriction: Loc<TypePropertyRestriction<F>, F>
+	restriction: Loc<TypePropertyRestriction<F>, F>,
 }
 
 impl<F: Clone> TypeRestrictedProperty<F> {
@@ -240,7 +251,10 @@ impl<F: Clone> TypeRestrictedProperty<F> {
 		LayoutRestrictedField {
 			prop: self.prop.clone(),
 			alias: self.alias.clone(),
-			restriction: Loc(self.restriction.implicit_field_restriction(), self.restriction.location().clone())
+			restriction: Loc(
+				self.restriction.implicit_field_restriction(),
+				self.restriction.location().clone(),
+			),
 		}
 	}
 }
@@ -345,7 +359,7 @@ impl<F> OuterLayoutExpr<F> {
 	pub fn into_restriction(self) -> Result<LayoutRestrictedField<F>, Self> {
 		match self {
 			Self::Inner(i) => i.into_restriction().map_err(Self::Inner),
-			other => Err(other)
+			other => Err(other),
 		}
 	}
 }
@@ -361,6 +375,13 @@ impl<F> NamedInnerLayoutExpr<F> {
 		(self.expr, self.name)
 	}
 
+	pub fn as_id(&self) -> Option<Loc<Id, F>>
+	where
+		F: Clone,
+	{
+		self.expr.as_id()
+	}
+
 	pub fn into_restriction(self) -> Result<LayoutRestrictedField<F>, Self> {
 		if self.name.is_some() {
 			Err(self)
@@ -368,7 +389,7 @@ impl<F> NamedInnerLayoutExpr<F> {
 			let Loc(e, loc) = self.expr;
 			e.into_restriction().map_err(|other| Self {
 				expr: Loc(other, loc),
-				name: None
+				name: None,
 			})
 		}
 	}
@@ -378,7 +399,7 @@ pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
-	FieldRestriction(Label, LayoutRestrictedField<F>),
+	FieldRestriction(LayoutRestrictedField<F>),
 }
 
 impl<F> InnerLayoutExpr<F> {
@@ -386,10 +407,20 @@ impl<F> InnerLayoutExpr<F> {
 		!matches!(self, Self::Id(_))
 	}
 
+	pub fn as_id(&self) -> Option<Loc<Id, F>>
+	where
+		F: Clone,
+	{
+		match self {
+			Self::Id(id) => Some(id.clone()),
+			_ => None,
+		}
+	}
+
 	pub fn into_restriction(self) -> Result<LayoutRestrictedField<F>, Self> {
 		match self {
-			Self::FieldRestriction(_, r) => Ok(r),
-			other => Err(other)
+			Self::FieldRestriction(r) => Ok(r),
+			other => Err(other),
 		}
 	}
 }
@@ -397,7 +428,7 @@ impl<F> InnerLayoutExpr<F> {
 pub struct LayoutRestrictedField<F> {
 	prop: Loc<Id, F>,
 	alias: Option<Loc<Alias, F>>,
-	restriction: Loc<LayoutFieldRestriction<F>, F>
+	restriction: Loc<LayoutFieldRestriction<F>, F>,
 }
 
 pub enum LayoutFieldRangeRestriction<F> {

@@ -42,12 +42,15 @@ fn generate_layout_term_definition<F>(
 
 	use treeldr::layout::Description;
 	match layout.description() {
+		Description::Never(_) => (),
 		Description::Struct(s) => {
-			let ty_ref = layout.ty();
-			let ty = model.types().get(ty_ref).unwrap();
-
 			let mut def = serde_json::Map::new();
-			def.insert("@id".into(), ty.id().display(vocabulary).to_string().into());
+
+			if let Some(ty_ref) = layout.ty() {
+				let ty = model.types().get(ty_ref).unwrap();
+				def.insert("@id".into(), ty.id().display(vocabulary).to_string().into());
+			}
+
 			def.insert(
 				"@context".into(),
 				generate_struct_context(vocabulary, model, s.fields())?.into(),
@@ -57,55 +60,102 @@ fn generate_layout_term_definition<F>(
 		}
 		Description::Enum(_) => (),
 		Description::Literal(lit) => {
-			let ty_ref = layout.ty();
-			let ty = model.types().get(ty_ref).unwrap();
+			if let Some(ty_ref) = layout.ty() {
+				let ty = model.types().get(ty_ref).unwrap();
 
-			if !lit.should_inline() {
-				let mut def = serde_json::Map::new();
-				def.insert("@id".into(), ty.id().display(vocabulary).to_string().into());
-				ld_context.insert(lit.name().to_pascal_case(), def.into());
+				if !lit.should_inline() {
+					let mut def = serde_json::Map::new();
+					def.insert("@id".into(), ty.id().display(vocabulary).to_string().into());
+					ld_context.insert(lit.name().to_pascal_case(), def.into());
+				}
 			}
 		}
 		Description::Reference(_, _) => (),
 		Description::Native(_, _) => (),
+		Description::Set(_) => (),
+		Description::Array(_) => (),
 	}
 
 	Ok(())
 }
 
-fn generate_layout_type<F>(
+pub struct Context {
+	id: serde_json::Value,
+	ty: Option<serde_json::Value>,
+	container: Option<serde_json::Value>,
+}
+
+impl Context {
+	fn new(id: serde_json::Value) -> Self {
+		Self {
+			id,
+			ty: None,
+			container: None,
+		}
+	}
+
+	fn into_json(self) -> serde_json::Value {
+		if self.ty.is_none() && self.container.is_none() {
+			self.id
+		} else {
+			let mut map = serde_json::Map::new();
+			map.insert("@id".into(), self.id);
+
+			if let Some(ty) = self.ty {
+				map.insert("@type".into(), ty);
+			}
+
+			if let Some(container) = self.container {
+				map.insert("@container".into(), container);
+			}
+
+			map.into()
+		}
+	}
+}
+
+fn generate_layout_context<F>(
+	context: &mut Context,
 	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	layout_ref: Ref<layout::Definition<F>>,
-) -> Option<serde_json::Value> {
+) {
 	let layout = model.layouts().get(layout_ref).unwrap();
 	use treeldr::layout::Description;
+
+	let non_blank_id = layout.ty().and_then(|ty_ref| {
+		let ty = model.types().get(ty_ref).unwrap();
+		if ty.id().is_blank() {
+			None
+		} else {
+			Some(ty.id())
+		}
+	});
+
 	match layout.description() {
+		Description::Never(_) => (),
 		Description::Struct(_) => {
-			let ty_ref = layout.ty();
-			let ty = model.types().get(ty_ref).unwrap();
-			Some(ty.id().display(vocabulary).to_string().into())
+			if let Some(ty_ref) = layout.ty() {
+				let ty = model.types().get(ty_ref).unwrap();
+				context.ty = Some(ty.id().display(vocabulary).to_string().into())
+			}
 		}
 		Description::Enum(_) => {
-			let ty_ref = layout.ty();
-			let ty = model.types().get(ty_ref).unwrap();
-			if ty.id().is_blank() {
-				None
-			} else {
-				Some(ty.id().display(vocabulary).to_string().into())
-			}
+			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into())
 		}
 		Description::Literal(_) => {
-			let ty_ref = layout.ty();
-			let ty = model.types().get(ty_ref).unwrap();
-			if ty.id().is_blank() {
-				None
-			} else {
-				Some(ty.id().display(vocabulary).to_string().into())
-			}
+			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into())
 		}
-		Description::Reference(_, _) => Some("@id".into()),
-		Description::Native(n, _) => Some(generate_native_type(*n)),
+		Description::Reference(_, _) => context.ty = Some("@id".into()),
+		Description::Native(n, _) => context.ty = Some(generate_native_type(*n)),
+		Description::Set(_) => {
+			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into());
+			context.container = Some("@set".into());
+		}
+		Description::Array(_) => {
+			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into());
+			context.container = Some("@list".into());
+		}
 	}
 }
 
@@ -117,28 +167,15 @@ fn generate_struct_context<F>(
 	let mut json = serde_json::Map::new();
 
 	for field in fields {
-		let property_ref = field.property();
-		let property = model.properties().get(property_ref).unwrap();
+		if let Some(property_ref) = field.property() {
+			let property = model.properties().get(property_ref).unwrap();
 
-		let field_layout_ref = field.layout();
-		let field_type = generate_layout_type(vocabulary, model, field_layout_ref);
-		let field_def: serde_json::Value = if field_type.is_none() {
-			property.id().display(vocabulary).to_string().into()
-		} else {
-			let mut field_def = serde_json::Map::new();
-			field_def.insert(
-				"@id".into(),
-				property.id().display(vocabulary).to_string().into(),
-			);
-
-			if let Some(field_type) = field_type {
-				field_def.insert("@type".into(), field_type);
-			}
-
-			field_def.into()
-		};
-
-		json.insert(field.name().to_camel_case(), field_def);
+			let field_layout_ref = field.layout();
+			let mut field_context =
+				Context::new(property.id().display(vocabulary).to_string().into());
+			generate_layout_context(&mut field_context, vocabulary, model, field_layout_ref);
+			json.insert(field.name().to_camel_case(), field_context.into_json());
+		}
 	}
 
 	Ok(json)

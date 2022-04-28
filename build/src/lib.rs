@@ -64,10 +64,7 @@ pub enum Item<F> {
 }
 
 #[derive(Derivative)]
-#[derivative(
-	Clone(bound = ""),
-	Copy(bound = "")
-)]
+#[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub struct Dependencies<'a, F> {
 	pub types: &'a [Option<treeldr::ty::Definition<F>>],
 	pub properties: &'a [Option<treeldr::prop::Definition<F>>],
@@ -101,15 +98,11 @@ pub struct AdditionalNodes<F> {
 }
 
 impl<F> AdditionalNodes<F> {
-	pub fn new(
-		types_count: usize,
-		properties_count: usize,
-		layouts_count: usize
-	) -> Self {
+	pub fn new(types_count: usize, properties_count: usize, layouts_count: usize) -> Self {
 		Self {
 			types: Additional::new(types_count),
 			properties: Additional::new(properties_count),
-			layouts: Additional::new(layouts_count)
+			layouts: Additional::new(layouts_count),
 		}
 	}
 
@@ -128,14 +121,14 @@ impl<F> AdditionalNodes<F> {
 
 pub struct Additional<T> {
 	offset: usize,
-	data: Vec<T>
+	data: Vec<T>,
 }
 
 impl<T> Additional<T> {
 	pub fn new(offset: usize) -> Self {
 		Self {
 			offset,
-			data: Vec::new()
+			data: Vec::new(),
 		}
 	}
 
@@ -144,8 +137,13 @@ impl<T> Additional<T> {
 		self.data.push(value);
 		r
 	}
+}
 
-	pub fn into_iter(self) -> std::vec::IntoIter<T> {
+impl<T> std::iter::IntoIterator for Additional<T> {
+	type Item = T;
+	type IntoIter = std::vec::IntoIter<T>;
+
+	fn into_iter(self) -> Self::IntoIter {
 		self.data.into_iter()
 	}
 }

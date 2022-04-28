@@ -2,22 +2,22 @@ use crate::{layout, ty, vocab::Name, Causes, Documentation, Id, MaybeSet, WithCa
 use locspan::Location;
 use shelves::Ref;
 
+mod array;
 pub mod enumeration;
 pub mod literal;
 mod native;
-mod structure;
-mod array;
 mod set;
+mod structure;
 
 mod strongly_connected;
 mod usages;
 
+pub use array::Array;
 pub use enumeration::{Enum, Variant};
 pub use literal::Literal;
 pub use native::Native;
-pub use structure::{Field, Struct};
-pub use array::Array;
 pub use set::Set;
+pub use structure::{Field, Struct};
 
 pub use strongly_connected::StronglyConnectedLayouts;
 pub use usages::Usages;
@@ -32,7 +32,7 @@ pub enum Type {
 	Reference,
 	Literal,
 	Array,
-	Set
+	Set,
 }
 
 /// Layout definition.
@@ -68,7 +68,7 @@ pub enum Description<F> {
 	Array(Array<F>),
 
 	/// Set layout.
-	Set(Set<F>)
+	Set(Set<F>),
 }
 
 impl<F> Description<F> {
@@ -81,7 +81,7 @@ impl<F> Description<F> {
 			Self::Struct(_) => Type::Struct,
 			Self::Enum(_) => Type::Enum,
 			Self::Array(_) => Type::Array,
-			Self::Set(_) => Type::Set
+			Self::Set(_) => Type::Set,
 		}
 	}
 
@@ -101,7 +101,7 @@ impl<F> Description<F> {
 			Self::Struct(s) => Some(s.set_name(new_name, cause)),
 			Self::Enum(e) => Some(e.set_name(new_name, cause)),
 			Self::Array(a) => a.set_name(new_name, cause),
-			Self::Set(s) => s.set_name(new_name, cause)
+			Self::Set(s) => s.set_name(new_name, cause),
 		}
 	}
 
@@ -114,7 +114,7 @@ impl<F> Description<F> {
 			Description::Native(_, n) => n,
 			Description::Literal(l) => l.into_name().into(),
 			Description::Array(a) => a.into_name(),
-			Description::Set(s) => s.into_name()
+			Description::Set(s) => s.into_name(),
 		}
 	}
 }
@@ -153,7 +153,7 @@ impl<F> Definition<F> {
 			Description::Native(_, n) => n.value(),
 			Description::Literal(l) => Some(l.name()),
 			Description::Array(a) => a.name(),
-			Description::Set(s) => s.name()
+			Description::Set(s) => s.name(),
 		}
 	}
 

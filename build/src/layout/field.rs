@@ -187,15 +187,9 @@ impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
 		doc: Documentation,
 		nodes: &super::super::context::AllocatedNodes<F>,
 	) -> Result<treeldr::layout::Field<F>, Error<F>> {
-		let prop_id = self.prop.value_or_else(|| {
-			Caused::new(
-				error::LayoutFieldMissingProperty(self.id).into(),
-				self.causes().preferred().cloned(),
-			)
+		let prop = self.prop.clone().try_map_with_causes(|prop_id, causes| {
+			Ok(**nodes.require_property(prop_id, causes.preferred().cloned())?)
 		})?;
-		let prop = nodes
-			.require_property(*prop_id.inner(), prop_id.causes().preferred().cloned())?
-			.clone_with_causes(prop_id.causes().clone());
 
 		let name = self.require_name()?;
 

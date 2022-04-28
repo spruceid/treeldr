@@ -35,7 +35,7 @@ impl<F: Ord + Clone> IntersectedWith<F> for treeldr::layout::Struct<F> {
 
 			for (k, other_field) in other.fields()[j..].iter().enumerate() {
 				if field.name.inner() == other_field.name() {
-					if *field.prop != other_field.property() {
+					if field.prop.value().cloned() != other_field.property() {
 						return Err(Caused::new(
 							error::LayoutIntersectionFailed { id }.into(),
 							cause.cloned(),

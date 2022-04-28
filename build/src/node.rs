@@ -26,7 +26,7 @@ impl<T> Node<T> {
 			id,
 			label: None,
 			doc: Documentation::new(),
-			value
+			value,
 		}
 	}
 

@@ -58,57 +58,58 @@ fn main() {
 		}
 	}
 
-	match args.command {
-		Some(Command::Rdf) => {
-			todo!()
+	use treeldr::reporting::Diagnose;
+	use treeldr::vocab::BorrowWithVocabulary;
+	let mut vocabulary = treeldr::Vocabulary::new();
+	let mut build_context = BuildContext::new(&mut vocabulary);
+	build_context.define_xml_types().unwrap();
+
+	for doc in &mut documents {
+		if let Err(e) = doc.declare(&mut build_context) {
+			let diagnostic = e.with_vocabulary(build_context.vocabulary()).diagnostic();
+			let writer = StandardStream::stderr(ColorChoice::Always);
+			let config = codespan_reporting::term::Config::default();
+			term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+				.expect("diagnostic failed");
+			std::process::exit(1);
 		}
-		command => {
-			use treeldr::reporting::Diagnose;
-			use treeldr::vocab::BorrowWithVocabulary;
-			let mut vocabulary = treeldr::Vocabulary::new();
-			let mut build_context = BuildContext::new(&mut vocabulary);
-			build_context.define_xml_types().unwrap();
+	}
 
-			for doc in &mut documents {
-				if let Err(e) = doc.declare(&mut build_context) {
-					let diagnostic = e.with_vocabulary(build_context.vocabulary()).diagnostic();
-					let writer = StandardStream::stderr(ColorChoice::Always);
-					let config = codespan_reporting::term::Config::default();
-					term::emit(&mut writer.lock(), &config, &files, &diagnostic)
-						.expect("diagnostic failed");
-					std::process::exit(1);
+	for doc in documents {
+		if let Err(e) = doc.build(&mut build_context) {
+			let diagnostic = e.with_vocabulary(build_context.vocabulary()).diagnostic();
+			let writer = StandardStream::stderr(ColorChoice::Always);
+			let config = codespan_reporting::term::Config::default();
+			term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+				.expect("diagnostic failed");
+			std::process::exit(1);
+		}
+	}
+
+	match build_context.build() {
+		#[allow(unused_variables)]
+		Ok(model) => match args.command {
+			Some(Command::Rdf) => {
+				use treeldr::vocab::RdfDisplay;
+				let mut quads = Vec::new();
+				model.to_rdf(&mut vocabulary, &mut quads);
+				for quad in quads {
+					println!("{} .", quad.rdf_display(&vocabulary))
 				}
 			}
-
-			for doc in documents {
-				if let Err(e) = doc.build(&mut build_context) {
-					let diagnostic = e.with_vocabulary(build_context.vocabulary()).diagnostic();
-					let writer = StandardStream::stderr(ColorChoice::Always);
-					let config = codespan_reporting::term::Config::default();
-					term::emit(&mut writer.lock(), &config, &files, &diagnostic)
-						.expect("diagnostic failed");
-					std::process::exit(1);
-				}
-			}
-
-			match build_context.build() {
-				#[allow(unused_variables)]
-				Ok(model) => match command {
-					#[cfg(feature = "json-schema")]
-					Some(Command::JsonSchema(command)) => command.execute(&vocabulary, &model),
-					#[cfg(feature = "json-ld-context")]
-					Some(Command::JsonLdContext(command)) => command.execute(&vocabulary, &model),
-					_ => (),
-				},
-				Err(e) => {
-					let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
-					let writer = StandardStream::stderr(ColorChoice::Always);
-					let config = codespan_reporting::term::Config::default();
-					term::emit(&mut writer.lock(), &config, &files, &diagnostic)
-						.expect("diagnostic failed");
-					std::process::exit(1);
-				}
-			}
+			#[cfg(feature = "json-schema")]
+			Some(Command::JsonSchema(command)) => command.execute(&vocabulary, &model),
+			#[cfg(feature = "json-ld-context")]
+			Some(Command::JsonLdContext(command)) => command.execute(&vocabulary, &model),
+			_ => (),
+		},
+		Err(e) => {
+			let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
+			let writer = StandardStream::stderr(ColorChoice::Always);
+			let config = codespan_reporting::term::Config::default();
+			term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+				.expect("diagnostic failed");
+			std::process::exit(1);
 		}
 	}
 }

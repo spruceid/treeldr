@@ -1,13 +1,12 @@
 use crate::{
-	error, layout, list, node, prop, ty, Descriptions, Error, ListMut, ListRef, Node, ParentLayout,
-	SubLayout,
-	AdditionalNodes
+	error, layout, list, node, prop, ty, AdditionalNodes, Descriptions, Error, ListMut, ListRef,
+	Node, ParentLayout, SubLayout,
 };
 use derivative::Derivative;
 use locspan::Location;
 use shelves::{Ref, Shelf};
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{vocab, Causes, Caused, Id, MaybeSet, Model, Vocabulary, WithCauses};
+use treeldr::{vocab, Caused, Causes, Id, MaybeSet, Model, Vocabulary, WithCauses};
 
 /// TreeLDR build context.
 pub struct Context<'v, F, D: Descriptions<F>> {
@@ -169,12 +168,15 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 		for (id, target_layout_id) in by_depth {
 			let (target_layout_id, cause) = target_layout_id.into_parts();
 			let target_layout = self.require_layout(target_layout_id, cause.clone())?;
-			let (target_ty_id, ty_cause) = target_layout.require_ty(cause)?.clone().into_parts();
-			self.get_mut(id)
-				.unwrap()
-				.as_layout_mut()
-				.unwrap()
-				.set_type(target_ty_id, ty_cause.into_preferred())?
+
+			if let Some(target_ty) = target_layout.ty().cloned() {
+				let (target_ty_id, ty_cause) = target_ty.into_parts();
+				self.get_mut(id)
+					.unwrap()
+					.as_layout_mut()
+					.unwrap()
+					.set_type(target_ty_id, ty_cause.into_preferred())?
+			}
 		}
 
 		Ok(())
@@ -412,7 +414,7 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 		let mut additional = AdditionalNodes::new(
 			types_to_build.len(),
 			properties_to_build.len(),
-			layouts_to_build.len()
+			layouts_to_build.len(),
 		);
 
 		for i in ordered_components.into_iter().rev() {
@@ -428,19 +430,37 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 					crate::Item::Type(ty_ref) => {
 						let (_, ty) = types_to_build[ty_ref.index()].take().unwrap();
 						let (ty, causes) = ty.into_parts();
-						let built_ty = ty.build(self.vocab, &mut allocated_nodes, &mut additional, dependencies, causes)?;
+						let built_ty = ty.build(
+							self.vocab,
+							&mut allocated_nodes,
+							&mut additional,
+							dependencies,
+							causes,
+						)?;
 						built_types[ty_ref.index()] = Some(built_ty)
 					}
 					crate::Item::Property(prop_ref) => {
 						let (_, prop) = properties_to_build[prop_ref.index()].take().unwrap();
 						let (prop, causes) = prop.into_parts();
-						let built_prop = prop.build(self.vocab, &mut allocated_nodes, &mut additional, dependencies, causes)?;
+						let built_prop = prop.build(
+							self.vocab,
+							&mut allocated_nodes,
+							&mut additional,
+							dependencies,
+							causes,
+						)?;
 						built_properties[prop_ref.index()] = Some(built_prop)
 					}
 					crate::Item::Layout(layout_ref) => {
 						let (_, layout) = layouts_to_build[layout_ref.index()].take().unwrap();
 						let (layout, causes) = layout.into_parts();
-						let built_layout = layout.build(self.vocab, &mut allocated_nodes, &mut additional, dependencies, causes)?;
+						let built_layout = layout.build(
+							self.vocab,
+							&mut allocated_nodes,
+							&mut additional,
+							dependencies,
+							causes,
+						)?;
 						built_layouts[layout_ref.index()] = Some(built_layout)
 					}
 				}
@@ -449,9 +469,27 @@ impl<'v, F, D: Descriptions<F>> Context<'v, F, D> {
 
 		Ok(Model::from_parts(
 			allocated_nodes.into_model_nodes(),
-			Shelf::new(built_types.into_iter().map(Option::unwrap).chain(additional.types.into_iter()).collect()),
-			Shelf::new(built_properties.into_iter().map(Option::unwrap).chain(additional.properties.into_iter()).collect()),
-			Shelf::new(built_layouts.into_iter().map(Option::unwrap).chain(additional.layouts.into_iter()).collect()),
+			Shelf::new(
+				built_types
+					.into_iter()
+					.map(Option::unwrap)
+					.chain(additional.types.into_iter())
+					.collect(),
+			),
+			Shelf::new(
+				built_properties
+					.into_iter()
+					.map(Option::unwrap)
+					.chain(additional.properties.into_iter())
+					.collect(),
+			),
+			Shelf::new(
+				built_layouts
+					.into_iter()
+					.map(Option::unwrap)
+					.chain(additional.layouts.into_iter())
+					.collect(),
+			),
 		))
 	}
 
@@ -1171,15 +1209,27 @@ impl<F: Clone> AllocatedNodes<F> {
 			.collect()
 	}
 
-	pub fn insert(&mut self, id: Id, node: Node<AllocatedComponents<F>>) -> Option<Node<AllocatedComponents<F>>> {
+	pub fn insert(
+		&mut self,
+		id: Id,
+		node: Node<AllocatedComponents<F>>,
+	) -> Option<Node<AllocatedComponents<F>>> {
 		self.nodes.insert(id, node)
 	}
 
-	pub fn insert_layout(&mut self, id: Id, layout_ref: Ref<treeldr::layout::Definition<F>>, causes: impl Into<Causes<F>>) -> Option<Node<AllocatedComponents<F>>> {
-		let node = Node::new_with(id, AllocatedComponents {
-			layout: WithCauses::new(layout_ref, causes).into(),
-			..AllocatedComponents::default()
-		});
+	pub fn insert_layout(
+		&mut self,
+		id: Id,
+		layout_ref: Ref<treeldr::layout::Definition<F>>,
+		causes: impl Into<Causes<F>>,
+	) -> Option<Node<AllocatedComponents<F>>> {
+		let node = Node::new_with(
+			id,
+			AllocatedComponents {
+				layout: WithCauses::new(layout_ref, causes).into(),
+				..AllocatedComponents::default()
+			},
+		);
 		self.insert(id, node)
 	}
 
