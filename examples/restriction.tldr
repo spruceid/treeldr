@@ -5,7 +5,7 @@ type A {}
 type B {}
 
 type Type {
-	property: multiple A | B
+	property: A | B
 }
 
 type Restricted = Type & <Type/property>: A
