@@ -241,6 +241,14 @@ impl<T, F> WithCauses<T, F> {
 		(self.t, self.causes)
 	}
 
+	pub fn parts(&self) -> (&T, &Causes<F>) {
+		(&self.t, &self.causes)
+	}
+
+	pub fn parts_mut(&mut self) -> (&mut T, &mut Causes<F>) {
+		(&mut self.t, &mut self.causes)
+	}
+
 	pub fn into_causes(self) -> Causes<F> {
 		self.causes
 	}

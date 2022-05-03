@@ -2,13 +2,13 @@ base <https://example.com>
 use <https://example.com/> as here
 
 type A {
-	here:a: &A,
-	here:c: &C
+	here:a: A,
+	here:c: C
 }
 
 type B {
-	here:b: &B,
-	here:c: &C
+	here:b: B,
+	here:c: C
 }
 
 type C = A & B

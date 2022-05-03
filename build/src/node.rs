@@ -1,9 +1,11 @@
-use crate::{error, layout, list, prop, ty, Descriptions, Error};
+use crate::{error, layout, list, prop, ty, Descriptions, Error, TryMap};
+use derivative::Derivative;
 use locspan::Location;
-use treeldr::{Caused, Causes, Documentation, Id, MaybeSet, WithCauses};
+use treeldr::{Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
 
 pub use treeldr::node::{CausedTypes, Type, Types};
 
+#[derive(Clone)]
 pub struct Node<T> {
 	id: Id,
 	label: Option<String>,
@@ -11,13 +13,41 @@ pub struct Node<T> {
 	value: T,
 }
 
-pub struct Components<F, D: Descriptions<F>> {
+#[derive(Derivative)]
+#[derivative(Clone(bound = "F: Clone"))]
+pub struct Components<F, D: Descriptions<F> = crate::StandardDescriptions> {
 	pub ty: MaybeSet<ty::Definition<F, D::Type>, F>,
 	pub property: MaybeSet<prop::Definition<F>, F>,
 	pub layout: MaybeSet<layout::Definition<F, D::Layout>, F>,
 	pub layout_field: MaybeSet<layout::field::Definition<F>, F>,
 	pub layout_variant: MaybeSet<layout::variant::Definition<F>, F>,
 	pub list: MaybeSet<list::Definition<F>, F>,
+}
+
+impl<F, D: Descriptions<F>> Components<F, D> {
+	pub fn try_map<G: Descriptions<F>, E>(
+		self,
+		map: &impl TryMap<F, E, D, G>,
+		source: &crate::Context<F, D>,
+		target: &mut crate::Context<F, G>,
+		vocabulary: &mut Vocabulary,
+	) -> Result<Components<F, G>, E>
+	where
+		F: Clone,
+	{
+		Ok(Components {
+			ty: self.ty.try_map_with_causes(|d, causes| {
+				d.try_map(|d| map.ty(d, causes, source, target, vocabulary))
+			})?,
+			property: self.property,
+			layout: self.layout.try_map_with_causes(|d, causes| {
+				d.try_map(|d| map.layout(d, causes, source, target, vocabulary))
+			})?,
+			layout_field: self.layout_field,
+			layout_variant: self.layout_variant,
+			list: self.list,
+		})
+	}
 }
 
 impl<T> Node<T> {
@@ -65,6 +95,15 @@ impl<T> Node<T> {
 			doc: self.doc,
 			value: f(self.value),
 		}
+	}
+
+	pub fn try_map<U, E>(self, f: impl FnOnce(T) -> Result<U, E>) -> Result<Node<U>, E> {
+		Ok(Node {
+			id: self.id,
+			label: self.label,
+			doc: self.doc,
+			value: f(self.value)?,
+		})
 	}
 
 	pub fn into_parts(self) -> (Id, Option<String>, Documentation, T) {

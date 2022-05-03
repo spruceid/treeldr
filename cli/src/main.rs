@@ -4,11 +4,12 @@ use codespan_reporting::term::{
 	termcolor::{ColorChoice, StandardStream},
 };
 use std::{convert::Infallible, path::PathBuf};
+use treeldr::Vocabulary;
 use treeldr_syntax as syntax;
 
 mod source;
 
-type BuildContext<'v> = treeldr_build::Context<'v, source::FileId, syntax::build::Descriptions>;
+type BuildContext = treeldr_build::Context<source::FileId, syntax::build::Descriptions>;
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -61,12 +62,12 @@ fn main() {
 	use treeldr::reporting::Diagnose;
 	use treeldr::vocab::BorrowWithVocabulary;
 	let mut vocabulary = treeldr::Vocabulary::new();
-	let mut build_context = BuildContext::new(&mut vocabulary);
+	let mut build_context = BuildContext::new();
 	build_context.define_xml_types().unwrap();
 
 	for doc in &mut documents {
-		if let Err(e) = doc.declare(&mut build_context) {
-			let diagnostic = e.with_vocabulary(build_context.vocabulary()).diagnostic();
+		if let Err(e) = doc.declare(&mut build_context, &mut vocabulary) {
+			let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
 			let writer = StandardStream::stderr(ColorChoice::Always);
 			let config = codespan_reporting::term::Config::default();
 			term::emit(&mut writer.lock(), &config, &files, &diagnostic)
@@ -76,8 +77,8 @@ fn main() {
 	}
 
 	for doc in documents {
-		if let Err(e) = doc.build(&mut build_context) {
-			let diagnostic = e.with_vocabulary(build_context.vocabulary()).diagnostic();
+		if let Err(e) = doc.build(&mut build_context, &mut vocabulary) {
+			let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
 			let writer = StandardStream::stderr(ColorChoice::Always);
 			let config = codespan_reporting::term::Config::default();
 			term::emit(&mut writer.lock(), &config, &files, &diagnostic)
@@ -86,22 +87,32 @@ fn main() {
 		}
 	}
 
-	match build_context.build() {
-		#[allow(unused_variables)]
-		Ok(model) => match args.command {
-			Some(Command::Rdf) => {
-				use treeldr::vocab::RdfDisplay;
-				let mut quads = Vec::new();
-				model.to_rdf(&mut vocabulary, &mut quads);
-				for quad in quads {
-					println!("{} .", quad.rdf_display(&vocabulary))
+	match build_context.simplify(&mut vocabulary) {
+		Ok(build_context) => match build_context.build(&mut vocabulary) {
+			#[allow(unused_variables)]
+			Ok(model) => match args.command {
+				Some(Command::Rdf) => {
+					use treeldr::vocab::RdfDisplay;
+					let mut quads = Vec::new();
+					model.to_rdf(&mut vocabulary, &mut quads);
+					for quad in quads {
+						println!("{} .", quad.rdf_display(&vocabulary))
+					}
 				}
+				#[cfg(feature = "json-schema")]
+				Some(Command::JsonSchema(command)) => command.execute(&vocabulary, &model),
+				#[cfg(feature = "json-ld-context")]
+				Some(Command::JsonLdContext(command)) => command.execute(&vocabulary, &model),
+				_ => (),
+			},
+			Err(e) => {
+				let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
+				let writer = StandardStream::stderr(ColorChoice::Always);
+				let config = codespan_reporting::term::Config::default();
+				term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+					.expect("diagnostic failed");
+				std::process::exit(1);
 			}
-			#[cfg(feature = "json-schema")]
-			Some(Command::JsonSchema(command)) => command.execute(&vocabulary, &model),
-			#[cfg(feature = "json-ld-context")]
-			Some(Command::JsonLdContext(command)) => command.execute(&vocabulary, &model),
-			_ => (),
 		},
 		Err(e) => {
 			let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
@@ -123,17 +134,21 @@ impl TreeLdrDocument {
 	fn declare(
 		&mut self,
 		context: &mut BuildContext,
+		vocabulary: &mut Vocabulary,
 	) -> Result<(), syntax::build::Error<source::FileId>> {
 		use treeldr_build::Document;
-		self.doc.declare(&mut self.local_context, context)
+		self.doc
+			.declare(&mut self.local_context, context, vocabulary)
 	}
 
 	fn build(
 		mut self,
 		context: &mut BuildContext,
+		vocabulary: &mut Vocabulary,
 	) -> Result<(), syntax::build::Error<source::FileId>> {
 		use treeldr_build::Document;
-		self.doc.relate(&mut self.local_context, context)
+		self.doc
+			.relate(&mut self.local_context, context, vocabulary)
 	}
 }
 
@@ -145,15 +160,20 @@ impl Document {
 	fn declare(
 		&mut self,
 		context: &mut BuildContext,
+		vocabulary: &mut Vocabulary,
 	) -> Result<(), syntax::build::Error<source::FileId>> {
 		match self {
-			Self::TreeLdr(d) => d.declare(context),
+			Self::TreeLdr(d) => d.declare(context, vocabulary),
 		}
 	}
 
-	fn build(self, context: &mut BuildContext) -> Result<(), syntax::build::Error<source::FileId>> {
+	fn build(
+		self,
+		context: &mut BuildContext,
+		vocabulary: &mut Vocabulary,
+	) -> Result<(), syntax::build::Error<source::FileId>> {
 		match self {
-			Self::TreeLdr(d) => d.build(context),
+			Self::TreeLdr(d) => d.build(context, vocabulary),
 		}
 	}
 }

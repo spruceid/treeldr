@@ -1,10 +1,6 @@
-use crate::{
-	error,
-	utils::{TryCollect, TryFilterCollect},
-	Context, Descriptions, Error,
-};
+use crate::{error, utils::TryCollect, Context, Descriptions, Error, ObjectToId};
 use locspan::Location;
-use treeldr::{vocab, Caused, Causes, Id, MaybeSet, WithCauses};
+use treeldr::{vocab, Caused, Causes, Id, MaybeSet, Vocabulary, WithCauses};
 use vocab::Name;
 
 pub mod enumeration;
@@ -15,75 +11,9 @@ pub mod variant;
 
 pub use treeldr::layout::{literal::RegExp, Native};
 
-/// Layout definition.
-pub struct Definition<F, D = Description> {
-	/// Identifier of the layout.
-	id: Id,
-
-	/// Optional name.
-	///
-	/// If not provided, the name is generated using the `default_name`
-	/// method. If it conflicts with another name or failed to be generated,
-	/// then a name must be explicitly defined by the user.
-	name: MaybeSet<vocab::Name, F>,
-
-	/// Type for which this layout is defined.
-	ty: MaybeSet<Id, F>,
-
-	/// Layout description.
-	desc: MaybeSet<D, F>,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum LayoutConnection {
-	Field(Id),
-	Variant(Id),
-	Item,
-}
-
-pub struct SubLayout<F> {
-	pub connection: LayoutConnection,
-	pub layout: WithCauses<Id, F>,
-}
-
-pub struct ParentLayout {
-	pub connection: LayoutConnection,
-	pub layout: Id,
-}
-
-pub trait PseudoDescription<F>: PartialEq + From<Description> {
-	type Error: From<Error<F>>;
-
-	fn as_standard(&self) -> Option<&Description>;
-
-	fn sub_layouts<D: Descriptions<F>>(
-		&self,
-		context: &Context<F, D>,
-		causes: &Causes<F>,
-	) -> Result<Vec<SubLayout<F>>, Self::Error>;
-
-	fn dependencies(
-		&self,
-		id: Id,
-		nodes: &super::context::AllocatedNodes<F>,
-		causes: &Causes<F>,
-	) -> Result<Vec<crate::Item<F>>, Self::Error>;
-
-	#[allow(clippy::too_many_arguments)]
-	fn build(
-		self,
-		id: Id,
-		name: MaybeSet<Name, F>,
-		vocab: &mut treeldr::Vocabulary,
-		nodes: &mut super::context::AllocatedNodes<F>,
-		additional: &mut crate::AdditionalNodes<F>,
-		dependencies: crate::Dependencies<F>,
-		causes: &Causes<F>,
-	) -> Result<treeldr::layout::Description<F>, Self::Error>;
-}
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Description {
+	Never,
 	Native(Native),
 	Struct(Id),
 	Reference(Id),
@@ -91,10 +21,12 @@ pub enum Description {
 	Enum(Id),
 	Set(Id),
 	Array(Id),
+	Alias(Id),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Type {
+	Never,
 	Native(Native),
 	Reference,
 	Literal,
@@ -102,11 +34,13 @@ pub enum Type {
 	Enum,
 	Set,
 	Array,
+	Alias,
 }
 
 impl Description {
 	pub fn ty(&self) -> Type {
 		match self {
+			Self::Never => Type::Never,
 			Self::Reference(_) => Type::Reference,
 			Self::Struct(_) => Type::Struct,
 			Self::Native(n) => Type::Native(*n),
@@ -114,6 +48,7 @@ impl Description {
 			Self::Enum(_) => Type::Enum,
 			Self::Set(_) => Type::Set,
 			Self::Array(_) => Type::Array,
+			Self::Alias(_) => Type::Alias,
 		}
 	}
 
@@ -134,14 +69,7 @@ impl Description {
 					.iter(context);
 				for item in fields {
 					let (object, causes) = item?.clone().into_parts();
-					let field_id = match object {
-						vocab::Object::Literal(lit) => Err(Caused::new(
-							error::LiteralUnexpected(lit).into(),
-							causes.preferred().cloned(),
-						)),
-						vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-						vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-					}?;
+					let field_id = object.into_id(causes.preferred())?;
 					let field = context.require_layout_field(field_id, causes.into_preferred())?;
 					let field_layout_id = field.require_layout(field.causes())?;
 
@@ -168,88 +96,75 @@ impl Description {
 	pub fn dependencies<F: Clone + Ord>(
 		&self,
 		_id: Id,
-		nodes: &super::context::AllocatedNodes<F>,
-		causes: &Causes<F>,
+		_nodes: &super::context::allocated::Nodes<F>,
+		_causes: &Causes<F>,
 	) -> Result<Vec<crate::Item<F>>, Error<F>> {
-		match self {
-			Description::Struct(field_list_id) => {
-				let mut dependencies = Vec::new();
-				let field_list = nodes.require_list(*field_list_id, causes.preferred().cloned())?;
+		// match self {
+		// 	Description::Struct(field_list_id) => {
+		// 		let mut dependencies = Vec::new();
+		// 		let field_list = nodes.require_list(*field_list_id, causes.preferred().cloned())?;
 
-				for item in field_list.iter(nodes) {
-					let (object, field_causes) = item?.clone().into_parts();
-					let field_id = match object {
-						vocab::Object::Literal(lit) => Err(Caused::new(
-							error::LiteralUnexpected(lit).into(),
-							causes.preferred().cloned(),
-						)),
-						vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-						vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-					}?;
+		// 		for item in field_list.iter(nodes) {
+		// 			let (object, field_causes) = item?.clone().into_parts();
+		// 			let field_id = object.into_id(field_causes.preferred())?;
 
-					let field =
-						nodes.require_layout_field(field_id, field_causes.preferred().cloned())?;
+		// 			let field =
+		// 				nodes.require_layout_field(field_id, field_causes.preferred().cloned())?;
 
-					if let Some(prop_id) = field.property() {
-						let prop_ref = **nodes
-							.require_property(**prop_id, prop_id.causes().preferred().cloned())?;
+		// 			if let Some(prop_id) = field.property() {
+		// 				let prop_ref = **nodes
+		// 					.require_property(**prop_id, prop_id.causes().preferred().cloned())?;
 
-						dependencies.push(crate::Item::Property(prop_ref));
-					}
+		// 				dependencies.push(crate::Item::Property(prop_ref));
+		// 			}
 
-					if let Some(layout_id) = field.layout() {
-						let layout_ref = **nodes
-							.require_layout(**layout_id, layout_id.causes().preferred().cloned())?;
+		// 			if let Some(layout_id) = field.layout() {
+		// 				let layout_ref = **nodes
+		// 					.require_layout(**layout_id, layout_id.causes().preferred().cloned())?;
 
-						dependencies.push(crate::Item::Layout(layout_ref));
-					}
-				}
+		// 				dependencies.push(crate::Item::Layout(layout_ref));
+		// 			}
+		// 		}
 
-				Ok(dependencies)
-			}
-			Description::Enum(variant_list_id) => {
-				let layouts =
-					nodes
-						.require_list(*variant_list_id, causes.preferred().cloned())?
-						.iter(nodes)
-						.map(|item| {
-							let (object, variant_causes) = item?.clone().into_parts();
-							let variant_id = match object {
-								vocab::Object::Literal(lit) => Err(Caused::new(
-									error::LiteralUnexpected(lit).into(),
-									causes.preferred().cloned(),
-								)),
-								vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-								vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-							}?;
+		// 		Ok(dependencies)
+		// 	}
+		// 	Description::Enum(variant_list_id) => {
+		// 		let layouts =
+		// 			nodes
+		// 				.require_list(*variant_list_id, causes.preferred().cloned())?
+		// 				.iter(nodes)
+		// 				.map(|item| {
+		// 					let (object, variant_causes) = item?.clone().into_parts();
+		// 					let variant_id = object.into_id(variant_causes.preferred())?;
 
-							let variant = nodes.require_layout_variant(
-								variant_id,
-								variant_causes.preferred().cloned(),
-							)?;
+		// 					let variant = nodes.require_layout_variant(
+		// 						variant_id,
+		// 						variant_causes.preferred().cloned(),
+		// 					)?;
 
-							let layout = variant.layout().clone().try_map_with_causes(
-								|layout_id, causes| {
-									Ok(*nodes
-										.require_layout(layout_id, causes.preferred().cloned())?
-										.inner())
-								},
-							)?;
+		// 					let layout = variant.layout().clone().try_map_with_causes(
+		// 						|layout_id, causes| {
+		// 							Ok(*nodes
+		// 								.require_layout(layout_id, causes.preferred().cloned())?
+		// 								.inner())
+		// 						},
+		// 					)?;
 
-							Ok(layout.into_value().map(crate::Item::Layout))
-						})
-						.try_filter_collect()?;
-				Ok(layouts)
-			}
-			_ => Ok(Vec::new()),
-		}
+		// 					Ok(layout.into_value().map(crate::Item::Layout))
+		// 				})
+		// 				.try_filter_collect()?;
+		// 		Ok(layouts)
+		// 	}
+		// 	_ => Ok(Vec::new()),
+		// }
+		Ok(Vec::new())
 	}
 
 	pub fn build<F>(
 		self,
 		id: Id,
 		name: MaybeSet<Name, F>,
-		nodes: &mut super::context::AllocatedNodes<F>,
+		nodes: &mut super::context::allocated::Nodes<F>,
 		causes: &Causes<F>,
 	) -> Result<treeldr::layout::Description<F>, Error<F>>
 	where
@@ -275,6 +190,7 @@ impl Description {
 		}
 
 		match self {
+			Description::Never => Ok(treeldr::layout::Description::Never(name)),
 			Description::Native(n) => Ok(treeldr::layout::Description::Native(n, name)),
 			Description::Reference(layout_id) => {
 				let layout_ref = *nodes
@@ -289,14 +205,7 @@ impl Description {
 					.iter(nodes)
 					.map(|item| {
 						let (object, causes) = item?.clone().into_parts();
-						let field_id = match object {
-							vocab::Object::Literal(lit) => Err(Caused::new(
-								error::LiteralUnexpected(lit).into(),
-								causes.preferred().cloned(),
-							)),
-							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-							vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-						}?;
+						let field_id = object.into_id(causes.preferred())?;
 
 						let field =
 							nodes.require_layout_field(field_id, causes.into_preferred())?;
@@ -318,14 +227,7 @@ impl Description {
 					.iter(nodes)
 					.map(|item| {
 						let (object, variant_causes) = item?.clone().into_parts();
-						let variant_id = match object {
-							vocab::Object::Literal(lit) => Err(Caused::new(
-								error::LiteralUnexpected(lit).into(),
-								causes.preferred().cloned(),
-							)),
-							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-							vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-						}?;
+						let variant_id = object.into_id(variant_causes.preferred())?;
 
 						let variant = nodes.require_layout_variant(
 							variant_id,
@@ -365,46 +267,63 @@ impl Description {
 					treeldr::layout::Array::new(name, item_layout_ref),
 				))
 			}
+			Description::Alias(alias_layout_id) => {
+				let name = require_name(id, name, causes)?;
+
+				let alias_layout_ref = *nodes
+					.require_layout(alias_layout_id, causes.preferred().cloned())?
+					.inner();
+				Ok(treeldr::layout::Description::Alias(name, alias_layout_ref))
+			}
 		}
 	}
 }
 
-impl<F: Clone + Ord> PseudoDescription<F> for Description {
-	type Error = Error<F>;
+pub trait PseudoDescription: Clone + PartialEq + From<Description> {
+	fn as_standard(&self) -> Option<&Description>;
+}
 
+impl PseudoDescription for Description {
 	fn as_standard(&self) -> Option<&Description> {
 		Some(self)
 	}
+}
 
-	fn sub_layouts<D: Descriptions<F>>(
-		&self,
-		context: &Context<F, D>,
-		causes: &Causes<F>,
-	) -> Result<Vec<SubLayout<F>>, Self::Error> {
-		self.sub_layouts(context, causes)
-	}
+/// Layout definition.
+#[derive(Clone)]
+pub struct Definition<F, D = Description> {
+	/// Identifier of the layout.
+	id: Id,
 
-	fn dependencies(
-		&self,
-		id: Id,
-		nodes: &super::context::AllocatedNodes<F>,
-		causes: &Causes<F>,
-	) -> Result<Vec<crate::Item<F>>, Error<F>> {
-		self.dependencies(id, nodes, causes)
-	}
+	/// Optional name.
+	///
+	/// If not provided, the name is generated using the `default_name`
+	/// method. If it conflicts with another name or failed to be generated,
+	/// then a name must be explicitly defined by the user.
+	name: MaybeSet<vocab::Name, F>,
 
-	fn build(
-		self,
-		id: Id,
-		name: MaybeSet<Name, F>,
-		_vocab: &mut treeldr::Vocabulary,
-		nodes: &mut super::context::AllocatedNodes<F>,
-		_additional: &mut crate::AdditionalNodes<F>,
-		_dependencies: crate::Dependencies<F>,
-		causes: &Causes<F>,
-	) -> Result<treeldr::layout::Description<F>, Error<F>> {
-		self.build(id, name, nodes, causes)
-	}
+	/// Type for which this layout is defined.
+	ty: MaybeSet<Id, F>,
+
+	/// Layout description.
+	desc: MaybeSet<D, F>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum LayoutConnection {
+	Field(Id),
+	Variant(Id),
+	Item,
+}
+
+pub struct SubLayout<F> {
+	pub connection: LayoutConnection,
+	pub layout: WithCauses<Id, F>,
+}
+
+pub struct ParentLayout {
+	pub connection: LayoutConnection,
+	pub layout: Id,
 }
 
 impl<F, D> Definition<F, D> {
@@ -479,9 +398,22 @@ impl<F, D> Definition<F, D> {
 				.into()
 			})
 	}
+
+	pub fn replace_description(&mut self, desc: MaybeSet<D, F>) {
+		self.desc = desc
+	}
+
+	pub fn try_map<U, E>(self, f: impl FnOnce(D) -> Result<U, E>) -> Result<Definition<F, U>, E> {
+		Ok(Definition {
+			id: self.id,
+			name: self.name,
+			ty: self.ty,
+			desc: self.desc.try_map(f)?,
+		})
+	}
 }
 
-impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
+impl<F: Clone + Ord, D: PseudoDescription> Definition<F, D> {
 	pub fn set_native(
 		&mut self,
 		native: Native,
@@ -517,11 +449,10 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 	pub fn set_array(&mut self, item: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
 		self.set_description(Description::Array(item).into(), cause)
 	}
+}
 
-	pub fn sub_layouts<C: Descriptions<F>>(
-		&self,
-		context: &Context<F, C>,
-	) -> Result<Vec<SubLayout<F>>, D::Error> {
+impl<F: Clone + Ord> Definition<F> {
+	pub fn sub_layouts(&self, context: &Context<F>) -> Result<Vec<SubLayout<F>>, Error<F>> {
 		match self.desc.with_causes() {
 			Some(desc) => desc.sub_layouts(context, desc.causes()),
 			None => Ok(Vec::new()),
@@ -530,35 +461,32 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 
 	pub fn dependencies(
 		&self,
-		nodes: &super::context::AllocatedNodes<F>,
-		causes: &Causes<F>,
-	) -> Result<Vec<crate::Item<F>>, D::Error> {
-		let desc = self.desc.with_causes().ok_or_else(|| {
-			Caused::new(
-				error::LayoutMissingDescription(self.id).into(),
-				causes.preferred().cloned(),
-			)
-		})?;
-
-		desc.dependencies(self.id, nodes, desc.causes())
+		nodes: &super::context::allocated::Nodes<F>,
+		_causes: &Causes<F>,
+	) -> Result<Vec<crate::Item<F>>, Error<F>> {
+		match self.desc.with_causes() {
+			Some(desc) => desc.dependencies(self.id, nodes, desc.causes()),
+			None => Ok(Vec::new()),
+		}
 	}
 
 	/// Build a default name for this layout.
 	pub fn default_name<C: Descriptions<F>>(
 		&self,
 		context: &Context<F, C>,
+		vocabulary: &Vocabulary,
 		parent_layouts: &[WithCauses<ParentLayout, F>],
 		cause: Option<Location<F>>,
 	) -> Result<Option<Caused<vocab::Name, F>>, Error<F>> {
 		if let Id::Iri(iri) = self.id {
-			if let Some(name) = iri.iri(context.vocabulary()).unwrap().path().file_name() {
+			if let Some(name) = iri.iri(vocabulary).unwrap().path().file_name() {
 				if let Ok(name) = vocab::Name::new(name) {
 					return Ok(Some(Caused::new(name, cause)));
 				}
 			}
 		}
 
-		if let Some(Description::Literal(regexp)) = self.desc.value().and_then(D::as_standard) {
+		if let Some(Description::Literal(regexp)) = self.desc.value() {
 			if let Some(singleton) = regexp.as_singleton() {
 				if let Ok(singleton_name) = vocab::Name::new(singleton) {
 					let mut name = vocab::Name::new("const").unwrap();
@@ -615,18 +543,15 @@ pub struct Using<F> {
 	pub field_layout: WithCauses<Id, F>,
 }
 
-impl<F: Ord + Clone, D: PseudoDescription<F>> crate::Build<F> for Definition<F, D> {
+impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 	type Target = treeldr::layout::Definition<F>;
-	type Error = D::Error;
 
 	fn build(
 		self,
-		vocab: &mut treeldr::Vocabulary,
-		nodes: &mut super::context::AllocatedNodes<F>,
-		additional: &mut crate::AdditionalNodes<F>,
-		dependencies: crate::Dependencies<F>,
+		nodes: &mut super::context::allocated::Nodes<F>,
+		_dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
-	) -> Result<Self::Target, Self::Error> {
+	) -> Result<Self::Target, Error<F>> {
 		let ty = self.ty.try_map_with_causes(|ty_id, causes| {
 			Ok(**nodes.require_type(ty_id, causes.preferred().cloned())?)
 		})?;
@@ -639,15 +564,7 @@ impl<F: Ord + Clone, D: PseudoDescription<F>> crate::Build<F> for Definition<F, 
 		})?;
 
 		let desc = desc.try_map_with_causes(|desc, desc_causes| {
-			desc.build(
-				self.id,
-				self.name,
-				vocab,
-				nodes,
-				additional,
-				dependencies,
-				desc_causes,
-			)
+			desc.build(self.id, self.name, nodes, desc_causes)
 		})?;
 
 		Ok(treeldr::layout::Definition::new(self.id, ty, desc, causes))

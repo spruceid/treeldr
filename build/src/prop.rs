@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use treeldr::{Caused, Causes, Id, MaybeSet, WithCauses};
 
 /// Property definition.
+#[derive(Clone)]
 pub struct Definition<F> {
 	id: Id,
 	domain: HashMap<Id, Causes<F>>,
@@ -107,7 +108,7 @@ impl<F> Definition<F> {
 
 	pub fn dependencies(
 		&self,
-		_nodes: &super::context::AllocatedNodes<F>,
+		_nodes: &super::context::allocated::Nodes<F>,
 		_causes: &Causes<F>,
 	) -> Result<Vec<crate::Item<F>>, Error<F>>
 	where
@@ -119,13 +120,10 @@ impl<F> Definition<F> {
 
 impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 	type Target = treeldr::prop::Definition<F>;
-	type Error = Error<F>;
 
 	fn build(
 		self,
-		_vocab: &mut treeldr::Vocabulary,
-		nodes: &mut super::context::AllocatedNodes<F>,
-		_additional: &mut crate::AdditionalNodes<F>,
+		nodes: &mut super::context::allocated::Nodes<F>,
 		_dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
 	) -> Result<Self::Target, Error<F>> {

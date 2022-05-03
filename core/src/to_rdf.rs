@@ -420,6 +420,7 @@ impl<F> layout::Definition<F> {
 					None,
 				));
 			}
+			layout::Description::Alias(_, _) => todo!("alias layout to RDF"),
 		}
 	}
 }

@@ -2,6 +2,7 @@ use crate::{error, Context, Descriptions, Error};
 use locspan::Location;
 use treeldr::{vocab::Object, Caused, Id, MaybeSet, WithCauses};
 
+#[derive(Clone)]
 pub struct Definition<F> {
 	id: Id,
 	first: MaybeSet<Object<F>, F>,
@@ -73,7 +74,7 @@ pub trait RequireList<F> {
 		F: Clone;
 }
 
-impl<'v, 'l, F, D: Descriptions<F>> RequireList<F> for Context<'v, F, D> {
+impl<'l, F, D: Descriptions<F>> RequireList<F> for Context<F, D> {
 	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
 	where
 		F: Clone,
@@ -82,11 +83,8 @@ impl<'v, 'l, F, D: Descriptions<F>> RequireList<F> for Context<'v, F, D> {
 	}
 }
 
-impl<'l, F> RequireList<F> for super::context::AllocatedNodes<F> {
-	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
-	where
-		F: Clone,
-	{
+impl<'l, F: Clone + Ord> RequireList<F> for super::context::allocated::Nodes<F> {
+	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>> {
 		self.require_list(id, cause)
 	}
 }

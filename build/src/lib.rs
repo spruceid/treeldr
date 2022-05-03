@@ -1,5 +1,5 @@
 use derivative::Derivative;
-use treeldr::{Causes, Ref, Vocabulary};
+use treeldr::{vocab, Causes, Ref, Vocabulary};
 
 pub mod context;
 pub mod error;
@@ -18,35 +18,50 @@ pub use list::{ListMut, ListRef};
 pub use node::Node;
 
 pub trait Descriptions<F>: Sized {
-	type Error: From<Error<F>>
-		+ From<<Self::Type as ty::PseudoDescription<F>>::Error>
-		+ From<<Self::Layout as layout::PseudoDescription<F>>::Error>;
-
 	type Type: ty::PseudoDescription<F>;
-	type Layout: layout::PseudoDescription<F>;
+	type Layout: layout::PseudoDescription;
+}
+
+pub trait TryMap<F, E, A: Descriptions<F>, B: Descriptions<F>> {
+	fn ty(
+		&self,
+		a: A::Type,
+		causes: &Causes<F>,
+		source: &Context<F, A>,
+		context: &mut Context<F, B>,
+		vocabulary: &mut Vocabulary,
+	) -> Result<B::Type, E>;
+	fn layout(
+		&self,
+		a: A::Layout,
+		causes: &Causes<F>,
+		source: &Context<F, A>,
+		context: &mut Context<F, B>,
+		vocabulary: &mut Vocabulary,
+	) -> Result<B::Layout, E>;
+}
+
+pub trait Simplify<F: Clone + Ord>: Descriptions<F> {
+	type Error;
+	type TryMap: Default + TryMap<F, Self::Error, Self, StandardDescriptions>;
 }
 
 pub struct StandardDescriptions;
 
 impl<F: Clone + Ord> Descriptions<F> for StandardDescriptions {
-	type Error = Error<F>;
-
 	type Type = ty::Description<F>;
 	type Layout = layout::Description;
 }
 
 pub trait Build<F> {
 	type Target;
-	type Error;
 
 	fn build(
 		self,
-		vocabulary: &mut Vocabulary,
-		nodes: &mut context::AllocatedNodes<F>,
-		additional: &mut AdditionalNodes<F>,
+		nodes: &mut context::allocated::Nodes<F>,
 		dependencies: Dependencies<F>,
 		causes: Causes<F>,
-	) -> Result<Self::Target, Self::Error>;
+	) -> Result<Self::Target, Error<F>>;
 }
 
 #[derive(Derivative)]
@@ -91,63 +106,6 @@ impl<'a, F> Dependencies<'a, F> {
 	}
 }
 
-pub struct AdditionalNodes<F> {
-	types: Additional<treeldr::ty::Definition<F>>,
-	properties: Additional<treeldr::prop::Definition<F>>,
-	layouts: Additional<treeldr::layout::Definition<F>>,
-}
-
-impl<F> AdditionalNodes<F> {
-	pub fn new(types_count: usize, properties_count: usize, layouts_count: usize) -> Self {
-		Self {
-			types: Additional::new(types_count),
-			properties: Additional::new(properties_count),
-			layouts: Additional::new(layouts_count),
-		}
-	}
-
-	pub fn types_mut(&mut self) -> &mut Additional<treeldr::ty::Definition<F>> {
-		&mut self.types
-	}
-
-	pub fn properties_mut(&mut self) -> &mut Additional<treeldr::prop::Definition<F>> {
-		&mut self.properties
-	}
-
-	pub fn layouts_mut(&mut self) -> &mut Additional<treeldr::layout::Definition<F>> {
-		&mut self.layouts
-	}
-}
-
-pub struct Additional<T> {
-	offset: usize,
-	data: Vec<T>,
-}
-
-impl<T> Additional<T> {
-	pub fn new(offset: usize) -> Self {
-		Self {
-			offset,
-			data: Vec::new(),
-		}
-	}
-
-	pub fn insert(&mut self, value: T) -> Ref<T> {
-		let r = Ref::new(self.offset + self.data.len());
-		self.data.push(value);
-		r
-	}
-}
-
-impl<T> std::iter::IntoIterator for Additional<T> {
-	type Item = T;
-	type IntoIter = std::vec::IntoIter<T>;
-
-	fn into_iter(self) -> Self::IntoIter {
-		self.data.into_iter()
-	}
-}
-
 pub trait Document<F, D: Descriptions<F>> {
 	type LocalContext;
 	type Error;
@@ -156,11 +114,43 @@ pub trait Document<F, D: Descriptions<F>> {
 		&self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<F, D>,
+		vocabulary: &mut Vocabulary,
 	) -> Result<(), Self::Error>;
 
 	fn relate(
 		self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<F, D>,
+		vocabulary: &mut Vocabulary,
 	) -> Result<(), Self::Error>;
+}
+
+pub trait ObjectToId<F> {
+	fn as_id(&self, cause: Option<&locspan::Location<F>>) -> Result<vocab::Id, Error<F>>;
+
+	fn into_id(self, cause: Option<&locspan::Location<F>>) -> Result<vocab::Id, Error<F>>;
+}
+
+impl<F: Clone> ObjectToId<F> for vocab::Object<F> {
+	fn as_id(&self, cause: Option<&locspan::Location<F>>) -> Result<vocab::Id, Error<F>> {
+		match self {
+			vocab::Object::Literal(lit) => Err(Error::new(
+				error::LiteralUnexpected(lit.clone()).into(),
+				cause.cloned(),
+			)),
+			vocab::Object::Iri(id) => Ok(vocab::Id::Iri(*id)),
+			vocab::Object::Blank(id) => Ok(vocab::Id::Blank(*id)),
+		}
+	}
+
+	fn into_id(self, cause: Option<&locspan::Location<F>>) -> Result<vocab::Id, Error<F>> {
+		match self {
+			vocab::Object::Literal(lit) => Err(Error::new(
+				error::LiteralUnexpected(lit).into(),
+				cause.cloned(),
+			)),
+			vocab::Object::Iri(id) => Ok(vocab::Id::Iri(id)),
+			vocab::Object::Blank(id) => Ok(vocab::Id::Blank(id)),
+		}
+	}
 }

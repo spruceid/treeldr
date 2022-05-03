@@ -1,9 +1,9 @@
 use super::{error, Error};
-use crate::{Context, Descriptions};
 use locspan::Location;
-use treeldr::{vocab::Name, Caused, Causes, Documentation, Id, MaybeSet, WithCauses};
+use treeldr::{vocab::Name, Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
 
 /// Layout field definition.
+#[derive(Clone)]
 pub struct Definition<F> {
 	id: Id,
 	prop: MaybeSet<Id, F>,
@@ -45,9 +45,13 @@ impl<F> Definition<F> {
 			})
 	}
 
-	pub fn default_name<D: Descriptions<F>>(
+	pub fn replace_property(&mut self, prop: MaybeSet<Id, F>) {
+		self.prop = prop
+	}
+
+	pub fn default_name(
 		&self,
-		context: &Context<F, D>,
+		vocabulary: &Vocabulary,
 		cause: Option<Location<F>>,
 	) -> Option<Caused<Name, F>>
 	where
@@ -55,7 +59,7 @@ impl<F> Definition<F> {
 	{
 		self.id
 			.as_iri()
-			.and_then(|term| term.iri(context.vocabulary()))
+			.and_then(|term| term.iri(vocabulary))
 			.and_then(|iri| {
 				iri.path()
 					.file_name()
@@ -83,6 +87,10 @@ impl<F> Definition<F> {
 		})
 	}
 
+	pub fn replace_name(&mut self, name: MaybeSet<Name, F>) {
+		self.name = name
+	}
+
 	pub fn layout(&self) -> Option<&WithCauses<Id, F>> {
 		self.layout.with_causes()
 	}
@@ -101,6 +109,10 @@ impl<F> Definition<F> {
 				}
 				.into()
 			})
+	}
+
+	pub fn replace_layout(&mut self, layout: MaybeSet<Id, F>) {
+		self.layout = layout
 	}
 
 	pub fn require_layout(&self, causes: &Causes<F>) -> Result<&WithCauses<Id, F>, Error<F>>
@@ -167,7 +179,7 @@ pub trait Build<F> {
 		&self,
 		label: Option<String>,
 		doc: Documentation,
-		nodes: &super::super::context::AllocatedNodes<F>,
+		nodes: &super::super::context::allocated::Nodes<F>,
 	) -> Result<treeldr::layout::Field<F>, Error<F>>;
 }
 
@@ -185,7 +197,7 @@ impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
 		&self,
 		label: Option<String>,
 		doc: Documentation,
-		nodes: &super::super::context::AllocatedNodes<F>,
+		nodes: &super::super::context::allocated::Nodes<F>,
 	) -> Result<treeldr::layout::Field<F>, Error<F>> {
 		let prop = self.prop.clone().try_map_with_causes(|prop_id, causes| {
 			Ok(**nodes.require_property(prop_id, causes.preferred().cloned())?)

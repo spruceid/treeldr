@@ -2,7 +2,7 @@ use crate::{error, list::ListMut, Context, Descriptions, Document, Error};
 use locspan::Loc;
 use treeldr::{
 	vocab::{self, GraphLabel, Object, Term},
-	Id,
+	Id, Vocabulary,
 };
 
 fn expect_id<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<Id, F>, Error<F>> {
@@ -36,7 +36,12 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 	type LocalContext = ();
 	type Error = Error<F>;
 
-	fn declare(&self, _: &mut (), context: &mut Context<F, D>) -> Result<(), Error<F>> {
+	fn declare(
+		&self,
+		_: &mut (),
+		context: &mut Context<F, D>,
+		_vocabulary: &mut Vocabulary,
+	) -> Result<(), Error<F>> {
 		// Step 1: find out the type of each node.
 		for Loc(quad, loc) in self.loc_quads() {
 			let Loc(id, _) = quad.subject().cloned_value();
@@ -69,7 +74,12 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 		Ok(())
 	}
 
-	fn relate(self, _: &mut (), context: &mut Context<F, D>) -> Result<(), Error<F>> {
+	fn relate(
+		self,
+		_: &mut (),
+		context: &mut Context<F, D>,
+		_vocabulary: &mut Vocabulary,
+	) -> Result<(), Error<F>> {
 		// Step 2: find out the properties of each node.
 		for Loc(rdf_types::Quad(subject, predicate, object, _graph), loc) in self.into_loc_quads() {
 			let Loc(id, id_loc) = subject;

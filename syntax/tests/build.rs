@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use treeldr_vocab::{GraphLabel, Id, StrippedObject, Term, Vocabulary};
 
-type BuildContext<'v> = treeldr_build::Context<'v, (), treeldr_syntax::build::Descriptions>;
+type BuildContext = treeldr_build::Context<(), treeldr_syntax::build::Descriptions>;
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
@@ -60,17 +60,19 @@ fn parse_treeldr<P: AsRef<Path>>(
 	let input = std::fs::read_to_string(path).expect("unable to read input file");
 	let mut lexer = Lexer::new((), input.chars().map(infallible));
 	let ast = treeldr_syntax::Document::parse(&mut lexer).expect("parse error");
-	let mut context = BuildContext::new(vocabulary);
+	let mut context = BuildContext::new();
 	context.define_xml_types().unwrap();
 	let mut local_context =
 		treeldr_syntax::build::LocalContext::new(Some(iri!("http://www.example.com").into()));
-	ast.declare(&mut local_context, &mut context)
+	ast.declare(&mut local_context, &mut context, vocabulary)
 		.expect("build error");
 	ast.into_value()
-		.relate(&mut local_context, &mut context)
+		.relate(&mut local_context, &mut context, vocabulary)
 		.expect("build error");
 
-	let model = context.build().expect("build error");
+	let context = context.simplify(vocabulary).expect("simplification failed");
+
+	let model = context.build(vocabulary).expect("build error");
 
 	let mut quads = Vec::new();
 	model.to_rdf(vocabulary, &mut quads);

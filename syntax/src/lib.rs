@@ -436,7 +436,7 @@ pub enum LayoutFieldRangeRestriction<F> {
 	All(Box<Loc<InnerLayoutExpr<F>, F>>),
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum LayoutFieldCardinalityRestriction {
 	AtLeast(u32),
 	AtMost(u32),

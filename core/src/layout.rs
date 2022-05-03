@@ -1,4 +1,4 @@
-use crate::{layout, ty, vocab::Name, Causes, Documentation, Id, MaybeSet, WithCauses};
+use crate::{ty, vocab::Name, Causes, Documentation, Id, MaybeSet, WithCauses};
 use locspan::Location;
 use shelves::Ref;
 
@@ -33,6 +33,7 @@ pub enum Type {
 	Literal,
 	Array,
 	Set,
+	Alias,
 }
 
 /// Layout definition.
@@ -53,7 +54,7 @@ pub enum Description<F> {
 	Native(Native, MaybeSet<Name, F>),
 
 	/// Reference.
-	Reference(Ref<layout::Definition<F>>, MaybeSet<Name, F>),
+	Reference(Ref<Definition<F>>, MaybeSet<Name, F>),
 
 	/// Literal layout.
 	Literal(Literal<F>),
@@ -69,6 +70,8 @@ pub enum Description<F> {
 
 	/// Set layout.
 	Set(Set<F>),
+
+	Alias(WithCauses<Name, F>, Ref<Definition<F>>),
 }
 
 impl<F> Description<F> {
@@ -82,6 +85,7 @@ impl<F> Description<F> {
 			Self::Enum(_) => Type::Enum,
 			Self::Array(_) => Type::Array,
 			Self::Set(_) => Type::Set,
+			Self::Alias(_, _) => Type::Alias,
 		}
 	}
 
@@ -102,6 +106,7 @@ impl<F> Description<F> {
 			Self::Enum(e) => Some(e.set_name(new_name, cause)),
 			Self::Array(a) => a.set_name(new_name, cause),
 			Self::Set(s) => s.set_name(new_name, cause),
+			Self::Alias(n, _) => Some(std::mem::replace(n, WithCauses::new(new_name, cause))),
 		}
 	}
 
@@ -115,6 +120,7 @@ impl<F> Description<F> {
 			Description::Literal(l) => l.into_name().into(),
 			Description::Array(a) => a.into_name(),
 			Description::Set(s) => s.into_name(),
+			Description::Alias(n, _) => n.into(),
 		}
 	}
 }
@@ -154,6 +160,7 @@ impl<F> Definition<F> {
 			Description::Literal(l) => Some(l.name()),
 			Description::Array(a) => a.name(),
 			Description::Set(s) => s.name(),
+			Description::Alias(n, _) => Some(n.inner()),
 		}
 	}
 
@@ -209,6 +216,7 @@ impl<F> Definition<F> {
 			Description::Native(_, _) => ComposingLayouts::None,
 			Description::Array(a) => ComposingLayouts::One(Some(a.item_layout())),
 			Description::Set(s) => ComposingLayouts::One(Some(s.item_layout())),
+			Description::Alias(_, _) => ComposingLayouts::None,
 		}
 	}
 }

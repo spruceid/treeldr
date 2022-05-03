@@ -1,43 +1,13 @@
-use crate::{error, utils::TryCollect, Error};
+use crate::{error, utils::TryCollect, Error, ObjectToId};
 use derivative::Derivative;
 use locspan::Location;
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{vocab, Caused, Causes, Id, MaybeSet, WithCauses};
+use treeldr::{Causes, Id, MaybeSet, WithCauses};
 
 pub use treeldr::ty::Kind;
 
-pub struct Definition<F, D = Description<F>> {
-	/// Identifier of the type.
-	id: Id,
-
-	/// Type description.
-	desc: MaybeSet<D, F>,
-}
-
-pub trait PseudoDescription<F>: From<Description<F>> {
-	type Error: From<Error<F>>;
-
-	fn as_standard(&self) -> Option<&Description<F>>;
-
-	fn as_standard_mut(&mut self) -> Option<&mut Description<F>>;
-
-	fn dependencies(
-		&self,
-		id: Id,
-		nodes: &super::context::AllocatedNodes<F>,
-		causes: &Causes<F>,
-	) -> Result<Vec<crate::Item<F>>, Self::Error>;
-
-	fn build(
-		self,
-		id: Id,
-		nodes: &super::context::AllocatedNodes<F>,
-		dependencies: crate::Dependencies<F>,
-		causes: Causes<F>,
-	) -> Result<treeldr::ty::Description<F>, Self::Error>;
-}
-
 /// Type definition.
+#[derive(Clone)]
 pub enum Description<F> {
 	/// Normal type.
 	Normal(Normal<F>),
@@ -65,7 +35,7 @@ impl<F: Clone + Ord> Description<F> {
 	fn dependencies(
 		&self,
 		_id: Id,
-		nodes: &super::context::AllocatedNodes<F>,
+		nodes: &super::context::allocated::Nodes<F>,
 		causes: &Causes<F>,
 	) -> Result<Vec<crate::Item<F>>, Error<F>> {
 		let list_id = match self {
@@ -81,14 +51,7 @@ impl<F: Clone + Ord> Description<F> {
 					.iter(nodes)
 					.map(|item| {
 						let (object, ty_causes) = item?.clone().into_parts();
-						let ty_id = match object {
-							vocab::Object::Literal(lit) => Err(Caused::new(
-								error::LiteralUnexpected(lit).into(),
-								causes.preferred().cloned(),
-							)),
-							vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-							vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-						}?;
+						let ty_id = object.into_id(causes.preferred())?;
 
 						let ty_ref = *nodes
 							.require_type(ty_id, ty_causes.preferred().cloned())?
@@ -106,7 +69,7 @@ impl<F: Clone + Ord> Description<F> {
 	fn build(
 		self,
 		_id: Id,
-		nodes: &super::context::AllocatedNodes<F>,
+		nodes: &super::context::allocated::Nodes<F>,
 		dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
 	) -> Result<treeldr::ty::Description<F>, Error<F>>
@@ -124,14 +87,7 @@ impl<F: Clone + Ord> Description<F> {
 					.iter(nodes);
 				for item in items {
 					let (object, causes) = item?.clone().into_parts();
-					let option_id = match object {
-						vocab::Object::Literal(lit) => Err(Caused::new(
-							error::LiteralUnexpected(lit).into(),
-							causes.preferred().cloned(),
-						)),
-						vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-						vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-					}?;
+					let option_id = object.into_id(causes.preferred())?;
 
 					let (option_ty, option_causes) = nodes
 						.require_type(option_id, causes.into_preferred())?
@@ -161,14 +117,7 @@ impl<F: Clone + Ord> Description<F> {
 					.iter(nodes);
 				for item in items {
 					let (object, causes) = item?.clone().into_parts();
-					let option_id = match object {
-						vocab::Object::Literal(lit) => Err(Caused::new(
-							error::LiteralUnexpected(lit).into(),
-							causes.preferred().cloned(),
-						)),
-						vocab::Object::Iri(id) => Ok(Id::Iri(id)),
-						vocab::Object::Blank(id) => Ok(Id::Blank(id)),
-					}?;
+					let option_id = object.into_id(causes.preferred())?;
 
 					let (ty, ty_causes) = nodes
 						.require_type(option_id, causes.into_preferred())?
@@ -197,9 +146,13 @@ impl<F: Clone + Ord> Description<F> {
 	}
 }
 
-impl<F: Clone + Ord> PseudoDescription<F> for Description<F> {
-	type Error = Error<F>;
+pub trait PseudoDescription<F>: Clone + From<Description<F>> {
+	fn as_standard(&self) -> Option<&Description<F>>;
 
+	fn as_standard_mut(&mut self) -> Option<&mut Description<F>>;
+}
+
+impl<F: Clone> PseudoDescription<F> for Description<F> {
 	fn as_standard(&self) -> Option<&Description<F>> {
 		Some(self)
 	}
@@ -207,25 +160,15 @@ impl<F: Clone + Ord> PseudoDescription<F> for Description<F> {
 	fn as_standard_mut(&mut self) -> Option<&mut Description<F>> {
 		Some(self)
 	}
+}
 
-	fn dependencies(
-		&self,
-		id: Id,
-		nodes: &super::context::AllocatedNodes<F>,
-		causes: &Causes<F>,
-	) -> Result<Vec<crate::Item<F>>, Error<F>> {
-		self.dependencies(id, nodes, causes)
-	}
+#[derive(Clone)]
+pub struct Definition<F, D = Description<F>> {
+	/// Identifier of the type.
+	id: Id,
 
-	fn build(
-		self,
-		id: Id,
-		nodes: &super::context::AllocatedNodes<F>,
-		dependencies: crate::Dependencies<F>,
-		causes: Causes<F>,
-	) -> Result<treeldr::ty::Description<F>, Self::Error> {
-		self.build(id, nodes, dependencies, causes)
-	}
+	/// Type description.
+	desc: MaybeSet<D, F>,
 }
 
 impl<F, D> Definition<F, D> {
@@ -245,26 +188,15 @@ impl<F, D> Definition<F, D> {
 		&self.desc
 	}
 
-	// pub fn kind(&self) -> Option<Kind> {
-	// 	self.desc.value().map(Description::kind)
-	// }
+	pub fn try_map<U, E>(self, f: impl FnOnce(D) -> Result<U, E>) -> Result<Definition<F, U>, E> {
+		Ok(Definition {
+			id: self.id,
+			desc: self.desc.try_map(f)?,
+		})
+	}
 }
 
 impl<F, D: PseudoDescription<F>> Definition<F, D> {
-	pub fn dependencies(
-		&self,
-		nodes: &super::context::AllocatedNodes<F>,
-		_causes: &Causes<F>,
-	) -> Result<Vec<crate::Item<F>>, D::Error>
-	where
-		F: Clone + Ord,
-	{
-		match self.desc.with_causes() {
-			Some(desc) => desc.dependencies(self.id, nodes, desc.causes()),
-			None => Ok(Vec::new()),
-		}
-	}
-
 	pub fn require_normal_mut(
 		&mut self,
 		cause: Option<Location<F>>,
@@ -451,18 +383,28 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 	}
 }
 
-impl<F, D: PseudoDescription<F>> crate::Build<F> for Definition<F, D> {
+impl<F: Clone + Ord> Definition<F> {
+	pub fn dependencies(
+		&self,
+		nodes: &super::context::allocated::Nodes<F>,
+		_causes: &Causes<F>,
+	) -> Result<Vec<crate::Item<F>>, Error<F>> {
+		match self.desc.with_causes() {
+			Some(desc) => desc.dependencies(self.id, nodes, desc.causes()),
+			None => Ok(Vec::new()),
+		}
+	}
+}
+
+impl<F: Clone + Ord> crate::Build<F> for Definition<F> {
 	type Target = treeldr::ty::Definition<F>;
-	type Error = D::Error;
 
 	fn build(
 		self,
-		_vocab: &mut treeldr::Vocabulary,
-		nodes: &mut super::context::AllocatedNodes<F>,
-		_additional: &mut crate::AdditionalNodes<F>,
+		nodes: &mut super::context::allocated::Nodes<F>,
 		dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
-	) -> Result<Self::Target, Self::Error> {
+	) -> Result<Self::Target, Error<F>> {
 		let desc = match self.desc.unwrap() {
 			Some(desc) => {
 				let (desc, desc_causes) = desc.into_parts();
@@ -476,7 +418,7 @@ impl<F, D: PseudoDescription<F>> crate::Build<F> for Definition<F, D> {
 }
 
 /// Normal type definition.
-#[derive(Derivative)]
+#[derive(Clone, Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Normal<F> {
 	/// Properties.
@@ -515,7 +457,7 @@ impl<F> Normal<F> {
 
 	pub fn build(
 		self,
-		nodes: &super::context::AllocatedNodes<F>,
+		nodes: &super::context::allocated::Nodes<F>,
 	) -> Result<treeldr::ty::Description<F>, Error<F>>
 	where
 		F: Clone + Ord,
@@ -545,6 +487,7 @@ pub enum PropertyRestriction {
 	Cardinality(CardinalityRestriction),
 }
 
+#[derive(Clone)]
 pub struct Restriction<F> {
 	property: WithCauses<Id, F>,
 	restrictions: BTreeMap<PropertyRestriction, Causes<F>>,
@@ -589,7 +532,7 @@ impl<F> Restriction<F> {
 
 	pub fn build(
 		self,
-		nodes: &super::context::AllocatedNodes<F>,
+		nodes: &super::context::allocated::Nodes<F>,
 	) -> Result<treeldr::ty::Description<F>, Error<F>>
 	where
 		F: Clone + Ord,
@@ -615,7 +558,7 @@ impl<F> Restriction<F> {
 impl PropertyRestriction {
 	pub fn build<F>(
 		self,
-		nodes: &super::context::AllocatedNodes<F>,
+		nodes: &super::context::allocated::Nodes<F>,
 		causes: &Causes<F>,
 	) -> Result<treeldr::prop::Restriction<F>, Error<F>>
 	where
@@ -631,7 +574,7 @@ impl PropertyRestriction {
 impl RangeRestriction {
 	pub fn build<F>(
 		self,
-		nodes: &super::context::AllocatedNodes<F>,
+		nodes: &super::context::allocated::Nodes<F>,
 		causes: &Causes<F>,
 	) -> Result<treeldr::prop::restriction::Range<F>, Error<F>>
 	where

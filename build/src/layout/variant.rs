@@ -1,8 +1,9 @@
 use crate::{error, Context, Descriptions, Error};
 use locspan::Location;
-use treeldr::{vocab::Name, Caused, Documentation, Id, MaybeSet, WithCauses};
+use treeldr::{vocab::Name, Caused, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
 
 /// Layout field definition.
+#[derive(Clone)]
 pub struct Definition<F> {
 	id: Id,
 	name: MaybeSet<Name, F>,
@@ -37,17 +38,22 @@ impl<F> Definition<F> {
 		})
 	}
 
+	pub fn replace_name(&mut self, name: MaybeSet<Name, F>) {
+		self.name = name
+	}
+
 	/// Build a default name for this layout variant.
 	pub fn default_name<D: Descriptions<F>>(
 		&self,
 		context: &Context<F, D>,
+		vocabulary: &Vocabulary,
 		cause: Option<Location<F>>,
 	) -> Result<Option<Caused<Name, F>>, Error<F>>
 	where
 		F: Clone,
 	{
 		if let Id::Iri(iri) = self.id {
-			if let Some(name) = iri.iri(context.vocabulary()).unwrap().path().file_name() {
+			if let Some(name) = iri.iri(vocabulary).unwrap().path().file_name() {
 				if let Ok(name) = Name::new(name) {
 					return Ok(Some(Caused::new(name, cause)));
 				}
@@ -84,6 +90,10 @@ impl<F> Definition<F> {
 				.into()
 			})
 	}
+
+	pub fn replace_layout(&mut self, layout: MaybeSet<Id, F>) {
+		self.layout = layout
+	}
 }
 
 pub trait Build<F> {
@@ -93,7 +103,7 @@ pub trait Build<F> {
 		&self,
 		label: Option<String>,
 		doc: Documentation,
-		nodes: &super::super::context::AllocatedNodes<F>,
+		nodes: &super::super::context::allocated::Nodes<F>,
 	) -> Result<treeldr::layout::Variant<F>, Error<F>>;
 }
 
@@ -111,7 +121,7 @@ impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
 		&self,
 		label: Option<String>,
 		doc: Documentation,
-		nodes: &super::super::context::AllocatedNodes<F>,
+		nodes: &super::super::context::allocated::Nodes<F>,
 	) -> Result<treeldr::layout::Variant<F>, Error<F>> {
 		let name = self.require_name()?;
 
