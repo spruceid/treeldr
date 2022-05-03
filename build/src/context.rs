@@ -644,19 +644,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		match self.standard_references.get(&deref_layout).cloned() {
 			Some(id) => Ok(id),
 			None => {
-				let id = match deref_layout {
-					Id::Iri(term) => {
-						let mut iri = iref::IriBuf::new("https://treeldr.org/Reference").unwrap();
-						let fragment = pct_str::PctString::encode(
-							term.iri(vocabulary).unwrap().as_str().chars(),
-							pct_str::URIReserved,
-						);
-						iri.set_fragment(Some(fragment.as_str().try_into().unwrap()));
-						Id::Iri(vocab::Term::from_iri(iri, vocabulary))
-					}
-					Id::Blank(_) => Id::Blank(vocabulary.new_blank_label()),
-				};
-
+				let id = Id::Blank(vocabulary.new_blank_label());
 				self.declare_layout(id, cause);
 				let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
 				layout.set_deref_to(deref_layout, deref_cause)?;

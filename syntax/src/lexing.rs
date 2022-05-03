@@ -239,6 +239,8 @@ pub enum Keyword {
 	Layout,
 	As,
 	For,
+	All,
+	Any,
 	Annotation(Annotation),
 }
 
@@ -251,6 +253,8 @@ impl Keyword {
 			"layout" => Some(Keyword::Layout),
 			"as" => Some(Keyword::As),
 			"for" => Some(Keyword::For),
+			"all" => Some(Keyword::All),
+			"any" => Some(Keyword::Any),
 			_ => Annotation::from_name(name).map(Self::Annotation),
 		}
 	}
@@ -263,6 +267,8 @@ impl Keyword {
 			Self::Layout => "layout",
 			Self::As => "as",
 			Self::For => "for",
+			Self::All => "all",
+			Self::Any => "any",
 			Self::Annotation(a) => a.as_str(),
 		}
 	}

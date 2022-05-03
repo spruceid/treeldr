@@ -9,4 +9,4 @@ type Type {
 	property: A | B
 }
 
-type Restricted = Type & <Type/property>: A
+type Restricted = Type & all <Type/property>: A

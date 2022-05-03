@@ -8,10 +8,8 @@ treeldr = { path = "../core" }
 log = "0.4"
 rdf-types = { version = "0.4.1", features = ["loc"] }
 iref = "2.1.2"
-pct-str = "1.1.0"
 shelves = "0.2.6"
 derivative = "2.2.0"
 locspan = { version = "0.3.2", features = ["reporting"] }
 codespan-reporting = "0.11"
-
 grdf = { version = "0.7.3", features = ["loc"] }

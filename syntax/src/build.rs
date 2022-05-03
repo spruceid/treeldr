@@ -1311,24 +1311,26 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 				id.build(local_context, context, vocabulary)
 			}
 			crate::InnerLayoutExpr::Reference(r) => {
+				let id = local_context.next_id.take();
+
 				let Loc(deref_layout, deref_loc) = r.build(local_context, context, vocabulary)?;
 
-				let id = if local_context.next_id.is_some() {
-					let Loc(id, _) = local_context.anonymous_id(None, vocabulary, loc.clone());
-					if id.is_blank() {
-						context.declare_layout(id, Some(loc.clone()));
-					}
+				let id = match id {
+					Some(Loc(id, _)) => {
+						if id.is_blank() {
+							context.declare_layout(id, Some(loc.clone()));
+						}
 
-					let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
-					layout.set_deref_to(deref_layout, Some(deref_loc))?;
-					id
-				} else {
-					context.standard_reference(
+						let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
+						layout.set_deref_to(deref_layout, Some(deref_loc))?;
+						id
+					}
+					None => context.standard_reference(
 						vocabulary,
 						deref_layout,
 						Some(loc.clone()),
 						Some(deref_loc),
-					)?
+					)?,
 				};
 
 				Ok(Loc(id, loc))

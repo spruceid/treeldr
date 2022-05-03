@@ -746,6 +746,7 @@ impl<F: Clone> Parse<F> for NamedInnerTypeExpr<F> {
 impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
+		TokenKind::Keyword(Keyword::All),
 		TokenKind::Punct(Punct::Ampersand),
 		TokenKind::Literal,
 	];
@@ -755,8 +756,8 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 		token: Token,
 		mut loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
-		match token.no_keyword() {
-			Token::Id(id) => {
+		match token {
+			Token::Keyword(Keyword::All) => {
 				#[allow(clippy::type_complexity)]
 				fn parse_property_restriction<F, L: Tokens<F>>(
 					lexer: &mut L,
@@ -785,21 +786,17 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 					))
 				}
 
-				match peek_token(lexer)? {
+				let id = Id::parse(lexer)?;
+
+				match next_token(lexer)? {
 					Loc(Some(Token::Keyword(lexing::Keyword::As)), _) => {
-						next_token(lexer)?;
-						let id_loc = loc.clone();
 						let alias = Alias::parse(lexer)?;
 						match next_expected_token(lexer, || {
 							vec![TokenKind::Punct(lexing::Punct::Colon)]
 						})? {
 							Loc(Token::Punct(lexing::Punct::Colon), _) => {
-								let restriction = parse_property_restriction(
-									lexer,
-									Loc(id, id_loc),
-									Some(alias),
-									loc,
-								)?;
+								let restriction =
+									parse_property_restriction(lexer, id, Some(alias), loc)?;
 								Ok(restriction.map(Self::PropertyRestriction))
 							}
 							Loc(unexpected, loc) => Err(Loc::new(
@@ -812,25 +809,34 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 						}
 					}
 					Loc(Some(Token::Punct(lexing::Punct::Colon)), _) => {
-						next_token(lexer)?;
-						let id_loc = loc.clone();
-						let restriction =
-							parse_property_restriction(lexer, Loc(id, id_loc), None, loc)?;
+						let restriction = parse_property_restriction(lexer, id, None, loc)?;
 						Ok(restriction.map(Self::PropertyRestriction))
 					}
-					_ => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
+					Loc(unexpected, loc) => Err(Loc::new(
+						Error::Unexpected(
+							unexpected,
+							vec![
+								TokenKind::Keyword(Keyword::As),
+								TokenKind::Punct(lexing::Punct::Colon),
+							],
+						),
+						loc,
+					)),
 				}
 			}
-			Token::Punct(lexing::Punct::Ampersand) => {
-				let arg = Self::parse(lexer)?;
-				loc.span_mut().set_end(arg.span().end());
-				Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
-			}
-			Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
-			unexpected => Err(Loc::new(
-				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
-				loc,
-			)),
+			token => match token.no_keyword() {
+				Token::Id(id) => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
+				Token::Punct(lexing::Punct::Ampersand) => {
+					let arg = Self::parse(lexer)?;
+					loc.span_mut().set_end(arg.span().end());
+					Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
+				}
+				Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
+				unexpected => Err(Loc::new(
+					Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
+					loc,
+				)),
+			},
 		}
 	}
 }
