@@ -437,7 +437,36 @@ impl<F> layout::Array<F> {
 				.id()
 				.into_term(),
 			None,
-		))
+		));
+
+		if let Some(semantics) = self.semantics() {
+			if let Some(first_prop) = semantics.first() {
+				quads.push(Quad(
+					id,
+					Term::TreeLdr(vocab::TreeLdr::ArrayListFirst),
+					model.properties().get(first_prop).unwrap().id().into_term(),
+					None,
+				));
+			}
+
+			if let Some(rest_prop) = semantics.rest() {
+				quads.push(Quad(
+					id,
+					Term::TreeLdr(vocab::TreeLdr::ArrayListRest),
+					model.properties().get(rest_prop).unwrap().id().into_term(),
+					None,
+				));
+			}
+
+			if let Some(nil_value) = semantics.nil() {
+				quads.push(Quad(
+					id,
+					Term::TreeLdr(vocab::TreeLdr::ArrayListFirst),
+					nil_value.into_term(),
+					None,
+				));
+			}
+		}
 	}
 }
 

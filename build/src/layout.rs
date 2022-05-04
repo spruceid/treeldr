@@ -3,16 +3,18 @@ use locspan::Location;
 use treeldr::{vocab, Caused, Causes, Id, MaybeSet, Vocabulary, WithCauses};
 use vocab::Name;
 
+pub mod array;
 pub mod enumeration;
 pub mod field;
 pub mod literal;
 pub mod structure;
 pub mod variant;
 
+pub use array::Array;
 pub use treeldr::layout::{literal::RegExp, Native};
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Description {
+#[derive(Clone, Debug)]
+pub enum Description<F> {
 	Never,
 	Native(Native),
 	Struct(Id),
@@ -20,7 +22,7 @@ pub enum Description {
 	Literal(RegExp),
 	Enum(Id),
 	Set(Id),
-	Array(Id),
+	Array(Array<F>),
 	Alias(Id),
 }
 
@@ -37,7 +39,7 @@ pub enum Type {
 	Alias,
 }
 
-impl Description {
+impl<F> Description<F> {
 	pub fn ty(&self) -> Type {
 		match self {
 			Self::Never => Type::Never,
@@ -52,7 +54,7 @@ impl Description {
 		}
 	}
 
-	pub fn sub_layouts<F, D: Descriptions<F>>(
+	pub fn sub_layouts<D: Descriptions<F>>(
 		&self,
 		context: &Context<F, D>,
 		causes: &Causes<F>,
@@ -83,8 +85,8 @@ impl Description {
 				layout: WithCauses::new(*item_layout_id, causes.clone()),
 				connection: LayoutConnection::Item,
 			}),
-			Description::Array(item_layout_id) => sub_layouts.push(SubLayout {
-				layout: WithCauses::new(*item_layout_id, causes.clone()),
+			Description::Array(array) => sub_layouts.push(SubLayout {
+				layout: WithCauses::new(array.item_layout(), causes.clone()),
 				connection: LayoutConnection::Item,
 			}),
 			_ => (),
@@ -93,7 +95,7 @@ impl Description {
 		Ok(sub_layouts)
 	}
 
-	pub fn dependencies<F: Clone + Ord>(
+	pub fn dependencies(
 		&self,
 		_id: Id,
 		_nodes: &super::context::allocated::Nodes<F>,
@@ -160,7 +162,7 @@ impl Description {
 		Ok(Vec::new())
 	}
 
-	pub fn build<F>(
+	pub fn build(
 		self,
 		id: Id,
 		name: MaybeSet<Name, F>,
@@ -259,14 +261,9 @@ impl Description {
 					treeldr::layout::Set::new(name, item_layout_ref),
 				))
 			}
-			Description::Array(item_layout_id) => {
-				let item_layout_ref = *nodes
-					.require_layout(item_layout_id, causes.preferred().cloned())?
-					.inner();
-				Ok(treeldr::layout::Description::Array(
-					treeldr::layout::Array::new(name, item_layout_ref),
-				))
-			}
+			Description::Array(array) => Ok(treeldr::layout::Description::Array(
+				array.build(name, nodes, causes)?,
+			)),
 			Description::Alias(alias_layout_id) => {
 				let name = require_name(id, name, causes)?;
 
@@ -279,19 +276,63 @@ impl Description {
 	}
 }
 
-pub trait PseudoDescription: Clone + PartialEq + From<Description> {
-	fn as_standard(&self) -> Option<&Description>;
+pub trait PseudoDescription<F>: Clone + From<Description<F>> {
+	fn as_standard(&self) -> Option<&Description<F>>;
+
+	fn as_standard_mut(&mut self) -> Option<&mut Description<F>>;
+
+	fn try_unify(
+		self,
+		other: Self,
+		id: Id,
+		causes: &Causes<F>,
+		other_causes: &Causes<F>,
+	) -> Result<Self, Error<F>>;
 }
 
-impl PseudoDescription for Description {
-	fn as_standard(&self) -> Option<&Description> {
+impl<F: Clone + Ord> PseudoDescription<F> for Description<F> {
+	fn as_standard(&self) -> Option<&Description<F>> {
 		Some(self)
+	}
+
+	fn as_standard_mut(&mut self) -> Option<&mut Description<F>> {
+		Some(self)
+	}
+
+	fn try_unify(
+		self,
+		other: Self,
+		id: Id,
+		causes: &Causes<F>,
+		other_causes: &Causes<F>,
+	) -> Result<Self, Error<F>> {
+		match (self, other) {
+			(Self::Never, Self::Never) => Ok(Self::Never),
+			(Self::Native(a), Self::Native(b)) if a == b => Ok(Self::Native(a)),
+			(Self::Struct(a), Self::Struct(b)) if a == b => Ok(Self::Struct(a)),
+			(Self::Reference(a), Self::Reference(b)) if a == b => Ok(Self::Reference(a)),
+			(Self::Literal(a), Self::Literal(b)) if a == b => Ok(Self::Literal(a)),
+			(Self::Enum(a), Self::Enum(b)) if a == b => Ok(Self::Enum(a)),
+			(Self::Set(a), Self::Set(b)) if a == b => Ok(Self::Set(a)),
+			(Self::Array(a), Self::Array(b)) => {
+				Ok(Self::Array(a.try_unify(b, id, causes, other_causes)?))
+			}
+			(Self::Alias(a), Self::Alias(b)) if a == b => Ok(Self::Alias(a)),
+			_ => Err(Error::new(
+				error::LayoutMismatchDescription {
+					id,
+					because: causes.preferred().cloned(),
+				}
+				.into(),
+				other_causes.preferred().cloned(),
+			)),
+		}
 	}
 }
 
 /// Layout definition.
 #[derive(Clone)]
-pub struct Definition<F, D = Description> {
+pub struct Definition<F, D = Description<F>> {
 	/// Identifier of the layout.
 	id: Id,
 
@@ -353,19 +394,27 @@ impl<F, D> Definition<F, D> {
 	where
 		F: Ord + Clone,
 	{
-		self.name.try_set(name, cause, |expected, because, found| {
-			error::LayoutMismatchName {
-				id: self.id,
-				expected: expected.clone(),
-				found,
-				because: because.cloned(),
-			}
-			.into()
-		})
+		self.name
+			.try_set(name, cause, |expected, found, because, causes| {
+				Error::new(
+					error::LayoutMismatchName {
+						id: self.id,
+						expected,
+						found,
+						because: because.preferred().cloned(),
+					}
+					.into(),
+					causes.preferred().cloned(),
+				)
+			})
 	}
 
 	pub fn description(&self) -> Option<&WithCauses<D, F>> {
 		self.desc.with_causes()
+	}
+
+	pub fn description_mut(&mut self) -> Option<&mut WithCauses<D, F>> {
+		self.desc.with_causes_mut()
 	}
 
 	/// Declare the type for which this layout is defined.
@@ -373,29 +422,29 @@ impl<F, D> Definition<F, D> {
 	where
 		F: Clone + Ord,
 	{
-		self.ty.try_set(ty_ref, cause, |expected, because, found| {
-			error::LayoutMismatchType {
-				id: self.id,
-				expected: *expected,
-				found,
-				because: because.cloned(),
-			}
-			.into()
-		})
+		self.ty
+			.try_set(ty_ref, cause, |expected, found, because, causes| {
+				Error::new(
+					error::LayoutMismatchType {
+						id: self.id,
+						expected,
+						found,
+						because: because.preferred().cloned(),
+					}
+					.into(),
+					causes.preferred().cloned(),
+				)
+			})
 	}
 
 	pub fn set_description(&mut self, desc: D, cause: Option<Location<F>>) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
-		D: PartialEq,
+		D: PseudoDescription<F>,
 	{
 		self.desc
-			.try_set(desc, cause, |_expected, because, _found| {
-				error::LayoutMismatchDescription {
-					id: self.id,
-					because: because.cloned(),
-				}
-				.into()
+			.try_unify(desc, cause, |current_desc, desc, causes, cause| {
+				current_desc.try_unify(desc, self.id, causes, cause)
 			})
 	}
 
@@ -413,7 +462,7 @@ impl<F, D> Definition<F, D> {
 	}
 }
 
-impl<F: Clone + Ord, D: PseudoDescription> Definition<F, D> {
+impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 	pub fn set_native(
 		&mut self,
 		native: Native,
@@ -446,8 +495,91 @@ impl<F: Clone + Ord, D: PseudoDescription> Definition<F, D> {
 		self.set_description(Description::Set(item).into(), cause)
 	}
 
-	pub fn set_array(&mut self, item: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
-		self.set_description(Description::Array(item).into(), cause)
+	pub fn set_array(
+		&mut self,
+		item: Id,
+		semantics: Option<array::Semantics<F>>,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>> {
+		self.set_description(
+			Description::Array(Array::new(item, semantics)).into(),
+			cause,
+		)
+	}
+
+	pub fn set_array_list_first(
+		&mut self,
+		first_prop: Id,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>> {
+		let id = self.id;
+		match self.description_mut() {
+			Some(desc) => match desc.inner_mut().as_standard_mut() {
+				Some(Description::Array(array)) => array.set_list_first(id, first_prop, cause),
+				_ => Err(Error::new(
+					error::LayoutMismatchDescription {
+						id,
+						because: desc.causes().preferred().cloned(),
+					}
+					.into(),
+					cause,
+				)),
+			},
+			None => Err(Error::new(
+				error::LayoutMismatchDescription { id, because: None }.into(),
+				cause,
+			)),
+		}
+	}
+
+	pub fn set_array_list_rest(
+		&mut self,
+		value: Id,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>> {
+		let id = self.id;
+		match self.description_mut() {
+			Some(desc) => match desc.inner_mut().as_standard_mut() {
+				Some(Description::Array(array)) => array.set_list_rest(id, value, cause),
+				_ => Err(Error::new(
+					error::LayoutMismatchDescription {
+						id,
+						because: desc.causes().preferred().cloned(),
+					}
+					.into(),
+					cause,
+				)),
+			},
+			None => Err(Error::new(
+				error::LayoutMismatchDescription { id, because: None }.into(),
+				cause,
+			)),
+		}
+	}
+
+	pub fn set_array_list_nil(
+		&mut self,
+		value: Id,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>> {
+		let id = self.id;
+		match self.description_mut() {
+			Some(desc) => match desc.inner_mut().as_standard_mut() {
+				Some(Description::Array(array)) => array.set_list_nil(id, value, cause),
+				_ => Err(Error::new(
+					error::LayoutMismatchDescription {
+						id,
+						because: desc.causes().preferred().cloned(),
+					}
+					.into(),
+					cause,
+				)),
+			},
+			None => Err(Error::new(
+				error::LayoutMismatchDescription { id, because: None }.into(),
+				cause,
+			)),
+		}
 	}
 }
 
@@ -531,18 +663,6 @@ impl<F: Clone + Ord> Definition<F> {
 	}
 }
 
-/// Field/layout usage.
-///
-/// For a given layout, this structure define a field used inside the layout,
-/// and the layout of this field.
-pub struct Using<F> {
-	/// Layout field.
-	pub field: Id,
-
-	/// Field layout.
-	pub field_layout: WithCauses<Id, F>,
-}
-
 impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 	type Target = treeldr::layout::Definition<F>;
 
@@ -568,77 +688,5 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 		})?;
 
 		Ok(treeldr::layout::Definition::new(self.id, ty, desc, causes))
-	}
-}
-
-pub trait ComputeIntersection<F>: Sized {
-	/// Intersects this type description with `other`.
-	///
-	/// If provided, `name` will override the name of the intersected type,
-	/// otherwise the name of `self` is used.
-	fn intersected_with(
-		self,
-		id: Id,
-		other: &WithCauses<Self, F>,
-		name: MaybeSet<Name, F>,
-		built_layouts: &[Option<treeldr::layout::Definition<F>>],
-	) -> Result<Self, Error<F>>;
-}
-
-impl<F: Clone + Ord> ComputeIntersection<F> for treeldr::layout::Description<F> {
-	fn intersected_with(
-		self,
-		id: Id,
-		other: &WithCauses<Self, F>,
-		name: MaybeSet<Name, F>,
-		built_layouts: &[Option<treeldr::layout::Definition<F>>],
-	) -> Result<Self, Error<F>> {
-		match (self, other.inner()) {
-			(Self::Native(a, a_name), Self::Native(b, _)) if &a == b => {
-				Ok(Self::Native(a, name.or(a_name)))
-			}
-			(Self::Reference(a, a_name), Self::Reference(b, _)) if &a == b => {
-				Ok(Self::Reference(a, name.or(a_name)))
-			}
-			(Self::Literal(a), Self::Literal(b)) => {
-				use literal::IntersectedWith;
-				Ok(Self::Literal(a.intersected_with(
-					id,
-					b,
-					name,
-					other.causes().preferred(),
-				)?))
-			}
-			(Self::Struct(a), Self::Struct(b)) => {
-				use structure::IntersectedWith;
-				Ok(Self::Struct(a.intersected_with(
-					id,
-					b,
-					name,
-					other.causes().preferred(),
-				)?))
-			}
-			(Self::Enum(a), Self::Enum(b)) => {
-				use enumeration::IntersectedWith;
-				let e = a.intersected_with(id, b, name, other.causes().preferred())?;
-
-				if e.variants().len() == 1 && e.variants()[0].layout().is_some() {
-					let layout_ref = e.variants()[0].layout().unwrap();
-					let mut desc = built_layouts[layout_ref.index()]
-						.as_ref()
-						.unwrap()
-						.description()
-						.clone();
-					desc.set_name(e.name().clone(), e.name_causes().preferred().cloned());
-					Ok(desc)
-				} else {
-					Ok(Self::Enum(e))
-				}
-			}
-			_ => Err(Caused::new(
-				error::LayoutIntersectionFailed { id }.into(),
-				other.causes().preferred().cloned(),
-			)),
-		}
 	}
 }

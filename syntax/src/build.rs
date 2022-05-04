@@ -883,6 +883,71 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerTypeExpr<F>, F> {
 
 				Ok(Loc(id, loc))
 			}
+			crate::InnerTypeExpr::List(label, item) => {
+				let Loc(id, _) = local_context.anonymous_id(Some(label), vocabulary, loc.clone());
+				if id.is_blank() {
+					context.declare_type(id, Some(loc.clone()));
+				}
+
+				let Loc(item_id, _) = item.build(local_context, context, vocabulary)?;
+
+				// Restriction on the `rdf:first` property.
+				let Loc(first_restriction_id, _) =
+					local_context.anonymous_id(None, vocabulary, loc.clone());
+				context.declare_type(first_restriction_id, Some(loc.clone()));
+				let mut first_restriction = treeldr_build::ty::Restriction::new(WithCauses::new(
+					Id::Iri(Term::Rdf(Rdf::First)),
+					loc.clone(),
+				));
+				first_restriction.add_restriction(
+					treeldr_build::ty::PropertyRestriction::Range(
+						treeldr_build::ty::RangeRestriction::All(item_id),
+					),
+					Some(loc.clone()),
+				);
+				let first_restriction_ty = context
+					.get_mut(first_restriction_id)
+					.unwrap()
+					.as_type_mut()
+					.unwrap();
+				first_restriction_ty.declare_restriction(first_restriction, Some(loc.clone()))?;
+
+				// Restriction on the `rdf:rest` property.
+				let Loc(rest_restriction_id, _) =
+					local_context.anonymous_id(None, vocabulary, loc.clone());
+				context.declare_type(rest_restriction_id, Some(loc.clone()));
+				let mut rest_restriction = treeldr_build::ty::Restriction::new(WithCauses::new(
+					Id::Iri(Term::Rdf(Rdf::Rest)),
+					loc.clone(),
+				));
+				rest_restriction.add_restriction(
+					treeldr_build::ty::PropertyRestriction::Range(
+						treeldr_build::ty::RangeRestriction::All(id),
+					),
+					Some(loc.clone()),
+				);
+				let rest_restriction_ty = context
+					.get_mut(rest_restriction_id)
+					.unwrap()
+					.as_type_mut()
+					.unwrap();
+				rest_restriction_ty.declare_restriction(rest_restriction, Some(loc.clone()))?;
+
+				// Intersection list.
+				let types_id = context.create_list(
+					vocabulary,
+					[
+						Caused::new(Object::Iri(Term::Rdf(Rdf::List)), Some(loc.clone())),
+						Caused::new(first_restriction_id.into_term(), Some(loc.clone())),
+						Caused::new(rest_restriction_id.into_term(), Some(loc.clone())),
+					],
+				)?;
+
+				let ty = context.get_mut(id).unwrap().as_type_mut().unwrap();
+				ty.declare_intersection(types_id, Some(loc.clone()))?;
+
+				Ok(Loc(id, loc))
+			}
 		}
 	}
 }
@@ -1341,6 +1406,28 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 			crate::InnerLayoutExpr::FieldRestriction(_) => {
 				Err(Loc(LocalError::PropertyRestrictionOutsideIntersection, loc).into())
 			}
+			crate::InnerLayoutExpr::Array(label, item) => {
+				let Loc(id, _) = local_context.anonymous_id(Some(label), vocabulary, loc.clone());
+				if id.is_blank() {
+					context.declare_layout(id, Some(loc.clone()));
+				}
+
+				let Loc(item_id, _) = item.build(local_context, context, vocabulary)?;
+
+				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
+				if local_context.implicit_definition {
+					layout.set_type(id, Some(loc.clone()))?;
+				}
+				layout.set_array(
+					item_id,
+					Some(treeldr_build::layout::array::Semantics::rdf_list(Some(
+						loc.clone(),
+					))),
+					Some(loc.clone()),
+				)?;
+
+				Ok(Loc(id, loc))
+			}
 		}
 	}
 }
@@ -1443,10 +1530,10 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 	}
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub enum LayoutDescription<F> {
 	/// Standard layout description.
-	Standard(treeldr_build::layout::Description),
+	Standard(treeldr_build::layout::Description<F>),
 
 	Intersection(Id, Vec<Loc<LayoutRestrictedField<F>, F>>),
 }
@@ -1458,7 +1545,7 @@ impl<F: Clone + Ord> LayoutDescription<F> {
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
 		causes: &Causes<F>,
-	) -> Result<treeldr_build::layout::Description, Error<F>> {
+	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
 		match self {
 			Self::Standard(desc) => Ok(desc),
 			Self::Intersection(id, restricted_fields) => {
@@ -1510,22 +1597,65 @@ impl<F: Clone + Ord>
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<treeldr_build::layout::Description, Error<F>> {
+	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
 		a.simplify(source, target, vocabulary, causes)
 	}
 }
 
-impl<F> From<treeldr_build::layout::Description> for LayoutDescription<F> {
-	fn from(d: treeldr_build::layout::Description) -> Self {
+impl<F> From<treeldr_build::layout::Description<F>> for LayoutDescription<F> {
+	fn from(d: treeldr_build::layout::Description<F>) -> Self {
 		Self::Standard(d)
 	}
 }
 
-impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription for LayoutDescription<F> {
-	fn as_standard(&self) -> Option<&treeldr_build::layout::Description> {
+impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescription<F> {
+	fn as_standard(&self) -> Option<&treeldr_build::layout::Description<F>> {
 		match self {
 			Self::Standard(s) => Some(s),
 			_ => None,
+		}
+	}
+
+	fn as_standard_mut(&mut self) -> Option<&mut treeldr_build::layout::Description<F>> {
+		match self {
+			Self::Standard(s) => Some(s),
+			_ => None,
+		}
+	}
+
+	fn try_unify(
+		self,
+		other: Self,
+		id: Id,
+		causes: &Causes<F>,
+		other_causes: &Causes<F>,
+	) -> Result<Self, treeldr_build::Error<F>> {
+		match (self, other) {
+			(Self::Standard(a), Self::Standard(b)) => {
+				Ok(Self::Standard(a.try_unify(b, id, causes, other_causes)?))
+			}
+			(Self::Intersection(a, a_restrictions), Self::Intersection(b, b_restrictions)) => {
+				if a == b && a_restrictions == b_restrictions {
+					Ok(Self::Intersection(a, a_restrictions))
+				} else {
+					Err(treeldr_build::Error::new(
+						treeldr_build::error::LayoutMismatchDescription {
+							id,
+							because: causes.preferred().cloned(),
+						}
+						.into(),
+						other_causes.preferred().cloned(),
+					))
+				}
+			}
+			_ => Err(treeldr_build::Error::new(
+				treeldr_build::error::LayoutMismatchDescription {
+					id,
+					because: causes.preferred().cloned(),
+				}
+				.into(),
+				other_causes.preferred().cloned(),
+			)),
 		}
 	}
 }

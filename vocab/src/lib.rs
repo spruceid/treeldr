@@ -85,6 +85,18 @@ pub enum TreeLdr {
 	#[iri("tldr:array")]
 	Array,
 
+	/// Defines the `first` property for the list semantics of an array layout.
+	#[iri("tldr:arrayListFirst")]
+	ArrayListFirst,
+
+	/// Defines the `rest` property for the list semantics of an array layout.
+	#[iri("tldr:arrayListRest")]
+	ArrayListRest,
+
+	/// Defines the `nil` value for the list semantics of an array layout.
+	#[iri("tldr:arrayListNil")]
+	ArrayListNil,
+
 	/// Set layout.
 	#[iri("tldr:set")]
 	Set,
@@ -177,6 +189,9 @@ pub enum Schema {
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("rdfs" = "http://www.w3.org/2000/01/rdf-schema#")]
 pub enum Rdfs {
+	#[iri("rdfs:Resource")]
+	Resource,
+
 	#[iri("rdfs:Class")]
 	Class,
 

@@ -258,6 +258,34 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_enum(fields_id, Some(loc))?
 				}
+				Term::TreeLdr(vocab::TreeLdr::Array) => {
+					let Loc(item_id, _) = expect_id(object)?;
+					let layout = context.require_layout_mut(id, Some(id_loc))?;
+					layout.set_array(item_id, None, Some(loc))?
+				}
+				Term::TreeLdr(vocab::TreeLdr::ArrayListFirst) => {
+					let Loc(prop_id, _) = expect_id(object)?;
+					let layout = context.require_layout_mut(id, Some(id_loc))?;
+					layout.set_array(prop_id, None, Some(loc.clone()))?;
+					layout.set_array_list_first(prop_id, Some(loc))?
+				}
+				Term::TreeLdr(vocab::TreeLdr::ArrayListRest) => {
+					let Loc(prop_id, _) = expect_id(object)?;
+					let layout = context.require_layout_mut(id, Some(id_loc))?;
+					layout.set_array(prop_id, None, Some(loc.clone()))?;
+					layout.set_array_list_rest(prop_id, Some(loc))?
+				}
+				Term::TreeLdr(vocab::TreeLdr::ArrayListNil) => {
+					let Loc(nil_id, _) = expect_id(object)?;
+					let layout = context.require_layout_mut(id, Some(id_loc))?;
+					layout.set_array(nil_id, None, Some(loc.clone()))?;
+					layout.set_array_list_nil(nil_id, Some(loc))?
+				}
+				Term::TreeLdr(vocab::TreeLdr::Set) => {
+					let Loc(item_id, _) = expect_id(object)?;
+					let layout = context.require_layout_mut(id, Some(id_loc))?;
+					layout.set_set(item_id, Some(loc))?
+				}
 				_ => (),
 			}
 		}

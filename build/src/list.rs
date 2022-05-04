@@ -42,15 +42,19 @@ impl<F> Definition<F> {
 	where
 		F: Clone + Ord,
 	{
-		self.rest.try_set(list, cause, |expected, because, found| {
-			error::ListMismatchRest {
-				id: self.id,
-				expected: *expected,
-				found,
-				because: because.cloned(),
-			}
-			.into()
-		})
+		self.rest
+			.try_set(list, cause, |expected, found, because, causes| {
+				Error::new(
+					error::ListMismatchRest {
+						id: self.id,
+						expected,
+						found,
+						because: because.preferred().cloned(),
+					}
+					.into(),
+					causes.preferred().cloned(),
+				)
+			})
 	}
 }
 

@@ -2,7 +2,7 @@ use crate::{ty, vocab::Name, Causes, Documentation, Id, MaybeSet, WithCauses};
 use locspan::Location;
 use shelves::Ref;
 
-mod array;
+pub mod array;
 pub mod enumeration;
 pub mod literal;
 mod native;

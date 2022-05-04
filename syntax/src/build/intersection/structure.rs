@@ -144,7 +144,7 @@ impl<F: Clone + Ord> IntersectedStruct<F> {
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<treeldr_build::layout::Description, Error<F>> {
+	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
 		let mut fields = Vec::new();
 		for field in self.fields {
 			let (field, causes) = field.into_parts();

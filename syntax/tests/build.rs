@@ -61,6 +61,7 @@ fn parse_treeldr<P: AsRef<Path>>(
 	let mut lexer = Lexer::new((), input.chars().map(infallible));
 	let ast = treeldr_syntax::Document::parse(&mut lexer).expect("parse error");
 	let mut context = BuildContext::new();
+	context.define_rdf_types().unwrap();
 	context.define_xml_types().unwrap();
 	let mut local_context =
 		treeldr_syntax::build::LocalContext::new(Some(iri!("http://www.example.com").into()));
@@ -150,6 +151,11 @@ fn t010() {
 #[test]
 fn t011() {
 	test("tests/011-in.tldr", "tests/011-out.nq")
+}
+
+#[test]
+fn t012() {
+	test("tests/012-in.tldr", "tests/012-out.nq")
 }
 
 #[test]
