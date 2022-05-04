@@ -1415,14 +1415,18 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 				let Loc(item_id, _) = item.build(local_context, context, vocabulary)?;
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
-				if local_context.implicit_definition {
+				let semantics = if local_context.implicit_definition {
 					layout.set_type(id, Some(loc.clone()))?;
-				}
-				layout.set_array(
-					item_id,
 					Some(treeldr_build::layout::array::Semantics::rdf_list(Some(
 						loc.clone(),
-					))),
+					)))
+				} else {
+					None
+				};
+				
+				layout.set_array(
+					item_id,
+					semantics,
 					Some(loc.clone()),
 				)?;
 
