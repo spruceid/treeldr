@@ -5,7 +5,6 @@ use std::fmt;
 
 pub use shelves::Ref;
 
-pub mod build;
 mod cause;
 mod doc;
 pub mod error;
@@ -18,6 +17,7 @@ pub mod reporting;
 pub mod ty;
 pub mod utils;
 pub use treeldr_vocab as vocab;
+mod to_rdf;
 
 pub use cause::*;
 pub use doc::Documentation;
@@ -31,9 +31,6 @@ pub use vocab::{Id, Vocabulary};
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Model<F> {
-	/// Vocabulary.
-	vocab: Vocabulary,
-
 	/// Nodes.
 	nodes: HashMap<Id, Node<F>>,
 
@@ -53,40 +50,18 @@ impl<F> Model<F> {
 		Self::default()
 	}
 
-	pub fn with_vocabulary(vocab: Vocabulary) -> Self {
-		Self {
-			vocab,
-			nodes: HashMap::new(),
-			types: Shelf::default(),
-			properties: Shelf::default(),
-			layouts: Shelf::default(),
-		}
-	}
-
 	pub fn from_parts(
-		vocab: Vocabulary,
 		nodes: HashMap<Id, Node<F>>,
 		types: Shelf<Vec<ty::Definition<F>>>,
 		properties: Shelf<Vec<prop::Definition<F>>>,
 		layouts: Shelf<Vec<layout::Definition<F>>>,
 	) -> Self {
 		Self {
-			vocab,
 			nodes,
 			types,
 			properties,
 			layouts,
 		}
-	}
-
-	/// Returns a reference to the vocabulary.
-	pub fn vocabulary(&self) -> &Vocabulary {
-		&self.vocab
-	}
-
-	/// Returns a mutable reference to the vocabulary.
-	pub fn vocabulary_mut(&mut self) -> &mut Vocabulary {
-		&mut self.vocab
 	}
 
 	/// Returns the node associated to the given `Id`, if any.
@@ -144,19 +119,12 @@ impl<F> Model<F> {
 		&mut self.layouts
 	}
 
-	pub fn require(
-		&self,
-		id: Id,
-		expected_ty: Option<node::Type>,
-	) -> Result<&Node<F>, error::Description<F>> {
+	pub fn require(&self, id: Id, expected_ty: Option<node::Type>) -> Result<&Node<F>, Error<F>> {
 		self.get(id)
 			.ok_or_else(|| error::NodeUnknown { id, expected_ty }.into())
 	}
 
-	pub fn require_layout(
-		&self,
-		id: Id,
-	) -> Result<Ref<layout::Definition<F>>, error::Description<F>>
+	pub fn require_layout(&self, id: Id) -> Result<Ref<layout::Definition<F>>, Error<F>>
 	where
 		F: Clone,
 	{

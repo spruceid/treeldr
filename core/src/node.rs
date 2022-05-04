@@ -1,4 +1,4 @@
-use crate::{error, layout, prop, ty, Caused, Documentation, Id, MaybeSet};
+use crate::{error, layout, prop, ty, Caused, Documentation, Error, Id, MaybeSet};
 use locspan::Location;
 use shelves::Ref;
 
@@ -217,7 +217,7 @@ impl<F> Node<F> {
 		}
 	}
 
-	pub fn require_layout(&self) -> Result<Ref<layout::Definition<F>>, error::Description<F>>
+	pub fn require_layout(&self) -> Result<Ref<layout::Definition<F>>, Error<F>>
 	where
 		F: Clone,
 	{

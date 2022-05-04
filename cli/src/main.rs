@@ -4,9 +4,12 @@ use codespan_reporting::term::{
 	termcolor::{ColorChoice, StandardStream},
 };
 use std::{convert::Infallible, path::PathBuf};
+use treeldr::Vocabulary;
 use treeldr_syntax as syntax;
 
 mod source;
+
+type BuildContext = treeldr_build::Context<source::FileId, syntax::build::Descriptions>;
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -25,8 +28,8 @@ struct Args {
 
 #[derive(clap::Subcommand)]
 pub enum Command {
-	/// Dump the parsed RDF dataset.
-	Dump,
+	/// Convert the input to an RDF dataset.
+	Rdf,
 
 	#[cfg(feature = "json-schema")]
 	JsonSchema(treeldr_json_schema::Command),
@@ -43,12 +46,11 @@ fn main() {
 	stderrlog::new().verbosity(args.verbosity).init().unwrap();
 
 	let mut files = source::Files::new();
-	let mut vocab = treeldr::Vocabulary::new();
-	let mut quads = Vec::new();
+	let mut documents = Vec::new();
 	for filename in args.filenames {
 		match files.load(&filename, None) {
 			Ok(file_id) => {
-				import_treeldr(&mut vocab, &mut quads, &files, file_id);
+				documents.push(Document::TreeLdr(import_treeldr(&files, file_id)));
 			}
 			Err(e) => {
 				log::error!("unable to read file `{}`: {}", filename.display(), e);
@@ -57,49 +59,129 @@ fn main() {
 		}
 	}
 
-	match args.command {
-		Some(Command::Dump) => {
-			for quad in &quads {
-				use treeldr::vocab::RdfDisplay;
-				println!("{} .", quad.rdf_display(&vocab))
-			}
-		}
-		command => {
-			let mut build_context: treeldr::build::Context<source::FileId> =
-				treeldr::build::Context::with_vocabulary(vocab);
-			build_context.define_xml_types().unwrap();
+	use treeldr::reporting::Diagnose;
+	use treeldr::vocab::BorrowWithVocabulary;
+	let mut vocabulary = treeldr::Vocabulary::new();
+	let mut build_context = BuildContext::new();
+	build_context.define_xml_types().unwrap();
 
-			match build_context.build_dataset(quads.into_iter().collect()) {
-				#[allow(unused_variables)]
-				Ok(model) => match command {
-					#[cfg(feature = "json-schema")]
-					Some(Command::JsonSchema(command)) => command.execute(&model),
-					#[cfg(feature = "json-ld-context")]
-					Some(Command::JsonLdContext(command)) => command.execute(&model),
-					_ => (),
-				},
-				Err((e, vocab)) => {
-					use treeldr::reporting::Diagnose;
-					let diagnostic = e.with_vocabulary(&vocab).diagnostic();
-					let writer = StandardStream::stderr(ColorChoice::Always);
-					let config = codespan_reporting::term::Config::default();
-					term::emit(&mut writer.lock(), &config, &files, &diagnostic)
-						.expect("diagnostic failed");
-					std::process::exit(1);
+	for doc in &mut documents {
+		if let Err(e) = doc.declare(&mut build_context, &mut vocabulary) {
+			let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
+			let writer = StandardStream::stderr(ColorChoice::Always);
+			let config = codespan_reporting::term::Config::default();
+			term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+				.expect("diagnostic failed");
+			std::process::exit(1);
+		}
+	}
+
+	for doc in documents {
+		if let Err(e) = doc.build(&mut build_context, &mut vocabulary) {
+			let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
+			let writer = StandardStream::stderr(ColorChoice::Always);
+			let config = codespan_reporting::term::Config::default();
+			term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+				.expect("diagnostic failed");
+			std::process::exit(1);
+		}
+	}
+
+	match build_context.simplify(&mut vocabulary) {
+		Ok(build_context) => match build_context.build(&mut vocabulary) {
+			#[allow(unused_variables)]
+			Ok(model) => match args.command {
+				Some(Command::Rdf) => {
+					use treeldr::vocab::RdfDisplay;
+					let mut quads = Vec::new();
+					model.to_rdf(&mut vocabulary, &mut quads);
+					for quad in quads {
+						println!("{} .", quad.rdf_display(&vocabulary))
+					}
 				}
+				#[cfg(feature = "json-schema")]
+				Some(Command::JsonSchema(command)) => command.execute(&vocabulary, &model),
+				#[cfg(feature = "json-ld-context")]
+				Some(Command::JsonLdContext(command)) => command.execute(&vocabulary, &model),
+				_ => (),
+			},
+			Err(e) => {
+				let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
+				let writer = StandardStream::stderr(ColorChoice::Always);
+				let config = codespan_reporting::term::Config::default();
+				term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+					.expect("diagnostic failed");
+				std::process::exit(1);
 			}
+		},
+		Err(e) => {
+			let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
+			let writer = StandardStream::stderr(ColorChoice::Always);
+			let config = codespan_reporting::term::Config::default();
+			term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+				.expect("diagnostic failed");
+			std::process::exit(1);
+		}
+	}
+}
+
+pub struct TreeLdrDocument {
+	doc: syntax::Document<source::FileId>,
+	local_context: syntax::build::LocalContext<source::FileId>,
+}
+
+impl TreeLdrDocument {
+	fn declare(
+		&mut self,
+		context: &mut BuildContext,
+		vocabulary: &mut Vocabulary,
+	) -> Result<(), syntax::build::Error<source::FileId>> {
+		use treeldr_build::Document;
+		self.doc
+			.declare(&mut self.local_context, context, vocabulary)
+	}
+
+	fn build(
+		mut self,
+		context: &mut BuildContext,
+		vocabulary: &mut Vocabulary,
+	) -> Result<(), syntax::build::Error<source::FileId>> {
+		use treeldr_build::Document;
+		self.doc
+			.relate(&mut self.local_context, context, vocabulary)
+	}
+}
+
+pub enum Document {
+	TreeLdr(TreeLdrDocument),
+}
+
+impl Document {
+	fn declare(
+		&mut self,
+		context: &mut BuildContext,
+		vocabulary: &mut Vocabulary,
+	) -> Result<(), syntax::build::Error<source::FileId>> {
+		match self {
+			Self::TreeLdr(d) => d.declare(context, vocabulary),
+		}
+	}
+
+	fn build(
+		self,
+		context: &mut BuildContext,
+		vocabulary: &mut Vocabulary,
+	) -> Result<(), syntax::build::Error<source::FileId>> {
+		match self {
+			Self::TreeLdr(d) => d.build(context, vocabulary),
 		}
 	}
 }
 
 /// Import a TreeLDR file.
-fn import_treeldr(
-	vocab: &mut treeldr::Vocabulary,
-	quads: &mut Vec<syntax::vocab::LocQuad<source::FileId>>,
-	files: &source::Files,
-	source_id: source::FileId,
-) {
-	use syntax::{reporting::Diagnose, Build, Parse};
+fn import_treeldr(files: &source::Files, source_id: source::FileId) -> TreeLdrDocument {
+	use syntax::Parse;
+	use treeldr::reporting::Diagnose;
 	let file = files.get(source_id).unwrap();
 
 	let mut lexer =
@@ -109,19 +191,11 @@ fn import_treeldr(
 	match syntax::Document::parse(&mut lexer) {
 		Ok(doc) => {
 			log::debug!("parsing succeeded.");
-			let mut env = syntax::build::Context::new(vocab, file.base_iri().map(|iri| iri.into()));
-			match doc.build(&mut env, quads) {
-				Ok(()) => {
-					log::debug!("build succeeded.");
-				}
-				Err(e) => {
-					let diagnostic = e.diagnostic();
-					let writer = StandardStream::stderr(ColorChoice::Always);
-					let config = codespan_reporting::term::Config::default();
-					term::emit(&mut writer.lock(), &config, files, &diagnostic)
-						.expect("diagnostic failed");
-					std::process::exit(1);
-				}
+			TreeLdrDocument {
+				doc: doc.into_value(),
+				local_context: syntax::build::LocalContext::new(
+					file.base_iri().map(|iri| iri.into()),
+				),
 			}
 		}
 		Err(e) => {

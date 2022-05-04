@@ -2,6 +2,7 @@ use super::*;
 use lexing::{Delimiter, Keyword, Punct, Token, TokenKind, Tokens};
 use locspan::{Loc, Location, MapLocErr};
 use std::{fmt, fmt::Debug};
+use treeldr::reporting;
 
 /// Parse error.
 #[derive(Debug)]
@@ -13,27 +14,31 @@ pub enum Error<E> {
 	Lexer(E),
 }
 
-impl<E: Debug + fmt::Display, F: Clone> reporting::Diagnose<F> for Loc<Error<E>, F> {
-	fn message(&self) -> String {
-		match self.value() {
-			Error::Unexpected(_, _) => "parsing error".to_owned(),
-			Error::InvalidUseId(_) => "invalid use IRI".to_owned(),
-			Error::InvalidPrefix(_) => "invalid prefix".to_owned(),
-			Error::InvalidAlias(_) => "invalid alias".to_owned(),
-			Error::Lexer(_) => "lexing error".to_owned(),
+impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithCause<F> for Error<E> {
+	fn message(&self, _cause: Option<&Location<F>>) -> String {
+		match self {
+			Self::Unexpected(_, _) => "parsing error".to_owned(),
+			Self::InvalidUseId(_) => "invalid use IRI".to_owned(),
+			Self::InvalidPrefix(_) => "invalid prefix".to_owned(),
+			Self::InvalidAlias(_) => "invalid alias".to_owned(),
+			Self::Lexer(_) => "lexing error".to_owned(),
 		}
 	}
 
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
-		vec![codespan_reporting::diagnostic::Label::primary(
-			self.location().file().clone(),
-			self.location().span(),
-		)
-		.with_message(self.to_string())]
+	fn labels(&self, cause: Option<&Location<F>>) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+		match cause {
+			Some(loc) => {
+				vec![
+					codespan_reporting::diagnostic::Label::primary(loc.file().clone(), loc.span())
+						.with_message(self.to_string()),
+				]
+			}
+			None => Vec::new(),
+		}
 	}
 
-	fn notes(&self) -> Vec<String> {
-		if let Error::Unexpected(_, expected) = self.value() {
+	fn notes(&self, _cause: Option<&Location<F>>) -> Vec<String> {
+		if let Error::Unexpected(_, expected) = self {
 			if !expected.is_empty() {
 				let mut note = "expected ".to_owned();
 
@@ -529,7 +534,15 @@ impl<F: Clone> Parse<F> for PropertyDefinition<F> {
 			_ => None,
 		};
 
-		Ok(Loc::new(Self { id, ty, doc }, loc))
+		Ok(Loc::new(
+			Self {
+				id,
+				alias: None,
+				ty,
+				doc,
+			},
+			loc,
+		))
 	}
 }
 
@@ -675,18 +688,30 @@ impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
 		let Loc(first, first_loc) = NamedInnerTypeExpr::parse_from(lexer, token, loc.clone())?;
 
-		if let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
-			let mut options = vec![Loc(first, first_loc)];
-			while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
-				next_token(lexer)?;
-				let item = NamedInnerTypeExpr::parse(lexer)?;
-				loc.span_mut().append(item.span());
-				options.push(item);
-			}
+		match peek_token(lexer)? {
+			Loc(Some(Token::Punct(Punct::Pipe)), _) => {
+				let mut options = vec![Loc(first, first_loc)];
+				while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
+					next_token(lexer)?;
+					let item = NamedInnerTypeExpr::parse(lexer)?;
+					loc.span_mut().append(item.span());
+					options.push(item);
+				}
 
-			Ok(Loc(Self::Union(options), loc))
-		} else {
-			Ok(Loc(Self::Inner(first), first_loc))
+				Ok(Loc(Self::Union(lexer.next_label(), options), loc))
+			}
+			Loc(Some(Token::Punct(Punct::Ampersand)), _) => {
+				let mut types = vec![Loc(first, first_loc)];
+				while let Loc(Some(Token::Punct(Punct::Ampersand)), _) = peek_token(lexer)? {
+					next_token(lexer)?;
+					let item = NamedInnerTypeExpr::parse(lexer)?;
+					loc.span_mut().append(item.span());
+					types.push(item);
+				}
+
+				Ok(Loc(Self::Intersection(lexer.next_label(), types), loc))
+			}
+			_ => Ok(Loc(Self::Inner(first), first_loc)),
 		}
 	}
 }
@@ -721,6 +746,7 @@ impl<F: Clone> Parse<F> for NamedInnerTypeExpr<F> {
 impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
+		TokenKind::Keyword(Keyword::All),
 		TokenKind::Punct(Punct::Ampersand),
 		TokenKind::Literal,
 	];
@@ -730,18 +756,87 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 		token: Token,
 		mut loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
-		match token.no_keyword() {
-			Token::Id(id) => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
-			Token::Punct(lexing::Punct::Ampersand) => {
-				let arg = Self::parse(lexer)?;
-				loc.span_mut().set_end(arg.span().end());
-				Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
+		match token {
+			Token::Keyword(Keyword::All) => {
+				#[allow(clippy::type_complexity)]
+				fn parse_property_restriction<F, L: Tokens<F>>(
+					lexer: &mut L,
+					prop: Loc<Id, F>,
+					alias: Option<Loc<Alias, F>>,
+					mut loc: Location<F>,
+				) -> Result<Loc<TypeRestrictedProperty<F>, F>, Loc<Error<L::Error>, F>>
+				where
+					F: Clone,
+				{
+					let ty = InnerTypeExpr::parse(lexer)?;
+					let restriction_loc = ty.location().clone();
+					loc.span_mut().append(ty.span());
+					Ok(Loc(
+						TypeRestrictedProperty {
+							prop,
+							alias,
+							restriction: Loc(
+								TypePropertyRestriction::Range(TypePropertyRangeRestriction::All(
+									Box::new(ty),
+								)),
+								restriction_loc,
+							),
+						},
+						loc,
+					))
+				}
+
+				let id = Id::parse(lexer)?;
+
+				match next_token(lexer)? {
+					Loc(Some(Token::Keyword(lexing::Keyword::As)), _) => {
+						let alias = Alias::parse(lexer)?;
+						match next_expected_token(lexer, || {
+							vec![TokenKind::Punct(lexing::Punct::Colon)]
+						})? {
+							Loc(Token::Punct(lexing::Punct::Colon), _) => {
+								let restriction =
+									parse_property_restriction(lexer, id, Some(alias), loc)?;
+								Ok(restriction.map(Self::PropertyRestriction))
+							}
+							Loc(unexpected, loc) => Err(Loc::new(
+								Error::Unexpected(
+									Some(unexpected),
+									vec![TokenKind::Punct(lexing::Punct::Colon)],
+								),
+								loc,
+							)),
+						}
+					}
+					Loc(Some(Token::Punct(lexing::Punct::Colon)), _) => {
+						let restriction = parse_property_restriction(lexer, id, None, loc)?;
+						Ok(restriction.map(Self::PropertyRestriction))
+					}
+					Loc(unexpected, loc) => Err(Loc::new(
+						Error::Unexpected(
+							unexpected,
+							vec![
+								TokenKind::Keyword(Keyword::As),
+								TokenKind::Punct(lexing::Punct::Colon),
+							],
+						),
+						loc,
+					)),
+				}
 			}
-			Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
-			unexpected => Err(Loc::new(
-				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
-				loc,
-			)),
+			token => match token.no_keyword() {
+				Token::Id(id) => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
+				Token::Punct(lexing::Punct::Ampersand) => {
+					let arg = Self::parse(lexer)?;
+					loc.span_mut().set_end(arg.span().end());
+					Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
+				}
+				Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
+				unexpected => Err(Loc::new(
+					Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
+					loc,
+				)),
+			},
 		}
 	}
 }
@@ -806,18 +901,30 @@ impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
 		let Loc(first, first_loc) = NamedInnerLayoutExpr::parse_from(lexer, token, loc.clone())?;
 
-		if let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
-			let mut options = vec![Loc(first, first_loc)];
-			while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
-				next_token(lexer)?;
-				let item = NamedInnerLayoutExpr::parse(lexer)?;
-				loc.span_mut().append(item.span());
-				options.push(item);
-			}
+		match peek_token(lexer)? {
+			Loc(Some(Token::Punct(Punct::Pipe)), _) => {
+				let mut options = vec![Loc(first, first_loc)];
+				while let Loc(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
+					next_token(lexer)?;
+					let item = NamedInnerLayoutExpr::parse(lexer)?;
+					loc.span_mut().append(item.span());
+					options.push(item);
+				}
 
-			Ok(Loc(Self::Union(options), loc))
-		} else {
-			Ok(Loc(Self::Inner(first), first_loc))
+				Ok(Loc(Self::Union(lexer.next_label(), options), loc))
+			}
+			Loc(Some(Token::Punct(Punct::Ampersand)), _) => {
+				let mut layouts = vec![Loc(first, first_loc)];
+				while let Loc(Some(Token::Punct(Punct::Ampersand)), _) = peek_token(lexer)? {
+					next_token(lexer)?;
+					let item = NamedInnerLayoutExpr::parse(lexer)?;
+					loc.span_mut().append(item.span());
+					layouts.push(item);
+				}
+
+				Ok(Loc(Self::Intersection(lexer.next_label(), layouts), loc))
+			}
+			_ => Ok(Loc(Self::Inner(first), first_loc)),
 		}
 	}
 }

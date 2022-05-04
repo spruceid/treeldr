@@ -1,77 +1,38 @@
-use crate::{prop, Causes, Model, Ref};
-use std::collections::{HashMap, HashSet};
+use super::Properties;
+use crate::{Causes, Ref};
+use std::collections::BTreeMap;
 
 pub struct Union<F> {
-	options: HashMap<Ref<super::Definition<F>>, Causes<F>>,
+	options: BTreeMap<Ref<super::Definition<F>>, Causes<F>>,
+
+	/// Properties in the union.
+	properties: Properties<F>,
 }
 
 impl<F> Union<F> {
-	pub fn new(options: HashMap<Ref<super::Definition<F>>, Causes<F>>) -> Self {
-		Self { options }
-	}
-
-	pub fn properties_with_duplicates<'m>(
-		&'m self,
-		model: &'m Model<F>,
-	) -> PropertiesWithDuplicates<'m, F> {
-		PropertiesWithDuplicates {
-			model,
-			remaning_options: self.options.keys(),
-			current: None,
-		}
-	}
-
-	pub fn properties<'m>(&'m self, model: &'m Model<F>) -> Properties<'m, F> {
-		Properties {
-			visited: HashSet::new(),
-			inner: self.properties_with_duplicates(model),
-		}
-	}
-}
-
-pub struct PropertiesWithDuplicates<'a, F> {
-	model: &'a Model<F>,
-	remaning_options: std::collections::hash_map::Keys<'a, Ref<super::Definition<F>>, Causes<F>>,
-	current: Option<Box<super::PropertiesWithDuplicates<'a, F>>>,
-}
-
-impl<'a, F> Iterator for PropertiesWithDuplicates<'a, F> {
-	type Item = (Ref<prop::Definition<F>>, &'a Causes<F>);
-
-	fn next(&mut self) -> Option<Self::Item> {
-		loop {
-			match self.current.as_mut() {
-				Some(current) => match current.next() {
-					Some(next) => break Some(next),
-					None => self.current = None,
-				},
-				None => match self.remaning_options.next() {
-					Some(ty_ref) => {
-						let ty = self.model.types().get(*ty_ref).unwrap();
-						self.current = Some(Box::new(ty.properties_with_duplicates(self.model)))
-					}
-					None => break None,
-				},
-			}
-		}
-	}
-}
-
-pub struct Properties<'a, F> {
-	visited: HashSet<Ref<prop::Definition<F>>>,
-	inner: PropertiesWithDuplicates<'a, F>,
-}
-
-impl<'a, F> Iterator for Properties<'a, F> {
-	type Item = (Ref<prop::Definition<F>>, &'a Causes<F>);
-
-	fn next(&mut self) -> Option<Self::Item> {
-		for next in self.inner.by_ref() {
-			if self.visited.insert(next.0) {
-				return Some(next);
+	pub fn new<'a, G>(options: BTreeMap<Ref<super::Definition<F>>, Causes<F>>, get: G) -> Self
+	where
+		F: 'a + Clone + Ord,
+		G: 'a + Fn(Ref<super::Definition<F>>) -> &'a super::Definition<F>,
+	{
+		let mut properties = Properties::none();
+		for &ty_ref in options.keys() {
+			if let Some(ty_properties) = get(ty_ref).properties() {
+				properties.unite_with(ty_properties);
 			}
 		}
 
-		None
+		Self {
+			options,
+			properties,
+		}
+	}
+
+	pub fn options(&self) -> impl '_ + DoubleEndedIterator<Item = Ref<super::Definition<F>>> {
+		self.options.keys().cloned()
+	}
+
+	pub fn properties(&self) -> &Properties<F> {
+		&self.properties
 	}
 }

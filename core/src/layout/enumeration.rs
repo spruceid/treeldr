@@ -1,9 +1,16 @@
-use crate::{vocab::Name, Documentation, MaybeSet, Ref, WithCauses};
+use crate::{vocab::Name, Causes, Documentation, MaybeSet, Ref, WithCauses};
+use locspan::Location;
 
 /// Enum layout.
+#[derive(Clone)]
 pub struct Enum<F> {
 	name: WithCauses<Name, F>,
 	variants: Vec<WithCauses<Variant<F>, F>>,
+}
+
+pub struct Parts<F> {
+	pub name: WithCauses<Name, F>,
+	pub variants: Vec<WithCauses<Variant<F>, F>>,
 }
 
 impl<F> Enum<F> {
@@ -11,8 +18,30 @@ impl<F> Enum<F> {
 		Self { name, variants }
 	}
 
+	pub fn into_parts(self) -> Parts<F> {
+		Parts {
+			name: self.name,
+			variants: self.variants,
+		}
+	}
+
 	pub fn name(&self) -> &Name {
 		&self.name
+	}
+
+	pub fn into_name(self) -> WithCauses<Name, F> {
+		self.name
+	}
+
+	pub fn name_causes(&self) -> &Causes<F> {
+		self.name.causes()
+	}
+
+	pub fn set_name(&mut self, new_name: Name, cause: Option<Location<F>>) -> WithCauses<Name, F>
+	where
+		F: Ord,
+	{
+		std::mem::replace(&mut self.name, WithCauses::new(new_name, cause))
 	}
 
 	pub fn variants(&self) -> &[WithCauses<Variant<F>, F>] {
@@ -31,11 +60,19 @@ impl<F> Enum<F> {
 	}
 }
 
+#[derive(Clone)]
 pub struct Variant<F> {
 	name: WithCauses<Name, F>,
 	layout: MaybeSet<Ref<super::Definition<F>>, F>,
 	label: Option<String>,
 	doc: Documentation,
+}
+
+pub struct VariantParts<F> {
+	pub name: WithCauses<Name, F>,
+	pub layout: MaybeSet<Ref<super::Definition<F>>, F>,
+	pub label: Option<String>,
+	pub doc: Documentation,
 }
 
 impl<F> Variant<F> {
@@ -50,6 +87,15 @@ impl<F> Variant<F> {
 			layout,
 			label,
 			doc,
+		}
+	}
+
+	pub fn into_parts(self) -> VariantParts<F> {
+		VariantParts {
+			name: self.name,
+			layout: self.layout,
+			label: self.label,
+			doc: self.doc,
 		}
 	}
 

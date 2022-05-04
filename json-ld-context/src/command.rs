@@ -1,6 +1,6 @@
 use iref::{Iri, IriBuf};
 use std::fmt;
-use treeldr::{layout, Ref};
+use treeldr::{layout, Ref, Vocabulary};
 
 #[derive(clap::Args)]
 /// Generate a JSON-LD Context from a TreeLDR model.
@@ -31,26 +31,24 @@ impl<F> fmt::Display for Error<F> {
 }
 
 fn find_layout<F: Clone>(
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	iri: Iri,
 ) -> Result<Ref<layout::Definition<F>>, Error<F>> {
-	let name = treeldr::vocab::Term::try_from_iri(iri, model.vocabulary())
+	let name = treeldr::vocab::Term::try_from_iri(iri, vocabulary)
 		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
 	model
 		.require_layout(treeldr::Id::Iri(name))
 		.map_err(|e| match e {
-			treeldr::error::Description::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
-			treeldr::error::Description::NodeInvalidType(e) => {
-				Error::NotALayout(iri.into(), e.found)
-			}
-			_ => unreachable!(),
+			treeldr::Error::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
+			treeldr::Error::NodeInvalidType(e) => Error::NotALayout(iri.into(), e.found),
 		})
 }
 
 impl Command {
-	pub fn execute<F: Clone>(self, model: &treeldr::Model<F>) {
+	pub fn execute<F: Clone>(self, vocabulary: &Vocabulary, model: &treeldr::Model<F>) {
 		log::info!("generating JSON Schema.");
-		match self.try_execute(model) {
+		match self.try_execute(vocabulary, model) {
 			Ok(()) => (),
 			Err(e) => {
 				log::error!("{}", e);
@@ -59,13 +57,17 @@ impl Command {
 		}
 	}
 
-	fn try_execute<F: Clone>(self, model: &treeldr::Model<F>) -> Result<(), Error<F>> {
+	fn try_execute<F: Clone>(
+		self,
+		vocabulary: &Vocabulary,
+		model: &treeldr::Model<F>,
+	) -> Result<(), Error<F>> {
 		let mut layouts = Vec::with_capacity(self.layouts.len());
 		for layout_iri in self.layouts {
-			layouts.push(find_layout(model, layout_iri.as_iri())?);
+			layouts.push(find_layout(vocabulary, model, layout_iri.as_iri())?);
 		}
 
-		match crate::generate(model, layouts, self.type_property) {
+		match crate::generate(vocabulary, model, layouts, self.type_property) {
 			Ok(()) => Ok(()),
 			Err(crate::Error::Serialization(e)) => Err(Error::Serialization(e)),
 		}

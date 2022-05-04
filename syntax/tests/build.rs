@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use treeldr_vocab::{GraphLabel, Id, StrippedObject, Term, Vocabulary};
 
+type BuildContext = treeldr_build::Context<(), treeldr_syntax::build::Descriptions>;
+
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
 }
@@ -29,7 +31,7 @@ impl BlankIdGenerator {
 fn parse_nquads<P: AsRef<Path>>(
 	vocabulary: &mut Vocabulary,
 	path: P,
-) -> grdf::HashDataset<Id, Term, StrippedObject, GraphLabel> {
+) -> grdf::BTreeDataset<Id, Term, StrippedObject, GraphLabel> {
 	use nquads_syntax::{lexing::Utf8Decoded, Document, Lexer, Parse};
 
 	let buffer = std::fs::read_to_string(path).expect("unable to read file");
@@ -49,19 +51,33 @@ fn parse_nquads<P: AsRef<Path>>(
 }
 
 fn parse_treeldr<P: AsRef<Path>>(
-	vocab: &mut Vocabulary,
+	vocabulary: &mut Vocabulary,
 	path: P,
-) -> grdf::HashDataset<Id, Term, StrippedObject, GraphLabel> {
-	use treeldr_syntax::{build, Build, Document, Lexer, Parse};
+) -> grdf::BTreeDataset<Id, Term, StrippedObject, GraphLabel> {
+	use treeldr_build::Document;
+	use treeldr_syntax::{Lexer, Parse};
 
 	let input = std::fs::read_to_string(path).expect("unable to read input file");
 	let mut lexer = Lexer::new((), input.chars().map(infallible));
-	let ast = Document::parse(&mut lexer).expect("parse error");
-	let mut context = build::Context::new(vocab, Some(iri!("http://www.example.com").into()));
-	let mut quads = Vec::new();
-	ast.build(&mut context, &mut quads).expect("build error");
+	let ast = treeldr_syntax::Document::parse(&mut lexer).expect("parse error");
+	let mut context = BuildContext::new();
+	context.define_xml_types().unwrap();
+	let mut local_context =
+		treeldr_syntax::build::LocalContext::new(Some(iri!("http://www.example.com").into()));
+	ast.declare(&mut local_context, &mut context, vocabulary)
+		.expect("build error");
+	ast.into_value()
+		.relate(&mut local_context, &mut context, vocabulary)
+		.expect("build error");
 
-	quads.into_iter().map(treeldr_vocab::strip_quad).collect()
+	let context = context.simplify(vocabulary).expect("simplification failed");
+
+	let model = context.build(vocabulary).expect("build error");
+
+	let mut quads = Vec::new();
+	model.to_rdf(vocabulary, &mut quads);
+
+	quads.into_iter().collect()
 }
 
 fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) {

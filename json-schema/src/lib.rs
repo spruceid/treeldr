@@ -1,4 +1,4 @@
-use treeldr::{layout, vocab::Display, Ref};
+use treeldr::{layout, vocab::Display, Ref, Vocabulary};
 
 mod command;
 pub mod embedding;
@@ -14,6 +14,7 @@ pub enum Error<F> {
 
 /// Generate a JSON Schema from a TreeLDR model.
 pub fn generate<F>(
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -38,47 +39,39 @@ pub fn generate<F>(
 	let layout = model.layouts().get(layout_ref).unwrap();
 	let name = layout.name().ok_or(Error::NoLayoutName(layout_ref))?;
 
-	let mut json_schema = serde_json::Map::new();
-	json_schema.insert(
-		"$schema".into(),
-		"https://json-schema.org/draft/2020-12/schema".into(),
-	);
+	let mut json_schema = generate_layout(vocabulary, model, embedding, type_property, layout_ref)?;
 
-	let title = match layout.preferred_label(model) {
-		Some(label) => label.to_string(),
-		None => name.to_pascal_case(),
-	};
-	json_schema.insert("title".into(), title.into());
-	generate_layout(
-		&mut json_schema,
-		model,
-		embedding,
-		type_property,
-		layout_ref,
-	)?;
+	if let Some(json_schema) = json_schema.as_object_mut() {
+		json_schema.insert(
+			"$schema".into(),
+			"https://json-schema.org/draft/2020-12/schema".into(),
+		);
 
-	// Generate the `$defs` section.
-	let mut defs = serde_json::Map::new();
-	for layout_ref in embedding.indirect_layouts() {
-		let mut json_schema = serde_json::Map::new();
-		let name = model
-			.layouts()
-			.get(layout_ref)
-			.unwrap()
-			.name()
-			.ok_or(Error::NoLayoutName(layout_ref))?
-			.to_string();
-		generate_layout(
-			&mut json_schema,
-			model,
-			embedding,
-			type_property,
-			layout_ref,
-		)?;
-		defs.insert(name, json_schema.into());
-	}
-	if !defs.is_empty() {
-		json_schema.insert("$defs".into(), defs.into());
+		let title = match layout.preferred_label(model) {
+			Some(label) => label.to_string(),
+			None => name.to_pascal_case(),
+		};
+		json_schema.insert("title".into(), title.into());
+
+		// Generate the `$defs` section.
+		let mut defs = serde_json::Map::new();
+		for layout_ref in embedding.indirect_layouts() {
+			let name = model
+				.layouts()
+				.get(layout_ref)
+				.unwrap()
+				.name()
+				.ok_or(Error::NoLayoutName(layout_ref))?
+				.to_string();
+
+			let json_schema =
+				generate_layout(vocabulary, model, embedding, type_property, layout_ref)?;
+
+			defs.insert(name, json_schema);
+		}
+		if !defs.is_empty() {
+			json_schema.insert("$defs".into(), defs.into());
+		}
 	}
 
 	println!(
@@ -104,54 +97,79 @@ fn remove_newlines(s: &str) -> String {
 }
 
 fn generate_layout<F>(
-	json: &mut serde_json::Map<String, serde_json::Value>,
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
 	layout_ref: Ref<layout::Definition<F>>,
-) -> Result<(), Error<F>> {
+) -> Result<serde_json::Value, Error<F>> {
 	let layout = model.layouts().get(layout_ref).unwrap();
-	json.insert(
-		"$id".into(),
-		layout.id().display(model.vocabulary()).to_string().into(),
-	);
+	let mut schema = generate_layout_schema(vocabulary, model, embedding, type_property, layout)?;
 
-	if let Some(description) = layout.preferred_documentation(model).short_description() {
-		json.insert(
-			"description".into(),
-			remove_newlines(description.trim()).into(),
+	if let Some(schema) = schema.as_object_mut() {
+		schema.insert(
+			"$id".into(),
+			layout.id().display(vocabulary).to_string().into(),
 		);
+
+		if let Some(description) = layout.preferred_documentation(model).short_description() {
+			schema.insert(
+				"description".into(),
+				remove_newlines(description.trim()).into(),
+			);
+		}
 	}
 
+	Ok(schema)
+}
+
+fn generate_layout_schema<F>(
+	vocabulary: &Vocabulary,
+	model: &treeldr::Model<F>,
+	embedding: &embedding::Configuration<F>,
+	type_property: Option<&str>,
+	layout: &layout::Definition<F>,
+) -> Result<serde_json::Value, Error<F>> {
 	use treeldr::layout::Description;
 	match layout.description() {
+		Description::Never(_) => Ok(serde_json::Value::Bool(false)),
 		Description::Reference(_, _) => {
+			let mut json = serde_json::Map::new();
 			json.insert("type".into(), "string".into());
-			Ok(())
+			Ok(json.into())
 		}
-		Description::Struct(s) => generate_struct(json, model, embedding, type_property, s),
+		Description::Struct(s) => generate_struct(vocabulary, model, embedding, type_property, s),
 		Description::Enum(enm) => {
-			generate_enum_type(json, model, enm)?;
-			Ok(())
+			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
-		Description::Literal(lit) => {
-			generate_literal_type(json, lit);
-			Ok(())
+		Description::Literal(lit) => Ok(generate_literal_type(lit)),
+		Description::Native(n, _) => Ok(generate_native_type(*n)),
+		Description::Set(s) => {
+			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
 		}
-		Description::Native(n, _) => {
-			generate_native_type(json, *n);
-			Ok(())
+		Description::Array(a) => {
+			generate_list_type(vocabulary, model, embedding, type_property, a.item_layout())
+		}
+		Description::Alias(_, alias_ref) => {
+			let mut json = serde_json::Map::new();
+			let alias = model.layouts().get(*alias_ref).unwrap();
+			json.insert(
+				"$ref".into(),
+				alias.id().display(vocabulary).to_string().into(),
+			);
+			Ok(json.into())
 		}
 	}
 }
 
 fn generate_struct<F>(
-	json: &mut serde_json::Map<String, serde_json::Value>,
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
 	s: &treeldr::layout::Struct<F>,
-) -> Result<(), Error<F>> {
+) -> Result<serde_json::Value, Error<F>> {
+	let mut json = serde_json::Map::new();
 	let mut properties = serde_json::Map::new();
 	let mut required_properties = Vec::new();
 
@@ -168,49 +186,24 @@ fn generate_struct<F>(
 	for field in s.fields() {
 		let field_layout_ref = field.layout();
 
-		let mut layout_schema = serde_json::Map::new();
+		let mut layout_schema = embed_layout(
+			vocabulary,
+			model,
+			embedding,
+			type_property,
+			field_layout_ref,
+		)?;
 
-		match embedding.get(field_layout_ref) {
-			Embedding::Reference => {
-				generate_layout_ref(&mut layout_schema, model, field_layout_ref)?;
-			}
-			Embedding::Indirect => {
-				generate_layout_defs_ref(&mut layout_schema, model, field_layout_ref)?;
-			}
-			Embedding::Direct => {
-				generate_layout(
-					&mut layout_schema,
-					model,
-					embedding,
-					type_property,
-					field_layout_ref,
-				)?;
+		if let Some(obj) = layout_schema.as_object_mut() {
+			if let Some(description) = field.preferred_label(model) {
+				obj.insert(
+					"description".into(),
+					remove_newlines(description.trim()).into(),
+				);
 			}
 		}
 
-		let mut field_schema = if field.is_functional() {
-			layout_schema
-		} else {
-			let mut field_schema = serde_json::Map::new();
-
-			field_schema.insert("type".into(), "array".into());
-			field_schema.insert("items".into(), layout_schema.into());
-
-			if field.is_required() {
-				field_schema.insert("minItems".into(), 1.into());
-			}
-
-			field_schema
-		};
-
-		if let Some(description) = field.preferred_label(model) {
-			field_schema.insert(
-				"description".into(),
-				remove_newlines(description.trim()).into(),
-			);
-		}
-
-		properties.insert(field.name().to_camel_case(), field_schema.into());
+		properties.insert(field.name().to_camel_case(), layout_schema);
 
 		if field.is_required() {
 			required_properties.push(serde_json::Value::from(field.name().to_camel_case()));
@@ -224,7 +217,29 @@ fn generate_struct<F>(
 		json.insert("required".into(), required_properties.into());
 	}
 
-	Ok(())
+	Ok(json.into())
+}
+
+fn embed_layout<F>(
+	vocabulary: &Vocabulary,
+	model: &treeldr::Model<F>,
+	embedding: &embedding::Configuration<F>,
+	type_property: Option<&str>,
+	layout_ref: Ref<layout::Definition<F>>,
+) -> Result<serde_json::Value, Error<F>> {
+	match embedding.get(layout_ref) {
+		Embedding::Reference => {
+			generate_layout_ref(vocabulary, model, embedding, type_property, layout_ref)
+		}
+		Embedding::Indirect => {
+			let mut json = serde_json::Map::new();
+			generate_layout_defs_ref(&mut json, model, layout_ref)?;
+			Ok(json.into())
+		}
+		Embedding::Direct => {
+			generate_layout(vocabulary, model, embedding, type_property, layout_ref)
+		}
+	}
 }
 
 fn generate_layout_defs_ref<F>(
@@ -249,63 +264,99 @@ fn generate_layout_defs_ref<F>(
 }
 
 fn generate_layout_ref<F>(
-	json: &mut serde_json::Map<String, serde_json::Value>,
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
+	embedding: &embedding::Configuration<F>,
+	type_property: Option<&str>,
 	layout_ref: Ref<layout::Definition<F>>,
-) -> Result<(), Error<F>> {
+) -> Result<serde_json::Value, Error<F>> {
 	let layout = model.layouts().get(layout_ref).unwrap();
 
 	use treeldr::layout::Description;
 	match layout.description() {
+		Description::Never(_) => Ok(serde_json::Value::Bool(false)),
 		Description::Reference(_, _) => {
+			let mut json = serde_json::Map::new();
 			json.insert("type".into(), "string".into());
-			Ok(())
+			Ok(json.into())
 		}
-		Description::Struct(_) => {
+		Description::Enum(enm) => {
+			generate_enum_type(vocabulary, model, embedding, type_property, enm)
+		}
+		Description::Literal(lit) => Ok(generate_literal_type(lit)),
+		Description::Native(n, _) => Ok(generate_native_type(*n)),
+		Description::Set(s) => {
+			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
+		}
+		Description::Array(a) => {
+			generate_list_type(vocabulary, model, embedding, type_property, a.item_layout())
+		}
+		Description::Struct(_) | Description::Alias(_, _) => {
+			let mut json = serde_json::Map::new();
 			let layout = model.layouts().get(layout_ref).unwrap();
 			json.insert(
 				"$ref".into(),
-				layout.id().display(model.vocabulary()).to_string().into(),
+				layout.id().display(vocabulary).to_string().into(),
 			);
-			Ok(())
-		}
-		Description::Enum(enm) => {
-			generate_enum_type(json, model, enm)?;
-			Ok(())
-		}
-		Description::Literal(lit) => {
-			generate_literal_type(json, lit);
-			Ok(())
-		}
-		Description::Native(n, _) => {
-			generate_native_type(json, *n);
-			Ok(())
+			Ok(json.into())
 		}
 	}
 }
 
-fn generate_enum_type<F>(
-	def: &mut serde_json::Map<String, serde_json::Value>,
+fn generate_set_type<F>(
+	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
+	embedding: &embedding::Configuration<F>,
+	type_property: Option<&str>,
+	item_layout_ref: Ref<layout::Definition<F>>,
+) -> Result<serde_json::Value, Error<F>> {
+	let mut def = serde_json::Map::new();
+	let item_schema =
+		generate_layout_ref(vocabulary, model, embedding, type_property, item_layout_ref)?;
+	def.insert("type".into(), "array".into());
+	def.insert("items".into(), item_schema);
+	def.insert("uniqueItems".into(), true.into());
+	Ok(def.into())
+}
+
+fn generate_list_type<F>(
+	vocabulary: &Vocabulary,
+	model: &treeldr::Model<F>,
+	embedding: &embedding::Configuration<F>,
+	type_property: Option<&str>,
+	item_layout_ref: Ref<layout::Definition<F>>,
+) -> Result<serde_json::Value, Error<F>> {
+	let mut def = serde_json::Map::new();
+	let item_schema =
+		generate_layout_ref(vocabulary, model, embedding, type_property, item_layout_ref)?;
+	def.insert("type".into(), "array".into());
+	def.insert("items".into(), item_schema);
+	Ok(def.into())
+}
+
+fn generate_enum_type<F>(
+	vocabulary: &Vocabulary,
+	model: &treeldr::Model<F>,
+	embedding: &embedding::Configuration<F>,
+	type_property: Option<&str>,
 	enm: &layout::Enum<F>,
-) -> Result<(), Error<F>> {
+) -> Result<serde_json::Value, Error<F>> {
+	let mut def = serde_json::Map::new();
 	let mut variants = Vec::with_capacity(enm.variants().len());
 	for variant in enm.variants() {
 		let layout_ref = variant.layout().unwrap();
-		let mut variant_json = serde_json::Map::new();
-		generate_layout_ref(&mut variant_json, model, layout_ref)?;
-		variants.push(serde_json::Value::Object(variant_json))
+		let variant_json = embed_layout(vocabulary, model, embedding, type_property, layout_ref)?;
+		variants.push(variant_json)
 	}
 
 	def.insert("oneOf".into(), variants.into());
 
-	Ok(())
+	Ok(def.into())
 }
 
-fn generate_literal_type<F>(
-	def: &mut serde_json::Map<String, serde_json::Value>,
-	lit: &layout::Literal<F>,
-) {
+fn generate_literal_type<F>(lit: &layout::Literal<F>) -> serde_json::Value {
+	let mut def = serde_json::Map::new();
+
 	def.insert("type".into(), "string".into());
 	match lit.regexp().as_singleton() {
 		Some(singleton) => {
@@ -316,13 +367,14 @@ fn generate_literal_type<F>(
 			def.insert("pattern".into(), lit.regexp().to_string().into());
 		}
 	}
+
+	def.into()
 }
 
-fn generate_native_type(
-	def: &mut serde_json::Map<String, serde_json::Value>,
-	n: treeldr::layout::Native,
-) {
+fn generate_native_type(n: treeldr::layout::Native) -> serde_json::Value {
 	use treeldr::layout::Native;
+	let mut def = serde_json::Map::new();
+
 	match n {
 		Native::Boolean => {
 			def.insert("type".into(), "bool".into());
@@ -368,4 +420,6 @@ fn generate_native_type(
 			def.insert("format".into(), "uri".into());
 		}
 	}
+
+	def.into()
 }

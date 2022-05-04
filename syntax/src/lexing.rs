@@ -12,7 +12,12 @@ pub trait Tokens<F> {
 
 	#[allow(clippy::type_complexity)]
 	fn next(&mut self) -> Result<Loc<Option<Token>, F>, Loc<Self::Error, F>>;
+
+	fn next_label(&mut self) -> Label;
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Label(usize);
 
 /// Identifier.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -196,6 +201,7 @@ pub enum Punct {
 	Ampersand,
 	Pipe,
 	Equal,
+	Underscore,
 }
 
 impl Punct {
@@ -219,6 +225,7 @@ impl fmt::Display for Punct {
 			Self::Ampersand => write!(f, "&"),
 			Self::Pipe => write!(f, "|"),
 			Self::Equal => write!(f, "="),
+			Self::Underscore => write!(f, "_"),
 		}
 	}
 }
@@ -232,6 +239,8 @@ pub enum Keyword {
 	Layout,
 	As,
 	For,
+	All,
+	Any,
 	Annotation(Annotation),
 }
 
@@ -244,6 +253,8 @@ impl Keyword {
 			"layout" => Some(Keyword::Layout),
 			"as" => Some(Keyword::As),
 			"for" => Some(Keyword::For),
+			"all" => Some(Keyword::All),
+			"any" => Some(Keyword::Any),
 			_ => Annotation::from_name(name).map(Self::Annotation),
 		}
 	}
@@ -256,6 +267,8 @@ impl Keyword {
 			Self::Layout => "layout",
 			Self::As => "as",
 			Self::For => "for",
+			Self::All => "all",
+			Self::Any => "any",
 			Self::Annotation(a) => a.as_str(),
 		}
 	}
@@ -367,6 +380,7 @@ pub struct Lexer<F, E, C: Iterator<Item = Result<char, E>>> {
 	chars: Chars<C>,
 	pos: Position<F>,
 	lookahead: Option<Loc<Token, F>>,
+	label_count: usize,
 }
 
 pub enum PrefixedName {
@@ -390,7 +404,14 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 				last_span: Span::default(),
 			},
 			lookahead: None,
+			label_count: 0,
 		}
+	}
+
+	pub fn next_label(&mut self) -> Label {
+		let l = self.label_count;
+		self.label_count += 1;
+		Label(l)
 	}
 
 	fn peek_char(&mut self) -> Result<Option<char>, Loc<Error<E>, F>> {
@@ -635,6 +656,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		// PN_LOCAL
 		let mut suffix = String::new();
 		let mut suffix_span = self.pos.current_span().next();
+
 		let c = self.expect_char()?;
 		if is_pn_chars_u(c) || c.is_ascii_digit() || matches!(c, ':' | '%' | '\\') {
 			let c = match c {
@@ -655,7 +677,12 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 				match self.peek_char()? {
 					Some(c)
 						if is_pn_chars(c)
-							|| c.is_ascii_digit() || matches!(c, ':' | '%' | '\\') =>
+							|| c.is_ascii_digit() || matches!(c, '%' | '\\')
+							|| (c == ':'
+								&& !self
+									.peek_char2()?
+									.map(|c| c.is_whitespace())
+									.unwrap_or(true)) =>
 					{
 						let c = match self.expect_char()? {
 							'%' => {
@@ -792,6 +819,10 @@ impl<F: Clone, E: fmt::Debug, C: Iterator<Item = Result<char, E>>> Tokens<F> for
 
 	fn next(&mut self) -> Result<Loc<Option<Token>, F>, Loc<Error<E>, F>> {
 		self.next()
+	}
+
+	fn next_label(&mut self) -> Label {
+		self.next_label()
 	}
 }
 

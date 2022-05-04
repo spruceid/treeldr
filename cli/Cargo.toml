@@ -16,6 +16,7 @@ json-ld-context = [
 
 [dependencies]
 treeldr = { path = "../core" }
+treeldr-build = { path = "../build" }
 treeldr-syntax = { path = "../syntax" }
 iref = "2.1.2"
 grdf = { version = "0.7.3", features = ["loc"] }

@@ -1,0 +1,12 @@
+base <https://example.com>
+use <https://example.com/> as here
+
+type A {}
+type B {}
+type C {}
+
+type Type {
+	property: A | B
+}
+
+type Restricted = Type & all <Type/property>: A

@@ -1,10 +1,15 @@
-use crate::{prop, Causes, Documentation, Id, Model};
-use shelves::Ref;
+use crate::{Causes, Documentation, Id};
 
+mod intersection;
 pub mod normal;
+pub mod properties;
+pub mod restriction;
 mod r#union;
 
+pub use intersection::Intersection;
 pub use normal::Normal;
+pub use properties::{Properties, PseudoProperty};
+pub use restriction::Restriction;
 pub use union::Union;
 
 /// Type definition.
@@ -15,23 +20,38 @@ pub struct Definition<F> {
 	/// Causes of the definition.
 	causes: Causes<F>,
 
-	/// Documentation.
-	doc: Documentation,
-
 	/// Type description.
 	desc: Description<F>,
 }
 
 /// Type definition.
 pub enum Description<F> {
+	Empty,
 	Normal(Normal<F>),
 	Union(Union<F>),
+	Intersection(Intersection<F>),
+	Restriction(Restriction<F>),
+}
+
+impl<F> Description<F> {
+	pub fn kind(&self) -> Kind {
+		match self {
+			Self::Empty => Kind::Empty,
+			Self::Normal(_) => Kind::Normal,
+			Self::Union(_) => Kind::Union,
+			Self::Intersection(_) => Kind::Intersection,
+			Self::Restriction(_) => Kind::Restriction,
+		}
+	}
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Kind {
+	Empty,
 	Normal,
 	Union,
+	Intersection,
+	Restriction,
 }
 
 impl<F> Definition<F> {
@@ -39,7 +59,6 @@ impl<F> Definition<F> {
 		Self {
 			id,
 			causes: causes.into(),
-			doc: Documentation::default(),
 			desc,
 		}
 	}
@@ -53,68 +72,25 @@ impl<F> Definition<F> {
 		&self.causes
 	}
 
-	pub fn documentation(&self) -> &Documentation {
-		&self.doc
+	pub fn description(&self) -> &Description<F> {
+		&self.desc
 	}
 
-	pub fn documentation_mut(&mut self) -> &mut Documentation {
-		&mut self.doc
+	pub fn label<'m>(&self, model: &'m crate::Model<F>) -> Option<&'m str> {
+		model.get(self.id).unwrap().label()
 	}
 
-	pub fn set_documentation(&mut self, doc: Documentation) {
-		self.doc = doc
+	pub fn documentation<'m>(&self, model: &'m crate::Model<F>) -> &'m Documentation {
+		model.get(self.id).unwrap().documentation()
 	}
 
-	pub fn properties_with_duplicates<'m>(
-		&'m self,
-		model: &'m Model<F>,
-	) -> PropertiesWithDuplicates<'m, F> {
+	pub fn properties(&self) -> Option<&Properties<F>> {
 		match &self.desc {
-			Description::Normal(n) => PropertiesWithDuplicates::Normal(n.properties()),
-			Description::Union(u) => {
-				PropertiesWithDuplicates::Union(u.properties_with_duplicates(model))
-			}
-		}
-	}
-
-	pub fn properties<'m>(&'m self, model: &'m Model<F>) -> Properties<'m, F> {
-		match &self.desc {
-			Description::Normal(n) => Properties::Normal(n.properties()),
-			Description::Union(u) => Properties::Union(u.properties(model)),
-		}
-	}
-}
-
-/// Iterator over the properties of a type.
-pub enum PropertiesWithDuplicates<'a, F> {
-	Normal(normal::Properties<'a, F>),
-	Union(union::PropertiesWithDuplicates<'a, F>),
-}
-
-impl<'a, F> Iterator for PropertiesWithDuplicates<'a, F> {
-	type Item = (Ref<prop::Definition<F>>, &'a Causes<F>);
-
-	fn next(&mut self) -> Option<Self::Item> {
-		match self {
-			Self::Normal(n) => n.next(),
-			Self::Union(u) => u.next(),
-		}
-	}
-}
-
-/// Iterator over the properties of a type.
-pub enum Properties<'a, F> {
-	Normal(normal::Properties<'a, F>),
-	Union(union::Properties<'a, F>),
-}
-
-impl<'a, F> Iterator for Properties<'a, F> {
-	type Item = (Ref<prop::Definition<F>>, &'a Causes<F>);
-
-	fn next(&mut self) -> Option<Self::Item> {
-		match self {
-			Self::Normal(n) => n.next(),
-			Self::Union(u) => u.next(),
+			Description::Empty => None,
+			Description::Normal(n) => Some(n.properties()),
+			Description::Union(u) => Some(u.properties()),
+			Description::Intersection(i) => Some(i.properties()),
+			Description::Restriction(r) => Some(r.properties()),
 		}
 	}
 }

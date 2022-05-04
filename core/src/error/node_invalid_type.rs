@@ -7,8 +7,12 @@ pub struct NodeInvalidType<F> {
 	pub found: node::CausedTypes<F>,
 }
 
-impl node::Type {
-	pub fn name(&self) -> &str {
+trait NodeTypeName {
+	fn name(&self) -> &str;
+}
+
+impl NodeTypeName for node::Type {
+	fn name(&self) -> &str {
 		match self {
 			node::Type::Type => "type",
 			node::Type::Property => "property",
@@ -25,7 +29,7 @@ impl<F: Clone> super::AnyError<F> for NodeInvalidType<F> {
 		format!("invalid type for {}", self.id.display(vocab))
 	}
 
-	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
 		let mut labels = Vec::new();
 
 		for ty in self.found.iter() {

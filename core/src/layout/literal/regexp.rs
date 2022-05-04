@@ -146,20 +146,16 @@ impl RegExp {
 		while let Some(c) = chars.next() {
 			match c {
 				'(' => {
-					eprintln!("begin");
 					stack.push(vec![RegExp::empty()]);
 				}
 				')' => {
-					eprintln!("end");
 					let sub_exp = RegExp::Union(stack.pop().unwrap()).simplified();
 					let options = stack
 						.last_mut()
 						.ok_or(ParseError::UnmatchedClosingParenthesis)?;
-					eprintln!("adding option: {}", sub_exp);
 					options.last_mut().unwrap().push(sub_exp);
 				}
 				'|' => {
-					eprintln!("pipe");
 					let options = stack.last_mut().unwrap();
 					options.push(RegExp::empty());
 				}

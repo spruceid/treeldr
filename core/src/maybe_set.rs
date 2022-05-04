@@ -6,6 +6,12 @@ pub struct MaybeSet<T, F> {
 	value: Option<WithCauses<T, F>>,
 }
 
+impl<T, F> From<Option<WithCauses<T, F>>> for MaybeSet<T, F> {
+	fn from(value: Option<WithCauses<T, F>>) -> Self {
+		Self { value }
+	}
+}
+
 impl<T, F> Default for MaybeSet<T, F> {
 	fn default() -> Self {
 		Self { value: None }
@@ -21,6 +27,12 @@ impl<T, F> MaybeSet<T, F> {
 
 	pub fn is_set(&self) -> bool {
 		self.value.is_some()
+	}
+
+	pub fn take(&mut self) -> Self {
+		Self {
+			value: self.value.take(),
+		}
 	}
 
 	pub fn replace(&mut self, value: T, cause: Option<Location<F>>) -> Option<WithCauses<T, F>>
@@ -132,11 +144,19 @@ impl<T, F> MaybeSet<T, F> {
 		self.value.as_mut().map(|v| v.inner_mut())
 	}
 
+	pub fn into_value(self) -> Option<T> {
+		self.value.map(WithCauses::into_inner)
+	}
+
 	pub fn as_deref(&self) -> Option<&T::Target>
 	where
 		T: std::ops::Deref,
 	{
 		self.value.as_ref().map(|v| v.inner().deref())
+	}
+
+	pub fn unwrap(self) -> Option<WithCauses<T, F>> {
+		self.value
 	}
 
 	pub fn unwrap_or(self, default: T) -> WithCauses<T, F> {
@@ -153,6 +173,22 @@ impl<T, F> MaybeSet<T, F> {
 			.unwrap_or_else(|| f().map(WithCauses::without_causes))
 	}
 
+	pub fn or(self, other: Self) -> Self {
+		if self.is_set() {
+			self
+		} else {
+			other
+		}
+	}
+
+	pub fn or_else(self, other: impl FnOnce() -> Self) -> Self {
+		if self.is_set() {
+			self
+		} else {
+			other()
+		}
+	}
+
 	pub fn ok_or_else<E>(self, f: impl FnOnce() -> E) -> Result<WithCauses<T, F>, E> {
 		self.value.ok_or_else(f)
 	}
@@ -165,6 +201,12 @@ impl<T, F> MaybeSet<T, F> {
 		MaybeSet {
 			value: self.value.map(|t| t.map(f)),
 		}
+	}
+
+	pub fn try_map<U, E>(self, f: impl FnOnce(T) -> Result<U, E>) -> Result<MaybeSet<U, F>, E> {
+		Ok(MaybeSet {
+			value: self.value.map(|t| t.try_map(f)).transpose()?,
+		})
 	}
 
 	pub fn map_with_causes<U>(self, f: impl FnOnce(WithCauses<T, F>) -> U) -> MaybeSet<U, F>
@@ -181,19 +223,23 @@ impl<T, F> MaybeSet<T, F> {
 
 	pub fn try_map_with_causes<U, E>(
 		self,
-		f: impl FnOnce(WithCauses<T, F>) -> Result<U, E>,
-	) -> Result<MaybeSet<U, F>, E>
-	where
-		F: Clone,
-	{
+		f: impl FnOnce(T, &Causes<F>) -> Result<U, E>,
+	) -> Result<MaybeSet<U, F>, E> {
 		let value = match self.value {
 			Some(t) => {
-				let causes = t.causes().clone();
-				Some(WithCauses::new(f(t)?, causes))
+				let (t, causes) = t.into_parts();
+				let u = f(t, &causes)?;
+				Some(WithCauses::new(u, causes))
 			}
 			None => None,
 		};
 
 		Ok(MaybeSet { value })
+	}
+}
+
+impl<T, F> From<WithCauses<T, F>> for MaybeSet<T, F> {
+	fn from(t: WithCauses<T, F>) -> Self {
+		Self::from(Some(t))
 	}
 }

@@ -79,6 +79,14 @@ impl<F> Causes<F> {
 		self.set.insert(cause);
 	}
 
+	pub fn with<I: IntoIterator<Item = Location<F>>>(mut self, other: I) -> Self
+	where
+		F: Ord,
+	{
+		self.extend(other);
+		self
+	}
+
 	/// Picks the preferred cause, unless there are no causes.
 	pub fn preferred(&self) -> Option<&Location<F>> {
 		self.set.iter().next()
@@ -198,23 +206,20 @@ impl<T, F> WithCauses<T, F> {
 		WithCauses::new(f(self.t), self.causes)
 	}
 
-	pub fn try_map<U, E>(
-		self,
-		f: impl FnOnce(T) -> Result<U, E>,
-	) -> Result<WithCauses<U, F>, Caused<E, F>> {
+	pub fn try_map<U, E>(self, f: impl FnOnce(T) -> Result<U, E>) -> Result<WithCauses<U, F>, E> {
 		match f(self.t) {
 			Ok(value) => Ok(WithCauses::new(value, self.causes)),
-			Err(e) => Err(Caused::new(e, self.causes.into_preferred())),
+			Err(e) => Err(e),
 		}
 	}
 
-	pub fn try_map_with_causes<U, E, M>(self, f: M) -> Result<WithCauses<U, F>, Caused<E, F>>
+	pub fn try_map_with_causes<U, E, M>(self, f: M) -> Result<WithCauses<U, F>, E>
 	where
 		M: FnOnce(T, &Causes<F>) -> Result<U, E>,
 	{
 		match f(self.t, &self.causes) {
 			Ok(value) => Ok(WithCauses::new(value, self.causes)),
-			Err(e) => Err(Caused::new(e, self.causes.into_preferred())),
+			Err(e) => Err(e),
 		}
 	}
 
@@ -236,6 +241,14 @@ impl<T, F> WithCauses<T, F> {
 		(self.t, self.causes)
 	}
 
+	pub fn parts(&self) -> (&T, &Causes<F>) {
+		(&self.t, &self.causes)
+	}
+
+	pub fn parts_mut(&mut self) -> (&mut T, &mut Causes<F>) {
+		(&mut self.t, &mut self.causes)
+	}
+
 	pub fn into_causes(self) -> Causes<F> {
 		self.causes
 	}
@@ -244,6 +257,12 @@ impl<T, F> WithCauses<T, F> {
 impl<T, F> From<T> for WithCauses<T, F> {
 	fn from(t: T) -> Self {
 		Self::without_causes(t)
+	}
+}
+
+impl<T, F: Ord> From<locspan::Loc<T, F>> for WithCauses<T, F> {
+	fn from(locspan::Loc(t, loc): locspan::Loc<T, F>) -> Self {
+		Self::new(t, loc)
 	}
 }
 
