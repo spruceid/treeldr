@@ -2,9 +2,11 @@ use treeldr::{layout, vocab::Display, Ref, Vocabulary};
 
 mod command;
 pub mod embedding;
+pub mod schema;
 
 pub use command::Command;
 pub use embedding::Embedding;
+pub use schema::Schema;
 
 pub enum Error<F> {
 	NoLayoutName(Ref<layout::Definition<F>>),
