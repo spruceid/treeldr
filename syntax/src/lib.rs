@@ -215,6 +215,7 @@ pub enum InnerTypeExpr<F> {
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
 	PropertyRestriction(TypeRestrictedProperty<F>),
+	List(Label, Box<Loc<OuterTypeExpr<F>, F>>),
 }
 
 impl<F: Clone> InnerTypeExpr<F> {
@@ -236,6 +237,10 @@ impl<F: Clone> InnerTypeExpr<F> {
 			Self::PropertyRestriction(r) => {
 				InnerLayoutExpr::FieldRestriction(r.implicit_layout_restricted_field())
 			}
+			Self::List(label, item) => InnerLayoutExpr::Array(
+				*label,
+				Box::new(Loc(item.implicit_layout_expr(), item.location().clone())),
+			),
 		}
 	}
 }
@@ -400,6 +405,7 @@ pub enum InnerLayoutExpr<F> {
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
 	FieldRestriction(LayoutRestrictedField<F>),
+	Array(Label, Box<Loc<OuterLayoutExpr<F>, F>>),
 }
 
 impl<F> InnerLayoutExpr<F> {

@@ -37,14 +37,17 @@ impl<F> Definition<F> {
 		F: Ord + Clone,
 	{
 		self.required
-			.try_set(value, cause, |expected, because, found| {
-				error::PropertyMismatchRequired {
-					id: self.id,
-					expected: *expected,
-					found,
-					because: because.cloned(),
-				}
-				.into()
+			.try_set(value, cause, |expected, found, because, causes| {
+				Error::new(
+					error::PropertyMismatchRequired {
+						id: self.id,
+						expected,
+						found,
+						because: because.preferred().cloned(),
+					}
+					.into(),
+					causes.preferred().cloned(),
+				)
 			})
 	}
 
@@ -63,14 +66,17 @@ impl<F> Definition<F> {
 		F: Ord + Clone,
 	{
 		self.functional
-			.try_set(value, cause, |expected, because, found| {
-				error::PropertyMismatchFunctional {
-					id: self.id,
-					expected: *expected,
-					found,
-					because: because.cloned(),
-				}
-				.into()
+			.try_set(value, cause, |expected, found, because, causes| {
+				Error::new(
+					error::PropertyMismatchFunctional {
+						id: self.id,
+						expected,
+						found,
+						because: because.preferred().cloned(),
+					}
+					.into(),
+					causes.preferred().cloned(),
+				)
 			})
 	}
 
@@ -95,15 +101,19 @@ impl<F> Definition<F> {
 	where
 		F: Clone + Ord,
 	{
-		self.range.try_set(ty, cause, |expected, because, found| {
-			error::PropertyMismatchType {
-				id: self.id,
-				expected: *expected,
-				found,
-				because: because.cloned(),
-			}
-			.into()
-		})
+		self.range
+			.try_set(ty, cause, |expected, found, because, causes| {
+				Error::new(
+					error::PropertyMismatchType {
+						id: self.id,
+						expected,
+						found,
+						because: because.preferred().cloned(),
+					}
+					.into(),
+					causes.preferred().cloned(),
+				)
+			})
 	}
 
 	pub fn dependencies(

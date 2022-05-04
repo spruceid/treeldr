@@ -19,7 +19,7 @@ pub use node::Node;
 
 pub trait Descriptions<F>: Sized {
 	type Type: ty::PseudoDescription<F>;
-	type Layout: layout::PseudoDescription;
+	type Layout: layout::PseudoDescription<F>;
 }
 
 pub trait TryMap<F, E, A: Descriptions<F>, B: Descriptions<F>> {
@@ -50,7 +50,7 @@ pub struct StandardDescriptions;
 
 impl<F: Clone + Ord> Descriptions<F> for StandardDescriptions {
 	type Type = ty::Description<F>;
-	type Layout = layout::Description;
+	type Layout = layout::Description<F>;
 }
 
 pub trait Build<F> {

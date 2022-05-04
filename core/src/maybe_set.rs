@@ -52,36 +52,64 @@ impl<T, F> MaybeSet<T, F> {
 		}
 	}
 
+	pub fn try_unify<E>(
+		&mut self,
+		value: T,
+		causes: impl Into<Causes<F>>,
+		unify: impl Fn(T, T, &Causes<F>, &Causes<F>) -> Result<T, E>,
+	) -> Result<(), E>
+	where
+		F: Ord,
+	{
+		match self.value.take() {
+			Some(current_value) => {
+				let (current_value, current_causes) = current_value.into_parts();
+				let causes = causes.into();
+				self.value = Some(WithCauses::new(
+					unify(current_value, value, &current_causes, &causes)?,
+					current_causes.with(causes),
+				))
+			}
+			None => self.value = Some(WithCauses::new(value, causes)),
+		}
+
+		Ok(())
+	}
+
 	pub fn try_set<E>(
 		&mut self,
 		value: T,
-		cause: Option<Location<F>>,
-		on_err: impl Fn(&T, Option<&Location<F>>, T) -> E,
-	) -> Result<(), Caused<E, F>>
+		causes: impl Into<Causes<F>>,
+		on_err: impl Fn(T, T, &Causes<F>, &Causes<F>) -> E,
+	) -> Result<(), E>
 	where
 		T: PartialEq,
 		F: Ord,
 	{
-		match &mut self.value {
-			Some(current_value) => {
-				if *current_value.inner() == value {
-					current_value.add_opt_cause(cause);
-					Ok(())
-				} else {
-					Err(Caused::new(
-						on_err(
-							current_value.inner(),
-							current_value.causes().preferred(),
-							value,
-						),
-						cause,
-					))
-				}
+		self.try_unify(value, causes, |a, b, a_causes, b_causes| {
+			if a == b {
+				Ok(a)
+			} else {
+				Err(on_err(a, b, a_causes, b_causes))
 			}
-			None => {
-				self.value = Some(WithCauses::new(value, cause));
-				Ok(())
+		})
+	}
+
+	pub fn try_set_opt<E>(
+		&mut self,
+		value: MaybeSet<T, F>,
+		on_err: impl Fn(T, T, &Causes<F>, &Causes<F>) -> E,
+	) -> Result<(), E>
+	where
+		T: PartialEq,
+		F: Ord,
+	{
+		match value.unwrap() {
+			Some(value) => {
+				let (value, causes) = value.into_parts();
+				self.try_set(value, causes, on_err)
 			}
+			None => Ok(()),
 		}
 	}
 

@@ -27,15 +27,19 @@ impl<F> Definition<F> {
 	where
 		F: Ord + Clone,
 	{
-		self.name.try_set(name, cause, |expected, because, found| {
-			error::LayoutFieldMismatchName {
-				id: self.id,
-				expected: expected.clone(),
-				found,
-				because: because.cloned(),
-			}
-			.into()
-		})
+		self.name
+			.try_set(name, cause, |expected, found, because, causes| {
+				Error::new(
+					error::LayoutFieldMismatchName {
+						id: self.id,
+						expected,
+						found,
+						because: because.preferred().cloned(),
+					}
+					.into(),
+					causes.preferred().cloned(),
+				)
+			})
 	}
 
 	pub fn replace_name(&mut self, name: MaybeSet<Name, F>) {
@@ -80,14 +84,17 @@ impl<F> Definition<F> {
 		F: Ord + Clone,
 	{
 		self.layout
-			.try_set(layout_ref, cause, |expected, because, found| {
-				error::LayoutFieldMismatchLayout {
-					id: self.id,
-					expected: *expected,
-					found,
-					because: because.cloned(),
-				}
-				.into()
+			.try_set(layout_ref, cause, |expected, found, because, causes| {
+				Error::new(
+					error::LayoutFieldMismatchLayout {
+						id: self.id,
+						expected,
+						found,
+						because: because.preferred().cloned(),
+					}
+					.into(),
+					causes.preferred().cloned(),
+				)
 			})
 	}
 

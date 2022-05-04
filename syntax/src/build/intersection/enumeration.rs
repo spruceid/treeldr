@@ -130,7 +130,7 @@ impl<F: Clone + Ord> IntersectedEnum<F> {
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<treeldr_build::layout::Description, Error<F>> {
+	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
 		match self.variants.len() {
 			0 => Ok(treeldr_build::layout::Description::Never),
 			1 => {

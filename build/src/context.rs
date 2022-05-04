@@ -51,6 +51,43 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		Ok(id)
 	}
 
+	pub fn define_rdf_types(&mut self) -> Result<(), Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		use vocab::{Rdf, Rdfs, Term};
+		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
+
+		self.declare_type(Id::Iri(Term::Rdf(Rdf::Property)), None);
+
+		self.declare_type(Id::Iri(Term::Rdf(Rdf::List)), None);
+		let list = self
+			.get_mut(Id::Iri(Term::Rdf(Rdf::List)))
+			.unwrap()
+			.as_type_mut()
+			.unwrap();
+		list.declare_property(Id::Iri(Term::Rdf(Rdf::First)), None)?;
+		list.declare_property(Id::Iri(Term::Rdf(Rdf::Rest)), None)?;
+
+		self.declare_property(Id::Iri(Term::Rdf(Rdf::First)), None);
+		let prop = self
+			.get_mut(Id::Iri(Term::Rdf(Rdf::First)))
+			.unwrap()
+			.as_property_mut()
+			.unwrap();
+		prop.set_domain(Id::Iri(Term::Rdf(Rdf::List)), None);
+		prop.set_range(Id::Iri(Term::Rdfs(Rdfs::Resource)), None)?;
+
+		self.declare_property(Id::Iri(Term::Rdf(Rdf::Rest)), None);
+		let prop = self
+			.get_mut(Id::Iri(Term::Rdf(Rdf::Rest)))
+			.unwrap()
+			.as_property_mut()
+			.unwrap();
+		prop.set_domain(Id::Iri(Term::Rdf(Rdf::List)), None);
+		prop.set_range(Id::Iri(Term::Rdf(Rdf::List)), None)
+	}
+
 	pub fn define_xml_types(&mut self) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,

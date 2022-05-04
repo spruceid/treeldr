@@ -6,7 +6,7 @@ use treeldr::{
 	layout::{literal::RegExp, Native},
 	Causes, Id, MaybeSet, Vocabulary, WithCauses,
 };
-use treeldr_build::{Context, ObjectToId};
+use treeldr_build::{layout::Array, Context, ObjectToId};
 
 mod enumeration;
 mod structure;
@@ -39,7 +39,7 @@ pub enum IntersectedLayoutDescription<F> {
 	Literal(RegExp),
 	Enum(IntersectedEnum<F>),
 	Set(Id),
-	Array(Id),
+	Array(Array<F>),
 	Alias(Id),
 }
 
@@ -199,7 +199,7 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<treeldr_build::layout::Description, Error<F>> {
+	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
 		match self.ids.into_iter().next() {
 			Some((id, _)) => Ok(treeldr_build::layout::Description::Alias(id)),
 			None => self
@@ -256,12 +256,12 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 						IntersectedEnum::new(*variants_id, context, desc.causes())?,
 					)),
 					treeldr_build::layout::Description::Set(s) => Ok(Self::Set(*s)),
-					treeldr_build::layout::Description::Array(a) => Ok(Self::Array(*a)),
+					treeldr_build::layout::Description::Array(a) => Ok(Self::Array(a.clone())),
 					treeldr_build::layout::Description::Alias(a) => Ok(Self::Alias(*a)),
 				},
-				LayoutDescription::Intersection(fields_id, restricted_fields) => {
+				LayoutDescription::Intersection(layouts_id, restricted_fields) => {
 					let layout_list =
-						context.require_list(*fields_id, desc.causes().preferred().cloned())?;
+						context.require_list(*layouts_id, desc.causes().preferred().cloned())?;
 					let mut layouts = Vec::new();
 					for obj in layout_list.iter(context) {
 						let obj = obj?;
@@ -393,7 +393,7 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<treeldr_build::layout::Description, Error<F>> {
+	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
 		match self {
 			Self::Never => Ok(treeldr_build::layout::Description::Never),
 			Self::Native(n) => Ok(treeldr_build::layout::Description::Native(n)),

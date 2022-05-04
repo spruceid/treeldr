@@ -251,6 +251,21 @@ fn parse_keyword<F, L: Tokens<F>>(
 	}
 }
 
+fn parse_end<F, L: Tokens<F>>(
+	tokens: &mut L,
+	delimiter: Delimiter,
+) -> Result<Location<F>, Loc<Error<L::Error>, F>> {
+	let locspan::Loc(token, loc) = next_expected_token(tokens, || vec![TokenKind::End(delimiter)])?;
+
+	match token {
+		Token::End(d) if d == delimiter => Ok(loc),
+		unexpected => Err(Loc::new(
+			Error::Unexpected(Some(unexpected), vec![TokenKind::End(delimiter)]),
+			loc,
+		)),
+	}
+}
+
 impl<F: Clone> Parse<F> for Document<F> {
 	const FIRST: &'static [TokenKind] = Item::<F>::FIRST;
 
@@ -749,6 +764,7 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 		TokenKind::Keyword(Keyword::All),
 		TokenKind::Punct(Punct::Ampersand),
 		TokenKind::Literal,
+		TokenKind::Begin(Delimiter::Bracket),
 	];
 
 	fn parse_from<L: Tokens<F>>(
@@ -832,6 +848,13 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 					Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
 				}
 				Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
+				Token::Begin(Delimiter::Bracket) => {
+					let label = lexer.next_label();
+					let item = OuterTypeExpr::parse(lexer)?;
+					let end_loc = parse_end(lexer, Delimiter::Bracket)?;
+					loc.span_mut().append(end_loc.span());
+					Ok(Loc::new(Self::List(label, Box::new(item)), loc))
+				}
 				unexpected => Err(Loc::new(
 					Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
 					loc,
@@ -961,6 +984,7 @@ impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
 		TokenKind::Literal,
+		TokenKind::Begin(Delimiter::Bracket),
 	];
 
 	fn parse_from<L: Tokens<F>>(
@@ -976,6 +1000,13 @@ impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
 				Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
 			}
 			Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
+			Token::Begin(Delimiter::Bracket) => {
+				let label = lexer.next_label();
+				let item = OuterLayoutExpr::parse(lexer)?;
+				let end_loc = parse_end(lexer, Delimiter::Bracket)?;
+				loc.span_mut().append(end_loc.span());
+				Ok(Loc::new(Self::Array(label, Box::new(item)), loc))
+			}
 			unexpected => Err(Loc::new(
 				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
 				loc,
