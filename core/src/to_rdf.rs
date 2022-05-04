@@ -461,7 +461,7 @@ impl<F> layout::Array<F> {
 			if let Some(nil_value) = semantics.nil() {
 				quads.push(Quad(
 					id,
-					Term::TreeLdr(vocab::TreeLdr::ArrayListFirst),
+					Term::TreeLdr(vocab::TreeLdr::ArrayListNil),
 					nil_value.into_term(),
 					None,
 				));
