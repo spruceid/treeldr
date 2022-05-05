@@ -83,6 +83,12 @@ pub struct RegularSchema {
 	pub defs: Option<BTreeMap<String, Schema>>,
 }
 
+impl RegularSchema {
+	pub fn is_primitive(&self) -> bool {
+		self.desc.is_empty() && self.validation.is_primitive()
+	}
+}
+
 /// A Vocabulary for Basic Meta-Data Annotations.
 pub struct MetaData {
 	pub title: Option<String>,
@@ -92,6 +98,18 @@ pub struct MetaData {
 	pub read_only: Option<bool>,
 	pub write_only: Option<bool>,
 	pub examples: Option<Vec<serde_json::Value>>,
+}
+
+impl MetaData {
+	pub fn is_empty(&self) -> bool {
+		self.title.is_none()
+			&& self.description.is_none()
+			&& self.default.is_none()
+			&& self.deprecated.is_none()
+			&& self.read_only.is_none()
+			&& self.write_only.is_none()
+			&& self.examples.is_none()
+	}
 }
 
 /// Meta-Schemas and Vocabularies.
@@ -111,6 +129,12 @@ pub struct MetaSchema {
 	/// consistent with the semantic definitions contained within the
 	/// vocabulary.
 	pub vocabulary: Option<BTreeMap<IriBuf, bool>>,
+}
+
+impl MetaSchema {
+	pub fn is_empty(&self) -> bool {
+		self.schema.is_none() && self.vocabulary.is_none()
+	}
 }
 
 /// Schema defined with the `$ref` keyword.
@@ -142,6 +166,19 @@ pub enum Description {
 		then: Option<Box<Schema>>,
 		els: Option<Box<Schema>>,
 	},
+}
+
+impl Description {
+	pub fn is_empty(&self) -> bool {
+		match self {
+			Self::Definition {
+				string,
+				array,
+				object,
+			} => string.is_empty() && array.is_empty() && object.is_empty(),
+			_ => false,
+		}
+	}
 }
 
 pub struct ArraySchema {

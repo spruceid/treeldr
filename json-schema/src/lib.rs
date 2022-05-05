@@ -2,10 +2,12 @@ use treeldr::{layout, vocab::Display, Ref, Vocabulary};
 
 mod command;
 pub mod embedding;
+pub mod import;
 pub mod schema;
 
 pub use command::Command;
 pub use embedding::Embedding;
+pub use import::import_schema;
 pub use schema::Schema;
 
 pub enum Error<F> {

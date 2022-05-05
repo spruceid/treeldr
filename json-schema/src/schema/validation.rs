@@ -20,6 +20,17 @@ pub struct Validation {
 	pub format: Option<Format>,
 }
 
+impl Validation {
+	/// Returns `true` is the only values set are the `type` and `format` properties.
+	pub fn is_primitive(&self) -> bool {
+		self.any.cnst.is_none()
+			&& self.any.enm.is_none()
+			&& self.numeric.is_empty()
+			&& self.string.is_empty()
+			&& self.array.is_empty()
+	}
+}
+
 /// Validation Keywords for Any Instance Type.
 pub struct AnyValidation {
 	pub ty: Option<Vec<Type>>,
@@ -66,11 +77,11 @@ pub struct NumericValidation {
 
 impl NumericValidation {
 	pub fn is_empty(&self) -> bool {
-		self.multiple_of.is_some()
-			|| self.maximum.is_some()
-			|| self.exclusive_maximum.is_some()
-			|| self.minimum.is_some()
-			|| self.exclusive_minimum.is_some()
+		self.multiple_of.is_none()
+			&& self.maximum.is_none()
+			&& self.exclusive_maximum.is_none()
+			&& self.minimum.is_none()
+			&& self.exclusive_minimum.is_none()
 	}
 }
 
