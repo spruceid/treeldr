@@ -1423,12 +1423,8 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 				} else {
 					None
 				};
-				
-				layout.set_array(
-					item_id,
-					semantics,
-					Some(loc.clone()),
-				)?;
+
+				layout.set_array(item_id, semantics, Some(loc.clone()))?;
 
 				Ok(Loc(id, loc))
 			}

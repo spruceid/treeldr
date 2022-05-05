@@ -8,7 +8,8 @@ edition = "2021"
 [features]
 default = ["json-schema", "json-ld-context"]
 json-schema = [
-	"treeldr-json-schema"
+	"treeldr-json-schema",
+	"serde_json"
 ]
 json-ld-context = [
 	"treeldr-json-ld-context"
@@ -21,13 +22,14 @@ treeldr-syntax = { path = "../syntax" }
 iref = "2.1.2"
 grdf = { version = "0.7.3", features = ["loc"] }
 log = "0.4"
-locspan = "*"
+locspan = "0.3.2"
 codespan-reporting = "0.11"
 stderrlog = "0.5"
 clap = { version = "3.0", features = ["derive"] }
 
 # Extensions.
 treeldr-json-schema = { path = "../json-schema", version = "0.1", optional = true }
+serde_json = { version = "1.0.81", optional = true }
 treeldr-json-ld-context = { path = "../json-ld-context", version = "0.1", optional = true }
 
 [[bin]]

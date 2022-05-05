@@ -1,7 +1,4 @@
-use crate::{
-	Id,
-	vocab
-};
+use crate::{vocab, Id};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Native {
@@ -44,10 +41,7 @@ pub enum Native {
 
 impl Native {
 	pub fn id(&self) -> Id {
-		use vocab::{
-			Term,
-			Xsd
-		};
+		use vocab::{Term, Xsd};
 
 		match self {
 			Self::Boolean => Id::Iri(Term::Xsd(Xsd::Boolean)),
@@ -61,7 +55,7 @@ impl Native {
 			Self::DateTime => Id::Iri(Term::Xsd(Xsd::DateTime)),
 			Self::Iri => todo!(),
 			Self::Uri => Id::Iri(Term::Xsd(Xsd::AnyUri)),
-			Self::Url => todo!()
+			Self::Url => todo!(),
 		}
 	}
 }
