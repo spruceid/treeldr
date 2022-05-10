@@ -3,7 +3,7 @@ use crate::schema::{self, RegularSchema, Schema};
 use iref::{Iri, IriBuf};
 use locspan::{Loc, Location};
 use rdf_types::Quad;
-use treeldr::{vocab, Caused, Id, Vocabulary};
+use treeldr::{vocab, Caused, Id, Name, Vocabulary};
 use treeldr_build::{Context, Descriptions};
 use vocab::{LocQuad, Object, Term};
 
@@ -141,8 +141,8 @@ pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
 			let id = Id::Iri(vocab::Term::from_iri(iri.clone(), vocabulary));
 			let name = iri.path().file_name().and_then(|name| {
 				match std::path::Path::new(name).file_stem() {
-					Some(stem) => vocab::Name::new(stem.to_string_lossy()).ok(),
-					None => vocab::Name::new(name).ok(),
+					Some(stem) => Name::new(stem.to_string_lossy()).ok(),
+					None => Name::new(name).ok(),
 				}
 			});
 
@@ -156,7 +156,7 @@ pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
 
 	if name.is_none() {
 		if let Some(title) = &schema.meta_data.title {
-			if let Ok(n) = vocab::Name::new(title) {
+			if let Ok(n) = Name::new(title) {
 				name = Some(n)
 			}
 		}
@@ -328,7 +328,7 @@ fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 				.as_layout_field_mut()
 				.unwrap();
 
-			match vocab::Name::new(prop) {
+			match Name::new(prop) {
 				Ok(name) => field.set_name(name, None)?,
 				Err(_) => return Err(Error::InvalidPropertyName(prop.to_string())),
 			}

@@ -1,7 +1,6 @@
 use crate::{error, utils::TryCollect, Context, Descriptions, Error, ObjectToId};
 use locspan::Location;
-use treeldr::{vocab, Caused, Causes, Id, MaybeSet, Vocabulary, WithCauses};
-use vocab::Name;
+use treeldr::{Caused, Causes, Id, MaybeSet, Name, Vocabulary, WithCauses};
 
 pub mod array;
 pub mod enumeration;
@@ -177,9 +176,9 @@ impl<F> Description<F> {
 
 		fn require_name<F>(
 			id: Id,
-			name: MaybeSet<vocab::Name, F>,
+			name: MaybeSet<Name, F>,
 			causes: &Causes<F>,
-		) -> Result<WithCauses<vocab::Name, F>, Error<F>>
+		) -> Result<WithCauses<Name, F>, Error<F>>
 		where
 			F: Clone,
 		{
@@ -341,7 +340,7 @@ pub struct Definition<F, D = Description<F>> {
 	/// If not provided, the name is generated using the `default_name`
 	/// method. If it conflicts with another name or failed to be generated,
 	/// then a name must be explicitly defined by the user.
-	name: MaybeSet<vocab::Name, F>,
+	name: MaybeSet<Name, F>,
 
 	/// Type for which this layout is defined.
 	ty: MaybeSet<Id, F>,
@@ -382,15 +381,11 @@ impl<F, D> Definition<F, D> {
 		self.ty.with_causes()
 	}
 
-	pub fn name(&self) -> Option<&WithCauses<vocab::Name, F>> {
+	pub fn name(&self) -> Option<&WithCauses<Name, F>> {
 		self.name.with_causes()
 	}
 
-	pub fn set_name(
-		&mut self,
-		name: vocab::Name,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
+	pub fn set_name(&mut self, name: Name, cause: Option<Location<F>>) -> Result<(), Error<F>>
 	where
 		F: Ord + Clone,
 	{
@@ -609,10 +604,10 @@ impl<F: Clone + Ord> Definition<F> {
 		vocabulary: &Vocabulary,
 		parent_layouts: &[WithCauses<ParentLayout, F>],
 		cause: Option<Location<F>>,
-	) -> Result<Option<Caused<vocab::Name, F>>, Error<F>> {
+	) -> Result<Option<Caused<Name, F>>, Error<F>> {
 		if let Id::Iri(iri) = self.id {
 			if let Some(name) = iri.iri(vocabulary).unwrap().path().file_name() {
-				if let Ok(name) = vocab::Name::new(name) {
+				if let Ok(name) = Name::new(name) {
 					return Ok(Some(Caused::new(name, cause)));
 				}
 			}
@@ -620,8 +615,8 @@ impl<F: Clone + Ord> Definition<F> {
 
 		if let Some(Description::Literal(regexp)) = self.desc.value() {
 			if let Some(singleton) = regexp.as_singleton() {
-				if let Ok(singleton_name) = vocab::Name::new(singleton) {
-					let mut name = vocab::Name::new("const").unwrap();
+				if let Ok(singleton_name) = Name::new(singleton) {
+					let mut name = Name::new("const").unwrap();
 					name.push_name(&singleton_name);
 					return Ok(Some(Caused::new(name, cause)));
 				}
@@ -650,7 +645,7 @@ impl<F: Clone + Ord> Definition<F> {
 					}
 					LayoutConnection::Item => {
 						let mut name = parent_layout_name.inner().clone();
-						name.push_name(&vocab::Name::new("item").unwrap());
+						name.push_name(&Name::new("item").unwrap());
 
 						return Ok(Some(Caused::new(name, cause)));
 					}

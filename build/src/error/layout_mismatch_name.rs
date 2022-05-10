@@ -1,4 +1,4 @@
-use treeldr::{Id, Vocabulary, vocab::Display, vocab::Name};
+use treeldr::{Id, Vocabulary, vocab::Display, Name};
 use locspan::Location;
 
 #[derive(Debug)]

@@ -19,7 +19,6 @@ locspan = "0.3"
 rdf-types = { version = "0.4.0", features = ["loc"] }
 
 [dev-dependencies]
-treeldr-vocab = { path = "../vocab" }
 static-iref = "2.0"
 nquads-syntax = "0.2.0"
 grdf = "0.7.0"

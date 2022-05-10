@@ -11,19 +11,21 @@ pub mod error;
 mod feature;
 pub mod layout;
 mod maybe_set;
+pub mod name;
 pub mod node;
 pub mod prop;
 pub mod reporting;
+mod to_rdf;
 pub mod ty;
 pub mod utils;
-pub use treeldr_vocab as vocab;
-mod to_rdf;
+pub mod vocab;
 
 pub use cause::*;
 pub use doc::Documentation;
 pub use error::Error;
 pub use feature::Feature;
 pub use maybe_set::*;
+pub use name::Name;
 pub use node::Node;
 pub use vocab::{Id, Vocabulary};
 

@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 treeldr = { path = "../core" }
-treeldr-vocab = { path = "../vocab" }
 treeldr-build = { path = "../build" }
 iref = "2.1.1"
 locspan = "0.3"

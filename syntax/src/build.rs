@@ -2,7 +2,7 @@ use iref::{IriBuf, IriRef, IriRefBuf};
 use locspan::{Loc, Location};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
-use treeldr::{reporting, vocab::*, Caused, Causes, Id, Vocabulary, WithCauses};
+use treeldr::{reporting, vocab::*, Caused, Causes, Id, Name, Vocabulary, WithCauses};
 use treeldr_build::{Context, ObjectToId};
 
 mod intersection;
@@ -1086,13 +1086,19 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 			}
 		}
 
-		let Loc(ty_id, ty_id_loc) = def.ty_id.build(local_context, context, vocabulary)?;
-		context
-			.get_mut(id)
-			.unwrap()
-			.as_layout_mut()
-			.unwrap()
-			.set_type(ty_id, Some(ty_id_loc))?;
+		let ty_id = match def.ty_id {
+			Some(ty_id) => {
+				let Loc(ty_id, ty_id_loc) = ty_id.build(local_context, context, vocabulary)?;
+				context
+					.get_mut(id)
+					.unwrap()
+					.as_layout_mut()
+					.unwrap()
+					.set_type(ty_id, Some(ty_id_loc))?;
+				Some(ty_id)
+			}
+			None => None,
+		};
 
 		match def.description {
 			Loc(crate::LayoutDescription::Normal(fields), fields_loc) => {
@@ -1100,7 +1106,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 					vocabulary,
 					fields,
 					|field, context, vocabulary| {
-						local_context.scope = Some(ty_id);
+						local_context.scope = ty_id;
 						let Loc(item, item_loc) =
 							field.build(local_context, context, vocabulary)?;
 						local_context.scope = None;
@@ -1127,7 +1133,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::LayoutDefinition<F>, F> {
 }
 
 impl<F: Clone + Ord> Build<F> for Loc<crate::Alias, F> {
-	type Target = Loc<treeldr::vocab::Name, F>;
+	type Target = Loc<treeldr::Name, F>;
 
 	fn build(
 		self,
@@ -1136,7 +1142,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::Alias, F> {
 		_vocabulary: &mut Vocabulary,
 	) -> Result<Self::Target, Error<F>> {
 		let Loc(name, loc) = self;
-		match treeldr::vocab::Name::new(name.as_str()) {
+		match treeldr::Name::new(name.as_str()) {
 			Ok(name) => Ok(Loc(name, loc)),
 			Err(_) => Err(treeldr_build::Error::new(
 				treeldr_build::error::NameInvalid(name.into_string()).into(),

@@ -1,6 +1,6 @@
 use super::{IntersectedLayout, IntersectedLayoutDescription};
 use crate::build::{Descriptions, Error};
-use treeldr::{vocab::Name, Caused, Causes, Id, MaybeSet, Vocabulary, WithCauses};
+use treeldr::{Caused, Causes, Id, MaybeSet, Name, Vocabulary, WithCauses};
 use treeldr_build::{Context, ObjectToId};
 
 #[derive(Clone)]

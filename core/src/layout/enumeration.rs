@@ -1,4 +1,4 @@
-use crate::{vocab::Name, Causes, Documentation, MaybeSet, Ref, WithCauses};
+use crate::{Causes, Documentation, MaybeSet, Name, Ref, WithCauses};
 use locspan::Location;
 
 /// Enum layout.

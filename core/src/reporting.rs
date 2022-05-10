@@ -1,4 +1,4 @@
-use crate::Vocabulary;
+use crate::{vocab, Vocabulary};
 use locspan::{Loc, Location};
 
 /// Error with diagnostic reporting support.
@@ -95,9 +95,7 @@ pub trait DiagnoseWithVocabulary<F> {
 	}
 }
 
-impl<'t, 'v, F, T: DiagnoseWithVocabulary<F>> Diagnose<F>
-	for treeldr_vocab::WithVocabulary<'t, 'v, T>
-{
+impl<'t, 'v, F, T: DiagnoseWithVocabulary<F>> Diagnose<F> for vocab::WithVocabulary<'t, 'v, T> {
 	fn message(&self) -> String {
 		self.value().message(self.vocabulary())
 	}

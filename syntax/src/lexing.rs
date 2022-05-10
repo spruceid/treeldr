@@ -292,6 +292,7 @@ pub enum Error<E> {
 	InvalidId(String),
 	InvalidCodepoint(u32),
 	InvalidSuffix(String),
+	InvalidPrimitive(String),
 	Unexpected(Option<char>),
 	Stream(E),
 }
@@ -302,6 +303,7 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
 			Self::InvalidId(id) => write!(f, "invalid identifier `{}`", id),
 			Self::InvalidCodepoint(c) => write!(f, "invalid character codepoint {:x}", c),
 			Self::InvalidSuffix(s) => write!(f, "invalid compact IRI suffix `{}`", s),
+			Self::InvalidPrimitive(p) => write!(f, "invalid primitive layout `#{}`", p),
 			Self::Unexpected(None) => write!(f, "unexpected end of text"),
 			Self::Unexpected(Some(c)) => write!(f, "unexpected character `{}`", c),
 			Self::Stream(e) => e.fmt(f),

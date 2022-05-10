@@ -1,7 +1,6 @@
 use crate::{error, Error};
 use locspan::Location;
-use treeldr::{vocab, Caused, Id, MaybeSet};
-use vocab::Name;
+use treeldr::{Caused, Id, MaybeSet, Name};
 
 pub trait IntersectedWith<F>: Sized {
 	fn intersected_with(

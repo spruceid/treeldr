@@ -1,4 +1,4 @@
-use crate::{vocab::Name, WithCauses};
+use crate::{Name, WithCauses};
 use locspan::Location;
 
 pub mod regexp;

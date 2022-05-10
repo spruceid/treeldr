@@ -152,7 +152,7 @@ impl Name {
 	/// ## Example
 	///
 	/// ```
-	/// # use treeldr_vocab::Name;
+	/// # use treeldr::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
 	/// assert_eq!(name.to_snake_case(), "file_not_found_exception")
 	/// ```
@@ -165,7 +165,7 @@ impl Name {
 	/// ## Example
 	///
 	/// ```
-	/// # use treeldr_vocab::Name;
+	/// # use treeldr::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
 	/// assert_eq!(name.to_camel_case(), "fileNotFoundException")
 	/// ```
@@ -194,7 +194,7 @@ impl Name {
 	/// ## Example
 	///
 	/// ```
-	/// # use treeldr_vocab::Name;
+	/// # use treeldr::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
 	/// assert_eq!(name.to_pascal_case(), "FileNotFoundException")
 	/// ```
@@ -218,7 +218,7 @@ impl Name {
 	/// ## Example
 	///
 	/// ```
-	/// # use treeldr_vocab::Name;
+	/// # use treeldr::Name;
 	/// let name = Name::new("File_not_FoundException").unwrap();
 	/// assert_eq!(name.to_kebab_case(), "file-not-found-exception")
 	/// ```

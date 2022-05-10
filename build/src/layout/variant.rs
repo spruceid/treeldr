@@ -1,6 +1,6 @@
 use crate::{error, Context, Descriptions, Error};
 use locspan::Location;
-use treeldr::{vocab::Name, Caused, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
+use treeldr::{Caused, Documentation, Id, MaybeSet, Name, Vocabulary, WithCauses};
 
 /// Layout field definition.
 #[derive(Clone)]

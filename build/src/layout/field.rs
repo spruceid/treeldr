@@ -1,6 +1,6 @@
 use super::{error, Error};
 use locspan::Location;
-use treeldr::{vocab::Name, Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
+use treeldr::{Caused, Causes, Documentation, Id, MaybeSet, Name, Vocabulary, WithCauses};
 
 /// Layout field definition.
 #[derive(Clone)]

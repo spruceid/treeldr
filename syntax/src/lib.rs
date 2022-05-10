@@ -1,8 +1,6 @@
 use iref::IriBuf;
 use locspan::Loc;
 
-pub use treeldr_vocab as vocab;
-
 pub mod build;
 pub mod lexing;
 pub mod parsing;
@@ -10,7 +8,7 @@ mod peekable3;
 
 pub use lexing::{Id, Label, Lexer};
 pub use parsing::Parse;
-pub use treeldr::layout::Primitive;
+pub use treeldr::{layout::Primitive, vocab};
 
 #[derive(Clone)]
 pub struct Documentation<F> {
@@ -67,7 +65,7 @@ impl<F: Clone> TypeDefinition<F> {
 	pub fn implicit_layout_definition(&self) -> LayoutDefinition<F> {
 		LayoutDefinition {
 			id: self.id.clone(),
-			ty_id: self.id.clone(),
+			ty_id: Some(self.id.clone()),
 			description: Loc(
 				self.description.implicit_layout_description(),
 				self.description.location().clone(),
@@ -321,7 +319,7 @@ impl<F: Clone> TypePropertyRestriction<F> {
 
 pub struct LayoutDefinition<F> {
 	pub id: Loc<Id, F>,
-	pub ty_id: Loc<Id, F>,
+	pub ty_id: Option<Loc<Id, F>>,
 	pub description: Loc<LayoutDescription<F>, F>,
 	pub doc: Option<Loc<Documentation<F>, F>>,
 }

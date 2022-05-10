@@ -5,7 +5,7 @@ use crate::build::{
 };
 use locspan::Loc;
 use std::collections::BTreeMap;
-use treeldr::{vocab::*, Caused, Causes, Id, MaybeSet, WithCauses};
+use treeldr::{vocab::*, Caused, Causes, Id, MaybeSet, Name, WithCauses};
 use treeldr_build::{Context, ObjectToId};
 
 #[derive(Clone)]

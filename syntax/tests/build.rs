@@ -2,7 +2,7 @@ use locspan::Loc;
 use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;
-use treeldr_vocab::{GraphLabel, Id, StrippedObject, Term, Vocabulary};
+use treeldr::vocab::{BlankLabel, GraphLabel, Id, StrippedObject, Term, Vocabulary};
 
 type BuildContext = treeldr_build::Context<(), treeldr_syntax::build::Descriptions>;
 
@@ -11,16 +11,16 @@ fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 }
 
 #[derive(Default)]
-struct BlankIdGenerator(HashMap<rdf_types::BlankIdBuf, treeldr_vocab::BlankLabel>);
+struct BlankIdGenerator(HashMap<rdf_types::BlankIdBuf, BlankLabel>);
 
 impl BlankIdGenerator {
-	pub fn generate(&mut self, label: rdf_types::BlankIdBuf) -> treeldr_vocab::BlankLabel {
+	pub fn generate(&mut self, label: rdf_types::BlankIdBuf) -> BlankLabel {
 		use std::collections::hash_map::Entry;
 		let len = self.0.len() as u32;
 		match self.0.entry(label) {
 			Entry::Occupied(entry) => entry.get().clone(),
 			Entry::Vacant(entry) => {
-				let label = treeldr_vocab::BlankLabel::new(len);
+				let label = BlankLabel::new(len);
 				entry.insert(label);
 				label
 			}
@@ -46,7 +46,9 @@ fn parse_nquads<P: AsRef<Path>>(
 
 	quads
 		.into_iter()
-		.map(move |quad| treeldr_vocab::stripped_loc_quad_from_rdf(quad, vocabulary, &mut generate))
+		.map(move |quad| {
+			treeldr::vocab::stripped_loc_quad_from_rdf(quad, vocabulary, &mut generate)
+		})
 		.collect()
 }
 
@@ -82,7 +84,7 @@ fn parse_treeldr<P: AsRef<Path>>(
 }
 
 fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) {
-	use treeldr_vocab::RdfDisplay;
+	use treeldr::vocab::RdfDisplay;
 	let mut vocabulary = Vocabulary::new();
 	let output = parse_treeldr(&mut vocabulary, input_path);
 	let expected_output = parse_nquads(&mut vocabulary, expected_output_path);
@@ -95,7 +97,7 @@ fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) 
 }
 
 fn negative_test<I: AsRef<Path>>(input_path: I) {
-	use treeldr_vocab::RdfDisplay;
+	use treeldr::vocab::RdfDisplay;
 	let mut vocabulary = Vocabulary::new();
 	let output = parse_treeldr(&mut vocabulary, input_path);
 	for quad in output.quads() {
@@ -157,6 +159,11 @@ fn t011() {
 fn t012() {
 	test("tests/012-in.tldr", "tests/012-out.nq")
 }
+
+// #[test]
+// fn t013() {
+// 	test("tests/013-in.tldr", "tests/013-out.nq")
+// }
 
 #[test]
 #[should_panic]

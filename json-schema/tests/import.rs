@@ -3,24 +3,24 @@ use locspan::Loc;
 use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;
+use treeldr::vocab::{BlankLabel, GraphLabel, Id, StrippedObject, Term, Vocabulary};
 use treeldr_build::Context;
-use treeldr_vocab::{GraphLabel, Id, StrippedObject, Term, Vocabulary};
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
 }
 
 #[derive(Default)]
-struct BlankIdGenerator(HashMap<rdf_types::BlankIdBuf, treeldr_vocab::BlankLabel>);
+struct BlankIdGenerator(HashMap<rdf_types::BlankIdBuf, BlankLabel>);
 
 impl BlankIdGenerator {
-	pub fn generate(&mut self, label: rdf_types::BlankIdBuf) -> treeldr_vocab::BlankLabel {
+	pub fn generate(&mut self, label: rdf_types::BlankIdBuf) -> BlankLabel {
 		use std::collections::hash_map::Entry;
 		let len = self.0.len() as u32;
 		match self.0.entry(label) {
 			Entry::Occupied(entry) => entry.get().clone(),
 			Entry::Vacant(entry) => {
-				let label = treeldr_vocab::BlankLabel::new(len);
+				let label = BlankLabel::new(len);
 				entry.insert(label);
 				label
 			}
@@ -46,7 +46,9 @@ fn parse_nquads<P: AsRef<Path>>(
 
 	quads
 		.into_iter()
-		.map(move |quad| treeldr_vocab::stripped_loc_quad_from_rdf(quad, vocabulary, &mut generate))
+		.map(move |quad| {
+			treeldr::vocab::stripped_loc_quad_from_rdf(quad, vocabulary, &mut generate)
+		})
 		.collect()
 }
 
@@ -75,7 +77,7 @@ fn import_json_schema<P: AsRef<Path>>(
 }
 
 fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O, expected_iri: Iri) {
-	use treeldr_vocab::RdfDisplay;
+	use treeldr::vocab::RdfDisplay;
 	let mut vocabulary = Vocabulary::new();
 	let expected_id = Id::Iri(Term::from_iri(expected_iri.into(), &mut vocabulary));
 

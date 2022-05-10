@@ -2,7 +2,7 @@ use crate::{error, list::ListMut, Context, Descriptions, Document, Error};
 use locspan::Loc;
 use treeldr::{
 	vocab::{self, GraphLabel, Object, Term},
-	Id, Vocabulary,
+	Id, Name, Vocabulary,
 };
 
 fn expect_id<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<Id, F>, Error<F>> {
@@ -195,7 +195,7 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 					let node = context.require_mut(id, Some(id_loc))?;
 					let Loc(name, name_loc) = expect_raw_string(object)?;
 
-					let name = vocab::Name::new(&name).map_err(|vocab::InvalidName| {
+					let name = Name::new(&name).map_err(|treeldr::name::InvalidName| {
 						Error::new(error::NameInvalid(name.into()).into(), Some(name_loc))
 					})?;
 

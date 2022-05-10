@@ -1,4 +1,4 @@
-use crate::{prop, vocab::Name, Id, MaybeSet, Ref, WithCauses};
+use crate::{prop, Id, MaybeSet, Name, Ref, WithCauses};
 use locspan::Location;
 
 #[derive(Clone)]

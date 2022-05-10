@@ -542,8 +542,16 @@ impl<F: Clone> Parse<F> for Item<F> {
 			}
 			Token::Keyword(lexing::Keyword::Layout) => {
 				let id = Id::parse(lexer)?;
-				parse_keyword(lexer, lexing::Keyword::For)?;
-				let ty_id = Id::parse(lexer)?;
+
+				let ty_id = match peek_token(lexer)?.value() {
+					Some(Token::Keyword(Keyword::For)) => {
+						next_token(lexer)?;
+						let ty_id = Id::parse(lexer)?;
+						loc.span_mut().append(ty_id.span());
+						Some(ty_id)
+					}
+					_ => None,
+				};
 
 				let description = match next_token(lexer)? {
 					Loc(Some(Token::Begin(Delimiter::Brace)), block_loc) => {

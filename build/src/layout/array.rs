@@ -1,6 +1,6 @@
 use crate::{error, Error};
 use derivative::Derivative;
-use treeldr::{vocab, Causes, Id, MaybeSet};
+use treeldr::{vocab, Causes, Id, MaybeSet, Name};
 use vocab::{Rdf, Term};
 
 #[derive(Clone, Debug, Derivative)]
@@ -102,7 +102,7 @@ impl<F> Array<F> {
 
 	pub fn build(
 		self,
-		name: MaybeSet<vocab::Name, F>,
+		name: MaybeSet<Name, F>,
 		nodes: &mut crate::context::allocated::Nodes<F>,
 		causes: &Causes<F>,
 	) -> Result<treeldr::layout::Array<F>, Error<F>>

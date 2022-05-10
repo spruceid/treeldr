@@ -5,10 +5,8 @@ use rdf_types::Quad;
 use std::{collections::HashMap, fmt};
 
 mod display;
-mod name;
 
 pub use display::*;
-pub use name::*;
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]
@@ -23,10 +21,11 @@ pub enum TreeLdr {
 	#[iri("tldr:format")]
 	Format,
 
-	/// Primitive layout definition.
+	/// Primitive layout.
 	#[iri("tldr:primitive")]
 	Primitive,
 
+	/// Structure layout.
 	#[iri("tldr:fields")]
 	Fields,
 
