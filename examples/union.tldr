@@ -1,8 +1,8 @@
-base <https://example.com>
+base <https://example.com>;
 
 type Type {
 	union: A | B | "foo" | /rege+xp/ as RequiredName
 }
 
-type A {}
-type B {}
+type A;
+type B;

@@ -1,4 +1,4 @@
-type Foo {}
-type Bar {}
+type Foo;
+type Bar;
 
-type Union = Foo | Bar
+type Union = Foo | Bar;

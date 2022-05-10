@@ -512,6 +512,10 @@ impl<F: Clone + Ord> treeldr_build::Document<F, Descriptions> for crate::Documen
 			ty.declare(local_context, context, vocabulary)?
 		}
 
+		for prop in &self.properties {
+			prop.declare(local_context, context, vocabulary)?
+		}
+
 		for layout in &self.layouts {
 			layout.declare(local_context, context, vocabulary)?
 		}
@@ -527,6 +531,10 @@ impl<F: Clone + Ord> treeldr_build::Document<F, Descriptions> for crate::Documen
 	) -> Result<(), Error<F>> {
 		for ty in self.types {
 			ty.build(local_context, context, vocabulary)?
+		}
+
+		for prop in self.properties {
+			prop.build(local_context, context, vocabulary)?;
 		}
 
 		for layout in self.layouts {

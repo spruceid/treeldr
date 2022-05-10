@@ -1,6 +1,6 @@
-base <https://example.com>
+base <https://example.com>;
 
-use <http://www.w3.org/2001/XMLSchema#> as xs
+use <http://www.w3.org/2001/XMLSchema#> as xs;
 
 /// Certificate or deed issued by an educational institution.
 type Diploma {
@@ -21,14 +21,8 @@ type Department {
 	parent: Department
 }
 
-type Degree {
-	// ...
-}
+type Degree;
 
-type Year {
-	// ...
-}
+type Year;
 
-type Honors {
-	// ...
-}
+type Honors;

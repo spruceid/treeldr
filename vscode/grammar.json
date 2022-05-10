@@ -13,7 +13,7 @@
 		},
 		{
 			"name": "keyword.treeldr",
-			"match": "(?<!as\\s*)\\b(base|use|as|type|layout|for)\\b(?!\\s*(:|as))"
+			"match": "(?<!as\\s*)\\b(base|use|as|type|property|layout|for|any|all)\\b(?!\\s*(:|as))"
 		},
 		{
 			"name": "entity.name.tag.treeldr",

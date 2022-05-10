@@ -11,14 +11,14 @@ type B {
 	here:c: C
 }
 
-type C = A & B
+type C = A & B;
 
-type ABC = A | B | C
+type ABC = A | B | C;
 
-type AB = A | B
+type AB = A | B;
 
-type ABAgain = ABC & AB
+type ABAgain = ABC & AB;
 
-type BC = B | C
+type BC = B | C;
 
-type BAgain = AB & BC
+type BAgain = AB & BC;

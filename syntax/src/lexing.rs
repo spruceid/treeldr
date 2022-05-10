@@ -197,6 +197,7 @@ impl Delimiter {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Punct {
 	Comma,
+	Semicolon,
 	Colon,
 	Ampersand,
 	Pipe,
@@ -208,6 +209,7 @@ impl Punct {
 	pub fn from_char(c: char) -> Option<Self> {
 		match c {
 			',' => Some(Self::Comma),
+			';' => Some(Self::Semicolon),
 			':' => Some(Self::Colon),
 			'&' => Some(Self::Ampersand),
 			'|' => Some(Self::Pipe),
@@ -221,6 +223,7 @@ impl fmt::Display for Punct {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::Comma => write!(f, ","),
+			Self::Semicolon => write!(f, ";"),
 			Self::Colon => write!(f, ":"),
 			Self::Ampersand => write!(f, "&"),
 			Self::Pipe => write!(f, "|"),
@@ -236,6 +239,7 @@ pub enum Keyword {
 	Base,
 	Use,
 	Type,
+	Property,
 	Layout,
 	As,
 	For,
@@ -250,6 +254,7 @@ impl Keyword {
 			"base" => Some(Keyword::Base),
 			"use" => Some(Keyword::Use),
 			"type" => Some(Keyword::Type),
+			"property" => Some(Keyword::Property),
 			"layout" => Some(Keyword::Layout),
 			"as" => Some(Keyword::As),
 			"for" => Some(Keyword::For),
@@ -264,6 +269,7 @@ impl Keyword {
 			Self::Base => "base",
 			Self::Use => "use",
 			Self::Type => "type",
+			Self::Property => "property",
 			Self::Layout => "layout",
 			Self::As => "as",
 			Self::For => "for",

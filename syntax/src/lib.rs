@@ -26,6 +26,7 @@ pub struct Document<F> {
 	pub bases: Vec<Loc<IriBuf, F>>,
 	pub uses: Vec<Loc<Use<F>, F>>,
 	pub types: Vec<Loc<TypeDefinition<F>, F>>,
+	pub properties: Vec<Loc<PropertyDefinition<F>, F>>,
 	pub layouts: Vec<Loc<LayoutDefinition<F>, F>>,
 }
 
@@ -45,6 +46,7 @@ pub enum Item<F> {
 	Base(Loc<IriBuf, F>),
 	Use(Loc<Use<F>, F>),
 	Type(Loc<TypeDefinition<F>, F>),
+	Property(Loc<PropertyDefinition<F>, F>),
 	Layout(Loc<LayoutDefinition<F>, F>),
 }
 

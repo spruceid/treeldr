@@ -2,4 +2,4 @@ type Foo {
 	union: Foo | Bar
 }
 
-type Bar {}
+type Bar;

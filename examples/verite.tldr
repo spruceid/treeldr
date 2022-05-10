@@ -1,11 +1,11 @@
-base <https://verite.id/verite/appendix/schemas/>
+base <https://verite.id/verite/appendix/schemas/>;
 
-use <http://www.w3.org/2001/XMLSchema#> as rdf
-use <http://www.w3.org/1999/02/22-rdf-syntax-ns#> as rdfs
-use <http://www.w3.org/2001/XMLSchema#> as xs
-use <http://schema.org/> as schema
+use <http://www.w3.org/2001/XMLSchema#> as rdf;
+use <http://www.w3.org/1999/02/22-rdf-syntax-ns#> as rdfs;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <http://schema.org/> as schema;
 
-type schema:PostalAddress {}
+type schema:PostalAddress;
 
 /// KYC/AML Attestation.
 /// 

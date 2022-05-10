@@ -1,7 +1,7 @@
-use <http://www.w3.org/2001/XMLSchema#> as xs
-base <did:web:demo.spruceid.com/>
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+base <did:web:demo.spruceid.com/>;
 
-type Person {}
+type Person;
 
 /// Follow.
 type Follow {
