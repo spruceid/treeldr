@@ -406,7 +406,7 @@ impl<F> layout::Definition<F> {
 
 		match self.description() {
 			layout::Description::Never(_) => todo!(),
-			layout::Description::Native(n, _) => n.to_rdf(self.id(), quads),
+			layout::Description::Primitive(n, _) => n.to_rdf(self.id(), quads),
 			layout::Description::Literal(l) => l.to_rdf(self.id(), quads),
 			layout::Description::Struct(s) => s.to_rdf(model, self.id(), generator, quads),
 			layout::Description::Enum(e) => e.to_rdf(model, self.id(), generator, quads),
@@ -486,9 +486,9 @@ impl<F> layout::Set<F> {
 	}
 }
 
-impl layout::Native {
+impl layout::Primitive {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		let native = match self {
+		let primitive = match self {
 			Self::Boolean => Term::Xsd(vocab::Xsd::Boolean),
 			Self::Integer => Term::Xsd(vocab::Xsd::Integer),
 			Self::PositiveInteger => Term::Xsd(vocab::Xsd::PositiveInteger),
@@ -505,8 +505,8 @@ impl layout::Native {
 
 		quads.push(Quad(
 			id,
-			Term::TreeLdr(vocab::TreeLdr::Native),
-			Object::Iri(native),
+			Term::TreeLdr(vocab::TreeLdr::Primitive),
+			Object::Iri(primitive),
 			None,
 		));
 	}

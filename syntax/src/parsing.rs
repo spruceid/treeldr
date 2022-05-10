@@ -213,7 +213,7 @@ fn parse_comma_separated_list<F, L: Tokens<F>, T: Parse<F>>(
 #[allow(clippy::type_complexity)]
 fn parse_block<F, L: Tokens<F>, T: Parse<F>>(
 	lexer: &mut L,
-	mut loc: Location<F>
+	mut loc: Location<F>,
 ) -> Result<Loc<Vec<Loc<T, F>>, F>, Loc<Error<L::Error>, F>> {
 	let items = parse_comma_separated_list(lexer)?;
 	match next_token(lexer)? {
@@ -222,7 +222,13 @@ fn parse_block<F, L: Tokens<F>, T: Parse<F>>(
 			Ok(Loc::new(items, loc))
 		}
 		Loc(unexpected, loc) => Err(Loc::new(
-			Error::Unexpected(unexpected, vec![TokenKind::Punct(Punct::Comma), TokenKind::End(Delimiter::Brace)]),
+			Error::Unexpected(
+				unexpected,
+				vec![
+					TokenKind::Punct(Punct::Comma),
+					TokenKind::End(Delimiter::Brace),
+				],
+			),
 			loc,
 		)),
 	}
@@ -248,8 +254,7 @@ fn parse_punct<F, L: Tokens<F>>(
 	tokens: &mut L,
 	punct: lexing::Punct,
 ) -> Result<(), Loc<Error<L::Error>, F>> {
-	let locspan::Loc(token, span) =
-		next_expected_token(tokens, || vec![TokenKind::Punct(punct)])?;
+	let locspan::Loc(token, span) = next_expected_token(tokens, || vec![TokenKind::Punct(punct)])?;
 
 	match token {
 		Token::Punct(p) if p == punct => Ok(()),
@@ -507,16 +512,14 @@ impl<F: Clone> Parse<F> for Item<F> {
 						parse_punct(lexer, Punct::Semicolon)?;
 						Some(ty)
 					}
-					Loc(Some(Token::Punct(Punct::Semicolon)), _) => {
-						None
-					}
+					Loc(Some(Token::Punct(Punct::Semicolon)), _) => None,
 					Loc(unexpected, loc) => {
 						return Err(Loc::new(
 							Error::Unexpected(
 								unexpected,
 								vec![
 									TokenKind::Punct(Punct::Colon),
-									TokenKind::Punct(Punct::Semicolon)
+									TokenKind::Punct(Punct::Semicolon),
 								],
 							),
 							loc,
@@ -600,7 +603,7 @@ impl<F: Clone> Parse<F> for PropertyDefinition<F> {
 		token_loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
 		let (doc, k) = Documentation::try_parse_from(lexer, token, token_loc)?;
-		
+
 		let id = Id::parse_from_continuation(lexer, k)?;
 		let mut loc = id.location().clone();
 
@@ -617,7 +620,7 @@ impl<F: Clone> Parse<F> for PropertyDefinition<F> {
 						loc.span_mut().append(alias.span());
 						Some(alias)
 					}
-					_ => None
+					_ => None,
 				};
 
 				(Some(ty), alias)
@@ -631,15 +634,7 @@ impl<F: Clone> Parse<F> for PropertyDefinition<F> {
 			_ => (None, None),
 		};
 
-		Ok(Loc::new(
-			Self {
-				id,
-				alias,
-				ty,
-				doc,
-			},
-			loc,
-		))
+		Ok(Loc::new(Self { id, alias, ty, doc }, loc))
 	}
 }
 

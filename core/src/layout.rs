@@ -5,7 +5,7 @@ use shelves::Ref;
 pub mod array;
 pub mod enumeration;
 pub mod literal;
-mod native;
+mod primitive;
 mod set;
 mod structure;
 
@@ -15,7 +15,7 @@ mod usages;
 pub use array::Array;
 pub use enumeration::{Enum, Variant};
 pub use literal::Literal;
-pub use native::Native;
+pub use primitive::Primitive;
 pub use set::Set;
 pub use structure::{Field, Struct};
 
@@ -26,7 +26,7 @@ pub use usages::Usages;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Type {
 	Never,
-	Native(Native),
+	Primitive(Primitive),
 	Struct,
 	Enum,
 	Reference,
@@ -50,8 +50,8 @@ pub enum Description<F> {
 	/// Never layout.
 	Never(MaybeSet<Name, F>),
 
-	/// Native layout, such as a number, a string, etc.
-	Native(Native, MaybeSet<Name, F>),
+	/// Primitive layout, such as a number, a string, etc.
+	Primitive(Primitive, MaybeSet<Name, F>),
 
 	/// Reference.
 	Reference(Ref<Definition<F>>, MaybeSet<Name, F>),
@@ -78,7 +78,7 @@ impl<F> Description<F> {
 	pub fn ty(&self) -> Type {
 		match self {
 			Self::Never(_) => Type::Never,
-			Self::Native(n, _) => Type::Native(*n),
+			Self::Primitive(n, _) => Type::Primitive(*n),
 			Self::Literal(_) => Type::Literal,
 			Self::Reference(_, _) => Type::Reference,
 			Self::Struct(_) => Type::Struct,
@@ -99,7 +99,7 @@ impl<F> Description<F> {
 	{
 		match self {
 			Self::Never(name) => name.replace(new_name, cause),
-			Self::Native(_, name) => name.replace(new_name, cause),
+			Self::Primitive(_, name) => name.replace(new_name, cause),
 			Self::Literal(lit) => Some(lit.set_name(new_name, cause)),
 			Self::Reference(_, name) => name.replace(new_name, cause),
 			Self::Struct(s) => Some(s.set_name(new_name, cause)),
@@ -116,7 +116,7 @@ impl<F> Description<F> {
 			Description::Struct(s) => s.into_name().into(),
 			Description::Enum(e) => e.into_name().into(),
 			Description::Reference(_, n) => n,
-			Description::Native(_, n) => n,
+			Description::Primitive(_, n) => n,
 			Description::Literal(l) => l.into_name().into(),
 			Description::Array(a) => a.into_name(),
 			Description::Set(s) => s.into_name(),
@@ -156,7 +156,7 @@ impl<F> Definition<F> {
 			Description::Struct(s) => Some(s.name()),
 			Description::Enum(e) => Some(e.name()),
 			Description::Reference(_, n) => n.value(),
-			Description::Native(_, n) => n.value(),
+			Description::Primitive(_, n) => n.value(),
 			Description::Literal(l) => Some(l.name()),
 			Description::Array(a) => a.name(),
 			Description::Set(s) => s.name(),
@@ -213,7 +213,7 @@ impl<F> Definition<F> {
 			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts()),
 			Description::Literal(_) => ComposingLayouts::None,
 			Description::Reference(_, _) => ComposingLayouts::None,
-			Description::Native(_, _) => ComposingLayouts::None,
+			Description::Primitive(_, _) => ComposingLayouts::None,
 			Description::Array(a) => ComposingLayouts::One(Some(a.item_layout())),
 			Description::Set(s) => ComposingLayouts::One(Some(s.item_layout())),
 			Description::Alias(_, _) => ComposingLayouts::None,

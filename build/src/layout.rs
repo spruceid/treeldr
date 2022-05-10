@@ -11,12 +11,12 @@ pub mod structure;
 pub mod variant;
 
 pub use array::Array;
-pub use treeldr::layout::{literal::RegExp, Native};
+pub use treeldr::layout::{literal::RegExp, Primitive};
 
 #[derive(Clone, Debug)]
 pub enum Description<F> {
 	Never,
-	Native(Native),
+	Primitive(Primitive),
 	Struct(Id),
 	Reference(Id),
 	Literal(RegExp),
@@ -29,7 +29,7 @@ pub enum Description<F> {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Type {
 	Never,
-	Native(Native),
+	Primitive(Primitive),
 	Reference,
 	Literal,
 	Struct,
@@ -45,7 +45,7 @@ impl<F> Description<F> {
 			Self::Never => Type::Never,
 			Self::Reference(_) => Type::Reference,
 			Self::Struct(_) => Type::Struct,
-			Self::Native(n) => Type::Native(*n),
+			Self::Primitive(n) => Type::Primitive(*n),
 			Self::Literal(_) => Type::Literal,
 			Self::Enum(_) => Type::Enum,
 			Self::Set(_) => Type::Set,
@@ -193,7 +193,7 @@ impl<F> Description<F> {
 
 		match self {
 			Description::Never => Ok(treeldr::layout::Description::Never(name)),
-			Description::Native(n) => Ok(treeldr::layout::Description::Native(n, name)),
+			Description::Primitive(n) => Ok(treeldr::layout::Description::Primitive(n, name)),
 			Description::Reference(layout_id) => {
 				let layout_ref = *nodes
 					.require_layout(layout_id, causes.preferred().cloned())?
@@ -308,7 +308,7 @@ impl<F: Clone + Ord> PseudoDescription<F> for Description<F> {
 	) -> Result<Self, Error<F>> {
 		match (self, other) {
 			(Self::Never, Self::Never) => Ok(Self::Never),
-			(Self::Native(a), Self::Native(b)) if a == b => Ok(Self::Native(a)),
+			(Self::Primitive(a), Self::Primitive(b)) if a == b => Ok(Self::Primitive(a)),
 			(Self::Struct(a), Self::Struct(b)) if a == b => Ok(Self::Struct(a)),
 			(Self::Reference(a), Self::Reference(b)) if a == b => Ok(Self::Reference(a)),
 			(Self::Literal(a), Self::Literal(b)) if a == b => Ok(Self::Literal(a)),
@@ -463,12 +463,12 @@ impl<F, D> Definition<F, D> {
 }
 
 impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
-	pub fn set_native(
+	pub fn set_primitive(
 		&mut self,
-		native: Native,
+		primitive: Primitive,
 		cause: Option<Location<F>>,
 	) -> Result<(), Error<F>> {
-		self.set_description(Description::Native(native).into(), cause)
+		self.set_description(Description::Primitive(primitive).into(), cause)
 	}
 
 	pub fn set_fields(&mut self, fields: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {

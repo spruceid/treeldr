@@ -3,7 +3,7 @@ use derivative::Derivative;
 use locspan::Loc;
 use std::collections::BTreeMap;
 use treeldr::{
-	layout::{literal::RegExp, Native},
+	layout::{literal::RegExp, Primitive},
 	Causes, Id, MaybeSet, Vocabulary, WithCauses,
 };
 use treeldr_build::{layout::Array, Context, ObjectToId};
@@ -33,7 +33,7 @@ impl<F> PartialEq for IntersectedLayout<F> {
 #[derivative(PartialEq(bound = ""))]
 pub enum IntersectedLayoutDescription<F> {
 	Never,
-	Native(Native),
+	Primitive(Primitive),
 	Struct(IntersectedStruct<F>),
 	Reference(Id),
 	Literal(RegExp),
@@ -246,7 +246,7 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 			Some(desc) => match desc.inner() {
 				LayoutDescription::Standard(standard_desc) => match standard_desc {
 					treeldr_build::layout::Description::Never => Ok(Self::Never),
-					treeldr_build::layout::Description::Native(n) => Ok(Self::Native(*n)),
+					treeldr_build::layout::Description::Primitive(n) => Ok(Self::Primitive(*n)),
 					treeldr_build::layout::Description::Literal(l) => Ok(Self::Literal(l.clone())),
 					treeldr_build::layout::Description::Reference(r) => Ok(Self::Reference(*r)),
 					treeldr_build::layout::Description::Struct(fields_id) => Ok(Self::Struct(
@@ -325,8 +325,8 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 			},
 			other => match self {
 				Self::Never => Ok(Self::Never),
-				Self::Native(a) => match other {
-					Self::Native(b) if a == b => Ok(Self::Native(a)),
+				Self::Primitive(a) => match other {
+					Self::Primitive(b) if a == b => Ok(Self::Primitive(a)),
 					_ => Ok(Self::Never),
 				},
 				Self::Reference(a) => match other {
@@ -396,7 +396,7 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
 		match self {
 			Self::Never => Ok(treeldr_build::layout::Description::Never),
-			Self::Native(n) => Ok(treeldr_build::layout::Description::Native(n)),
+			Self::Primitive(n) => Ok(treeldr_build::layout::Description::Primitive(n)),
 			Self::Reference(r) => Ok(treeldr_build::layout::Description::Reference(r)),
 			Self::Literal(literal) => Ok(treeldr_build::layout::Description::Literal(literal)),
 			Self::Struct(s) => s.into_standard_description(source, target, vocabulary),

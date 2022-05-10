@@ -124,7 +124,7 @@ pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
 		vocabulary,
 	)?;
 
-	if let treeldr_build::layout::Description::Native(layout) = &desc {
+	if let treeldr_build::layout::Description::Primitive(layout) = &desc {
 		if schema.is_primitive()
 			&& schema.id.is_none()
 			&& schema.meta_schema.is_empty()
@@ -209,22 +209,22 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 		}
 	}
 
-	let native_layout = if let Some(format) = schema.validation.format {
+	let primitive_layout = if let Some(format) = schema.validation.format {
 		kind.refine(LayoutKind::String)?;
 		Some(format_layout(format)?)
 	} else {
 		match kind {
-			LayoutKind::Boolean => Some(treeldr::layout::Native::Boolean),
-			LayoutKind::Integer => Some(treeldr::layout::Native::Integer),
-			LayoutKind::Number => Some(treeldr::layout::Native::Double),
-			LayoutKind::String => Some(treeldr::layout::Native::String),
+			LayoutKind::Boolean => Some(treeldr::layout::Primitive::Boolean),
+			LayoutKind::Integer => Some(treeldr::layout::Primitive::Integer),
+			LayoutKind::Number => Some(treeldr::layout::Primitive::Double),
+			LayoutKind::String => Some(treeldr::layout::Primitive::String),
 			_ => None,
 		}
 	};
 
-	if let Some(layout) = native_layout {
+	if let Some(layout) = primitive_layout {
 		if schema.is_primitive() {
-			return Ok(treeldr_build::layout::Description::Native(layout));
+			return Ok(treeldr_build::layout::Description::Primitive(layout));
 		}
 	}
 
@@ -253,13 +253,13 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 			#[allow(clippy::if_same_then_else)]
 			if kind.is_number() {
 				// TODO: for now, numeric constraints are ignored.
-				Ok(treeldr_build::layout::Description::Native(
-					native_layout.unwrap(),
+				Ok(treeldr_build::layout::Description::Primitive(
+					primitive_layout.unwrap(),
 				))
 			} else if kind.is_string() || !string.is_empty() {
 				// TODO: for now, string constraints are ignored.
-				Ok(treeldr_build::layout::Description::Native(
-					native_layout.unwrap(),
+				Ok(treeldr_build::layout::Description::Primitive(
+					primitive_layout.unwrap(),
 				))
 			} else if !array.is_empty() || !schema.validation.array.is_empty() {
 				kind.refine(LayoutKind::ArrayOrSet)?;
@@ -349,12 +349,12 @@ fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 	Ok(treeldr_build::layout::Description::Struct(fields_id))
 }
 
-fn format_layout<F>(format: schema::Format) -> Result<treeldr::layout::Native, Error<F>> {
-	use treeldr::layout::Native;
+fn format_layout<F>(format: schema::Format) -> Result<treeldr::layout::Primitive, Error<F>> {
+	use treeldr::layout::Primitive;
 	let layout = match format {
-		schema::Format::DateTime => Native::DateTime,
-		schema::Format::Date => Native::Date,
-		schema::Format::Time => Native::Time,
+		schema::Format::DateTime => Primitive::DateTime,
+		schema::Format::Date => Primitive::Date,
+		schema::Format::Time => Primitive::Time,
 		schema::Format::Duration => todo!(),
 		schema::Format::Email => todo!(),
 		schema::Format::IdnEmail => todo!(),
@@ -362,7 +362,7 @@ fn format_layout<F>(format: schema::Format) -> Result<treeldr::layout::Native, E
 		schema::Format::IdnHostname => todo!(),
 		schema::Format::Ipv4 => todo!(),
 		schema::Format::Ipv6 => todo!(),
-		schema::Format::Uri => Native::Uri,
+		schema::Format::Uri => Primitive::Uri,
 		schema::Format::UriReference => todo!(),
 		schema::Format::Iri => todo!(),
 		schema::Format::IriReference => todo!(),

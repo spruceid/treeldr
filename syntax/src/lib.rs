@@ -10,6 +10,7 @@ mod peekable3;
 
 pub use lexing::{Id, Label, Lexer};
 pub use parsing::Parse;
+pub use treeldr::layout::Primitive;
 
 #[derive(Clone)]
 pub struct Documentation<F> {
@@ -404,6 +405,7 @@ impl<F> NamedInnerLayoutExpr<F> {
 
 pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
+	Primitive(Primitive),
 	Reference(Box<Loc<Self, F>>),
 	Literal(Literal),
 	FieldRestriction(LayoutRestrictedField<F>),

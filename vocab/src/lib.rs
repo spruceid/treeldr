@@ -23,9 +23,9 @@ pub enum TreeLdr {
 	#[iri("tldr:format")]
 	Format,
 
-	/// Native layout definition.
-	#[iri("tldr:native")]
-	Native,
+	/// Primitive layout definition.
+	#[iri("tldr:primitive")]
+	Primitive,
 
 	#[iri("tldr:fields")]
 	Fields,

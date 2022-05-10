@@ -22,8 +22,11 @@ impl<F> DefaultLayout<F> {
 	pub fn build<D: crate::Descriptions<F>>(
 		self,
 		context: &mut crate::Context<F, D>,
-		vocabulary: &mut Vocabulary
-	) -> WithCauses<Id, F> where F: Clone + Ord {
+		vocabulary: &mut Vocabulary,
+	) -> WithCauses<Id, F>
+	where
+		F: Clone + Ord,
+	{
 		match self {
 			Self::Functional(layout) => layout,
 			Self::NonFunctional(item) => {
@@ -34,7 +37,9 @@ impl<F> DefaultLayout<F> {
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
 
 				let (item, item_causes) = item.into_parts();
-				layout.set_array(item, None, item_causes.preferred().cloned()).ok();
+				layout
+					.set_array(item, None, item_causes.preferred().cloned())
+					.ok();
 
 				WithCauses::new(id, causes)
 			}
@@ -154,7 +159,13 @@ impl<F> Definition<F> {
 		self.layout = layout
 	}
 
-	pub fn default_layout<D: crate::Descriptions<F>>(&self, context: &crate::Context<F, D>) -> Option<DefaultLayout<F>> where F: Clone {
+	pub fn default_layout<D: crate::Descriptions<F>>(
+		&self,
+		context: &crate::Context<F, D>,
+	) -> Option<DefaultLayout<F>>
+	where
+		F: Clone,
+	{
 		let prop_id = self.property()?;
 		let prop = context.get(**prop_id)?.as_property()?;
 		let range_id = prop.range()?;
@@ -171,17 +182,16 @@ impl<F> Definition<F> {
 		}
 	}
 
-	pub fn require_layout(
-		&self,
-		causes: &Causes<F>
-	) -> Result<&WithCauses<Id, F>, Error<F>>
+	pub fn require_layout(&self, causes: &Causes<F>) -> Result<&WithCauses<Id, F>, Error<F>>
 	where
 		F: Clone,
 	{
-		self.layout.value_or_else(|| Error::new(
-			error::LayoutFieldMissingLayout(self.id).into(),
-			causes.preferred().cloned(),
-		))
+		self.layout.value_or_else(|| {
+			Error::new(
+				error::LayoutFieldMissingLayout(self.id).into(),
+				causes.preferred().cloned(),
+			)
+		})
 	}
 
 	pub fn is_required(&self) -> bool {

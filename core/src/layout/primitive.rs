@@ -1,7 +1,7 @@
 use crate::{vocab, Id};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Native {
+pub enum Primitive {
 	/// Boolean.
 	Boolean,
 
@@ -39,7 +39,7 @@ pub enum Native {
 	Url,
 }
 
-impl Native {
+impl Primitive {
 	pub fn id(&self) -> Id {
 		use vocab::{Term, Xsd};
 

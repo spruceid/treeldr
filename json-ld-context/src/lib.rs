@@ -71,7 +71,7 @@ fn generate_layout_term_definition<F>(
 			}
 		}
 		Description::Reference(_, _) => (),
-		Description::Native(_, _) => (),
+		Description::Primitive(_, _) => (),
 		Description::Set(_) => (),
 		Description::Array(_) => (),
 		Description::Alias(_, _) => todo!(),
@@ -148,7 +148,7 @@ fn generate_layout_context<F>(
 			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into())
 		}
 		Description::Reference(_, _) => context.ty = Some("@id".into()),
-		Description::Native(n, _) => context.ty = Some(generate_native_type(*n)),
+		Description::Primitive(n, _) => context.ty = Some(generate_primitive_type(*n)),
 		Description::Set(_) => {
 			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into());
 			context.container = Some("@set".into());
@@ -183,20 +183,20 @@ fn generate_struct_context<F>(
 	Ok(json)
 }
 
-fn generate_native_type(n: treeldr::layout::Native) -> serde_json::Value {
-	use treeldr::layout::Native;
+fn generate_primitive_type(n: treeldr::layout::Primitive) -> serde_json::Value {
+	use treeldr::layout::Primitive;
 	match n {
-		Native::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".into(),
-		Native::Integer => "http://www.w3.org/2001/XMLSchema#integer".into(),
-		Native::PositiveInteger => "http://www.w3.org/2001/XMLSchema#positiveInteger".into(),
-		Native::Float => "http://www.w3.org/2001/XMLSchema#float".into(),
-		Native::Double => "http://www.w3.org/2001/XMLSchema#double".into(),
-		Native::String => "http://www.w3.org/2001/XMLSchema#string".into(),
-		Native::Time => "http://www.w3.org/2001/XMLSchema#time".into(),
-		Native::Date => "http://www.w3.org/2001/XMLSchema#date".into(),
-		Native::DateTime => "http://www.w3.org/2001/XMLSchema#dateTime".into(),
-		Native::Iri => "http://www.w3.org/2001/XMLSchema#anyURI".into(),
-		Native::Uri => "http://www.w3.org/2001/XMLSchema#anyURI".into(),
-		Native::Url => "http://www.w3.org/2001/XMLSchema#anyURI".into(),
+		Primitive::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".into(),
+		Primitive::Integer => "http://www.w3.org/2001/XMLSchema#integer".into(),
+		Primitive::PositiveInteger => "http://www.w3.org/2001/XMLSchema#positiveInteger".into(),
+		Primitive::Float => "http://www.w3.org/2001/XMLSchema#float".into(),
+		Primitive::Double => "http://www.w3.org/2001/XMLSchema#double".into(),
+		Primitive::String => "http://www.w3.org/2001/XMLSchema#string".into(),
+		Primitive::Time => "http://www.w3.org/2001/XMLSchema#time".into(),
+		Primitive::Date => "http://www.w3.org/2001/XMLSchema#date".into(),
+		Primitive::DateTime => "http://www.w3.org/2001/XMLSchema#dateTime".into(),
+		Primitive::Iri => "http://www.w3.org/2001/XMLSchema#anyURI".into(),
+		Primitive::Uri => "http://www.w3.org/2001/XMLSchema#anyURI".into(),
+		Primitive::Url => "http://www.w3.org/2001/XMLSchema#anyURI".into(),
 	}
 }

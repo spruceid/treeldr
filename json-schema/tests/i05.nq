@@ -10,7 +10,7 @@ _:15 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Fiel
 _:15 <https://treeldr.org/format> _:6 .
 _:4 <https://treeldr.org/name> "product_product_name" .
 _:4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
-_:4 <https://treeldr.org/native> <http://www.w3.org/2001/XMLSchema#string> .
+_:4 <https://treeldr.org/primitive> <http://www.w3.org/2001/XMLSchema#string> .
 _:4 <http://www.w3.org/2000/01/rdf-schema#comment> "Name of the product" .
 _:18 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:13 .
 _:18 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
@@ -31,11 +31,11 @@ _:19 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:12 .
 <https://example.com/product.schema.json> <https://treeldr.org/name> "product" .
 <https://example.com/product.schema.json> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 <https://example.com/product.schema.json> <http://www.w3.org/2000/01/rdf-schema#label> "Product" .
-_:2 <https://treeldr.org/native> <http://www.w3.org/2001/XMLSchema#integer> .
+_:2 <https://treeldr.org/primitive> <http://www.w3.org/2001/XMLSchema#integer> .
 _:2 <http://www.w3.org/2000/01/rdf-schema#comment> "The unique identifier for a product" .
 _:2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 _:2 <https://treeldr.org/name> "product_product_id" .
-_:0 <https://treeldr.org/native> <http://www.w3.org/2001/XMLSchema#double> .
+_:0 <https://treeldr.org/primitive> <http://www.w3.org/2001/XMLSchema#double> .
 _:0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 _:0 <https://treeldr.org/name> "product_price" .
 _:0 <http://www.w3.org/2000/01/rdf-schema#comment> "The price of the product" .

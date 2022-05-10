@@ -1383,6 +1383,17 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 
 				id.build(local_context, context, vocabulary)
 			}
+			crate::InnerLayoutExpr::Primitive(p) => {
+				let Loc(id, _) = local_context.anonymous_id(None, vocabulary, loc.clone());
+				if id.is_blank() {
+					context.declare_layout(id, Some(loc.clone()));
+				}
+
+				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
+				layout.set_primitive(p, Some(loc.clone()))?;
+
+				Ok(Loc(id, loc))
+			}
 			crate::InnerLayoutExpr::Reference(r) => {
 				let id = local_context.next_id.take();
 

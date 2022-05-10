@@ -34,10 +34,10 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		Self::default()
 	}
 
-	pub fn define_native_type(
+	pub fn define_primitive_type(
 		&mut self,
 		id: Id,
-		native_layout: layout::Native,
+		primitive_layout: layout::Primitive,
 		cause: Option<Location<F>>,
 	) -> Result<Id, Error<F>>
 	where
@@ -46,7 +46,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		self.declare_type(id, cause.clone());
 		self.declare_layout(id, cause.clone());
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
-		layout.set_native(native_layout, cause.clone())?;
+		layout.set_primitive(primitive_layout, cause.clone())?;
 		layout.set_type(id, cause)?;
 		Ok(id)
 	}
@@ -92,59 +92,59 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	where
 		F: Clone + Ord,
 	{
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Boolean)),
-			layout::Native::Boolean,
+			layout::Primitive::Boolean,
 			None,
 		)?;
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Int)),
-			layout::Native::Integer,
+			layout::Primitive::Integer,
 			None,
 		)?;
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Integer)),
-			layout::Native::Integer,
+			layout::Primitive::Integer,
 			None,
 		)?;
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::PositiveInteger)),
-			layout::Native::PositiveInteger,
+			layout::Primitive::PositiveInteger,
 			None,
 		)?;
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Float)),
-			layout::Native::Float,
+			layout::Primitive::Float,
 			None,
 		)?;
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Double)),
-			layout::Native::Double,
+			layout::Primitive::Double,
 			None,
 		)?;
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::String)),
-			layout::Native::String,
+			layout::Primitive::String,
 			None,
 		)?;
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Time)),
-			layout::Native::Time,
+			layout::Primitive::Time,
 			None,
 		)?;
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Date)),
-			layout::Native::Date,
+			layout::Primitive::Date,
 			None,
 		)?;
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::DateTime)),
-			layout::Native::DateTime,
+			layout::Primitive::DateTime,
 			None,
 		)?;
-		self.define_native_type(
+		self.define_primitive_type(
 			Id::Iri(vocab::Term::Xsd(vocab::Xsd::AnyUri)),
-			layout::Native::Uri,
+			layout::Primitive::Uri,
 			None,
 		)?;
 
@@ -806,7 +806,11 @@ impl<F: Clone + Ord> Context<F> {
 
 		for (id, default_layout) in default_layouts {
 			let default_layout = default_layout.build(self, vocabulary);
-			self.get_mut(id).unwrap().as_layout_field_mut().unwrap().replace_layout(default_layout.into());
+			self.get_mut(id)
+				.unwrap()
+				.as_layout_field_mut()
+				.unwrap()
+				.replace_layout(default_layout.into());
 		}
 	}
 

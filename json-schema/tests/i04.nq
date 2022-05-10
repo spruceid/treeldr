@@ -1,5 +1,5 @@
 _:0 <https://treeldr.org/name> "product_product_id" .
-_:0 <https://treeldr.org/native> <http://www.w3.org/2001/XMLSchema#integer> .
+_:0 <https://treeldr.org/primitive> <http://www.w3.org/2001/XMLSchema#integer> .
 _:0 <http://www.w3.org/2000/01/rdf-schema#comment> "The unique identifier for a product" .
 _:0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 _:6 <https://treeldr.org/format> _:0 .
@@ -24,4 +24,4 @@ _:7 <https://schema.org/valueRequired> <https://schema.org/True> .
 _:2 <https://treeldr.org/name> "product_product_name" .
 _:2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 _:2 <http://www.w3.org/2000/01/rdf-schema#comment> "Name of the product" .
-_:2 <https://treeldr.org/native> <http://www.w3.org/2001/XMLSchema#string> .
+_:2 <https://treeldr.org/primitive> <http://www.w3.org/2001/XMLSchema#string> .

@@ -147,7 +147,7 @@ fn generate_layout_schema<F>(
 			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
 		Description::Literal(lit) => Ok(generate_literal_type(lit)),
-		Description::Native(n, _) => Ok(generate_native_type(*n)),
+		Description::Primitive(n, _) => Ok(generate_primitive_type(*n)),
 		Description::Set(s) => {
 			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
 		}
@@ -288,7 +288,7 @@ fn generate_layout_ref<F>(
 			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
 		Description::Literal(lit) => Ok(generate_literal_type(lit)),
-		Description::Native(n, _) => Ok(generate_native_type(*n)),
+		Description::Primitive(n, _) => Ok(generate_primitive_type(*n)),
 		Description::Set(s) => {
 			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
 		}
@@ -375,51 +375,51 @@ fn generate_literal_type<F>(lit: &layout::Literal<F>) -> serde_json::Value {
 	def.into()
 }
 
-fn generate_native_type(n: treeldr::layout::Native) -> serde_json::Value {
-	use treeldr::layout::Native;
+fn generate_primitive_type(n: treeldr::layout::Primitive) -> serde_json::Value {
+	use treeldr::layout::Primitive;
 	let mut def = serde_json::Map::new();
 
 	match n {
-		Native::Boolean => {
+		Primitive::Boolean => {
 			def.insert("type".into(), "bool".into());
 		}
-		Native::Integer => {
+		Primitive::Integer => {
 			def.insert("type".into(), "integer".into());
 		}
-		Native::PositiveInteger => {
+		Primitive::PositiveInteger => {
 			def.insert("type".into(), "integer".into());
 			def.insert("minimum".into(), 0.into());
 		}
-		Native::Float => {
+		Primitive::Float => {
 			def.insert("type".into(), "number".into());
 		}
-		Native::Double => {
+		Primitive::Double => {
 			def.insert("type".into(), "number".into());
 		}
-		Native::String => {
+		Primitive::String => {
 			def.insert("type".into(), "string".into());
 		}
-		Native::Time => {
+		Primitive::Time => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "time".into());
 		}
-		Native::Date => {
+		Primitive::Date => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "date".into());
 		}
-		Native::DateTime => {
+		Primitive::DateTime => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "date-time".into());
 		}
-		Native::Iri => {
+		Primitive::Iri => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "iri".into());
 		}
-		Native::Uri => {
+		Primitive::Uri => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "uri".into());
 		}
-		Native::Url => {
+		Primitive::Url => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "uri".into());
 		}
