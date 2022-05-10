@@ -59,17 +59,23 @@ pub struct TypeDefinition<F> {
 	pub id: Loc<Id, F>,
 	pub description: Loc<TypeDescription<F>, F>,
 	pub doc: Option<Loc<Documentation<F>, F>>,
+	pub layout: Option<Loc<LayoutDescription<F>, F>>,
 }
 
 impl<F: Clone> TypeDefinition<F> {
 	pub fn implicit_layout_definition(&self) -> LayoutDefinition<F> {
-		LayoutDefinition {
-			id: self.id.clone(),
-			ty_id: Some(self.id.clone()),
-			description: Loc(
+		let description = match &self.layout {
+			Some(d) => d.clone(),
+			None => Loc(
 				self.description.implicit_layout_description(),
 				self.description.location().clone(),
 			),
+		};
+
+		LayoutDefinition {
+			id: self.id.clone(),
+			ty_id: Some(self.id.clone()),
+			description,
 			doc: self.doc.clone(),
 		}
 	}
@@ -324,11 +330,13 @@ pub struct LayoutDefinition<F> {
 	pub doc: Option<Loc<Documentation<F>, F>>,
 }
 
+#[derive(Clone)]
 pub enum LayoutDescription<F> {
 	Normal(Vec<Loc<FieldDefinition<F>, F>>),
 	Alias(OuterLayoutExpr<F>),
 }
 
+#[derive(Clone)]
 pub struct FieldDefinition<F> {
 	pub id: Loc<Id, F>,
 	pub layout: Option<Loc<AnnotatedLayoutExpr<F>, F>>,
@@ -350,11 +358,13 @@ impl Alias {
 }
 
 /// Annotated layout expression.
+#[derive(Clone)]
 pub struct AnnotatedLayoutExpr<F> {
 	pub expr: Loc<OuterLayoutExpr<F>, F>,
 	pub annotations: Vec<Loc<Annotation, F>>,
 }
 
+#[derive(Clone)]
 pub enum OuterLayoutExpr<F> {
 	Inner(NamedInnerLayoutExpr<F>),
 	Union(Label, Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
@@ -370,6 +380,7 @@ impl<F> OuterLayoutExpr<F> {
 	}
 }
 
+#[derive(Clone)]
 pub struct NamedInnerLayoutExpr<F> {
 	pub expr: Loc<InnerLayoutExpr<F>, F>,
 	pub name: Option<Loc<Alias, F>>,
@@ -401,6 +412,7 @@ impl<F> NamedInnerLayoutExpr<F> {
 	}
 }
 
+#[derive(Clone)]
 pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Primitive(Primitive),
@@ -433,12 +445,14 @@ impl<F> InnerLayoutExpr<F> {
 	}
 }
 
+#[derive(Clone)]
 pub struct LayoutRestrictedField<F> {
 	prop: Loc<Id, F>,
 	alias: Option<Loc<Alias, F>>,
 	restriction: Loc<LayoutFieldRestriction<F>, F>,
 }
 
+#[derive(Clone)]
 pub enum LayoutFieldRangeRestriction<F> {
 	Any(Box<Loc<InnerLayoutExpr<F>, F>>),
 	All(Box<Loc<InnerLayoutExpr<F>, F>>),
@@ -451,6 +465,7 @@ pub enum LayoutFieldCardinalityRestriction {
 	Exactly(u32),
 }
 
+#[derive(Clone)]
 pub enum LayoutFieldRestriction<F> {
 	/// Affects the item of a collection layout?
 	Range(LayoutFieldRangeRestriction<F>),

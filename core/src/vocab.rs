@@ -1,3 +1,4 @@
+pub use crate::layout::Primitive;
 use iref::{Iri, IriBuf};
 use iref_enum::IriEnum;
 use locspan::Loc;
@@ -22,8 +23,11 @@ pub enum TreeLdr {
 	Format,
 
 	/// Primitive layout.
-	#[iri("tldr:primitive")]
-	Primitive,
+	Primitive(Primitive),
+
+	/// Layout alias.
+	#[iri("tldr:alias")]
+	Alias,
 
 	/// Structure layout.
 	#[iri("tldr:fields")]

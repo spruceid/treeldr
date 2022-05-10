@@ -420,7 +420,14 @@ impl<F> layout::Definition<F> {
 					None,
 				));
 			}
-			layout::Description::Alias(_, _) => todo!("alias layout to RDF"),
+			layout::Description::Alias(_, alias_ref) => {
+				quads.push(Quad(
+					self.id(),
+					Term::TreeLdr(vocab::TreeLdr::Alias),
+					model.layouts().get(*alias_ref).unwrap().id().into_term(),
+					None,
+				));
+			}
 		}
 	}
 }
@@ -488,27 +495,17 @@ impl<F> layout::Set<F> {
 
 impl layout::Primitive {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		let primitive = match self {
-			Self::Boolean => Term::Xsd(vocab::Xsd::Boolean),
-			Self::Integer => Term::Xsd(vocab::Xsd::Integer),
-			Self::PositiveInteger => Term::Xsd(vocab::Xsd::PositiveInteger),
-			Self::Float => Term::Xsd(vocab::Xsd::Float),
-			Self::Double => Term::Xsd(vocab::Xsd::Double),
-			Self::String => Term::Xsd(vocab::Xsd::String),
-			Self::Date => Term::Xsd(vocab::Xsd::Date),
-			Self::Time => Term::Xsd(vocab::Xsd::Time),
-			Self::DateTime => Term::Xsd(vocab::Xsd::DateTime),
-			Self::Url => todo!(),
-			Self::Uri => Term::Xsd(vocab::Xsd::AnyUri),
-			Self::Iri => todo!(),
-		};
-
-		quads.push(Quad(
-			id,
-			Term::TreeLdr(vocab::TreeLdr::Primitive),
-			Object::Iri(primitive),
-			None,
-		));
+		match id {
+			Id::Iri(Term::TreeLdr(vocab::TreeLdr::Primitive(_))) => (),
+			_ => {
+				quads.push(Quad(
+					id,
+					Term::TreeLdr(vocab::TreeLdr::Alias),
+					self.id().into_term(),
+					None,
+				));
+			}
+		}
 	}
 }
 

@@ -466,6 +466,10 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 		self.set_description(Description::Primitive(primitive).into(), cause)
 	}
 
+	pub fn set_alias(&mut self, alias: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
+		self.set_description(Description::Alias(alias).into(), cause)
+	}
+
 	pub fn set_fields(&mut self, fields: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
 		self.set_description(Description::Struct(fields).into(), cause)
 	}

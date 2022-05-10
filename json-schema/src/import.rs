@@ -124,15 +124,16 @@ pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
 		vocabulary,
 	)?;
 
-	if let treeldr_build::layout::Description::Primitive(layout) = &desc {
+	if let treeldr_build::layout::Description::Primitive(primitive) = &desc {
 		if schema.is_primitive()
 			&& schema.id.is_none()
 			&& schema.meta_schema.is_empty()
-			&& schema.meta_data.is_empty()
+			&& schema.meta_data.title.is_none()
 			&& schema.anchor.is_none()
 			&& schema.dynamic_anchor.is_none()
 		{
-			return Ok(layout.id());
+			// TODO we may want to associate the description to the using field.
+			return Ok(primitive.id());
 		}
 	}
 

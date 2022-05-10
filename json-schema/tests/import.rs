@@ -65,7 +65,7 @@ fn import_json_schema<P: AsRef<Path>>(
 	let input = parse_json_schema(path);
 	let mut context: Context<()> = Context::new();
 	context.define_rdf_types().unwrap();
-	context.define_xml_types().unwrap();
+	context.define_treeldr_types().unwrap();
 
 	let id = treeldr_json_schema::import_schema(&input, None, &mut context, vocabulary)
 		.expect("import failed");
@@ -97,7 +97,7 @@ fn t001() {
 	test(
 		"tests/i01.json",
 		"tests/i01.nq",
-		iri!("http://www.w3.org/2001/XMLSchema#string"),
+		iri!("https://treeldr.org/String"),
 	)
 }
 

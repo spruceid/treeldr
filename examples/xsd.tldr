@@ -1,0 +1,5 @@
+base <http://www.w3.org/2001/XMLSchema>;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <https://treeldr.org> as tldr;
+
+layout xs:string = tldr:String;

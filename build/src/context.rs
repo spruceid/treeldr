@@ -36,18 +36,17 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 
 	pub fn define_primitive_type(
 		&mut self,
-		id: Id,
 		primitive_layout: layout::Primitive,
-		cause: Option<Location<F>>,
 	) -> Result<Id, Error<F>>
 	where
 		F: Clone + Ord,
 	{
-		self.declare_type(id, cause.clone());
-		self.declare_layout(id, cause.clone());
+		let id = Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Primitive(
+			primitive_layout,
+		)));
+		self.declare_layout(id, None);
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
-		layout.set_primitive(primitive_layout, cause.clone())?;
-		layout.set_type(id, cause)?;
+		layout.set_primitive(primitive_layout, None)?;
 		Ok(id)
 	}
 
@@ -88,65 +87,23 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		prop.set_range(Id::Iri(Term::Rdf(Rdf::List)), None)
 	}
 
-	pub fn define_xml_types(&mut self) -> Result<(), Error<F>>
+	pub fn define_treeldr_types(&mut self) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
 	{
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Boolean)),
-			layout::Primitive::Boolean,
-			None,
-		)?;
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Int)),
-			layout::Primitive::Integer,
-			None,
-		)?;
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Integer)),
-			layout::Primitive::Integer,
-			None,
-		)?;
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::PositiveInteger)),
-			layout::Primitive::PositiveInteger,
-			None,
-		)?;
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Float)),
-			layout::Primitive::Float,
-			None,
-		)?;
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Double)),
-			layout::Primitive::Double,
-			None,
-		)?;
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::String)),
-			layout::Primitive::String,
-			None,
-		)?;
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Time)),
-			layout::Primitive::Time,
-			None,
-		)?;
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::Date)),
-			layout::Primitive::Date,
-			None,
-		)?;
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::DateTime)),
-			layout::Primitive::DateTime,
-			None,
-		)?;
-		self.define_primitive_type(
-			Id::Iri(vocab::Term::Xsd(vocab::Xsd::AnyUri)),
-			layout::Primitive::Uri,
-			None,
-		)?;
+		use layout::Primitive;
+		self.define_primitive_type(Primitive::Boolean)?;
+		self.define_primitive_type(Primitive::Integer)?;
+		self.define_primitive_type(Primitive::PositiveInteger)?;
+		self.define_primitive_type(Primitive::Float)?;
+		self.define_primitive_type(Primitive::Double)?;
+		self.define_primitive_type(Primitive::String)?;
+		self.define_primitive_type(Primitive::Time)?;
+		self.define_primitive_type(Primitive::Date)?;
+		self.define_primitive_type(Primitive::DateTime)?;
+		self.define_primitive_type(Primitive::Iri)?;
+		self.define_primitive_type(Primitive::Uri)?;
+		self.define_primitive_type(Primitive::Url)?;
 
 		Ok(())
 	}

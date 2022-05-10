@@ -462,18 +462,53 @@ impl<F: Clone> Parse<F> for Item<F> {
 			Token::Keyword(lexing::Keyword::Type) => {
 				let id = Id::parse(lexer)?;
 
-				let description = match next_token(lexer)? {
+				let (description, layout) = match next_token(lexer)? {
 					Loc(Some(Token::Begin(Delimiter::Brace)), block_loc) => {
 						let Loc(properties, properties_loc) = parse_block(lexer, block_loc)?;
-						Loc(TypeDescription::Normal(properties), properties_loc)
+
+						let layout = match peek_token(lexer)?.value() {
+							Some(Token::Keyword(Keyword::Layout)) => {
+								next_token(lexer)?;
+								let layout = LayoutDescription::parse(lexer)?;
+								loc.span_mut().append(layout.span());
+								Some(layout)
+							}
+							_ => None,
+						};
+
+						(
+							Loc(TypeDescription::Normal(properties), properties_loc),
+							layout,
+						)
 					}
 					Loc(Some(Token::Punct(Punct::Equal)), _) => {
 						let Loc(expr, expr_loc) = OuterTypeExpr::parse(lexer)?;
-						parse_punct(lexer, Punct::Semicolon)?;
-						Loc(TypeDescription::Alias(expr), expr_loc)
+
+						let layout = match peek_token(lexer)?.value() {
+							Some(Token::Keyword(Keyword::Layout)) => {
+								next_token(lexer)?;
+								let layout = LayoutDescription::parse(lexer)?;
+								loc.span_mut().append(layout.span());
+								Some(layout)
+							}
+							_ => {
+								parse_punct(lexer, Punct::Semicolon)?;
+								None
+							}
+						};
+
+						(Loc(TypeDescription::Alias(expr), expr_loc), layout)
 					}
 					Loc(Some(Token::Punct(Punct::Semicolon)), loc) => {
-						Loc(TypeDescription::Normal(Vec::new()), loc)
+						(Loc(TypeDescription::Normal(Vec::new()), loc), None)
+					}
+					Loc(Some(Token::Keyword(Keyword::Layout)), _) => {
+						let layout = LayoutDescription::parse(lexer)?;
+						loc.span_mut().append(layout.span());
+						(
+							Loc(TypeDescription::Normal(Vec::new()), loc.clone()),
+							Some(layout),
+						)
 					}
 					Loc(unexpected, loc) => {
 						return Err(Loc::new(
@@ -496,6 +531,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 							id,
 							description,
 							doc,
+							layout,
 						},
 						loc.clone(),
 					)),
@@ -598,6 +634,35 @@ impl<F: Clone> Parse<F> for Item<F> {
 				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
 				loc,
 			)),
+		}
+	}
+}
+
+impl<F: Clone> Parse<F> for LayoutDescription<F> {
+	const FIRST: &'static [TokenKind] = &[
+		TokenKind::Begin(Delimiter::Brace),
+		TokenKind::Punct(Punct::Semicolon),
+		TokenKind::Id,
+		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+	];
+
+	fn parse_from<L: Tokens<F>>(
+		lexer: &mut L,
+		token: Token,
+		loc: Location<F>,
+	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+		match token {
+			Token::Begin(Delimiter::Brace) => {
+				let Loc(fields, loc) = parse_block(lexer, loc)?;
+				Ok(Loc(LayoutDescription::Normal(fields), loc))
+			}
+			Token::Punct(Punct::Semicolon) => Ok(Loc(LayoutDescription::Normal(Vec::new()), loc)),
+			other => {
+				let Loc(expr, expr_loc) = OuterLayoutExpr::parse_from(lexer, other, loc)?;
+				parse_punct(lexer, Punct::Semicolon)?;
+				Ok(Loc(LayoutDescription::Alias(expr), expr_loc))
+			}
 		}
 	}
 }

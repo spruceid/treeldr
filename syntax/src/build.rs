@@ -55,7 +55,7 @@ pub enum LocalError<F> {
 		because: Location<F>,
 	},
 	TypeAlias(Id, Location<F>),
-	LayoutAlias(Id, Location<F>),
+	Renaming(Id, Location<F>),
 	PropertyRestrictionOutsideIntersection,
 	FieldRestrictionNoMatches,
 	UnexpectedFieldRestriction,
@@ -70,7 +70,7 @@ impl<'c, 't, F: Clone> reporting::DiagnoseWithCause<F> for LocalError<F> {
 			Self::NoBaseIri => "no base IRI".to_string(),
 			Self::BaseIriMismatch { .. } => "base IRI mismatch".to_string(),
 			Self::TypeAlias(_, _) => "type aliases are not supported".to_string(),
-			Self::LayoutAlias(_, _) => "layout aliases are not supported".to_string(),
+			Self::Renaming(_, _) => "invalid layout renaming".to_string(),
 			Self::PropertyRestrictionOutsideIntersection => {
 				"cannot define restricted field layout outside an intersection".to_string()
 			}
@@ -125,7 +125,7 @@ impl<F> fmt::Display for LocalError<F> {
 			Self::NoBaseIri => "cannot resolve the IRI reference without a base IRI".fmt(f),
 			Self::BaseIriMismatch { expected, .. } => write!(f, "should be `{}`", expected),
 			Self::TypeAlias(_, _) => write!(f, "type aliases are not supported"),
-			Self::LayoutAlias(_, _) => write!(f, "layout aliases are not supported"),
+			Self::Renaming(_, _) => write!(f, "only inline layouts can be assigned a name"),
 			Self::PropertyRestrictionOutsideIntersection => {
 				write!(f, "invalid layout field restriction")
 			}
@@ -1362,7 +1362,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::NamedInnerLayoutExpr<F>, F> {
 					.unwrap()
 					.set_name(name, Some(name_loc))?;
 			} else {
-				return Err(Loc(LocalError::LayoutAlias(id, expr_loc), loc).into());
+				return Err(Loc(LocalError::Renaming(id, expr_loc), loc).into());
 			}
 		}
 
@@ -1383,11 +1383,23 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 
 		match expr {
 			crate::InnerLayoutExpr::Id(id) => {
-				if let Some(Loc(id, id_loc)) = local_context.next_id.take() {
-					return Err(Loc(LocalError::LayoutAlias(id, id_loc), loc).into());
-				}
+				let alias_id = local_context.next_id.take();
 
-				id.build(local_context, context, vocabulary)
+				let id = id.build(local_context, context, vocabulary)?;
+
+				match alias_id {
+					Some(Loc(alias_id, alias_id_loc)) => {
+						if alias_id.is_blank() {
+							context.declare_layout(alias_id, Some(alias_id_loc));
+						}
+
+						let layout = context.get_mut(alias_id).unwrap().as_layout_mut().unwrap();
+						layout.set_alias(*id, Some(loc.clone()))?;
+
+						Ok(Loc(alias_id, loc))
+					}
+					None => Ok(id),
+				}
 			}
 			crate::InnerLayoutExpr::Primitive(p) => {
 				let Loc(id, _) = local_context.anonymous_id(None, vocabulary, loc.clone());

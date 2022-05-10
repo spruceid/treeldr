@@ -1,4 +1,6 @@
-use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <https://treeldr.org/> as tldr;
+
+type URL layout tldr:URL;
 
 /// Certificate or deed issued by an educational institution.
 type Diploma {
@@ -6,7 +8,7 @@ type Diploma {
 	degree: Degree,
 	year: Year,
 	honors: Honors,
-	url: xs:anyURI
+	url: URL
 }
 
 /// Department

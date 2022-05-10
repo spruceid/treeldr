@@ -1,42 +1,56 @@
 use crate::{vocab, Id};
+use iref_enum::IriEnum;
 use std::fmt;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[iri_prefix("tldr" = "https://treeldr.org/")]
 pub enum Primitive {
 	/// Boolean.
+	#[iri("tldr:Boolean")]
 	Boolean,
 
 	/// Integer number.
+	#[iri("tldr:Integer")]
 	Integer,
 
 	/// Positive integer number.
+	#[iri("tldr:PositiveInteger")]
 	PositiveInteger,
 
 	/// Floating point number.
+	#[iri("tldr:Float")]
 	Float,
 
 	/// Double.
+	#[iri("tldr:Double")]
 	Double,
 
 	/// String.
+	#[iri("tldr:String")]
 	String,
 
 	/// Time.
+	#[iri("tldr:Time")]
 	Time,
 
 	/// Date.
+	#[iri("tldr:Date")]
 	Date,
 
 	/// Date and time.
+	#[iri("tldr:DateTime")]
 	DateTime,
 
 	/// IRI.
+	#[iri("tldr:IRI")]
 	Iri,
 
 	/// URI.
+	#[iri("tldr:URI")]
 	Uri,
 
 	/// URL.
+	#[iri("tldr:URL")]
 	Url,
 }
 
@@ -77,22 +91,8 @@ impl Primitive {
 	}
 
 	pub fn id(&self) -> Id {
-		use vocab::{Term, Xsd};
-
-		match self {
-			Self::Boolean => Id::Iri(Term::Xsd(Xsd::Boolean)),
-			Self::Integer => Id::Iri(Term::Xsd(Xsd::Integer)),
-			Self::PositiveInteger => Id::Iri(Term::Xsd(Xsd::PositiveInteger)),
-			Self::Float => Id::Iri(Term::Xsd(Xsd::Float)),
-			Self::Double => Id::Iri(Term::Xsd(Xsd::Double)),
-			Self::String => Id::Iri(Term::Xsd(Xsd::String)),
-			Self::Time => Id::Iri(Term::Xsd(Xsd::Time)),
-			Self::Date => Id::Iri(Term::Xsd(Xsd::Date)),
-			Self::DateTime => Id::Iri(Term::Xsd(Xsd::DateTime)),
-			Self::Iri => todo!(),
-			Self::Uri => Id::Iri(Term::Xsd(Xsd::AnyUri)),
-			Self::Url => todo!(),
-		}
+		use vocab::{Term, TreeLdr};
+		Id::Iri(Term::TreeLdr(TreeLdr::Primitive(*self)))
 	}
 }
 
