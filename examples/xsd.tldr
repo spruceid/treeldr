@@ -1,5 +1,14 @@
 base <http://www.w3.org/2001/XMLSchema>;
 use <http://www.w3.org/2001/XMLSchema#> as xs;
-use <https://treeldr.org> as tldr;
+use <https://treeldr.org/> as tldr;
 
-layout xs:string = tldr:String;
+type xs:boolean layout tldr:Boolean;
+type xs:integer layout tldr:Integer;
+type xs:positiveInteger layout tldr:PositiveInteger;
+type xs:float layout tldr:Float;
+type xs:double layout tldr:Double;
+type xs:string layout tldr:String;
+type xs:time layout tldr:Time;
+type xs:date layout tldr:Date;
+type xs:dateTime layout tldr:DateTime;
+type xs:anyURI layout tldr:URI;
