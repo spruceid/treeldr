@@ -1,0 +1,10 @@
+base <https://schema.org>;
+
+/// Text.
+type Text;
+
+/// URL.
+type URL;
+
+/// URL of the item.
+property url: URL;

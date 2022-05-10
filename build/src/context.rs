@@ -792,6 +792,24 @@ impl<F: Clone + Ord> Context<F> {
 		Ok(())
 	}
 
+	pub fn assign_default_layouts(&mut self, vocabulary: &mut Vocabulary) {
+		let mut default_layouts = BTreeMap::new();
+		for (id, node) in &self.nodes {
+			if let Some(field) = node.as_layout_field() {
+				if field.layout().is_none() {
+					if let Some(default_layout) = field.default_layout(self) {
+						default_layouts.insert(*id, default_layout);
+					}
+				}
+			}
+		}
+
+		for (id, default_layout) in default_layouts {
+			let default_layout = default_layout.build(self, vocabulary);
+			self.get_mut(id).unwrap().as_layout_field_mut().unwrap().replace_layout(default_layout.into());
+		}
+	}
+
 	/// Assigns default name for layouts/variants that don't have a name yet.
 	pub fn assign_default_names(&mut self, vocabulary: &Vocabulary) -> Result<(), Error<F>>
 	where
@@ -901,6 +919,7 @@ impl<F: Clone + Ord> Context<F> {
 		use crate::utils::SccGraph;
 		use crate::Build;
 
+		self.assign_default_layouts(vocabulary);
 		self.resolve_references()?;
 		self.compute_uses()?;
 		self.assign_default_names(vocabulary)?;
@@ -910,22 +929,6 @@ impl<F: Clone + Ord> Context<F> {
 		let graph = allocated_shelves.dependency_graph(&allocated_nodes)?;
 
 		let components = graph.strongly_connected_components();
-
-		// for (i, component) in components.iter().enumerate() {
-		// 	if components.is_looping(i) {
-		// 		for c in component {
-		// 			if let crate::Item::Layout(layout_ref) = c {
-		// 				let (id, layout) =
-		// 					allocated_shelves.layouts.get(layout_ref.cast()).unwrap();
-		// 				return Err(Error::new(
-		// 					error::LayoutInfiniteSize { id: *id }.into(),
-		// 					layout.causes().preferred().cloned(),
-		// 				)
-		// 				.into());
-		// 			}
-		// 		}
-		// 	}
-		// }
 
 		let ordered_components = components.order_by_depth();
 

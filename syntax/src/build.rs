@@ -1476,7 +1476,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 		let mut required = false;
 		let mut required_loc = None;
 
-		let Loc(layout, layout_loc) = match def.layout {
+		let layout = match def.layout {
 			Some(Loc(layout, _)) => {
 				let scope = local_context.scope.take();
 				let mut layout_id = layout.expr.build(local_context, context, vocabulary)?;
@@ -1503,9 +1503,9 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 					}
 				}
 
-				layout_id
+				Some(layout_id)
 			}
-			None => todo!("infer field layout"),
+			None => None,
 		};
 
 		let doc = def
@@ -1528,7 +1528,10 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 		let field = node.as_layout_field_mut().unwrap();
 		field.set_property(prop_id, Some(prop_id_loc))?;
 		field.set_name(name, Some(name_loc))?;
-		field.set_layout(layout, Some(layout_loc))?;
+
+		if let Some(Loc(layout, layout_loc)) = layout {
+			field.set_layout(layout, Some(layout_loc))?;
+		}
 
 		if let Some(required_loc) = required_loc {
 			field.set_required(required, Some(required_loc))?;

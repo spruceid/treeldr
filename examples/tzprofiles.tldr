@@ -1,0 +1,7 @@
+base <https://tzprofiles.com>;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <https://schema.org/> as schema;
+
+property handle: schema:Text;
+
+property timestamp: xs:dateTime;

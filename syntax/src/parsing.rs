@@ -222,7 +222,7 @@ fn parse_block<F, L: Tokens<F>, T: Parse<F>>(
 			Ok(Loc::new(items, loc))
 		}
 		Loc(unexpected, loc) => Err(Loc::new(
-			Error::Unexpected(unexpected, vec![TokenKind::Begin(Delimiter::Brace)]),
+			Error::Unexpected(unexpected, vec![TokenKind::Punct(Punct::Comma), TokenKind::End(Delimiter::Brace)]),
 			loc,
 		)),
 	}
@@ -504,6 +504,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 					Loc(Some(Token::Punct(Punct::Colon)), _) => {
 						let ty = AnnotatedTypeExpr::parse(lexer)?;
 						loc.span_mut().append(ty.span());
+						parse_punct(lexer, Punct::Semicolon)?;
 						Some(ty)
 					}
 					Loc(Some(Token::Punct(Punct::Semicolon)), _) => {
@@ -599,22 +600,41 @@ impl<F: Clone> Parse<F> for PropertyDefinition<F> {
 		token_loc: Location<F>,
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
 		let (doc, k) = Documentation::try_parse_from(lexer, token, token_loc)?;
+		
 		let id = Id::parse_from_continuation(lexer, k)?;
 		let mut loc = id.location().clone();
-		let ty = match peek_token(lexer)?.into_value() {
+
+		let (ty, alias) = match peek_token(lexer)?.into_value() {
 			Some(Token::Punct(lexing::Punct::Colon)) => {
 				next_token(lexer)?;
 				let ty = AnnotatedTypeExpr::parse(lexer)?;
 				loc.span_mut().append(ty.span());
-				Some(ty)
+
+				let alias = match peek_token(lexer)?.into_value() {
+					Some(Token::Keyword(Keyword::As)) => {
+						next_token(lexer)?;
+						let alias = Alias::parse(lexer)?;
+						loc.span_mut().append(alias.span());
+						Some(alias)
+					}
+					_ => None
+				};
+
+				(Some(ty), alias)
 			}
-			_ => None,
+			Some(Token::Keyword(Keyword::As)) => {
+				next_token(lexer)?;
+				let alias = Alias::parse(lexer)?;
+				loc.span_mut().append(alias.span());
+				(None, Some(alias))
+			}
+			_ => (None, None),
 		};
 
 		Ok(Loc::new(
 			Self {
 				id,
-				alias: None,
+				alias,
 				ty,
 				doc,
 			},
