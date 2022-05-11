@@ -36,6 +36,13 @@ impl Schema {
 			_ => None,
 		}
 	}
+
+	pub fn meta_data(&self) -> Option<&MetaData> {
+		match self {
+			Self::Regular(r) => Some(&r.meta_data),
+			_ => None,
+		}
+	}
 }
 
 impl From<RefSchema> for Schema {

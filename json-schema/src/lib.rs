@@ -215,7 +215,10 @@ fn generate_struct<F>(
 	}
 
 	json.insert("type".into(), "object".into());
-	json.insert("properties".into(), properties.into());
+
+	if !properties.is_empty() {
+		json.insert("properties".into(), properties.into());
+	}
 
 	if !required_properties.is_empty() {
 		json.insert("required".into(), required_properties.into());

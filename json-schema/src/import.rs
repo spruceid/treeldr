@@ -50,7 +50,34 @@ pub fn import_schema<F: Clone + Ord, D: Descriptions<F>>(
 			Ok(id)
 		}
 		Schema::DynamicRef(_) => todo!(),
-		Schema::Regular(schema) => import_regular_schema(schema, base_iri, context, vocabulary),
+		Schema::Regular(schema) => {
+			import_regular_schema(schema, true, base_iri, context, vocabulary)
+		}
+	}
+}
+
+pub fn import_sub_schema<F: Clone + Ord, D: Descriptions<F>>(
+	schema: &Schema,
+	base_iri: Option<Iri>,
+	context: &mut Context<F, D>,
+	vocabulary: &mut Vocabulary,
+) -> Result<Id, Error<F>> {
+	match schema {
+		Schema::True => todo!(),
+		Schema::False => {
+			let id = Id::Blank(vocabulary.new_blank_label());
+			context.declare_layout(id, None);
+			Ok(id)
+		}
+		Schema::Ref(r) => {
+			let iri = r.target.resolved(base_iri.unwrap());
+			let id = Id::Iri(vocab::Term::from_iri(iri, vocabulary));
+			Ok(id)
+		}
+		Schema::DynamicRef(_) => todo!(),
+		Schema::Regular(schema) => {
+			import_regular_schema(schema, false, base_iri, context, vocabulary)
+		}
 	}
 }
 
@@ -102,13 +129,14 @@ impl LayoutKind {
 
 pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
 	schema: &RegularSchema,
+	_top_level: bool,
 	base_iri: Option<Iri>,
 	context: &mut Context<F, D>,
 	vocabulary: &mut Vocabulary,
 ) -> Result<Id, Error<F>> {
 	if let Some(defs) = &schema.defs {
 		for schema in defs.values() {
-			import_schema(schema, base_iri, context, vocabulary)?;
+			import_sub_schema(schema, base_iri, context, vocabulary)?;
 		}
 	}
 
@@ -264,11 +292,13 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 				))
 			} else if !array.is_empty() || !schema.validation.array.is_empty() {
 				kind.refine(LayoutKind::ArrayOrSet)?;
-				import_array_schema(schema, array, &mut kind, base_iri, context, vocabulary)
+				import_array_schema(
+					schema, false, array, &mut kind, base_iri, context, vocabulary,
+				)
 			} else if kind.is_struct() || !object.is_empty() || !schema.validation.object.is_empty()
 			{
 				kind.refine(LayoutKind::Struct)?;
-				import_object_schema(schema, object, base_iri, context, vocabulary)
+				import_object_schema(schema, false, object, base_iri, context, vocabulary)
 			} else {
 				todo!()
 			}
@@ -283,6 +313,7 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 #[allow(clippy::too_many_arguments)]
 fn import_array_schema<F: Clone + Ord, D: Descriptions<F>>(
 	schema: &RegularSchema,
+	_top_level: bool,
 	array: &schema::ArraySchema,
 	kind: &mut LayoutKind,
 	base_iri: Option<Iri>,
@@ -290,7 +321,7 @@ fn import_array_schema<F: Clone + Ord, D: Descriptions<F>>(
 	vocabulary: &mut Vocabulary,
 ) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
 	let item_type = match &array.items {
-		Some(items) => import_schema(items, base_iri, context, vocabulary)?,
+		Some(items) => import_sub_schema(items, base_iri, context, vocabulary)?,
 		None => todo!(),
 	};
 
@@ -307,6 +338,7 @@ fn import_array_schema<F: Clone + Ord, D: Descriptions<F>>(
 
 fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 	schema: &RegularSchema,
+	_top_level: bool,
 	object: &schema::ObjectSchema,
 	base_iri: Option<Iri>,
 	context: &mut Context<F, D>,
@@ -319,15 +351,19 @@ fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 
 		// First, we build each field.
 		for (prop, prop_schema) in properties {
-			let prop_schema = import_schema(prop_schema, base_iri, context, vocabulary)?;
+			let layout_id = import_sub_schema(prop_schema, base_iri, context, vocabulary)?;
 
 			let field_id = Id::Blank(vocabulary.new_blank_label());
 			context.declare_layout_field(field_id, None);
-			let field = context
-				.get_mut(field_id)
-				.unwrap()
-				.as_layout_field_mut()
-				.unwrap();
+			let field_node = context.get_mut(field_id).unwrap();
+
+			if let Some(meta) = &prop_schema.meta_data() {
+				if let Some(doc) = &meta.description {
+					field_node.add_label(doc.clone())
+				}
+			}
+
+			let field = field_node.as_layout_field_mut().unwrap();
 
 			match Name::new(prop) {
 				Ok(name) => field.set_name(name, None)?,
@@ -340,7 +376,7 @@ fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 				}
 			}
 
-			field.set_layout(prop_schema, None)?;
+			field.set_layout(layout_id, None)?;
 
 			fields.push(Caused::new(field_id.into_term(), None));
 		}
