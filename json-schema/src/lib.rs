@@ -147,7 +147,7 @@ fn generate_layout_schema<F>(
 			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
 		Description::Literal(lit) => Ok(generate_literal_type(lit)),
-		Description::Primitive(n, _) => Ok(generate_primitive_type(*n)),
+		Description::Primitive(n, _) => Ok(generate_primitive_type(n)),
 		Description::Set(s) => {
 			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
 		}
@@ -291,7 +291,7 @@ fn generate_layout_ref<F>(
 			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
 		Description::Literal(lit) => Ok(generate_literal_type(lit)),
-		Description::Primitive(n, _) => Ok(generate_primitive_type(*n)),
+		Description::Primitive(n, _) => Ok(generate_primitive_type(n)),
 		Description::Set(s) => {
 			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
 		}
@@ -378,11 +378,11 @@ fn generate_literal_type<F>(lit: &layout::Literal<F>) -> serde_json::Value {
 	def.into()
 }
 
-fn generate_primitive_type(n: treeldr::layout::Primitive) -> serde_json::Value {
+fn generate_primitive_type(n: &treeldr::layout::BoundedPrimitive) -> serde_json::Value {
 	use treeldr::layout::Primitive;
 	let mut def = serde_json::Map::new();
 
-	match n {
+	match n.primitive() {
 		Primitive::Boolean => {
 			def.insert("type".into(), "bool".into());
 		}

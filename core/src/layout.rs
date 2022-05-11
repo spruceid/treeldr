@@ -5,7 +5,7 @@ use shelves::Ref;
 pub mod array;
 pub mod enumeration;
 pub mod literal;
-mod primitive;
+pub mod primitive;
 mod set;
 mod structure;
 
@@ -15,18 +15,18 @@ mod usages;
 pub use array::Array;
 pub use enumeration::{Enum, Variant};
 pub use literal::Literal;
-pub use primitive::Primitive;
+pub use primitive::{bounded::Bounded as BoundedPrimitive, Primitive};
 pub use set::Set;
 pub use structure::{Field, Struct};
 
 pub use strongly_connected::StronglyConnectedLayouts;
 pub use usages::Usages;
 
-/// Layout type.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Type {
+/// Layout kind.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Kind {
 	Never,
-	Primitive(Primitive),
+	Primitive(BoundedPrimitive),
 	Struct,
 	Enum,
 	Reference,
@@ -51,12 +51,12 @@ pub enum Description<F> {
 	Never(MaybeSet<Name, F>),
 
 	/// Primitive layout, such as a number, a string, etc.
-	Primitive(Primitive, MaybeSet<Name, F>),
+	Primitive(BoundedPrimitive, MaybeSet<Name, F>),
 
 	/// Reference.
 	Reference(Ref<Definition<F>>, MaybeSet<Name, F>),
 
-	/// Literal layout.
+	/// Literal.
 	Literal(Literal<F>),
 
 	/// Structure.
@@ -65,27 +65,28 @@ pub enum Description<F> {
 	/// Enumeration.
 	Enum(Enum<F>),
 
-	/// Array layout.
+	/// Array.
 	Array(Array<F>),
 
-	/// Set layout.
+	/// Set.
 	Set(Set<F>),
 
+	/// Alias.
 	Alias(WithCauses<Name, F>, Ref<Definition<F>>),
 }
 
 impl<F> Description<F> {
-	pub fn ty(&self) -> Type {
+	pub fn kind(&self) -> Kind {
 		match self {
-			Self::Never(_) => Type::Never,
-			Self::Primitive(n, _) => Type::Primitive(*n),
-			Self::Literal(_) => Type::Literal,
-			Self::Reference(_, _) => Type::Reference,
-			Self::Struct(_) => Type::Struct,
-			Self::Enum(_) => Type::Enum,
-			Self::Array(_) => Type::Array,
-			Self::Set(_) => Type::Set,
-			Self::Alias(_, _) => Type::Alias,
+			Self::Never(_) => Kind::Never,
+			Self::Primitive(n, _) => Kind::Primitive(n.clone()),
+			Self::Literal(_) => Kind::Literal,
+			Self::Reference(_, _) => Kind::Reference,
+			Self::Struct(_) => Kind::Struct,
+			Self::Enum(_) => Kind::Enum,
+			Self::Array(_) => Kind::Array,
+			Self::Set(_) => Kind::Set,
+			Self::Alias(_, _) => Kind::Alias,
 		}
 	}
 

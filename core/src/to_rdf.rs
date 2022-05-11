@@ -493,7 +493,7 @@ impl<F> layout::Set<F> {
 	}
 }
 
-impl layout::Primitive {
+impl layout::BoundedPrimitive {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
 		match id {
 			Id::Iri(Term::TreeLdr(vocab::TreeLdr::Primitive(_))) => (),
@@ -501,7 +501,7 @@ impl layout::Primitive {
 				quads.push(Quad(
 					id,
 					Term::TreeLdr(vocab::TreeLdr::Alias),
-					self.id().into_term(),
+					self.primitive().id().into_term(),
 					None,
 				));
 			}

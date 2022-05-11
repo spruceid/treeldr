@@ -192,7 +192,9 @@ impl<F> Description<F> {
 
 		match self {
 			Description::Never => Ok(treeldr::layout::Description::Never(name)),
-			Description::Primitive(n) => Ok(treeldr::layout::Description::Primitive(n, name)),
+			Description::Primitive(n) => {
+				Ok(treeldr::layout::Description::Primitive(n.into(), name))
+			}
 			Description::Reference(layout_id) => {
 				let layout_ref = *nodes
 					.require_layout(layout_id, causes.preferred().cloned())?

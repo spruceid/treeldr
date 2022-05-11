@@ -148,7 +148,7 @@ fn generate_layout_context<F>(
 			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into())
 		}
 		Description::Reference(_, _) => context.ty = Some("@id".into()),
-		Description::Primitive(n, _) => context.ty = Some(generate_primitive_type(*n)),
+		Description::Primitive(n, _) => context.ty = Some(generate_primitive_type(n)),
 		Description::Set(_) => {
 			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into());
 			context.container = Some("@set".into());
@@ -183,9 +183,9 @@ fn generate_struct_context<F>(
 	Ok(json)
 }
 
-fn generate_primitive_type(n: treeldr::layout::Primitive) -> serde_json::Value {
+fn generate_primitive_type(n: &treeldr::layout::BoundedPrimitive) -> serde_json::Value {
 	use treeldr::layout::Primitive;
-	match n {
+	match n.primitive() {
 		Primitive::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".into(),
 		Primitive::Integer => "http://www.w3.org/2001/XMLSchema#integer".into(),
 		Primitive::PositiveInteger => "http://www.w3.org/2001/XMLSchema#positiveInteger".into(),

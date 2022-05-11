@@ -16,5 +16,6 @@ locspan = { version = "0.3.2", features = ["reporting"] }
 codespan-reporting = "0.11"
 rdf-types = { version = "0.4.1", features = ["loc"] }
 grdf = { version = "0.7.3", features = ["loc"] }
-btree-range-map = "0.2.5"
+btree-range-map = { version = "0.2.6", features = ["ordered-float"] }
 lazy_static = "1.4.0"
+ordered-float = "3.0.0"
