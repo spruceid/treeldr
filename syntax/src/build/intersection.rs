@@ -3,10 +3,9 @@ use derivative::Derivative;
 use locspan::Loc;
 use std::collections::BTreeMap;
 use treeldr::{
-	layout::{literal::RegExp, Primitive},
 	Causes, Id, MaybeSet, Vocabulary, WithCauses,
 };
-use treeldr_build::{layout::Array, Context, ObjectToId};
+use treeldr_build::{layout::{Array, RestrictedPrimitive}, Context, ObjectToId};
 
 mod enumeration;
 mod structure;
@@ -33,10 +32,9 @@ impl<F> PartialEq for IntersectedLayout<F> {
 #[derivative(PartialEq(bound = ""))]
 pub enum IntersectedLayoutDescription<F> {
 	Never,
-	Primitive(Primitive),
+	Primitive(RestrictedPrimitive<F>),
 	Struct(IntersectedStruct<F>),
 	Reference(Id),
-	Literal(RegExp),
 	Enum(IntersectedEnum<F>),
 	Set(Id),
 	Array(Array<F>),
@@ -246,8 +244,7 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 			Some(desc) => match desc.inner() {
 				LayoutDescription::Standard(standard_desc) => match standard_desc {
 					treeldr_build::layout::Description::Never => Ok(Self::Never),
-					treeldr_build::layout::Description::Primitive(n) => Ok(Self::Primitive(*n)),
-					treeldr_build::layout::Description::Literal(l) => Ok(Self::Literal(l.clone())),
+					treeldr_build::layout::Description::Primitive(n) => Ok(Self::Primitive(n.clone())),
 					treeldr_build::layout::Description::Reference(r) => Ok(Self::Reference(*r)),
 					treeldr_build::layout::Description::Struct(fields_id) => Ok(Self::Struct(
 						IntersectedStruct::new(*fields_id, context, desc.causes())?,
@@ -333,10 +330,6 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 					Self::Reference(b) if a == b => Ok(Self::Reference(a)),
 					_ => Ok(Self::Never),
 				},
-				Self::Literal(a) => match other {
-					Self::Literal(b) if a == b => Ok(Self::Literal(a)),
-					_ => Ok(Self::Never),
-				},
 				Self::Struct(a) => match other {
 					Self::Struct(b) => a.intersected_with(b),
 					_ => Ok(Self::Never),
@@ -398,7 +391,6 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 			Self::Never => Ok(treeldr_build::layout::Description::Never),
 			Self::Primitive(n) => Ok(treeldr_build::layout::Description::Primitive(n)),
 			Self::Reference(r) => Ok(treeldr_build::layout::Description::Reference(r)),
-			Self::Literal(literal) => Ok(treeldr_build::layout::Description::Literal(literal)),
 			Self::Struct(s) => s.into_standard_description(source, target, vocabulary),
 			Self::Enum(e) => e.into_standard_description(source, target, vocabulary),
 			Self::Set(s) => Ok(treeldr_build::layout::Description::Set(s)),

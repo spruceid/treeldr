@@ -134,6 +134,7 @@ impl<F> ty::Definition<F> {
 
 		match self.description() {
 			ty::Description::Empty => (),
+			ty::Description::Data(_) => todo!(),
 			ty::Description::Normal(_) => (),
 			ty::Description::Union(u) => u.to_rdf(model, self.id(), generator, quads),
 			ty::Description::Intersection(i) => i.to_rdf(model, self.id(), generator, quads),
@@ -407,7 +408,6 @@ impl<F> layout::Definition<F> {
 		match self.description() {
 			layout::Description::Never(_) => todo!(),
 			layout::Description::Primitive(n, _) => n.to_rdf(self.id(), quads),
-			layout::Description::Literal(l) => l.to_rdf(self.id(), quads),
 			layout::Description::Struct(s) => s.to_rdf(model, self.id(), generator, quads),
 			layout::Description::Enum(e) => e.to_rdf(model, self.id(), generator, quads),
 			layout::Description::Array(a) => a.to_rdf(model, self.id(), quads),
@@ -505,25 +505,6 @@ impl layout::BoundedPrimitive {
 					None,
 				));
 			}
-		}
-	}
-}
-
-impl<F> layout::Literal<F> {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		match self.regexp().as_singleton() {
-			Some(singleton) => quads.push(Quad(
-				id,
-				Term::TreeLdr(vocab::TreeLdr::Singleton),
-				Object::Literal(Literal::String(singleton.into())),
-				None,
-			)),
-			None => quads.push(Quad(
-				id,
-				Term::TreeLdr(vocab::TreeLdr::Matches),
-				Object::Literal(Literal::String(self.regexp().to_string().into())),
-				None,
-			)),
 		}
 	}
 }

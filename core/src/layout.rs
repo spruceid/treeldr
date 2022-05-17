@@ -4,7 +4,6 @@ use shelves::Ref;
 
 pub mod array;
 pub mod enumeration;
-pub mod literal;
 pub mod primitive;
 mod set;
 mod structure;
@@ -14,7 +13,6 @@ mod usages;
 
 pub use array::Array;
 pub use enumeration::{Enum, Variant};
-pub use literal::Literal;
 pub use primitive::{bounded::Bounded as BoundedPrimitive, Primitive};
 pub use set::Set;
 pub use structure::{Field, Struct};
@@ -26,7 +24,7 @@ pub use usages::Usages;
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Kind {
 	Never,
-	Primitive(BoundedPrimitive),
+	Primitive(Primitive),
 	Struct,
 	Enum,
 	Reference,
@@ -56,9 +54,6 @@ pub enum Description<F> {
 	/// Reference.
 	Reference(Ref<Definition<F>>, MaybeSet<Name, F>),
 
-	/// Literal.
-	Literal(Literal<F>),
-
 	/// Structure.
 	Struct(Struct<F>),
 
@@ -79,8 +74,7 @@ impl<F> Description<F> {
 	pub fn kind(&self) -> Kind {
 		match self {
 			Self::Never(_) => Kind::Never,
-			Self::Primitive(n, _) => Kind::Primitive(n.clone()),
-			Self::Literal(_) => Kind::Literal,
+			Self::Primitive(n, _) => Kind::Primitive(n.primitive()),
 			Self::Reference(_, _) => Kind::Reference,
 			Self::Struct(_) => Kind::Struct,
 			Self::Enum(_) => Kind::Enum,
@@ -101,7 +95,6 @@ impl<F> Description<F> {
 		match self {
 			Self::Never(name) => name.replace(new_name, cause),
 			Self::Primitive(_, name) => name.replace(new_name, cause),
-			Self::Literal(lit) => Some(lit.set_name(new_name, cause)),
 			Self::Reference(_, name) => name.replace(new_name, cause),
 			Self::Struct(s) => Some(s.set_name(new_name, cause)),
 			Self::Enum(e) => Some(e.set_name(new_name, cause)),
@@ -118,7 +111,6 @@ impl<F> Description<F> {
 			Description::Enum(e) => e.into_name().into(),
 			Description::Reference(_, n) => n,
 			Description::Primitive(_, n) => n,
-			Description::Literal(l) => l.into_name().into(),
 			Description::Array(a) => a.into_name(),
 			Description::Set(s) => s.into_name(),
 			Description::Alias(n, _) => n.into(),
@@ -158,7 +150,6 @@ impl<F> Definition<F> {
 			Description::Enum(e) => Some(e.name()),
 			Description::Reference(_, n) => n.value(),
 			Description::Primitive(_, n) => n.value(),
-			Description::Literal(l) => Some(l.name()),
 			Description::Array(a) => a.name(),
 			Description::Set(s) => s.name(),
 			Description::Alias(n, _) => Some(n.inner()),
@@ -212,7 +203,6 @@ impl<F> Definition<F> {
 			Description::Never(_) => ComposingLayouts::None,
 			Description::Struct(s) => ComposingLayouts::Struct(s.fields().iter()),
 			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts()),
-			Description::Literal(_) => ComposingLayouts::None,
 			Description::Reference(_, _) => ComposingLayouts::None,
 			Description::Primitive(_, _) => ComposingLayouts::None,
 			Description::Array(a) => ComposingLayouts::One(Some(a.item_layout())),

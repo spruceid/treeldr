@@ -55,19 +55,6 @@ pub enum TreeLdr {
 	#[iri("tldr:derefTo")]
 	DerefTo,
 
-	/// Layout equality constraint.
-	///
-	/// The only possible instance of the subject layout is the given object.
-	#[iri("tldr:singleton")]
-	Singleton,
-
-	/// Layout regular expression matching constraint.
-	///
-	/// The instances of the subject layout must match the given regular
-	/// expression object.
-	#[iri("tldr:matches")]
-	Matches,
-
 	/// Enumeration layout.
 	///
 	/// Declares that a layout is an enumeration, and what list defined the
@@ -134,6 +121,12 @@ pub enum Owl {
 
 	#[iri("owl:maxCardinality")]
 	Cardinality,
+
+	#[iri("owl:onDatatype")]
+	OnDatatype,
+
+	#[iri("owl:withRestrictions")]
+	WithRestrictions
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -171,6 +164,30 @@ pub enum Xsd {
 
 	#[iri("xsd:anyURI")]
 	AnyUri,
+
+	#[iri("xsd:length")]
+	Length,
+
+	#[iri("xsd:minLength")]
+	MinLength,
+
+	#[iri("xsd:maxLength")]
+	MaxLength,
+
+	#[iri("xsd:pattern")]
+	Pattern,
+
+	#[iri("xsd:maxExclusive")]
+	MaxExclusive,
+
+	#[iri("xsd:maxInclusive")]
+	MaxInclusive,
+
+	#[iri("xsd:minExclusive")]
+	MinExclusive,
+
+	#[iri("xsd:minInclusive")]
+	MinInclusive,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -197,6 +214,9 @@ pub enum Rdfs {
 
 	#[iri("rdfs:Class")]
 	Class,
+
+	#[iri("rdfs:Datatype")]
+	Datatype,
 
 	#[iri("rdfs:label")]
 	Label,

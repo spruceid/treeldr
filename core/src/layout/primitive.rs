@@ -5,6 +5,7 @@ use std::fmt;
 pub mod bounded;
 
 pub use bounded::Bounded;
+pub use crate::ty::data::RegExp;
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]
@@ -17,9 +18,9 @@ pub enum Primitive {
 	#[iri("tldr:Integer")]
 	Integer,
 
-	/// Positive integer number.
-	#[iri("tldr:PositiveInteger")]
-	PositiveInteger,
+	/// Unsigned integer number.
+	#[iri("tldr:UnsignedInteger")]
+	UnsignedInteger,
 
 	/// Floating point number.
 	#[iri("tldr:Float")]
@@ -63,7 +64,7 @@ impl Primitive {
 		match name {
 			"boolean" => Some(Self::Boolean),
 			"integer" => Some(Self::Integer),
-			"unsigned" => Some(Self::PositiveInteger),
+			"unsigned" => Some(Self::UnsignedInteger),
 			"float" => Some(Self::Float),
 			"double" => Some(Self::Double),
 			"string" => Some(Self::String),
@@ -81,7 +82,7 @@ impl Primitive {
 		match self {
 			Self::Boolean => "boolean",
 			Self::Integer => "integer",
-			Self::PositiveInteger => "unsigned",
+			Self::UnsignedInteger => "unsigned",
 			Self::Float => "float",
 			Self::Double => "double",
 			Self::String => "string",

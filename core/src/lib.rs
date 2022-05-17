@@ -17,6 +17,7 @@ pub mod prop;
 pub mod reporting;
 mod to_rdf;
 pub mod ty;
+pub mod value;
 pub mod utils;
 pub mod vocab;
 
@@ -27,6 +28,7 @@ pub use feature::Feature;
 pub use maybe_set::*;
 pub use name::Name;
 pub use node::Node;
+pub use value::Value;
 pub use vocab::{Id, Vocabulary};
 
 /// TreeLDR model.

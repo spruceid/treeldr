@@ -1,14 +1,22 @@
 use crate::{error, utils::TryCollect, Error, ObjectToId};
-use derivative::Derivative;
 use locspan::Location;
-use std::collections::{BTreeMap, HashMap};
-use treeldr::{Causes, Id, MaybeSet, WithCauses};
+use std::collections::BTreeMap;
+use treeldr::{Causes, Id, MaybeSet};
 
+mod data;
+mod normal;
+mod restriction;
+
+pub use data::DataType;
+pub use normal::*;
+pub use restriction::*;
 pub use treeldr::ty::Kind;
 
 /// Type definition.
 #[derive(Clone)]
 pub enum Description<F> {
+	Data(DataType),
+
 	/// Normal type.
 	Normal(Normal<F>),
 
@@ -25,6 +33,7 @@ pub enum Description<F> {
 impl<F: Clone + Ord> Description<F> {
 	pub fn kind(&self) -> Kind {
 		match self {
+			Self::Data(_) => Kind::Data,
 			Self::Normal(_) => Kind::Normal,
 			Self::Union(_) => Kind::Union,
 			Self::Intersection(_) => Kind::Intersection,
@@ -77,6 +86,7 @@ impl<F: Clone + Ord> Description<F> {
 		F: Clone + Ord,
 	{
 		let desc = match self {
+			Self::Data(d) => d.build(nodes)?,
 			Self::Normal(n) => n.build(nodes)?,
 			Self::Union(options_id) => {
 				use std::collections::btree_map::Entry;
@@ -197,6 +207,41 @@ impl<F, D> Definition<F, D> {
 }
 
 impl<F, D: PseudoDescription<F>> Definition<F, D> {
+	pub fn require_datatype_mut(
+		&mut self,
+		cause: Option<Location<F>>,
+	) -> Result<&mut DataType, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.desc
+			.set_once(cause.clone(), || Description::Data(DataType::default()).into());
+		let because = self.desc.causes().unwrap().preferred().cloned();
+		match self.desc.value_mut().unwrap().as_standard_mut() {
+			Some(Description::Data(d)) => Ok(d),
+			Some(other) => Err(Error::new(
+				error::TypeMismatchKind {
+					id: self.id,
+					expected: Some(other.kind()),
+					found: Some(Kind::Normal),
+					because,
+				}
+				.into(),
+				cause,
+			)),
+			None => Err(Error::new(
+				error::TypeMismatchKind {
+					id: self.id,
+					expected: None,
+					found: Some(Kind::Normal),
+					because,
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
 	pub fn require_normal_mut(
 		&mut self,
 		cause: Option<Location<F>>,
@@ -213,7 +258,7 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 				error::TypeMismatchKind {
 					id: self.id,
 					expected: Some(other.kind()),
-					found: Some(Kind::Normal),
+					found: Some(Kind::Data),
 					because,
 				}
 				.into(),
@@ -223,7 +268,43 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 				error::TypeMismatchKind {
 					id: self.id,
 					expected: None,
-					found: Some(Kind::Normal),
+					found: Some(Kind::Data),
+					because,
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
+	/// Declare that this type is a datatype.
+	pub fn declare_datatype(
+		&mut self,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>>
+	where
+		F: Ord + Clone,
+	{
+		self.desc
+			.set_once(cause.clone(), || Description::Data(DataType::default()).into());
+		let because = self.desc.causes().unwrap().preferred().cloned();
+		match self.desc.value_mut().unwrap().as_standard() {
+			Some(Description::Data(_)) => Ok(()),
+			Some(other) => Err(Error::new(
+				error::TypeMismatchKind {
+					id: self.id,
+					expected: Some(other.kind()),
+					found: Some(Kind::Data),
+					because,
+				}
+				.into(),
+				cause,
+			)),
+			None => Err(Error::new(
+				error::TypeMismatchKind {
+					id: self.id,
+					expected: None,
+					found: Some(Kind::Data),
 					because,
 				}
 				.into(),
@@ -414,181 +495,5 @@ impl<F: Clone + Ord> crate::Build<F> for Definition<F> {
 		};
 
 		Ok(treeldr::ty::Definition::new(self.id, desc, causes))
-	}
-}
-
-/// Normal type definition.
-#[derive(Clone, Derivative)]
-#[derivative(Default(bound = ""))]
-pub struct Normal<F> {
-	/// Properties.
-	properties: HashMap<Id, Causes<F>>,
-}
-
-impl<F> Normal<F> {
-	pub fn new() -> Self {
-		Self::default()
-	}
-
-	pub fn is_empty(&self) -> bool {
-		self.properties.is_empty()
-	}
-
-	pub fn properties(&self) -> impl Iterator<Item = (Id, &Causes<F>)> {
-		self.properties.iter().map(|(p, c)| (*p, c))
-	}
-
-	pub fn declare_property(&mut self, prop_ref: Id, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
-		use std::collections::hash_map::Entry;
-		match self.properties.entry(prop_ref) {
-			Entry::Vacant(entry) => {
-				entry.insert(cause.into());
-			}
-			Entry::Occupied(mut entry) => {
-				if let Some(cause) = cause {
-					entry.get_mut().add(cause)
-				}
-			}
-		}
-	}
-
-	pub fn build(
-		self,
-		nodes: &super::context::allocated::Nodes<F>,
-	) -> Result<treeldr::ty::Description<F>, Error<F>>
-	where
-		F: Clone + Ord,
-	{
-		let mut result = treeldr::ty::Normal::new();
-
-		for (prop_id, prop_causes) in self.properties {
-			let prop_ref = nodes.require_property(prop_id, prop_causes.preferred().cloned())?;
-			result.insert_property(*prop_ref.inner(), prop_causes)
-		}
-
-		Ok(treeldr::ty::Description::Normal(result))
-	}
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum RangeRestriction {
-	Any(Id),
-	All(Id),
-}
-
-pub type CardinalityRestriction = treeldr::prop::restriction::Cardinality;
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PropertyRestriction {
-	Range(RangeRestriction),
-	Cardinality(CardinalityRestriction),
-}
-
-#[derive(Clone)]
-pub struct Restriction<F> {
-	property: WithCauses<Id, F>,
-	restrictions: BTreeMap<PropertyRestriction, Causes<F>>,
-}
-
-impl<F> PartialEq for Restriction<F> {
-	fn eq(&self, other: &Self) -> bool {
-		self.property.inner() == other.property.inner()
-			&& self.restrictions.len() == other.restrictions.len()
-			&& self
-				.restrictions
-				.keys()
-				.zip(other.restrictions.keys())
-				.all(|(a, b)| a == b)
-	}
-}
-
-impl<F> Restriction<F> {
-	pub fn new(property: WithCauses<Id, F>) -> Self {
-		Self {
-			property,
-			restrictions: BTreeMap::new(),
-		}
-	}
-
-	pub fn add_restriction(&mut self, r: PropertyRestriction, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
-		use std::collections::btree_map::Entry;
-		match self.restrictions.entry(r) {
-			Entry::Vacant(entry) => {
-				entry.insert(cause.into());
-			}
-			Entry::Occupied(mut entry) => {
-				if let Some(cause) = cause {
-					entry.get_mut().add(cause)
-				}
-			}
-		}
-	}
-
-	pub fn build(
-		self,
-		nodes: &super::context::allocated::Nodes<F>,
-	) -> Result<treeldr::ty::Description<F>, Error<F>>
-	where
-		F: Clone + Ord,
-	{
-		let (prop_id, prop_causes) = self.property.into_parts();
-		let prop_ref = nodes.require_property(prop_id, prop_causes.preferred().cloned())?;
-
-		let mut restrictions = treeldr::prop::Restrictions::new();
-		for (restriction, restriction_causes) in self.restrictions {
-			if let Err(treeldr::prop::restriction::Contradiction) =
-				restrictions.restrict(restriction.build(nodes, &restriction_causes)?)
-			{
-				return Ok(treeldr::ty::Description::Empty);
-			}
-		}
-
-		let result =
-			treeldr::ty::Restriction::new(WithCauses::new(**prop_ref, prop_causes), restrictions);
-		Ok(treeldr::ty::Description::Restriction(result))
-	}
-}
-
-impl PropertyRestriction {
-	pub fn build<F>(
-		self,
-		nodes: &super::context::allocated::Nodes<F>,
-		causes: &Causes<F>,
-	) -> Result<treeldr::prop::Restriction<F>, Error<F>>
-	where
-		F: Clone + Ord,
-	{
-		match self {
-			Self::Range(r) => Ok(treeldr::prop::Restriction::Range(r.build(nodes, causes)?)),
-			Self::Cardinality(c) => Ok(treeldr::prop::Restriction::Cardinality(c)),
-		}
-	}
-}
-
-impl RangeRestriction {
-	pub fn build<F>(
-		self,
-		nodes: &super::context::allocated::Nodes<F>,
-		causes: &Causes<F>,
-	) -> Result<treeldr::prop::restriction::Range<F>, Error<F>>
-	where
-		F: Clone + Ord,
-	{
-		match self {
-			Self::Any(id) => {
-				let ty_ref = nodes.require_type(id, causes.preferred().cloned())?;
-				Ok(treeldr::prop::restriction::Range::Any(**ty_ref))
-			}
-			Self::All(id) => {
-				let ty_ref = nodes.require_type(id, causes.preferred().cloned())?;
-				Ok(treeldr::prop::restriction::Range::All(**ty_ref))
-			}
-		}
 	}
 }

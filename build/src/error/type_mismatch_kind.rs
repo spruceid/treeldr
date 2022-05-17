@@ -17,6 +17,7 @@ impl KindName for Kind {
 	fn name(&self) -> &str {
 		match self {
 			Self::Empty => "the empty type",
+			Self::Data => "a datatype",
 			Self::Normal => "a normal type",
 			Self::Union => "an union",
 			Self::Intersection => "an intersection",

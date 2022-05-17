@@ -46,7 +46,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		)));
 		self.declare_layout(id, None);
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
-		layout.set_primitive(primitive_layout, None)?;
+		layout.set_primitive(primitive_layout.into(), None)?;
 		Ok(id)
 	}
 
@@ -94,7 +94,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		use layout::Primitive;
 		self.define_primitive_type(Primitive::Boolean)?;
 		self.define_primitive_type(Primitive::Integer)?;
-		self.define_primitive_type(Primitive::PositiveInteger)?;
+		self.define_primitive_type(Primitive::UnsignedInteger)?;
 		self.define_primitive_type(Primitive::Float)?;
 		self.define_primitive_type(Primitive::Double)?;
 		self.define_primitive_type(Primitive::String)?;

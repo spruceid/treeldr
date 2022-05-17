@@ -5,20 +5,22 @@ use treeldr::{Caused, Causes, Id, MaybeSet, Name, Vocabulary, WithCauses};
 pub mod array;
 pub mod enumeration;
 pub mod field;
-pub mod literal;
+pub mod primitive;
 pub mod structure;
 pub mod variant;
 
+pub use primitive::{
+	Primitive,
+	Restricted as RestrictedPrimitive
+};
 pub use array::Array;
-pub use treeldr::layout::{literal::RegExp, Primitive};
 
 #[derive(Clone, Debug)]
 pub enum Description<F> {
 	Never,
-	Primitive(Primitive),
+	Primitive(RestrictedPrimitive<F>),
 	Struct(Id),
 	Reference(Id),
-	Literal(RegExp),
 	Enum(Id),
 	Set(Id),
 	Array(Array<F>),
@@ -26,9 +28,9 @@ pub enum Description<F> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Type {
+pub enum Kind {
 	Never,
-	Primitive(Primitive),
+	Primitive(Option<Primitive>),
 	Reference,
 	Literal,
 	Struct,
@@ -39,17 +41,16 @@ pub enum Type {
 }
 
 impl<F> Description<F> {
-	pub fn ty(&self) -> Type {
+	pub fn kind(&self) -> Kind {
 		match self {
-			Self::Never => Type::Never,
-			Self::Reference(_) => Type::Reference,
-			Self::Struct(_) => Type::Struct,
-			Self::Primitive(n) => Type::Primitive(*n),
-			Self::Literal(_) => Type::Literal,
-			Self::Enum(_) => Type::Enum,
-			Self::Set(_) => Type::Set,
-			Self::Array(_) => Type::Array,
-			Self::Alias(_) => Type::Alias,
+			Self::Never => Kind::Never,
+			Self::Reference(_) => Kind::Reference,
+			Self::Struct(_) => Kind::Struct,
+			Self::Primitive(n) => Kind::Primitive(n.primitive().value().cloned()),
+			Self::Enum(_) => Kind::Enum,
+			Self::Set(_) => Kind::Set,
+			Self::Array(_) => Kind::Array,
+			Self::Alias(_) => Kind::Alias,
 		}
 	}
 
@@ -193,7 +194,7 @@ impl<F> Description<F> {
 		match self {
 			Description::Never => Ok(treeldr::layout::Description::Never(name)),
 			Description::Primitive(n) => {
-				Ok(treeldr::layout::Description::Primitive(n.into(), name))
+				Ok(treeldr::layout::Description::Primitive(n.build(), name))
 			}
 			Description::Reference(layout_id) => {
 				let layout_ref = *nodes
@@ -248,11 +249,6 @@ impl<F> Description<F> {
 
 				let enm = treeldr::layout::Enum::new(name, variants);
 				Ok(treeldr::layout::Description::Enum(enm))
-			}
-			Description::Literal(regexp) => {
-				let name = require_name(id, name, causes)?;
-				let lit = treeldr::layout::Literal::new(regexp, name, id.is_blank());
-				Ok(treeldr::layout::Description::Literal(lit))
 			}
 			Description::Set(item_layout_id) => {
 				let item_layout_ref = *nodes
@@ -309,10 +305,11 @@ impl<F: Clone + Ord> PseudoDescription<F> for Description<F> {
 	) -> Result<Self, Error<F>> {
 		match (self, other) {
 			(Self::Never, Self::Never) => Ok(Self::Never),
-			(Self::Primitive(a), Self::Primitive(b)) if a == b => Ok(Self::Primitive(a)),
+			(Self::Primitive(a), Self::Primitive(b)) => {
+				Ok(Self::Primitive(a.try_unify(b)?))
+			},
 			(Self::Struct(a), Self::Struct(b)) if a == b => Ok(Self::Struct(a)),
 			(Self::Reference(a), Self::Reference(b)) if a == b => Ok(Self::Reference(a)),
-			(Self::Literal(a), Self::Literal(b)) if a == b => Ok(Self::Literal(a)),
 			(Self::Enum(a), Self::Enum(b)) if a == b => Ok(Self::Enum(a)),
 			(Self::Set(a), Self::Set(b)) if a == b => Ok(Self::Set(a)),
 			(Self::Array(a), Self::Array(b)) => {
@@ -462,7 +459,7 @@ impl<F, D> Definition<F, D> {
 impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 	pub fn set_primitive(
 		&mut self,
-		primitive: Primitive,
+		primitive: RestrictedPrimitive<F>,
 		cause: Option<Location<F>>,
 	) -> Result<(), Error<F>> {
 		self.set_description(Description::Primitive(primitive).into(), cause)
@@ -478,14 +475,6 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 
 	pub fn set_deref_to(&mut self, target: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
 		self.set_description(Description::Reference(target).into(), cause)
-	}
-
-	pub fn set_literal(
-		&mut self,
-		regexp: RegExp,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>> {
-		self.set_description(Description::Literal(regexp).into(), cause)
 	}
 
 	pub fn set_enum(&mut self, items: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
@@ -619,15 +608,15 @@ impl<F: Clone + Ord> Definition<F> {
 			}
 		}
 
-		if let Some(Description::Literal(regexp)) = self.desc.value() {
-			if let Some(singleton) = regexp.as_singleton() {
-				if let Ok(singleton_name) = Name::new(singleton) {
-					let mut name = Name::new("const").unwrap();
-					name.push_name(&singleton_name);
-					return Ok(Some(Caused::new(name, cause)));
-				}
-			}
-		}
+		// if let Some(Description::Literal(regexp)) = self.desc.value() {
+		// 	if let Some(singleton) = regexp.as_singleton() {
+		// 		if let Ok(singleton_name) = Name::new(singleton) {
+		// 			let mut name = Name::new("const").unwrap();
+		// 			name.push_name(&singleton_name);
+		// 			return Ok(Some(Caused::new(name, cause)));
+		// 		}
+		// 	}
+		// }
 
 		if parent_layouts.len() == 1 {
 			let parent = &parent_layouts[0];

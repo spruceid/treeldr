@@ -364,9 +364,9 @@ impl<F: Clone> LocalContext<F> {
 		}
 
 		let regexp = match lit {
-			crate::Literal::String(s) => treeldr::layout::literal::RegExp::from(s),
+			crate::Literal::String(s) => treeldr::ty::data::RegExp::from(s),
 			crate::Literal::RegExp(regexp_string) => {
-				match treeldr::layout::literal::RegExp::parse(regexp_string) {
+				match treeldr::ty::data::RegExp::parse(regexp_string) {
 					Ok(regexp) => regexp,
 					Err(e) => {
 						return Err(treeldr_build::Error::new(
@@ -379,12 +379,17 @@ impl<F: Clone> LocalContext<F> {
 			}
 		};
 
+		let mut p = treeldr_build::layout::RestrictedPrimitive::new();
+		p.set_primitive(treeldr::layout::Primitive::String, Some(loc.clone()))?;
+		p.restrictions_mut().insert(treeldr_build::layout::primitive::Restriction::Pattern(regexp), Some(loc.clone()));
+
 		context
 			.get_mut(*id)
 			.unwrap()
 			.as_layout_mut()
 			.unwrap()
-			.set_literal(regexp, Some(loc.clone()))?;
+			.set_primitive(p, Some(loc.clone()))?;
+
 		Ok(())
 	}
 
@@ -1408,7 +1413,10 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 				}
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
-				layout.set_primitive(p, Some(loc.clone()))?;
+				layout.set_primitive(
+					treeldr_build::layout::primitive::Restricted::unrestricted(p, Some(loc.clone())),
+					Some(loc.clone())
+				)?;
 
 				Ok(Loc(id, loc))
 			}

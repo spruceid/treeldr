@@ -1,6 +1,6 @@
 use treeldr::{
 	Vocabulary,
-	layout::literal::regexp::ParseError
+	ty::data::regexp::ParseError
 };
 
 #[derive(Debug)]

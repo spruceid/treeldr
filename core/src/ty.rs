@@ -1,11 +1,13 @@
 use crate::{Causes, Documentation, Id};
 
+pub mod data;
 mod intersection;
 pub mod normal;
 pub mod properties;
 pub mod restriction;
 mod r#union;
 
+pub use data::DataType;
 pub use intersection::Intersection;
 pub use normal::Normal;
 pub use properties::{Properties, PseudoProperty};
@@ -27,6 +29,7 @@ pub struct Definition<F> {
 /// Type definition.
 pub enum Description<F> {
 	Empty,
+	Data(DataType),
 	Normal(Normal<F>),
 	Union(Union<F>),
 	Intersection(Intersection<F>),
@@ -37,6 +40,7 @@ impl<F> Description<F> {
 	pub fn kind(&self) -> Kind {
 		match self {
 			Self::Empty => Kind::Empty,
+			Self::Data(_) => Kind::Data,
 			Self::Normal(_) => Kind::Normal,
 			Self::Union(_) => Kind::Union,
 			Self::Intersection(_) => Kind::Intersection,
@@ -48,6 +52,7 @@ impl<F> Description<F> {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Kind {
 	Empty,
+	Data,
 	Normal,
 	Union,
 	Intersection,
@@ -87,6 +92,7 @@ impl<F> Definition<F> {
 	pub fn properties(&self) -> Option<&Properties<F>> {
 		match &self.desc {
 			Description::Empty => None,
+			Description::Data(_) => None,
 			Description::Normal(n) => Some(n.properties()),
 			Description::Union(u) => Some(u.properties()),
 			Description::Intersection(i) => Some(i.properties()),

@@ -2,7 +2,7 @@ use btree_range_map::RangeSet;
 use std::fmt;
 
 /// Regular expression.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RegExp {
 	/// Any character.
 	///
