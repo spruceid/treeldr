@@ -34,7 +34,7 @@ impl<F> Display for super::Literal<F> {
 			Self::String(s) => s.fmt(f),
 			Self::LangString(Loc(s, _), Loc(tag, _)) => write!(f, "{}@{}", s, tag),
 			Self::TypedString(Loc(s, _), Loc(ty, _)) => {
-				write!(f, "{}^^{}", s, ty.display(namespace))
+				write!(f, "{}^^<{}>", s, ty.display(namespace))
 			}
 		}
 	}
@@ -45,7 +45,7 @@ impl Display for super::StrippedLiteral {
 		match self {
 			Self::String(s) => s.fmt(f),
 			Self::LangString(s, tag) => write!(f, "{}@{}", s, tag),
-			Self::TypedString(s, ty) => write!(f, "{}^^{}", s, ty.display(namespace)),
+			Self::TypedString(s, ty) => write!(f, "{}^^<{}>", s, ty.display(namespace)),
 		}
 	}
 }

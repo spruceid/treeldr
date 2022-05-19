@@ -22,8 +22,16 @@ impl Restrictions {
 		self.min
 	}
 
+	pub fn add_min(&mut self, min: i64) {
+		self.min = core::cmp::max(self.min, min)
+	}
+
 	pub fn max(&self) -> i64 {
 		self.max
+	}
+
+	pub fn add_max(&mut self, max: i64) {
+		self.max = core::cmp::min(self.max, max)
 	}
 
 	pub fn iter(&self) -> Iter {

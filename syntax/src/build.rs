@@ -407,10 +407,14 @@ impl<F: Clone> LocalContext<F> {
 			}
 		};
 
-		let mut p = treeldr_build::layout::RestrictedPrimitive::new();
-		p.set_primitive(*id, treeldr::layout::Primitive::String, Some(loc.clone()))?;
-		p.restrictions_mut().insert(
-			treeldr_build::layout::primitive::Restriction::Pattern(regexp),
+		let mut restricted = treeldr_build::layout::RestrictedPrimitive::unrestricted(
+			treeldr::layout::Primitive::String,
+			Some(loc.clone()),
+		);
+		restricted.restrictions_mut().insert(
+			treeldr_build::layout::primitive::Restriction::String(
+				treeldr_build::layout::primitive::restriction::String::Pattern(regexp),
+			),
 			Some(loc.clone()),
 		);
 
@@ -419,7 +423,7 @@ impl<F: Clone> LocalContext<F> {
 			.unwrap()
 			.as_layout_mut()
 			.unwrap()
-			.set_primitive(p, Some(loc.clone()))?;
+			.set_primitive(restricted, Some(loc.clone()))?;
 
 		Ok(())
 	}

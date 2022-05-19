@@ -95,17 +95,17 @@ enum LayoutKind {
 }
 
 impl LayoutKind {
-	pub fn is_number(&self) -> bool {
-		matches!(self, Self::Integer | Self::Number)
-	}
+	// pub fn is_number(&self) -> bool {
+	// 	matches!(self, Self::Integer | Self::Number)
+	// }
 
-	pub fn is_string(&self) -> bool {
-		matches!(self, Self::String)
-	}
+	// pub fn is_string(&self) -> bool {
+	// 	matches!(self, Self::String)
+	// }
 
-	pub fn is_struct(&self) -> bool {
-		matches!(self, Self::Struct)
-	}
+	// pub fn is_struct(&self) -> bool {
+	// 	matches!(self, Self::Struct)
+	// }
 
 	pub fn refine<F>(&mut self, other: Self) -> Result<(), Error<F>> {
 		*self = match (*self, other) {
@@ -214,6 +214,44 @@ pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
 	Ok(id)
 }
 
+fn into_numeric(
+	primitive: treeldr::layout::Primitive,
+	n: &serde_json::Number,
+) -> treeldr::value::Numeric {
+	use treeldr::value;
+	match primitive {
+		treeldr::layout::Primitive::Float => match n.as_f64() {
+			Some(d) => {
+				treeldr::value::Numeric::Float(value::Float::new((d as f32).try_into().unwrap()))
+			}
+			None => todo!(),
+		},
+		treeldr::layout::Primitive::Double => match n.as_f64() {
+			Some(d) => treeldr::value::Numeric::Double(value::Double::new(d.try_into().unwrap())),
+			None => todo!(),
+		},
+		treeldr::layout::Primitive::Integer => match xsd_types::IntegerBuf::new(n.to_string()) {
+			Ok(n) => treeldr::value::Numeric::Integer(n.into()),
+			Err(_) => todo!(),
+		},
+		treeldr::layout::Primitive::UnsignedInteger => {
+			match xsd_types::IntegerBuf::new(n.to_string()) {
+				Ok(n) => {
+					if n.is_negative() {
+						todo!()
+					} else {
+						treeldr::value::Numeric::NonNegativeInteger(unsafe {
+							value::NonNegativeInteger::new_unchecked(n.into())
+						})
+					}
+				}
+				Err(_) => todo!(),
+			}
+		}
+		_ => todo!(),
+	}
+}
+
 fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 	schema: &RegularSchema,
 	base_iri: Option<Iri>,
@@ -262,53 +300,113 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 			array,
 			object,
 		} => {
-			if kind.is_number() {
-				// TODO: for now, numeric constraints are ignored.
-				Ok(treeldr_build::layout::Description::Primitive(
-					primitive_layout.unwrap().into(),
-				))
-			} else if kind.is_string() || !string.is_empty() {
-				let mut p = treeldr_build::layout::RestrictedPrimitive::unrestricted(
-					treeldr::layout::Primitive::String,
-					None,
-				);
+			if !string.is_empty() || !schema.validation.string.is_empty() {
+				kind.refine(LayoutKind::String)?;
+			}
 
-				if let Some(cnst) = &schema.validation.any.cnst {
-					p.restrictions_mut().insert(
-						treeldr_build::layout::primitive::Restriction::Pattern(
-							cnst.to_string().into(),
-						),
-						None,
-					);
-				}
-
-				if let Some(pattern) = &schema.validation.string.pattern {
-					p.restrictions_mut().insert(
-						treeldr_build::layout::primitive::Restriction::Pattern(
-							pattern.to_string().into(),
-						),
-						None,
-					);
-				}
-
-				// TODO: for now, most string constraints are ignored.
-				Ok(treeldr_build::layout::Description::Primitive(p))
-			} else if !array.is_empty() || !schema.validation.array.is_empty() {
+			if !array.is_empty() || !schema.validation.array.is_empty() {
 				kind.refine(LayoutKind::ArrayOrSet)?;
-				import_array_schema(
-					schema, false, array, &mut kind, base_iri, context, vocabulary,
-				)
-			} else if kind.is_struct() || !object.is_empty() || !schema.validation.object.is_empty()
-			{
+			}
+
+			if !object.is_empty() || !schema.validation.object.is_empty() {
 				kind.refine(LayoutKind::Struct)?;
-				import_object_schema(schema, false, object, base_iri, context, vocabulary)
-			} else {
-				todo!()
+			}
+
+			match kind {
+				LayoutKind::Unknown => todo!(),
+				LayoutKind::Boolean => {
+					todo!()
+				}
+				LayoutKind::Number | LayoutKind::Integer => {
+					if schema.validation.numeric.is_empty() {
+						Ok(treeldr_build::layout::Description::Primitive(
+							primitive_layout.unwrap().into(),
+						))
+					} else {
+						use treeldr_build::layout::primitive::{restriction::Numeric, Restriction};
+
+						let primitive = primitive_layout.unwrap();
+						let mut restricted =
+							treeldr_build::layout::primitive::Restricted::unrestricted(
+								primitive, None,
+							);
+						let restrictions = restricted.restrictions_mut();
+
+						if let Some(min) = &schema.validation.numeric.minimum {
+							restrictions.insert(
+								Restriction::Numeric(Numeric::InclusiveMinimum(into_numeric(
+									primitive, min,
+								))),
+								None,
+							)
+						}
+
+						if let Some(min) = &schema.validation.numeric.exclusive_minimum {
+							restrictions.insert(
+								Restriction::Numeric(Numeric::ExclusiveMinimum(into_numeric(
+									primitive, min,
+								))),
+								None,
+							)
+						}
+
+						if let Some(max) = &schema.validation.numeric.maximum {
+							restrictions.insert(
+								Restriction::Numeric(Numeric::InclusiveMaximum(into_numeric(
+									primitive, max,
+								))),
+								None,
+							)
+						}
+
+						if let Some(max) = &schema.validation.numeric.exclusive_maximum {
+							restrictions.insert(
+								Restriction::Numeric(Numeric::ExclusiveMaximum(into_numeric(
+									primitive, max,
+								))),
+								None,
+							)
+						}
+
+						Ok(treeldr_build::layout::Description::Primitive(restricted))
+					}
+				}
+				LayoutKind::String => {
+					use treeldr_build::layout::primitive::{restriction::String, Restriction};
+
+					let mut restricted = treeldr_build::layout::RestrictedPrimitive::unrestricted(
+						treeldr::layout::Primitive::String,
+						None,
+					);
+					let restrictions = restricted.restrictions_mut();
+
+					if let Some(cnst) = &schema.validation.any.cnst {
+						restrictions.insert(
+							Restriction::String(String::Pattern(cnst.to_string().into())),
+							None,
+						);
+					}
+
+					if let Some(pattern) = &schema.validation.string.pattern {
+						restrictions.insert(
+							Restriction::String(String::Pattern(pattern.to_string().into())),
+							None,
+						);
+					}
+
+					// TODO: for now, most string constraints are ignored.
+					Ok(treeldr_build::layout::Description::Primitive(restricted))
+				}
+				LayoutKind::ArrayOrSet | LayoutKind::Array | LayoutKind::Set => {
+					import_array_schema(
+						schema, false, array, &mut kind, base_iri, context, vocabulary,
+					)
+				}
+				LayoutKind::Struct => {
+					import_object_schema(schema, false, object, base_iri, context, vocabulary)
+				}
 			}
 		}
-		// schema::Description::OneOf(schemas) => {
-		// 	todo!()
-		// }
 		_ => todo!(),
 	}
 }

@@ -20,6 +20,19 @@ impl Rational {
 		unsafe { core::mem::transmute(self.0.denom()) }
 	}
 
+	pub fn into_parts(self) -> (Integer, Integer) {
+		let (n, d) = self.0.into();
+		(n.into(), d.into())
+	}
+
+	pub fn into_numer(self) -> Integer {
+		self.into_parts().0
+	}
+
+	pub fn into_denum(self) -> Integer {
+		self.into_parts().1
+	}
+
 	pub fn is_zero(&self) -> bool {
 		self.0.is_zero()
 	}
@@ -119,5 +132,59 @@ impl Rational {
 impl fmt::Display for Rational {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.0.fmt(f)
+	}
+}
+
+impl From<BigRational> for Rational {
+	fn from(r: BigRational) -> Self {
+		Self(r)
+	}
+}
+
+impl From<BigInt> for Rational {
+	fn from(i: BigInt) -> Self {
+		Self(i.into())
+	}
+}
+
+impl From<Rational> for super::Real {
+	fn from(r: Rational) -> Self {
+		Self::Rational(r)
+	}
+}
+
+impl TryFrom<Rational> for super::Decimal {
+	type Error = Rational;
+
+	fn try_from(r: Rational) -> Result<Self, Self::Error> {
+		if r.is_decimal() {
+			Ok(unsafe { Self::new_unchecked(r) })
+		} else {
+			Err(r)
+		}
+	}
+}
+
+impl TryFrom<Rational> for super::Integer {
+	type Error = Rational;
+
+	fn try_from(r: Rational) -> Result<Self, Self::Error> {
+		if r.is_integer() {
+			Ok(r.into_numer())
+		} else {
+			Err(r)
+		}
+	}
+}
+
+impl TryFrom<Rational> for super::NonNegativeInteger {
+	type Error = Rational;
+
+	fn try_from(r: Rational) -> Result<Self, Self::Error> {
+		if r.is_integer() && !r.is_negative() {
+			Ok(unsafe { Self::new_unchecked(r.into_numer()) })
+		} else {
+			Err(r)
+		}
 	}
 }

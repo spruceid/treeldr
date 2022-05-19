@@ -197,7 +197,10 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 					ty.declare_intersection(types_id, Some(types_loc))?
 				}
 				Term::Owl(vocab::Owl::OnDatatype) => {
-					// ...
+					todo!()
+				}
+				Term::Owl(vocab::Owl::WithRestrictions) => {
+					todo!()
 				}
 				Term::TreeLdr(vocab::TreeLdr::Name) => {
 					let node = context.require_mut(id, Some(id_loc))?;
@@ -261,6 +264,12 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 				// 	let layout = context.require_layout_mut(id, Some(id_loc))?;
 				// 	layout.set_literal(regexp, Some(loc))?
 				// }
+				Term::TreeLdr(vocab::TreeLdr::DerivedFrom) => {
+					todo!()
+				}
+				Term::TreeLdr(vocab::TreeLdr::WithRestrictions) => {
+					todo!()
+				}
 				Term::TreeLdr(vocab::TreeLdr::Enumeration) => {
 					let Loc(fields_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;

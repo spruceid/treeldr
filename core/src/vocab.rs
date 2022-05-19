@@ -155,6 +155,9 @@ pub enum Xsd {
 	#[iri("xsd:integer")]
 	Integer,
 
+	#[iri("xsd:nonNegativeInteger")]
+	NonNegativeInteger,
+
 	#[iri("xsd:positiveInteger")]
 	PositiveInteger,
 

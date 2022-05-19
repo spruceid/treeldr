@@ -17,10 +17,22 @@ impl Float {
 		use crate::vocab::{Term, Xsd};
 		StrippedLiteral::TypedString(self.0.to_string().into(), Term::Xsd(Xsd::Float))
 	}
+
+	pub fn unwrap(self) -> ordered_float::NotNan<f32> {
+		self.0
+	}
 }
 
 impl fmt::Display for Float {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.0.fmt(f)
+	}
+}
+
+impl TryFrom<f32> for Float {
+	type Error = ordered_float::FloatIsNan;
+
+	fn try_from(f: f32) -> Result<Self, Self::Error> {
+		Ok(Self(f.try_into()?))
 	}
 }
