@@ -1,7 +1,7 @@
-use crate::{Error, context};
+use crate::{context, Error};
 use locspan::Location;
 use std::collections::BTreeMap;
-use treeldr::{Causes, Id,WithCauses};
+use treeldr::{Causes, Id, WithCauses};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RangeRestriction {

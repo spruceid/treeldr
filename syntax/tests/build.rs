@@ -63,8 +63,7 @@ fn parse_treeldr<P: AsRef<Path>>(
 	let mut lexer = Lexer::new((), input.chars().map(infallible));
 	let ast = treeldr_syntax::Document::parse(&mut lexer).expect("parse error");
 	let mut context = BuildContext::new();
-	context.define_rdf_types().unwrap();
-	context.define_treeldr_types().unwrap();
+	context.apply_built_in_definitions().unwrap();
 	let mut local_context =
 		treeldr_syntax::build::LocalContext::new(Some(iri!("http://www.example.com").into()));
 	ast.declare(&mut local_context, &mut context, vocabulary)

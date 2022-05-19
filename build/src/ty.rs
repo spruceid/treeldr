@@ -3,7 +3,7 @@ use locspan::Location;
 use std::collections::BTreeMap;
 use treeldr::{Causes, Id, MaybeSet};
 
-mod data;
+pub mod data;
 mod normal;
 mod restriction;
 
@@ -15,7 +15,7 @@ pub use treeldr::ty::Kind;
 /// Type definition.
 #[derive(Clone)]
 pub enum Description<F> {
-	Data(DataType),
+	Data(DataType<F>),
 
 	/// Normal type.
 	Normal(Normal<F>),
@@ -50,6 +50,7 @@ impl<F: Clone + Ord> Description<F> {
 		let list_id = match self {
 			Description::Union(list_id) => Some(*list_id),
 			Description::Intersection(list_id) => Some(*list_id),
+			Description::Data(dt) => return dt.dependencies(nodes),
 			_ => None,
 		};
 
@@ -77,7 +78,7 @@ impl<F: Clone + Ord> Description<F> {
 
 	fn build(
 		self,
-		_id: Id,
+		id: Id,
 		nodes: &super::context::allocated::Nodes<F>,
 		dependencies: crate::Dependencies<F>,
 		causes: Causes<F>,
@@ -86,7 +87,7 @@ impl<F: Clone + Ord> Description<F> {
 		F: Clone + Ord,
 	{
 		let desc = match self {
-			Self::Data(d) => d.build(nodes)?,
+			Self::Data(d) => d.build(id, nodes, dependencies)?,
 			Self::Normal(n) => n.build(nodes)?,
 			Self::Union(options_id) => {
 				use std::collections::btree_map::Entry;
@@ -207,15 +208,46 @@ impl<F, D> Definition<F, D> {
 }
 
 impl<F, D: PseudoDescription<F>> Definition<F, D> {
-	pub fn require_datatype_mut(
-		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<&mut DataType, Error<F>>
+	pub fn require_datatype(&self, cause: Option<Location<F>>) -> Result<&DataType<F>, Error<F>>
 	where
 		F: Clone + Ord,
 	{
-		self.desc
-			.set_once(cause.clone(), || Description::Data(DataType::default()).into());
+		let because = self.desc.causes().unwrap().preferred().cloned();
+		match self.desc.value().and_then(|d| d.as_standard()) {
+			Some(Description::Data(d)) => Ok(d),
+			Some(other) => Err(Error::new(
+				error::TypeMismatchKind {
+					id: self.id,
+					expected: Some(other.kind()),
+					found: Some(Kind::Normal),
+					because,
+				}
+				.into(),
+				cause,
+			)),
+			None => Err(Error::new(
+				error::TypeMismatchKind {
+					id: self.id,
+					expected: None,
+					found: Some(Kind::Normal),
+					because,
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
+	pub fn require_datatype_mut(
+		&mut self,
+		cause: Option<Location<F>>,
+	) -> Result<&mut DataType<F>, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.desc.set_once(cause.clone(), || {
+			Description::Data(DataType::default()).into()
+		});
 		let because = self.desc.causes().unwrap().preferred().cloned();
 		match self.desc.value_mut().unwrap().as_standard_mut() {
 			Some(Description::Data(d)) => Ok(d),
@@ -278,15 +310,13 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 	}
 
 	/// Declare that this type is a datatype.
-	pub fn declare_datatype(
-		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
+	pub fn declare_datatype(&mut self, cause: Option<Location<F>>) -> Result<(), Error<F>>
 	where
 		F: Ord + Clone,
 	{
-		self.desc
-			.set_once(cause.clone(), || Description::Data(DataType::default()).into());
+		self.desc.set_once(cause.clone(), || {
+			Description::Data(DataType::default()).into()
+		});
 		let because = self.desc.causes().unwrap().preferred().cloned();
 		match self.desc.value_mut().unwrap().as_standard() {
 			Some(Description::Data(_)) => Ok(()),

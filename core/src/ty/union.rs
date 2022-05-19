@@ -1,5 +1,5 @@
 use super::Properties;
-use crate::{Causes, Ref};
+use crate::{Causes, Model, Ref};
 use std::collections::BTreeMap;
 
 pub struct Union<F> {
@@ -34,5 +34,11 @@ impl<F> Union<F> {
 
 	pub fn properties(&self) -> &Properties<F> {
 		&self.properties
+	}
+
+	pub fn is_datatype(&self, model: &Model<F>) -> bool {
+		self.options
+			.iter()
+			.all(|(ty_ref, _)| model.types().get(*ty_ref).unwrap().is_datatype(model))
 	}
 }

@@ -1,4 +1,4 @@
-use crate::{Causes, Documentation, Id};
+use crate::{Causes, Documentation, Id, Model};
 
 pub mod data;
 mod intersection;
@@ -45,6 +45,15 @@ impl<F> Description<F> {
 			Self::Union(_) => Kind::Union,
 			Self::Intersection(_) => Kind::Intersection,
 			Self::Restriction(_) => Kind::Restriction,
+		}
+	}
+
+	pub fn is_datatype(&self, model: &Model<F>) -> bool {
+		match self {
+			Self::Data(_) => true,
+			Self::Union(u) => u.is_datatype(model),
+			Self::Intersection(i) => i.is_datatype(model),
+			_ => false,
 		}
 	}
 }
@@ -98,5 +107,9 @@ impl<F> Definition<F> {
 			Description::Intersection(i) => Some(i.properties()),
 			Description::Restriction(r) => Some(r.properties()),
 		}
+	}
+
+	pub fn is_datatype(&self, model: &Model<F>) -> bool {
+		self.desc.is_datatype(model)
 	}
 }

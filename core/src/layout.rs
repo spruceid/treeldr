@@ -13,7 +13,7 @@ mod usages;
 
 pub use array::Array;
 pub use enumeration::{Enum, Variant};
-pub use primitive::{bounded::Bounded as BoundedPrimitive, Primitive};
+pub use primitive::{restricted::Restricted as RestrictedPrimitive, Primitive};
 pub use set::Set;
 pub use structure::{Field, Struct};
 
@@ -49,7 +49,7 @@ pub enum Description<F> {
 	Never(MaybeSet<Name, F>),
 
 	/// Primitive layout, such as a number, a string, etc.
-	Primitive(BoundedPrimitive, MaybeSet<Name, F>),
+	Primitive(RestrictedPrimitive, MaybeSet<Name, F>),
 
 	/// Reference.
 	Reference(Ref<Definition<F>>, MaybeSet<Name, F>),

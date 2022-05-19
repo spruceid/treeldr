@@ -146,7 +146,6 @@ fn generate_layout_schema<F>(
 		Description::Enum(enm) => {
 			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
-		Description::Literal(lit) => Ok(generate_literal_type(lit)),
 		Description::Primitive(n, _) => Ok(generate_primitive_type(n)),
 		Description::Set(s) => {
 			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
@@ -290,7 +289,6 @@ fn generate_layout_ref<F>(
 		Description::Enum(enm) => {
 			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
-		Description::Literal(lit) => Ok(generate_literal_type(lit)),
 		Description::Primitive(n, _) => Ok(generate_primitive_type(n)),
 		Description::Set(s) => {
 			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
@@ -361,68 +359,61 @@ fn generate_enum_type<F>(
 	Ok(def.into())
 }
 
-fn generate_literal_type<F>(lit: &layout::Literal<F>) -> serde_json::Value {
+fn generate_primitive_type(n: &treeldr::layout::RestrictedPrimitive) -> serde_json::Value {
+	use treeldr::layout::RestrictedPrimitive;
 	let mut def = serde_json::Map::new();
 
-	def.insert("type".into(), "string".into());
-	match lit.regexp().as_singleton() {
-		Some(singleton) => {
-			def.insert("const".into(), singleton.into());
-		}
-		None => {
-			// TODO: convert to ECMA-262 regular expression?
-			def.insert("pattern".into(), lit.regexp().to_string().into());
-		}
-	}
-
-	def.into()
-}
-
-fn generate_primitive_type(n: &treeldr::layout::BoundedPrimitive) -> serde_json::Value {
-	use treeldr::layout::Primitive;
-	let mut def = serde_json::Map::new();
-
-	match n.primitive() {
-		Primitive::Boolean => {
+	match n {
+		RestrictedPrimitive::Boolean => {
 			def.insert("type".into(), "bool".into());
 		}
-		Primitive::Integer => {
+		RestrictedPrimitive::Integer(_) => {
 			def.insert("type".into(), "integer".into());
 		}
-		Primitive::PositiveInteger => {
+		RestrictedPrimitive::UnsignedInteger(_) => {
 			def.insert("type".into(), "integer".into());
 			def.insert("minimum".into(), 0.into());
 		}
-		Primitive::Float => {
+		RestrictedPrimitive::Float(_) => {
 			def.insert("type".into(), "number".into());
 		}
-		Primitive::Double => {
+		RestrictedPrimitive::Double(_) => {
 			def.insert("type".into(), "number".into());
 		}
-		Primitive::String => {
+		RestrictedPrimitive::String(s) => {
 			def.insert("type".into(), "string".into());
+			if let Some(pattern) = s.pattern() {
+				match pattern.as_singleton() {
+					Some(singleton) => {
+						def.insert("const".into(), singleton.into());
+					}
+					None => {
+						def.insert("pattern".into(), pattern.to_string().into());
+					}
+				}
+			}
 		}
-		Primitive::Time => {
+		RestrictedPrimitive::Time => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "time".into());
 		}
-		Primitive::Date => {
+		RestrictedPrimitive::Date => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "date".into());
 		}
-		Primitive::DateTime => {
+		RestrictedPrimitive::DateTime => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "date-time".into());
 		}
-		Primitive::Iri => {
+		RestrictedPrimitive::Iri => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "iri".into());
 		}
-		Primitive::Uri => {
+		RestrictedPrimitive::Uri => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "uri".into());
 		}
-		Primitive::Url => {
+		RestrictedPrimitive::Url => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "uri".into());
 		}

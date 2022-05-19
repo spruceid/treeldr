@@ -318,7 +318,7 @@ impl<F: Clone> LocalContext<F> {
 		Loc(id, _): &Loc<Id, F>,
 		bind_to_layout: bool,
 		context: &mut Context<F, Descriptions>,
-		Loc(_, loc): &Loc<crate::Literal, F>,
+		Loc(lit, loc): &Loc<crate::Literal, F>,
 	) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
@@ -336,6 +336,34 @@ impl<F: Clone> LocalContext<F> {
 				.unwrap()
 				.set_type(*id, Some(loc.clone()))?;
 		}
+
+		let regexp = match lit {
+			crate::Literal::String(s) => treeldr::ty::data::RegExp::from(s),
+			crate::Literal::RegExp(regexp_string) => {
+				match treeldr::ty::data::RegExp::parse(regexp_string) {
+					Ok(regexp) => regexp,
+					Err(e) => {
+						return Err(treeldr_build::Error::new(
+							treeldr_build::error::RegExpInvalid(regexp_string.clone(), e).into(),
+							Some(loc.clone()),
+						)
+						.into())
+					}
+				}
+			}
+		};
+
+		let ty = context.get_mut(*id).unwrap().as_type_mut().unwrap();
+
+		let dt = ty.require_datatype_mut(Some(loc.clone()))?;
+		dt.set_derivation_base(Id::Iri(Term::Xsd(Xsd::String)), Some(loc.clone()))?;
+		let derived = dt.as_derived_mut().unwrap();
+		derived.restrictions_mut().insert(
+			treeldr_build::ty::data::Restriction::String(
+				treeldr_build::ty::data::restriction::String::Pattern(regexp),
+			),
+			Some(loc.clone()),
+		);
 
 		Ok(())
 	}
@@ -380,8 +408,11 @@ impl<F: Clone> LocalContext<F> {
 		};
 
 		let mut p = treeldr_build::layout::RestrictedPrimitive::new();
-		p.set_primitive(treeldr::layout::Primitive::String, Some(loc.clone()))?;
-		p.restrictions_mut().insert(treeldr_build::layout::primitive::Restriction::Pattern(regexp), Some(loc.clone()));
+		p.set_primitive(*id, treeldr::layout::Primitive::String, Some(loc.clone()))?;
+		p.restrictions_mut().insert(
+			treeldr_build::layout::primitive::Restriction::Pattern(regexp),
+			Some(loc.clone()),
+		);
 
 		context
 			.get_mut(*id)
@@ -1414,8 +1445,11 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
 				layout.set_primitive(
-					treeldr_build::layout::primitive::Restricted::unrestricted(p, Some(loc.clone())),
-					Some(loc.clone())
+					treeldr_build::layout::primitive::Restricted::unrestricted(
+						p,
+						Some(loc.clone()),
+					),
+					Some(loc.clone()),
 				)?;
 
 				Ok(Loc(id, loc))

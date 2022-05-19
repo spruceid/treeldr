@@ -1,5 +1,5 @@
 use super::Properties;
-use crate::{prop::restriction, Causes, Ref};
+use crate::{prop::restriction, Causes, Model, Ref};
 use std::collections::BTreeMap;
 
 /// Intersection type.
@@ -35,5 +35,11 @@ impl<F> Intersection<F> {
 
 	pub fn properties(&self) -> &Properties<F> {
 		&self.properties
+	}
+
+	pub fn is_datatype(&self, model: &Model<F>) -> bool {
+		self.types
+			.iter()
+			.any(|(ty_ref, _)| model.types().get(*ty_ref).unwrap().is_datatype(model))
 	}
 }

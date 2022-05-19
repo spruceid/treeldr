@@ -34,7 +34,22 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		Self::default()
 	}
 
-	pub fn define_primitive_type(
+	pub fn define_primitive_datatype(
+		&mut self,
+		id: Id,
+		primitive_type: ty::data::Primitive,
+	) -> Result<Id, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.declare_type(id, None);
+		let ty = self.get_mut(id).unwrap().as_type_mut().unwrap();
+		let dt = ty.require_datatype_mut(None)?;
+		dt.set_primitive(primitive_type, None)?;
+		Ok(id)
+	}
+
+	pub fn define_primitive_layout(
 		&mut self,
 		primitive_layout: layout::Primitive,
 	) -> Result<Id, Error<F>>
@@ -48,6 +63,15 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
 		layout.set_primitive(primitive_layout.into(), None)?;
 		Ok(id)
+	}
+
+	pub fn apply_built_in_definitions(&mut self) -> Result<(), Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.define_rdf_types()?;
+		self.define_xsd_types()?;
+		self.define_treeldr_types()
 	}
 
 	pub fn define_rdf_types(&mut self) -> Result<(), Error<F>>
@@ -87,23 +111,35 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		prop.set_range(Id::Iri(Term::Rdf(Rdf::List)), None)
 	}
 
+	pub fn define_xsd_types(&mut self) -> Result<(), Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		use vocab::{Term, Xsd};
+		self.define_primitive_datatype(
+			Id::Iri(Term::Xsd(Xsd::String)),
+			ty::data::Primitive::String,
+		)?;
+		Ok(())
+	}
+
 	pub fn define_treeldr_types(&mut self) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
 	{
 		use layout::Primitive;
-		self.define_primitive_type(Primitive::Boolean)?;
-		self.define_primitive_type(Primitive::Integer)?;
-		self.define_primitive_type(Primitive::UnsignedInteger)?;
-		self.define_primitive_type(Primitive::Float)?;
-		self.define_primitive_type(Primitive::Double)?;
-		self.define_primitive_type(Primitive::String)?;
-		self.define_primitive_type(Primitive::Time)?;
-		self.define_primitive_type(Primitive::Date)?;
-		self.define_primitive_type(Primitive::DateTime)?;
-		self.define_primitive_type(Primitive::Iri)?;
-		self.define_primitive_type(Primitive::Uri)?;
-		self.define_primitive_type(Primitive::Url)?;
+		self.define_primitive_layout(Primitive::Boolean)?;
+		self.define_primitive_layout(Primitive::Integer)?;
+		self.define_primitive_layout(Primitive::UnsignedInteger)?;
+		self.define_primitive_layout(Primitive::Float)?;
+		self.define_primitive_layout(Primitive::Double)?;
+		self.define_primitive_layout(Primitive::String)?;
+		self.define_primitive_layout(Primitive::Time)?;
+		self.define_primitive_layout(Primitive::Date)?;
+		self.define_primitive_layout(Primitive::DateTime)?;
+		self.define_primitive_layout(Primitive::Iri)?;
+		self.define_primitive_layout(Primitive::Uri)?;
+		self.define_primitive_layout(Primitive::Url)?;
 
 		Ok(())
 	}

@@ -59,17 +59,6 @@ fn generate_layout_term_definition<F>(
 			ld_context.insert(s.name().to_pascal_case(), def.into());
 		}
 		Description::Enum(_) => (),
-		Description::Literal(lit) => {
-			if let Some(ty_ref) = layout.ty() {
-				let ty = model.types().get(ty_ref).unwrap();
-
-				if !lit.should_inline() {
-					let mut def = serde_json::Map::new();
-					def.insert("@id".into(), ty.id().display(vocabulary).to_string().into());
-					ld_context.insert(lit.name().to_pascal_case(), def.into());
-				}
-			}
-		}
 		Description::Reference(_, _) => (),
 		Description::Primitive(_, _) => (),
 		Description::Set(_) => (),
@@ -144,9 +133,6 @@ fn generate_layout_context<F>(
 		Description::Enum(_) => {
 			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into())
 		}
-		Description::Literal(_) => {
-			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into())
-		}
 		Description::Reference(_, _) => context.ty = Some("@id".into()),
 		Description::Primitive(n, _) => context.ty = Some(generate_primitive_type(n)),
 		Description::Set(_) => {
@@ -183,12 +169,12 @@ fn generate_struct_context<F>(
 	Ok(json)
 }
 
-fn generate_primitive_type(n: &treeldr::layout::BoundedPrimitive) -> serde_json::Value {
+fn generate_primitive_type(n: &treeldr::layout::RestrictedPrimitive) -> serde_json::Value {
 	use treeldr::layout::Primitive;
 	match n.primitive() {
 		Primitive::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".into(),
 		Primitive::Integer => "http://www.w3.org/2001/XMLSchema#integer".into(),
-		Primitive::PositiveInteger => "http://www.w3.org/2001/XMLSchema#positiveInteger".into(),
+		Primitive::UnsignedInteger => "http://www.w3.org/2001/XMLSchema#nonNegativeInteger".into(),
 		Primitive::Float => "http://www.w3.org/2001/XMLSchema#float".into(),
 		Primitive::Double => "http://www.w3.org/2001/XMLSchema#double".into(),
 		Primitive::String => "http://www.w3.org/2001/XMLSchema#string".into(),

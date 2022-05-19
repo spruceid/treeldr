@@ -25,6 +25,14 @@ pub enum TreeLdr {
 	/// Primitive layout.
 	Primitive(Primitive),
 
+	/// Derived primitive layout.
+	#[iri("tldr:derivedFrom")]
+	DerivedFrom,
+
+	/// Primitive layout restrictions definition.
+	#[iri("tldr:withRestrictions")]
+	WithRestrictions,
+
 	/// Layout alias.
 	#[iri("tldr:alias")]
 	Alias,
@@ -95,6 +103,12 @@ pub enum TreeLdr {
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("owl" = "http://www.w3.org/2002/07/owl#")]
 pub enum Owl {
+	#[iri("owl:real")]
+	Real,
+
+	#[iri("owl:rational")]
+	Rational,
+
 	#[iri("owl:unionOf")]
 	UnionOf,
 
@@ -126,7 +140,7 @@ pub enum Owl {
 	OnDatatype,
 
 	#[iri("owl:withRestrictions")]
-	WithRestrictions
+	WithRestrictions,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -135,14 +149,17 @@ pub enum Xsd {
 	#[iri("xsd:boolean")]
 	Boolean,
 
-	#[iri("xsd:int")]
-	Int,
+	#[iri("xsd:decimal")]
+	Decimal,
 
 	#[iri("xsd:integer")]
 	Integer,
 
 	#[iri("xsd:positiveInteger")]
 	PositiveInteger,
+
+	#[iri("xsd:int")]
+	Int,
 
 	#[iri("xsd:float")]
 	Float,
@@ -161,6 +178,9 @@ pub enum Xsd {
 
 	#[iri("xsd:dateTime")]
 	DateTime,
+
+	#[iri("xsd:duration")]
+	Duration,
 
 	#[iri("xsd:anyURI")]
 	AnyUri,

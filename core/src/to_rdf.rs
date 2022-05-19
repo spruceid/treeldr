@@ -125,20 +125,232 @@ impl<F> ty::Definition<F> {
 		generator: &mut impl Generator,
 		quads: &mut Vec<StrippedQuad>,
 	) {
+		let class = if self.is_datatype(model) {
+			vocab::Rdfs::Datatype
+		} else {
+			vocab::Rdfs::Class
+		};
+
 		quads.push(Quad(
 			self.id(),
 			Term::Rdf(vocab::Rdf::Type),
-			Object::Iri(Term::Rdfs(vocab::Rdfs::Class)),
+			Object::Iri(Term::Rdfs(class)),
 			None,
 		));
 
 		match self.description() {
 			ty::Description::Empty => (),
-			ty::Description::Data(_) => todo!(),
+			ty::Description::Data(d) => d.to_rdf(self.id(), generator, quads),
 			ty::Description::Normal(_) => (),
 			ty::Description::Union(u) => u.to_rdf(model, self.id(), generator, quads),
 			ty::Description::Intersection(i) => i.to_rdf(model, self.id(), generator, quads),
 			ty::Description::Restriction(r) => r.to_rdf(model, self.id(), generator, quads),
+		}
+	}
+}
+
+impl ty::DataType {
+	pub fn to_rdf(&self, id: Id, generator: &mut impl Generator, quads: &mut Vec<StrippedQuad>) {
+		match self {
+			Self::Primitive(_) => (),
+			Self::Derived(d) => {
+				quads.push(Quad(
+					id,
+					Term::Owl(vocab::Owl::OnDatatype),
+					d.base().into_term(),
+					None,
+				));
+
+				let restrictions_id = d.restrictions().to_rdf(generator, quads);
+				quads.push(Quad(
+					id,
+					Term::Owl(vocab::Owl::WithRestrictions),
+					restrictions_id.into_term(),
+					None,
+				));
+			}
+		}
+	}
+}
+
+impl<'a> ty::data::Restrictions<'a> {
+	pub fn to_rdf(self, generator: &mut impl Generator, quads: &mut Vec<StrippedQuad>) -> Id {
+		let restrictions: Vec<_> = self
+			.map(|restriction| {
+				let id = generator.next();
+				restriction.to_rdf(id, quads);
+				id.into_term()
+			})
+			.collect();
+
+		to_rdf_list(generator, quads, restrictions)
+	}
+}
+
+impl<'a> ty::data::Restriction<'a> {
+	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		match self {
+			Self::Real(r) => r.to_rdf(id, quads),
+			Self::Float(r) => r.to_rdf(id, quads),
+			Self::Double(r) => r.to_rdf(id, quads),
+			Self::String(r) => r.to_rdf(id, quads),
+		}
+	}
+}
+
+impl<'a> ty::data::restriction::real::Restriction<'a> {
+	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		use ty::data::restriction::real::{Max, Min};
+		match self {
+			Self::Min(Min::Included(min)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinInclusive),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Min(Min::Excluded(min)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinExclusive),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Included(max)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxInclusive),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Excluded(max)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxExclusive),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+		}
+	}
+}
+
+impl ty::data::restriction::float::Restriction {
+	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		use ty::data::restriction::float::{Max, Min};
+		match self {
+			Self::Min(Min::Included(min)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinInclusive),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Min(Min::Excluded(min)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinExclusive),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Included(max)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxInclusive),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Excluded(max)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxExclusive),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+		}
+	}
+}
+
+impl ty::data::restriction::double::Restriction {
+	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		use ty::data::restriction::double::{Max, Min};
+		match self {
+			Self::Min(Min::Included(min)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinInclusive),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Min(Min::Excluded(min)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinExclusive),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Included(max)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxInclusive),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Excluded(max)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxExclusive),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+		}
+	}
+}
+
+impl<'a> ty::data::restriction::string::Restriction<'a> {
+	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		match self {
+			Self::MinLength(min) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinLength),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						Term::Xsd(vocab::Xsd::Integer),
+					)),
+					None,
+				));
+			}
+			Self::MaxLength(max) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxLength),
+					Object::Literal(Literal::TypedString(
+						max.to_string().into(),
+						Term::Xsd(vocab::Xsd::Integer),
+					)),
+					None,
+				));
+			}
+			Self::Pattern(regexp) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::Pattern),
+					Object::Literal(Literal::String(regexp.to_string().into())),
+					None,
+				));
+			}
 		}
 	}
 }
@@ -407,7 +619,7 @@ impl<F> layout::Definition<F> {
 
 		match self.description() {
 			layout::Description::Never(_) => todo!(),
-			layout::Description::Primitive(n, _) => n.to_rdf(self.id(), quads),
+			layout::Description::Primitive(n, _) => n.to_rdf(self.id(), generator, quads),
 			layout::Description::Struct(s) => s.to_rdf(model, self.id(), generator, quads),
 			layout::Description::Enum(e) => e.to_rdf(model, self.id(), generator, quads),
 			layout::Description::Array(a) => a.to_rdf(model, self.id(), quads),
@@ -493,15 +705,233 @@ impl<F> layout::Set<F> {
 	}
 }
 
-impl layout::BoundedPrimitive {
+impl layout::RestrictedPrimitive {
+	pub fn to_rdf(&self, id: Id, generator: &mut impl Generator, quads: &mut Vec<StrippedQuad>) {
+		if self.is_restricted() {
+			quads.push(Quad(
+				id,
+				Term::TreeLdr(vocab::TreeLdr::DerivedFrom),
+				self.primitive().id().into_term(),
+				None,
+			));
+
+			let restrictions_id = self.restrictions().to_rdf(generator, quads);
+			quads.push(Quad(
+				id,
+				Term::TreeLdr(vocab::TreeLdr::WithRestrictions),
+				restrictions_id.into_term(),
+				None,
+			));
+		} else {
+			match id {
+				Id::Iri(Term::TreeLdr(vocab::TreeLdr::Primitive(_))) => (),
+				_ => {
+					quads.push(Quad(
+						id,
+						Term::TreeLdr(vocab::TreeLdr::Alias),
+						self.primitive().id().into_term(),
+						None,
+					));
+				}
+			}
+		}
+	}
+}
+
+impl<'a> layout::primitive::Restrictions<'a> {
+	pub fn to_rdf(self, generator: &mut impl Generator, quads: &mut Vec<StrippedQuad>) -> Id {
+		let restrictions: Vec<_> = self
+			.map(|restriction| {
+				let id = generator.next();
+				restriction.to_rdf(id, quads);
+				id.into_term()
+			})
+			.collect();
+
+		to_rdf_list(generator, quads, restrictions)
+	}
+}
+
+impl<'a> layout::primitive::Restriction<'a> {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		match id {
-			Id::Iri(Term::TreeLdr(vocab::TreeLdr::Primitive(_))) => (),
-			_ => {
+		match self {
+			Self::Integer(r) => r.to_rdf(id, quads),
+			Self::UnsignedInteger(r) => r.to_rdf(id, quads),
+			Self::Float(r) => r.to_rdf(id, quads),
+			Self::Double(r) => r.to_rdf(id, quads),
+			Self::String(r) => r.to_rdf(id, quads),
+		}
+	}
+}
+
+impl layout::primitive::restricted::integer::Restriction {
+	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		match self {
+			Self::MinInclusive(min) => {
 				quads.push(Quad(
 					id,
-					Term::TreeLdr(vocab::TreeLdr::Alias),
-					self.primitive().id().into_term(),
+					Term::Xsd(vocab::Xsd::MinInclusive),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						Term::Xsd(vocab::Xsd::Integer),
+					)),
+					None,
+				));
+			}
+			Self::MaxInclusive(min) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxInclusive),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						Term::Xsd(vocab::Xsd::Integer),
+					)),
+					None,
+				));
+			}
+		}
+	}
+}
+
+impl layout::primitive::restricted::unsigned::Restriction {
+	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		match self {
+			Self::MinInclusive(min) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinInclusive),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						Term::Xsd(vocab::Xsd::Integer),
+					)),
+					None,
+				));
+			}
+			Self::MaxInclusive(min) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxInclusive),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						Term::Xsd(vocab::Xsd::Integer),
+					)),
+					None,
+				));
+			}
+		}
+	}
+}
+
+impl layout::primitive::restricted::float::Restriction {
+	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		use layout::primitive::restricted::float::{Max, Min};
+		match self {
+			Self::Min(Min::Included(min)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinInclusive),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Min(Min::Excluded(min)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinExclusive),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Included(max)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxInclusive),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Excluded(max)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxExclusive),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+		}
+	}
+}
+
+impl layout::primitive::restricted::double::Restriction {
+	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		use layout::primitive::restricted::double::{Max, Min};
+		match self {
+			Self::Min(Min::Included(min)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinInclusive),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Min(Min::Excluded(min)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinExclusive),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Included(max)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxInclusive),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Excluded(max)) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxExclusive),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+		}
+	}
+}
+
+impl<'a> layout::primitive::restricted::string::Restriction<'a> {
+	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		match self {
+			Self::MinLength(min) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MinLength),
+					Object::Literal(Literal::TypedString(
+						xsd_types::IntegerBuf::from(*min).into_string().into(),
+						Term::Xsd(vocab::Xsd::Integer),
+					)),
+					None,
+				));
+			}
+			Self::MaxLength(max) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::MaxLength),
+					Object::Literal(Literal::TypedString(
+						xsd_types::IntegerBuf::from(*max).into_string().into(),
+						Term::Xsd(vocab::Xsd::Integer),
+					)),
+					None,
+				));
+			}
+			Self::Pattern(regexp) => {
+				quads.push(Quad(
+					id,
+					Term::Xsd(vocab::Xsd::Pattern),
+					Object::Literal(Literal::String(regexp.to_string().into())),
 					None,
 				));
 			}

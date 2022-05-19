@@ -9,11 +9,8 @@ pub mod primitive;
 pub mod structure;
 pub mod variant;
 
-pub use primitive::{
-	Primitive,
-	Restricted as RestrictedPrimitive
-};
 pub use array::Array;
+pub use primitive::{Primitive, Restricted as RestrictedPrimitive};
 
 #[derive(Clone, Debug)]
 pub enum Description<F> {
@@ -193,9 +190,10 @@ impl<F> Description<F> {
 
 		match self {
 			Description::Never => Ok(treeldr::layout::Description::Never(name)),
-			Description::Primitive(n) => {
-				Ok(treeldr::layout::Description::Primitive(n.build(), name))
-			}
+			Description::Primitive(n) => Ok(treeldr::layout::Description::Primitive(
+				n.build(id, causes)?,
+				name,
+			)),
 			Description::Reference(layout_id) => {
 				let layout_ref = *nodes
 					.require_layout(layout_id, causes.preferred().cloned())?
@@ -305,9 +303,7 @@ impl<F: Clone + Ord> PseudoDescription<F> for Description<F> {
 	) -> Result<Self, Error<F>> {
 		match (self, other) {
 			(Self::Never, Self::Never) => Ok(Self::Never),
-			(Self::Primitive(a), Self::Primitive(b)) => {
-				Ok(Self::Primitive(a.try_unify(b)?))
-			},
+			(Self::Primitive(a), Self::Primitive(b)) => Ok(Self::Primitive(a.try_unify(id, b)?)),
 			(Self::Struct(a), Self::Struct(b)) if a == b => Ok(Self::Struct(a)),
 			(Self::Reference(a), Self::Reference(b)) if a == b => Ok(Self::Reference(a)),
 			(Self::Enum(a), Self::Enum(b)) if a == b => Ok(Self::Enum(a)),

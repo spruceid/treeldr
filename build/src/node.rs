@@ -416,6 +416,29 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 	}
 
 	#[allow(clippy::type_complexity)]
+	pub fn require_type(
+		&self,
+		cause: Option<Location<F>>,
+	) -> Result<&WithCauses<ty::Definition<F, D::Type>, F>, Error<F>>
+	where
+		F: Clone,
+	{
+		let types = self.caused_types();
+		match self.value.ty.with_causes() {
+			Some(ty) => Ok(ty),
+			None => Err(Caused::new(
+				error::NodeInvalidType {
+					id: self.id,
+					expected: Type::Type,
+					found: types,
+				}
+				.into(),
+				cause,
+			)),
+		}
+	}
+
+	#[allow(clippy::type_complexity)]
 	pub fn require_type_mut(
 		&mut self,
 		cause: Option<Location<F>>,

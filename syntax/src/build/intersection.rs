@@ -2,10 +2,11 @@ use super::{Descriptions, Error, LayoutDescription, LayoutRestrictedField, Local
 use derivative::Derivative;
 use locspan::Loc;
 use std::collections::BTreeMap;
-use treeldr::{
-	Causes, Id, MaybeSet, Vocabulary, WithCauses,
+use treeldr::{Causes, Id, MaybeSet, Vocabulary, WithCauses};
+use treeldr_build::{
+	layout::{Array, RestrictedPrimitive},
+	Context, ObjectToId,
 };
-use treeldr_build::{layout::{Array, RestrictedPrimitive}, Context, ObjectToId};
 
 mod enumeration;
 mod structure;
@@ -244,7 +245,9 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 			Some(desc) => match desc.inner() {
 				LayoutDescription::Standard(standard_desc) => match standard_desc {
 					treeldr_build::layout::Description::Never => Ok(Self::Never),
-					treeldr_build::layout::Description::Primitive(n) => Ok(Self::Primitive(n.clone())),
+					treeldr_build::layout::Description::Primitive(n) => {
+						Ok(Self::Primitive(n.clone()))
+					}
 					treeldr_build::layout::Description::Reference(r) => Ok(Self::Reference(*r)),
 					treeldr_build::layout::Description::Struct(fields_id) => Ok(Self::Struct(
 						IntersectedStruct::new(*fields_id, context, desc.causes())?,

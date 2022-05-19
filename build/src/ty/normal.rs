@@ -1,4 +1,4 @@
-use crate::{Error, context};
+use crate::{context, Error};
 use derivative::Derivative;
 use locspan::Location;
 use std::collections::HashMap;

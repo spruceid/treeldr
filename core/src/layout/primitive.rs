@@ -2,10 +2,10 @@ use crate::{vocab, Id};
 use iref_enum::IriEnum;
 use std::fmt;
 
-pub mod bounded;
+pub mod restricted;
 
-pub use bounded::Bounded;
 pub use crate::ty::data::RegExp;
+pub use restricted::{Restricted, Restriction, Restrictions};
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]

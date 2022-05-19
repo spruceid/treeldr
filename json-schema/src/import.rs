@@ -160,8 +160,7 @@ pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
 			&& schema.anchor.is_none()
 			&& schema.dynamic_anchor.is_none()
 		{
-			// TODO we may want to associate the description to the using field.
-			return Ok(primitive.id());
+			return Ok(primitive.primitive().value().unwrap().id());
 		}
 	}
 
@@ -253,24 +252,8 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 
 	if let Some(layout) = primitive_layout {
 		if schema.is_primitive() {
-			return Ok(treeldr_build::layout::Description::Primitive(layout));
+			return Ok(treeldr_build::layout::Description::Primitive(layout.into()));
 		}
-	}
-
-	if let Some(cnst) = &schema.validation.any.cnst {
-		// The presence of this key means that the schema represents a TreeLDR
-		// literal/singleton layout.
-		return Ok(treeldr_build::layout::Description::Literal(
-			cnst.to_string().into(),
-		));
-	}
-
-	if let Some(pattern) = &schema.validation.string.pattern {
-		// The presence of this key means that the schema represents a TreeLDR literal
-		// regular expression layout.
-		return Ok(treeldr_build::layout::Description::Literal(
-			pattern.to_string().into(),
-		));
 	}
 
 	match &schema.desc {
@@ -279,17 +262,37 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 			array,
 			object,
 		} => {
-			#[allow(clippy::if_same_then_else)]
 			if kind.is_number() {
 				// TODO: for now, numeric constraints are ignored.
 				Ok(treeldr_build::layout::Description::Primitive(
-					primitive_layout.unwrap(),
+					primitive_layout.unwrap().into(),
 				))
 			} else if kind.is_string() || !string.is_empty() {
-				// TODO: for now, string constraints are ignored.
-				Ok(treeldr_build::layout::Description::Primitive(
-					primitive_layout.unwrap(),
-				))
+				let mut p = treeldr_build::layout::RestrictedPrimitive::unrestricted(
+					treeldr::layout::Primitive::String,
+					None,
+				);
+
+				if let Some(cnst) = &schema.validation.any.cnst {
+					p.restrictions_mut().insert(
+						treeldr_build::layout::primitive::Restriction::Pattern(
+							cnst.to_string().into(),
+						),
+						None,
+					);
+				}
+
+				if let Some(pattern) = &schema.validation.string.pattern {
+					p.restrictions_mut().insert(
+						treeldr_build::layout::primitive::Restriction::Pattern(
+							pattern.to_string().into(),
+						),
+						None,
+					);
+				}
+
+				// TODO: for now, most string constraints are ignored.
+				Ok(treeldr_build::layout::Description::Primitive(p))
 			} else if !array.is_empty() || !schema.validation.array.is_empty() {
 				kind.refine(LayoutKind::ArrayOrSet)?;
 				import_array_schema(

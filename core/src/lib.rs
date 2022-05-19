@@ -17,8 +17,8 @@ pub mod prop;
 pub mod reporting;
 mod to_rdf;
 pub mod ty;
-pub mod value;
 pub mod utils;
+pub mod value;
 pub mod vocab;
 
 pub use cause::*;
