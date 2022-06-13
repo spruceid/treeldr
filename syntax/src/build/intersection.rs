@@ -2,7 +2,7 @@ use super::{Descriptions, Error, LayoutDescription, LayoutRestrictedField, Local
 use derivative::Derivative;
 use locspan::Loc;
 use std::collections::BTreeMap;
-use treeldr::{Causes, Id, MaybeSet, Vocabulary, WithCauses};
+use treeldr::{Causes, Id, MaybeSet, Vocabulary, WithCauses, Value};
 use treeldr_build::{
 	layout::{Array, RestrictedPrimitive},
 	Context, ObjectToId,
@@ -37,6 +37,7 @@ pub enum IntersectedLayoutDescription<F> {
 	Struct(IntersectedStruct<F>),
 	Reference(Id),
 	Enum(IntersectedEnum<F>),
+	Singleton(Value),
 	Set(Id),
 	Array(Array<F>),
 	Alias(Id),
@@ -255,6 +256,9 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 					treeldr_build::layout::Description::Enum(variants_id) => Ok(Self::Enum(
 						IntersectedEnum::new(*variants_id, context, desc.causes())?,
 					)),
+					treeldr_build::layout::Description::Singleton(value) => Ok(Self::Singleton(
+						value.clone()
+					)),
 					treeldr_build::layout::Description::Set(s) => Ok(Self::Set(*s)),
 					treeldr_build::layout::Description::Array(a) => Ok(Self::Array(a.clone())),
 					treeldr_build::layout::Description::Alias(a) => Ok(Self::Alias(*a)),
@@ -341,6 +345,10 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 					IntersectedLayout::from_parts(other_ids, WithCauses::new(other, other_causes)),
 					context,
 				),
+				Self::Singleton(a) => match other {
+					Self::Singleton(b) if a == b => Ok(Self::Singleton(a)),
+					_ => Ok(Self::Never)
+				}
 				Self::Set(a) => match other {
 					Self::Set(b) if a == b => Ok(Self::Set(a)),
 					_ => Ok(Self::Never),
@@ -396,6 +404,7 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 			Self::Reference(r) => Ok(treeldr_build::layout::Description::Reference(r)),
 			Self::Struct(s) => s.into_standard_description(source, target, vocabulary),
 			Self::Enum(e) => e.into_standard_description(source, target, vocabulary),
+			Self::Singleton(v) => Ok(treeldr_build::layout::Description::Singleton(v)),
 			Self::Set(s) => Ok(treeldr_build::layout::Description::Set(s)),
 			Self::Array(a) => Ok(treeldr_build::layout::Description::Array(a)),
 			Self::Alias(a) => Ok(treeldr_build::layout::Description::Alias(a)),

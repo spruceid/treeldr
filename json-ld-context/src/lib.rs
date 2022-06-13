@@ -59,6 +59,7 @@ fn generate_layout_term_definition<F>(
 			ld_context.insert(s.name().to_pascal_case(), def.into());
 		}
 		Description::Enum(_) => (),
+		Description::Singleton(_) => (),
 		Description::Reference(_, _) => (),
 		Description::Primitive(_, _) => (),
 		Description::Set(_) => (),
@@ -131,6 +132,9 @@ fn generate_layout_context<F>(
 			}
 		}
 		Description::Enum(_) => {
+			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into())
+		}
+		Description::Singleton(_) => {
 			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into())
 		}
 		Description::Reference(_, _) => context.ty = Some("@id".into()),

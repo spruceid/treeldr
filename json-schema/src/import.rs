@@ -312,98 +312,135 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 				kind.refine(LayoutKind::Struct)?;
 			}
 
-			match kind {
-				LayoutKind::Unknown => todo!(),
-				LayoutKind::Boolean => {
-					todo!()
-				}
-				LayoutKind::Number | LayoutKind::Integer => {
-					if schema.validation.numeric.is_empty() {
-						Ok(treeldr_build::layout::Description::Primitive(
-							primitive_layout.unwrap().into(),
+			if let Some(_enm) = &schema.validation.any.enm {
+				todo!()
+			} else if let Some(cnst) = &schema.validation.any.cnst {
+				let value = match cnst {
+					serde_json::Value::Null => todo!(),
+					serde_json::Value::Bool(b) => {
+						kind.refine(LayoutKind::Boolean)?;
+						treeldr::Value::Literal(treeldr::value::Literal::Boolean(*b))
+					},
+					serde_json::Value::Number(n) => {
+						kind.refine(LayoutKind::Number)?;
+						let lexical = xsd_types::DecimalBuf::new(n.to_string()).unwrap();
+						treeldr::Value::Literal(treeldr::value::Literal::Numeric(
+							treeldr::value::Decimal::from_lexical(&lexical).into()
 						))
-					} else {
-						use treeldr_build::layout::primitive::{restriction::Numeric, Restriction};
+					}
+					serde_json::Value::String(s) => {
+						kind.refine(LayoutKind::String)?;
+						treeldr::Value::Literal(treeldr::value::Literal::String(s.clone()))
+					}
+					serde_json::Value::Array(_) => {
+						kind.refine(LayoutKind::Array)?;
+						todo!()
+					},
+					serde_json::Value::Object(_) => {
+						kind.refine(LayoutKind::Struct)?;
+						todo!()
+					}
+				};
 
-						let primitive = primitive_layout.unwrap();
-						let mut restricted =
-							treeldr_build::layout::primitive::Restricted::unrestricted(
-								primitive, None,
-							);
+				Ok(treeldr_build::layout::Description::Singleton(value))
+			} else {
+				match kind {
+					LayoutKind::Unknown => todo!(),
+					LayoutKind::Boolean => {
+						todo!()
+					}
+					LayoutKind::Number | LayoutKind::Integer => {
+						if schema.validation.numeric.is_empty() {
+							Ok(treeldr_build::layout::Description::Primitive(
+								primitive_layout.unwrap().into(),
+							))
+						} else {
+							use treeldr_build::layout::primitive::{restriction::Numeric, Restriction};
+	
+							let primitive = primitive_layout.unwrap();
+							let mut restricted =
+								treeldr_build::layout::primitive::Restricted::unrestricted(
+									primitive, None,
+								);
+							let restrictions = restricted.restrictions_mut();
+	
+							if let Some(min) = &schema.validation.numeric.minimum {
+								restrictions.insert(
+									Restriction::Numeric(Numeric::InclusiveMinimum(into_numeric(
+										primitive, min,
+									))),
+									None,
+								)
+							}
+	
+							if let Some(min) = &schema.validation.numeric.exclusive_minimum {
+								restrictions.insert(
+									Restriction::Numeric(Numeric::ExclusiveMinimum(into_numeric(
+										primitive, min,
+									))),
+									None,
+								)
+							}
+	
+							if let Some(max) = &schema.validation.numeric.maximum {
+								restrictions.insert(
+									Restriction::Numeric(Numeric::InclusiveMaximum(into_numeric(
+										primitive, max,
+									))),
+									None,
+								)
+							}
+	
+							if let Some(max) = &schema.validation.numeric.exclusive_maximum {
+								restrictions.insert(
+									Restriction::Numeric(Numeric::ExclusiveMaximum(into_numeric(
+										primitive, max,
+									))),
+									None,
+								)
+							}
+	
+							if let Some(_k) = &schema.validation.numeric.multiple_of {
+								log::warn!("ignored unsupported property <https://www.w3.org/2019/wot/json-schema#multipleOf>")
+							}
+	
+							Ok(treeldr_build::layout::Description::Primitive(restricted))
+						}
+					}
+					LayoutKind::String => {
+						use treeldr_build::layout::primitive::{restriction::String, Restriction};
+	
+						let mut restricted = treeldr_build::layout::RestrictedPrimitive::unrestricted(
+							treeldr::layout::Primitive::String,
+							None,
+						);
 						let restrictions = restricted.restrictions_mut();
-
-						if let Some(min) = &schema.validation.numeric.minimum {
-							restrictions.insert(
-								Restriction::Numeric(Numeric::InclusiveMinimum(into_numeric(
-									primitive, min,
-								))),
-								None,
-							)
+	
+						if let Some(_m) = &schema.validation.string.min_length {
+							log::warn!("ignored unsupported property <https://www.w3.org/2019/wot/json-schema#minLength>")
 						}
-
-						if let Some(min) = &schema.validation.numeric.exclusive_minimum {
-							restrictions.insert(
-								Restriction::Numeric(Numeric::ExclusiveMinimum(into_numeric(
-									primitive, min,
-								))),
-								None,
-							)
+	
+						if let Some(_m) = &schema.validation.string.max_length {
+							log::warn!("ignored unsupported property <https://www.w3.org/2019/wot/json-schema#maxLength>")
 						}
-
-						if let Some(max) = &schema.validation.numeric.maximum {
+	
+						if let Some(pattern) = &schema.validation.string.pattern {
 							restrictions.insert(
-								Restriction::Numeric(Numeric::InclusiveMaximum(into_numeric(
-									primitive, max,
-								))),
+								Restriction::String(String::Pattern(pattern.to_string().into())),
 								None,
-							)
+							);
 						}
-
-						if let Some(max) = &schema.validation.numeric.exclusive_maximum {
-							restrictions.insert(
-								Restriction::Numeric(Numeric::ExclusiveMaximum(into_numeric(
-									primitive, max,
-								))),
-								None,
-							)
-						}
-
+	
 						Ok(treeldr_build::layout::Description::Primitive(restricted))
 					}
-				}
-				LayoutKind::String => {
-					use treeldr_build::layout::primitive::{restriction::String, Restriction};
-
-					let mut restricted = treeldr_build::layout::RestrictedPrimitive::unrestricted(
-						treeldr::layout::Primitive::String,
-						None,
-					);
-					let restrictions = restricted.restrictions_mut();
-
-					if let Some(cnst) = &schema.validation.any.cnst {
-						restrictions.insert(
-							Restriction::String(String::Pattern(cnst.to_string().into())),
-							None,
-						);
+					LayoutKind::ArrayOrSet | LayoutKind::Array | LayoutKind::Set => {
+						import_array_schema(
+							schema, false, array, &mut kind, base_iri, context, vocabulary,
+						)
 					}
-
-					if let Some(pattern) = &schema.validation.string.pattern {
-						restrictions.insert(
-							Restriction::String(String::Pattern(pattern.to_string().into())),
-							None,
-						);
+					LayoutKind::Struct => {
+						import_object_schema(schema, false, object, base_iri, context, vocabulary)
 					}
-
-					// TODO: for now, most string constraints are ignored.
-					Ok(treeldr_build::layout::Description::Primitive(restricted))
-				}
-				LayoutKind::ArrayOrSet | LayoutKind::Array | LayoutKind::Set => {
-					import_array_schema(
-						schema, false, array, &mut kind, base_iri, context, vocabulary,
-					)
-				}
-				LayoutKind::Struct => {
-					import_object_schema(schema, false, object, base_iri, context, vocabulary)
 				}
 			}
 		}
@@ -426,8 +463,37 @@ fn import_array_schema<F: Clone + Ord, D: Descriptions<F>>(
 		None => todo!(),
 	};
 
+	if array.prefix_items.is_some() {
+		log::warn!("ignored unsupported property `prefix_items`")
+	}
+
+	if array.contains.is_some() {
+		log::warn!("ignored unsupported property `contains`");
+
+		if schema.validation.array.min_contains.is_some() {
+			log::warn!("ignored unsupported property `min_contains`")
+		}
+	
+		if schema.validation.array.max_contains.is_some() {
+			log::warn!("ignored unsupported property `max_contains`")
+		}
+	}
+
+	if array.unevaluated_items.is_some() {
+		log::warn!("ignored unsupported property `unevaluated_items`")
+	}
+
+	if schema.validation.array.min_items.is_some() {
+		log::warn!("ignored unsupported property <https://www.w3.org/2019/wot/json-schema#minItems>")
+	}
+
+	if schema.validation.array.max_items.is_some() {
+		log::warn!("ignored unsupported property <https://www.w3.org/2019/wot/json-schema#maxItems>")
+	}
+
 	if matches!(schema.validation.array.unique_items, Some(true)) {
 		kind.refine(LayoutKind::Set)?;
+
 		Ok(treeldr_build::layout::Description::Set(item_type))
 	} else {
 		kind.refine(LayoutKind::Array)?;

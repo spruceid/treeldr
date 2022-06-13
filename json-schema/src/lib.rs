@@ -146,6 +146,9 @@ fn generate_layout_schema<F>(
 		Description::Enum(enm) => {
 			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
+		Description::Singleton(s) => {
+			generate_singleton_type(vocabulary, s)
+		}
 		Description::Primitive(n, _) => Ok(generate_primitive_type(n)),
 		Description::Set(s) => {
 			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
@@ -289,6 +292,9 @@ fn generate_layout_ref<F>(
 		Description::Enum(enm) => {
 			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
+		Description::Singleton(s) => {
+			generate_singleton_type(vocabulary, s)
+		}
 		Description::Primitive(n, _) => Ok(generate_primitive_type(n)),
 		Description::Set(s) => {
 			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
@@ -304,6 +310,24 @@ fn generate_layout_ref<F>(
 				layout.id().display(vocabulary).to_string().into(),
 			);
 			Ok(json.into())
+		}
+	}
+}
+
+fn generate_value(vocabulary: &Vocabulary, value: &treeldr::Value) -> serde_json::Value {
+	match value {
+		treeldr::Value::Node(id) => id.display(vocabulary).to_string().into(),
+		treeldr::Value::Literal(l) => match l {
+			treeldr::value::Literal::Boolean(b) => (*b).into(),
+			treeldr::value::Literal::Numeric(n) => match n {
+				treeldr::value::Real::Rational(r) => {
+					let lexical = r.to_string();
+					serde_json::Value::Number(lexical.parse().unwrap())
+				}
+			}
+			treeldr::value::Literal::String(s) => {
+				s.clone().into()
+			}
 		}
 	}
 }
@@ -356,6 +380,15 @@ fn generate_enum_type<F>(
 
 	def.insert("oneOf".into(), variants.into());
 
+	Ok(def.into())
+}
+
+fn generate_singleton_type<F>(
+	vocabulary: &Vocabulary,
+	s: &layout::Singleton<F>,
+) -> Result<serde_json::Value, Error<F>> {
+	let mut def = serde_json::Map::new();
+	def.insert("const".into(), generate_value(vocabulary, s.value()));
 	Ok(def.into())
 }
 

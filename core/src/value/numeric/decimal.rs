@@ -21,6 +21,11 @@ impl Decimal {
 		Self(r)
 	}
 
+	pub fn from_lexical(d: &xsd_types::Decimal) -> Self {
+		use std::str::FromStr;
+		Self(num::BigRational::from_str(d).unwrap().into())
+	}
+
 	pub fn is_zero(&self) -> bool {
 		self.0.is_zero()
 	}

@@ -21,7 +21,8 @@ impl KindName for Kind {
 			Self::Normal => "a normal type",
 			Self::Union => "an union",
 			Self::Intersection => "an intersection",
-			Self::Restriction => "a restriction"
+			Self::Restriction => "a restriction",
+			Self::Enumeration => "an enumeration"
 		}
 	}
 }

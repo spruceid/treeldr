@@ -6,6 +6,7 @@ pub mod normal;
 pub mod properties;
 pub mod restriction;
 mod r#union;
+mod enumeration;
 
 pub use data::DataType;
 pub use intersection::Intersection;
@@ -13,6 +14,7 @@ pub use normal::Normal;
 pub use properties::{Properties, PseudoProperty};
 pub use restriction::Restriction;
 pub use union::Union;
+pub use enumeration::Enumeration;
 
 /// Type definition.
 pub struct Definition<F> {
@@ -34,6 +36,7 @@ pub enum Description<F> {
 	Union(Union<F>),
 	Intersection(Intersection<F>),
 	Restriction(Restriction<F>),
+	Enumeration(Enumeration<F>)
 }
 
 impl<F> Description<F> {
@@ -45,6 +48,7 @@ impl<F> Description<F> {
 			Self::Union(_) => Kind::Union,
 			Self::Intersection(_) => Kind::Intersection,
 			Self::Restriction(_) => Kind::Restriction,
+			Self::Enumeration(_) => Kind::Enumeration
 		}
 	}
 
@@ -53,6 +57,7 @@ impl<F> Description<F> {
 			Self::Data(_) => true,
 			Self::Union(u) => u.is_datatype(model),
 			Self::Intersection(i) => i.is_datatype(model),
+			Self::Enumeration(e) => e.is_datatype(),
 			_ => false,
 		}
 	}
@@ -66,6 +71,7 @@ pub enum Kind {
 	Union,
 	Intersection,
 	Restriction,
+	Enumeration
 }
 
 impl<F> Definition<F> {
@@ -106,6 +112,7 @@ impl<F> Definition<F> {
 			Description::Union(u) => Some(u.properties()),
 			Description::Intersection(i) => Some(i.properties()),
 			Description::Restriction(r) => Some(r.properties()),
+			Description::Enumeration(_) => None
 		}
 	}
 

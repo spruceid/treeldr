@@ -154,3 +154,67 @@ impl<F: Clone> ObjectToId<F> for vocab::Object<F> {
 		}
 	}
 }
+
+pub trait ObjectToValue<F> {
+	fn into_value(self, cause: Option<&locspan::Location<F>>) -> Result<treeldr::Value, Error<F>>;
+}
+
+impl<F: Clone> ObjectToValue<F> for vocab::Object<F> {
+	fn into_value(self, cause: Option<&locspan::Location<F>>) -> Result<treeldr::Value, Error<F>> {
+		match self {
+			vocab::Object::Literal(lit) => {
+				let lit = match lit {
+					vocab::Literal::String(s) => treeldr::value::Literal::String(s.into_value().into()),
+					vocab::Literal::TypedString(s, ty) => {
+						match ty.into_value() {
+							vocab::Term::Xsd(vocab::Xsd::Boolean) => {
+								if s.as_ref() == "true" {
+									treeldr::value::Literal::Boolean(true)
+								} else if s.as_ref() == "false" {
+									treeldr::value::Literal::Boolean(false)
+								} else {
+									todo!("invalid boolean")
+								}
+							}
+							vocab::Term::Owl(vocab::Owl::Rational) => {
+								todo!()
+							}
+							vocab::Term::Xsd(vocab::Xsd::Decimal) => {
+								todo!()
+							}
+							vocab::Term::Xsd(vocab::Xsd::Integer) => {
+								todo!()
+							}
+							vocab::Term::Xsd(vocab::Xsd::NonNegativeInteger) => {
+								todo!()
+							}
+							vocab::Term::Xsd(vocab::Xsd::PositiveInteger) => {
+								todo!()
+							}
+							vocab::Term::Xsd(vocab::Xsd::Float) => {
+								todo!()
+							}
+							vocab::Term::Xsd(vocab::Xsd::Double) => {
+								todo!()
+							}
+							vocab::Term::Xsd(vocab::Xsd::String) => {
+								todo!()
+							}
+							ty => {
+								treeldr::value::Literal::Unknown(s.into_value(), ty)
+							}
+						}
+					}
+					vocab::Literal::LangString(s, _lang) => {
+						// TODO do not ignore lang tag.
+						treeldr::value::Literal::String(s.into_value().into())
+					}
+				};
+
+				Ok(treeldr::Value::Literal(lit))
+			},
+			vocab::Object::Iri(id) => Ok(treeldr::Value::Node(vocab::Id::Iri(id))),
+			vocab::Object::Blank(id) => Ok(treeldr::Value::Node(vocab::Id::Blank(id))),
+		}
+	}
+}

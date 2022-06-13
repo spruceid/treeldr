@@ -337,13 +337,31 @@ impl<F: Clone> LocalContext<F> {
 				.set_type(*id, Some(loc.clone()))?;
 		}
 
-		let regexp = match lit {
-			crate::Literal::String(s) => treeldr::ty::data::RegExp::from(s),
+		let ty = context.get_mut(*id).unwrap().as_type_mut().unwrap();
+
+		match lit {
+			crate::Literal::String(s) => {
+				// treeldr::ty::data::RegExp::from(s);
+				ty.declare_enumeration();
+				Ok(())
+			},
 			crate::Literal::RegExp(regexp_string) => {
 				match treeldr::ty::data::RegExp::parse(regexp_string) {
-					Ok(regexp) => regexp,
+					Ok(regexp) => {
+						let dt = ty.require_datatype_mut(Some(loc.clone()))?;
+						dt.set_derivation_base(Id::Iri(Term::Xsd(Xsd::String)), Some(loc.clone()))?;
+						let derived = dt.as_derived_mut().unwrap();
+						derived.restrictions_mut().insert(
+							treeldr_build::ty::data::Restriction::String(
+								treeldr_build::ty::data::restriction::String::Pattern(regexp),
+							),
+							Some(loc.clone()),
+						);
+
+						Ok(())
+					},
 					Err(e) => {
-						return Err(treeldr_build::Error::new(
+						Err(treeldr_build::Error::new(
 							treeldr_build::error::RegExpInvalid(regexp_string.clone(), e).into(),
 							Some(loc.clone()),
 						)
@@ -351,21 +369,7 @@ impl<F: Clone> LocalContext<F> {
 					}
 				}
 			}
-		};
-
-		let ty = context.get_mut(*id).unwrap().as_type_mut().unwrap();
-
-		let dt = ty.require_datatype_mut(Some(loc.clone()))?;
-		dt.set_derivation_base(Id::Iri(Term::Xsd(Xsd::String)), Some(loc.clone()))?;
-		let derived = dt.as_derived_mut().unwrap();
-		derived.restrictions_mut().insert(
-			treeldr_build::ty::data::Restriction::String(
-				treeldr_build::ty::data::restriction::String::Pattern(regexp),
-			),
-			Some(loc.clone()),
-		);
-
-		Ok(())
+		}
 	}
 
 	pub fn generate_literal_layout(

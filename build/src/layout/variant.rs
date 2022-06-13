@@ -1,6 +1,6 @@
 use crate::{error, Context, Descriptions, Error};
 use locspan::Location;
-use treeldr::{Caused, Documentation, Id, MaybeSet, Name, Vocabulary, WithCauses};
+use treeldr::{Caused, Documentation, Id, MaybeSet, Name, Vocabulary, WithCauses, Value};
 
 /// Layout field definition.
 #[derive(Clone)]
@@ -8,6 +8,7 @@ pub struct Definition<F> {
 	id: Id,
 	name: MaybeSet<Name, F>,
 	layout: MaybeSet<Id, F>,
+	value: MaybeSet<Value, F>
 }
 
 impl<F> Definition<F> {
@@ -16,6 +17,7 @@ impl<F> Definition<F> {
 			id,
 			name: MaybeSet::default(),
 			layout: MaybeSet::default(),
+			value: MaybeSet::default()
 		}
 	}
 
@@ -139,6 +141,18 @@ impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
 				Ok(**nodes.require_layout(layout_id, causes.preferred().cloned())?)
 			})?;
 
-		Ok(treeldr::layout::Variant::new(name, layout, label, doc))
+		let payload = match layout.unwrap() {
+			None => treeldr::layout::enumeration::VariantPayload::None(self.value.clone()),
+			Some(layout) => {
+				match self.value.with_causes() {
+					Some(_value) => todo!(),
+					None => {
+						treeldr::layout::enumeration::VariantPayload::Some(layout)
+					}
+				}
+			}
+		};
+
+		Ok(treeldr::layout::Variant::new(name, payload, label, doc))
 	}
 }

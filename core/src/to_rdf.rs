@@ -1,6 +1,6 @@
-use crate::{layout, prop, ty, vocab, Documentation, Id, Model, Ref};
+use crate::{layout, prop, ty, vocab, Documentation, Id, Model, Ref, value, Value};
 use rdf_types::{Literal, Object, Quad};
-use vocab::{StrippedObject, StrippedQuad, Term};
+use vocab::{StrippedObject, StrippedLiteral, StrippedQuad, Term};
 
 pub trait Generator {
 	fn next(&mut self) -> Id;
@@ -118,6 +118,39 @@ where
 	head
 }
 
+impl Value {
+	pub fn to_rdf(&self) -> StrippedObject {
+		match self {
+			Self::Node(Id::Iri(iri)) => Object::Iri(*iri),
+			Self::Node(Id::Blank(id)) => Object::Blank(*id),
+			Self::Literal(l) => Object::Literal(l.to_rdf())
+		}
+	}
+}
+
+impl value::Literal {
+	pub fn to_rdf(&self) -> StrippedLiteral {
+		match self {
+			Self::Numeric(r) => r.literal(),
+			Self::String(s) => {
+				StrippedLiteral::String(s.clone().into())
+			}
+			Self::Boolean(b) => {
+				StrippedLiteral::TypedString(
+					if *b { "true" } else { "false" }.to_string().into(),
+					Term::Xsd(vocab::Xsd::Boolean)
+				)
+			}
+			Self::Unknown(lit, ty) => {
+				StrippedLiteral::TypedString(
+					lit.clone(),
+					*ty
+				)
+			}
+		}
+	}
+}
+
 impl<F> ty::Definition<F> {
 	pub fn to_rdf(
 		&self,
@@ -145,6 +178,7 @@ impl<F> ty::Definition<F> {
 			ty::Description::Union(u) => u.to_rdf(model, self.id(), generator, quads),
 			ty::Description::Intersection(i) => i.to_rdf(model, self.id(), generator, quads),
 			ty::Description::Restriction(r) => r.to_rdf(model, self.id(), generator, quads),
+			ty::Description::Enumeration(e) => e.to_rdf(self.id(), generator, quads)
 		}
 	}
 }
@@ -443,6 +477,27 @@ impl<F> ty::Restriction<F> {
 	}
 }
 
+impl<F> ty::Enumeration<F> {
+	pub fn to_rdf(&self, id: Id, generator: &mut impl Generator, quads: &mut Vec<StrippedQuad>) {
+		let values: Vec<_> = self
+			.values()
+			.iter()
+			.map(|(value, _)| {
+				value.to_rdf()
+			})
+			.collect();
+
+		let list_id = to_rdf_list(generator, quads, values);
+
+		quads.push(Quad(
+			id,
+			Term::Owl(vocab::Owl::OneOf),
+			list_id.into_term(),
+			None,
+		))
+	}
+}
+
 impl<F> prop::Restriction<F> {
 	pub fn to_rdf(
 		&self,
@@ -622,6 +677,7 @@ impl<F> layout::Definition<F> {
 			layout::Description::Primitive(n, _) => n.to_rdf(self.id(), generator, quads),
 			layout::Description::Struct(s) => s.to_rdf(model, self.id(), generator, quads),
 			layout::Description::Enum(e) => e.to_rdf(model, self.id(), generator, quads),
+			layout::Description::Singleton(s) => s.to_rdf(self.id(), quads),
 			layout::Description::Array(a) => a.to_rdf(model, self.id(), quads),
 			layout::Description::Set(s) => s.to_rdf(model, self.id(), quads),
 			layout::Description::Reference(layout_ref, _) => {
@@ -1094,5 +1150,20 @@ impl<F> layout::Variant<F> {
 		self.documentation().to_rdf(id, quads);
 
 		id
+	}
+}
+
+impl<F> layout::Singleton<F> {
+	pub fn to_rdf(
+		&self,
+		id: Id,
+		quads: &mut Vec<StrippedQuad>,
+	) {
+		quads.push(Quad(
+			id,
+			Term::TreeLdr(vocab::TreeLdr::Singleton),
+			self.value().to_rdf(),
+			None,
+		))
 	}
 }
