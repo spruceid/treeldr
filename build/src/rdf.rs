@@ -196,6 +196,9 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 					let Loc(types_id, types_loc) = expect_id(object)?;
 					ty.declare_intersection(types_id, Some(types_loc))?
 				}
+				Term::Owl(vocab::Owl::OneOf) => {
+					todo!()
+				}
 				Term::Owl(vocab::Owl::OnDatatype) => {
 					todo!()
 				}
@@ -246,28 +249,13 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_deref_to(target_id, Some(loc))?
 				}
-				// Term::TreeLdr(vocab::TreeLdr::Singleton) => {
-				// 	let Loc(string, _) = expect_raw_string(object)?;
-				// 	let layout = context.require_layout_mut(id, Some(id_loc))?;
-				// 	layout.set_literal(string.into(), Some(loc))?
-				// }
-				// Term::TreeLdr(vocab::TreeLdr::Matches) => {
-				// 	let Loc(regexp_string, regexp_loc) = expect_raw_string(object)?;
-				// 	let regexp = treeldr::layout::literal::RegExp::parse(&regexp_string).map_err(
-				// 		move |e| {
-				// 			Error::new(
-				// 				error::RegExpInvalid(regexp_string.into(), e).into(),
-				// 				Some(regexp_loc),
-				// 			)
-				// 		},
-				// 	)?;
-				// 	let layout = context.require_layout_mut(id, Some(id_loc))?;
-				// 	layout.set_literal(regexp, Some(loc))?
-				// }
 				Term::TreeLdr(vocab::TreeLdr::DerivedFrom) => {
 					todo!()
 				}
 				Term::TreeLdr(vocab::TreeLdr::WithRestrictions) => {
+					todo!()
+				}
+				Term::TreeLdr(vocab::TreeLdr::Singleton) => {
 					todo!()
 				}
 				Term::TreeLdr(vocab::TreeLdr::Enumeration) => {

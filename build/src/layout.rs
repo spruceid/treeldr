@@ -1,12 +1,10 @@
 use crate::{error, utils::TryCollect, Context, Descriptions, Error, ObjectToId};
 use locspan::Location;
-use treeldr::{Caused, Causes, Id, MaybeSet, Name, Vocabulary, WithCauses};
+use treeldr::{Caused, Causes, Id, MaybeSet, Name, Vocabulary, WithCauses, Value};
 
 pub mod array;
-pub mod enumeration;
 pub mod field;
 pub mod primitive;
-pub mod structure;
 pub mod variant;
 
 pub use array::Array;
@@ -19,6 +17,7 @@ pub enum Description<F> {
 	Struct(Id),
 	Reference(Id),
 	Enum(Id),
+	Singleton(Value),
 	Set(Id),
 	Array(Array<F>),
 	Alias(Id),
@@ -32,6 +31,7 @@ pub enum Kind {
 	Literal,
 	Struct,
 	Enum,
+	Singleton,
 	Set,
 	Array,
 	Alias,
@@ -45,6 +45,7 @@ impl<F> Description<F> {
 			Self::Struct(_) => Kind::Struct,
 			Self::Primitive(n) => Kind::Primitive(n.primitive().value().cloned()),
 			Self::Enum(_) => Kind::Enum,
+			Self::Singleton(_) => Kind::Singleton,
 			Self::Set(_) => Kind::Set,
 			Self::Array(_) => Kind::Array,
 			Self::Alias(_) => Kind::Alias,
@@ -247,6 +248,12 @@ impl<F> Description<F> {
 
 				let enm = treeldr::layout::Enum::new(name, variants);
 				Ok(treeldr::layout::Description::Enum(enm))
+			}
+			Description::Singleton(value) => {
+				let name = require_name(id, name, causes)?;
+				Ok(treeldr::layout::Description::Singleton(
+					treeldr::layout::Singleton::new(name, WithCauses::new(value, causes.clone()))
+				))
 			}
 			Description::Set(item_layout_id) => {
 				let item_layout_ref = *nodes

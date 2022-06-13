@@ -63,6 +63,10 @@ pub enum TreeLdr {
 	#[iri("tldr:derefTo")]
 	DerefTo,
 
+	/// Singleton layout.
+	#[iri("tldr:singleton")]
+	Singleton,
+
 	/// Enumeration layout.
 	///
 	/// Declares that a layout is an enumeration, and what list defined the
@@ -114,6 +118,9 @@ pub enum Owl {
 
 	#[iri("owl:intersectionOf")]
 	IntersectionOf,
+
+	#[iri("owl:oneOf")]
+	OneOf,
 
 	#[iri("owl:Restriction")]
 	Restriction,

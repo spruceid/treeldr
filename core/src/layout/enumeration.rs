@@ -1,4 +1,4 @@
-use crate::{Causes, Documentation, MaybeSet, Name, Ref, WithCauses};
+use crate::{Causes, Documentation, MaybeSet, Name, Ref, WithCauses, Value};
 use locspan::Location;
 
 /// Enum layout.
@@ -63,14 +63,14 @@ impl<F> Enum<F> {
 #[derive(Clone)]
 pub struct Variant<F> {
 	name: WithCauses<Name, F>,
-	layout: MaybeSet<Ref<super::Definition<F>>, F>,
+	payload: VariantPayload<F>,
 	label: Option<String>,
 	doc: Documentation,
 }
 
 pub struct VariantParts<F> {
 	pub name: WithCauses<Name, F>,
-	pub layout: MaybeSet<Ref<super::Definition<F>>, F>,
+	pub payload: VariantPayload<F>,
 	pub label: Option<String>,
 	pub doc: Documentation,
 }
@@ -78,13 +78,13 @@ pub struct VariantParts<F> {
 impl<F> Variant<F> {
 	pub fn new(
 		name: WithCauses<Name, F>,
-		layout: MaybeSet<Ref<super::Definition<F>>, F>,
+		payload: VariantPayload<F>,
 		label: Option<String>,
 		doc: Documentation,
 	) -> Self {
 		Self {
 			name,
-			layout,
+			payload,
 			label,
 			doc,
 		}
@@ -93,7 +93,7 @@ impl<F> Variant<F> {
 	pub fn into_parts(self) -> VariantParts<F> {
 		VariantParts {
 			name: self.name,
-			layout: self.layout,
+			payload: self.payload,
 			label: self.label,
 			doc: self.doc,
 		}
@@ -108,7 +108,7 @@ impl<F> Variant<F> {
 	}
 
 	pub fn layout(&self) -> Option<Ref<super::Definition<F>>> {
-		self.layout.value().cloned()
+		self.payload.layout()
 	}
 
 	pub fn documentation(&self) -> &Documentation {
@@ -132,24 +132,23 @@ impl<'a, F> Iterator for ComposingLayouts<'a, F> {
 	}
 }
 
-// pub struct Fields<'a, F> {
-// 	variants: std::slice::Iter<'a, WithCauses<Ref<super::Definition<F>>, F>>,
-// 	current_fields: Option<std::slice::Iter<'a, Field<F>>>,
-// }
+#[derive(Clone)]
+pub enum VariantPayload<F> {
+	/// No payload.
+	/// 
+	/// In this case, the variant may optionally be bound
+	/// to an RDF value it represents.
+	None(MaybeSet<Value, F>),
 
-// impl<'a, F> Iterator for Fields<'a, F> {
-// 	type Item = &'a Field<F>;
+	/// Some payload with a given layout.
+	Some(WithCauses<Ref<super::Definition<F>>, F>)
+}
 
-// 	fn next(&mut self) -> Option<Self::Item> {
-// 		loop {
-// 			match self.current_fields.as_mut().map(Iterator::next) {
-// 				Some(Some(item)) => break Some(item),
-// 				Some(None) => self.current_fields = None,
-// 				None => match self.variants.next() {
-// 					Some(variant) => self.current_fields = Some(variant.fields().iter()),
-// 					None => break None,
-// 				},
-// 			}
-// 		}
-// 	}
-// }
+impl<F> VariantPayload<F> {
+	pub fn layout(&self) -> Option<Ref<super::Definition<F>>> {
+		match self {
+			Self::None(_) => None,
+			Self::Some(layout) => Some(layout.inner().clone())
+		}
+	}
+}

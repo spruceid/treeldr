@@ -28,6 +28,9 @@ pub enum Description<F> {
 
 	/// Property restriction.
 	Restriction(Restriction<F>),
+
+	/// Enumeration.
+	Enumeration(Id)
 }
 
 impl<F: Clone + Ord> Description<F> {
@@ -38,6 +41,7 @@ impl<F: Clone + Ord> Description<F> {
 			Self::Union(_) => Kind::Union,
 			Self::Intersection(_) => Kind::Intersection,
 			Self::Restriction(_) => Kind::Restriction,
+			Self::Enumeration(_) => Kind::Enumeration
 		}
 	}
 
@@ -151,6 +155,32 @@ impl<F: Clone + Ord> Description<F> {
 				}
 			}
 			Description::Restriction(r) => r.build(nodes)?,
+			Description::Enumeration(values_id) => {
+				use std::collections::btree_map::Entry;
+				use crate::ObjectToValue;
+				let mut values = BTreeMap::new();
+
+				let items = nodes
+					.require_list(values_id, causes.preferred().cloned())?
+					.iter(nodes);
+				for item in items {
+					let (object, causes) = item?.clone().into_parts();
+					let value = object.into_value(causes.preferred())?;
+
+					match values.entry(value) {
+						Entry::Vacant(entry) => {
+							entry.insert(causes);
+						}
+						Entry::Occupied(mut entry) => {
+							entry.get_mut().extend(causes);
+						}
+					}
+				}
+
+				treeldr::ty::Description::Enumeration(
+					treeldr::ty::Enumeration::new(values)
+				)
+			}
 		};
 
 		Ok(desc)
@@ -490,6 +520,48 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 				}
 			}
 			None => Ok(()),
+		}
+	}
+
+	pub fn declare_enumeration(
+		&mut self,
+		values_ref: Id,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>>
+	where
+		F: Ord + Clone,
+	{
+		self.desc
+			.set_once(cause.clone(), || Description::Enumeration(values_ref).into());
+		let because = self.desc.causes().unwrap().preferred().cloned();
+		match self.desc.value_mut().unwrap().as_standard() {
+			Some(Description::Union(r)) => {
+				if *r == values_ref {
+					Ok(())
+				} else {
+					todo!()
+				}
+			}
+			Some(other) => Err(Error::new(
+				error::TypeMismatchKind {
+					id: self.id,
+					expected: Some(other.kind()),
+					found: Some(Kind::Union),
+					because,
+				}
+				.into(),
+				cause,
+			)),
+			None => Err(Error::new(
+				error::TypeMismatchKind {
+					id: self.id,
+					expected: None,
+					found: Some(Kind::Union),
+					because,
+				}
+				.into(),
+				cause,
+			)),
 		}
 	}
 }

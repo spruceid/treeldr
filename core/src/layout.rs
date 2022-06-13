@@ -4,6 +4,7 @@ use shelves::Ref;
 
 pub mod array;
 pub mod enumeration;
+pub mod singleton;
 pub mod primitive;
 mod set;
 mod structure;
@@ -13,6 +14,7 @@ mod usages;
 
 pub use array::Array;
 pub use enumeration::{Enum, Variant};
+pub use singleton::Singleton;
 pub use primitive::{restricted::Restricted as RestrictedPrimitive, Primitive};
 pub use set::Set;
 pub use structure::{Field, Struct};
@@ -27,6 +29,7 @@ pub enum Kind {
 	Primitive(Primitive),
 	Struct,
 	Enum,
+	Singleton,
 	Reference,
 	Literal,
 	Array,
@@ -60,6 +63,9 @@ pub enum Description<F> {
 	/// Enumeration.
 	Enum(Enum<F>),
 
+	/// Singleton.
+	Singleton(Singleton<F>),
+
 	/// Array.
 	Array(Array<F>),
 
@@ -78,6 +84,7 @@ impl<F> Description<F> {
 			Self::Reference(_, _) => Kind::Reference,
 			Self::Struct(_) => Kind::Struct,
 			Self::Enum(_) => Kind::Enum,
+			Self::Singleton(_) => Kind::Singleton,
 			Self::Array(_) => Kind::Array,
 			Self::Set(_) => Kind::Set,
 			Self::Alias(_, _) => Kind::Alias,
@@ -98,6 +105,7 @@ impl<F> Description<F> {
 			Self::Reference(_, name) => name.replace(new_name, cause),
 			Self::Struct(s) => Some(s.set_name(new_name, cause)),
 			Self::Enum(e) => Some(e.set_name(new_name, cause)),
+			Self::Singleton(s) => Some(s.set_name(new_name, cause)),
 			Self::Array(a) => a.set_name(new_name, cause),
 			Self::Set(s) => s.set_name(new_name, cause),
 			Self::Alias(n, _) => Some(std::mem::replace(n, WithCauses::new(new_name, cause))),
@@ -109,6 +117,7 @@ impl<F> Description<F> {
 			Description::Never(n) => n,
 			Description::Struct(s) => s.into_name().into(),
 			Description::Enum(e) => e.into_name().into(),
+			Description::Singleton(s) => s.into_name().into(),
 			Description::Reference(_, n) => n,
 			Description::Primitive(_, n) => n,
 			Description::Array(a) => a.into_name(),
@@ -148,6 +157,7 @@ impl<F> Definition<F> {
 			Description::Never(n) => n.value(),
 			Description::Struct(s) => Some(s.name()),
 			Description::Enum(e) => Some(e.name()),
+			Description::Singleton(s) => Some(s.name()),
 			Description::Reference(_, n) => n.value(),
 			Description::Primitive(_, n) => n.value(),
 			Description::Array(a) => a.name(),
@@ -203,6 +213,7 @@ impl<F> Definition<F> {
 			Description::Never(_) => ComposingLayouts::None,
 			Description::Struct(s) => ComposingLayouts::Struct(s.fields().iter()),
 			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts()),
+			Description::Singleton(_) => ComposingLayouts::None,
 			Description::Reference(_, _) => ComposingLayouts::None,
 			Description::Primitive(_, _) => ComposingLayouts::None,
 			Description::Array(a) => ComposingLayouts::One(Some(a.item_layout())),
