@@ -9,12 +9,8 @@ type schema:BlogPosting {
 }
 
 layout BasicPost for schema:BlogPosting {
-	schema:title,
-	schema:body
+	schema:title: xs:string,
+	schema:body: xs:string
 }
 
-type BasicPostCredential {
-	vc:credentialSubject: BasicPost,
-} layout default;
-
-type VerifiableBasicPost = vc:VerifiableCredential & BasicPostCredential layout default;
+type VerifiableBasicPost = vc:VerifiableCredential & all vc:credentialSubject: (schema:BlogPosting with BasicPost);
