@@ -6,7 +6,7 @@ use <https://www.w3.org/2018/credentials#> as vc;
 
 /// Credential.
 layout Credential for vc:VerifiableCredential {
-	// _ as id: &Self = self,
+	tldr:self as id,
 	// rdf:type: required multiple &rdfs:Class,
 	vc:credentialSubject: required multiple CredentialSubject,
 	vc:issuer: Issuer,
