@@ -6,7 +6,7 @@ description = "Schema definition language."
 edition = "2021"
 
 [dependencies]
-treeldr = { path = "../core", version = "0.1" }
+treeldr = { path = "../../core", version = "0.1" }
 log = "0.4"
 iref = "2.0"
 serde_json = "1.0"
@@ -14,7 +14,7 @@ clap = { version = "3.0", features = ["derive"] }
 derivative = "2.2.0"
 
 # For the import function.
-treeldr-build = { path = "../build" }
+treeldr-build = { path = "../../build" }
 locspan = "0.3"
 rdf-types = { version = "0.4.0", features = ["loc"] }
 xsd-types = "0.3.0"

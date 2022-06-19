@@ -6,7 +6,7 @@ description = "Schema definition language."
 edition = "2021"
 
 [dependencies]
-treeldr = { path = "../core", version = "0.1" }
+treeldr = { path = "../../core", version = "0.1" }
 log = "0.4"
 iref = "2.0"
 serde_json = "1.0"
