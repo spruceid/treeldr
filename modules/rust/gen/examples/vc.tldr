@@ -1,0 +1,18 @@
+use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <https://www.w3.org/2018/credentials#> as vc;
+
+type vc:VerifiableCredential {
+	vc:credentialSubject: required multiple rdfs:Resource,
+	vc:issuer: rdfs:Resource,
+	vc:issuanceDate: xs:dateTime,
+	vc:proof: vc:Proof,
+	vc:expirationDate: xs:dateTime,
+	vc:credentialStatus: rdfs:Resource,
+	vc:termOfUse: rdfs:Resource,
+	vc:evidence: rdfs:Resource,
+	vc:credentialSchema: rdfs:Resource,
+	vc:refreshService: rdfs:Resource
+}
+
+type vc:Proof;

@@ -1,0 +1,53 @@
+base <https://example.com/rebase/>;
+use <http://www.w3.org/1999/02/22-rdf-syntax-ns#> as rdf;
+use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
+use <https://treeldr.org/> as tldr;
+use <https://www.w3.org/2018/credentials#> as vc;
+
+/// Credential.
+layout Credential for vc:VerifiableCredential {
+	// _ as id: &Self = self,
+	// rdf:type: required multiple &rdfs:Class,
+	vc:credentialSubject: required multiple CredentialSubject,
+	vc:issuer: Issuer,
+	vc:issuanceDate: tldr:DateTime,
+	vc:proof: multiple Proof,
+	vc:expirationDate: tldr:DateTime,
+	vc:credentialStatus: Status,
+	vc:termOfUse: multiple TermOfUse,
+	vc:evidence: multiple Evidence,
+	vc:credentialSchema: multiple Schema,
+	vc:refreshService: multiple RefreshService,
+	// * as property_set: &rdf:Property -> (&Any | Any)
+}
+
+layout Proof for rdfs:Resource;
+
+layout TermOfUse for rdfs:Resource;
+
+layout Evidence for rdfs:Resource;
+
+layout Status for rdfs:Resource;
+
+layout Schema for rdfs:Resource;
+
+layout RefreshService for rdfs:Resource;
+
+layout Any for rdfs:Resource {
+	// * as property_set: &rdf:Property -> (&Any | Any)
+}
+
+/// Any object with an identifier.
+layout ObjectWithId for rdfs:Resource {
+	// /// Identifier to self.
+	// _ as id: &Self = self,
+
+	// /// Other properties.
+	// * as property_set: &rdf:Property -> (&Any | Any)
+}
+
+/// Issuer.
+layout Issuer for rdfs:Resource = tldr:URI | ObjectWithId as Object;
+
+/// Credential subject.
+layout CredentialSubject = ObjectWithId;
