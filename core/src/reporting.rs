@@ -113,7 +113,7 @@ impl<'t, 'v, F, T: DiagnoseWithVocabulary<F>> Diagnose<F> for vocab::WithVocabul
 	}
 }
 
-impl<'t, 'v, F, T: DiagnoseWithCause<F>> Diagnose<F> for crate::Caused<T, F> {
+impl<F, T: DiagnoseWithCause<F>> Diagnose<F> for crate::Caused<T, F> {
 	fn message(&self) -> String {
 		self.inner().message(self.cause())
 	}
@@ -131,9 +131,7 @@ impl<'t, 'v, F, T: DiagnoseWithCause<F>> Diagnose<F> for crate::Caused<T, F> {
 	}
 }
 
-impl<'t, 'v, F, T: DiagnoseWithCauseAndVocabulary<F>> DiagnoseWithVocabulary<F>
-	for crate::Caused<T, F>
-{
+impl<F, T: DiagnoseWithCauseAndVocabulary<F>> DiagnoseWithVocabulary<F> for crate::Caused<T, F> {
 	fn message(&self, vocabulary: &Vocabulary) -> String {
 		self.inner().message(self.cause(), vocabulary)
 	}
@@ -151,7 +149,7 @@ impl<'t, 'v, F, T: DiagnoseWithCauseAndVocabulary<F>> DiagnoseWithVocabulary<F>
 	}
 }
 
-impl<'t, 'v, F, T: DiagnoseWithCause<F>> Diagnose<F> for Loc<T, F> {
+impl<F, T: DiagnoseWithCause<F>> Diagnose<F> for Loc<T, F> {
 	fn message(&self) -> String {
 		self.value().message(Some(self.location()))
 	}
@@ -169,7 +167,7 @@ impl<'t, 'v, F, T: DiagnoseWithCause<F>> Diagnose<F> for Loc<T, F> {
 	}
 }
 
-impl<'t, 'v, F, T: DiagnoseWithCauseAndVocabulary<F>> DiagnoseWithVocabulary<F> for Loc<T, F> {
+impl<F, T: DiagnoseWithCauseAndVocabulary<F>> DiagnoseWithVocabulary<F> for Loc<T, F> {
 	fn message(&self, vocabulary: &Vocabulary) -> String {
 		self.value().message(Some(self.location()), vocabulary)
 	}

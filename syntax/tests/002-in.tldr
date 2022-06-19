@@ -1,6 +1,6 @@
 use <https://treeldr.org/> as tldr;
 
-type URL layout tldr:URL;
+type URL with tldr:URL;
 
 /// Certificate or deed issued by an educational institution.
 type Diploma {

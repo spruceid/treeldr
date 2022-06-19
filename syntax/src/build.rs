@@ -15,7 +15,7 @@ pub enum Error<F> {
 	Local(Loc<LocalError<F>, F>),
 }
 
-impl<'c, 't, F: Clone> reporting::DiagnoseWithVocabulary<F> for Error<F> {
+impl<F: Clone> reporting::DiagnoseWithVocabulary<F> for Error<F> {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		match self {
 			Self::Global(e) => e.message(vocab),
@@ -61,7 +61,7 @@ pub enum LocalError<F> {
 	UnexpectedFieldRestriction,
 }
 
-impl<'c, 't, F: Clone> reporting::DiagnoseWithCause<F> for LocalError<F> {
+impl<F: Clone> reporting::DiagnoseWithCause<F> for LocalError<F> {
 	fn message(&self, _cause: Option<&Location<F>>) -> String {
 		match self {
 			Self::InvalidExpandedCompactIri(_) => "invalid expanded compact IRI".to_string(),

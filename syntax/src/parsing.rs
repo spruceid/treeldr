@@ -467,7 +467,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 						let Loc(properties, properties_loc) = parse_block(lexer, block_loc)?;
 
 						let layout = match peek_token(lexer)?.value() {
-							Some(Token::Keyword(Keyword::Layout)) => {
+							Some(Token::Keyword(Keyword::With)) => {
 								next_token(lexer)?;
 								let layout = LayoutDescription::parse(lexer)?;
 								loc.span_mut().append(layout.span());
@@ -485,7 +485,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 						let Loc(expr, expr_loc) = OuterTypeExpr::parse(lexer)?;
 
 						let layout = match peek_token(lexer)?.value() {
-							Some(Token::Keyword(Keyword::Layout)) => {
+							Some(Token::Keyword(Keyword::With)) => {
 								next_token(lexer)?;
 								let layout = LayoutDescription::parse(lexer)?;
 								loc.span_mut().append(layout.span());
@@ -502,7 +502,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 					Loc(Some(Token::Punct(Punct::Semicolon)), loc) => {
 						(Loc(TypeDescription::Normal(Vec::new()), loc), None)
 					}
-					Loc(Some(Token::Keyword(Keyword::Layout)), _) => {
+					Loc(Some(Token::Keyword(Keyword::With)), _) => {
 						let layout = LayoutDescription::parse(lexer)?;
 						loc.span_mut().append(layout.span());
 						(

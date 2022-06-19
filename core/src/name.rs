@@ -78,7 +78,7 @@ fn normalize(id: &str) -> Result<String, InvalidName> {
 
 	while let Some(c) = chars.next() {
 		match c {
-			c if c.is_digit(10) && result.is_empty() => break,
+			c if c.is_ascii_digit() && result.is_empty() => break,
 			'_' | ' ' | '-' => {
 				if !boundary {
 					boundary = true

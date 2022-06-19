@@ -78,7 +78,7 @@ pub trait RequireList<F> {
 		F: Clone;
 }
 
-impl<'l, F, D: Descriptions<F>> RequireList<F> for Context<F, D> {
+impl<F, D: Descriptions<F>> RequireList<F> for Context<F, D> {
 	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
 	where
 		F: Clone,
@@ -87,7 +87,7 @@ impl<'l, F, D: Descriptions<F>> RequireList<F> for Context<F, D> {
 	}
 }
 
-impl<'l, F: Clone + Ord> RequireList<F> for super::context::allocated::Nodes<F> {
+impl<F: Clone + Ord> RequireList<F> for super::context::allocated::Nodes<F> {
 	fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>> {
 		self.require_list(id, cause)
 	}

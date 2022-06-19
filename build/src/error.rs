@@ -41,7 +41,7 @@ macro_rules! errors {
 			}
 		)*
 
-		impl<'c, 'a, F: Clone> DiagnoseWithCauseAndVocabulary<F> for Description<F> {
+		impl<F: Clone> DiagnoseWithCauseAndVocabulary<F> for Description<F> {
 			fn message(&self, _cause: Option<&Location<F>>, vocabulary: &Vocabulary) -> String {
 				match self {
 					$(

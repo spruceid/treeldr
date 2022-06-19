@@ -434,7 +434,7 @@ impl<F> PartialEq for RangeRestrictions<F> {
 	}
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct CardinalityRestrictions {
 	min: u32,
 	max: u32,
