@@ -25,7 +25,7 @@ pub fn build_all(
 	build_context: &mut BuildContext,
 	mut documents: Vec<Document>
 ) -> Result<treeldr::Model<source::FileId>, BuildAllError> {
-	build_context.apply_built_in_definitions().unwrap();
+	build_context.apply_built_in_definitions(vocabulary).unwrap();
 
 	for doc in &mut documents {
 		doc.declare(build_context, vocabulary).map_err(BuildAllError::Declaration)?
