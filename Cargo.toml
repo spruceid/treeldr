@@ -3,7 +3,11 @@ members = [
 	"core",
 	"build",
 	"syntax",
+	"load",
 	"cli",
-	"json-schema",
-	"json-ld-context"
+	"modules/json-schema",
+	"modules/json-ld-context",
+	"modules/rust/gen",
+	"modules/rust/macros",
+	"modules/rust/prelude",
 ]
