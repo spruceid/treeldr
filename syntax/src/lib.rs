@@ -198,7 +198,12 @@ impl<F: Clone> OuterTypeExpr<F> {
 
 pub struct NamedInnerTypeExpr<F> {
 	pub expr: Loc<InnerTypeExpr<F>, F>,
-	pub name: Option<Loc<Alias, F>>,
+	pub layout: NamedInnerTypeExprLayout<F>,
+}
+
+pub enum NamedInnerTypeExprLayout<F> {
+	Implicit(Option<Loc<Alias, F>>),
+	Explicit(Loc<NamedInnerLayoutExpr<F>, F>),
 }
 
 impl<F: Clone> NamedInnerTypeExpr<F> {
@@ -207,12 +212,15 @@ impl<F: Clone> NamedInnerTypeExpr<F> {
 	}
 
 	pub fn implicit_layout_expr(&self) -> NamedInnerLayoutExpr<F> {
-		NamedInnerLayoutExpr {
-			expr: Loc(
-				self.expr.implicit_layout_expr(),
-				self.expr.location().clone(),
-			),
-			name: self.name.clone(),
+		match &self.layout {
+			NamedInnerTypeExprLayout::Implicit(name) => NamedInnerLayoutExpr {
+				expr: Loc(
+					self.expr.implicit_layout_expr(),
+					self.expr.location().clone(),
+				),
+				name: name.clone(),
+			},
+			NamedInnerTypeExprLayout::Explicit(expr) => expr.value().clone(),
 		}
 	}
 }
@@ -223,6 +231,7 @@ pub enum InnerTypeExpr<F> {
 	Literal(Literal),
 	PropertyRestriction(TypeRestrictedProperty<F>),
 	List(Label, Box<Loc<OuterTypeExpr<F>, F>>),
+	Outer(Box<Loc<OuterTypeExpr<F>, F>>),
 }
 
 impl<F: Clone> InnerTypeExpr<F> {
@@ -248,6 +257,10 @@ impl<F: Clone> InnerTypeExpr<F> {
 				*label,
 				Box::new(Loc(item.implicit_layout_expr(), item.location().clone())),
 			),
+			Self::Outer(outer) => InnerLayoutExpr::Outer(Box::new(Loc(
+				outer.implicit_layout_expr(),
+				outer.location().clone(),
+			))),
 		}
 	}
 }
@@ -420,6 +433,7 @@ pub enum InnerLayoutExpr<F> {
 	Literal(Literal),
 	FieldRestriction(LayoutRestrictedField<F>),
 	Array(Label, Box<Loc<OuterLayoutExpr<F>, F>>),
+	Outer(Box<Loc<OuterLayoutExpr<F>, F>>),
 }
 
 impl<F> InnerLayoutExpr<F> {

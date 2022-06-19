@@ -799,6 +799,9 @@ impl<F: Clone> Parse<F> for AnnotatedTypeExpr<F> {
 		TokenKind::Keyword(Keyword::Annotation(Annotation::Required)),
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+		TokenKind::Begin(Delimiter::Bracket),
+		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
 	fn parse_from<L: Tokens<F>>(
@@ -844,6 +847,8 @@ impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
 		TokenKind::Literal,
+		TokenKind::Begin(Delimiter::Bracket),
+		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
 	fn parse_from<L: Tokens<F>>(
@@ -886,6 +891,8 @@ impl<F: Clone> Parse<F> for NamedInnerTypeExpr<F> {
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
 		TokenKind::Literal,
+		TokenKind::Begin(Delimiter::Bracket),
+		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
 	fn parse_from<L: Tokens<F>>(
@@ -895,16 +902,24 @@ impl<F: Clone> Parse<F> for NamedInnerTypeExpr<F> {
 	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
 		let expr = InnerTypeExpr::parse_from(lexer, token, loc)?;
 		let mut loc = expr.location().clone();
-		let name = if let Loc(Some(Token::Keyword(Keyword::As)), _) = peek_token(lexer)? {
-			next_token(lexer)?;
-			let name = Alias::parse(lexer)?;
-			loc.span_mut().append(name.span());
-			Some(name)
-		} else {
-			None
+
+		let layout = match peek_token(lexer)? {
+			Loc(Some(Token::Keyword(Keyword::With)), _) => {
+				next_token(lexer)?;
+				let layout = NamedInnerLayoutExpr::parse(lexer)?;
+				loc.span_mut().append(layout.span());
+				NamedInnerTypeExprLayout::Explicit(layout)
+			}
+			Loc(Some(Token::Keyword(Keyword::As)), _) => {
+				next_token(lexer)?;
+				let name = Alias::parse(lexer)?;
+				loc.span_mut().append(name.span());
+				NamedInnerTypeExprLayout::Implicit(Some(name))
+			}
+			_ => NamedInnerTypeExprLayout::Implicit(None),
 		};
 
-		Ok(Loc(Self { expr, name }, loc))
+		Ok(Loc(Self { expr, layout }, loc))
 	}
 }
 
@@ -915,6 +930,7 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 		TokenKind::Punct(Punct::Ampersand),
 		TokenKind::Literal,
 		TokenKind::Begin(Delimiter::Bracket),
+		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
 	fn parse_from<L: Tokens<F>>(
@@ -1005,6 +1021,11 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 					loc.span_mut().append(end_loc.span());
 					Ok(Loc::new(Self::List(label, Box::new(item)), loc))
 				}
+				Token::Begin(Delimiter::Parenthesis) => {
+					let outer = OuterTypeExpr::parse(lexer)?;
+					parse_end(lexer, Delimiter::Parenthesis)?;
+					Ok(Loc(Self::Outer(Box::new(outer)), loc))
+				}
 				unexpected => Err(Loc::new(
 					Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
 					loc,
@@ -1020,6 +1041,9 @@ impl<F: Clone> Parse<F> for AnnotatedLayoutExpr<F> {
 		TokenKind::Keyword(Keyword::Annotation(Annotation::Required)),
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
+		TokenKind::Literal,
+		TokenKind::Begin(Delimiter::Bracket),
+		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
 	fn parse_from<L: Tokens<F>>(
@@ -1065,6 +1089,8 @@ impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
 		TokenKind::Literal,
+		TokenKind::Begin(Delimiter::Bracket),
+		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
 	fn parse_from<L: Tokens<F>>(
@@ -1107,6 +1133,8 @@ impl<F: Clone> Parse<F> for NamedInnerLayoutExpr<F> {
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
 		TokenKind::Literal,
+		TokenKind::Begin(Delimiter::Bracket),
+		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
 	fn parse_from<L: Tokens<F>>(
@@ -1135,6 +1163,7 @@ impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
 		TokenKind::Punct(Punct::Ampersand),
 		TokenKind::Literal,
 		TokenKind::Begin(Delimiter::Bracket),
+		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
 	fn parse_from<L: Tokens<F>>(
@@ -1156,6 +1185,11 @@ impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
 				let end_loc = parse_end(lexer, Delimiter::Bracket)?;
 				loc.span_mut().append(end_loc.span());
 				Ok(Loc::new(Self::Array(label, Box::new(item)), loc))
+			}
+			Token::Begin(Delimiter::Parenthesis) => {
+				let outer = OuterLayoutExpr::parse(lexer)?;
+				parse_end(lexer, Delimiter::Parenthesis)?;
+				Ok(Loc(Self::Outer(Box::new(outer)), loc))
 			}
 			unexpected => Err(Loc::new(
 				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),

@@ -159,10 +159,15 @@ fn t012() {
 	test("tests/012-in.tldr", "tests/012-out.nq")
 }
 
-// #[test]
-// fn t013() {
-// 	test("tests/013-in.tldr", "tests/013-out.nq")
-// }
+#[test]
+fn t013() {
+	test("tests/013-in.tldr", "tests/013-out.nq")
+}
+
+#[test]
+fn t014() {
+	test("tests/014-in.tldr", "tests/014-out.nq")
+}
 
 #[test]
 #[should_panic]

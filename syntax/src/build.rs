@@ -871,6 +871,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerTypeExpr<F>, F> {
 		let Loc(ty, loc) = self;
 
 		match ty {
+			crate::InnerTypeExpr::Outer(outer) => outer.build(local_context, context, vocabulary),
 			crate::InnerTypeExpr::Id(id) => {
 				if let Some(Loc(id, id_loc)) = local_context.next_id.take() {
 					return Err(Loc(LocalError::TypeAlias(id, id_loc), loc).into());
@@ -1422,6 +1423,7 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 		let Loc(expr, loc) = self;
 
 		match expr {
+			crate::InnerLayoutExpr::Outer(outer) => outer.build(local_context, context, vocabulary),
 			crate::InnerLayoutExpr::Id(id) => {
 				let alias_id = local_context.next_id.take();
 
