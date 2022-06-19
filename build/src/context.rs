@@ -65,21 +65,74 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		Ok(id)
 	}
 
-	pub fn apply_built_in_definitions(&mut self) -> Result<(), Error<F>>
+	pub fn apply_built_in_definitions(
+		&mut self,
+		vocabulary: &mut Vocabulary,
+	) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
 	{
-		self.define_rdf_types()?;
+		self.define_rdf_types(vocabulary)?;
 		self.define_xsd_types()?;
 		self.define_treeldr_types()
 	}
 
-	pub fn define_rdf_types(&mut self) -> Result<(), Error<F>>
+	pub fn create_reference_to(
+		&mut self,
+		vocabulary: &mut Vocabulary,
+		target: Id,
+		cause: Option<Location<F>>,
+	) -> Result<Id, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		let id = Id::Blank(vocabulary.new_blank_label());
+		self.create_named_reference_to(id, target, cause)
+	}
+
+	pub fn create_named_reference_to(
+		&mut self,
+		id: Id,
+		target: Id,
+		cause: Option<Location<F>>,
+	) -> Result<Id, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.declare_layout(id, cause.clone());
+		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
+		layout.set_deref_to(target, cause)?;
+		Ok(id)
+	}
+
+	pub fn define_rdf_types(&mut self, vocabulary: &mut Vocabulary) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
 	{
 		use vocab::{Rdf, Rdfs, Term};
 		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
+		self.declare_layout(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
+		let id_field = Id::Blank(vocabulary.new_blank_label());
+		self.declare_layout_field(id_field, None);
+		let field_layout = self.create_named_reference_to(
+			Id::Iri(Term::TreeLdr(vocab::TreeLdr::SelfLayout)),
+			Id::Iri(Term::Rdfs(Rdfs::Resource)),
+			None,
+		)?;
+		let field = self
+			.get_mut(id_field)
+			.unwrap()
+			.as_layout_field_mut()
+			.unwrap();
+		field.set_name(treeldr::Name::new("id").unwrap(), None)?;
+		field.set_layout(field_layout, None)?;
+		let fields_id = self.create_list(vocabulary, [Caused::new(id_field.into_term(), None)])?;
+		let layout = self
+			.get_mut(Id::Iri(Term::Rdfs(Rdfs::Resource)))
+			.unwrap()
+			.as_layout_mut()
+			.unwrap();
+		layout.set_fields(fields_id, None)?;
 
 		self.declare_type(Id::Iri(Term::Rdf(Rdf::Property)), None);
 
@@ -128,6 +181,15 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		F: Clone + Ord,
 	{
 		use layout::Primitive;
+
+		self.declare_property(Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)), None);
+		let prop = self
+			.get_mut(Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)))
+			.unwrap()
+			.as_property_mut()
+			.unwrap();
+		prop.set_range(Id::Iri(vocab::Term::Rdfs(vocab::Rdfs::Resource)), None)?;
+
 		self.define_primitive_layout(Primitive::Boolean)?;
 		self.define_primitive_layout(Primitive::Integer)?;
 		self.define_primitive_layout(Primitive::UnsignedInteger)?;

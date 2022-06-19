@@ -64,8 +64,7 @@ fn import_json_schema<P: AsRef<Path>>(
 ) -> (grdf::HashDataset<Id, Term, StrippedObject, GraphLabel>, Id) {
 	let input = parse_json_schema(path);
 	let mut context: Context<()> = Context::new();
-	context.define_rdf_types().unwrap();
-	context.define_treeldr_types().unwrap();
+	context.apply_built_in_definitions(vocabulary).unwrap();
 
 	let id = treeldr_json_schema::import_schema(&input, None, &mut context, vocabulary)
 		.expect("import failed");

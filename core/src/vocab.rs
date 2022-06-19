@@ -12,6 +12,16 @@ pub use display::*;
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]
 pub enum TreeLdr {
+	/// Property that reflects a resource.
+	///
+	/// Useful to capture the identifier of a resource in its layout.
+	#[iri("tldr:self")]
+	Self_,
+
+	/// Default layout of the `self` property.
+	#[iri("tldr:SelfLayout")]
+	SelfLayout,
+
 	#[iri("tldr:Layout")]
 	Layout,
 
