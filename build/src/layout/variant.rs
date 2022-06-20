@@ -56,11 +56,10 @@ impl<F> Definition<F> {
 	where
 		F: Clone,
 	{
-		if let Id::Iri(iri) = self.id {
-			if let Some(name) = iri.iri(vocabulary).unwrap().path().file_name() {
-				if let Ok(name) = Name::new(name) {
-					return Ok(Some(Caused::new(name, cause)));
-				}
+		
+		if let Id::Iri(term) = self.id {
+			if let Ok(Some(name)) = Name::from_iri(term.iri(vocabulary).unwrap()) {
+				return Ok(Some(Caused::new(name, cause)));
 			}
 		}
 

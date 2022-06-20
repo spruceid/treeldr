@@ -1535,17 +1535,19 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 		let Loc(name, name_loc) = def
 			.alias
 			.unwrap_or_else(|| match prop_id {
-				Id::Iri(id) => Loc(
-					crate::Alias(
-						id.iri(vocabulary)
-							.unwrap()
-							.path()
-							.file_name()
-							.expect("invalid property IRI")
-							.to_owned(),
-					),
-					prop_id_loc.clone(),
-				),
+				Id::Iri(id) => {
+					let iri = id.iri(vocabulary).unwrap();
+
+					let id = match iri.fragment() {
+						Some(fragment) => fragment.to_string(),
+						None => iri.path().file_name().expect("invalid property IRI").to_owned()
+					};
+
+					Loc(
+						crate::Alias(id),
+						prop_id_loc.clone(),
+					)
+				},
 				_ => panic!("invalid property IRI"),
 			})
 			.build(local_context, context, vocabulary)?;

@@ -98,9 +98,7 @@ impl<F> Definition<F> {
 			.as_iri()
 			.and_then(|term| term.iri(vocabulary))
 			.and_then(|iri| {
-				iri.path()
-					.file_name()
-					.and_then(|name| Name::try_from(name).ok())
+				Name::from_iri(iri).ok().flatten()
 			})
 			.map(|name| Caused::new(name, cause))
 	}

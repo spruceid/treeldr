@@ -596,11 +596,9 @@ impl<F: Clone + Ord> Definition<F> {
 		parent_layouts: &[WithCauses<ParentLayout, F>],
 		cause: Option<Location<F>>,
 	) -> Result<Option<Caused<Name, F>>, Error<F>> {
-		if let Id::Iri(iri) = self.id {
-			if let Some(name) = iri.iri(vocabulary).unwrap().path().file_name() {
-				if let Ok(name) = Name::new(name) {
-					return Ok(Some(Caused::new(name, cause)));
-				}
+		if let Id::Iri(term) = self.id {
+			if let Ok(Some(name)) = Name::from_iri(term.iri(vocabulary).unwrap()) {
+				return Ok(Some(Caused::new(name, cause)));
 			}
 		}
 

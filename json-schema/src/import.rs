@@ -167,12 +167,7 @@ pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
 	let (id, mut name) = match &schema.id {
 		Some(iri) => {
 			let id = Id::Iri(vocab::Term::from_iri(iri.clone(), vocabulary));
-			let name = iri.path().file_name().and_then(|name| {
-				match std::path::Path::new(name).file_stem() {
-					Some(stem) => Name::new(stem.to_string_lossy()).ok(),
-					None => Name::new(name).ok(),
-				}
-			});
+			let name = Name::from_iri(iri.as_iri()).ok().flatten();
 
 			(id, name)
 		}

@@ -143,6 +143,18 @@ impl Name {
 		})
 	}
 
+	pub fn from_iri(iri: iref::Iri) -> Result<Option<Self>, InvalidName> {
+		match iri.fragment() {
+			Some(fragment) => Ok(Some(Self::new(fragment.as_str())?)),
+			None => iri.path().file_name().map(|name| {
+				match std::path::Path::new(name).file_stem() {
+					Some(stem) => Name::new(stem.to_string_lossy()),
+					None => Name::new(name)
+				}
+			}).transpose()
+		}
+	}
+
 	pub fn as_str(&self) -> &str {
 		&self.normalized
 	}
