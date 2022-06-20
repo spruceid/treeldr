@@ -134,6 +134,8 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 			.unwrap();
 		layout.set_fields(fields_id, None)?;
 
+		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Class)), None);
+
 		self.declare_type(Id::Iri(Term::Rdf(Rdf::Property)), None);
 
 		self.declare_type(Id::Iri(Term::Rdf(Rdf::List)), None);
