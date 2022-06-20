@@ -1,4 +1,6 @@
 base <https://schema.org>;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <https://schema.org/> as schema;
 
 /// Text.
 type Text;
@@ -8,3 +10,9 @@ type URL;
 
 /// URL of the item.
 property url: URL;
+
+/// Blog post.
+type BlogPosting {
+	schema:title: xs:string,
+	schema:body: xs:string
+}
