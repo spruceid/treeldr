@@ -3,11 +3,6 @@ use <http://www.w3.org/2001/XMLSchema#> as xs;
 use <https://schema.org/> as schema;
 use <https://www.w3.org/2018/credentials#> as vc;
 
-type schema:BlogPosting {
-	schema:title: xs:string,
-	schema:body: xs:string
-}
-
 layout BasicPost for schema:BlogPosting {
 	schema:title: xs:string,
 	schema:body: xs:string

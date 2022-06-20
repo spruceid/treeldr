@@ -7,7 +7,7 @@ use <https://www.w3.org/2018/credentials#> as vc;
 /// Credential.
 layout Credential for vc:VerifiableCredential {
 	tldr:self as id,
-	// rdf:type: required multiple &rdfs:Class,
+	rdf:type: required multiple &rdfs:Class,
 	vc:credentialSubject: required multiple CredentialSubject,
 	vc:issuer: Issuer,
 	vc:issuanceDate: tldr:DateTime,
@@ -17,8 +17,7 @@ layout Credential for vc:VerifiableCredential {
 	vc:termOfUse: multiple TermOfUse,
 	vc:evidence: multiple Evidence,
 	vc:credentialSchema: multiple Schema,
-	vc:refreshService: multiple RefreshService,
-	// * as property_set: &rdf:Property -> (&Any | Any)
+	vc:refreshService: multiple RefreshService
 }
 
 layout Proof for rdfs:Resource;

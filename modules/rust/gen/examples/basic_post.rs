@@ -1,6 +1,8 @@
 use treeldr_rust_macros::tldr;
 
 #[tldr(
+	"examples/xsd.tldr",
+	"examples/schema.org.tldr",
 	"modules/rust/gen/examples/vc.tldr",
 	"modules/rust/gen/examples/rebase.tldr",
 	"modules/rust/gen/examples/basic_post.tldr"
