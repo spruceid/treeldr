@@ -86,7 +86,9 @@ fn main() {
 	use treeldr::vocab::BorrowWithVocabulary;
 	let mut vocabulary = treeldr::Vocabulary::new();
 	let mut build_context = BuildContext::new();
-	build_context.apply_built_in_definitions(&mut vocabulary).unwrap();
+	build_context
+		.apply_built_in_definitions(&mut vocabulary)
+		.unwrap();
 
 	for doc in &mut documents {
 		if let Err(e) = doc.declare(&mut build_context, &mut vocabulary) {

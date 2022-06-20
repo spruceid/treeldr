@@ -56,7 +56,6 @@ impl<F> Definition<F> {
 	where
 		F: Clone,
 	{
-		
 		if let Id::Iri(term) = self.id {
 			if let Ok(Some(name)) = Name::from_iri(term.iri(vocabulary).unwrap()) {
 				return Ok(Some(Caused::new(name, cause)));

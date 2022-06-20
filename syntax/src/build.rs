@@ -1460,10 +1460,10 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 
 				Ok(Loc(id, loc))
 			}
-			crate::InnerLayoutExpr::Reference(r) => {
+			crate::InnerLayoutExpr::Reference(ty_expr) => {
 				let id = local_context.next_id.take();
 
-				let Loc(deref_layout, deref_loc) = r.build(local_context, context, vocabulary)?;
+				let Loc(deref_ty, deref_loc) = ty_expr.build(local_context, context, vocabulary)?;
 
 				let id = match id {
 					Some(Loc(id, _)) => {
@@ -1472,12 +1472,16 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 						}
 
 						let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
-						layout.set_deref_to(deref_layout, Some(deref_loc))?;
+						layout.set_type(deref_ty, Some(deref_loc))?;
+						let id_layout = Id::Iri(Term::TreeLdr(TreeLdr::Primitive(
+							treeldr::layout::Primitive::Iri,
+						)));
+						layout.set_reference(id_layout, Some(loc.clone()))?;
 						id
 					}
 					None => context.standard_reference(
 						vocabulary,
-						deref_layout,
+						deref_ty,
 						Some(loc.clone()),
 						Some(deref_loc),
 					)?,
@@ -1540,14 +1544,15 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 
 					let id = match iri.fragment() {
 						Some(fragment) => fragment.to_string(),
-						None => iri.path().file_name().expect("invalid property IRI").to_owned()
+						None => iri
+							.path()
+							.file_name()
+							.expect("invalid property IRI")
+							.to_owned(),
 					};
 
-					Loc(
-						crate::Alias(id),
-						prop_id_loc.clone(),
-					)
-				},
+					Loc(crate::Alias(id), prop_id_loc.clone())
+				}
 				_ => panic!("invalid property IRI"),
 			})
 			.build(local_context, context, vocabulary)?;

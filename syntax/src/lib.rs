@@ -168,6 +168,7 @@ impl<F: Clone> AnnotatedTypeExpr<F> {
 	}
 }
 
+#[derive(Clone)]
 pub enum OuterTypeExpr<F> {
 	Inner(NamedInnerTypeExpr<F>),
 	Union(Label, Vec<Loc<NamedInnerTypeExpr<F>, F>>),
@@ -196,11 +197,13 @@ impl<F: Clone> OuterTypeExpr<F> {
 	}
 }
 
+#[derive(Clone)]
 pub struct NamedInnerTypeExpr<F> {
 	pub expr: Loc<InnerTypeExpr<F>, F>,
 	pub layout: NamedInnerTypeExprLayout<F>,
 }
 
+#[derive(Clone)]
 pub enum NamedInnerTypeExprLayout<F> {
 	Implicit(Option<Loc<Alias, F>>),
 	Explicit(Loc<NamedInnerLayoutExpr<F>, F>),
@@ -225,6 +228,7 @@ impl<F: Clone> NamedInnerTypeExpr<F> {
 	}
 }
 
+#[derive(Clone)]
 pub enum InnerTypeExpr<F> {
 	Id(Loc<Id, F>),
 	Reference(Box<Loc<Self, F>>),
@@ -245,10 +249,7 @@ impl<F: Clone> InnerTypeExpr<F> {
 	pub fn implicit_layout_expr(&self) -> InnerLayoutExpr<F> {
 		match self {
 			Self::Id(id) => InnerLayoutExpr::Id(id.clone()),
-			Self::Reference(r) => InnerLayoutExpr::Reference(Box::new(Loc(
-				r.implicit_layout_expr(),
-				r.location().clone(),
-			))),
+			Self::Reference(r) => InnerLayoutExpr::Reference(r.clone()),
 			Self::Literal(lit) => InnerLayoutExpr::Literal(lit.clone()),
 			Self::PropertyRestriction(r) => {
 				InnerLayoutExpr::FieldRestriction(r.implicit_layout_restricted_field())
@@ -265,6 +266,7 @@ impl<F: Clone> InnerTypeExpr<F> {
 	}
 }
 
+#[derive(Clone)]
 pub struct TypeRestrictedProperty<F> {
 	prop: Loc<Id, F>,
 	alias: Option<Loc<Alias, F>>,
@@ -284,6 +286,7 @@ impl<F: Clone> TypeRestrictedProperty<F> {
 	}
 }
 
+#[derive(Clone)]
 pub enum TypePropertyRangeRestriction<F> {
 	Any(Box<Loc<InnerTypeExpr<F>, F>>),
 	All(Box<Loc<InnerTypeExpr<F>, F>>),
@@ -304,6 +307,7 @@ impl<F: Clone> TypePropertyRangeRestriction<F> {
 	}
 }
 
+#[derive(Clone)]
 pub enum TypePropertyCardinalityRestriction {
 	AtLeast(u32),
 	AtMost(u32),
@@ -320,6 +324,7 @@ impl TypePropertyCardinalityRestriction {
 	}
 }
 
+#[derive(Clone)]
 pub enum TypePropertyRestriction<F> {
 	Range(TypePropertyRangeRestriction<F>),
 	Cardinality(TypePropertyCardinalityRestriction),
@@ -429,7 +434,7 @@ impl<F> NamedInnerLayoutExpr<F> {
 pub enum InnerLayoutExpr<F> {
 	Id(Loc<Id, F>),
 	Primitive(Primitive),
-	Reference(Box<Loc<Self, F>>),
+	Reference(Box<Loc<InnerTypeExpr<F>, F>>),
 	Literal(Literal),
 	FieldRestriction(LayoutRestrictedField<F>),
 	Array(Label, Box<Loc<OuterLayoutExpr<F>, F>>),

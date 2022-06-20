@@ -241,10 +241,10 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 					let field = context.require_layout_field_mut(id, Some(id_loc))?;
 					field.set_property(prop_id, Some(loc))?
 				}
-				Term::TreeLdr(vocab::TreeLdr::DerefTo) => {
+				Term::TreeLdr(vocab::TreeLdr::Reference) => {
 					let Loc(target_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
-					layout.set_deref_to(target_id, Some(loc))?
+					layout.set_reference(target_id, Some(loc))?
 				}
 				// Term::TreeLdr(vocab::TreeLdr::Singleton) => {
 				// 	let Loc(string, _) = expect_raw_string(object)?;

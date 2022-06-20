@@ -68,10 +68,11 @@ pub enum TreeLdr {
 
 	/// Reference layout target.
 	///
-	/// Used to declare that a layout is a reference, and to what layout it
-	/// dereferences.
-	#[iri("tldr:derefTo")]
-	DerefTo,
+	/// Used to declare that a layout is a reference.
+	/// The actual layout is an IRI-like layout representing the identifier of
+	/// the referenced node, given as object of the property.
+	#[iri("tldr:reference")]
+	Reference,
 
 	/// Enumeration layout.
 	///

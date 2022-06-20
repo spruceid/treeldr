@@ -624,11 +624,11 @@ impl<F> layout::Definition<F> {
 			layout::Description::Enum(e) => e.to_rdf(model, self.id(), generator, quads),
 			layout::Description::Array(a) => a.to_rdf(model, self.id(), quads),
 			layout::Description::Set(s) => s.to_rdf(model, self.id(), quads),
-			layout::Description::Reference(layout_ref, _) => {
+			layout::Description::Reference(r) => {
 				quads.push(Quad(
 					self.id(),
-					Term::TreeLdr(vocab::TreeLdr::DerefTo),
-					model.layouts().get(*layout_ref).unwrap().id().into_term(),
+					Term::TreeLdr(vocab::TreeLdr::Reference),
+					model.layouts().get(r.id_layout()).unwrap().id().into_term(),
 					None,
 				));
 			}

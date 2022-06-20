@@ -1174,7 +1174,7 @@ impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
 		match token.no_keyword() {
 			Token::Id(id) => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
 			Token::Punct(lexing::Punct::Ampersand) => {
-				let arg = Self::parse(lexer)?;
+				let arg = InnerTypeExpr::parse(lexer)?;
 				loc.span_mut().append(arg.span());
 				Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
 			}

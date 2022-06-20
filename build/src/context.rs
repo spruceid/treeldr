@@ -77,31 +77,59 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		self.define_treeldr_types()
 	}
 
-	pub fn create_reference_to(
+	pub fn standard_reference(
 		&mut self,
 		vocabulary: &mut Vocabulary,
-		target: Id,
+		deref_ty: Id,
 		cause: Option<Location<F>>,
+		deref_cause: Option<Location<F>>,
+	) -> Result<Id, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		match self.standard_references.get(&deref_ty).cloned() {
+			Some(id) => Ok(id),
+			None => {
+				let id = self.create_reference(vocabulary, deref_ty, cause, deref_cause)?;
+				self.standard_references.insert(deref_ty, id);
+				Ok(id)
+			}
+		}
+	}
+
+	pub fn create_reference(
+		&mut self,
+		vocabulary: &mut Vocabulary,
+		target_ty: Id,
+		cause: Option<Location<F>>,
+		deref_cause: Option<Location<F>>,
 	) -> Result<Id, Error<F>>
 	where
 		F: Clone + Ord,
 	{
 		let id = Id::Blank(vocabulary.new_blank_label());
-		self.create_named_reference_to(id, target, cause)
+		self.create_named_reference(id, target_ty, cause, deref_cause)
 	}
 
-	pub fn create_named_reference_to(
+	pub fn create_named_reference(
 		&mut self,
 		id: Id,
-		target: Id,
+		target_ty: Id,
 		cause: Option<Location<F>>,
+		deref_cause: Option<Location<F>>,
 	) -> Result<Id, Error<F>>
 	where
 		F: Clone + Ord,
 	{
 		self.declare_layout(id, cause.clone());
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
-		layout.set_deref_to(target, cause)?;
+		layout.set_type(target_ty, deref_cause)?;
+		layout.set_reference(
+			Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Primitive(
+				treeldr::layout::Primitive::Iri,
+			))),
+			cause,
+		)?;
 		Ok(id)
 	}
 
@@ -114,9 +142,10 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		self.declare_layout(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
 		let id_field = Id::Blank(vocabulary.new_blank_label());
 		self.declare_layout_field(id_field, None);
-		let field_layout = self.create_named_reference_to(
+		let field_layout = self.create_named_reference(
 			Id::Iri(Term::TreeLdr(vocab::TreeLdr::SelfLayout)),
 			Id::Iri(Term::Rdfs(Rdfs::Resource)),
+			None,
 			None,
 		)?;
 		let field = self
@@ -724,96 +753,9 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 
 		Ok(head)
 	}
-
-	pub fn standard_reference(
-		&mut self,
-		vocabulary: &mut Vocabulary,
-		deref_layout: Id,
-		cause: Option<Location<F>>,
-		deref_cause: Option<Location<F>>,
-	) -> Result<Id, Error<F>>
-	where
-		F: Clone + Ord,
-	{
-		match self.standard_references.get(&deref_layout).cloned() {
-			Some(id) => Ok(id),
-			None => {
-				let id = Id::Blank(vocabulary.new_blank_label());
-				self.declare_layout(id, cause);
-				let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
-				layout.set_deref_to(deref_layout, deref_cause)?;
-				self.standard_references.insert(deref_layout, id);
-				Ok(id)
-			}
-		}
-	}
 }
 
 impl<F: Clone + Ord> Context<F> {
-	/// Resolve all the reference layouts.
-	///
-	/// Checks that the type of a reference layout (`&T`) is equal to the type of the target layout (`T`).
-	/// If no type is defined for the reference layout, it is set to the correct type.
-	pub fn resolve_references(&mut self) -> Result<(), Error<F>>
-	where
-		F: Ord + Clone,
-	{
-		let mut deref_map = BTreeMap::new();
-
-		for (id, node) in &self.nodes {
-			if let Some(layout) = node.as_layout() {
-				if let Some(desc) = layout.description() {
-					if let layout::Description::Reference(target_layout_id) = desc.inner() {
-						deref_map.insert(
-							*id,
-							Caused::new(*target_layout_id, desc.causes().preferred().cloned()),
-						);
-					}
-				}
-			}
-		}
-
-		// Assign a depth to each reference.
-		// The depth correspond the the reference nesting level (`&&&&T` => 4 nesting level => depth 3).
-		// References with higher depth must be resolved first.
-		let mut depth_map: BTreeMap<_, _> = deref_map.keys().map(|id| (*id, 0)).collect();
-		let mut stack: Vec<_> = deref_map.keys().map(|id| (*id, 0)).collect();
-		while let Some((id, depth)) = stack.pop() {
-			let current_depth = depth_map[&id];
-			if depth > current_depth {
-				if current_depth > 0 {
-					panic!("cycling reference")
-				}
-
-				depth_map.insert(id, depth);
-				if let Some(target_layout_id) = deref_map.get(&id) {
-					stack.push((*target_layout_id.inner(), depth + 1));
-				}
-			}
-		}
-
-		// Sort references by depth (highest first).
-		let mut by_depth: Vec<_> = deref_map.into_iter().collect();
-		by_depth.sort_by(|(a, _), (b, _)| depth_map[b].cmp(&depth_map[a]));
-
-		// Actually resolve the references.
-		for (id, target_layout_id) in by_depth {
-			let (target_layout_id, cause) = target_layout_id.into_parts();
-			let target_layout = self.require_layout(target_layout_id, cause.clone())?;
-
-			if let Some(target_ty) = target_layout.ty().cloned() {
-				let (target_ty_id, ty_cause) = target_ty.into_parts();
-				self.get_mut(id)
-					.unwrap()
-					.as_layout_mut()
-					.unwrap()
-					.set_type(target_ty_id, ty_cause.into_preferred())?
-			}
-		}
-
-		Ok(())
-	}
-
 	/// Compute the `use` relation between all the layouts.
 	///
 	/// A layout is used by another layout if it is the layout of one of its
@@ -981,7 +923,6 @@ impl<F: Clone + Ord> Context<F> {
 		use crate::Build;
 
 		self.assign_default_layouts(vocabulary);
-		self.resolve_references()?;
 		self.compute_uses()?;
 		self.assign_default_names(vocabulary)?;
 

@@ -198,7 +198,8 @@ impl<F> Description<F> {
 				let layout_ref = *nodes
 					.require_layout(layout_id, causes.preferred().cloned())?
 					.inner();
-				Ok(treeldr::layout::Description::Reference(layout_ref, name))
+				let r = treeldr::layout::Reference::new(name, layout_ref);
+				Ok(treeldr::layout::Description::Reference(r))
 			}
 			Description::Struct(fields_id) => {
 				let name = require_name(id, name, causes)?;
@@ -469,8 +470,12 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 		self.set_description(Description::Struct(fields).into(), cause)
 	}
 
-	pub fn set_deref_to(&mut self, target: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
-		self.set_description(Description::Reference(target).into(), cause)
+	pub fn set_reference(
+		&mut self,
+		id_layout: Id,
+		cause: Option<Location<F>>,
+	) -> Result<(), Error<F>> {
+		self.set_description(Description::Reference(id_layout).into(), cause)
 	}
 
 	pub fn set_enum(&mut self, items: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {

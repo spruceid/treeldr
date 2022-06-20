@@ -137,7 +137,7 @@ fn generate_layout_schema<F>(
 	use treeldr::layout::Description;
 	match layout.description() {
 		Description::Never(_) => Ok(serde_json::Value::Bool(false)),
-		Description::Reference(_, _) => {
+		Description::Reference(_) => {
 			let mut json = serde_json::Map::new();
 			json.insert("type".into(), "string".into());
 			Ok(json.into())
@@ -281,7 +281,7 @@ fn generate_layout_ref<F>(
 	use treeldr::layout::Description;
 	match layout.description() {
 		Description::Never(_) => Ok(serde_json::Value::Bool(false)),
-		Description::Reference(_, _) => {
+		Description::Reference(_) => {
 			let mut json = serde_json::Map::new();
 			json.insert("type".into(), "string".into());
 			Ok(json.into())

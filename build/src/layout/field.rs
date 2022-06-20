@@ -97,9 +97,7 @@ impl<F> Definition<F> {
 		self.id
 			.as_iri()
 			.and_then(|term| term.iri(vocabulary))
-			.and_then(|iri| {
-				Name::from_iri(iri).ok().flatten()
-			})
+			.and_then(|iri| Name::from_iri(iri).ok().flatten())
 			.map(|name| Caused::new(name, cause))
 	}
 
