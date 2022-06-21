@@ -7,6 +7,7 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
+treeldr = { path = "../../../core" }
 treeldr-load = { path = "../../../load" }
 treeldr-rust-gen = { path = "../gen" }
 syn = { version = "1.0", features = ["full"] }

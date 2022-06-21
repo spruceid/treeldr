@@ -3,7 +3,16 @@ name = "treeldr-rust-gen"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+treeldr = { path = "../../../core" }
+proc-macro2 = "1.0.40"
+quote = "1.0.20"
+iref = "2.1.3"
+shelves = "0.2.7"
+derivative = "2.2.0"
+thiserror = "1.0.31"
 
 [dev-dependencies]
 treeldr-rust-macros = { path = "../macros" }
+chrono = "0.4.19"
+iref = "2.1.3"

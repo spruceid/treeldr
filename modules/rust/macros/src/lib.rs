@@ -1,13 +1,9 @@
-use proc_macro::TokenStream;
-use proc_macro_error::{
-	proc_macro_error,
-	abort,
-	abort_call_site
-};
 use codespan_reporting::term::{
 	self,
 	termcolor::{ColorChoice, StandardStream},
 };
+use proc_macro::TokenStream;
+use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use std::collections::HashMap;
 use treeldr_load as load;
 
@@ -21,7 +17,7 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 		Ok(inputs) => {
 			let item = syn::parse_macro_input!(item as syn::Item);
 			match Module::from_item(item) {
-				Ok(module) => {
+				Ok(mut module) => {
 					let mut files = load::source::Files::new();
 					let mut documents = Vec::new();
 					let mut file_id_span = HashMap::new();
@@ -30,7 +26,7 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 							Ok((doc, file_id)) => {
 								file_id_span.insert(file_id, input.span);
 								documents.push(doc)
-							},
+							}
 							Err(e) => {
 								abort!(input.span, "{}", e)
 							}
@@ -42,13 +38,18 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 					match load::build_all(&mut vocabulary, &mut build_context, documents) {
 						Ok(model) => {
-							match module.generate() {
+							let mut gen_context =
+								treeldr_rust_gen::Context::new(&model, &vocabulary);
+							module.bind(&vocabulary, &mut gen_context);
+
+							match module.generate(&gen_context) {
 								Ok(tokens) => tokens.into(),
-								Err((e, span)) => {
-									abort!(span, "{}", e)
+								Err(e) => {
+									use treeldr_rust_gen::Display;
+									abort_call_site!("{}", e.display(&gen_context))
 								}
 							}
-						},
+						}
 						Err(e) => {
 							use load::reporting::Diagnose;
 							use load::BorrowWithVocabulary;

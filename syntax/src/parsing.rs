@@ -1023,7 +1023,8 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 				}
 				Token::Begin(Delimiter::Parenthesis) => {
 					let outer = OuterTypeExpr::parse(lexer)?;
-					parse_end(lexer, Delimiter::Parenthesis)?;
+					loc.span_mut()
+						.append(parse_end(lexer, Delimiter::Parenthesis)?.span());
 					Ok(Loc(Self::Outer(Box::new(outer)), loc))
 				}
 				unexpected => Err(Loc::new(
@@ -1188,7 +1189,8 @@ impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
 			}
 			Token::Begin(Delimiter::Parenthesis) => {
 				let outer = OuterLayoutExpr::parse(lexer)?;
-				parse_end(lexer, Delimiter::Parenthesis)?;
+				loc.span_mut()
+					.append(parse_end(lexer, Delimiter::Parenthesis)?.span());
 				Ok(Loc(Self::Outer(Box::new(outer)), loc))
 			}
 			unexpected => Err(Loc::new(

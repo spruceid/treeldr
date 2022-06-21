@@ -3,10 +3,8 @@ use locspan::Location;
 use treeldr::{Caused, Causes, Id, MaybeSet, Name, Vocabulary, WithCauses};
 
 pub mod array;
-pub mod enumeration;
 pub mod field;
 pub mod primitive;
-pub mod structure;
 pub mod variant;
 
 pub use array::Array;

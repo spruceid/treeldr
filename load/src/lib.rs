@@ -3,40 +3,41 @@ use codespan_reporting::term::{
 	termcolor::{ColorChoice, StandardStream},
 };
 use std::convert::Infallible;
-use std::path::{
-	Path,
-	PathBuf
-};
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 use treeldr_syntax as syntax;
 
 pub mod source;
 
-pub use treeldr::{
-	Vocabulary,
-	reporting,
-	vocab::BorrowWithVocabulary
-};
+pub use treeldr::{reporting, vocab::BorrowWithVocabulary, Vocabulary};
 pub type BuildContext = treeldr_build::Context<source::FileId, syntax::build::Descriptions>;
 
 /// Build all the given documents.
 pub fn build_all(
 	vocabulary: &mut treeldr::Vocabulary,
 	build_context: &mut BuildContext,
-	mut documents: Vec<Document>
+	mut documents: Vec<Document>,
 ) -> Result<treeldr::Model<source::FileId>, BuildAllError> {
-	build_context.apply_built_in_definitions(vocabulary).unwrap();
+	build_context
+		.apply_built_in_definitions(vocabulary)
+		.unwrap();
 
 	for doc in &mut documents {
-		doc.declare(build_context, vocabulary).map_err(BuildAllError::Declaration)?
+		doc.declare(build_context, vocabulary)
+			.map_err(BuildAllError::Declaration)?
 	}
 
 	for doc in documents {
-		doc.build(build_context, vocabulary).map_err(BuildAllError::Link)?
+		doc.build(build_context, vocabulary)
+			.map_err(BuildAllError::Link)?
 	}
 
-	let build_context = build_context.simplify(vocabulary).map_err(BuildAllError::Simplification)?;
-	build_context.build(vocabulary).map_err(BuildAllError::Build)
+	let build_context = build_context
+		.simplify(vocabulary)
+		.map_err(BuildAllError::Simplification)?;
+	build_context
+		.build(vocabulary)
+		.map_err(BuildAllError::Build)
 }
 
 #[derive(Error, Debug)]
@@ -48,7 +49,7 @@ pub enum LoadError {
 	UnrecognizedFormat(PathBuf),
 
 	#[error("unable to read file `{0}`: {1}")]
-	UnableToRead(PathBuf, std::io::Error)
+	UnableToRead(PathBuf, std::io::Error),
 }
 
 pub struct TreeLdrDocument {
@@ -82,7 +83,7 @@ pub enum BuildAllError {
 	Declaration(LangError),
 	Link(LangError),
 	Simplification(<syntax::build::Descriptions as treeldr_build::Simplify<source::FileId>>::Error),
-	Build(treeldr_build::Error<source::FileId>)
+	Build(treeldr_build::Error<source::FileId>),
 }
 
 impl treeldr::reporting::DiagnoseWithVocabulary<source::FileId> for BuildAllError {
@@ -176,13 +177,13 @@ impl Document {
 	/// Load the document located at the given `path`.
 	pub fn load(
 		files: &mut source::Files,
-		filename: &Path
+		filename: &Path,
 	) -> Result<(Self, source::FileId), LoadError> {
 		match files.load(&filename, None, None) {
 			Ok(file_id) => {
 				let document = match files.get(file_id).unwrap().mime_type() {
 					Some(source::MimeType::TreeLdr) => {
-						Document::TreeLdr(Box::new(import_treeldr(&files, file_id)))
+						Document::TreeLdr(Box::new(import_treeldr(files, file_id)))
 					}
 					#[cfg(feature = "json-schema")]
 					Some(source::MimeType::JsonSchema) => {
@@ -190,12 +191,12 @@ impl Document {
 					}
 					#[allow(unreachable_patterns)]
 					Some(mime_type) => return Err(LoadError::UnsupportedMimeType(mime_type)),
-					None => return Err(LoadError::UnrecognizedFormat(filename.to_owned()))
+					None => return Err(LoadError::UnrecognizedFormat(filename.to_owned())),
 				};
-	
+
 				Ok((document, file_id))
 			}
-			Err(e) => Err(LoadError::UnableToRead(filename.to_owned(), e))
+			Err(e) => Err(LoadError::UnableToRead(filename.to_owned(), e)),
 		}
 	}
 
@@ -217,7 +218,11 @@ impl Document {
 		}
 	}
 
-	fn build(self, context: &mut BuildContext, vocabulary: &mut Vocabulary) -> Result<(), LangError> {
+	fn build(
+		self,
+		context: &mut BuildContext,
+		vocabulary: &mut Vocabulary,
+	) -> Result<(), LangError> {
 		match self {
 			Self::TreeLdr(d) => {
 				d.build(context, vocabulary)?;

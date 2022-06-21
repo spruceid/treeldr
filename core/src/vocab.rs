@@ -18,10 +18,6 @@ pub enum TreeLdr {
 	#[iri("tldr:self")]
 	Self_,
 
-	/// Default layout of the `self` property.
-	#[iri("tldr:SelfLayout")]
-	SelfLayout,
-
 	#[iri("tldr:Layout")]
 	Layout,
 

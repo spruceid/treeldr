@@ -1,7 +1,7 @@
 use iref::{IriBuf, IriRef, IriRefBuf};
 use locspan::{Loc, Location};
 use std::collections::{BTreeMap, HashMap};
-use std::fmt;
+use thiserror::Error;
 use treeldr::{reporting, vocab::*, Caused, Causes, Id, Name, Vocabulary, WithCauses};
 use treeldr_build::{Context, ObjectToId};
 
@@ -43,22 +43,34 @@ impl<F> From<Loc<LocalError<F>, F>> for Error<F> {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum LocalError<F> {
+	#[error("`{0}` is not a valid IRI")]
 	InvalidExpandedCompactIri(String),
+	#[error("prefix `{0}` is undefined")]
 	UndefinedPrefix(String),
+	#[error("prefix `{0}` is already defined")]
 	AlreadyDefinedPrefix(String, Location<F>),
+	#[error("cannot resolve the IRI reference without a base IRI")]
 	NoBaseIri,
+	#[error("should be `{expected}`")]
 	BaseIriMismatch {
 		expected: Box<IriBuf>,
 		found: Box<IriBuf>,
 		because: Location<F>,
 	},
+	#[error("type aliases are not supported")]
 	TypeAlias(Id, Location<F>),
+	#[error("only inline layouts can be assigned a name")]
 	Renaming(Id, Location<F>),
+	#[error("cannot define restricted field layout outside an intersection")]
 	PropertyRestrictionOutsideIntersection,
+	#[error("field not found")]
 	FieldRestrictionNoMatches,
+	#[error("unexpected field restriction")]
 	UnexpectedFieldRestriction,
+	#[error("field restrictions lead to anonymous layout")]
+	AnonymousFieldLayoutIntersection(Vec<WithCauses<Id, F>>),
 }
 
 impl<F: Clone> reporting::DiagnoseWithCause<F> for LocalError<F> {
@@ -78,6 +90,7 @@ impl<F: Clone> reporting::DiagnoseWithCause<F> for LocalError<F> {
 			Self::UnexpectedFieldRestriction => {
 				"field restrictions can only be applied on structure layouts".to_string()
 			}
+			Self::AnonymousFieldLayoutIntersection(_) => "unexpected anonymous layout".to_string(),
 		}
 	}
 
@@ -105,33 +118,22 @@ impl<F: Clone> reporting::DiagnoseWithCause<F> for LocalError<F> {
 					.into_secondary_label()
 					.with_message("original base IRI defined here".to_string()),
 			),
+			Self::AnonymousFieldLayoutIntersection(layouts) => {
+				for layout in layouts {
+					if let Some(cause) = layout.causes().preferred() {
+						labels.push(
+							cause
+								.clone()
+								.into_secondary_label()
+								.with_message("part of the intersection".to_string()),
+						)
+					}
+				}
+			}
 			_ => (),
 		}
 
 		labels
-	}
-}
-
-impl<F> fmt::Display for LocalError<F> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match self {
-			Self::InvalidExpandedCompactIri(expanded) => {
-				write!(f, "`{}` is not a valid IRI", expanded)
-			}
-			Self::UndefinedPrefix(prefix) => write!(f, "prefix `{}` is undefined", prefix),
-			Self::AlreadyDefinedPrefix(prefix, _) => {
-				write!(f, "prefix `{}` is already defined", prefix)
-			}
-			Self::NoBaseIri => "cannot resolve the IRI reference without a base IRI".fmt(f),
-			Self::BaseIriMismatch { expected, .. } => write!(f, "should be `{}`", expected),
-			Self::TypeAlias(_, _) => write!(f, "type aliases are not supported"),
-			Self::Renaming(_, _) => write!(f, "only inline layouts can be assigned a name"),
-			Self::PropertyRestrictionOutsideIntersection => {
-				write!(f, "invalid layout field restriction")
-			}
-			Self::FieldRestrictionNoMatches => write!(f, "field not found"),
-			Self::UnexpectedFieldRestriction => write!(f, "unexpected field restriction"),
-		}
 	}
 }
 

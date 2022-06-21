@@ -15,7 +15,7 @@ pub mod name;
 pub mod node;
 pub mod prop;
 pub mod reporting;
-mod to_rdf;
+pub mod to_rdf;
 pub mod ty;
 pub mod utils;
 pub mod value;

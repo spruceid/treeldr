@@ -29,7 +29,10 @@ struct Args {
 #[derive(clap::Subcommand)]
 pub enum Command {
 	/// Convert the input to an RDF dataset.
-	Rdf,
+	Rdf {
+		#[clap(short = 's', long = "standard-vocab")]
+		include_standard_vocabulary: bool,
+	},
 
 	#[cfg(feature = "json-schema")]
 	JsonSchema(treeldr_json_schema::Command),
@@ -116,10 +119,18 @@ fn main() {
 		Ok(build_context) => match build_context.build(&mut vocabulary) {
 			#[allow(unused_variables)]
 			Ok(model) => match args.command {
-				Some(Command::Rdf) => {
+				Some(Command::Rdf {
+					include_standard_vocabulary,
+				}) => {
 					use treeldr::vocab::RdfDisplay;
 					let mut quads = Vec::new();
-					model.to_rdf(&mut vocabulary, &mut quads);
+					model.to_rdf_with(
+						&mut vocabulary,
+						&mut quads,
+						treeldr::to_rdf::Options {
+							ignore_standard_vocabulary: !include_standard_vocabulary,
+						},
+					);
 					for quad in quads {
 						println!("{} .", quad.rdf_display(&vocabulary))
 					}

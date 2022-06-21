@@ -16,7 +16,7 @@ pub struct Options {
 	/// Ignore standard definitions.
 	///
 	/// Defaults to `true`.
-	ignore_standard_vocabulary: bool,
+	pub ignore_standard_vocabulary: bool,
 }
 
 impl Default for Options {

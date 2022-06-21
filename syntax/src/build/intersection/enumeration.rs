@@ -40,6 +40,26 @@ impl<F: Clone + Ord> IntersectedEnum<F> {
 		Ok(Self { variants })
 	}
 
+	pub fn is_included_in(&self, other: &Self) -> bool {
+		let mut i = 0;
+		'next_variant: for variant in &self.variants {
+			while i < other.variants.len() {
+				let other_variant = &other.variants[i];
+				if other_variant.name.value() == variant.name.value()
+					&& other_variant.layout == variant.layout
+				{
+					continue 'next_variant;
+				}
+
+				i += 1;
+			}
+
+			return false;
+		}
+
+		true
+	}
+
 	pub fn intersected_with(
 		mut self,
 		mut other: IntersectedEnum<F>,

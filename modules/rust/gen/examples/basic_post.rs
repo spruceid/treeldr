@@ -8,16 +8,27 @@ use treeldr_rust_macros::tldr;
 	"modules/rust/gen/examples/basic_post.tldr"
 )]
 mod schema {
+	#[prefix("http://www.w3.org/2000/01/rdf-schema#")]
+	pub mod rdfs {}
+
+	#[prefix("http://www.w3.org/2001/XMLSchema#")]
+	pub mod xsd {}
+
 	#[prefix("https://www.w3.org/2018/credentials#")]
-	mod vc {}
+	pub mod vc {}
 
 	#[prefix("https://example.com/rebase/")]
-	mod rebase {}
+	pub mod rebase {}
 
 	#[prefix("https://example.com/example/")]
-	mod basic_post {}
+	pub mod basic_post {}
 }
 
 fn main() {
+	let mut post =
+		schema::basic_post::BasicPost::new(iref::IriBuf::new("https://example.com/post").unwrap());
+	post.title = Some("Title".to_string());
+	post.body = Some("Lorem ipsum dolor sit amet, consectetur adipiscing elit.".to_string());
+
 	println!("Hello World!")
 }

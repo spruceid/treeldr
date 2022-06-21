@@ -1,11 +1,16 @@
 base <https://example.com/example/>;
+use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
 use <http://www.w3.org/2001/XMLSchema#> as xs;
 use <https://schema.org/> as schema;
+use <https://treeldr.org/> as tldr;
 use <https://www.w3.org/2018/credentials#> as vc;
 
 layout BasicPost for schema:BlogPosting {
+	tldr:self as id: required &rdfs:Resource,
 	schema:title: xs:string,
 	schema:body: xs:string
 }
 
-type VerifiableBasicPost = vc:VerifiableCredential & all vc:credentialSubject: (schema:BlogPosting with BasicPost);
+/// Verifiable `BasicPost`
+type VerifiableBasicPost = vc:VerifiableCredential &
+	all vc:credentialSubject: (schema:BlogPosting with BasicPost);

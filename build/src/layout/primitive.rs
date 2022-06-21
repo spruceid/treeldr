@@ -107,6 +107,11 @@ impl<F> Restricted<F> {
 		Ok(self)
 	}
 
+	pub fn is_included_in(&self, other: &Self) -> bool {
+		self.primitive().value() == other.primitive().value()
+			&& self.restrictions.is_included_in(&other.restrictions)
+	}
+
 	pub fn build(
 		self,
 		id: Id,

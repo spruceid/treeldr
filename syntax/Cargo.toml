@@ -13,6 +13,7 @@ locspan = "0.3"
 codespan-reporting = "0.11"
 rdf-types = { version = "0.4.1", features = ["loc"] }
 derivative = "2.2.0"
+thiserror = "1.0.31"
 
 [dev-dependencies]
 static-iref = "2.0"

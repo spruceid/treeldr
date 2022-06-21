@@ -3,7 +3,7 @@ use <http://www.w3.org/2001/XMLSchema#> as xs;
 use <https://www.w3.org/2018/credentials#> as vc;
 
 type vc:VerifiableCredential {
-	vc:credentialSubject: required multiple rdfs:Resource,
+	vc:credentialSubject: rdfs:Resource,
 	vc:issuer: rdfs:Resource,
 	vc:issuanceDate: xs:dateTime,
 	vc:proof: vc:Proof,

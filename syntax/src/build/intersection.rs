@@ -149,6 +149,14 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 				})
 			}
 			None => {
+				if self.desc.is_included_in(&other.desc) {
+					return Ok(other);
+				}
+
+				if other.desc.is_included_in(&self.desc) {
+					return Ok(self);
+				}
+
 				let (desc, causes) = self.desc.into_parts();
 				let other_causes = other.desc.causes().clone();
 
@@ -304,6 +312,20 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 		}
 
 		Ok(aliases)
+	}
+
+	pub fn is_included_in(&self, other: &Self) -> bool {
+		match (self, other) {
+			(Self::Never, Self::Never) => true,
+			(Self::Primitive(a), Self::Primitive(b)) => a.is_included_in(b),
+			(Self::Reference(a), Self::Reference(b)) => a == b,
+			(Self::Enum(a), Self::Enum(b)) => a.is_included_in(b),
+			(Self::Struct(a), Self::Struct(b)) => a.is_included_in(b),
+			(Self::Set(a), Self::Set(b)) => a == b,
+			(Self::Array(a), Self::Array(b)) => a == b,
+			(Self::Alias(a), Self::Alias(b)) => a == b,
+			_ => false,
+		}
 	}
 
 	pub fn intersected_with(

@@ -138,21 +138,19 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		F: Clone + Ord,
 	{
 		use vocab::{Rdf, Rdfs, Term};
+		// rdfs:Resource
 		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
 		self.declare_layout(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
 		let id_field = Id::Blank(vocabulary.new_blank_label());
 		self.declare_layout_field(id_field, None);
-		let field_layout = self.create_named_reference(
-			Id::Iri(Term::TreeLdr(vocab::TreeLdr::SelfLayout)),
-			Id::Iri(Term::Rdfs(Rdfs::Resource)),
-			None,
-			None,
-		)?;
+		let field_layout =
+			self.standard_reference(vocabulary, Id::Iri(Term::Rdfs(Rdfs::Resource)), None, None)?;
 		let field = self
 			.get_mut(id_field)
 			.unwrap()
 			.as_layout_field_mut()
 			.unwrap();
+		field.set_property(Id::Iri(Term::TreeLdr(vocab::TreeLdr::Self_)), None)?;
 		field.set_name(treeldr::Name::new("id").unwrap(), None)?;
 		field.set_layout(field_layout, None)?;
 		let fields_id = self.create_list(vocabulary, [Caused::new(id_field.into_term(), None)])?;
@@ -163,10 +161,23 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 			.unwrap();
 		layout.set_fields(fields_id, None)?;
 
+		// rdfs:Class
 		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Class)), None);
 
+		// rdf:Property
 		self.declare_type(Id::Iri(Term::Rdf(Rdf::Property)), None);
 
+		// rdf:type
+		self.declare_property(Id::Iri(Term::Rdf(Rdf::Type)), None);
+		let prop = self
+			.get_mut(Id::Iri(Term::Rdf(Rdf::Type)))
+			.unwrap()
+			.as_property_mut()
+			.unwrap();
+		prop.set_domain(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
+		prop.set_range(Id::Iri(Term::Rdfs(Rdfs::Class)), None)?;
+
+		// rdf:List
 		self.declare_type(Id::Iri(Term::Rdf(Rdf::List)), None);
 		let list = self
 			.get_mut(Id::Iri(Term::Rdf(Rdf::List)))
@@ -176,6 +187,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		list.declare_property(Id::Iri(Term::Rdf(Rdf::First)), None)?;
 		list.declare_property(Id::Iri(Term::Rdf(Rdf::Rest)), None)?;
 
+		// rdf:first
 		self.declare_property(Id::Iri(Term::Rdf(Rdf::First)), None);
 		let prop = self
 			.get_mut(Id::Iri(Term::Rdf(Rdf::First)))
@@ -185,6 +197,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		prop.set_domain(Id::Iri(Term::Rdf(Rdf::List)), None);
 		prop.set_range(Id::Iri(Term::Rdfs(Rdfs::Resource)), None)?;
 
+		// rdf:rest
 		self.declare_property(Id::Iri(Term::Rdf(Rdf::Rest)), None);
 		let prop = self
 			.get_mut(Id::Iri(Term::Rdf(Rdf::Rest)))

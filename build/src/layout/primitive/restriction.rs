@@ -48,6 +48,12 @@ impl<F> PartialEq for Restrictions<F> {
 
 impl<F> Eq for Restrictions<F> {}
 
+impl<F> Restrictions<F> {
+	pub fn is_included_in(&self, other: &Self) -> bool {
+		self.map.keys().all(|r| other.map.contains_key(r))
+	}
+}
+
 impl<F: Ord> Restrictions<F> {
 	pub fn insert(&mut self, restriction: Restriction, causes: impl Into<Causes<F>>) {
 		self.map

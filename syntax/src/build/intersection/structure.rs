@@ -42,6 +42,27 @@ impl<F: Clone + Ord> IntersectedStruct<F> {
 		Ok(Self { fields })
 	}
 
+	pub fn is_included_in(&self, other: &Self) -> bool {
+		let mut i = 0;
+		'next_field: for field in &self.fields {
+			while i < other.fields.len() {
+				let other_field = &other.fields[i];
+				if other_field.name.value() == field.name.value()
+					&& other_field.property.value() == field.property.value()
+					&& other_field.restrictions == field.restrictions
+				{
+					continue 'next_field;
+				}
+
+				i += 1;
+			}
+
+			return false;
+		}
+
+		true
+	}
+
 	pub fn intersected_with(
 		mut self,
 		mut other: IntersectedStruct<F>,
@@ -310,16 +331,26 @@ impl<F> FieldRestrictions<F> {
 		let result = IntersectedLayout::try_from_iter(
 			self.range
 				.all
-				.into_iter()
-				.map(|(id, causes)| WithCauses::new(id, causes)),
+				.iter()
+				.map(|(id, causes)| WithCauses::new(*id, causes.clone())),
 			source,
-			causes,
+			causes.clone(),
 		)?;
 
 		if result.has_id() {
 			Ok(Some(result.into_layout(source, target, vocabulary)?))
 		} else {
-			Ok(None)
+			Err(Loc(
+				LocalError::AnonymousFieldLayoutIntersection(
+					self.range
+						.all
+						.into_iter()
+						.map(|(id, causes)| WithCauses::new(id, causes))
+						.collect(),
+				),
+				causes.preferred().cloned().unwrap(),
+			)
+			.into())
 		}
 	}
 }
