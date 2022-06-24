@@ -32,18 +32,10 @@ layout Schema for rdfs:Resource;
 
 layout RefreshService for rdfs:Resource;
 
-layout Any for rdfs:Resource {
-	// * as property_set: &rdf:Property -> (&Any | Any)
-}
+layout Any for rdfs:Resource;
 
 /// Any object with an identifier.
-layout ObjectWithId for rdfs:Resource {
-	// /// Identifier to self.
-	// _ as id: &Self = self,
-
-	// /// Other properties.
-	// * as property_set: &rdf:Property -> (&Any | Any)
-}
+layout ObjectWithId for rdfs:Resource;
 
 /// Issuer.
 layout Issuer for rdfs:Resource = tldr:URI | ObjectWithId as Object;

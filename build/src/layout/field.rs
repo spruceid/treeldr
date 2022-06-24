@@ -194,6 +194,10 @@ impl<F> Definition<F> {
 		self.required.value().cloned().unwrap_or(false)
 	}
 
+	pub fn is_required_opt(&self) -> &MaybeSet<bool, F> {
+		&self.required
+	}
+
 	pub fn set_required(&mut self, value: bool, cause: Option<Location<F>>) -> Result<(), Error<F>>
 	where
 		F: Ord + Clone,
@@ -213,8 +217,16 @@ impl<F> Definition<F> {
 			})
 	}
 
+	pub fn replace_required(&mut self, value: MaybeSet<bool, F>) {
+		self.required = value
+	}
+
 	pub fn is_functional(&self) -> bool {
 		self.functional.value().cloned().unwrap_or(true)
+	}
+
+	pub fn is_functional_opt(&self) -> &MaybeSet<bool, F> {
+		&self.functional
 	}
 
 	pub fn set_functional(
@@ -238,6 +250,10 @@ impl<F> Definition<F> {
 					causes.preferred().cloned(),
 				)
 			})
+	}
+
+	pub fn replace_functional(&mut self, value: MaybeSet<bool, F>) {
+		self.functional = value
 	}
 }
 

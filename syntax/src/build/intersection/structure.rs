@@ -33,6 +33,8 @@ impl<F: Clone + Ord> IntersectedStruct<F> {
 				IntersectedField {
 					name: field.name().cloned().into(),
 					property: field.property().cloned().into(),
+					required: field.is_required_opt().clone(),
+					functional: field.is_functional_opt().clone(),
 					restrictions: FieldRestrictions::from_field_layout(field.layout().cloned()),
 				},
 				field.causes().clone(),
@@ -196,6 +198,8 @@ impl<F> PartialEq for IntersectedStruct<F> {
 pub struct IntersectedField<F> {
 	name: MaybeSet<Name, F>,
 	property: MaybeSet<Id, F>,
+	required: MaybeSet<bool, F>,
+	functional: MaybeSet<bool, F>,
 	restrictions: FieldRestrictions<F>,
 }
 
@@ -220,6 +224,9 @@ impl<F: Clone + Ord> IntersectedField<F> {
 				def.replace_name(self.name);
 				def.replace_property(self.property);
 				def.replace_layout(layout.into());
+
+				def.replace_required(self.required); // TODO
+				def.replace_functional(self.functional); // TODO
 
 				id
 			}))
@@ -260,6 +267,8 @@ impl<F: Clone + Ord> IntersectedField<F> {
 			Some(restrictions) => Ok(Some(Self {
 				name,
 				property,
+				required: self.required, // TODO
+				functional: self.functional, // TODO
 				restrictions,
 			})),
 			None => Ok(None),
