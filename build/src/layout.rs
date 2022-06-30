@@ -17,6 +17,8 @@ pub enum Description<F> {
 	Struct(Id),
 	Reference(Id),
 	Enum(Id),
+	Required(Id),
+	Option(Id),
 	Set(Id),
 	Array(Array<F>),
 	Alias(Id),
@@ -30,6 +32,8 @@ pub enum Kind {
 	Literal,
 	Struct,
 	Enum,
+	Required,
+	Option,
 	Set,
 	Array,
 	Alias,
@@ -43,6 +47,8 @@ impl<F> Description<F> {
 			Self::Struct(_) => Kind::Struct,
 			Self::Primitive(n) => Kind::Primitive(n.primitive().value().cloned()),
 			Self::Enum(_) => Kind::Enum,
+			Self::Required(_) => Kind::Required,
+			Self::Option(_) => Kind::Option,
 			Self::Set(_) => Kind::Set,
 			Self::Array(_) => Kind::Array,
 			Self::Alias(_) => Kind::Alias,
@@ -246,6 +252,22 @@ impl<F> Description<F> {
 
 				let enm = treeldr::layout::Enum::new(name, variants);
 				Ok(treeldr::layout::Description::Enum(enm))
+			}
+			Description::Required(item_layout_id) => {
+				let item_layout_ref = *nodes
+					.require_layout(item_layout_id, causes.preferred().cloned())?
+					.inner();
+				Ok(treeldr::layout::Description::Required(
+					treeldr::layout::Required::new(name, item_layout_ref),
+				))
+			}
+			Description::Option(item_layout_id) => {
+				let item_layout_ref = *nodes
+					.require_layout(item_layout_id, causes.preferred().cloned())?
+					.inner();
+				Ok(treeldr::layout::Description::Option(
+					treeldr::layout::Optional::new(name, item_layout_ref),
+				))
 			}
 			Description::Set(item_layout_id) => {
 				let item_layout_ref = *nodes
@@ -478,6 +500,14 @@ impl<F: Clone + Ord, D: PseudoDescription<F>> Definition<F, D> {
 
 	pub fn set_enum(&mut self, items: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
 		self.set_description(Description::Enum(items).into(), cause)
+	}
+
+	pub fn set_required(&mut self, item: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
+		self.set_description(Description::Required(item).into(), cause)
+	}
+
+	pub fn set_option(&mut self, item: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {
+		self.set_description(Description::Option(item).into(), cause)
 	}
 
 	pub fn set_set(&mut self, item: Id, cause: Option<Location<F>>) -> Result<(), Error<F>> {

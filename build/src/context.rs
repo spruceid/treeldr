@@ -77,6 +77,34 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		self.define_treeldr_types()
 	}
 
+	pub fn create_option_layout(
+		&mut self,
+		vocabulary: &mut Vocabulary,
+		item_layout: Id,
+		cause: Option<Location<F>>,
+	) -> Result<Id, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		let id = Id::Blank(vocabulary.new_blank_label());
+		self.create_named_option_layout(id, item_layout, cause)
+	}
+
+	pub fn create_named_option_layout(
+		&mut self,
+		id: Id,
+		item_layout: Id,
+		cause: Option<Location<F>>,
+	) -> Result<Id, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		self.declare_layout(id, cause.clone());
+		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
+		layout.set_option(item_layout, cause)?;
+		Ok(id)
+	}
+
 	pub fn standard_reference(
 		&mut self,
 		vocabulary: &mut Vocabulary,
@@ -143,8 +171,9 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		self.declare_layout(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
 		let id_field = Id::Blank(vocabulary.new_blank_label());
 		self.declare_layout_field(id_field, None);
-		let field_layout =
+		let resource_ref_layout =
 			self.standard_reference(vocabulary, Id::Iri(Term::Rdfs(Rdfs::Resource)), None, None)?;
+		let field_layout = self.create_option_layout(vocabulary, resource_ref_layout, None)?;
 		let field = self
 			.get_mut(id_field)
 			.unwrap()

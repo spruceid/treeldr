@@ -25,13 +25,17 @@ mod schema {
 }
 
 fn main() {
-	let mut post =
-		schema::basic_post::BasicPost::new(iref::IriBuf::new("https://example.com/#MyPost").unwrap());
+	let mut post = schema::basic_post::BasicPost::new(
+		iref::IriBuf::new("https://example.com/#MyPost").unwrap(),
+	);
 	post.title = Some("Title".to_string());
 	post.body = Some("Lorem ipsum dolor sit amet, consectetur adipiscing elit.".to_string());
 
 	let mut vc = schema::basic_post::VerifiableBasicPost::default();
-	vc.credential_subject = Some(post);
+	vc.credential_subject.insert(post);
 
-	println!("Created post `{}`", vc.credential_subject.as_ref().unwrap().id)
+	println!(
+		"Created post `{}`",
+		vc.credential_subject.iter().next().unwrap().id
+	)
 }

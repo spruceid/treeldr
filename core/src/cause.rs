@@ -1,12 +1,16 @@
 use derivative::Derivative;
 use locspan::Location;
+use locspan_derive::StrippedPartialEq;
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, PartialEq, StrippedPartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[stripped_ignore(F)]
 pub struct Caused<T, F> {
 	t: T,
+
+	#[stripped_ignore]
 	cause: Option<Location<F>>,
 }
 
@@ -153,9 +157,12 @@ impl<F> IntoIterator for Causes<F> {
 	}
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, StrippedPartialEq)]
+#[stripped_ignore(F)]
 pub struct WithCauses<T, F> {
 	t: T,
+
+	#[stripped_ignore]
 	causes: Causes<F>,
 }
 

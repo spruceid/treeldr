@@ -618,10 +618,12 @@ impl<F> layout::Definition<F> {
 		}
 
 		match self.description() {
-			layout::Description::Never(_) => todo!(),
+			layout::Description::Never(_) => (),
 			layout::Description::Primitive(n, _) => n.to_rdf(self.id(), generator, quads),
 			layout::Description::Struct(s) => s.to_rdf(model, self.id(), generator, quads),
 			layout::Description::Enum(e) => e.to_rdf(model, self.id(), generator, quads),
+			layout::Description::Required(r) => r.to_rdf(model, self.id(), quads),
+			layout::Description::Option(o) => o.to_rdf(model, self.id(), quads),
 			layout::Description::Array(a) => a.to_rdf(model, self.id(), quads),
 			layout::Description::Set(s) => s.to_rdf(model, self.id(), quads),
 			layout::Description::Reference(r) => {
@@ -641,6 +643,38 @@ impl<F> layout::Definition<F> {
 				));
 			}
 		}
+	}
+}
+
+impl<F> layout::Required<F> {
+	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
+		quads.push(Quad(
+			id,
+			Term::TreeLdr(vocab::TreeLdr::Required),
+			model
+				.layouts()
+				.get(self.item_layout())
+				.unwrap()
+				.id()
+				.into_term(),
+			None,
+		))
+	}
+}
+
+impl<F> layout::Optional<F> {
+	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
+		quads.push(Quad(
+			id,
+			Term::TreeLdr(vocab::TreeLdr::Option),
+			model
+				.layouts()
+				.get(self.item_layout())
+				.unwrap()
+				.id()
+				.into_term(),
+			None,
+		))
 	}
 }
 
@@ -1001,15 +1035,6 @@ impl<F> layout::Field<F> {
 			Object::Literal(Literal::String(self.name().to_string().into())),
 			None,
 		));
-
-		if self.is_required() {
-			quads.push(Quad(
-				id,
-				Term::Schema(vocab::Schema::ValueRequired),
-				Object::Iri(Term::Schema(vocab::Schema::True)),
-				None,
-			));
-		}
 
 		if let Some(label) = self.label() {
 			quads.push(Quad(

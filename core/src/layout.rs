@@ -4,8 +4,10 @@ use shelves::Ref;
 
 pub mod array;
 pub mod enumeration;
+mod optional;
 pub mod primitive;
 mod reference;
+mod required;
 mod set;
 mod structure;
 
@@ -14,8 +16,10 @@ mod usages;
 
 pub use array::Array;
 pub use enumeration::{Enum, Variant};
+pub use optional::Optional;
 pub use primitive::{restricted::Restricted as RestrictedPrimitive, Primitive};
 pub use reference::Reference;
+pub use required::Required;
 pub use set::Set;
 pub use structure::{Field, Struct};
 
@@ -31,6 +35,8 @@ pub enum Kind {
 	Enum,
 	Reference,
 	Literal,
+	Required,
+	Option,
 	Array,
 	Set,
 	Alias,
@@ -62,6 +68,12 @@ pub enum Description<F> {
 	/// Enumeration.
 	Enum(Enum<F>),
 
+	/// Required.
+	Required(Required<F>),
+
+	/// Option.
+	Option(Optional<F>),
+
 	/// Array.
 	Array(Array<F>),
 
@@ -80,6 +92,8 @@ impl<F> Description<F> {
 			Self::Reference(_) => Kind::Reference,
 			Self::Struct(_) => Kind::Struct,
 			Self::Enum(_) => Kind::Enum,
+			Self::Required(_) => Kind::Required,
+			Self::Option(_) => Kind::Option,
 			Self::Array(_) => Kind::Array,
 			Self::Set(_) => Kind::Set,
 			Self::Alias(_, _) => Kind::Alias,
@@ -100,6 +114,8 @@ impl<F> Description<F> {
 			Self::Reference(r) => r.set_name(new_name, cause),
 			Self::Struct(s) => Some(s.set_name(new_name, cause)),
 			Self::Enum(e) => Some(e.set_name(new_name, cause)),
+			Self::Required(r) => r.set_name(new_name, cause),
+			Self::Option(o) => o.set_name(new_name, cause),
 			Self::Array(a) => a.set_name(new_name, cause),
 			Self::Set(s) => s.set_name(new_name, cause),
 			Self::Alias(n, _) => Some(std::mem::replace(n, WithCauses::new(new_name, cause))),
@@ -113,6 +129,8 @@ impl<F> Description<F> {
 			Description::Enum(e) => e.into_name().into(),
 			Description::Reference(r) => r.into_name(),
 			Description::Primitive(_, n) => n,
+			Description::Required(r) => r.into_name(),
+			Description::Option(o) => o.into_name(),
 			Description::Array(a) => a.into_name(),
 			Description::Set(s) => s.into_name(),
 			Description::Alias(n, _) => n.into(),
@@ -152,6 +170,8 @@ impl<F> Definition<F> {
 			Description::Enum(e) => Some(e.name()),
 			Description::Reference(r) => r.name(),
 			Description::Primitive(_, n) => n.value(),
+			Description::Required(r) => r.name(),
+			Description::Option(o) => o.name(),
 			Description::Array(a) => a.name(),
 			Description::Set(s) => s.name(),
 			Description::Alias(n, _) => Some(n.inner()),
@@ -207,6 +227,8 @@ impl<F> Definition<F> {
 			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts()),
 			Description::Reference(r) => ComposingLayouts::One(Some(r.id_layout())),
 			Description::Primitive(_, _) => ComposingLayouts::None,
+			Description::Option(o) => ComposingLayouts::One(Some(o.item_layout())),
+			Description::Required(r) => ComposingLayouts::One(Some(r.item_layout())),
 			Description::Array(a) => ComposingLayouts::One(Some(a.item_layout())),
 			Description::Set(s) => ComposingLayouts::One(Some(s.item_layout())),
 			Description::Alias(_, _) => ComposingLayouts::None,

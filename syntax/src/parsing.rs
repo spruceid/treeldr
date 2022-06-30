@@ -680,31 +680,24 @@ impl<F: Clone> Parse<F> for PropertyDefinition<F> {
 		let id = Id::parse_from_continuation(lexer, k)?;
 		let mut loc = id.location().clone();
 
-		let (ty, alias) = match peek_token(lexer)?.into_value() {
+		let alias = match peek_token(lexer)? {
+			locspan::Loc(Some(Token::Keyword(lexing::Keyword::As)), _) => {
+				next_token(lexer)?;
+				let alias = Alias::parse(lexer)?;
+				loc.span_mut().append(alias.span());
+				Some(alias)
+			}
+			_ => None,
+		};
+
+		let ty = match peek_token(lexer)?.into_value() {
 			Some(Token::Punct(lexing::Punct::Colon)) => {
 				next_token(lexer)?;
 				let ty = AnnotatedTypeExpr::parse(lexer)?;
 				loc.span_mut().append(ty.span());
-
-				let alias = match peek_token(lexer)?.into_value() {
-					Some(Token::Keyword(Keyword::As)) => {
-						next_token(lexer)?;
-						let alias = Alias::parse(lexer)?;
-						loc.span_mut().append(alias.span());
-						Some(alias)
-					}
-					_ => None,
-				};
-
-				(Some(ty), alias)
+				Some(ty)
 			}
-			Some(Token::Keyword(Keyword::As)) => {
-				next_token(lexer)?;
-				let alias = Alias::parse(lexer)?;
-				loc.span_mut().append(alias.span());
-				(None, Some(alias))
-			}
-			_ => (None, None),
+			_ => None,
 		};
 
 		Ok(Loc::new(Self { id, alias, ty, doc }, loc))

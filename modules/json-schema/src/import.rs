@@ -447,7 +447,23 @@ fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 
 		// First, we build each field.
 		for (prop, prop_schema) in properties {
-			let layout_id = import_sub_schema(prop_schema, base_iri, context, vocabulary)?;
+			let mut layout_id = import_sub_schema(prop_schema, base_iri, context, vocabulary)?;
+
+			let mut is_required = false;
+			if let Some(required) = &schema.validation.object.required {
+				if required.contains(prop) {
+					is_required = true;
+				}
+			}
+
+			if !is_required {
+				// Wrap inside option.
+				let item_layout_id = layout_id;
+				layout_id = Id::Blank(vocabulary.new_blank_label());
+				context.declare_layout(layout_id, None);
+				let container_layout = context.get_mut(layout_id).unwrap().as_layout_mut().unwrap();
+				container_layout.set_option(item_layout_id, None)?;
+			}
 
 			let field_id = Id::Blank(vocabulary.new_blank_label());
 			context.declare_layout_field(field_id, None);
@@ -464,12 +480,6 @@ fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 			match Name::new(prop) {
 				Ok(name) => field.set_name(name, None)?,
 				Err(_) => return Err(Error::InvalidPropertyName(prop.to_string())),
-			}
-
-			if let Some(required) = &schema.validation.object.required {
-				if required.contains(prop) {
-					field.set_required(true, None)?
-				}
 			}
 
 			field.set_layout(layout_id, None)?;

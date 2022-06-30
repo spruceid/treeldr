@@ -61,6 +61,8 @@ fn generate_layout_term_definition<F>(
 		Description::Enum(_) => (),
 		Description::Reference(_) => (),
 		Description::Primitive(_, _) => (),
+		Description::Required(_) => (),
+		Description::Option(_) => (),
 		Description::Set(_) => (),
 		Description::Array(_) => (),
 		Description::Alias(_, _) => todo!(),
@@ -135,6 +137,12 @@ fn generate_layout_context<F>(
 		}
 		Description::Reference(_) => context.ty = Some("@id".into()),
 		Description::Primitive(n, _) => context.ty = Some(generate_primitive_type(n)),
+		Description::Required(r) => {
+			generate_layout_context(context, vocabulary, model, r.item_layout())
+		}
+		Description::Option(o) => {
+			generate_layout_context(context, vocabulary, model, o.item_layout())
+		}
 		Description::Set(_) => {
 			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into());
 			context.container = Some("@set".into());

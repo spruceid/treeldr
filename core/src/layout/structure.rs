@@ -64,7 +64,6 @@ pub struct Field<F> {
 	name: WithCauses<Name, F>,
 	label: Option<String>,
 	layout: WithCauses<Ref<super::Definition<F>>, F>,
-	required: WithCauses<bool, F>,
 	doc: Documentation,
 }
 
@@ -75,7 +74,6 @@ pub struct FieldsParts<F> {
 	pub name: WithCauses<Name, F>,
 	pub label: Option<String>,
 	pub layout: WithCauses<Ref<super::Definition<F>>, F>,
-	pub required: WithCauses<bool, F>,
 	pub doc: Documentation,
 }
 
@@ -85,7 +83,6 @@ impl<F> Field<F> {
 		name: WithCauses<Name, F>,
 		label: Option<String>,
 		layout: WithCauses<Ref<super::Definition<F>>, F>,
-		required: WithCauses<bool, F>,
 		doc: Documentation,
 	) -> Self {
 		Self {
@@ -93,7 +90,6 @@ impl<F> Field<F> {
 			name,
 			label,
 			layout,
-			required,
 			doc,
 		}
 	}
@@ -104,7 +100,6 @@ impl<F> Field<F> {
 			name: self.name,
 			label: self.label,
 			layout: self.layout,
-			required: self.required,
 			doc: self.doc,
 		}
 	}
@@ -150,14 +145,6 @@ impl<F> Field<F> {
 
 	pub fn set_layout(&mut self, layout: Ref<layout::Definition<F>>, causes: impl Into<Causes<F>>) {
 		self.layout = WithCauses::new(layout, causes)
-	}
-
-	pub fn is_required(&self) -> bool {
-		*self.required.inner()
-	}
-
-	pub fn is_required_with_causes(&self) -> &WithCauses<bool, F> {
-		&self.required
 	}
 
 	pub fn documentation(&self) -> &Documentation {

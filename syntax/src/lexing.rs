@@ -376,7 +376,7 @@ impl<F: Clone> Position<F> {
 	}
 
 	fn end(&self) -> Location<F> {
-		Location::new(self.file.clone(), self.span.end())
+		Location::new(self.file.clone(), self.span.end().into())
 	}
 
 	fn last(&self) -> Location<F> {
@@ -433,7 +433,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		let offset = self.peek_char()?.map(char::len_utf8).unwrap_or(0);
 		self.chars
 			.peek2()
-			.err_at(|| Location::new(self.pos.file.clone(), self.pos.span.end() + offset))
+			.err_at(|| Location::new(self.pos.file.clone(), (self.pos.span.end() + offset).into()))
 	}
 
 	fn peek_char3(&mut self) -> Result<Option<char>, Loc<Error<E>, F>> {
@@ -441,7 +441,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 			+ self.peek_char2()?.map(char::len_utf8).unwrap_or(0);
 		self.chars
 			.peek3()
-			.err_at(|| Location::new(self.pos.file.clone(), self.pos.span.end() + offset))
+			.err_at(|| Location::new(self.pos.file.clone(), (self.pos.span.end() + offset).into()))
 	}
 
 	fn next_char(&mut self) -> Result<Option<char>, Loc<Error<E>, F>> {

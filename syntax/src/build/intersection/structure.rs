@@ -1,9 +1,10 @@
 use super::{IntersectedLayout, IntersectedLayoutDescription};
 use crate::build::{
-	Descriptions, Error, LayoutFieldCardinalityRestriction, LayoutFieldRangeRestriction,
-	LayoutFieldRestriction, LayoutRestrictedField, LocalError,
+	Descriptions, Error, LayoutDescription, LayoutFieldCardinalityRestriction,
+	LayoutFieldRangeRestriction, LayoutFieldRestriction, LayoutRestrictedField, LocalError,
 };
-use locspan::Loc;
+use locspan::{BorrowStripped, Loc};
+use locspan_derive::StrippedPartialEq;
 use std::collections::BTreeMap;
 use treeldr::{vocab::*, Caused, Causes, Id, MaybeSet, Name, WithCauses};
 use treeldr_build::{Context, ObjectToId};
@@ -29,13 +30,17 @@ impl<F: Clone + Ord> IntersectedStruct<F> {
 			let field_id = field_obj.as_id(field_obj.causes().preferred())?;
 			let field =
 				context.require_layout_field(field_id, field_obj.causes().preferred().cloned())?;
+
+			let layout = match field.layout() {
+				Some(field_layout) => FieldLayout::new(context, field_layout)?,
+				None => panic!("no container layout"),
+			};
+
 			fields.push(WithCauses::new(
 				IntersectedField {
 					name: field.name().cloned().into(),
 					property: field.property().cloned().into(),
-					required: field.is_required_opt().clone(),
-					functional: field.is_functional_opt().clone(),
-					restrictions: FieldRestrictions::from_field_layout(field.layout().cloned()),
+					layout,
 				},
 				field.causes().clone(),
 			))
@@ -44,22 +49,60 @@ impl<F: Clone + Ord> IntersectedStruct<F> {
 		Ok(Self { fields })
 	}
 
-	pub fn is_included_in(&self, other: &Self) -> bool {
-		let mut i = 0;
-		'next_field: for field in &self.fields {
-			while i < other.fields.len() {
-				let other_field = &other.fields[i];
-				if other_field.name.value() == field.name.value()
-					&& other_field.property.value() == field.property.value()
-					&& other_field.restrictions == field.restrictions
-				{
-					continue 'next_field;
+	/// Find a field that can be mapped to the given `field`
+	pub fn mappable_field(&self, field: &IntersectedField<F>) -> Option<&IntersectedField<F>> {
+		match field.property.value() {
+			Some(prop) => {
+				for other_field in &self.fields {
+					if other_field.property.value() == Some(prop) {
+						return Some(other_field);
+					}
 				}
 
-				i += 1;
+				for other_field in &self.fields {
+					if !other_field.property.is_set()
+						&& other_field.name.value() == field.name.value()
+					{
+						return Some(other_field);
+					}
+				}
 			}
+			None => {
+				for other_field in &self.fields {
+					if other_field.name.value() == field.name.value() {
+						return Some(other_field);
+					}
+				}
+			}
+		}
 
-			return false;
+		None
+	}
+
+	/// Checks if this structure is logically included in `other`, meaning that
+	/// every instance of this structure can be represented as an instance of
+	/// `other`.
+	pub fn is_included_in(&self, other: &Self) -> bool {
+		// Each field must appear in `other`, or be optional.
+		'next_field: for field in &self.fields {
+			if field.is_required() {
+				match other.mappable_field(field) {
+					Some(other_field) if field.layout.is_included_in(&other_field.layout) => {
+						continue 'next_field
+					}
+					_ => return false,
+				}
+			}
+		}
+
+		// Each field in `other` must appear in this structure.
+		'next_field: for other_field in &other.fields {
+			match self.mappable_field(other_field) {
+				Some(field) if field.layout.is_included_in(&other_field.layout) => {
+					continue 'next_field
+				}
+				_ => return false,
+			}
 		}
 
 		true
@@ -131,18 +174,9 @@ impl<F: Clone + Ord> IntersectedStruct<F> {
 				.unwrap_or(false);
 
 			if property_match || name_match {
-				match restricted_field.restriction {
-					Loc(LayoutFieldRestriction::Range(r), loc) => {
-						self.fields[i].restrictions.range.insert(Loc(r, loc))?
-					}
-					Loc(LayoutFieldRestriction::Cardinality(c), _) => {
-						if !self.fields[i].restrictions.cardinality.insert(c) {
-							return Ok(false);
-						}
-					}
-				}
-
-				return Ok(true);
+				return self.fields[i]
+					.layout
+					.apply_restriction(restricted_field.restriction);
 			}
 		}
 
@@ -194,16 +228,226 @@ impl<F> PartialEq for IntersectedStruct<F> {
 	}
 }
 
+#[derive(Clone, StrippedPartialEq)]
+#[stripped_ignore(F)]
+pub struct FieldLayout<F> {
+	/// Layout description.
+	desc: WithCauses<FieldLayoutDescription<F>, F>,
+
+	/// Restrictions.
+	restrictions: FieldRestrictions<F>,
+}
+
+#[derive(Clone, StrippedPartialEq)]
+#[stripped_ignore(F)]
+pub enum FieldLayoutDescription<F> {
+	Required,
+	Option,
+	Array(Option<treeldr_build::layout::array::Semantics<F>>),
+	Set,
+}
+
+impl<F> FieldLayout<F> {
+	pub fn new(
+		context: &Context<F, Descriptions>,
+		layout_id: &WithCauses<Id, F>,
+	) -> Result<Self, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		let (layout_id, causes) = layout_id.clone().into_parts();
+		let layout = context.require_layout(layout_id, causes.preferred().cloned())?;
+
+		match layout.description() {
+			Some(desc) => {
+				let desc_causes = desc.causes();
+				let (desc, item_id) = match desc.inner() {
+					LayoutDescription::Standard(treeldr_build::layout::Description::Required(
+						r,
+					)) => (FieldLayoutDescription::Required, *r),
+					LayoutDescription::Standard(treeldr_build::layout::Description::Option(r)) => {
+						(FieldLayoutDescription::Option, *r)
+					}
+					LayoutDescription::Standard(treeldr_build::layout::Description::Set(r)) => {
+						(FieldLayoutDescription::Set, *r)
+					}
+					LayoutDescription::Standard(treeldr_build::layout::Description::Array(a)) => (
+						FieldLayoutDescription::Array(a.semantics().cloned()),
+						a.item_layout(),
+					),
+					_ => panic!("field layout not a container"),
+				};
+
+				Ok(Self {
+					desc: WithCauses::new(desc, desc_causes.clone()),
+					restrictions: FieldRestrictions::from_field_layout(WithCauses::new(
+						item_id, causes,
+					)),
+				})
+			}
+			None => panic!("no container description"),
+		}
+	}
+
+	pub fn is_required(&self) -> bool {
+		self.desc.is_required()
+	}
+
+	pub fn is_included_in(&self, other: &Self) -> bool {
+		self.desc.is_included_in(&other.desc)
+			&& self.restrictions.stripped() == other.restrictions.stripped()
+	}
+
+	pub fn apply_restriction(
+		&mut self,
+		Loc(restriction, loc): Loc<LayoutFieldRestriction, F>,
+	) -> Result<bool, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		match restriction {
+			LayoutFieldRestriction::Range(r) => self.restrictions.range.insert(Loc(r, loc))?,
+			LayoutFieldRestriction::Cardinality(c) => {
+				if !self.restrictions.cardinality.insert(c) {
+					return Ok(false);
+				}
+			}
+		}
+
+		Ok(true)
+	}
+
+	pub fn intersected_with(self, other: Self) -> Option<Self>
+	where
+		F: Clone + Ord,
+	{
+		if self.stripped() == other.stripped() {
+			Some(self)
+		} else {
+			let (desc, desc_causes) = self.desc.into_parts();
+			let (other_desc, other_desc_causes) = other.desc.into_parts();
+			let desc = desc.intersected_with(other_desc)?;
+			let desc_causes = desc_causes.with(other_desc_causes);
+			let restrictions = self.restrictions.intersected_with(other.restrictions)?;
+
+			Some(Self {
+				desc: WithCauses::new(desc, desc_causes),
+				restrictions,
+			})
+		}
+	}
+
+	pub fn into_layout(
+		self,
+		causes: Causes<F>,
+		source: &Context<F, Descriptions>,
+		target: &mut Context<F>,
+		vocabulary: &mut Vocabulary,
+	) -> Result<Option<WithCauses<Id, F>>, Error<F>>
+	where
+		F: Clone + Ord,
+	{
+		match self
+			.restrictions
+			.into_layout(causes, source, target, vocabulary)?
+		{
+			Some(item_layout) => {
+				let (desc, desc_causes) = self.desc.into_parts();
+				Ok(Some(desc.into_layout(
+					item_layout,
+					desc_causes,
+					target,
+					vocabulary,
+				)))
+			}
+			None => Ok(None),
+		}
+	}
+}
+
+impl<F> FieldLayoutDescription<F> {
+	pub fn is_required(&self) -> bool {
+		matches!(self, Self::Required)
+	}
+
+	pub fn is_included_in(&self, other: &Self) -> bool {
+		match (self, other) {
+			(Self::Required, Self::Required | Self::Option) => true,
+			(Self::Option, Self::Option) => true,
+			(Self::Set, Self::Set) => true,
+			(Self::Array(a), Self::Array(b)) => a.stripped() == b.stripped(),
+			_ => false,
+		}
+	}
+
+	pub fn intersected_with(self, other: Self) -> Option<Self> {
+		match (self, other) {
+			(Self::Required, Self::Required)
+			| (Self::Required, Self::Option)
+			| (Self::Option, Self::Required) => Some(Self::Required),
+			(Self::Option, Self::Option) => Some(Self::Option),
+			(Self::Set, Self::Set) => Some(Self::Set),
+			(Self::Array(a), Self::Array(b)) if a.stripped() == b.stripped() => {
+				Some(Self::Array(a))
+			}
+			_ => None,
+		}
+	}
+
+	pub fn into_layout(
+		self,
+		item_layout: WithCauses<Id, F>,
+		causes: Causes<F>,
+		target: &mut Context<F>,
+		vocabulary: &mut Vocabulary,
+	) -> WithCauses<Id, F>
+	where
+		F: Clone + Ord,
+	{
+		let (item_layout, item_causes) = item_layout.into_parts();
+		let id = Id::Blank(vocabulary.new_blank_label());
+		target.declare_layout(id, causes.preferred().cloned());
+		let layout = target.get_mut(id).unwrap().as_layout_mut().unwrap();
+
+		match self {
+			Self::Required => {
+				layout
+					.set_required(item_layout, item_causes.preferred().cloned())
+					.ok();
+			}
+			Self::Option => {
+				layout
+					.set_option(item_layout, item_causes.preferred().cloned())
+					.ok();
+			}
+			Self::Set => {
+				layout
+					.set_set(item_layout, item_causes.preferred().cloned())
+					.ok();
+			}
+			Self::Array(semantics) => {
+				layout
+					.set_array(item_layout, semantics, item_causes.preferred().cloned())
+					.ok();
+			}
+		}
+
+		WithCauses::new(id, causes)
+	}
+}
+
 #[derive(Clone)]
 pub struct IntersectedField<F> {
 	name: MaybeSet<Name, F>,
 	property: MaybeSet<Id, F>,
-	required: MaybeSet<bool, F>,
-	functional: MaybeSet<bool, F>,
-	restrictions: FieldRestrictions<F>,
+	layout: FieldLayout<F>,
 }
 
 impl<F: Clone + Ord> IntersectedField<F> {
+	pub fn is_required(&self) -> bool {
+		self.layout.is_required()
+	}
+
 	pub fn into_field(
 		self,
 		source: &Context<F, Descriptions>,
@@ -213,7 +457,7 @@ impl<F: Clone + Ord> IntersectedField<F> {
 	) -> Result<Option<Id>, Error<F>> {
 		let cause = causes.preferred().cloned();
 		Ok(self
-			.restrictions
+			.layout
 			.into_layout(causes, source, target, vocabulary)?
 			.map(|layout| {
 				let id = Id::Blank(vocabulary.new_blank_label());
@@ -224,9 +468,6 @@ impl<F: Clone + Ord> IntersectedField<F> {
 				def.replace_name(self.name);
 				def.replace_property(self.property);
 				def.replace_layout(layout.into());
-
-				def.replace_required(self.required); // TODO
-				def.replace_functional(self.functional); // TODO
 
 				id
 			}))
@@ -263,13 +504,11 @@ impl<F: Clone + Ord> IntersectedField<F> {
 			(None, None) => MaybeSet::default(),
 		};
 
-		match self.restrictions.intersected_with(other.restrictions) {
-			Some(restrictions) => Ok(Some(Self {
+		match self.layout.intersected_with(other.layout) {
+			Some(layout) => Ok(Some(Self {
 				name,
 				property,
-				required: self.required, // TODO
-				functional: self.functional, // TODO
-				restrictions,
+				layout,
 			})),
 			None => Ok(None),
 		}
@@ -280,15 +519,18 @@ impl<F> PartialEq for IntersectedField<F> {
 	fn eq(&self, other: &Self) -> bool {
 		self.name.value() == other.name.value()
 			&& match (self.property.value(), other.property.value()) {
-				(Some(a), Some(b)) => a == b && self.restrictions == other.restrictions,
+				(Some(a), Some(b)) => a == b && self.layout.stripped() == other.layout.stripped(),
 				_ => false,
 			}
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, StrippedPartialEq)]
+#[stripped_ignore(F)]
 pub struct FieldRestrictions<F> {
 	range: RangeRestrictions<F>,
+
+	#[stripped]
 	cardinality: CardinalityRestrictions,
 }
 
@@ -302,7 +544,7 @@ impl<F> Default for FieldRestrictions<F> {
 }
 
 impl<F> FieldRestrictions<F> {
-	pub fn from_field_layout(layout: Option<WithCauses<Id, F>>) -> Self {
+	pub fn from_field_layout(layout: WithCauses<Id, F>) -> Self {
 		Self {
 			range: RangeRestrictions::from_field_layout(layout),
 			cardinality: CardinalityRestrictions::default(),
@@ -346,7 +588,7 @@ impl<F> FieldRestrictions<F> {
 			causes.clone(),
 		)?;
 
-		if result.has_id() {
+		if result.has_id() || !result.needs_id() {
 			Ok(Some(result.into_layout(source, target, vocabulary)?))
 		} else {
 			Err(Loc(
@@ -366,7 +608,7 @@ impl<F> FieldRestrictions<F> {
 
 impl<F> PartialEq for FieldRestrictions<F> {
 	fn eq(&self, other: &Self) -> bool {
-		self.range == other.range && self.cardinality == other.cardinality
+		self.range.stripped() == other.range.stripped() && self.cardinality == other.cardinality
 	}
 }
 
@@ -386,13 +628,11 @@ impl<F> Default for RangeRestrictions<F> {
 }
 
 impl<F> RangeRestrictions<F> {
-	pub fn from_field_layout(layout: Option<WithCauses<Id, F>>) -> Self {
+	pub fn from_field_layout(layout: WithCauses<Id, F>) -> Self {
 		let mut result = Self::default();
 
-		if let Some(layout) = layout {
-			let (id, causes) = layout.into_parts();
-			result.all.insert(id, causes);
-		}
+		let (id, causes) = layout.into_parts();
+		result.all.insert(id, causes);
 
 		result
 	}
@@ -465,8 +705,8 @@ impl<F> RangeRestrictions<F> {
 	}
 }
 
-impl<F> PartialEq for RangeRestrictions<F> {
-	fn eq(&self, other: &Self) -> bool {
+impl<F> locspan::StrippedPartialEq for RangeRestrictions<F> {
+	fn stripped_eq(&self, other: &Self) -> bool {
 		self.any.len() == other.any.len()
 			&& self.all.len() == other.all.len()
 			&& self.any.keys().zip(other.any.keys()).all(|(a, b)| a == b)

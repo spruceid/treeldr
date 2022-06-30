@@ -341,6 +341,7 @@ impl<F> Description<F> {
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub enum BuiltIn<F> {
+	Option(Ref<treeldr::layout::Definition<F>>),
 	Vec(Ref<treeldr::layout::Definition<F>>),
 	BTreeSet(Ref<treeldr::layout::Definition<F>>),
 }
@@ -359,6 +360,10 @@ impl<F> Generate<F> for BuiltIn<F> {
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<F>> {
 		tokens.extend(match self {
+			Self::Option(item) => {
+				let item = item.with(context, scope).into_tokens()?;
+				quote! { Option<#item> }
+			}
 			Self::Vec(item) => {
 				let item = item.with(context, scope).into_tokens()?;
 				quote! { Vec<#item> }
@@ -381,6 +386,10 @@ impl<F> Generate<F> for Referenced<BuiltIn<F>> {
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<F>> {
 		tokens.extend(match self.0 {
+			BuiltIn::Option(item) => {
+				let item_ref = Referenced(item).with(context, scope).into_tokens()?;
+				quote! { Option<#item_ref> }
+			}
 			BuiltIn::Vec(item) => {
 				let item = item.with(context, scope).into_tokens()?;
 				quote! { &[#item] }
@@ -438,10 +447,7 @@ impl<F> Description<F> {
 				let mut fields = Vec::with_capacity(s.fields().len());
 				for field in s.fields() {
 					let ident = field_ident_of_name(field.name());
-					fields.push(Field::new(
-						ident,
-						FieldType::new(field.layout(), field.is_required()),
-					))
+					fields.push(Field::new(ident, FieldType::new(field.layout())))
 				}
 
 				Self::Struct(Struct::new(ident, fields))
@@ -455,6 +461,10 @@ impl<F> Description<F> {
 				}
 
 				Self::Enum(Enum::new(ident, variants))
+			}
+			treeldr::layout::Description::Required(r) => Self::new(context, r.item_layout()),
+			treeldr::layout::Description::Option(o) => {
+				Self::BuiltIn(BuiltIn::Option(o.item_layout()))
 			}
 			treeldr::layout::Description::Array(a) => Self::BuiltIn(BuiltIn::Vec(a.item_layout())),
 			treeldr::layout::Description::Set(s) => {
@@ -491,25 +501,20 @@ impl<F> Struct<F> {
 #[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub struct FieldType<F> {
 	ty: Ref<treeldr::layout::Definition<F>>,
-	required: bool,
 }
 
 impl<F> FieldType<F> {
-	pub fn new(ty: Ref<treeldr::layout::Definition<F>>, required: bool) -> Self {
-		Self { ty, required }
+	pub fn new(ty: Ref<treeldr::layout::Definition<F>>) -> Self {
+		Self { ty }
 	}
 
 	pub fn ty(&self) -> Ref<treeldr::layout::Definition<F>> {
 		self.ty
 	}
 
-	pub fn is_required(&self) -> bool {
-		self.required
-	}
-
 	pub fn impl_default(&self, context: &Context<F>) -> bool {
 		let ty = context.layout(self.ty).unwrap();
-		!self.required || ty.impl_default(context)
+		ty.impl_default(context)
 	}
 }
 
@@ -522,11 +527,7 @@ impl<F> Generate<F> for FieldType<F> {
 	) -> Result<(), Error<F>> {
 		let ty = self.ty.with(context, scope).into_tokens()?;
 
-		if self.required {
-			tokens.extend(ty)
-		} else {
-			tokens.extend(quote! { Option<#ty> })
-		}
+		tokens.extend(ty);
 
 		Ok(())
 	}
@@ -655,7 +656,14 @@ impl<F> Generate<F> for Layout<F> {
 				let mut fields = Vec::with_capacity(s.fields().len());
 				let mut required_inputs = Vec::new();
 				let mut fields_init = Vec::new();
-				let mut derives = vec![quote! { Clone }];
+				let mut derives = vec![
+					quote! { Clone },
+					quote! { PartialEq },
+					quote! { Eq },
+					quote! { PartialOrd },
+					quote! { Ord },
+					quote! { Debug },
+				];
 
 				for field in s.fields() {
 					fields.push(field.with(context, scope).into_tokens()?);
@@ -711,7 +719,7 @@ impl<F> Generate<F> for Layout<F> {
 				}
 
 				tokens.extend(quote! {
-					#[derive(Clone)]
+					#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 					pub enum #ident {
 						#(#variants),*
 					}

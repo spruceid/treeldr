@@ -1,5 +1,6 @@
 use crate::{error, Error};
 use derivative::Derivative;
+use locspan_derive::StrippedPartialEq;
 use treeldr::{vocab, Causes, Id, MaybeSet, Name};
 use vocab::{Rdf, Term};
 
@@ -122,11 +123,17 @@ impl<F> Array<F> {
 	}
 }
 
-#[derive(Clone, Debug, Derivative)]
+#[derive(Clone, Debug, Derivative, StrippedPartialEq)]
 #[derivative(Default(bound = ""))]
+#[stripped_ignore(F)]
 pub struct Semantics<F> {
+	#[stripped_option]
 	first: MaybeSet<Id, F>,
+
+	#[stripped_option]
 	rest: MaybeSet<Id, F>,
+
+	#[stripped_option]
 	nil: MaybeSet<Id, F>,
 }
 

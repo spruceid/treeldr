@@ -172,6 +172,16 @@ impl<T, F> MaybeSet<T, F> {
 		self.value.as_mut().map(|v| v.inner_mut())
 	}
 
+	/// Alias for `value`
+	pub fn as_ref(&self) -> Option<&T> {
+		self.value.as_ref().map(|v| v.inner())
+	}
+
+	/// Alias for `value_mut`
+	pub fn as_mut(&mut self) -> Option<&mut T> {
+		self.value.as_mut().map(|v| v.inner_mut())
+	}
+
 	pub fn into_value(self) -> Option<T> {
 		self.value.map(WithCauses::into_inner)
 	}

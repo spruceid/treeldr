@@ -1,7 +1,7 @@
 pub use crate::layout::Primitive;
 use iref::{Iri, IriBuf};
 use iref_enum::IriEnum;
-use locspan::Loc;
+use locspan::{Loc, Span};
 use rdf_types::Quad;
 use std::{collections::HashMap, fmt};
 
@@ -85,6 +85,17 @@ pub enum TreeLdr {
 	/// property.
 	#[iri("tldr:Variant")]
 	Variant,
+
+	/// Required layout.
+	///
+	/// This is a simple container layout that contains a single instance of
+	/// the given type.
+	#[iri("tldr:required")]
+	Required,
+
+	/// Option layout.
+	#[iri("tldr:option")]
+	Option,
 
 	/// Array layout.
 	#[iri("tldr:array")]
@@ -395,15 +406,15 @@ impl fmt::Display for BlankLabel {
 	}
 }
 
-pub type Literal<F> = rdf_types::loc::Literal<F, rdf_types::StringLiteral, Term>;
+pub type Literal<F, N = Span> = rdf_types::loc::Literal<F, N, rdf_types::StringLiteral, Term>;
 
 pub type Id = rdf_types::Subject<Term, BlankLabel>;
 
 pub type GraphLabel = rdf_types::GraphLabel<Term, BlankLabel>;
 
-pub type Object<F> = rdf_types::Object<Term, BlankLabel, Literal<F>>;
+pub type Object<F, N = Span> = rdf_types::Object<Term, BlankLabel, Literal<F, N>>;
 
-pub type LocQuad<F> = rdf_types::loc::LocQuad<Id, Term, Object<F>, GraphLabel, F>;
+pub type LocQuad<F, N = Span> = rdf_types::loc::LocQuad<Id, Term, Object<F, N>, GraphLabel, F, N>;
 
 pub type StrippedLiteral = rdf_types::Literal<rdf_types::StringLiteral, Term>;
 

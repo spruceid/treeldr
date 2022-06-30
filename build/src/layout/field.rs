@@ -9,8 +9,6 @@ pub struct Definition<F> {
 	prop: MaybeSet<Id, F>,
 	name: MaybeSet<Name, F>,
 	layout: MaybeSet<Id, F>,
-	required: MaybeSet<bool, F>,
-	functional: MaybeSet<bool, F>,
 }
 
 pub enum DefaultLayout<F> {
@@ -54,8 +52,6 @@ impl<F> Definition<F> {
 			prop: MaybeSet::default(),
 			name: MaybeSet::default(),
 			layout: MaybeSet::default(),
-			required: MaybeSet::default(),
-			functional: MaybeSet::default(),
 		}
 	}
 
@@ -189,72 +185,6 @@ impl<F> Definition<F> {
 			)
 		})
 	}
-
-	pub fn is_required(&self) -> bool {
-		self.required.value().cloned().unwrap_or(false)
-	}
-
-	pub fn is_required_opt(&self) -> &MaybeSet<bool, F> {
-		&self.required
-	}
-
-	pub fn set_required(&mut self, value: bool, cause: Option<Location<F>>) -> Result<(), Error<F>>
-	where
-		F: Ord + Clone,
-	{
-		self.required
-			.try_set(value, cause, |expected, found, because, causes| {
-				Error::new(
-					error::LayoutFieldMismatchRequired {
-						id: self.id,
-						expected,
-						found,
-						because: because.preferred().cloned(),
-					}
-					.into(),
-					causes.preferred().cloned(),
-				)
-			})
-	}
-
-	pub fn replace_required(&mut self, value: MaybeSet<bool, F>) {
-		self.required = value
-	}
-
-	pub fn is_functional(&self) -> bool {
-		self.functional.value().cloned().unwrap_or(true)
-	}
-
-	pub fn is_functional_opt(&self) -> &MaybeSet<bool, F> {
-		&self.functional
-	}
-
-	pub fn set_functional(
-		&mut self,
-		value: bool,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
-	where
-		F: Ord + Clone,
-	{
-		self.functional
-			.try_set(value, cause, |expected, found, because, causes| {
-				Error::new(
-					error::LayoutFieldMismatchFunctional {
-						id: self.id,
-						expected,
-						found,
-						because: because.preferred().cloned(),
-					}
-					.into(),
-					causes.preferred().cloned(),
-				)
-			})
-	}
-
-	pub fn replace_functional(&mut self, value: MaybeSet<bool, F>) {
-		self.functional = value
-	}
 }
 
 pub trait Build<F> {
@@ -295,10 +225,6 @@ impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
 			.require_layout(*layout_id.inner(), layout_id.causes().preferred().cloned())?
 			.clone_with_causes(layout_id.causes().clone());
 
-		let required = self.required.clone().unwrap_or(false);
-
-		Ok(treeldr::layout::Field::new(
-			prop, name, label, layout, required, doc,
-		))
+		Ok(treeldr::layout::Field::new(prop, name, label, layout, doc))
 	}
 }

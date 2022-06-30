@@ -1560,34 +1560,76 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 			.build(local_context, context, vocabulary)?;
 
 		let mut required = false;
-		let mut required_loc = None;
+		let mut multiple = false;
+		let mut multiple_loc = None;
 
 		let layout = match def.layout {
 			Some(Loc(layout, _)) => {
 				let scope = local_context.scope.take();
-				let mut layout_id = layout.expr.build(local_context, context, vocabulary)?;
+				let layout_id = layout.expr.build(local_context, context, vocabulary)?;
 				local_context.scope = scope;
 
 				for Loc(ann, ann_loc) in layout.annotations {
 					match ann {
 						crate::Annotation::Multiple => {
-							let container_id = Id::Blank(vocabulary.new_blank_label());
-							context.declare_layout(container_id, Some(ann_loc.clone()));
-							let container_layout = context
-								.get_mut(container_id)
-								.unwrap()
-								.as_layout_mut()
-								.unwrap();
-							let Loc(item_layout_id, item_layout_loc) = layout_id;
-							container_layout.set_set(item_layout_id, Some(ann_loc))?;
-							layout_id = Loc(container_id, item_layout_loc)
+							multiple = true;
+							multiple_loc = Some(ann_loc)
 						}
-						crate::Annotation::Required => {
-							required = true;
-							required_loc = Some(ann_loc)
-						}
+						crate::Annotation::Required => required = true,
 					}
 				}
+
+				let layout_id = if required {
+					if multiple {
+						// Wrap inside non-empty set.
+						let container_id = Id::Blank(vocabulary.new_blank_label());
+						context.declare_layout(container_id, multiple_loc.clone());
+						let container_layout = context
+							.get_mut(container_id)
+							.unwrap()
+							.as_layout_mut()
+							.unwrap();
+						let Loc(item_layout_id, item_layout_loc) = layout_id;
+						container_layout.set_set(item_layout_id, multiple_loc)?;
+						Loc(container_id, item_layout_loc)
+					} else {
+						// Wrap inside non-empty set.
+						let container_id = Id::Blank(vocabulary.new_blank_label());
+						context.declare_layout(container_id, multiple_loc.clone());
+						let container_layout = context
+							.get_mut(container_id)
+							.unwrap()
+							.as_layout_mut()
+							.unwrap();
+						let Loc(item_layout_id, item_layout_loc) = layout_id;
+						container_layout.set_required(item_layout_id, multiple_loc)?;
+						Loc(container_id, item_layout_loc)
+					}
+				} else if multiple {
+					// Wrap inside set.
+					let container_id = Id::Blank(vocabulary.new_blank_label());
+					context.declare_layout(container_id, multiple_loc.clone());
+					let container_layout = context
+						.get_mut(container_id)
+						.unwrap()
+						.as_layout_mut()
+						.unwrap();
+					let Loc(item_layout_id, item_layout_loc) = layout_id;
+					container_layout.set_set(item_layout_id, multiple_loc)?;
+					Loc(container_id, item_layout_loc)
+				} else {
+					// Wrap inside option.
+					let container_id = Id::Blank(vocabulary.new_blank_label());
+					context.declare_layout(container_id, None);
+					let container_layout = context
+						.get_mut(container_id)
+						.unwrap()
+						.as_layout_mut()
+						.unwrap();
+					let Loc(item_layout_id, item_layout_loc) = layout_id;
+					container_layout.set_option(item_layout_id, None)?;
+					Loc(container_id, item_layout_loc)
+				};
 
 				Some(layout_id)
 			}
@@ -1617,10 +1659,6 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 
 		if let Some(Loc(layout, layout_loc)) = layout {
 			field.set_layout(layout, Some(layout_loc))?;
-		}
-
-		if let Some(required_loc) = required_loc {
-			field.set_required(required, Some(required_loc))?;
 		}
 
 		Ok(Loc(id, loc))

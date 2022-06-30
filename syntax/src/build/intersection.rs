@@ -37,6 +37,8 @@ pub enum IntersectedLayoutDescription<F> {
 	Struct(IntersectedStruct<F>),
 	Reference(Id),
 	Enum(IntersectedEnum<F>),
+	Required(Id),
+	Option(Id),
 	Set(Id),
 	Array(Array<F>),
 	Alias(Id),
@@ -103,6 +105,10 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 		!self.ids.is_empty()
 	}
 
+	pub fn needs_id(&self) -> bool {
+		self.desc.needs_id()
+	}
+
 	pub fn id(&self) -> Option<(Id, &Causes<F>)> {
 		self.ids.iter().next().map(|(id, causes)| (*id, causes))
 	}
@@ -118,6 +124,13 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 		}
 
 		None
+	}
+
+	pub fn into_required_id(self) -> Result<WithCauses<Id, F>, Error<F>> {
+		match self.ids.into_iter().next() {
+			Some((id, causes)) => Ok(WithCauses::new(id, causes)),
+			None => todo!("anonymous intersection"),
+		}
 	}
 
 	pub fn intersected_with_id(
@@ -150,11 +163,11 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 			}
 			None => {
 				if self.desc.is_included_in(&other.desc) {
-					return Ok(other);
+					return Ok(self);
 				}
 
 				if other.desc.is_included_in(&self.desc) {
-					return Ok(self);
+					return Ok(other);
 				}
 
 				let (desc, causes) = self.desc.into_parts();
@@ -263,6 +276,8 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 					treeldr_build::layout::Description::Enum(variants_id) => Ok(Self::Enum(
 						IntersectedEnum::new(*variants_id, context, desc.causes())?,
 					)),
+					treeldr_build::layout::Description::Required(r) => Ok(Self::Required(*r)),
+					treeldr_build::layout::Description::Option(s) => Ok(Self::Option(*s)),
 					treeldr_build::layout::Description::Set(s) => Ok(Self::Set(*s)),
 					treeldr_build::layout::Description::Array(a) => Ok(Self::Array(a.clone())),
 					treeldr_build::layout::Description::Alias(a) => Ok(Self::Alias(*a)),
@@ -290,6 +305,14 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 
 	pub fn is_never(&self) -> bool {
 		matches!(self, Self::Never)
+	}
+
+	pub fn never_or_else(self, f: impl FnOnce(Self) -> Self) -> Self {
+		if self.is_never() {
+			self
+		} else {
+			f(self)
+		}
 	}
 
 	pub fn compress(
@@ -328,6 +351,10 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 		}
 	}
 
+	pub fn needs_id(&self) -> bool {
+		matches!(self, Self::Enum(_) | Self::Struct(_) | Self::Alias(_))
+	}
+
 	pub fn intersected_with(
 		self,
 		causes: Causes<F>,
@@ -363,6 +390,39 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 					IntersectedLayout::from_parts(other_ids, WithCauses::new(other, other_causes)),
 					context,
 				),
+				Self::Required(a) => match other {
+					Self::Required(b) => {
+						eprintln!("case B");
+						let c = IntersectedLayout::try_from_iter(
+							[
+								WithCauses::new(a, causes.clone()),
+								WithCauses::new(b, other_causes),
+							],
+							context,
+							causes,
+						)?
+						.into_required_id()?
+						.into_inner();
+						Ok(Self::Required(c))
+					}
+					_ => Ok(Self::Never),
+				},
+				Self::Option(a) => match other {
+					Self::Option(b) => {
+						let c = IntersectedLayout::try_from_iter(
+							[
+								WithCauses::new(a, causes.clone()),
+								WithCauses::new(b, other_causes),
+							],
+							context,
+							causes,
+						)?
+						.into_required_id()?
+						.into_inner();
+						Ok(Self::Option(c))
+					}
+					_ => Ok(Self::Never),
+				},
 				Self::Set(a) => match other {
 					Self::Set(b) if a == b => Ok(Self::Set(a)),
 					_ => Ok(Self::Never),
@@ -418,6 +478,8 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 			Self::Reference(r) => Ok(treeldr_build::layout::Description::Reference(r)),
 			Self::Struct(s) => s.into_standard_description(source, target, vocabulary),
 			Self::Enum(e) => e.into_standard_description(source, target, vocabulary),
+			Self::Required(r) => Ok(treeldr_build::layout::Description::Required(r)),
+			Self::Option(o) => Ok(treeldr_build::layout::Description::Option(o)),
 			Self::Set(s) => Ok(treeldr_build::layout::Description::Set(s)),
 			Self::Array(a) => Ok(treeldr_build::layout::Description::Array(a)),
 			Self::Alias(a) => Ok(treeldr_build::layout::Description::Alias(a)),
