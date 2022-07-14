@@ -1,6 +1,6 @@
 use super::Vocabulary;
 use fmt::Display as StdDisplay;
-use locspan::Loc;
+use locspan::{Meta, Loc};
 use std::fmt;
 
 pub trait Display {
@@ -32,8 +32,8 @@ impl<F> Display for super::Literal<F> {
 	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::String(s) => s.fmt(f),
-			Self::LangString(Loc(s, _), Loc(tag, _)) => write!(f, "{}@{}", s, tag),
-			Self::TypedString(Loc(s, _), Loc(ty, _)) => {
+			Self::LangString(Meta(s, _), Meta(tag, _)) => write!(f, "{}@{}", s, tag),
+			Self::TypedString(Meta(s, _), Meta(ty, _)) => {
 				write!(f, "{}^^<{}>", s, ty.display(namespace))
 			}
 		}
@@ -76,7 +76,7 @@ impl Display for super::Term {
 	}
 }
 
-impl<T: Display, F> Display for locspan::Loc<T, F> {
+impl<T: Display, F> Display for Loc<T, F> {
 	fn fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
 		self.value().fmt(namespace, f)
 	}
@@ -163,7 +163,7 @@ impl<S: RdfDisplay, P: RdfDisplay, O: RdfDisplay, G: RdfDisplay> RdfDisplay
 	}
 }
 
-impl<T: RdfDisplay, F> RdfDisplay for locspan::Loc<T, F> {
+impl<T: RdfDisplay, F> RdfDisplay for Loc<T, F> {
 	fn rdf_fmt(&self, namespace: &Vocabulary, f: &mut fmt::Formatter) -> fmt::Result {
 		self.value().rdf_fmt(namespace, f)
 	}

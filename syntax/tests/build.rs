@@ -1,4 +1,4 @@
-use locspan::Loc;
+use locspan::Meta;
 use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;
@@ -39,7 +39,7 @@ fn parse_nquads<P: AsRef<Path>>(
 		(),
 		Utf8Decoded::new(buffer.chars().map(infallible)).peekable(),
 	);
-	let Loc(quads, _) = Document::parse(&mut lexer).expect("parse error");
+	let Meta(quads, _) = Document::parse(&mut lexer).expect("parse error");
 
 	let mut generator = BlankIdGenerator::default();
 	let mut generate = move |label| generator.generate(label);

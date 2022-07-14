@@ -139,7 +139,7 @@ impl Name {
 	pub fn new<S: AsRef<str>>(id: S) -> Result<Self, InvalidName> {
 		Ok(Self {
 			normalized: normalize(id.as_ref())?,
-			preferred: None,
+			preferred: Some(id.as_ref().into()),
 		})
 	}
 
@@ -157,8 +157,15 @@ impl Name {
 		}
 	}
 
+	pub fn preferred(&self) -> Option<&str> {
+		self.preferred.as_deref()
+	}
+
 	pub fn as_str(&self) -> &str {
-		&self.normalized
+		match self.preferred.as_deref() {
+			Some(p) => p,
+			None => &self.normalized
+		}
 	}
 
 	/// Converts this name into a snake-cased identifier.

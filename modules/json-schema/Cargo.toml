@@ -15,11 +15,11 @@ derivative = "2.2.0"
 
 # For the import function.
 treeldr-build = { path = "../../build" }
-locspan = "0.5"
-rdf-types = { version = "0.6.1", features = ["loc"] }
+locspan = "0.7"
+rdf-types = { version = "0.8", features = ["meta"] }
 xsd-types = "0.3.0"
 
 [dev-dependencies]
 static-iref = "2.0"
-nquads-syntax = "0.2.0"
-grdf = "0.7.0"
+nquads-syntax = "0.5.0"
+grdf = "0.10.0"

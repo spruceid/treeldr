@@ -1,5 +1,5 @@
 use iref::IriBuf;
-use locspan::Loc;
+use locspan::{Meta, Loc};
 
 pub mod build;
 pub mod lexing;
@@ -92,7 +92,7 @@ impl<F: Clone> TypeDescription<F> {
 			Self::Normal(properties) => LayoutDescription::Normal(
 				properties
 					.iter()
-					.map(|Loc(prop, prop_loc)| {
+					.map(|Meta(prop, prop_loc)| {
 						Loc(prop.implicit_field_definition(), prop_loc.clone())
 					})
 					.collect(),
@@ -116,7 +116,7 @@ impl<F: Clone> PropertyDefinition<F> {
 			layout: self
 				.ty
 				.as_ref()
-				.map(|Loc(ty, ty_loc)| Loc(ty.implicit_layout_expr(), ty_loc.clone())),
+				.map(|Meta(ty, ty_loc)| Loc(ty.implicit_layout_expr(), ty_loc.clone())),
 			alias: None,
 			doc: self.doc.clone(),
 		}
@@ -183,14 +183,14 @@ impl<F: Clone> OuterTypeExpr<F> {
 				*label,
 				options
 					.iter()
-					.map(|Loc(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
+					.map(|Meta(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
 					.collect(),
 			),
 			Self::Intersection(label, types) => OuterLayoutExpr::Intersection(
 				*label,
 				types
 					.iter()
-					.map(|Loc(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
+					.map(|Meta(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
 					.collect(),
 			),
 		}
@@ -421,7 +421,7 @@ impl<F> NamedInnerLayoutExpr<F> {
 		if self.name.is_some() {
 			Err(self)
 		} else {
-			let Loc(e, loc) = self.expr;
+			let Meta(e, loc) = self.expr;
 			e.into_restriction().map_err(|other| Self {
 				expr: Loc(other, loc),
 				name: None,

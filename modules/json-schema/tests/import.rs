@@ -39,7 +39,7 @@ fn parse_nquads<P: AsRef<Path>>(
 		(),
 		Utf8Decoded::new(buffer.chars().map(infallible)).peekable(),
 	);
-	let Loc(quads, _) = Document::parse(&mut lexer).expect("parse error");
+	let quads = Document::parse(&mut lexer).expect("parse error").into_value();
 
 	let mut generator = BlankIdGenerator::default();
 	let mut generate = move |label| generator.generate(label);

@@ -45,7 +45,7 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 							match module.generate(&gen_context) {
 								Ok(tokens) => tokens.into(),
 								Err(e) => {
-									use treeldr_rust_gen::Display;
+									use treeldr_rust_gen::fmt::Display;
 									abort_call_site!("{}", e.display(&gen_context))
 								}
 							}

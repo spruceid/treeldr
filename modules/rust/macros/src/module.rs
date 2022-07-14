@@ -142,7 +142,7 @@ impl Module {
 						.strip_prefix(prefix.prefix_attrs.iri.0.as_str())
 						.is_some()
 					{
-						map.insert(layout_ref, treeldr_rust_gen::ParentModule::Ref(module_ref));
+						map.insert(layout_ref, treeldr_rust_gen::module::Parent::Ref(module_ref));
 					}
 				}
 			}
@@ -152,7 +152,7 @@ impl Module {
 			context.add_layout(
 				map.get(&layout_ref)
 					.cloned()
-					.or(Some(treeldr_rust_gen::ParentModule::Extern)),
+					.or(Some(treeldr_rust_gen::module::Parent::Extern)),
 				layout_ref,
 			)
 		}

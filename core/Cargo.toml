@@ -12,13 +12,13 @@ iref-enum = "2.1"
 static-iref = "2.0"
 log = "0.4"
 derivative = "2.2.0"
-locspan = { version = "0.5.2", features = ["reporting"] }
+locspan = { version = "0.7.2", features = ["reporting"] }
 locspan-derive = "0.4"
 codespan-reporting = "0.11"
-rdf-types = { version = "0.6.1", features = ["loc"] }
+rdf-types = { version = "0.8", features = ["meta"] }
 xsd-types = "0.3.0"
 num = "0.4.0"
-grdf = { version = "0.8", features = ["loc"] }
+grdf = { version = "0.10", features = ["meta"] }
 btree-range-map = { version = "0.2.6", features = ["ordered-float"] }
 lazy_static = "1.4.0"
 ordered-float = "3.0.0"

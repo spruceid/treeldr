@@ -3,7 +3,7 @@ use crate::build::{
 	Descriptions, Error, LayoutDescription, LayoutFieldCardinalityRestriction,
 	LayoutFieldRangeRestriction, LayoutFieldRestriction, LayoutRestrictedField, LocalError,
 };
-use locspan::{BorrowStripped, Loc};
+use locspan::{Meta, BorrowStripped, Loc};
 use locspan_derive::StrippedPartialEq;
 use std::collections::BTreeMap;
 use treeldr::{vocab::*, Caused, Causes, Id, MaybeSet, Name, WithCauses};
@@ -160,9 +160,9 @@ impl<F: Clone + Ord> IntersectedStruct<F> {
 
 	pub fn apply_restriction(
 		&mut self,
-		Loc(restricted_field, loc): Loc<LayoutRestrictedField<F>, F>,
+		Meta(restricted_field, loc): Loc<LayoutRestrictedField<F>, F>,
 	) -> Result<bool, Error<F>> {
-		let prop_id = restricted_field.field_prop.map(|Loc(id, _)| id);
+		let prop_id = restricted_field.field_prop.map(|Meta(id, _)| id);
 		let name = restricted_field.field_name.as_ref().map(|n| n.value());
 
 		for (i, field) in self.fields.iter().enumerate() {
@@ -300,7 +300,7 @@ impl<F> FieldLayout<F> {
 
 	pub fn apply_restriction(
 		&mut self,
-		Loc(restriction, loc): Loc<LayoutFieldRestriction, F>,
+		Meta(restriction, loc): Loc<LayoutFieldRestriction, F>,
 	) -> Result<bool, Error<F>>
 	where
 		F: Clone + Ord,
@@ -641,7 +641,7 @@ impl<F> RangeRestrictions<F> {
 impl<F> RangeRestrictions<F> {
 	pub fn insert(
 		&mut self,
-		Loc(restriction, loc): Loc<LayoutFieldRangeRestriction, F>,
+		Meta(restriction, loc): Loc<LayoutFieldRangeRestriction, F>,
 	) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,

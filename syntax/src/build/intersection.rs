@@ -1,6 +1,6 @@
 use super::{Descriptions, Error, LayoutDescription, LayoutRestrictedField, LocalError};
 use derivative::Derivative;
-use locspan::Loc;
+use locspan::{Meta, Loc};
 use std::collections::BTreeMap;
 use treeldr::{Causes, Id, MaybeSet, Vocabulary, WithCauses};
 use treeldr_build::{
@@ -457,7 +457,7 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 				}
 			}
 			other => {
-				if let Some(Loc(_, loc)) = restricted_fields.get(0) {
+				if let Some(Meta(_, loc)) = restricted_fields.get(0) {
 					return Err(Loc(LocalError::UnexpectedFieldRestriction, loc.clone()).into());
 				}
 

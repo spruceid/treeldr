@@ -1,11 +1,11 @@
 use crate::{error, list::ListMut, Context, Descriptions, Document, Error};
-use locspan::Loc;
+use locspan::{Meta, Loc, Location};
 use treeldr::{
 	vocab::{self, GraphLabel, Object, Term},
 	Id, Name, Vocabulary,
 };
 
-fn expect_id<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<Id, F>, Error<F>> {
+fn expect_id<F>(Meta(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<Id, F>, Error<F>> {
 	match value {
 		vocab::Object::Literal(_) => panic!("expected IRI or blank node label"),
 		vocab::Object::Blank(id) => Ok(Loc(Id::Blank(id), loc)),
@@ -13,7 +13,7 @@ fn expect_id<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<Id, F>,
 	}
 }
 
-fn expect_boolean<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<bool, F>, Error<F>> {
+fn expect_boolean<F>(Meta(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<bool, F>, Error<F>> {
 	match value {
 		vocab::Object::Iri(vocab::Term::Schema(vocab::Schema::True)) => Ok(Loc(true, loc)),
 		vocab::Object::Iri(vocab::Term::Schema(vocab::Schema::False)) => Ok(Loc(false, loc)),
@@ -22,16 +22,16 @@ fn expect_boolean<F>(Loc(value, loc): Loc<vocab::Object<F>, F>) -> Result<Loc<bo
 }
 
 fn expect_raw_string<F>(
-	Loc(value, _): Loc<vocab::Object<F>, F>,
+	Meta(value, _): Loc<vocab::Object<F>, F>,
 ) -> Result<Loc<rdf_types::StringLiteral, F>, Error<F>> {
 	match value {
-		vocab::Object::Literal(rdf_types::loc::Literal::String(s)) => Ok(s),
+		vocab::Object::Literal(rdf_types::meta::Literal::String(s)) => Ok(s),
 		_ => panic!("expected a untyped and untagged string literal"),
 	}
 }
 
 impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
-	for grdf::loc::BTreeDataset<Id, Term, Object<F>, GraphLabel, F>
+	for grdf::meta::BTreeDataset<Id, Term, Object<F>, GraphLabel, Location<F>>
 {
 	type LocalContext = ();
 	type Error = Error<F>;
@@ -43,33 +43,33 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 		_vocabulary: &mut Vocabulary,
 	) -> Result<(), Error<F>> {
 		// Step 1: find out the type of each node.
-		for Loc(quad, loc) in self.loc_quads() {
-			let Loc(id, _) = quad.subject().cloned_value();
+		for Meta(quad, loc) in self.loc_quads() {
+			let Meta(id, _) = quad.subject().cloned_value();
 
 			if let Term::Rdf(vocab::Rdf::Type) = quad.predicate().value() {
 				match quad.object().value() {
 					Object::Iri(Term::Rdf(vocab::Rdf::Property)) => {
-						context.declare_property(id, Some(loc.cloned()));
+						context.declare_property(id, Some(loc.clone()));
 					}
 					Object::Iri(Term::Rdf(vocab::Rdf::List)) => {
-						context.declare_list(id, Some(loc.cloned()));
+						context.declare_list(id, Some(loc.clone()));
 					}
 					Object::Iri(Term::Rdfs(vocab::Rdfs::Class)) => {
-						context.declare_type(id, Some(loc.cloned()));
+						context.declare_type(id, Some(loc.clone()));
 					}
 					Object::Iri(Term::Rdfs(vocab::Rdfs::Datatype)) => {
-						context.declare_type(id, Some(loc.cloned()));
+						context.declare_type(id, Some(loc.clone()));
 						let ty = context.get_mut(id).unwrap().as_type_mut().unwrap();
-						ty.declare_datatype(Some(loc.cloned()))?;
+						ty.declare_datatype(Some(loc.clone()))?;
 					}
 					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)) => {
-						context.declare_layout(id, Some(loc.cloned()));
+						context.declare_layout(id, Some(loc.clone()));
 					}
 					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Field)) => {
-						context.declare_layout_field(id, Some(loc.cloned()));
+						context.declare_layout_field(id, Some(loc.clone()));
 					}
 					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Variant)) => {
-						context.declare_layout_variant(id, Some(loc.cloned()));
+						context.declare_layout_variant(id, Some(loc.clone()));
 					}
 					_ => (),
 				}
@@ -86,8 +86,8 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 		_vocabulary: &mut Vocabulary,
 	) -> Result<(), Error<F>> {
 		// Step 2: find out the properties of each node.
-		for Loc(rdf_types::Quad(subject, predicate, object, _graph), loc) in self.into_loc_quads() {
-			let Loc(id, id_loc) = subject;
+		for Meta(rdf_types::Quad(subject, predicate, object, _graph), loc) in self.into_meta_quads() {
+			let Meta(id, id_loc) = subject;
 
 			match predicate.into_value() {
 				Term::Rdf(vocab::Rdf::First) => match context.require_list_mut(id, Some(id_loc))? {
@@ -98,7 +98,7 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 				},
 				Term::Rdf(vocab::Rdf::Rest) => match context.require_list_mut(id, Some(id_loc))? {
 					ListMut::Cons(list) => {
-						let Loc(object, _) = expect_id(object)?;
+						let Meta(object, _) = expect_id(object)?;
 						list.set_rest(object, Some(loc))?
 					}
 					ListMut::Nil => {
@@ -130,7 +130,7 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 				Term::Rdfs(vocab::Rdfs::Domain) => {
 					let (prop, field) =
 						context.require_property_or_layout_field_mut(id, Some(id_loc))?;
-					let Loc(object, object_loc) = expect_id(object)?;
+					let Meta(object, object_loc) = expect_id(object)?;
 
 					if let Some(field) = field {
 						field.set_layout(object, Some(loc.clone()))?
@@ -144,13 +144,13 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 				}
 				Term::Rdfs(vocab::Rdfs::Range) => {
 					let prop = context.require_property_mut(id, Some(id_loc))?;
-					let Loc(object, _) = expect_id(object)?;
+					let Meta(object, _) = expect_id(object)?;
 					prop.set_range(object, Some(loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::Format) => {
 					let (field, variant) =
 						context.require_layout_field_or_variant_mut(id, Some(id_loc))?;
-					let Loc(object, _) = expect_id(object)?;
+					let Meta(object, _) = expect_id(object)?;
 
 					if let Some(field) = field {
 						field.set_layout(object, Some(loc.clone()))?
@@ -162,22 +162,22 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 				}
 				Term::Schema(vocab::Schema::ValueRequired) => {
 					let prop = context.require_property_mut(id, Some(id_loc))?;
-					let Loc(required, _) = expect_boolean(object)?;
+					let Meta(required, _) = expect_boolean(object)?;
 					prop.set_required(required, Some(loc.clone()))?
 				}
 				Term::Schema(vocab::Schema::MultipleValues) => {
 					let prop = context.require_property_mut(id, Some(id_loc))?;
-					let Loc(multiple, _) = expect_boolean(object)?;
+					let Meta(multiple, _) = expect_boolean(object)?;
 					prop.set_functional(!multiple, Some(loc.clone()))?
 				}
 				Term::Owl(vocab::Owl::UnionOf) => {
 					let ty = context.require_type_mut(id, Some(id_loc))?;
-					let Loc(options_id, options_loc) = expect_id(object)?;
+					let Meta(options_id, options_loc) = expect_id(object)?;
 					ty.declare_union(options_id, Some(options_loc))?
 				}
 				Term::Owl(vocab::Owl::IntersectionOf) => {
 					let ty = context.require_type_mut(id, Some(id_loc))?;
-					let Loc(types_id, types_loc) = expect_id(object)?;
+					let Meta(types_id, types_loc) = expect_id(object)?;
 					ty.declare_intersection(types_id, Some(types_loc))?
 				}
 				Term::Owl(vocab::Owl::OnDatatype) => {
@@ -188,7 +188,7 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 				}
 				Term::TreeLdr(vocab::TreeLdr::Name) => {
 					let node = context.require_mut(id, Some(id_loc))?;
-					let Loc(name, name_loc) = expect_raw_string(object)?;
+					let Meta(name, name_loc) = expect_raw_string(object)?;
 
 					let name = Name::new(&name).map_err(|treeldr::name::InvalidName| {
 						Error::new(error::NameInvalid(name.into()).into(), Some(name_loc))
@@ -211,32 +211,32 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 					}
 				}
 				Term::TreeLdr(vocab::TreeLdr::LayoutFor) => {
-					let Loc(ty_id, _) = expect_id(object)?;
+					let Meta(ty_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_type(ty_id, Some(loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::Fields) => {
-					let Loc(fields_id, _) = expect_id(object)?;
+					let Meta(fields_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_fields(fields_id, Some(loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::FieldFor) => {
-					let Loc(prop_id, _) = expect_id(object)?;
+					let Meta(prop_id, _) = expect_id(object)?;
 					let field = context.require_layout_field_mut(id, Some(id_loc))?;
 					field.set_property(prop_id, Some(loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::Reference) => {
-					let Loc(target_id, _) = expect_id(object)?;
+					let Meta(target_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_reference(target_id, Some(loc))?
 				}
 				// Term::TreeLdr(vocab::TreeLdr::Singleton) => {
-				// 	let Loc(string, _) = expect_raw_string(object)?;
+				// 	let Meta(string, _) = expect_raw_string(object)?;
 				// 	let layout = context.require_layout_mut(id, Some(id_loc))?;
 				// 	layout.set_literal(string.into(), Some(loc))?
 				// }
 				// Term::TreeLdr(vocab::TreeLdr::Matches) => {
-				// 	let Loc(regexp_string, regexp_loc) = expect_raw_string(object)?;
+				// 	let Meta(regexp_string, regexp_loc) = expect_raw_string(object)?;
 				// 	let regexp = treeldr::layout::literal::RegExp::parse(&regexp_string).map_err(
 				// 		move |e| {
 				// 			Error::new(
@@ -255,40 +255,40 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 					todo!()
 				}
 				Term::TreeLdr(vocab::TreeLdr::Enumeration) => {
-					let Loc(fields_id, _) = expect_id(object)?;
+					let Meta(fields_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_enum(fields_id, Some(loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::Option) => {
-					let Loc(item_id, _) = expect_id(object)?;
+					let Meta(item_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_option(item_id, Some(loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::Array) => {
-					let Loc(item_id, _) = expect_id(object)?;
+					let Meta(item_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_array(item_id, None, Some(loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::ArrayListFirst) => {
-					let Loc(prop_id, _) = expect_id(object)?;
+					let Meta(prop_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_array(prop_id, None, Some(loc.clone()))?;
 					layout.set_array_list_first(prop_id, Some(loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::ArrayListRest) => {
-					let Loc(prop_id, _) = expect_id(object)?;
+					let Meta(prop_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_array(prop_id, None, Some(loc.clone()))?;
 					layout.set_array_list_rest(prop_id, Some(loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::ArrayListNil) => {
-					let Loc(nil_id, _) = expect_id(object)?;
+					let Meta(nil_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_array(nil_id, None, Some(loc.clone()))?;
 					layout.set_array_list_nil(nil_id, Some(loc))?
 				}
 				Term::TreeLdr(vocab::TreeLdr::Set) => {
-					let Loc(item_id, _) = expect_id(object)?;
+					let Meta(item_id, _) = expect_id(object)?;
 					let layout = context.require_layout_mut(id, Some(id_loc))?;
 					layout.set_set(item_id, Some(loc))?
 				}

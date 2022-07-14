@@ -1,6 +1,6 @@
 use super::{peekable3::Peekable3, Annotation, Literal};
 use iref::IriRefBuf;
-use locspan::{ErrAt, Loc, Location, Span};
+use locspan::{Meta, ErrAt, Loc, Location, Span};
 use std::fmt;
 
 /// Fallible tokens iterator with lookahead.
@@ -802,20 +802,20 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 	#[allow(clippy::type_complexity)]
 	fn peek(&mut self) -> Result<Loc<Option<&Token>, F>, Loc<Error<E>, F>> {
 		if self.lookahead.is_none() {
-			if let Loc(Some(token), loc) = self.consume()? {
+			if let Meta(Some(token), loc) = self.consume()? {
 				self.lookahead = Some(Loc::new(token, loc));
 			}
 		}
 
 		match &self.lookahead {
-			Some(Loc(token, loc)) => Ok(Loc::new(Some(token), loc.clone())),
+			Some(Meta(token, loc)) => Ok(Loc::new(Some(token), loc.clone())),
 			None => Ok(Loc::new(None, self.pos.end())),
 		}
 	}
 
 	fn next(&mut self) -> Result<Loc<Option<Token>, F>, Loc<Error<E>, F>> {
 		match self.lookahead.take() {
-			Some(Loc(token, loc)) => Ok(Loc::new(Some(token), loc)),
+			Some(Meta(token, loc)) => Ok(Loc::new(Some(token), loc)),
 			None => self.consume(),
 		}
 	}
@@ -842,8 +842,8 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Iterator for Lexer<F, E, 
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self.next() {
-			Ok(Loc(Some(token), loc)) => Some(Ok(Loc::new(token, loc))),
-			Ok(Loc(None, _)) => None,
+			Ok(Meta(Some(token), loc)) => Some(Ok(Loc::new(token, loc))),
+			Ok(Meta(None, _)) => None,
 			Err(e) => Some(Err(e)),
 		}
 	}

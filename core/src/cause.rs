@@ -1,5 +1,5 @@
 use derivative::Derivative;
-use locspan::Location;
+use locspan::{Meta, Location};
 use locspan_derive::StrippedPartialEq;
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::BTreeSet;
@@ -268,7 +268,7 @@ impl<T, F> From<T> for WithCauses<T, F> {
 }
 
 impl<T, F: Ord> From<locspan::Loc<T, F>> for WithCauses<T, F> {
-	fn from(locspan::Loc(t, loc): locspan::Loc<T, F>) -> Self {
+	fn from(Meta(t, loc): locspan::Loc<T, F>) -> Self {
 		Self::new(t, loc)
 	}
 }
