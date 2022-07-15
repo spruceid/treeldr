@@ -1,5 +1,8 @@
-use super::{Enum, Struct};
-use crate::Context;
+//! JSON-LD × Rust code generation.
+use crate::{
+	ty::{Enum, Struct},
+	Context,
+};
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -19,7 +22,7 @@ pub fn structure_builder<F>(
 		let key = field.name().as_str();
 		let id = field.ident();
 
-		let layout_ref = field.ty().layout();
+		let layout_ref = field.layout();
 		let layout = context.model().layouts().get(layout_ref).unwrap();
 
 		insert_field.push(match layout.description() {

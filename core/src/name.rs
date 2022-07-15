@@ -164,7 +164,7 @@ impl Name {
 	pub fn as_str(&self) -> &str {
 		match self.preferred.as_deref() {
 			Some(p) => p,
-			None => &self.normalized
+			None => &self.normalized,
 		}
 	}
 

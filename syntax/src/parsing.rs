@@ -238,8 +238,7 @@ fn parse_keyword<F, L: Tokens<F>>(
 	tokens: &mut L,
 	keyword: lexing::Keyword,
 ) -> Result<(), Loc<Error<L::Error>, F>> {
-	let Meta(token, span) =
-		next_expected_token(tokens, || vec![TokenKind::Keyword(keyword)])?;
+	let Meta(token, span) = next_expected_token(tokens, || vec![TokenKind::Keyword(keyword)])?;
 
 	match token {
 		Token::Keyword(k) if k == keyword => Ok(()),
@@ -823,9 +822,7 @@ impl<F: Clone> Parse<F> for AnnotatedTypeExpr<F> {
 		let expr = OuterTypeExpr::parse_from_continuation(lexer, k)?;
 		loc.span_mut().append(expr.span());
 
-		while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) =
-			peek_token(lexer)?
-		{
+		while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) = peek_token(lexer)? {
 			loc.span_mut().append(a_loc.span());
 			annotations.push(Loc::new(*a, a_loc));
 			next_token(lexer)?;
@@ -1066,9 +1063,7 @@ impl<F: Clone> Parse<F> for AnnotatedLayoutExpr<F> {
 		let expr = OuterLayoutExpr::parse_from_continuation(lexer, k)?;
 		loc.span_mut().append(expr.span());
 
-		while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) =
-			peek_token(lexer)?
-		{
+		while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) = peek_token(lexer)? {
 			loc.span_mut().append(a_loc.span());
 			annotations.push(Loc::new(*a, a_loc));
 			next_token(lexer)?;

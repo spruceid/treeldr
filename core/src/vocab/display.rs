@@ -1,6 +1,6 @@
 use super::Vocabulary;
 use fmt::Display as StdDisplay;
-use locspan::{Meta, Loc};
+use locspan::{Loc, Meta};
 use std::fmt;
 
 pub trait Display {

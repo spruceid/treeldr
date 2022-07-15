@@ -3,7 +3,7 @@ use crate::build::{
 	Descriptions, Error, LayoutDescription, LayoutFieldCardinalityRestriction,
 	LayoutFieldRangeRestriction, LayoutFieldRestriction, LayoutRestrictedField, LocalError,
 };
-use locspan::{Meta, BorrowStripped, Loc};
+use locspan::{BorrowStripped, Loc, Meta};
 use locspan_derive::StrippedPartialEq;
 use std::collections::BTreeMap;
 use treeldr::{vocab::*, Caused, Causes, Id, MaybeSet, Name, WithCauses};

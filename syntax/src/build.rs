@@ -1,5 +1,5 @@
 use iref::{IriBuf, IriRef, IriRefBuf};
-use locspan::{Meta, Loc, Location};
+use locspan::{Loc, Location, Meta};
 use std::collections::{BTreeMap, HashMap};
 use thiserror::Error;
 use treeldr::{reporting, vocab::*, Caused, Causes, Id, Name, Vocabulary, WithCauses};
@@ -1291,7 +1291,8 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::OuterLayoutExpr<F>, F> {
 					vocabulary,
 					true_layouts,
 					|layout_expr, context, vocabulary| {
-						let Meta(id, loc) = layout_expr.build(local_context, context, vocabulary)?;
+						let Meta(id, loc) =
+							layout_expr.build(local_context, context, vocabulary)?;
 						Ok(Caused::new(id.into_term(), Some(loc)))
 					},
 				)?;
@@ -1465,7 +1466,8 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::InnerLayoutExpr<F>, F> {
 			crate::InnerLayoutExpr::Reference(ty_expr) => {
 				let id = local_context.next_id.take();
 
-				let Meta(deref_ty, deref_loc) = ty_expr.build(local_context, context, vocabulary)?;
+				let Meta(deref_ty, deref_loc) =
+					ty_expr.build(local_context, context, vocabulary)?;
 
 				let id = match id {
 					Some(Meta(id, _)) => {
@@ -1595,14 +1597,14 @@ impl<F: Clone + Ord> Build<F> for Loc<crate::FieldDefinition<F>, F> {
 					} else {
 						// Wrap inside non-empty set.
 						let container_id = Id::Blank(vocabulary.new_blank_label());
-						context.declare_layout(container_id, multiple_loc.clone());
+						context.declare_layout(container_id, None);
 						let container_layout = context
 							.get_mut(container_id)
 							.unwrap()
 							.as_layout_mut()
 							.unwrap();
 						let Meta(item_layout_id, item_layout_loc) = layout_id;
-						container_layout.set_required(item_layout_id, multiple_loc)?;
+						container_layout.set_required(item_layout_id, None)?;
 						Loc(container_id, item_layout_loc)
 					}
 				} else if multiple {

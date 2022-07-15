@@ -4,13 +4,23 @@ use <http://www.w3.org/2001/XMLSchema#> as xs;
 use <https://schema.org/> as schema;
 use <https://treeldr.org/> as tldr;
 use <https://www.w3.org/2018/credentials#> as vc;
+use <https://example.com/rebase/> as rebase;
 
+/// Basic Blog Post.
 layout BasicPost for schema:BlogPosting {
+	/// Identifier of the post.
 	tldr:self as id: required &rdfs:Resource,
+
+	/// Title of the post.
 	schema:title: xs:string,
+
+	/// Content of the post.
 	schema:body: xs:string
 }
 
-/// Verifiable `BasicPost`
-type VerifiableBasicPost = vc:VerifiableCredential &
+/// Verifiable `BasicPost`.
+/// 
+/// Defined as a `vc:VerifiableCredential` where the
+/// credential subject is a `schema:BlogPosting`.
+type VerifiableBasicPost = (vc:VerifiableCredential with rebase:Credential) &
 	all vc:credentialSubject: (schema:BlogPosting with BasicPost);

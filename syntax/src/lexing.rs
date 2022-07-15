@@ -1,6 +1,6 @@
 use super::{peekable3::Peekable3, Annotation, Literal};
 use iref::IriRefBuf;
-use locspan::{Meta, ErrAt, Loc, Location, Span};
+use locspan::{ErrAt, Loc, Location, Meta, Span};
 use std::fmt;
 
 /// Fallible tokens iterator with lookahead.

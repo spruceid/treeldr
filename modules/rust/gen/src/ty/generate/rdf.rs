@@ -1,5 +1,5 @@
 //! RDF × Rust code generation.
-use super::{BuiltIn, Context, Description, Enum, Primitive, Struct, Type};
+use crate::ty::{BuiltIn, Context, Description, Enum, Primitive, Struct, Type};
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -12,10 +12,10 @@ fn primitive_from_literal<F>(context: &Context<F>, p: Primitive, lit: TokenStrea
 
 	match p {
 		Primitive::Boolean => quote! {
-			<bool as ::treeldr_rust_prelude::FromXsdLiteral<#id_ty>>::from_xsd_literal(#lit)?
+			<bool as ::treeldr_rust_prelude::rdf::FromXsdLiteral<#id_ty>>::from_xsd_literal(#lit)?
 		},
 		Primitive::Integer => quote! {
-			<i64 as ::treeldr_rust_prelude::FromXsdLiteral<#id_ty>>::from_xsd_literal(#lit)?
+			<i64 as ::treeldr_rust_prelude::rdf::FromXsdLiteral<#id_ty>>::from_xsd_literal(#lit)?
 		},
 		Primitive::UnsignedInteger => {
 			todo!("unsigned integer")
@@ -27,7 +27,7 @@ fn primitive_from_literal<F>(context: &Context<F>, p: Primitive, lit: TokenStrea
 			todo!("double")
 		}
 		Primitive::String => quote! {
-			<String as ::treeldr_rust_prelude::FromXsdLiteral<#id_ty>>::from_xsd_literal(#lit)?
+			<String as ::treeldr_rust_prelude::rdf::FromXsdLiteral<#id_ty>>::from_xsd_literal(#lit)?
 		},
 		Primitive::Time => {
 			todo!("time")
@@ -36,7 +36,7 @@ fn primitive_from_literal<F>(context: &Context<F>, p: Primitive, lit: TokenStrea
 			todo!("date")
 		}
 		Primitive::DateTime => quote! {
-			<::chrono::DateTime<::chrono::Utc> as ::treeldr_rust_prelude::FromXsdLiteral<#id_ty>>::from_xsd_literal(#lit)?
+			<::chrono::DateTime<::chrono::Utc> as ::treeldr_rust_prelude::rdf::FromXsdLiteral<#id_ty>>::from_xsd_literal(#lit)?
 		},
 		Primitive::Iri => {
 			todo!("iri")
@@ -52,11 +52,18 @@ fn primitive_from_literal<F>(context: &Context<F>, p: Primitive, lit: TokenStrea
 
 fn from_object<F>(context: &Context<F>, ty: &Type<F>, object: TokenStream) -> TokenStream {
 	match ty.description() {
+		Description::BuiltIn(BuiltIn::Required(item)) => {
+			let ty = context.layout_type(*item).unwrap();
+			from_object(context, ty, object)
+		}
 		Description::BuiltIn(BuiltIn::Option(item)) => {
 			todo!("option")
 		}
 		Description::BuiltIn(BuiltIn::BTreeSet(item)) => {
 			todo!("btreeset")
+		}
+		Description::BuiltIn(BuiltIn::OneOrMany(item)) => {
+			todo!("oneormany")
 		}
 		Description::BuiltIn(BuiltIn::Vec(item)) => {
 			todo!("vec")
@@ -73,7 +80,7 @@ fn from_object<F>(context: &Context<F>, ty: &Type<F>, object: TokenStream) -> To
 		Description::Reference => {
 			quote! {
 				match #object {
-					::treeldr_rust_prelude::Object::Id(id) => id.clone(),
+					::treeldr_rust_prelude::rdf::Object::Id(id) => id.clone(),
 					_ => return Err(::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue)
 				}
 			}
@@ -84,7 +91,7 @@ fn from_object<F>(context: &Context<F>, ty: &Type<F>, object: TokenStream) -> To
 
 			quote! {
 				match #object {
-					::treeldr_rust_prelude::Object::Literal(#lit) => { #from_literal },
+					::treeldr_rust_prelude::rdf::Object::Literal(#lit) => { #from_literal },
 					_ => return Err(::treeldr_rust_prelude::FromRdfError::ExpectedLiteralValue)
 				}
 			}
@@ -92,7 +99,7 @@ fn from_object<F>(context: &Context<F>, ty: &Type<F>, object: TokenStream) -> To
 		Description::Struct(_) | Description::Enum(_) => {
 			quote! {
 				match #object {
-					::treeldr_rust_prelude::Object::Id(id) => {
+					::treeldr_rust_prelude::rdf::Object::Id(id) => {
 						::treeldr_rust_prelude::FromRdf::from_rdf(::treeldr_rust_prelude::Id::as_ref(id), graph)?
 					},
 					_ => return Err(::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue)
@@ -153,7 +160,7 @@ pub fn structure_reader<F>(
 			Some(prop_ref) => {
 				let prop = context.model().properties().get(prop_ref).unwrap();
 
-				let layout_ref = field.ty().layout();
+				let layout_ref = field.layout();
 				let layout = context.model().layouts().get(layout_ref).unwrap();
 
 				if prop.id()
@@ -187,7 +194,7 @@ pub fn structure_reader<F>(
 						treeldr::layout::Description::Required(_) => {
 							let object = quote! { object };
 							let from_object =
-								from_object(context, field.ty().ty(context), object.clone());
+								from_object(context, field.ty(context), object.clone());
 
 							quote! {
 								let mut objects = #objects;
@@ -207,7 +214,7 @@ pub fn structure_reader<F>(
 							}
 						}
 						treeldr::layout::Description::Option(_) => {
-							match field.ty().ty(context).description() {
+							match field.ty(context).description() {
 								Description::BuiltIn(BuiltIn::Option(item_layout)) => {
 									let item_ty = context.layout_type(*item_layout).unwrap();
 									let object = quote! { object };
@@ -231,12 +238,12 @@ pub fn structure_reader<F>(
 								_ => panic!("not an option"),
 							}
 						}
-						_ => from_objects(context, field.ty().ty(context), objects),
+						_ => from_objects(context, field.ty(context), objects),
 					}
 				}
 			}
 			None => {
-				if field.ty().impl_default(context) {
+				if field.ty(context).impl_default(context) {
 					quote! { ::core::default::Default::default() }
 				} else {
 					return Err(Error::NoDefaultImplForOrphanField);
@@ -252,7 +259,7 @@ pub fn structure_reader<F>(
 
 	Ok(quote! {
 		impl ::treeldr_rust_prelude::FromRdf<#id_ty> for #ident {
-			fn from_rdf<G>(id: #id_ty_ref, graph: &G) -> Result<Self, ::treeldr_rust_prelude::FromRdfError> where G: ::grdf::Graph<Subject=#id_ty, Predicate=#id_ty, Object=::treeldr_rust_prelude::Object<#id_ty>> {
+			fn from_rdf<G>(id: #id_ty_ref, graph: &G) -> Result<Self, ::treeldr_rust_prelude::FromRdfError> where G: ::grdf::Graph<Subject=#id_ty, Predicate=#id_ty, Object=::treeldr_rust_prelude::rdf::Object<#id_ty>> {
 				Ok(Self {
 					#(#fields_init),*
 				})
@@ -273,7 +280,7 @@ pub fn enum_reader<F>(
 
 	Ok(quote! {
 		impl ::treeldr_rust_prelude::FromRdf<#id_ty> for #ident {
-			fn from_rdf<G>(id: #id_ty_ref, graph: &G) -> Result<Self, ::treeldr_rust_prelude::FromRdfError> where G: ::grdf::Graph<Subject=#id_ty, Predicate=#id_ty, Object=::treeldr_rust_prelude::Object<#id_ty>> {
+			fn from_rdf<G>(id: #id_ty_ref, graph: &G) -> Result<Self, ::treeldr_rust_prelude::FromRdfError> where G: ::grdf::Graph<Subject=#id_ty, Predicate=#id_ty, Object=::treeldr_rust_prelude::rdf::Object<#id_ty>> {
 				todo!()
 			}
 		}

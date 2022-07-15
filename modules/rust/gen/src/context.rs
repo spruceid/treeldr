@@ -22,7 +22,7 @@ impl IdentType {
 					treeldr::Id::Iri(id) => {
 						let iri = id.iri(context.vocabulary()).unwrap();
 						let iri_literal = iri.as_str();
-						quote! { ::treeldr_rust_prelude::SubjectRef::Iri(::treeldr_rust_prelude::static_iref::iri!(#iri_literal)) }
+						quote! { ::treeldr_rust_prelude::rdf::SubjectRef::Iri(::treeldr_rust_prelude::static_iref::iri!(#iri_literal)) }
 					}
 					treeldr::Id::Blank(_) => panic!("cannot generate static id for blank property"),
 				}
@@ -32,7 +32,7 @@ impl IdentType {
 
 	pub fn path(&self) -> TokenStream {
 		quote! {
-			::treeldr_rust_prelude::Subject
+			::treeldr_rust_prelude::rdf::Subject
 		}
 	}
 }
@@ -40,7 +40,7 @@ impl IdentType {
 impl Referenced<IdentType> {
 	pub fn path(&self) -> TokenStream {
 		quote! {
-			::treeldr_rust_prelude::SubjectRef
+			::treeldr_rust_prelude::rdf::SubjectRef
 		}
 	}
 }
@@ -81,7 +81,7 @@ impl<'a, F> Context<'a, F> {
 	}
 
 	pub fn ident_type(&self) -> IdentType {
-		IdentType::RdfSubject
+		self.ident_type
 	}
 
 	pub fn vocabulary(&self) -> &'a treeldr::Vocabulary {
@@ -139,9 +139,17 @@ impl<'a, F> Context<'a, F> {
 		module: Option<module::Parent<F>>,
 		layout_ref: Ref<treeldr::layout::Definition<F>>,
 	) {
+		let layout = self
+			.model()
+			.layouts()
+			.get(layout_ref)
+			.expect("undefined described layout");
+		let label = layout.preferred_label(self.model()).map(String::from);
+		let doc = layout.preferred_documentation(self.model()).clone();
+
 		self.layouts.insert(
 			layout_ref,
-			Type::new(module, ty::Description::new(self, layout_ref)),
+			Type::new(module, ty::Description::new(self, layout_ref), label, doc),
 		);
 		if let Some(module::Parent::Ref(module)) = module {
 			self.modules

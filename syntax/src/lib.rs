@@ -1,5 +1,5 @@
 use iref::IriBuf;
-use locspan::{Meta, Loc};
+use locspan::{Loc, Meta};
 
 pub mod build;
 pub mod lexing;

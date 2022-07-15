@@ -1,5 +1,5 @@
 use derivative::Derivative;
-use locspan::{Meta, Location};
+use locspan::{Location, Meta};
 use locspan_derive::StrippedPartialEq;
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::BTreeSet;

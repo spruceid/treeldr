@@ -1,5 +1,5 @@
 use crate::{error, list::ListMut, Context, Descriptions, Document, Error};
-use locspan::{Meta, Loc, Location};
+use locspan::{Loc, Location, Meta};
 use treeldr::{
 	vocab::{self, GraphLabel, Object, Term},
 	Id, Name, Vocabulary,
@@ -86,7 +86,8 @@ impl<F: Clone + Ord, D: Descriptions<F>> Document<F, D>
 		_vocabulary: &mut Vocabulary,
 	) -> Result<(), Error<F>> {
 		// Step 2: find out the properties of each node.
-		for Meta(rdf_types::Quad(subject, predicate, object, _graph), loc) in self.into_meta_quads() {
+		for Meta(rdf_types::Quad(subject, predicate, object, _graph), loc) in self.into_meta_quads()
+		{
 			let Meta(id, id_loc) = subject;
 
 			match predicate.into_value() {

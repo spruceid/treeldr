@@ -1,6 +1,6 @@
 use super::{Descriptions, Error, LayoutDescription, LayoutRestrictedField, LocalError};
 use derivative::Derivative;
-use locspan::{Meta, Loc};
+use locspan::{Loc, Meta};
 use std::collections::BTreeMap;
 use treeldr::{Causes, Id, MaybeSet, Vocabulary, WithCauses};
 use treeldr_build::{

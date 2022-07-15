@@ -17,7 +17,7 @@ impl Id for rdf_types::Subject {
 	fn from_ref(r: Self::Ref<'_>) -> Self {
 		match r {
 			rdf_types::SubjectRef::Blank(b) => Self::Blank(b.to_owned()),
-			rdf_types::SubjectRef::Iri(i) => Self::Iri(i.into())
+			rdf_types::SubjectRef::Iri(i) => Self::Iri(i.into()),
 		}
 	}
 }

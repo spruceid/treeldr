@@ -1,7 +1,7 @@
 pub use crate::layout::Primitive;
 use iref::{Iri, IriBuf};
 use iref_enum::IriEnum;
-use locspan::{Meta, Location, Loc, Span};
+use locspan::{Loc, Location, Meta, Span};
 use rdf_types::Quad;
 use std::{collections::HashMap, fmt};
 
@@ -406,7 +406,8 @@ impl fmt::Display for BlankLabel {
 	}
 }
 
-pub type Literal<F, N = Span> = rdf_types::meta::Literal<Location<F, N>, rdf_types::StringLiteral, Term>;
+pub type Literal<F, N = Span> =
+	rdf_types::meta::Literal<Location<F, N>, rdf_types::StringLiteral, Term>;
 
 pub type Id = rdf_types::Subject<Term, BlankLabel>;
 
@@ -414,7 +415,8 @@ pub type GraphLabel = rdf_types::GraphLabel<Term, BlankLabel>;
 
 pub type Object<F, N = Span> = rdf_types::Object<Term, BlankLabel, Literal<F, N>>;
 
-pub type LocQuad<F, N = Span> = rdf_types::meta::MetaQuad<Id, Term, Object<F, N>, GraphLabel, Location<F, N>>;
+pub type LocQuad<F, N = Span> =
+	rdf_types::meta::MetaQuad<Id, Term, Object<F, N>, GraphLabel, Location<F, N>>;
 
 pub type StrippedLiteral = rdf_types::Literal<rdf_types::StringLiteral, Term>;
 
@@ -432,7 +434,10 @@ pub fn strip_quad<F>(Meta(rdf_types::Quad(s, p, o, g), _): LocQuad<F>) -> Stripp
 	)
 }
 
-pub fn literal_from_rdf<F>(literal: rdf_types::meta::Literal<Location<F>>, ns: &mut Vocabulary) -> Literal<F> {
+pub fn literal_from_rdf<F>(
+	literal: rdf_types::meta::Literal<Location<F>>,
+	ns: &mut Vocabulary,
+) -> Literal<F> {
 	match literal {
 		rdf_types::meta::Literal::String(s) => Literal::String(s),
 		rdf_types::meta::Literal::LangString(s, tag) => Literal::LangString(s, tag),
