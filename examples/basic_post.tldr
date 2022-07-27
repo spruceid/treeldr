@@ -1,0 +1,16 @@
+base <https://example.com/>;
+use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
+use <https://schema.org/> as schema;
+use <https://treeldr.org/> as tldr;
+
+/// Basic Blog Post.
+layout BasicPost for schema:BlogPosting {
+	/// Identifier of the post.
+	tldr:self as id: required &rdfs:Resource,
+
+	/// Title of the post.
+	schema:title: schema:Text,
+
+	/// Content of the post.
+	schema:body: schema:Text
+}

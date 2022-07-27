@@ -1,0 +1,53 @@
+// Use the following command to generate a JSON-LD context:
+// cargo run -- -i examples/rebase/witness/dns.tldr -i examples/rebase/rebase.tldr -i examples/vc.tldr -i examples/xsd.tldr -i examples/schema.org.tldr json-ld-context https://spruceid.com/rebase/witness/dns/DnsVerificationMessage
+
+// Sets the base IRI of the document.
+base <https://spruceid.com/rebase/witness/dns/>;
+
+// Declare some IRI prefixes.
+use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <https://schema.org/> as schema;
+use <https://treeldr.org/> as tldr;
+use <https://www.w3.org/2018/credentials#> as vc;
+use <https://example.com/rebase/> as rebase;
+
+/// DNS Verification Message.
+//
+// This is the schema for each VC evidence
+// in this flow.
+type DnsVerificationMessage {
+	timestamp: xs:dateTime,
+	dnsServer: xs:string
+}
+
+/// DNS Verification Subject.
+//
+// This is the schema for each VC subject
+// in this flow.
+layout DnsVerificationSubject for rdfs:Resource {
+	tldr:self as id: required &rdfs:Resource,
+
+	schema:sameAs: &rdfs:Resource
+}
+
+/// DNS Verification VC.
+///
+/// Defined as a `vc:VerifiableCredential` where the
+/// credential subject is a `DnsVerificationSubject` and
+/// evidence a `DnsVerificationMessage`.
+//
+// The `with` keyword is used to define what default layout to use
+// for `vc:VerifiableCredential` and subject `rdfs:Resource`.
+// Using it TreeLDR will automatically derive the following layout
+// definition for this type:
+// ```
+// layout DnsVerification for DnsVerification =
+//   rebase:Credential &
+//   all vc:credentialSubject: DnsVerificationSubject &
+//   all vc:evidence: DnsVerificationMessage;
+// ```
+type DnsVerification =
+	(vc:VerifiableCredential with rebase:Credential) &
+	all vc:credentialSubject: (rdfs:Resource with DnsVerificationSubject) &
+	all vc:evidence: DnsVerificationMessage;

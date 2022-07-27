@@ -21,10 +21,6 @@ use treeldr_rust_prelude::{
 	"modules/rust/gen/examples/basic_post.tldr"
 )]
 pub mod schema {
-	/// Basic Post example types.
-	#[prefix("https://treeldr.org/")]
-	pub mod tldr {}
-
 	/// RDF Schema types.
 	#[prefix("http://www.w3.org/2000/01/rdf-schema#")]
 	pub mod rdfs {}
@@ -51,7 +47,7 @@ const VC_LD_CONTEXT_URL: Iri<'static> = iri!("https://www.w3.org/2018/credential
 type LocalContext<'a> = json_ld::syntax::ContextEntry<Location<&'a str>>;
 type Context<'a> = json_ld::Context<IriBuf, LocalContext<'a>>;
 type JsonLd<'a> = json_ld::syntax::Value<LocalContext<'a>, Location<&'a str>>;
-type Loader<'a> = json_ld::loader::NoLoader<JsonLd<'a>, Location<&'a str>>;
+type NoLoader<'a> = json_ld::loader::NoLoader<JsonLd<'a>, Location<&'a str>>;
 
 #[async_std::main]
 async fn main() {
@@ -65,7 +61,7 @@ async fn main() {
 	// Expand JSON-LD.
 	let context = Context::default();
 	let expanded_json_ld = json_ld
-		.expand(&context, &mut Loader::new())
+		.expand(&context, &mut NoLoader::new())
 		.await
 		.expect("expansion failed");
 
@@ -85,11 +81,11 @@ async fn main() {
 
 	// Wrap the post inside a VC.
 	let mut vc = schema::basic_post::VerifiableBasicPost::new(chrono::Utc::now());
+	vc.credential_subject = Some(post).into_iter().collect();
 	vc.type_.extend([
 		Subject::Iri(iri!("https://www.w3.org/2018/credentials#VerifiableCredential").into()),
 		Subject::Iri(iri!("https://example.com/example/VerifiableBasicPost").into()),
 	]);
-	vc.credential_subject = Some(post).into_iter().collect();
 
 	// Schema to JSON-LD.
 	let mut json_ld_out: json_ld::syntax::Value<json_ld::syntax::ContextEntry<()>, _> =

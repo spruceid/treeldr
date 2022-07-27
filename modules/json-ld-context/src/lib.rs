@@ -151,7 +151,9 @@ fn generate_layout_context<F>(
 			context.ty = non_blank_id.map(|id| id.display(vocabulary).to_string().into());
 			context.container = Some("@list".into());
 		}
-		Description::Alias(_, _) => todo!(),
+		Description::Alias(_, _) => {
+			// generate_layout_context(context, vocabulary, model, *layout_ref)
+		},
 	}
 }
 
