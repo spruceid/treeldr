@@ -1,18 +1,31 @@
 base <https://schema.org>;
 use <http://www.w3.org/2001/XMLSchema#> as xs;
 use <https://schema.org/> as schema;
+use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
+use <https://treeldr.org/> as tldr;
 
 /// Text.
-type Text;
+type Text with tldr:String;
 
 /// URL.
-type URL;
+type URL with tldr:URI;
+
+property sameAs: rdfs:Resource;
 
 /// URL of the item.
 property url: URL;
 
+type Thing {
+	schema:name: multiple Text
+}
+
+/// Person.
+type Person {
+	schema:parent: multiple Person
+}
+
 /// Blog post.
 type BlogPosting {
-	schema:title: xs:string,
-	schema:body: xs:string
+	schema:title: Text,
+	schema:body: Text
 }
