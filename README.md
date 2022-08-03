@@ -85,7 +85,7 @@ This will generate the given JSON-LD context:
 {
 	"name": "https://example.com/Person/name",
 	"parent": "https://schema.org/Person/parent",
-  "age": "https://schema.org/Person/age"
+	"age": "https://schema.org/Person/age"
 }
 ```
 
@@ -102,27 +102,27 @@ This will generate the given JSON Schema for the same layout:
 	"$id": "https://example.com/person.schema.json",
 	"description": "Person",
 	"type": "object",
-	"properties": [
+	"properties": {
 		"name": {
 			"description": "Full name",
 			"type": "string"
 		}
-    "parent": {
-      "description": "Parents",
-      "type": "array",
-      "item": {
-        "$ref": "https://example.com/person.schema.json"
-      }
-    }
-    "age": {
-      "description": "Age",
-      "type": "integer",
-      "minimum": 0
-    }
-	],
-  "required": [
-    "name"
-  ]
+		"parent": {
+			"description": "Parents",
+			"type": "array",
+			"item": {
+			"$ref": "https://example.com/person.schema.json"
+			}
+		}
+		"age": {
+			"description": "Age",
+			"type": "integer",
+			"minimum": 0
+		}
+	},
+	"required": [
+		"name"
+	]
 }
 ```
 
