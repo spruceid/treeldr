@@ -1,5 +1,5 @@
 [package]
-name = "treeldr-cli"
+name = "tldrc"
 version = "0.1.0"
 authors = ["Spruce Systems Inc."]
 description = "Schema definition language."
@@ -33,5 +33,5 @@ serde_json = { version = "1.0.81", optional = true }
 treeldr-json-ld-context = { path = "../modules/json-ld-context", version = "0.1", optional = true }
 
 [[bin]]
-name = "treeldr"
+name = "tldrc"
 path = "src/main.rs"

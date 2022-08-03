@@ -5,6 +5,22 @@ TreeLDR can be used to produce JSON Schemas, JSON-LD contexts, migration strateg
 and entire SDKs in various target programing languages such as Python, Java and more.
 This way, developers can define data structures in a familiar way and focus purely on the application level.
 
+## Installation
+
+TreeLDR can be installed from the source by first cloning
+the git repository:
+```
+git clone https://github.com/spruceid/treeldr.git
+```
+
+This repository contains the different libraries composing
+the TreeLDR language, the compiler library and its modules.
+You can then build and install the compiler using `cargo`
+from the repository root:
+```
+cargo install --path tldrc
+```
+
 ## User Guide
 
 See the [user guide](https://www.spruceid.dev) for a complete overview
