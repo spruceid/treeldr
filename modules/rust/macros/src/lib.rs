@@ -8,7 +8,9 @@ use std::collections::HashMap;
 use treeldr_load as load;
 
 mod module;
+mod source;
 use module::Module;
+use source::Source;
 
 #[proc_macro_attribute]
 #[proc_macro_error]
@@ -18,8 +20,15 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 			let item = syn::parse_macro_input!(item as syn::Item);
 			match Module::from_item(item) {
 				Ok(mut module) => {
-					let mut files = load::source::Files::new();
+					let mut files = load::Files::<Source>::new();
 					let mut documents = Vec::new();
+
+					documents.push(load_built_in(
+						&mut files,
+						Source::Xsd,
+						include_str!("../../../../schema/xsd.tldr"),
+					));
+
 					let mut file_id_span = HashMap::new();
 					for input in inputs {
 						match load::Document::load(&mut files, &input.filename) {
@@ -73,4 +82,14 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 			abort!(span, "{}", e)
 		}
 	}
+}
+
+fn load_built_in(files: &mut load::Files<Source>, source: Source, content: &str) -> load::Document {
+	let file_id = files.load_content(
+		source,
+		None,
+		Some(load::MimeType::TreeLdr),
+		content.to_string(),
+	);
+	load::Document::TreeLdr(Box::new(load::import_treeldr(files, file_id)))
 }

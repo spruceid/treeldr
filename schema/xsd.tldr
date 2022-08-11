@@ -1,0 +1,14 @@
+base <http://www.w3.org/2001/XMLSchema>;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <https://treeldr.org/> as tldr;
+
+type xs:boolean with tldr:Boolean;
+type xs:integer with tldr:Integer;
+type xs:nonNegativeInteger with tldr:UnsignedInteger;
+type xs:float with tldr:Float;
+type xs:double with tldr:Double;
+type xs:string with tldr:String;
+type xs:time with tldr:Time;
+type xs:date with tldr:Date;
+type xs:dateTime with tldr:DateTime;
+type xs:anyURI with tldr:URI;

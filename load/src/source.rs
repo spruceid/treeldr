@@ -1,21 +1,36 @@
 use iref::{Iri, IriBuf};
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::Hash;
 use std::ops::{Deref, Range};
 use std::path::{Path, PathBuf};
+
+pub trait DisplayPath<'a> {
+	type Display: 'a + fmt::Display;
+
+	fn display(&'a self) -> Self::Display;
+}
+
+impl<'a> DisplayPath<'a> for PathBuf {
+	type Display = std::path::Display<'a>;
+
+	fn display(&'a self) -> Self::Display {
+		Path::display(self)
+	}
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct FileId(usize);
 
-pub struct File {
-	source: PathBuf,
+pub struct File<P = PathBuf> {
+	source: P,
 	base_iri: Option<IriBuf>,
 	buffer: Buffer,
 	mime_type: Option<MimeType>,
 }
 
-impl File {
-	pub fn source(&self) -> &Path {
+impl<P> File<P> {
+	pub fn source(&self) -> &P {
 		&self.source
 	}
 
@@ -67,18 +82,26 @@ impl fmt::Display for MimeType {
 	}
 }
 
-#[derive(Default)]
-pub struct Files {
-	files: Vec<File>,
-	sources: HashMap<PathBuf, FileId>,
+pub struct Files<P = PathBuf> {
+	files: Vec<File<P>>,
+	sources: HashMap<P, FileId>,
 }
 
-impl Files {
+impl<P> Default for Files<P> {
+	fn default() -> Self {
+		Self {
+			files: Vec::new(),
+			sources: HashMap::new(),
+		}
+	}
+}
+
+impl<P> Files<P> {
 	pub fn new() -> Self {
 		Self::default()
 	}
 
-	pub fn get(&self, id: FileId) -> Option<&File> {
+	pub fn get(&self, id: FileId) -> Option<&File<P>> {
 		self.files.get(id.0)
 	}
 
@@ -95,22 +118,53 @@ impl Files {
 		source: &impl AsRef<Path>,
 		base_iri: Option<IriBuf>,
 		mime_type: Option<MimeType>,
-	) -> std::io::Result<FileId> {
-		let source = source.as_ref();
-		match self.sources.get(source).cloned() {
+	) -> std::io::Result<FileId>
+	where
+		P: Clone + Eq + Hash + for<'a> From<&'a Path>,
+	{
+		let path = source.as_ref();
+		let source: P = path.into();
+		match self.sources.get(&source).cloned() {
 			Some(id) => Ok(id),
 			None => {
-				let content = std::fs::read_to_string(source)?;
+				let content = std::fs::read_to_string(path)?;
 				let id = FileId(self.files.len());
-				let mime_type = mime_type.or_else(|| MimeType::infer(source, &content));
+				let mime_type = mime_type.or_else(|| MimeType::infer(path, &content));
 				self.files.push(File {
-					source: source.into(),
+					source: source.clone(),
 					base_iri,
 					buffer: Buffer::new(content),
 					mime_type,
 				});
-				self.sources.insert(source.into(), id);
+				self.sources.insert(source, id);
 				Ok(id)
+			}
+		}
+	}
+
+	pub fn load_content(
+		&mut self,
+		source: P,
+		base_iri: Option<IriBuf>,
+		mime_type: Option<MimeType>,
+		content: String,
+	) -> FileId
+	where
+		P: Clone + Eq + Hash,
+	{
+		use std::collections::hash_map::Entry;
+		match self.sources.entry(source) {
+			Entry::Occupied(entry) => *entry.get(),
+			Entry::Vacant(entry) => {
+				let id = FileId(self.files.len());
+				self.files.push(File {
+					source: entry.key().clone(),
+					base_iri,
+					buffer: Buffer::new(content),
+					mime_type,
+				});
+				entry.insert(id);
+				id
 			}
 		}
 	}
@@ -190,9 +244,9 @@ impl AsRef<str> for Buffer {
 	}
 }
 
-impl<'a> codespan_reporting::files::Files<'a> for Files {
+impl<'a, P: DisplayPath<'a>> codespan_reporting::files::Files<'a> for Files<P> {
 	type FileId = FileId;
-	type Name = std::path::Display<'a>;
+	type Name = P::Display;
 	type Source = &'a Buffer;
 
 	fn name(&'a self, id: FileId) -> Result<Self::Name, codespan_reporting::files::Error> {

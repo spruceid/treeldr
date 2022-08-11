@@ -153,7 +153,7 @@ fn generate_layout_context<F>(
 		}
 		Description::Alias(_, _) => {
 			// generate_layout_context(context, vocabulary, model, *layout_ref)
-		},
+		}
 	}
 }
 

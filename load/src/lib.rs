@@ -3,11 +3,13 @@ use codespan_reporting::term::{
 	termcolor::{ColorChoice, StandardStream},
 };
 use std::convert::Infallible;
+use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use treeldr_syntax as syntax;
 
-pub mod source;
+mod source;
+pub use source::*;
 
 pub use treeldr::{reporting, vocab::BorrowWithVocabulary, Vocabulary};
 pub type BuildContext = treeldr_build::Context<source::FileId, syntax::build::Descriptions>;
@@ -175,10 +177,13 @@ pub enum Document {
 
 impl Document {
 	/// Load the document located at the given `path`.
-	pub fn load(
-		files: &mut source::Files,
+	pub fn load<'f, P>(
+		files: &'f mut source::Files<P>,
 		filename: &Path,
-	) -> Result<(Self, source::FileId), LoadError> {
+	) -> Result<(Self, source::FileId), LoadError>
+	where
+		P: Clone + Eq + Hash + DisplayPath<'f> + for<'a> From<&'a Path>,
+	{
 		match files.load(&filename, None, None) {
 			Ok(file_id) => {
 				let document = match files.get(file_id).unwrap().mime_type() {
@@ -235,7 +240,13 @@ impl Document {
 }
 
 /// Import a TreeLDR file.
-fn import_treeldr(files: &source::Files, source_id: source::FileId) -> TreeLdrDocument {
+pub fn import_treeldr<'f, P>(
+	files: &'f source::Files<P>,
+	source_id: source::FileId,
+) -> TreeLdrDocument
+where
+	P: DisplayPath<'f>,
+{
 	use syntax::Parse;
 	use treeldr::reporting::Diagnose;
 	let file = files.get(source_id).unwrap();
@@ -265,7 +276,7 @@ fn import_treeldr(files: &source::Files, source_id: source::FileId) -> TreeLdrDo
 }
 
 #[cfg(feature = "json-schema")]
-fn import_json_schema(
+pub fn import_json_schema(
 	files: &source::Files,
 	source_id: source::FileId,
 ) -> treeldr_json_schema::Schema {
