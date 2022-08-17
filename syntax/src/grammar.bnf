@@ -5,20 +5,22 @@ item                     ::= base | use | type | layout | property
 
 base                     ::= 'base' IRIREF ';'
 use                      ::= 'use' IRIREF 'as' name ';'
-type                     ::= 'type' (typeAlias | typeDefinition)
-layout                   ::= 'layout' (layoutAlias | layoutStructDefinition)
+type                     ::= 'type' ref typeDescription
+layout                   ::= 'layout' ref layoutDescription
 property                 ::= 'property' propertyDefinition ';'
 
-typeAlias                ::= id '=' typeExpr ';'
-typeDefinition           ::= id '{' propertyList? '}'
+typeDescription          ::= typeAlias | normalTypeDefinition
+typeAlias                ::= '=' innerTypeExpr ('with' innerLayoutExpr)? ';'
+normalTypeDefinition     ::= '{' propertyList? '}' ('with' innerLayoutExpr ';')?
 
-layoutAlias              ::= id '=' layoutExpr ';'
-layoutStructDefinition   ::= id ['for' id]? '{' fieldList? '}'
+layoutDescription        ::= layoutAlias | structureDefinition
+layoutAlias              ::= '=' innerLayoutExpr ';'
+structureDefinition      ::= ['for' id]? '{' fieldList? '}'
 
 fieldList                ::= fieldDefinition (',' fieldDefinition)*
-fieldDefinition          ::= attributeList? id [':' attributeList? layoutExpr]?
+fieldDefinition          ::= attributeList? id (':' attributeList? layoutExpr)?
 
-propertyDefinition       ::= attributeList? id [':' attributeList? typeExpr]?
+propertyDefinition       ::= attributeList? id (':' attributeList? typeExpr)?
 propertyList             ::= propertyDefinition (',' propertyDefinition)*
 attribute                ::= 'required' | 'multiple'
 attributeList            ::= attribute (',' attribute)*
@@ -28,25 +30,25 @@ id                       ::= NAME | COMPACT_IRI | IRIREF
 
 /* Type expressions. */
 typeExpr                 ::= innerNamedTypeExpr | typeUnion | typeIntersection
-innerNamedTypeExpr       ::= innerTypeExpr ['as' NAME | 'with' id]?
+innerNamedTypeExpr       ::= innerTypeExpr ('as' NAME | 'with' id)?
 innerTypeExpr            ::= id | referenceLayout | literal | propertyRestriction | listType | '(' typeExpr ')'
 typeUnion                ::= innerNamedTypeExpr ('|' innerNamedTypeExpr)*
 typeIntersection         ::= innerNamedTypeExpr ('&' innerNamedTypeExpr)*
 
 propertyRestriction      ::= propertyRangeRestriction
-propertyRangeRestriction ::= ('any' | 'all') id ['as' NAME]? ':' innerTypeExpr
+propertyRangeRestriction ::= ('any' | 'all') id ('as' NAME)? ':' innerTypeExpr
 
 listType                 ::= '[' innerTypeExpr ']'
 
 /* Layout expressions. */
 layoutExpr               ::= InnerNamedLayoutExpr | layoutUnion | layoutIntersection
-InnerNamedLayoutExpr     ::= innerLayoutExpr ['as' NAME]?
+InnerNamedLayoutExpr     ::= innerLayoutExpr ('as' NAME)?
 innerLayoutExpr          ::= id | referenceLayout | literal | FieldRestriction | arrayLayout | '(' layoutExpr ')'
 layoutUnion              ::= innerNamedLayoutExpr ('|' innerNamedLayoutExpr)*
 layoutIntersection       ::= innerNamedLayoutExpr ('&' innerNamedLayoutExpr)*
 
 layoutRestriction        ::= layoutRangeRestriction
-layoutRangeRestriction   ::= ('any' | 'all') [id 'as']? NAME ':' innerLayoutExpr
+layoutRangeRestriction   ::= ('any' | 'all') (id 'as')? NAME ':' innerLayoutExpr
 
 arrayLayout              ::= '[' innerLayoutExpr ']'
 
