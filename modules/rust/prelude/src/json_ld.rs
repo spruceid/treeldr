@@ -1,7 +1,7 @@
 use crate::rdf::{Literal, Object, Subject};
 use iref::IriBuf;
 use json_ld::ValidReference;
-use rdf_types::{Quad, BlankIdBuf};
+use rdf_types::{BlankIdBuf, Quad};
 
 pub trait IntoJsonLd<M> {
 	fn into_json_ld(self) -> json_ld::syntax::Value<M>;
@@ -42,7 +42,7 @@ pub fn import_quad<'a>(
 
 	let object = match object {
 		json_ld::rdf::Value::Literal(l) => Object::Literal(import_literal(l)),
-		json_ld::rdf::Value::Reference(r) => Object::Id(r.into_rdf_subject())
+		json_ld::rdf::Value::Reference(r) => Object::Id(r.into_rdf_subject()),
 	};
 
 	Quad(subject, predicate, object, graph)
@@ -51,9 +51,7 @@ pub fn import_quad<'a>(
 pub fn import_literal(lit: json_ld::rdf::Literal<IriBuf>) -> Literal<Subject<IriBuf>> {
 	match lit {
 		json_ld::rdf::Literal::String(s) => Literal::String(s),
-		json_ld::rdf::Literal::TypedString(s, ty) => {
-			Literal::TypedString(s, Subject::Iri(ty))
-		}
+		json_ld::rdf::Literal::TypedString(s, ty) => Literal::TypedString(s, Subject::Iri(ty)),
 		json_ld::rdf::Literal::LangString(s, l) => Literal::LangString(s, l),
 	}
 }

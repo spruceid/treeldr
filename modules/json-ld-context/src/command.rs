@@ -5,9 +5,8 @@ use treeldr::{layout, Ref, Vocabulary};
 #[derive(clap::Args)]
 /// Generate a JSON-LD Context from a TreeLDR model.
 pub struct Command {
-	#[clap(multiple_occurrences(true))]
 	/// Layout schemas to generate.
-	layouts: Vec<IriBuf>
+	layouts: Vec<IriBuf>,
 }
 
 pub enum Error<F> {
@@ -69,7 +68,7 @@ impl Command {
 				println!("{}", definition.pretty_print());
 
 				Ok(())
-			},
+			}
 			Err(e) => Err(Error::Generation(e)),
 		}
 	}

@@ -1,69 +1,103 @@
-use json_ld::syntax::{Nullable, Container, ContainerKind, Entry, context::term_definition};
-use treeldr::{layout::{self, Field}, prop, vocab::Display, Ref, Vocabulary};
+use derivative::Derivative;
+use json_ld::syntax::{context::term_definition, Container, ContainerKind, Entry, Nullable};
 use locspan::Meta;
 use std::collections::HashMap;
 use std::fmt;
+use treeldr::{
+	layout::{self, Field},
+	prop,
+	vocab::Display,
+	Ref, Vocabulary,
+};
 
 mod command;
 pub use command::Command;
 
+#[derive(Derivative)]
+#[derivative(PartialEq(bound = ""))]
 pub struct TermDefinition<F> {
 	property_ref: Ref<prop::Definition<F>>,
-	layout_ref: Ref<layout::Definition<F>>
+	layout_ref: Ref<layout::Definition<F>>,
 }
 
 impl<F> TermDefinition<F> {
 	pub fn build(
-		self,
-		vocabulary: &Vocabulary,
-		model: &treeldr::Model<F>
-	) -> Nullable<json_ld::syntax::context::TermDefinition<()>> {
+		&self,
+		builder: &ContextBuilder<F>,
+	) -> Result<Nullable<json_ld::syntax::context::TermDefinition<()>>, Error> {
 		let mut definition = json_ld::syntax::context::term_definition::Expanded::new();
 
-		let property = model.properties().get(self.property_ref).unwrap();
-		let syntax_id = term_definition::Id::Term(property.id().display(vocabulary).to_string());
+		let property = builder.model.properties().get(self.property_ref).unwrap();
+		let syntax_id =
+			term_definition::Id::Term(property.id().display(builder.vocabulary).to_string());
 
 		definition.id = Some(Entry::new((), Meta(Nullable::Some(syntax_id), ())));
-		definition.type_ = generate_term_definition_type(vocabulary, model, self.layout_ref);
-		definition.container = generate_term_definition_container(model, self.layout_ref);
+		definition.type_ = builder.generate_term_definition_type(self.layout_ref);
+		definition.container = builder.generate_term_definition_container(self.layout_ref);
+		definition.context = builder.generate_term_definition_context(self.layout_ref)?;
 
-		definition.simplify()
+		Ok(definition.simplify())
 	}
 }
 
 pub struct ContextBuilder<'a, F> {
 	vocabulary: &'a Vocabulary,
 	model: &'a treeldr::Model<F>,
-	terms: HashMap<String, TermDefinition<F>>
+	parent: Option<&'a ContextBuilder<'a, F>>,
+	terms: HashMap<String, TermDefinition<F>>,
 }
 
 impl<'a, F> ContextBuilder<'a, F> {
 	pub fn new(
 		vocabulary: &'a Vocabulary,
 		model: &'a treeldr::Model<F>,
+		parent: Option<&'a ContextBuilder<'a, F>>,
 	) -> Self {
-		Self { vocabulary, model, terms: HashMap::new() }
+		Self {
+			vocabulary,
+			model,
+			parent,
+			terms: HashMap::new(),
+		}
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.terms.is_empty()
+	}
+
+	pub fn contains(&self, term: &str, definition: &TermDefinition<F>) -> bool {
+		match self.terms.get(term) {
+			Some(d) => d == definition,
+			None => match self.parent {
+				Some(parent) => parent.contains(term, definition),
+				None => false,
+			},
+		}
 	}
 
 	pub fn insert_field(&mut self, field: &'a Field<F>) -> Result<(), Error> {
 		match field.property() {
 			Some(property_ref) => {
-				let name = field.name().to_string();
+				let term = field.name().to_string();
+				let definition = TermDefinition {
+					property_ref,
+					layout_ref: field.layout(),
+				};
+
+				if let Some(parent) = self.parent {
+					if parent.contains(&term, &definition) {
+						return Ok(());
+					}
+				}
 
 				use std::collections::hash_map::Entry;
-				match self.terms.entry(name) {
+				match self.terms.entry(term) {
 					Entry::Vacant(entry) => {
-						entry.insert(TermDefinition {
-							property_ref,
-							layout_ref: field.layout()
-						});
-
+						entry.insert(definition);
 						Ok(())
 					}
 					Entry::Occupied(entry) => {
-						let term_definition = entry.get();
-
-						if term_definition.property_ref != property_ref || term_definition.layout_ref != field.layout() {
+						if *entry.get() != definition {
 							Err(Error::Ambiguity(entry.key().clone()))
 						} else {
 							Ok(())
@@ -71,9 +105,7 @@ impl<'a, F> ContextBuilder<'a, F> {
 					}
 				}
 			}
-			None => {
-				Ok(())
-			}
+			None => Ok(()),
 		}
 	}
 
@@ -82,42 +114,103 @@ impl<'a, F> ContextBuilder<'a, F> {
 
 		use treeldr::layout::Description;
 		match layout.description() {
+			Description::Set(s) => self.insert_layout(s.item_layout()),
+			Description::Required(o) => self.insert_layout(o.item_layout()),
+			Description::Option(o) => self.insert_layout(o.item_layout()),
 			Description::Struct(s) => {
 				for field in s.fields() {
 					self.insert_field(field)?
 				}
-			}
-			_ => ()
-		}
 
-		Ok(())
+				Ok(())
+			}
+			_ => Ok(()),
+		}
 	}
 
-	pub fn build(self) -> json_ld::syntax::context::Value<()> {
+	/// Generate the `@context` entry of a term definition.
+	fn generate_term_definition_context(
+		&self,
+		layout_ref: Ref<layout::Definition<F>>,
+	) -> Result<Option<Entry<Box<json_ld::syntax::context::Value<()>>, ()>>, Error> {
+		let mut builder = ContextBuilder::new(self.vocabulary, self.model, Some(self));
+
+		builder.insert_layout(layout_ref)?;
+
+		if builder.is_empty() {
+			Ok(None)
+		} else {
+			let context = builder.build()?;
+
+			Ok(Some(Entry::new((), Meta(Box::new(context), ()))))
+		}
+	}
+
+	/// Generate the `@type` entry of a term definition.
+	fn generate_term_definition_type(
+		&self,
+		layout_ref: Ref<layout::Definition<F>>,
+	) -> Option<Entry<Nullable<term_definition::Type>, ()>> {
+		let layout = self.model.layouts().get(layout_ref).unwrap();
+
+		use treeldr::layout::Description;
+		match layout.description() {
+			Description::Required(r) => self.generate_term_definition_type(r.item_layout()),
+			Description::Option(o) => self.generate_term_definition_type(o.item_layout()),
+			Description::Primitive(n, _) => {
+				let syntax_ty = generate_primitive_type(n);
+				Some(Entry::new((), Meta(Nullable::Some(syntax_ty), ())))
+			}
+			_ => None,
+		}
+	}
+
+	/// Generate the `@container` entry of a term definition.
+	fn generate_term_definition_container(
+		&self,
+		layout_ref: Ref<layout::Definition<F>>,
+	) -> Option<Entry<Nullable<Container<()>>, ()>> {
+		let layout = self.model.layouts().get(layout_ref).unwrap();
+
+		use treeldr::layout::Description;
+		match layout.description() {
+			Description::Set(_) => Some(Entry::new(
+				(),
+				Meta(Nullable::Some(Container::One(ContainerKind::Set)), ()),
+			)),
+			Description::Array(_) => Some(Entry::new(
+				(),
+				Meta(Nullable::Some(Container::One(ContainerKind::List)), ()),
+			)),
+			_ => None,
+		}
+	}
+
+	pub fn build(&self) -> Result<json_ld::syntax::context::Value<()>, Error> {
 		let mut definition = json_ld::syntax::context::Definition::new();
 
-		for (term, term_definition) in self.terms {
+		for (term, term_definition) in &self.terms {
 			definition.bindings.insert(
-				Meta(term.into(), ()),
-				Meta(term_definition.build(self.vocabulary, self.model), ())
+				Meta(term.clone().into(), ()),
+				Meta(term_definition.build(self)?, ()),
 			);
 		}
 
-		json_ld::syntax::context::Value::One(Meta(
+		Ok(json_ld::syntax::context::Value::One(Meta(
 			json_ld::syntax::Context::Definition(definition),
-			()
-		))
+			(),
+		)))
 	}
 }
 
 pub enum Error {
-	Ambiguity(String)
+	Ambiguity(String),
 }
 
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::Ambiguity(term) => write!(f, "term `{}` is ambiguous", term)
+			Self::Ambiguity(term) => write!(f, "term `{}` is ambiguous", term),
 		}
 	}
 }
@@ -128,56 +221,13 @@ pub fn generate<F>(
 	model: &treeldr::Model<F>,
 	layouts: Vec<Ref<layout::Definition<F>>>,
 ) -> Result<json_ld::syntax::context::Value<()>, Error> {
-	let mut builder = ContextBuilder::new(vocabulary, model);
+	let mut builder = ContextBuilder::new(vocabulary, model, None);
 
 	for layout_ref in layouts {
 		builder.insert_layout(layout_ref)?;
 	}
 
-	Ok(builder.build())
-}
-
-/// Generate the `@type` entry of a term definition.
-fn generate_term_definition_type<F>(
-	vocabulary: &Vocabulary,
-	model: &treeldr::Model<F>,
-	layout_ref: Ref<layout::Definition<F>>
-) -> Option<Entry<Nullable<term_definition::Type>, ()>> {
-	let layout = model.layouts().get(layout_ref).unwrap();
-
-	use treeldr::layout::Description;
-	match layout.description() {
-		Description::Required(r) => {
-			generate_term_definition_type(vocabulary, model, r.item_layout())
-		}
-		Description::Option(o) => {
-			generate_term_definition_type(vocabulary, model, o.item_layout())
-		},
-		Description::Primitive(n, _) => {
-			let syntax_ty = generate_primitive_type(n);
-			Some(Entry::new((), Meta(Nullable::Some(syntax_ty), ())))
-		},
-		_ => None
-	}
-}
-
-/// Generate the `@container` entry of a term definition.
-fn generate_term_definition_container<F>(
-	model: &treeldr::Model<F>,
-	layout_ref: Ref<layout::Definition<F>>
-) -> Option<Entry<Nullable<Container<()>>, ()>> {
-	let layout = model.layouts().get(layout_ref).unwrap();
-
-	use treeldr::layout::Description;
-	match layout.description() {
-		Description::Set(_) => {
-			Some(Entry::new((), Meta(Nullable::Some(Container::One(ContainerKind::Set)), ())))
-		}
-		Description::Array(_) => {
-			Some(Entry::new((), Meta(Nullable::Some(Container::One(ContainerKind::List)), ())))
-		}
-		_ => None
-	}
+	builder.build()
 }
 
 fn generate_primitive_type(n: &treeldr::layout::RestrictedPrimitive) -> term_definition::Type {
