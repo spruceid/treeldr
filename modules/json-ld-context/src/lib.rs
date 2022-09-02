@@ -1,12 +1,125 @@
 use json_ld::syntax::{Nullable, Container, ContainerKind, Entry, context::term_definition};
-use treeldr::{layout::{self, Field}, vocab::Display, Ref, Vocabulary};
+use treeldr::{layout::{self, Field}, prop, vocab::Display, Ref, Vocabulary};
 use locspan::Meta;
+use std::collections::HashMap;
+use std::fmt;
 
 mod command;
 pub use command::Command;
 
+pub struct TermDefinition<F> {
+	property_ref: Ref<prop::Definition<F>>,
+	layout_ref: Ref<layout::Definition<F>>
+}
+
+impl<F> TermDefinition<F> {
+	pub fn build(
+		self,
+		vocabulary: &Vocabulary,
+		model: &treeldr::Model<F>
+	) -> Nullable<json_ld::syntax::context::TermDefinition<()>> {
+		let mut definition = json_ld::syntax::context::term_definition::Expanded::new();
+
+		let property = model.properties().get(self.property_ref).unwrap();
+		let syntax_id = term_definition::Id::Term(property.id().display(vocabulary).to_string());
+
+		definition.id = Some(Entry::new((), Meta(Nullable::Some(syntax_id), ())));
+		definition.type_ = generate_term_definition_type(vocabulary, model, self.layout_ref);
+		definition.container = generate_term_definition_container(model, self.layout_ref);
+
+		definition.simplify()
+	}
+}
+
+pub struct ContextBuilder<'a, F> {
+	vocabulary: &'a Vocabulary,
+	model: &'a treeldr::Model<F>,
+	terms: HashMap<String, TermDefinition<F>>
+}
+
+impl<'a, F> ContextBuilder<'a, F> {
+	pub fn new(
+		vocabulary: &'a Vocabulary,
+		model: &'a treeldr::Model<F>,
+	) -> Self {
+		Self { vocabulary, model, terms: HashMap::new() }
+	}
+
+	pub fn insert_field(&mut self, field: &'a Field<F>) -> Result<(), Error> {
+		match field.property() {
+			Some(property_ref) => {
+				let name = field.name().to_string();
+
+				use std::collections::hash_map::Entry;
+				match self.terms.entry(name) {
+					Entry::Vacant(entry) => {
+						entry.insert(TermDefinition {
+							property_ref,
+							layout_ref: field.layout()
+						});
+
+						Ok(())
+					}
+					Entry::Occupied(entry) => {
+						let term_definition = entry.get();
+
+						if term_definition.property_ref != property_ref || term_definition.layout_ref != field.layout() {
+							Err(Error::Ambiguity(entry.key().clone()))
+						} else {
+							Ok(())
+						}
+					}
+				}
+			}
+			None => {
+				Ok(())
+			}
+		}
+	}
+
+	pub fn insert_layout(&mut self, layout_ref: Ref<layout::Definition<F>>) -> Result<(), Error> {
+		let layout = self.model.layouts().get(layout_ref).unwrap();
+
+		use treeldr::layout::Description;
+		match layout.description() {
+			Description::Struct(s) => {
+				for field in s.fields() {
+					self.insert_field(field)?
+				}
+			}
+			_ => ()
+		}
+
+		Ok(())
+	}
+
+	pub fn build(self) -> json_ld::syntax::context::Value<()> {
+		let mut definition = json_ld::syntax::context::Definition::new();
+
+		for (term, term_definition) in self.terms {
+			definition.bindings.insert(
+				Meta(term.into(), ()),
+				Meta(term_definition.build(self.vocabulary, self.model), ())
+			);
+		}
+
+		json_ld::syntax::context::Value::One(Meta(
+			json_ld::syntax::Context::Definition(definition),
+			()
+		))
+	}
+}
+
 pub enum Error {
-	Serialization(serde_json::Error),
+	Ambiguity(String)
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Ambiguity(term) => write!(f, "term `{}` is ambiguous", term)
+		}
+	}
 }
 
 /// Generate a JSON-LD context from a TreeLDR model.
@@ -15,76 +128,13 @@ pub fn generate<F>(
 	model: &treeldr::Model<F>,
 	layouts: Vec<Ref<layout::Definition<F>>>,
 ) -> Result<json_ld::syntax::context::Value<()>, Error> {
-	let mut context = json_ld::syntax::context::Definition::new();
+	let mut builder = ContextBuilder::new(vocabulary, model);
 
 	for layout_ref in layouts {
-		generate_layout_term_definitions(vocabulary, model, layout_ref, &mut context)?;
+		builder.insert_layout(layout_ref)?;
 	}
 
-	Ok(json_ld::syntax::context::Value::One(Meta(
-		json_ld::syntax::Context::Definition(context),
-		()
-	)))
-}
-
-/// Generate all the expanded term definitions for the given layout.
-fn generate_layout_term_definitions<F>(
-	vocabulary: &Vocabulary,
-	model: &treeldr::Model<F>,
-	layout_ref: Ref<layout::Definition<F>>,
-	context: &mut json_ld::syntax::context::Definition<()>
-) -> Result<(), Error> {
-	let layout = model.layouts().get(layout_ref).unwrap();
-
-	use treeldr::layout::Description;
-	match layout.description() {
-		Description::Never(_) => (),
-		Description::Struct(s) => {
-			for field in s.fields() {
-				if let Some(definition) = generate_field_term_definition(vocabulary, model, field)? {
-					context.bindings.insert(
-						Meta(field.name().to_camel_case().into(), ()),
-						Meta(definition, ())
-					);
-				}
-			}
-		}
-		Description::Enum(_) => (),
-		Description::Reference(_) => (),
-		Description::Primitive(_, _) => (),
-		Description::Required(_) => (),
-		Description::Option(_) => (),
-		Description::Set(_) => (),
-		Description::Array(_) => (),
-		Description::Alias(_, _) => todo!(),
-	}
-
-	Ok(())
-}
-
-fn generate_field_term_definition<F>(
-	vocabulary: &Vocabulary,
-	model: &treeldr::Model<F>,
-	field: &Field<F>,
-) -> Result<Option<Nullable<json_ld::syntax::context::TermDefinition<()>>>, Error> {
-	match field.property() {
-		Some(property_ref) => {
-			let property = model.properties().get(property_ref).unwrap();
-			
-			let field_layout_ref = field.layout();
-
-			let mut definition = json_ld::syntax::context::term_definition::Expanded::new();
-			let syntax_id = term_definition::Id::Term(property.id().display(vocabulary).to_string());
-			definition.id = Some(Entry::new((), Meta(Nullable::Some(syntax_id), ())));
-			definition.type_ = generate_term_definition_type(vocabulary, model, field_layout_ref);
-			definition.container = generate_term_definition_container(model, field_layout_ref);
-
-			Ok(Some(definition.simplify()))
-		}
-		None => {
-			Ok(None)
-		}
-	}
+	Ok(builder.build())
 }
 
 /// Generate the `@type` entry of a term definition.

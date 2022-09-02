@@ -13,7 +13,7 @@ pub struct Command {
 pub enum Error<F> {
 	UndefinedLayout(IriBuf),
 	NotALayout(IriBuf, treeldr::node::CausedTypes<F>),
-	Serialization(serde_json::Error),
+	Generation(crate::Error),
 }
 
 impl<F> fmt::Display for Error<F> {
@@ -21,7 +21,7 @@ impl<F> fmt::Display for Error<F> {
 		match self {
 			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{}`", iri),
 			Self::NotALayout(iri, _) => write!(f, "node `{}` is not a layout", iri),
-			Self::Serialization(e) => write!(f, "JSON serialization failed: {}", e),
+			Self::Generation(e) => e.fmt(f),
 		}
 	}
 }
@@ -70,7 +70,7 @@ impl Command {
 
 				Ok(())
 			},
-			Err(crate::Error::Serialization(e)) => Err(Error::Serialization(e)),
+			Err(e) => Err(Error::Generation(e)),
 		}
 	}
 }
