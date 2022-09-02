@@ -1,4 +1,4 @@
-base <https://example.com>
+base <https://example.com>;
 
 type Foo {
 	bar: Bar
