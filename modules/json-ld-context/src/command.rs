@@ -7,11 +7,7 @@ use treeldr::{layout, Ref, Vocabulary};
 pub struct Command {
 	#[clap(multiple_occurrences(true))]
 	/// Layout schemas to generate.
-	layouts: Vec<IriBuf>,
-
-	#[clap(short = 't', long = "type")]
-	/// Define a `@type` keyword alias.
-	type_property: Option<String>,
+	layouts: Vec<IriBuf>
 }
 
 pub enum Error<F> {
@@ -67,8 +63,13 @@ impl Command {
 			layouts.push(find_layout(vocabulary, model, layout_iri.as_iri())?);
 		}
 
-		match crate::generate(vocabulary, model, layouts, self.type_property) {
-			Ok(()) => Ok(()),
+		match crate::generate(vocabulary, model, layouts) {
+			Ok(definition) => {
+				use json_ld::syntax::Print;
+				println!("{}", definition.pretty_print());
+
+				Ok(())
+			},
 			Err(crate::Error::Serialization(e)) => Err(Error::Serialization(e)),
 		}
 	}
