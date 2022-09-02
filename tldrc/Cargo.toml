@@ -20,8 +20,8 @@ treeldr = { path = "../core" }
 treeldr-build = { path = "../build" }
 treeldr-syntax = { path = "../syntax" }
 treeldr-load = { path = "../load" }
-iref = "2.1.2"
-grdf = { version = "0.10", features = ["meta"] }
+iref = "2.2"
+grdf = { version = "0.11", features = ["meta"] }
 log = "0.4"
 locspan = "0.7.2"
 codespan-reporting = "0.11"
