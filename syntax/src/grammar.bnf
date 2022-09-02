@@ -5,9 +5,9 @@ item                     ::= base | use | type | layout | property
 
 base                     ::= 'base' IRIREF ';'
 use                      ::= 'use' IRIREF 'as' name ';'
-type                     ::= 'type' ref typeDescription
-layout                   ::= 'layout' ref layoutDescription
-property                 ::= 'property' propertyDefinition ';'
+type                     ::= doc 'type' ref typeDescription
+layout                   ::= doc 'layout' ref layoutDescription
+property                 ::= doc 'property' propertyDefinition ';'
 
 typeDescription          ::= typeAlias | normalTypeDefinition
 typeAlias                ::= '=' innerTypeExpr ('with' innerLayoutExpr)? ';'
@@ -18,9 +18,9 @@ layoutAlias              ::= '=' innerLayoutExpr ';'
 structureDefinition      ::= ['for' id]? '{' fieldList? '}'
 
 fieldList                ::= fieldDefinition (',' fieldDefinition)*
-fieldDefinition          ::= attributeList? id (':' attributeList? layoutExpr)?
+fieldDefinition          ::= doc attributeList? id (':' attributeList? layoutExpr)?
 
-propertyDefinition       ::= attributeList? id (':' attributeList? typeExpr)?
+propertyDefinition       ::= doc attributeList? id (':' attributeList? typeExpr)?
 propertyList             ::= propertyDefinition (',' propertyDefinition)*
 attribute                ::= 'required' | 'multiple'
 attributeList            ::= attribute (',' attribute)*
@@ -56,6 +56,9 @@ arrayLayout              ::= '[' innerLayoutExpr ']'
 referenceLayout          ::= '&' innerTypeExpr
 literal                  ::= STRING | REGEXP
 
+/* Documentation comments. */
+doc                      ::= DOC_LINE*
+
 /* Productions for terminals. */
 NAME                     ::= PN_CHARS
 IRIREF                   ::= '<' ([^#x00-#x20<>"{}|^`\] | UCHAR)* '>' /* #x00=NULL #01-#x1F=control codes #x20=space */
@@ -71,4 +74,5 @@ PN_CHARS                 ::= PN_CHARS_U | '-' | [0-9] | #x00B7 | [#x0300-#x036F]
 PN_PREFIX                ::= PN_CHARS_BASE ((PN_CHARS | '.')* PN_CHARS)?
 PN_LOCAL                 ::= (PN_CHARS_U | ':' | [0-9] | PLX) ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
 
+DOC_LINE                 ::= '///' [^#xA]* #xA /* #xA=new line */
 WS                       ::= #x20 | #x9 | #xD | #xA /* #x20=space #x9=character tabulation #xD=carriage return #xA=new line */
