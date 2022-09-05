@@ -1,3 +1,4 @@
+use crate::Options;
 use iref::{Iri, IriBuf};
 use std::fmt;
 use treeldr::{layout, Ref, Vocabulary};
@@ -7,6 +8,10 @@ use treeldr::{layout, Ref, Vocabulary};
 pub struct Command {
 	/// Layout schemas to generate.
 	layouts: Vec<IriBuf>,
+
+	/// Use layout name as `rdf:type` value.
+	#[clap(long = "rdf-type-to-layout-name")]
+	rdf_type_to_layout_name: bool,
 }
 
 pub enum Error<F> {
@@ -62,7 +67,11 @@ impl Command {
 			layouts.push(find_layout(vocabulary, model, layout_iri.as_iri())?);
 		}
 
-		match crate::generate(vocabulary, model, layouts) {
+		let options = Options {
+			rdf_type_to_layout_name: self.rdf_type_to_layout_name,
+		};
+
+		match crate::generate(vocabulary, model, options, layouts) {
 			Ok(definition) => {
 				use json_ld::syntax::Print;
 				println!("{}", definition.pretty_print());
