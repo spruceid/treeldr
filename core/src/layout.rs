@@ -100,6 +100,10 @@ impl<F> Description<F> {
 		}
 	}
 
+	pub fn is_required(&self) -> bool {
+		matches!(self, Self::Required(_)) // TODO checks for non-empty sets
+	}
+
 	pub fn set_name(
 		&mut self,
 		new_name: Name,
@@ -188,6 +192,10 @@ impl<F> Definition<F> {
 
 	pub fn description_with_causes(&self) -> &WithCauses<Description<F>, F> {
 		&self.desc
+	}
+
+	pub fn is_required(&self) -> bool {
+		self.desc.is_required()
 	}
 
 	pub fn label<'m>(&self, model: &'m crate::Model<F>) -> Option<&'m str> {

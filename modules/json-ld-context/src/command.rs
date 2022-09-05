@@ -1,3 +1,4 @@
+use crate::Options;
 use iref::{Iri, IriBuf};
 use std::fmt;
 use treeldr::{layout, Ref, Vocabulary};
@@ -5,19 +6,18 @@ use treeldr::{layout, Ref, Vocabulary};
 #[derive(clap::Args)]
 /// Generate a JSON-LD Context from a TreeLDR model.
 pub struct Command {
-	#[clap(multiple_occurrences(true))]
 	/// Layout schemas to generate.
 	layouts: Vec<IriBuf>,
 
-	#[clap(short = 't', long = "type")]
-	/// Define a `@type` keyword alias.
-	type_property: Option<String>,
+	/// Use layout name as `rdf:type` value.
+	#[clap(long = "rdf-type-to-layout-name")]
+	rdf_type_to_layout_name: bool,
 }
 
 pub enum Error<F> {
 	UndefinedLayout(IriBuf),
 	NotALayout(IriBuf, treeldr::node::CausedTypes<F>),
-	Serialization(serde_json::Error),
+	Generation(crate::Error),
 }
 
 impl<F> fmt::Display for Error<F> {
@@ -25,7 +25,7 @@ impl<F> fmt::Display for Error<F> {
 		match self {
 			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{}`", iri),
 			Self::NotALayout(iri, _) => write!(f, "node `{}` is not a layout", iri),
-			Self::Serialization(e) => write!(f, "JSON serialization failed: {}", e),
+			Self::Generation(e) => e.fmt(f),
 		}
 	}
 }
@@ -67,9 +67,18 @@ impl Command {
 			layouts.push(find_layout(vocabulary, model, layout_iri.as_iri())?);
 		}
 
-		match crate::generate(vocabulary, model, layouts, self.type_property) {
-			Ok(()) => Ok(()),
-			Err(crate::Error::Serialization(e)) => Err(Error::Serialization(e)),
+		let options = Options {
+			rdf_type_to_layout_name: self.rdf_type_to_layout_name,
+		};
+
+		match crate::generate(vocabulary, model, options, layouts) {
+			Ok(definition) => {
+				use json_ld::syntax::Print;
+				println!("{}", definition.pretty_print());
+
+				Ok(())
+			}
+			Err(e) => Err(Error::Generation(e)),
 		}
 	}
 }

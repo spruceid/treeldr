@@ -14,4 +14,4 @@ xsd-types = "0.3"
 chrono = "0.4.19"
 iref = "2.2"
 static-iref = "2.0"
-json-ld = { git = "https://github.com/timothee-haudebourg/json-ld.git", rev = "67d797b", optional = true }
+json-ld = { git = "https://github.com/timothee-haudebourg/json-ld.git", rev = "9366eb7", optional = true }

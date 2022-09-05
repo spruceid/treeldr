@@ -143,6 +143,11 @@ impl<F> Field<F> {
 		&self.layout
 	}
 
+	pub fn is_required(&self, model: &crate::Model<F>) -> bool {
+		let layout = model.layouts().get(self.layout()).unwrap();
+		layout.is_required()
+	}
+
 	pub fn set_layout(&mut self, layout: Ref<layout::Definition<F>>, causes: impl Into<Causes<F>>) {
 		self.layout = WithCauses::new(layout, causes)
 	}
