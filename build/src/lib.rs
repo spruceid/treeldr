@@ -1,5 +1,5 @@
 use derivative::Derivative;
-use treeldr::{vocab, Causes, Ref, Vocabulary};
+use treeldr::{vocab, Metadata, Ref, Vocabulary};
 
 pub mod context;
 pub mod error;
@@ -26,7 +26,7 @@ pub trait TryMap<F, E, A: Descriptions<F>, B: Descriptions<F>> {
 	fn ty(
 		&self,
 		a: A::Type,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 		source: &Context<F, A>,
 		context: &mut Context<F, B>,
 		vocabulary: &mut Vocabulary,
@@ -34,7 +34,7 @@ pub trait TryMap<F, E, A: Descriptions<F>, B: Descriptions<F>> {
 	fn layout(
 		&self,
 		a: A::Layout,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 		source: &Context<F, A>,
 		context: &mut Context<F, B>,
 		vocabulary: &mut Vocabulary,
@@ -60,7 +60,7 @@ pub trait Build<F> {
 		self,
 		nodes: &mut context::allocated::Nodes<F>,
 		dependencies: Dependencies<F>,
-		causes: Causes<F>,
+		causes: Metadata<F>,
 	) -> Result<Self::Target, Error<F>>;
 }
 

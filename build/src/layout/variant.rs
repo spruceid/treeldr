@@ -1,21 +1,21 @@
 use crate::{error, Context, Descriptions, Error};
 use locspan::Location;
-use treeldr::{Caused, Documentation, Id, MaybeSet, Name, Vocabulary, WithCauses};
+use treeldr::{Caused, Documentation, Id, MetaOption, Name, Vocabulary, WithCauses};
 
 /// Layout field definition.
 #[derive(Clone)]
 pub struct Definition<F> {
 	id: Id,
-	name: MaybeSet<Name, F>,
-	layout: MaybeSet<Id, F>,
+	name: MetaOption<Name, F>,
+	layout: MetaOption<Id, F>,
 }
 
 impl<F> Definition<F> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
-			name: MaybeSet::default(),
-			layout: MaybeSet::default(),
+			name: MetaOption::default(),
+			layout: MetaOption::default(),
 		}
 	}
 
@@ -42,7 +42,7 @@ impl<F> Definition<F> {
 			})
 	}
 
-	pub fn replace_name(&mut self, name: MaybeSet<Name, F>) {
+	pub fn replace_name(&mut self, name: MetaOption<Name, F>) {
 		self.name = name
 	}
 
@@ -73,7 +73,7 @@ impl<F> Definition<F> {
 		Ok(None)
 	}
 
-	pub fn layout(&self) -> &MaybeSet<Id, F> {
+	pub fn layout(&self) -> &MetaOption<Id, F> {
 		&self.layout
 	}
 
@@ -96,7 +96,7 @@ impl<F> Definition<F> {
 			})
 	}
 
-	pub fn replace_layout(&mut self, layout: MaybeSet<Id, F>) {
+	pub fn replace_layout(&mut self, layout: MetaOption<Id, F>) {
 		self.layout = layout
 	}
 }

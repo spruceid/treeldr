@@ -40,7 +40,7 @@ impl<E> Error<E> {
 	}
 }
 
-impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithCause<F> for Error<E> {
+impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithMetadata<F> for Error<E> {
 	fn message(&self, _cause: Option<&Location<F>>) -> String {
 		match self {
 			Self::Unexpected(_) => "parsing error".to_owned(),

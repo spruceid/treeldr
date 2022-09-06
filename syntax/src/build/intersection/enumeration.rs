@@ -1,6 +1,6 @@
 use super::{IntersectedLayout, IntersectedLayoutDescription};
 use crate::build::{Descriptions, Error};
-use treeldr::{Caused, Causes, Id, MaybeSet, Name, Vocabulary, WithCauses};
+use treeldr::{Caused, Metadata, Id, MetaOption, Name, Vocabulary, WithCauses};
 use treeldr_build::{Context, ObjectToId};
 
 #[derive(Clone)]
@@ -12,7 +12,7 @@ impl<F: Clone + Ord> IntersectedEnum<F> {
 	pub fn new(
 		variants_id: Id,
 		context: &Context<F, Descriptions>,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<Self, Error<F>> {
 		let mut variants = Vec::new();
 
@@ -196,7 +196,7 @@ impl<F> PartialEq for IntersectedEnum<F> {
 
 #[derive(Clone)]
 pub struct IntersectedVariant<F> {
-	name: MaybeSet<Name, F>,
+	name: MetaOption<Name, F>,
 	layout: IntersectedLayout<F>,
 }
 
@@ -206,7 +206,7 @@ impl<F: Clone + Ord> IntersectedVariant<F> {
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<Id, Error<F>> {
 		let layout = self.layout.into_layout(source, target, vocabulary)?;
 
@@ -237,11 +237,11 @@ impl<F: Clone + Ord> IntersectedVariant<F> {
 		let name = match (self.name.unwrap(), other.name.unwrap()) {
 			(Some(a), Some(b)) => {
 				let (a, causes) = a.into_parts();
-				MaybeSet::new(a, causes.with(b.into_causes()))
+				MetaOption::new(a, causes.with(b.into_causes()))
 			}
 			(Some(a), _) => a.into(),
 			(_, Some(b)) => b.into(),
-			(None, None) => MaybeSet::default(),
+			(None, None) => MetaOption::default(),
 		};
 
 		let layout = self.layout.intersected_with(other.layout, context)?;

@@ -2,7 +2,7 @@ use crate::{error, Error};
 use locspan::Location;
 pub use treeldr::{
 	layout::{primitive::restricted, primitive::RegExp, Primitive},
-	Causes, Id, MaybeSet,
+	Metadata, Id, MetaOption,
 };
 
 pub mod restriction;
@@ -11,14 +11,14 @@ pub use restriction::{Restriction, Restrictions};
 
 #[derive(Clone, Debug)]
 pub struct Restricted<F> {
-	primitive: MaybeSet<Primitive, F>,
+	primitive: MetaOption<Primitive, F>,
 	restrictions: Restrictions<F>,
 }
 
 impl<F> Default for Restricted<F> {
 	fn default() -> Self {
 		Self {
-			primitive: MaybeSet::default(),
+			primitive: MetaOption::default(),
 			restrictions: Restrictions::default(),
 		}
 	}
@@ -37,14 +37,14 @@ impl<F> Restricted<F> {
 		Self::default()
 	}
 
-	pub fn unrestricted(p: Primitive, causes: impl Into<Causes<F>>) -> Self {
+	pub fn unrestricted(p: Primitive, causes: impl Into<Metadata<F>>) -> Self {
 		Self {
-			primitive: MaybeSet::new(p, causes),
+			primitive: MetaOption::new(p, causes),
 			restrictions: Restrictions::default(),
 		}
 	}
 
-	pub fn primitive(&self) -> &MaybeSet<Primitive, F> {
+	pub fn primitive(&self) -> &MetaOption<Primitive, F> {
 		&self.primitive
 	}
 
@@ -115,7 +115,7 @@ impl<F> Restricted<F> {
 	pub fn build(
 		self,
 		id: Id,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<treeldr::layout::RestrictedPrimitive, Error<F>>
 	where
 		F: Clone,
@@ -180,7 +180,7 @@ impl<F> Restricted<F> {
 impl<F: Ord> From<Primitive> for Restricted<F> {
 	fn from(p: Primitive) -> Self {
 		Self {
-			primitive: MaybeSet::new(p, None),
+			primitive: MetaOption::new(p, None),
 			restrictions: Restrictions::default(),
 		}
 	}

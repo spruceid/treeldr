@@ -1,5 +1,5 @@
-use crate::{error, layout, prop, ty, Caused, Documentation, Error, Id, MaybeSet};
-use locspan::Location;
+use crate::{error, layout, prop, ty, Documentation, Error, Id, MetaOption};
+use locspan::Meta;
 use shelves::Ref;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -36,21 +36,21 @@ impl Types {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub struct CausedTypes<F> {
-	pub ty: Option<Option<Location<F>>>,
-	pub property: Option<Option<Location<F>>>,
-	pub layout: Option<Option<Location<F>>>,
-	pub layout_field: Option<Option<Location<F>>>,
-	pub layout_variant: Option<Option<Location<F>>>,
-	pub list: Option<Option<Location<F>>>,
+pub struct TypesMetadata<M> {
+	pub ty: Option<M>,
+	pub property: Option<M>,
+	pub layout: Option<M>,
+	pub layout_field: Option<M>,
+	pub layout_variant: Option<M>,
+	pub list: Option<M>,
 }
 
-impl<F> CausedTypes<F> {
+impl<M> TypesMetadata<M> {
 	pub fn is_empty(&self) -> bool {
 		self.ty.is_none() && self.property.is_none() && self.layout.is_none()
 	}
 
-	pub fn includes(&self, ty: Type) -> Option<&Option<Location<F>>> {
+	pub fn includes(&self, ty: Type) -> Option<&M> {
 		match ty {
 			Type::Type => self.ty.as_ref(),
 			Type::Property => self.property.as_ref(),
@@ -61,8 +61,8 @@ impl<F> CausedTypes<F> {
 		}
 	}
 
-	pub fn iter(&self) -> CausedTypesIter<F> {
-		CausedTypesIter {
+	pub fn iter(&self) -> TypesMetadataIter<M> {
+		TypesMetadataIter {
 			ty: self.ty.as_ref(),
 			property: self.property.as_ref(),
 			layout: self.layout.as_ref(),
@@ -73,42 +73,52 @@ impl<F> CausedTypes<F> {
 	}
 }
 
-impl<'a, F: Clone> IntoIterator for &'a CausedTypes<F> {
-	type Item = Caused<Type, F>;
-	type IntoIter = CausedTypesIter<'a, F>;
+impl<'a, M: Clone> TypesMetadata<&'a M> {
+	pub fn cloned(&self) -> TypesMetadata<M> {
+		TypesMetadata {
+			ty: self.ty.cloned(),
+			property: self.property.cloned(),
+			layout: self.layout.cloned(),
+			layout_field: self.layout_field.cloned(),
+			layout_variant: self.layout_variant.cloned(),
+			list: self.list.cloned(),
+		}
+	}
+}
+
+impl<'a, M> IntoIterator for &'a TypesMetadata<M> {
+	type Item = Meta<Type, &'a M>;
+	type IntoIter = TypesMetadataIter<'a, M>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.iter()
 	}
 }
 
-pub struct CausedTypesIter<'a, F> {
-	ty: Option<&'a Option<Location<F>>>,
-	property: Option<&'a Option<Location<F>>>,
-	layout: Option<&'a Option<Location<F>>>,
-	layout_field: Option<&'a Option<Location<F>>>,
-	layout_variant: Option<&'a Option<Location<F>>>,
-	list: Option<&'a Option<Location<F>>>,
+pub struct TypesMetadataIter<'a, M> {
+	ty: Option<&'a M>,
+	property: Option<&'a M>,
+	layout: Option<&'a M>,
+	layout_field: Option<&'a M>,
+	layout_variant: Option<&'a M>,
+	list: Option<&'a M>,
 }
 
-impl<'a, F: Clone> Iterator for CausedTypesIter<'a, F> {
-	type Item = Caused<Type, F>;
+impl<'a, M> Iterator for TypesMetadataIter<'a, M> {
+	type Item = Meta<Type, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self.ty.take() {
-			Some(cause) => Some(Caused::new(Type::Type, cause.clone())),
+			Some(metadata) => Some(Meta(Type::Type, metadata)),
 			None => match self.property.take() {
-				Some(cause) => Some(Caused::new(Type::Property, cause.clone())),
+				Some(metadata) => Some(Meta(Type::Property, metadata)),
 				None => match self.layout.take() {
-					Some(cause) => Some(Caused::new(Type::Layout, cause.clone())),
+					Some(metadata) => Some(Meta(Type::Layout, metadata)),
 					None => match self.layout_field.take() {
-						Some(cause) => Some(Caused::new(Type::LayoutField, cause.clone())),
+						Some(metadata) => Some(Meta(Type::LayoutField, metadata)),
 						None => match self.layout_variant.take() {
-							Some(cause) => Some(Caused::new(Type::LayoutVariant, cause.clone())),
-							None => self
-								.list
-								.take()
-								.map(|cause| Caused::new(Type::List, cause.clone())),
+							Some(metadata) => Some(Meta(Type::LayoutVariant, metadata)),
+							None => self.list.take().map(|metadata| Meta(Type::List, metadata)),
 						},
 					},
 				},
@@ -118,23 +128,23 @@ impl<'a, F: Clone> Iterator for CausedTypesIter<'a, F> {
 }
 
 #[derive(Debug)]
-pub struct Node<F> {
+pub struct Node<M> {
 	id: Id,
 	label: Option<String>,
-	ty: MaybeSet<Ref<ty::Definition<F>>, F>,
-	property: MaybeSet<Ref<prop::Definition<F>>, F>,
-	layout: MaybeSet<Ref<layout::Definition<F>>, F>,
+	ty: MetaOption<Ref<ty::Definition<M>>, M>,
+	property: MetaOption<Ref<prop::Definition<M>>, M>,
+	layout: MetaOption<Ref<layout::Definition<M>>, M>,
 	doc: Documentation,
 }
 
-impl<F> Node<F> {
+impl<M> Node<M> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
 			label: None,
-			ty: MaybeSet::default(),
-			property: MaybeSet::default(),
-			layout: MaybeSet::default(),
+			ty: MetaOption::default(),
+			property: MetaOption::default(),
+			layout: MetaOption::default(),
 			doc: Documentation::default(),
 		}
 	}
@@ -142,9 +152,9 @@ impl<F> Node<F> {
 	pub fn from_parts(
 		id: Id,
 		label: Option<String>,
-		ty: MaybeSet<Ref<ty::Definition<F>>, F>,
-		property: MaybeSet<Ref<prop::Definition<F>>, F>,
-		layout: MaybeSet<Ref<layout::Definition<F>>, F>,
+		ty: MetaOption<Ref<ty::Definition<M>>, M>,
+		property: MetaOption<Ref<prop::Definition<M>>, M>,
+		layout: MetaOption<Ref<layout::Definition<M>>, M>,
 		doc: Documentation,
 	) -> Self {
 		Self {
@@ -185,47 +195,38 @@ impl<F> Node<F> {
 		self.layout.is_set()
 	}
 
-	pub fn as_type(&self) -> Option<Ref<ty::Definition<F>>> {
+	pub fn as_type(&self) -> Option<Ref<ty::Definition<M>>> {
 		self.ty.value().cloned()
 	}
 
-	pub fn as_property(&self) -> Option<Ref<prop::Definition<F>>> {
+	pub fn as_property(&self) -> Option<Ref<prop::Definition<M>>> {
 		self.property.value().cloned()
 	}
 
-	pub fn as_layout(&self) -> Option<Ref<layout::Definition<F>>> {
+	pub fn as_layout(&self) -> Option<Ref<layout::Definition<M>>> {
 		self.layout.value().cloned()
 	}
 
-	pub fn caused_types(&self) -> CausedTypes<F>
-	where
-		F: Clone,
-	{
-		CausedTypes {
-			ty: self.ty.causes().map(|causes| causes.preferred().cloned()),
-			property: self
-				.property
-				.causes()
-				.map(|causes| causes.preferred().cloned()),
-			layout: self
-				.layout
-				.causes()
-				.map(|causes| causes.preferred().cloned()),
+	pub fn types_metadata(&self) -> TypesMetadata<&M> {
+		TypesMetadata {
+			ty: self.ty.metadata(),
+			property: self.property.metadata(),
+			layout: self.layout.metadata(),
 			layout_field: None,
 			layout_variant: None,
 			list: None,
 		}
 	}
 
-	pub fn require_layout(&self) -> Result<Ref<layout::Definition<F>>, Error<F>>
+	pub fn require_layout(&self) -> Result<Ref<layout::Definition<M>>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		self.as_layout().ok_or_else(|| {
 			error::NodeInvalidType {
 				id: self.id,
 				expected: Type::Layout,
-				found: self.caused_types(),
+				found: self.types_metadata().cloned(),
 			}
 			.into()
 		})

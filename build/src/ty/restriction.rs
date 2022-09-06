@@ -1,7 +1,7 @@
 use crate::{context, Error};
 use locspan::Location;
 use std::collections::BTreeMap;
-use treeldr::{Causes, Id, WithCauses};
+use treeldr::{Metadata, Id, WithCauses};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RangeRestriction {
@@ -20,7 +20,7 @@ pub enum PropertyRestriction {
 #[derive(Clone)]
 pub struct Restriction<F> {
 	property: WithCauses<Id, F>,
-	restrictions: BTreeMap<PropertyRestriction, Causes<F>>,
+	restrictions: BTreeMap<PropertyRestriction, Metadata<F>>,
 }
 
 impl<F> PartialEq for Restriction<F> {
@@ -89,7 +89,7 @@ impl PropertyRestriction {
 	pub fn build<F>(
 		self,
 		nodes: &context::allocated::Nodes<F>,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<treeldr::prop::Restriction<F>, Error<F>>
 	where
 		F: Clone + Ord,
@@ -105,7 +105,7 @@ impl RangeRestriction {
 	pub fn build<F>(
 		self,
 		nodes: &context::allocated::Nodes<F>,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<treeldr::prop::restriction::Range<F>, Error<F>>
 	where
 		F: Clone + Ord,

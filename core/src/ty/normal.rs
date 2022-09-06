@@ -1,33 +1,30 @@
 use super::Properties;
-use crate::{prop, Causes};
+use crate::{metadata, prop};
 use derivative::Derivative;
 use shelves::Ref;
 
 /// Normal type.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct Normal<F> {
+pub struct Normal<M> {
 	/// Properties.
-	properties: Properties<F>,
+	properties: Properties<M>,
 }
 
-impl<F> Normal<F> {
+impl<M> Normal<M> {
 	pub fn new() -> Self {
 		Self::default()
 	}
 
-	pub fn properties(&self) -> &Properties<F> {
+	pub fn properties(&self) -> &Properties<M> {
 		&self.properties
 	}
 
 	/// Insert a property.
-	pub fn insert_property(
-		&mut self,
-		prop_ref: Ref<prop::Definition<F>>,
-		causes: impl Into<Causes<F>>,
-	) where
-		F: Ord,
+	pub fn insert_property(&mut self, prop_ref: Ref<prop::Definition<M>>, metadata: M)
+	where
+		M: metadata::Merge,
 	{
-		self.properties.insert(prop_ref, None, causes.into());
+		self.properties.insert(prop_ref, None, metadata);
 	}
 }

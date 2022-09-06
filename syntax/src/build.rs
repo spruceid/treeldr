@@ -2,7 +2,7 @@ use iref::{IriBuf, IriRef, IriRefBuf};
 use locspan::{Loc, Location, Meta};
 use std::collections::{BTreeMap, HashMap};
 use thiserror::Error;
-use treeldr::{reporting, vocab::*, Caused, Causes, Id, Name, Vocabulary, WithCauses};
+use treeldr::{reporting, vocab::*, Caused, Metadata, Id, Name, Vocabulary, WithCauses};
 use treeldr_build::{Context, ObjectToId};
 
 mod intersection;
@@ -73,7 +73,7 @@ pub enum LocalError<F> {
 	AnonymousFieldLayoutIntersection(Vec<WithCauses<Id, F>>),
 }
 
-impl<F: Clone> reporting::DiagnoseWithCause<F> for LocalError<F> {
+impl<F: Clone> reporting::DiagnoseWithMetadata<F> for LocalError<F> {
 	fn message(&self, _cause: Option<&Location<F>>) -> String {
 		match self {
 			Self::InvalidExpandedCompactIri(_) => "invalid expanded compact IRI".to_string(),
@@ -1684,7 +1684,7 @@ impl<F: Clone + Ord> LayoutDescription<F> {
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
 		match self {
 			Self::Standard(desc) => Ok(desc),
@@ -1722,7 +1722,7 @@ impl<F: Clone + Ord>
 	fn ty(
 		&self,
 		a: treeldr_build::ty::Description<F>,
-		_causes: &Causes<F>,
+		_causes: &Metadata<F>,
 		_source: &Context<F, Descriptions>,
 		_target: &mut Context<F>,
 		_vocabulary: &mut Vocabulary,
@@ -1733,7 +1733,7 @@ impl<F: Clone + Ord>
 	fn layout(
 		&self,
 		a: LayoutDescription<F>,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
@@ -1767,8 +1767,8 @@ impl<F: Clone + Ord> treeldr_build::layout::PseudoDescription<F> for LayoutDescr
 		self,
 		other: Self,
 		id: Id,
-		causes: &Causes<F>,
-		other_causes: &Causes<F>,
+		causes: &Metadata<F>,
+		other_causes: &Metadata<F>,
 	) -> Result<Self, treeldr_build::Error<F>> {
 		match (self, other) {
 			(Self::Standard(a), Self::Standard(b)) => {

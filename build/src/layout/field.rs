@@ -1,14 +1,14 @@
 use super::{error, Error};
 use locspan::Location;
-use treeldr::{Caused, Causes, Documentation, Id, MaybeSet, Name, Vocabulary, WithCauses};
+use treeldr::{Caused, Metadata, Documentation, Id, MetaOption, Name, Vocabulary, WithCauses};
 
 /// Layout field definition.
 #[derive(Clone)]
 pub struct Definition<F> {
 	id: Id,
-	prop: MaybeSet<Id, F>,
-	name: MaybeSet<Name, F>,
-	layout: MaybeSet<Id, F>,
+	prop: MetaOption<Id, F>,
+	name: MetaOption<Name, F>,
+	layout: MetaOption<Id, F>,
 }
 
 pub enum DefaultLayout<F> {
@@ -49,9 +49,9 @@ impl<F> Definition<F> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
-			prop: MaybeSet::default(),
-			name: MaybeSet::default(),
-			layout: MaybeSet::default(),
+			prop: MetaOption::default(),
+			name: MetaOption::default(),
+			layout: MetaOption::default(),
 		}
 	}
 
@@ -78,7 +78,7 @@ impl<F> Definition<F> {
 			})
 	}
 
-	pub fn replace_property(&mut self, prop: MaybeSet<Id, F>) {
+	pub fn replace_property(&mut self, prop: MetaOption<Id, F>) {
 		self.prop = prop
 	}
 
@@ -120,7 +120,7 @@ impl<F> Definition<F> {
 			})
 	}
 
-	pub fn replace_name(&mut self, name: MaybeSet<Name, F>) {
+	pub fn replace_name(&mut self, name: MetaOption<Name, F>) {
 		self.name = name
 	}
 
@@ -147,7 +147,7 @@ impl<F> Definition<F> {
 			})
 	}
 
-	pub fn replace_layout(&mut self, layout: MaybeSet<Id, F>) {
+	pub fn replace_layout(&mut self, layout: MetaOption<Id, F>) {
 		self.layout = layout
 	}
 
@@ -174,7 +174,7 @@ impl<F> Definition<F> {
 		}
 	}
 
-	pub fn require_layout(&self, causes: &Causes<F>) -> Result<&WithCauses<Id, F>, Error<F>>
+	pub fn require_layout(&self, causes: &Metadata<F>) -> Result<&WithCauses<Id, F>, Error<F>>
 	where
 		F: Clone,
 	{

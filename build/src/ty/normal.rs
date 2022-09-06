@@ -2,14 +2,14 @@ use crate::{context, Error};
 use derivative::Derivative;
 use locspan::Location;
 use std::collections::HashMap;
-use treeldr::{Causes, Id};
+use treeldr::{Metadata, Id};
 
 /// Normal type definition.
 #[derive(Clone, Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Normal<F> {
 	/// Properties.
-	properties: HashMap<Id, Causes<F>>,
+	properties: HashMap<Id, Metadata<F>>,
 }
 
 impl<F> Normal<F> {
@@ -21,7 +21,7 @@ impl<F> Normal<F> {
 		self.properties.is_empty()
 	}
 
-	pub fn properties(&self) -> impl Iterator<Item = (Id, &Causes<F>)> {
+	pub fn properties(&self) -> impl Iterator<Item = (Id, &Metadata<F>)> {
 		self.properties.iter().map(|(p, c)| (*p, c))
 	}
 

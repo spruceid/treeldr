@@ -1,5 +1,5 @@
-use crate::{ty, Causes, Documentation, Id, MaybeSet, Name, WithCauses};
-use locspan::Location;
+use crate::{ty, Documentation, Id, MetaOption, Name};
+use locspan::Meta;
 use shelves::Ref;
 
 pub mod array;
@@ -43,48 +43,55 @@ pub enum Kind {
 }
 
 /// Layout definition.
-pub struct Definition<F> {
+pub struct Definition<M> {
+	/// Identifier of the layout.
 	id: Id,
-	ty: MaybeSet<Ref<ty::Definition<F>>, F>,
-	desc: WithCauses<Description<F>, F>,
-	causes: Causes<F>,
+
+	/// Type represented by this layout.
+	ty: MetaOption<Ref<ty::Definition<M>>, M>,
+
+	/// Layout description.
+	desc: Meta<Description<M>, M>,
+
+	// Metadata associated to the definition.
+	metadata: M,
 }
 
 /// Layout description.
 #[derive(Clone)]
-pub enum Description<F> {
+pub enum Description<M> {
 	/// Never layout.
-	Never(MaybeSet<Name, F>),
+	Never(MetaOption<Name, M>),
 
 	/// Primitive layout, such as a number, a string, etc.
-	Primitive(RestrictedPrimitive, MaybeSet<Name, F>),
+	Primitive(RestrictedPrimitive, MetaOption<Name, M>),
 
 	/// Reference.
-	Reference(Reference<F>),
+	Reference(Reference<M>),
 
 	/// Structure.
-	Struct(Struct<F>),
+	Struct(Struct<M>),
 
 	/// Enumeration.
-	Enum(Enum<F>),
+	Enum(Enum<M>),
 
 	/// Required.
-	Required(Required<F>),
+	Required(Required<M>),
 
 	/// Option.
-	Option(Optional<F>),
+	Option(Optional<M>),
 
 	/// Array.
-	Array(Array<F>),
+	Array(Array<M>),
 
 	/// Set.
-	Set(Set<F>),
+	Set(Set<M>),
 
 	/// Alias.
-	Alias(WithCauses<Name, F>, Ref<Definition<F>>),
+	Alias(Meta<Name, M>, Ref<Definition<M>>),
 }
 
-impl<F> Description<F> {
+impl<M> Description<M> {
 	pub fn kind(&self) -> Kind {
 		match self {
 			Self::Never(_) => Kind::Never,
@@ -100,33 +107,31 @@ impl<F> Description<F> {
 		}
 	}
 
+	/// Checks if this layout is required.
+	///
+	/// This means either the `required` container or a non-empty `set`
+	/// container.
 	pub fn is_required(&self) -> bool {
 		matches!(self, Self::Required(_)) // TODO checks for non-empty sets
 	}
 
-	pub fn set_name(
-		&mut self,
-		new_name: Name,
-		cause: Option<Location<F>>,
-	) -> Option<WithCauses<Name, F>>
-	where
-		F: Ord,
-	{
+	/// Sets the new name of the layout.
+	pub fn set_name(&mut self, new_name: Name, metadata: M) -> Option<Meta<Name, M>> {
 		match self {
-			Self::Never(name) => name.replace(new_name, cause),
-			Self::Primitive(_, name) => name.replace(new_name, cause),
-			Self::Reference(r) => r.set_name(new_name, cause),
-			Self::Struct(s) => Some(s.set_name(new_name, cause)),
-			Self::Enum(e) => Some(e.set_name(new_name, cause)),
-			Self::Required(r) => r.set_name(new_name, cause),
-			Self::Option(o) => o.set_name(new_name, cause),
-			Self::Array(a) => a.set_name(new_name, cause),
-			Self::Set(s) => s.set_name(new_name, cause),
-			Self::Alias(n, _) => Some(std::mem::replace(n, WithCauses::new(new_name, cause))),
+			Self::Never(name) => name.replace(new_name, metadata),
+			Self::Primitive(_, name) => name.replace(new_name, metadata),
+			Self::Reference(r) => r.set_name(new_name, metadata),
+			Self::Struct(s) => Some(s.set_name(new_name, metadata)),
+			Self::Enum(e) => Some(e.set_name(new_name, metadata)),
+			Self::Required(r) => r.set_name(new_name, metadata),
+			Self::Option(o) => o.set_name(new_name, metadata),
+			Self::Array(a) => a.set_name(new_name, metadata),
+			Self::Set(s) => s.set_name(new_name, metadata),
+			Self::Alias(n, _) => Some(std::mem::replace(n, Meta(new_name, metadata))),
 		}
 	}
 
-	pub fn into_name(self) -> MaybeSet<Name, F> {
+	pub fn into_name(self) -> MetaOption<Name, M> {
 		match self {
 			Description::Never(n) => n,
 			Description::Struct(s) => s.into_name().into(),
@@ -142,23 +147,24 @@ impl<F> Description<F> {
 	}
 }
 
-impl<F> Definition<F> {
+impl<M> Definition<M> {
+	/// Creates a new layout definition.
 	pub fn new(
 		id: Id,
-		ty: MaybeSet<Ref<ty::Definition<F>>, F>,
-		desc: WithCauses<Description<F>, F>,
-		causes: impl Into<Causes<F>>,
+		ty: MetaOption<Ref<ty::Definition<M>>, M>,
+		desc: Meta<Description<M>, M>,
+		metadata: M,
 	) -> Self {
 		Self {
 			id,
 			ty,
 			desc,
-			causes: causes.into(),
+			metadata,
 		}
 	}
 
 	/// Type for which the layout is defined.
-	pub fn ty(&self) -> Option<Ref<ty::Definition<F>>> {
+	pub fn ty(&self) -> Option<Ref<ty::Definition<M>>> {
 		self.ty.value().cloned()
 	}
 
@@ -167,42 +173,48 @@ impl<F> Definition<F> {
 		self.id
 	}
 
-	pub fn name(&self) -> Option<&Name> {
-		match self.desc.inner() {
-			Description::Never(n) => n.value(),
+	pub fn name(&self) -> Option<&Meta<Name, M>> {
+		match self.desc.value() {
+			Description::Never(n) => n.as_ref(),
 			Description::Struct(s) => Some(s.name()),
 			Description::Enum(e) => Some(e.name()),
 			Description::Reference(r) => r.name(),
-			Description::Primitive(_, n) => n.value(),
+			Description::Primitive(_, n) => n.as_ref(),
 			Description::Required(r) => r.name(),
 			Description::Option(o) => o.name(),
 			Description::Array(a) => a.name(),
 			Description::Set(s) => s.name(),
-			Description::Alias(n, _) => Some(n.inner()),
+			Description::Alias(n, _) => Some(n),
 		}
 	}
 
-	pub fn causes(&self) -> &Causes<F> {
-		&self.causes
+	/// Returns a reference to the metadata associated to this definition.
+	pub fn metadata(&self) -> &M {
+		&self.metadata
 	}
 
-	pub fn description(&self) -> &Description<F> {
+	/// Returns the layout description.
+	pub fn description(&self) -> &Meta<Description<M>, M> {
 		&self.desc
 	}
 
-	pub fn description_with_causes(&self) -> &WithCauses<Description<F>, F> {
-		&self.desc
-	}
-
+	/// Checks if the layout is required.
+	///
+	/// This means either the `required` container or a non-empty `set`
+	/// container.
 	pub fn is_required(&self) -> bool {
 		self.desc.is_required()
 	}
 
-	pub fn label<'m>(&self, model: &'m crate::Model<F>) -> Option<&'m str> {
+	/// Returns the defined label for this layout.
+	pub fn label<'m>(&self, model: &'m crate::Model<M>) -> Option<&'m str> {
 		model.get(self.id).unwrap().label()
 	}
 
-	pub fn preferred_label<'a>(&'a self, model: &'a crate::Model<F>) -> Option<&'a str> {
+	/// Returns the preferred layout for this layout.
+	///
+	/// Either the defined label if any, or the type label otherwise (if any).
+	pub fn preferred_label<'a>(&'a self, model: &'a crate::Model<M>) -> Option<&'a str> {
 		let label = self.label(model);
 		if label.is_none() {
 			self.ty().and_then(|ty_ref| {
@@ -214,11 +226,11 @@ impl<F> Definition<F> {
 		}
 	}
 
-	pub fn documentation<'m>(&self, model: &'m crate::Model<F>) -> &'m Documentation {
+	pub fn documentation<'m>(&self, model: &'m crate::Model<M>) -> &'m Documentation {
 		model.get(self.id).unwrap().documentation()
 	}
 
-	pub fn preferred_documentation<'m>(&self, model: &'m crate::Model<F>) -> &'m Documentation {
+	pub fn preferred_documentation<'m>(&self, model: &'m crate::Model<M>) -> &'m Documentation {
 		let doc = self.documentation(model);
 		if doc.is_empty() && self.ty().is_some() {
 			let ty_id = model.types().get(self.ty().unwrap()).unwrap().id();
@@ -228,8 +240,8 @@ impl<F> Definition<F> {
 		}
 	}
 
-	pub fn composing_layouts(&self) -> ComposingLayouts<F> {
-		match self.description() {
+	pub fn composing_layouts(&self) -> ComposingLayouts<M> {
+		match self.description().value() {
 			Description::Never(_) => ComposingLayouts::None,
 			Description::Struct(s) => ComposingLayouts::Struct(s.fields().iter()),
 			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts()),
@@ -244,15 +256,15 @@ impl<F> Definition<F> {
 	}
 }
 
-pub enum ComposingLayouts<'a, F> {
-	Struct(std::slice::Iter<'a, Field<F>>),
-	Enum(enumeration::ComposingLayouts<'a, F>),
-	One(Option<Ref<Definition<F>>>),
+pub enum ComposingLayouts<'a, M> {
+	Struct(std::slice::Iter<'a, Field<M>>),
+	Enum(enumeration::ComposingLayouts<'a, M>),
+	One(Option<Ref<Definition<M>>>),
 	None,
 }
 
-impl<'a, F> Iterator for ComposingLayouts<'a, F> {
-	type Item = Ref<Definition<F>>;
+impl<'a, M> Iterator for ComposingLayouts<'a, M> {
+	type Item = Ref<Definition<M>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {

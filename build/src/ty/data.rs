@@ -1,6 +1,6 @@
 use crate::{context, Error};
 use locspan::Location;
-use treeldr::{Causes, Id, WithCauses};
+use treeldr::{Metadata, Id, WithCauses};
 
 pub mod restriction;
 
@@ -115,7 +115,7 @@ pub struct Derived<F> {
 }
 
 impl<F> Derived<F> {
-	pub fn new(base: Id, causes: impl Into<Causes<F>>) -> Self
+	pub fn new(base: Id, causes: impl Into<Metadata<F>>) -> Self
 	where
 		F: Ord,
 	{

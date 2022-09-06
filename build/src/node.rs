@@ -1,9 +1,9 @@
 use crate::{error, layout, list, prop, ty, Descriptions, Error, TryMap};
 use derivative::Derivative;
 use locspan::Location;
-use treeldr::{Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
+use treeldr::{Caused, Metadata, Documentation, Id, MetaOption, Vocabulary, WithCauses};
 
-pub use treeldr::node::{CausedTypes, Type, Types};
+pub use treeldr::node::{TypesMetadata, Type, Types};
 
 #[derive(Clone)]
 pub struct Node<T> {
@@ -16,12 +16,12 @@ pub struct Node<T> {
 #[derive(Derivative)]
 #[derivative(Clone(bound = "F: Clone"))]
 pub struct Components<F, D: Descriptions<F> = crate::StandardDescriptions> {
-	pub ty: MaybeSet<ty::Definition<F, D::Type>, F>,
-	pub property: MaybeSet<prop::Definition<F>, F>,
-	pub layout: MaybeSet<layout::Definition<F, D::Layout>, F>,
-	pub layout_field: MaybeSet<layout::field::Definition<F>, F>,
-	pub layout_variant: MaybeSet<layout::variant::Definition<F>, F>,
-	pub list: MaybeSet<list::Definition<F>, F>,
+	pub ty: MetaOption<ty::Definition<F, D::Type>, F>,
+	pub property: MetaOption<prop::Definition<F>, F>,
+	pub layout: MetaOption<layout::Definition<F, D::Layout>, F>,
+	pub layout_field: MetaOption<layout::field::Definition<F>, F>,
+	pub layout_variant: MetaOption<layout::variant::Definition<F>, F>,
+	pub list: MetaOption<list::Definition<F>, F>,
 }
 
 impl<F, D: Descriptions<F>> Components<F, D> {
@@ -128,108 +128,108 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::default(),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::default(),
+				ty: MetaOption::default(),
+				property: MetaOption::default(),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_type(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_type(id: Id, causes: impl Into<Metadata<F>>) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::new(ty::Definition::new(id), causes),
-				property: MaybeSet::default(),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::default(),
+				ty: MetaOption::new(ty::Definition::new(id), causes),
+				property: MetaOption::default(),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_property(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_property(id: Id, causes: impl Into<Metadata<F>>) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::new(prop::Definition::new(id), causes),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::default(),
+				ty: MetaOption::default(),
+				property: MetaOption::new(prop::Definition::new(id), causes),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_layout(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_layout(id: Id, causes: impl Into<Metadata<F>>) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::default(),
-				layout: MaybeSet::new(layout::Definition::new(id), causes),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::default(),
+				ty: MetaOption::default(),
+				property: MetaOption::default(),
+				layout: MetaOption::new(layout::Definition::new(id), causes),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_layout_field(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_layout_field(id: Id, causes: impl Into<Metadata<F>>) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::default(),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::new(layout::field::Definition::new(id), causes),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::default(),
+				ty: MetaOption::default(),
+				property: MetaOption::default(),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::new(layout::field::Definition::new(id), causes),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_layout_variant(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_layout_variant(id: Id, causes: impl Into<Metadata<F>>) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::default(),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::new(layout::variant::Definition::new(id), causes),
-				list: MaybeSet::default(),
+				ty: MetaOption::default(),
+				property: MetaOption::default(),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::new(layout::variant::Definition::new(id), causes),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_list(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_list(id: Id, causes: impl Into<Metadata<F>>) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::default(),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::new(list::Definition::new(id), causes),
+				ty: MetaOption::default(),
+				property: MetaOption::default(),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::new(list::Definition::new(id), causes),
 			},
 		}
 	}
@@ -245,11 +245,11 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 		}
 	}
 
-	pub fn caused_types(&self) -> CausedTypes<F>
+	pub fn caused_types(&self) -> TypesMetadata<F>
 	where
 		F: Clone,
 	{
-		CausedTypes {
+		TypesMetadata {
 			ty: self
 				.value
 				.ty

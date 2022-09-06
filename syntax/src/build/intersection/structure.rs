@@ -6,7 +6,7 @@ use crate::build::{
 use locspan::{BorrowStripped, Loc, Meta};
 use locspan_derive::StrippedPartialEq;
 use std::collections::BTreeMap;
-use treeldr::{vocab::*, Caused, Causes, Id, MaybeSet, Name, WithCauses};
+use treeldr::{vocab::*, Caused, Metadata, Id, MetaOption, Name, WithCauses};
 use treeldr_build::{Context, ObjectToId};
 
 #[derive(Clone)]
@@ -18,7 +18,7 @@ impl<F: Clone + Ord> IntersectedStruct<F> {
 	pub fn new(
 		fields_id: Id,
 		context: &Context<F, Descriptions>,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<Self, Error<F>> {
 		let mut fields = Vec::new();
 
@@ -339,7 +339,7 @@ impl<F> FieldLayout<F> {
 
 	pub fn into_layout(
 		self,
-		causes: Causes<F>,
+		causes: Metadata<F>,
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
@@ -397,7 +397,7 @@ impl<F> FieldLayoutDescription<F> {
 	pub fn into_layout(
 		self,
 		item_layout: WithCauses<Id, F>,
-		causes: Causes<F>,
+		causes: Metadata<F>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
 	) -> WithCauses<Id, F>
@@ -438,8 +438,8 @@ impl<F> FieldLayoutDescription<F> {
 
 #[derive(Clone)]
 pub struct IntersectedField<F> {
-	name: MaybeSet<Name, F>,
-	property: MaybeSet<Id, F>,
+	name: MetaOption<Name, F>,
+	property: MetaOption<Id, F>,
 	layout: FieldLayout<F>,
 }
 
@@ -453,7 +453,7 @@ impl<F: Clone + Ord> IntersectedField<F> {
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
-		causes: Causes<F>,
+		causes: Metadata<F>,
 	) -> Result<Option<Id>, Error<F>> {
 		let cause = causes.preferred().cloned();
 		Ok(self
@@ -487,21 +487,21 @@ impl<F: Clone + Ord> IntersectedField<F> {
 		let name = match (self.name.unwrap(), other.name.unwrap()) {
 			(Some(a), Some(b)) => {
 				let (a, causes) = a.into_parts();
-				MaybeSet::new(a, causes.with(b.into_causes()))
+				MetaOption::new(a, causes.with(b.into_causes()))
 			}
 			(Some(a), _) => a.into(),
 			(_, Some(b)) => b.into(),
-			(None, None) => MaybeSet::default(),
+			(None, None) => MetaOption::default(),
 		};
 
 		let property = match (self.property.unwrap(), other.property.unwrap()) {
 			(Some(a), Some(b)) => {
 				let (a, causes) = a.into_parts();
-				MaybeSet::new(a, causes.with(b.into_causes()))
+				MetaOption::new(a, causes.with(b.into_causes()))
 			}
 			(Some(a), _) => a.into(),
 			(_, Some(b)) => b.into(),
-			(None, None) => MaybeSet::default(),
+			(None, None) => MetaOption::default(),
 		};
 
 		match self.layout.intersected_with(other.layout) {
@@ -563,7 +563,7 @@ impl<F> FieldRestrictions<F> {
 
 	pub fn into_layout(
 		self,
-		causes: Causes<F>,
+		causes: Metadata<F>,
 		source: &Context<F, Descriptions>,
 		target: &mut Context<F>,
 		vocabulary: &mut Vocabulary,
@@ -614,8 +614,8 @@ impl<F> PartialEq for FieldRestrictions<F> {
 
 #[derive(Clone)]
 pub struct RangeRestrictions<F> {
-	any: BTreeMap<Id, Causes<F>>,
-	all: BTreeMap<Id, Causes<F>>,
+	any: BTreeMap<Id, Metadata<F>>,
+	all: BTreeMap<Id, Metadata<F>>,
 }
 
 impl<F> Default for RangeRestrictions<F> {
@@ -658,11 +658,11 @@ impl<F> RangeRestrictions<F> {
 		}
 	}
 
-	pub fn causes(&self) -> Causes<F>
+	pub fn causes(&self) -> Metadata<F>
 	where
 		F: Clone + Ord,
 	{
-		let mut all_causes = Causes::new();
+		let mut all_causes = Metadata::new();
 
 		for causes in self.any.values() {
 			all_causes.extend(causes.iter().cloned())

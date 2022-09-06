@@ -2,7 +2,7 @@ use super::{Descriptions, Error, LayoutDescription, LayoutRestrictedField, Local
 use derivative::Derivative;
 use locspan::{Loc, Meta};
 use std::collections::BTreeMap;
-use treeldr::{Causes, Id, MaybeSet, Vocabulary, WithCauses};
+use treeldr::{Metadata, Id, MetaOption, Vocabulary, WithCauses};
 use treeldr_build::{
 	layout::{Array, RestrictedPrimitive},
 	Context, ObjectToId,
@@ -16,7 +16,7 @@ pub use structure::*;
 
 #[derive(Clone)]
 pub struct IntersectedLayout<F> {
-	ids: BTreeMap<Id, Causes<F>>,
+	ids: BTreeMap<Id, Metadata<F>>,
 	desc: WithCauses<IntersectedLayoutDescription<F>, F>,
 }
 
@@ -48,7 +48,7 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 	pub fn try_from_iter<I: IntoIterator<Item = WithCauses<Id, F>>>(
 		ids: I,
 		context: &Context<F, Descriptions>,
-		causes: Causes<F>,
+		causes: Metadata<F>,
 	) -> Result<Self, Error<F>> {
 		let mut ids = ids.into_iter();
 		match ids.next() {
@@ -75,13 +75,13 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 	}
 
 	pub fn from_parts(
-		ids: BTreeMap<Id, Causes<F>>,
+		ids: BTreeMap<Id, Metadata<F>>,
 		desc: WithCauses<IntersectedLayoutDescription<F>, F>,
 	) -> Self {
 		Self { ids, desc }
 	}
 
-	pub fn never(causes: Causes<F>) -> Self {
+	pub fn never(causes: Metadata<F>) -> Self {
 		Self {
 			ids: BTreeMap::new(),
 			desc: WithCauses::new(IntersectedLayoutDescription::Never, causes),
@@ -109,7 +109,7 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 		self.desc.needs_id()
 	}
 
-	pub fn id(&self) -> Option<(Id, &Causes<F>)> {
+	pub fn id(&self) -> Option<(Id, &Metadata<F>)> {
 		self.ids.iter().next().map(|(id, causes)| (*id, causes))
 	}
 
@@ -248,7 +248,7 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 					.unwrap()
 					.as_layout_mut()
 					.unwrap()
-					.replace_description(MaybeSet::new(standard_desc, causes.clone()));
+					.replace_description(MetaOption::new(standard_desc, causes.clone()));
 
 				Ok(WithCauses::new(id, causes))
 			}
@@ -318,8 +318,8 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 	pub fn compress(
 		&mut self,
 		context: &Context<F, Descriptions>,
-		causes: &Causes<F>,
-	) -> Result<BTreeMap<Id, Causes<F>>, Error<F>> {
+		causes: &Metadata<F>,
+	) -> Result<BTreeMap<Id, Metadata<F>>, Error<F>> {
 		let mut aliases = BTreeMap::new();
 
 		let mut causes = causes;
@@ -357,10 +357,10 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 
 	pub fn intersected_with(
 		self,
-		causes: Causes<F>,
-		ids: BTreeMap<Id, Causes<F>>,
+		causes: Metadata<F>,
+		ids: BTreeMap<Id, Metadata<F>>,
 		other: WithCauses<IntersectedLayoutDescription<F>, F>,
-		other_ids: BTreeMap<Id, Causes<F>>,
+		other_ids: BTreeMap<Id, Metadata<F>>,
 		context: &Context<F, Descriptions>,
 	) -> Result<Self, Error<F>> {
 		let (other, other_causes) = other.into_parts();

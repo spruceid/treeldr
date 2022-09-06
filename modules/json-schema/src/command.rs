@@ -26,7 +26,11 @@ pub struct NotALayoutError<F>(pub IriBuf, pub treeldr::node::CausedTypes<F>);
 pub enum Error<F> {
 	NoLayoutName(String),
 	UndefinedLayout(IriBuf),
+<<<<<<< HEAD
 	NotALayout(Box<NotALayoutError<F>>),
+=======
+	NotALayout(IriBuf, treeldr::node::TypesMetadata<F>),
+>>>>>>> 1d6a9e1 (Simplify metadata in `core`.)
 	InfiniteSchema(String),
 	Serialization(serde_json::Error),
 }

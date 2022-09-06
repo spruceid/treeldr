@@ -1,7 +1,7 @@
 use crate::{error, utils::TryCollect, Error, ObjectToId};
 use locspan::Location;
 use std::collections::BTreeMap;
-use treeldr::{Causes, Id, MaybeSet};
+use treeldr::{Metadata, Id, MetaOption};
 
 pub mod data;
 mod normal;
@@ -45,7 +45,7 @@ impl<F: Clone + Ord> Description<F> {
 		&self,
 		_id: Id,
 		nodes: &super::context::allocated::Nodes<F>,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<Vec<crate::Item<F>>, Error<F>> {
 		let list_id = match self {
 			Description::Union(list_id) => Some(*list_id),
@@ -81,7 +81,7 @@ impl<F: Clone + Ord> Description<F> {
 		id: Id,
 		nodes: &super::context::allocated::Nodes<F>,
 		dependencies: crate::Dependencies<F>,
-		causes: Causes<F>,
+		causes: Metadata<F>,
 	) -> Result<treeldr::ty::Description<F>, Error<F>>
 	where
 		F: Clone + Ord,
@@ -179,7 +179,7 @@ pub struct Definition<F, D = Description<F>> {
 	id: Id,
 
 	/// Type description.
-	desc: MaybeSet<D, F>,
+	desc: MetaOption<D, F>,
 }
 
 impl<F, D> Definition<F, D> {
@@ -191,11 +191,11 @@ impl<F, D> Definition<F, D> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
-			desc: MaybeSet::default(),
+			desc: MetaOption::default(),
 		}
 	}
 
-	pub fn description(&self) -> &MaybeSet<D, F> {
+	pub fn description(&self) -> &MetaOption<D, F> {
 		&self.desc
 	}
 
@@ -498,7 +498,7 @@ impl<F: Clone + Ord> Definition<F> {
 	pub fn dependencies(
 		&self,
 		nodes: &super::context::allocated::Nodes<F>,
-		_causes: &Causes<F>,
+		_causes: &Metadata<F>,
 	) -> Result<Vec<crate::Item<F>>, Error<F>> {
 		match self.desc.with_causes() {
 			Some(desc) => desc.dependencies(self.id, nodes, desc.causes()),
@@ -514,7 +514,7 @@ impl<F: Clone + Ord> crate::Build<F> for Definition<F> {
 		self,
 		nodes: &mut super::context::allocated::Nodes<F>,
 		dependencies: crate::Dependencies<F>,
-		causes: Causes<F>,
+		causes: Metadata<F>,
 	) -> Result<Self::Target, Error<F>> {
 		let desc = match self.desc.unwrap() {
 			Some(desc) => {

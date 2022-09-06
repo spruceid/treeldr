@@ -1,6 +1,6 @@
 use crate::{error, utils::TryCollect, Context, Descriptions, Error, ObjectToId};
 use locspan::Location;
-use treeldr::{Caused, Causes, Id, MaybeSet, Name, Vocabulary, WithCauses};
+use treeldr::{Caused, Metadata, Id, MetaOption, Name, Vocabulary, WithCauses};
 
 pub mod array;
 pub mod field;
@@ -58,7 +58,7 @@ impl<F> Description<F> {
 	pub fn sub_layouts<D: Descriptions<F>>(
 		&self,
 		context: &Context<F, D>,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<Vec<SubLayout<F>>, Error<F>>
 	where
 		F: Clone + Ord,
@@ -129,7 +129,7 @@ impl<F> Description<F> {
 		&self,
 		_id: Id,
 		_nodes: &super::context::allocated::Nodes<F>,
-		_causes: &Causes<F>,
+		_causes: &Metadata<F>,
 	) -> Result<Vec<crate::Item<F>>, Error<F>> {
 		// match self {
 		// 	Description::Struct(field_list_id) => {
@@ -195,9 +195,9 @@ impl<F> Description<F> {
 	pub fn build(
 		self,
 		id: Id,
-		name: MaybeSet<Name, F>,
+		name: MetaOption<Name, F>,
 		nodes: &mut super::context::allocated::Nodes<F>,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<treeldr::layout::Description<F>, Error<F>>
 	where
 		F: Clone + Ord,
@@ -207,8 +207,8 @@ impl<F> Description<F> {
 
 		fn require_name<F>(
 			id: Id,
-			name: MaybeSet<Name, F>,
-			causes: &Causes<F>,
+			name: MetaOption<Name, F>,
+			causes: &Metadata<F>,
 		) -> Result<WithCauses<Name, F>, Error<F>>
 		where
 			F: Clone,
@@ -330,8 +330,8 @@ pub trait PseudoDescription<F>: Clone + From<Description<F>> {
 		self,
 		other: Self,
 		id: Id,
-		causes: &Causes<F>,
-		other_causes: &Causes<F>,
+		causes: &Metadata<F>,
+		other_causes: &Metadata<F>,
 	) -> Result<Self, Error<F>>;
 }
 
@@ -348,8 +348,8 @@ impl<F: Clone + Ord> PseudoDescription<F> for Description<F> {
 		self,
 		other: Self,
 		id: Id,
-		causes: &Causes<F>,
-		other_causes: &Causes<F>,
+		causes: &Metadata<F>,
+		other_causes: &Metadata<F>,
 	) -> Result<Self, Error<F>> {
 		match (self, other) {
 			(Self::Never, Self::Never) => Ok(Self::Never),
@@ -385,13 +385,13 @@ pub struct Definition<F, D = Description<F>> {
 	/// If not provided, the name is generated using the `default_name`
 	/// method. If it conflicts with another name or failed to be generated,
 	/// then a name must be explicitly defined by the user.
-	name: MaybeSet<Name, F>,
+	name: MetaOption<Name, F>,
 
 	/// Type for which this layout is defined.
-	ty: MaybeSet<Id, F>,
+	ty: MetaOption<Id, F>,
 
 	/// Layout description.
-	desc: MaybeSet<D, F>,
+	desc: MetaOption<D, F>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -416,9 +416,9 @@ impl<F, D> Definition<F, D> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
-			name: MaybeSet::default(),
-			ty: MaybeSet::default(),
-			desc: MaybeSet::default(),
+			name: MetaOption::default(),
+			ty: MetaOption::default(),
+			desc: MetaOption::default(),
 		}
 	}
 
@@ -489,7 +489,7 @@ impl<F, D> Definition<F, D> {
 			})
 	}
 
-	pub fn replace_description(&mut self, desc: MaybeSet<D, F>) {
+	pub fn replace_description(&mut self, desc: MetaOption<D, F>) {
 		self.desc = desc
 	}
 
@@ -643,7 +643,7 @@ impl<F: Clone + Ord> Definition<F> {
 	pub fn dependencies(
 		&self,
 		nodes: &super::context::allocated::Nodes<F>,
-		_causes: &Causes<F>,
+		_causes: &Metadata<F>,
 	) -> Result<Vec<crate::Item<F>>, Error<F>> {
 		match self.desc.with_causes() {
 			Some(desc) => desc.dependencies(self.id, nodes, desc.causes()),
@@ -717,7 +717,7 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 		self,
 		nodes: &mut super::context::allocated::Nodes<F>,
 		_dependencies: crate::Dependencies<F>,
-		causes: Causes<F>,
+		causes: Metadata<F>,
 	) -> Result<Self::Target, Error<F>> {
 		let ty = self.ty.try_map_with_causes(|ty_id, causes| {
 			Ok(**nodes.require_type(ty_id, causes.preferred().cloned())?)

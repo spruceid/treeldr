@@ -1,7 +1,7 @@
 use crate::{error, Error};
 use derivative::Derivative;
 use locspan_derive::StrippedPartialEq;
-use treeldr::{vocab, Causes, Id, MaybeSet, Name};
+use treeldr::{vocab, Metadata, Id, MetaOption, Name};
 use vocab::{Rdf, Term};
 
 #[derive(Clone, Debug, Derivative)]
@@ -29,7 +29,7 @@ impl<F> Array<F> {
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Causes<F>>,
+		causes: impl Into<Metadata<F>>,
 	) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
@@ -43,7 +43,7 @@ impl<F> Array<F> {
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Causes<F>>,
+		causes: impl Into<Metadata<F>>,
 	) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
@@ -57,7 +57,7 @@ impl<F> Array<F> {
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Causes<F>>,
+		causes: impl Into<Metadata<F>>,
 	) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
@@ -71,8 +71,8 @@ impl<F> Array<F> {
 		self,
 		other: Self,
 		id: Id,
-		causes: &Causes<F>,
-		other_causes: &Causes<F>,
+		causes: &Metadata<F>,
+		other_causes: &Metadata<F>,
 	) -> Result<Self, Error<F>>
 	where
 		F: Clone + Ord,
@@ -103,9 +103,9 @@ impl<F> Array<F> {
 
 	pub fn build(
 		self,
-		name: MaybeSet<Name, F>,
+		name: MetaOption<Name, F>,
 		nodes: &mut crate::context::allocated::Nodes<F>,
-		causes: &Causes<F>,
+		causes: &Metadata<F>,
 	) -> Result<treeldr::layout::Array<F>, Error<F>>
 	where
 		F: Clone + Ord,
@@ -128,16 +128,16 @@ impl<F> Array<F> {
 #[stripped_ignore(F)]
 pub struct Semantics<F> {
 	#[stripped_option]
-	first: MaybeSet<Id, F>,
+	first: MetaOption<Id, F>,
 
 	#[stripped_option]
-	rest: MaybeSet<Id, F>,
+	rest: MetaOption<Id, F>,
 
 	#[stripped_option]
-	nil: MaybeSet<Id, F>,
+	nil: MetaOption<Id, F>,
 }
 
-fn on_err<F: Clone + Ord>(id: Id, a_causes: &Causes<F>, b_causes: &Causes<F>) -> Error<F> {
+fn on_err<F: Clone + Ord>(id: Id, a_causes: &Metadata<F>, b_causes: &Metadata<F>) -> Error<F> {
 	Error::new(
 		error::LayoutMismatchDescription {
 			id,
@@ -149,27 +149,27 @@ fn on_err<F: Clone + Ord>(id: Id, a_causes: &Causes<F>, b_causes: &Causes<F>) ->
 }
 
 impl<F> Semantics<F> {
-	pub fn rdf_list(causes: impl Into<Causes<F>>) -> Self
+	pub fn rdf_list(causes: impl Into<Metadata<F>>) -> Self
 	where
 		F: Clone,
 	{
 		let causes = causes.into();
 		Self {
-			first: MaybeSet::new(Id::Iri(Term::Rdf(Rdf::First)), causes.clone()),
-			rest: MaybeSet::new(Id::Iri(Term::Rdf(Rdf::Rest)), causes.clone()),
-			nil: MaybeSet::new(Id::Iri(Term::Rdf(Rdf::Nil)), causes),
+			first: MetaOption::new(Id::Iri(Term::Rdf(Rdf::First)), causes.clone()),
+			rest: MetaOption::new(Id::Iri(Term::Rdf(Rdf::Rest)), causes.clone()),
+			nil: MetaOption::new(Id::Iri(Term::Rdf(Rdf::Nil)), causes),
 		}
 	}
 
-	pub fn first(&self) -> &MaybeSet<Id, F> {
+	pub fn first(&self) -> &MetaOption<Id, F> {
 		&self.first
 	}
 
-	pub fn rest(&self) -> &MaybeSet<Id, F> {
+	pub fn rest(&self) -> &MetaOption<Id, F> {
 		&self.rest
 	}
 
-	pub fn nil(&self) -> &MaybeSet<Id, F> {
+	pub fn nil(&self) -> &MetaOption<Id, F> {
 		&self.nil
 	}
 
@@ -177,7 +177,7 @@ impl<F> Semantics<F> {
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Causes<F>>,
+		causes: impl Into<Metadata<F>>,
 	) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
@@ -192,7 +192,7 @@ impl<F> Semantics<F> {
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Causes<F>>,
+		causes: impl Into<Metadata<F>>,
 	) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,
@@ -207,7 +207,7 @@ impl<F> Semantics<F> {
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Causes<F>>,
+		causes: impl Into<Metadata<F>>,
 	) -> Result<(), Error<F>>
 	where
 		F: Clone + Ord,

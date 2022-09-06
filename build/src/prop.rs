@@ -1,16 +1,16 @@
 use crate::{error, Error};
 use locspan::Location;
 use std::collections::HashMap;
-use treeldr::{Caused, Causes, Id, MaybeSet, WithCauses};
+use treeldr::{Caused, Metadata, Id, MetaOption, WithCauses};
 
 /// Property definition.
 #[derive(Clone)]
 pub struct Definition<F> {
 	id: Id,
-	domain: HashMap<Id, Causes<F>>,
-	range: MaybeSet<Id, F>,
-	required: MaybeSet<bool, F>,
-	functional: MaybeSet<bool, F>,
+	domain: HashMap<Id, Metadata<F>>,
+	range: MetaOption<Id, F>,
+	required: MetaOption<bool, F>,
+	functional: MetaOption<bool, F>,
 }
 
 impl<F> Definition<F> {
@@ -18,9 +18,9 @@ impl<F> Definition<F> {
 		Self {
 			id,
 			domain: HashMap::new(),
-			range: MaybeSet::default(),
-			required: MaybeSet::default(),
-			functional: MaybeSet::default(),
+			range: MetaOption::default(),
+			required: MetaOption::default(),
+			functional: MetaOption::default(),
 		}
 	}
 
@@ -119,7 +119,7 @@ impl<F> Definition<F> {
 	pub fn dependencies(
 		&self,
 		_nodes: &super::context::allocated::Nodes<F>,
-		_causes: &Causes<F>,
+		_causes: &Metadata<F>,
 	) -> Result<Vec<crate::Item<F>>, Error<F>>
 	where
 		F: Clone + Ord,
@@ -135,7 +135,7 @@ impl<F: Ord + Clone> crate::Build<F> for Definition<F> {
 		self,
 		nodes: &mut super::context::allocated::Nodes<F>,
 		_dependencies: crate::Dependencies<F>,
-		causes: Causes<F>,
+		causes: Metadata<F>,
 	) -> Result<Self::Target, Error<F>> {
 		let range_id = self.range.ok_or_else(|| {
 			Caused::new(

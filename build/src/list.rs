@@ -1,20 +1,20 @@
 use crate::{error, Context, Descriptions, Error};
 use locspan::Location;
-use treeldr::{vocab::Object, Caused, Id, MaybeSet, WithCauses};
+use treeldr::{vocab::Object, Caused, Id, MetaOption, WithCauses};
 
 #[derive(Clone)]
 pub struct Definition<F> {
 	id: Id,
-	first: MaybeSet<Object<F>, F>,
-	rest: MaybeSet<Id, F>,
+	first: MetaOption<Object<F>, F>,
+	rest: MetaOption<Id, F>,
 }
 
 impl<F> Definition<F> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
-			first: MaybeSet::default(),
-			rest: MaybeSet::default(),
+			first: MetaOption::default(),
+			rest: MetaOption::default(),
 		}
 	}
 

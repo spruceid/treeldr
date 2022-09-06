@@ -1,11 +1,11 @@
 use super::Properties;
-use crate::{prop::restriction, Causes, Model, Ref};
+use crate::{metadata, prop::restriction, Metadata, Model, Ref};
 use std::collections::BTreeMap;
 
 /// Intersection type.
 pub struct Intersection<F> {
 	/// Types in the intersection.
-	types: BTreeMap<Ref<super::Definition<F>>, Causes<F>>,
+	types: BTreeMap<Ref<super::Definition<F>>, Metadata<F>>,
 
 	/// Properties in the intersection.
 	properties: Properties<F>,
@@ -13,11 +13,11 @@ pub struct Intersection<F> {
 
 impl<F> Intersection<F> {
 	pub fn new<'a, G>(
-		types: BTreeMap<Ref<super::Definition<F>>, Causes<F>>,
+		types: BTreeMap<Ref<super::Definition<F>>, Metadata<F>>,
 		get: G,
 	) -> Result<Self, restriction::Contradiction>
 	where
-		F: 'a + Clone + Ord,
+		F: 'a + Clone + metadata::Merge,
 		G: 'a + Fn(Ref<super::Definition<F>>) -> &'a super::Definition<F>,
 	{
 		let mut properties = Properties::all();

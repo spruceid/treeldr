@@ -1,10 +1,11 @@
-use crate::{Id, node, Vocabulary, vocab::Display};
+use crate::{Id, node, Vocabulary, vocab::Display, metadata::MaybeLocated, reporting::MetadataDiagnostic};
+use locspan::Meta;
 
 #[derive(Debug)]
-pub struct NodeInvalidType<F> {
+pub struct NodeInvalidType<M> {
 	pub id: Id,
 	pub expected: node::Type,
-	pub found: node::CausedTypes<F>,
+	pub found: node::TypesMetadata<M>,
 }
 
 trait NodeTypeName {
@@ -24,18 +25,17 @@ impl NodeTypeName for node::Type {
 	}
 }
 
-impl<F: Clone> super::AnyError<F> for NodeInvalidType<F> {
+impl<M: MetadataDiagnostic + MaybeLocated<File = M::FileId>> super::AnyError<M> for NodeInvalidType<M> where M::File: Clone {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("invalid type for {}", self.id.display(vocab))
 	}
 
-	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
 		let mut labels = Vec::new();
 
-		for ty in self.found.iter() {
-			let (ty, cause) = ty.into_parts();
-			if let Some(cause) = cause {
-				labels.push(cause.into_secondary_label().with_message(format!("declared as a {} here", ty.name())));
+		for Meta(ty, metadata) in self.found.iter() {
+			if let Some(loc) = metadata.location() {
+				labels.push(loc.into_secondary_label().with_message(format!("declared as a {} here", ty.name())));
 			}
 		}
 

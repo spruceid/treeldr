@@ -4,7 +4,7 @@ use treeldr::{Id, node, Vocabulary, vocab::Display};
 pub struct NodeInvalidType<F> {
 	pub id: Id,
 	pub expected: node::Type,
-	pub found: node::CausedTypes<F>,
+	pub found: node::TypesMetadata<F>,
 }
 
 trait NodeTypeName {

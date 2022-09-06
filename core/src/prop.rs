@@ -1,4 +1,5 @@
-use crate::{ty, Causes, Documentation, Id, WithCauses};
+use crate::{ty, Documentation, Id};
+use locspan::Meta;
 use shelves::Ref;
 use std::collections::HashMap;
 
@@ -7,22 +8,22 @@ pub mod restriction;
 pub use restriction::{Restriction, Restrictions};
 
 /// Property definition.
-pub struct Definition<F> {
+pub struct Definition<M> {
 	id: Id,
-	domain: HashMap<Ref<ty::Definition<F>>, Causes<F>>,
-	range: WithCauses<Ref<ty::Definition<F>>, F>,
-	required: WithCauses<bool, F>,
-	functional: WithCauses<bool, F>,
-	causes: Causes<F>,
+	domain: HashMap<Ref<ty::Definition<M>>, M>,
+	range: Meta<Ref<ty::Definition<M>>, M>,
+	required: Meta<bool, M>,
+	functional: Meta<bool, M>,
+	causes: M,
 }
 
-impl<F> Definition<F> {
+impl<M> Definition<M> {
 	pub fn new(
 		id: Id,
-		range: WithCauses<Ref<ty::Definition<F>>, F>,
-		required: WithCauses<bool, F>,
-		functional: WithCauses<bool, F>,
-		causes: impl Into<Causes<F>>,
+		range: Meta<Ref<ty::Definition<M>>, M>,
+		required: Meta<bool, M>,
+		functional: Meta<bool, M>,
+		causes: impl Into<M>,
 	) -> Self {
 		Self {
 			id,
@@ -39,40 +40,37 @@ impl<F> Definition<F> {
 		self.id
 	}
 
-	pub fn causes(&self) -> &Causes<F> {
+	pub fn causes(&self) -> &M {
 		&self.causes
 	}
 
-	pub fn insert_domain(&mut self, ty_ref: Ref<ty::Definition<F>>, causes: impl Into<Causes<F>>)
-	where
-		F: Ord,
-	{
-		self.domain.insert(ty_ref, causes.into());
+	pub fn insert_domain(&mut self, ty_ref: Ref<ty::Definition<M>>, metadata: M) {
+		self.domain.insert(ty_ref, metadata);
 	}
 
-	pub fn range(&self) -> &WithCauses<Ref<ty::Definition<F>>, F> {
+	pub fn range(&self) -> &Meta<Ref<ty::Definition<M>>, M> {
 		&self.range
 	}
 
-	pub fn domain(&self) -> impl '_ + Iterator<Item = Ref<ty::Definition<F>>> {
+	pub fn domain(&self) -> impl '_ + Iterator<Item = Ref<ty::Definition<M>>> {
 		self.domain.keys().cloned()
 	}
 
 	pub fn is_required(&self) -> bool {
-		*self.required.inner()
+		*self.required
 	}
 
 	/// Checks if this property is functional,
 	/// meaning that it is associated to at most one value.
 	pub fn is_functional(&self) -> bool {
-		*self.functional.inner()
+		*self.functional
 	}
 
-	pub fn label<'m>(&self, model: &'m crate::Model<F>) -> Option<&'m str> {
+	pub fn label<'m>(&self, model: &'m crate::Model<M>) -> Option<&'m str> {
 		model.get(self.id).unwrap().label()
 	}
 
-	pub fn documentation<'m>(&self, model: &'m crate::Model<F>) -> &'m Documentation {
+	pub fn documentation<'m>(&self, model: &'m crate::Model<M>) -> &'m Documentation {
 		model.get(self.id).unwrap().documentation()
 	}
 }

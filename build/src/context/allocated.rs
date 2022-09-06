@@ -3,25 +3,25 @@ use derivative::Derivative;
 use locspan::Location;
 use shelves::{Ref, Shelf};
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{vocab, Caused, Causes, Id, MaybeSet, WithCauses};
+use treeldr::{vocab, Caused, Metadata, Id, MetaOption, WithCauses};
 
 #[derive(Clone, Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Components<F> {
-	ty: MaybeSet<Ref<treeldr::ty::Definition<F>>, F>,
-	property: MaybeSet<Ref<treeldr::prop::Definition<F>>, F>,
-	layout: MaybeSet<Ref<treeldr::layout::Definition<F>>, F>,
-	layout_field: MaybeSet<layout::field::Definition<F>, F>,
-	layout_variant: MaybeSet<layout::variant::Definition<F>, F>,
-	list: MaybeSet<list::Definition<F>, F>,
+	ty: MetaOption<Ref<treeldr::ty::Definition<F>>, F>,
+	property: MetaOption<Ref<treeldr::prop::Definition<F>>, F>,
+	layout: MetaOption<Ref<treeldr::layout::Definition<F>>, F>,
+	layout_field: MetaOption<layout::field::Definition<F>, F>,
+	layout_variant: MetaOption<layout::variant::Definition<F>, F>,
+	list: MetaOption<list::Definition<F>, F>,
 }
 
 impl<F> Node<Components<F>> {
-	pub fn caused_types(&self) -> node::CausedTypes<F>
+	pub fn caused_types(&self) -> node::TypesMetadata<F>
 	where
 		F: Clone,
 	{
-		node::CausedTypes {
+		node::TypesMetadata {
 			ty: self
 				.value()
 				.ty
@@ -313,7 +313,7 @@ impl<F: Clone + Ord> Nodes<F> {
 		&mut self,
 		id: Id,
 		layout_ref: Ref<treeldr::layout::Definition<F>>,
-		causes: impl Into<Causes<F>>,
+		causes: impl Into<Metadata<F>>,
 	) -> Option<Node<Components<F>>> {
 		let node = Node::new_with(
 			id,

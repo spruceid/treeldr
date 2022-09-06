@@ -2,7 +2,7 @@ use crate::Error;
 use std::collections::BTreeMap;
 use treeldr::{
 	ty::data::{restriction, RegExp},
-	value, Causes, Id,
+	value, Metadata, Id,
 };
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -32,7 +32,7 @@ pub enum String {
 
 #[derive(Clone)]
 pub struct Restrictions<F> {
-	map: BTreeMap<Restriction, Causes<F>>,
+	map: BTreeMap<Restriction, Metadata<F>>,
 }
 
 impl<F> Default for Restrictions<F> {
@@ -48,13 +48,13 @@ impl<F> Restrictions<F> {
 		Self::default()
 	}
 
-	pub fn insert(&mut self, restriction: Restriction, causes: impl Into<Causes<F>>)
+	pub fn insert(&mut self, restriction: Restriction, causes: impl Into<Metadata<F>>)
 	where
 		F: Ord,
 	{
 		self.map
 			.entry(restriction)
-			.or_insert_with(Causes::new)
+			.or_insert_with(Metadata::new)
 			.extend(causes.into())
 	}
 
