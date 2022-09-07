@@ -34,14 +34,14 @@ fn find_layout<F: Clone>(
 	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	iri: Iri,
-) -> Result<Ref<layout::Definition<F>>, Error<F>> {
+) -> Result<Ref<layout::Definition<F>>, Box<Error<F>>> {
 	let name = treeldr::vocab::Term::try_from_iri(iri, vocabulary)
 		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
 	model
 		.require_layout(treeldr::Id::Iri(name))
 		.map_err(|e| match e {
-			treeldr::Error::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
-			treeldr::Error::NodeInvalidType(e) => Error::NotALayout(iri.into(), e.found),
+			treeldr::Error::NodeUnknown(_) => Box::new(Error::UndefinedLayout(iri.into())),
+			treeldr::Error::NodeInvalidType(e) => Box::new(Error::NotALayout(iri.into(), e.found)),
 		})
 }
 
@@ -61,7 +61,7 @@ impl Command {
 		self,
 		vocabulary: &Vocabulary,
 		model: &treeldr::Model<F>,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Box<Error<F>>> {
 		let mut layouts = Vec::with_capacity(self.layouts.len());
 		for layout_iri in self.layouts {
 			layouts.push(find_layout(vocabulary, model, layout_iri.as_iri())?);
@@ -78,7 +78,7 @@ impl Command {
 
 				Ok(())
 			}
-			Err(e) => Err(Error::Generation(e)),
+			Err(e) => Err(Box::new(Error::Generation(e))),
 		}
 	}
 }
