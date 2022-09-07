@@ -6,9 +6,14 @@
 ; of RFC 5234.
 
 ; TreeLDR Document.
-treeldr-document           = *item
+treeldr-document           = *WS [ item-list *WS ]
 
-item                       = *WS (base / use / type / layout / property) *WS
+item                       = base
+                           / use
+                           / type
+                           / layout
+                           / property
+item-list                  = item [ LWS item-list ]
 
 base                       = %s"base" LWS IRI-reference-literal LWS ";"
 use                        = %s"use" LWS IRI-reference-literal LWS %s"as" name ";"
@@ -25,15 +30,17 @@ layout-alias               = "=" LWS inner-layout-expr LWS ";"
 structure-definition       = [ %s"for" LWS id LWS ] "{" LWS [ field-list LWS ] "}"
 
 field-list                 = field-definition *(LWS "," LWS field-definition)
-field-definition           = doc [ attributeList LWS ] id [ LWS ":" LWS [ attributeList ] LWS layout-expr ]
+field-definition           = doc [ attribute-list LWS ] id [ LWS ":" LWS [ attribute-list ] LWS layout-expr ]
 
-property-definition        = doc [ attributeLis LWS ] id [ LWS ":" LWS [ attributeList ] LWS type-expr ]
+property-definition        = doc [ attributeLis LWS ] id [ LWS ":" LWS [ attribute-list ] LWS type-expr ]
 property-list              = property-definition *(LWS "," LWS property-definition)
 attribute                  = %s"required" / %s"multiple"
-attributeList              = attribute *(LWS "," LWS attribute)
+attribute-list             = attribute *(LWS "," LWS attribute)
 
 ; Node identifier
-id                         = name / compact-iri / IRI-reference-literal
+id                         = name
+                           / compact-iri
+                           / IRI-reference-literal
 
 ; Type expressions.
 type-expr                  = inner-named-type-expr
@@ -44,7 +51,7 @@ inner-type-expr            = id
                            / reference-layout
                            / literal
                            / property-restriction
-                           / listType
+                           / list-type
                            / "(" LWS type-expr LWS ")"
 type-union                 = inner-named-type-expr *(LWS "|" LWS inner-named-type-expr)
 type-intersection          = inner-named-type-expr *(LWS "&" LWS inner-named-type-expr)
@@ -65,8 +72,8 @@ inner-layout-expr          = id
                            / field-restriction
                            / array-layout
                            / "(" LWS layout-expr LWS ")"
-layout-union               = innerNamedLayoutExpr *(LWS "|" LWS innerNamedLayoutExpr)
-layout-intersection        = innerNamedLayoutExpr *(LWS "&" LWS innerNamedLayoutExpr)
+layout-union               = inner-named-layout-expr *(LWS "|" LWS inner-named-layout-expr)
+layout-intersection        = inner-named-layout-expr *(LWS "&" LWS inner-named-layout-expr)
 
 field-restriction          = field-range-restriction
 field-range-restriction    = (%s"any" / %s"all") [ LWS id %s"as" ] LWS name LWS ":" LWS inner-layout-expr
@@ -78,7 +85,7 @@ reference-layout           = "&" LWS inner-type-expr
 literal                    = string / regexp
 
 ; Documentation comments.
-doc                        = *WS *docLine
+doc                        = *WS *doc-line
 
 ; Productions for terminals.
 name                       = *iunreserved
@@ -87,15 +94,15 @@ suffix                     = *( ipchar / "/" ) [ "?" iquery ] [ "#" ifragment ]
                            / iprivate iquery [ "#" ifragment ]
 IRI-reference-literal      = "<" IRI-reference ">"
 
-string-char                = %x0-9 / %xb / %xc / %xe-21 / %x23-5b / %x5d-effff ; any char but %x22=" %x5C=\ %xA=new line %xD=carriage return.
+string-char                = %x0-9 / %xB / %xC / %xE-21 / %x23-5B / %x5D-EFFFF ; any char but %x22=" %x5C=\ %xA=new line %xD=carriage return.
 string                     = %x22 *(string-char / e-char / u-char) %x22 ; %x22="
-regexp-char                = %x0-9 / %xb / %xc / %xe-2e / %x30-5b / %x5d-effff ; any char but %x2F=/ %x5C=\ %xA=new line %xD=carriage return.
+regexp-char                = %x0-9 / %xB / %xC / %xe-2E / %x30-5b / %x5D-EFFFF ; any char but %x2F=/ %x5C=\ %xA=new line %xD=carriage return.
 regexp                     = "/" *(regexp-char / e-char / u-char) "/"
 u-char                     = %s"\u" HEXDIG HEXDIG HEXDIG HEXDIG
                            / %s"\U" HEXDIG HEXDIG HEXDIG HEXDIG HEXDIG HEXDIG HEXDIG HEXDIG
 e-char                     = "\" ( %s"t" / %s"b" / %s"n" / %s"r" / %s"f" / %x22 / "'" / "\" )
 
-docLine                    = "///" (%x0-9 / %xB-EFFFF) *WS ; everything but %xA=new line
+doc-line                   = "///" (%x0-9 / %xB-EFFFF) *WS ; everything but %xA=new line
 
 ; Whitespaces
 WS                         = %x20 / %x9 / %xD / %xA ; %x20=space %x9=character tabulation %xD=carriage return %xA=new line
