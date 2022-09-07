@@ -1,9 +1,8 @@
-use decoded_char::DecodedChars;
 use grdf::Dataset;
 use iref::{Iri, IriBuf};
-use json_ld::Expand;
+use json_ld::{Expand, RdfQuads};
 use json_syntax::{Parse, Print};
-use locspan::Location;
+use locspan::{Span, Meta};
 use treeldr_rust_macros::tldr;
 use treeldr_rust_prelude::{
 	json_ld::import_quad,
@@ -44,29 +43,25 @@ pub mod schema {
 
 const VC_LD_CONTEXT_URL: Iri<'static> = iri!("https://www.w3.org/2018/credentials/v1");
 
-type LocalContext<'a> = json_ld::syntax::ContextEntry<Location<&'a str>>;
-type Context<'a> = json_ld::Context<IriBuf, LocalContext<'a>>;
-type JsonLd<'a> = json_ld::syntax::Value<LocalContext<'a>, Location<&'a str>>;
-type NoLoader<'a> = json_ld::loader::NoLoader<JsonLd<'a>, Location<&'a str>>;
+type JsonLd<'a> = json_ld::syntax::Value<Span>;
+type NoLoader<'a> = json_ld::loader::NoLoader<IriBuf, JsonLd<'a>, Span>;
 
 #[async_std::main]
 async fn main() {
 	// Read JSON-LD file.
 	let filename = "examples/basic_post.jsonld";
 	let input = std::fs::read_to_string(filename).unwrap();
-	let json = json_syntax::Value::parse(filename, input.decoded_chars().map(infallible))
+	let json = json_syntax::Value::parse_str(&input, |span| span)
 		.expect("invalid JSON");
-	let json_ld = json_ld::syntax::Value::try_from_json(json).expect("invalid JSON-LD");
 
 	// Expand JSON-LD.
-	let context = Context::default();
-	let expanded_json_ld = json_ld
-		.expand(&context, &mut NoLoader::new())
+	let expanded_json_ld = json
+		.expand(None, &mut NoLoader::new())
 		.await
 		.expect("expansion failed");
 
 	// JSON-LD to RDF.
-	let mut generator = json_ld::id::generator::Blank::new();
+	let mut generator = json_ld::id::generator::Blank::new(Span::default());
 	let dataset: grdf::HashDataset<_, _, _, _> = expanded_json_ld
 		.rdf_quads(&mut generator, None)
 		.map(import_quad)
@@ -88,17 +83,13 @@ async fn main() {
 	]);
 
 	// Schema to JSON-LD.
-	let mut json_ld_out: json_ld::syntax::Value<json_ld::syntax::ContextEntry<()>, _> =
+	let mut json_ld_out: json_ld::syntax::Value<()> =
 		vc.into_json_ld();
 	json_ld_out
 		.as_object_mut()
 		.unwrap()
-		.append_context(VC_LD_CONTEXT_URL.into());
+		.insert(Meta("@context".into(), ()), Meta(VC_LD_CONTEXT_URL.as_str().into(), ()));
 
 	// Print the result.
 	println!("{}", json_ld_out.pretty_print());
-}
-
-fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
-	Ok(t)
 }
