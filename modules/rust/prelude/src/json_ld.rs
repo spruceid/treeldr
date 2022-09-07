@@ -34,9 +34,12 @@ impl<I: std::fmt::Display, B: std::fmt::Display, M> IntoJsonLd<M> for Subject<I,
 	}
 }
 
-pub fn import_quad<'a>(
-	Quad(subject, predicate, object, graph): json_ld::rdf::QuadRef<'a, IriBuf, BlankIdBuf>,
-) -> Quad<Subject<IriBuf>, Subject<IriBuf>, Object<Subject<IriBuf>>, &'a ValidReference<IriBuf>> {
+pub type ImportedQuad<'a> =
+	Quad<Subject<IriBuf>, Subject<IriBuf>, Object<Subject<IriBuf>>, &'a ValidReference<IriBuf>>;
+
+pub fn import_quad(
+	Quad(subject, predicate, object, graph): json_ld::rdf::QuadRef<IriBuf, BlankIdBuf>,
+) -> ImportedQuad {
 	let subject = subject.as_ref().clone().into_rdf_subject();
 	let predicate = predicate.as_ref().clone().into_rdf_subject();
 

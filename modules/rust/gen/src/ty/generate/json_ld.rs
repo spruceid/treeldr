@@ -61,8 +61,8 @@ pub fn structure_builder<F>(
 	}
 
 	Ok(quote! {
-		impl<C> ::treeldr_rust_prelude::IntoJsonLd<C, ()> for #ident {
-			fn into_json_ld(self) -> ::json_ld::syntax::Value<C, ()> {
+		impl ::treeldr_rust_prelude::IntoJsonLd<()> for #ident {
+			fn into_json_ld(self) -> ::json_ld::syntax::Value<()> {
 				let mut result = json_ld::syntax::Object::new();
 
 				#(#insert_field)*
@@ -75,13 +75,13 @@ pub fn structure_builder<F>(
 
 /// Creates a JSON-LD node object from an enumeration.
 pub fn enum_builder<F>(
-	context: &Context<F>,
-	ty: &Enum<F>,
+	_context: &Context<F>,
+	_ty: &Enum<F>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	Ok(quote! {
-		impl<C> ::treeldr_rust_prelude::IntoJsonLd<C, ()> for #ident {
-			fn into_json_ld(self) -> ::json_ld::syntax::Value<C, ()> {
+		impl ::treeldr_rust_prelude::IntoJsonLd<()> for #ident {
+			fn into_json_ld(self) -> ::json_ld::syntax::Value<()> {
 				todo!()
 			}
 		}

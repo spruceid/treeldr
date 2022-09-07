@@ -4,20 +4,46 @@ use locspan::{Loc, Location, MapLocErr};
 use std::{fmt, fmt::Debug};
 use treeldr::reporting;
 
+#[derive(Debug)]
+pub struct Unexpected(Option<Token>, Vec<lexing::TokenKind>);
+
+impl Unexpected {
+	pub fn expected(&self) -> &[lexing::TokenKind] {
+		&self.1
+	}
+}
+
+impl fmt::Display for Unexpected {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self(None, _) => write!(f, "unexpected end of text"),
+			Self(Some(token), _) => write!(f, "unexpected {}", token),
+		}
+	}
+}
+
+pub type LocError<E, F> = Box<Loc<Error<E>, F>>;
+
 /// Parse error.
 #[derive(Debug)]
 pub enum Error<E> {
-	Unexpected(Option<Token>, Vec<lexing::TokenKind>),
+	Unexpected(Box<Unexpected>),
 	InvalidUseId(Id),
 	InvalidPrefix(Id),
 	InvalidAlias(Id),
 	Lexer(E),
 }
 
+impl<E> Error<E> {
+	pub fn unexpected(token: Option<Token>, expected: Vec<lexing::TokenKind>) -> Self {
+		Self::Unexpected(Box::new(Unexpected(token, expected)))
+	}
+}
+
 impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithCause<F> for Error<E> {
 	fn message(&self, _cause: Option<&Location<F>>) -> String {
 		match self {
-			Self::Unexpected(_, _) => "parsing error".to_owned(),
+			Self::Unexpected(_) => "parsing error".to_owned(),
 			Self::InvalidUseId(_) => "invalid use IRI".to_owned(),
 			Self::InvalidPrefix(_) => "invalid prefix".to_owned(),
 			Self::InvalidAlias(_) => "invalid alias".to_owned(),
@@ -38,12 +64,12 @@ impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithCause<F> for Erro
 	}
 
 	fn notes(&self, _cause: Option<&Location<F>>) -> Vec<String> {
-		if let Error::Unexpected(_, expected) = self {
-			if !expected.is_empty() {
+		if let Error::Unexpected(e) = self {
+			if !e.expected().is_empty() {
 				let mut note = "expected ".to_owned();
 
-				let len = expected.len();
-				for (i, token) in expected.iter().enumerate() {
+				let len = e.expected().len();
+				for (i, token) in e.expected().iter().enumerate() {
 					if i > 0 {
 						if i + 1 == len {
 							note.push_str(" or ");
@@ -66,8 +92,7 @@ impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithCause<F> for Erro
 impl<E: Debug + fmt::Display> fmt::Display for Error<E> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			Self::Unexpected(None, _) => write!(f, "unexpected end of text"),
-			Self::Unexpected(Some(token), _) => write!(f, "unexpected {}", token),
+			Self::Unexpected(e) => fmt::Display::fmt(e, f),
 			Self::InvalidUseId(id) => write!(f, "invalid use IRI `{}`", id),
 			Self::InvalidPrefix(id) => write!(f, "invalid prefix `{}`", id),
 			Self::InvalidAlias(id) => write!(f, "invalid alias `{}`", id),
@@ -81,10 +106,13 @@ pub trait Parse<F>: Sized {
 	const FIRST: &'static [TokenKind];
 
 	#[allow(clippy::type_complexity)]
-	fn parse<L: Tokens<F>>(lexer: &mut L) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	fn parse<L: Tokens<F>>(lexer: &mut L) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		match lexer.next().map_loc_err(Error::Lexer)? {
 			Meta(Some(token), loc) => Self::parse_from(lexer, token, loc),
-			Meta(None, loc) => Err(Loc(Error::Unexpected(None, Self::FIRST.to_vec()), loc)),
+			Meta(None, loc) => Err(Box::new(Loc(
+				Error::unexpected(None, Self::FIRST.to_vec()),
+				loc,
+			))),
 		}
 	}
 
@@ -92,7 +120,7 @@ pub trait Parse<F>: Sized {
 	fn parse_from_continuation<L: Tokens<F>>(
 		lexer: &mut L,
 		token_opt: Option<Loc<Token, F>>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		match token_opt {
 			Some(Meta(token, loc)) => Self::parse_from(lexer, token, loc),
 			None => Self::parse(lexer),
@@ -104,12 +132,12 @@ pub trait Parse<F>: Sized {
 		lexer: &mut L,
 		token: Token,
 		loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>>;
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>>;
 
 	#[allow(clippy::type_complexity)]
 	fn try_parse<L: Tokens<F>>(
 		lexer: &mut L,
-	) -> Result<Option<Loc<Self, F>>, Loc<Error<L::Error>, F>> {
+	) -> Result<Option<Loc<Self, F>>, LocError<L::Error, F>> {
 		match lexer.peek().map_loc_err(Error::Lexer)? {
 			Meta(Some(token), _) => {
 				if token.kind().matches_any(Self::FIRST) {
@@ -126,7 +154,7 @@ pub trait Parse<F>: Sized {
 	fn try_parse_from_continuation<L: Tokens<F>>(
 		lexer: &mut L,
 		token_opt: Option<Loc<Token, F>>,
-	) -> Result<Option<Loc<Self, F>>, Loc<Error<L::Error>, F>> {
+	) -> Result<Option<Loc<Self, F>>, LocError<L::Error, F>> {
 		match token_opt {
 			Some(Meta(token, loc)) => {
 				if token.kind().matches_any(Self::FIRST) {
@@ -144,7 +172,7 @@ pub trait Parse<F>: Sized {
 		lexer: &mut L,
 		token: Token,
 		loc: Location<F>,
-	) -> Result<(Option<Loc<Self, F>>, Option<Loc<Token, F>>), Loc<Error<L::Error>, F>> {
+	) -> Result<(Option<Loc<Self, F>>, Option<Loc<Token, F>>), LocError<L::Error, F>> {
 		if token.kind().matches_any(Self::FIRST) {
 			Ok((Some(Self::parse_from(lexer, token, loc)?), None))
 		} else {
@@ -156,24 +184,24 @@ pub trait Parse<F>: Sized {
 #[allow(clippy::type_complexity)]
 fn peek_token<F, L: Tokens<F>>(
 	tokens: &mut L,
-) -> Result<Loc<Option<&Token>, F>, Loc<Error<L::Error>, F>> {
-	tokens.peek().map_loc_err(Error::Lexer)
+) -> Result<Loc<Option<&Token>, F>, LocError<L::Error, F>> {
+	tokens.peek().map_loc_err(Error::Lexer).map_err(Box::new)
 }
 
 #[allow(clippy::type_complexity)]
 fn next_token<F, L: Tokens<F>>(
 	tokens: &mut L,
-) -> Result<Loc<Option<Token>, F>, Loc<Error<L::Error>, F>> {
-	tokens.next().map_loc_err(Error::Lexer)
+) -> Result<Loc<Option<Token>, F>, LocError<L::Error, F>> {
+	tokens.next().map_loc_err(Error::Lexer).map_err(Box::new)
 }
 
 #[allow(clippy::type_complexity)]
 fn next_expected_token<F, L: Tokens<F>>(
 	tokens: &mut L,
 	expected: impl FnOnce() -> Vec<TokenKind>,
-) -> Result<Loc<Token, F>, Loc<Error<L::Error>, F>> {
+) -> Result<Loc<Token, F>, LocError<L::Error, F>> {
 	match next_token(tokens)? {
-		Meta(None, loc) => Err(Loc::new(Error::Unexpected(None, expected()), loc)),
+		Meta(None, loc) => Err(Box::new(Loc::new(Error::unexpected(None, expected()), loc))),
 		Meta(Some(token), loc) => Ok(Loc::new(token, loc)),
 	}
 }
@@ -183,7 +211,7 @@ fn next_expected_token_from<F, L: Tokens<F>>(
 	tokens: &mut L,
 	token_opt: Option<Loc<Token, F>>,
 	expected: impl FnOnce() -> Vec<TokenKind>,
-) -> Result<Loc<Token, F>, Loc<Error<L::Error>, F>> {
+) -> Result<Loc<Token, F>, LocError<L::Error, F>> {
 	match token_opt {
 		Some(token) => Ok(token),
 		None => next_expected_token(tokens, expected),
@@ -193,7 +221,7 @@ fn next_expected_token_from<F, L: Tokens<F>>(
 #[allow(clippy::type_complexity)]
 fn parse_comma_separated_list<F, L: Tokens<F>, T: Parse<F>>(
 	lexer: &mut L,
-) -> Result<Vec<Loc<T, F>>, Loc<Error<L::Error>, F>> {
+) -> Result<Vec<Loc<T, F>>, LocError<L::Error, F>> {
 	let mut list = Vec::new();
 
 	while let Some(item) = T::try_parse(lexer)? {
@@ -214,15 +242,15 @@ fn parse_comma_separated_list<F, L: Tokens<F>, T: Parse<F>>(
 fn parse_block<F, L: Tokens<F>, T: Parse<F>>(
 	lexer: &mut L,
 	mut loc: Location<F>,
-) -> Result<Loc<Vec<Loc<T, F>>, F>, Loc<Error<L::Error>, F>> {
+) -> Result<Loc<Vec<Loc<T, F>>, F>, LocError<L::Error, F>> {
 	let items = parse_comma_separated_list(lexer)?;
 	match next_token(lexer)? {
 		Meta(Some(Token::End(Delimiter::Brace)), end_loc) => {
 			loc.span_mut().append(end_loc.span());
 			Ok(Loc::new(items, loc))
 		}
-		Meta(unexpected, loc) => Err(Loc::new(
-			Error::Unexpected(
+		Meta(unexpected, loc) => Err(Box::new(Loc::new(
+			Error::unexpected(
 				unexpected,
 				vec![
 					TokenKind::Punct(Punct::Comma),
@@ -230,59 +258,59 @@ fn parse_block<F, L: Tokens<F>, T: Parse<F>>(
 				],
 			),
 			loc,
-		)),
+		))),
 	}
 }
 
 fn parse_keyword<F, L: Tokens<F>>(
 	tokens: &mut L,
 	keyword: lexing::Keyword,
-) -> Result<(), Loc<Error<L::Error>, F>> {
+) -> Result<(), LocError<L::Error, F>> {
 	let Meta(token, span) = next_expected_token(tokens, || vec![TokenKind::Keyword(keyword)])?;
 
 	match token {
 		Token::Keyword(k) if k == keyword => Ok(()),
-		unexpected => Err(Loc::new(
-			Error::Unexpected(Some(unexpected), vec![TokenKind::Keyword(keyword)]),
+		unexpected => Err(Box::new(Loc::new(
+			Error::unexpected(Some(unexpected), vec![TokenKind::Keyword(keyword)]),
 			span,
-		)),
+		))),
 	}
 }
 
 fn parse_punct<F, L: Tokens<F>>(
 	tokens: &mut L,
 	punct: lexing::Punct,
-) -> Result<(), Loc<Error<L::Error>, F>> {
+) -> Result<(), LocError<L::Error, F>> {
 	let Meta(token, span) = next_expected_token(tokens, || vec![TokenKind::Punct(punct)])?;
 
 	match token {
 		Token::Punct(p) if p == punct => Ok(()),
-		unexpected => Err(Loc::new(
-			Error::Unexpected(Some(unexpected), vec![TokenKind::Punct(punct)]),
+		unexpected => Err(Box::new(Loc::new(
+			Error::unexpected(Some(unexpected), vec![TokenKind::Punct(punct)]),
 			span,
-		)),
+		))),
 	}
 }
 
 fn parse_end<F, L: Tokens<F>>(
 	tokens: &mut L,
 	delimiter: Delimiter,
-) -> Result<Location<F>, Loc<Error<L::Error>, F>> {
+) -> Result<Location<F>, LocError<L::Error, F>> {
 	let Meta(token, loc) = next_expected_token(tokens, || vec![TokenKind::End(delimiter)])?;
 
 	match token {
 		Token::End(d) if d == delimiter => Ok(loc),
-		unexpected => Err(Loc::new(
-			Error::Unexpected(Some(unexpected), vec![TokenKind::End(delimiter)]),
+		unexpected => Err(Box::new(Loc::new(
+			Error::unexpected(Some(unexpected), vec![TokenKind::End(delimiter)]),
 			loc,
-		)),
+		))),
 	}
 }
 
 impl<F: Clone> Parse<F> for Document<F> {
 	const FIRST: &'static [TokenKind] = Item::<F>::FIRST;
 
-	fn parse<L: Tokens<F>>(lexer: &mut L) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	fn parse<L: Tokens<F>>(lexer: &mut L) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		match lexer.next().map_loc_err(Error::Lexer)? {
 			Meta(Some(token), loc) => Self::parse_from(lexer, token, loc),
 			Meta(None, loc) => Ok(Loc::new(
@@ -302,7 +330,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 		lexer: &mut L,
 		token: Token,
 		loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let mut bases = Vec::new();
 		let mut uses = Vec::new();
 		let mut types = Vec::new();
@@ -356,14 +384,14 @@ impl<F> Parse<F> for Id {
 		_lexer: &mut L,
 		token: Token,
 		loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		match token {
 			Token::Id(id) => Ok(Loc::new(id, loc)),
 			Token::Keyword(kw) => Ok(Loc::new(Id::Name(kw.to_string()), loc)),
-			unexpected => Err(Loc::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::Id]),
+			unexpected => Err(Box::new(Loc::new(
+				Error::unexpected(Some(unexpected), vec![TokenKind::Id]),
 				loc,
-			)),
+			))),
 		}
 	}
 }
@@ -375,7 +403,7 @@ impl<F: Clone> Parse<F> for Documentation<F> {
 		lexer: &mut L,
 		token: Token,
 		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let mut items = Vec::new();
 		match token {
 			Token::Doc(doc) => {
@@ -391,10 +419,10 @@ impl<F: Clone> Parse<F> for Documentation<F> {
 					}
 				}
 			}
-			unexpected => Err(Loc::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::Id]),
+			unexpected => Err(Box::new(Loc::new(
+				Error::unexpected(Some(unexpected), vec![TokenKind::Id]),
 				loc,
-			)),
+			))),
 		}
 	}
 }
@@ -412,7 +440,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 		lexer: &mut L,
 		token: Token,
 		token_loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let (doc, k) = Documentation::try_parse_from(lexer, token, token_loc)?;
 
 		let Meta(token, mut loc) = next_expected_token_from(lexer, k, || Self::FIRST.to_vec())?;
@@ -424,10 +452,13 @@ impl<F: Clone> Parse<F> for Item<F> {
 					Meta(Id::IriRef(iri_ref), loc) => match IriBuf::try_from(iri_ref) {
 						Ok(iri) => Loc::new(iri, loc),
 						Err(iri_ref) => {
-							return Err(Loc::new(Error::InvalidUseId(Id::IriRef(iri_ref)), loc))
+							return Err(Box::new(Loc::new(
+								Error::InvalidUseId(Id::IriRef(iri_ref)),
+								loc,
+							)))
 						}
 					},
-					Meta(id, loc) => return Err(Loc::new(Error::InvalidUseId(id), loc)),
+					Meta(id, loc) => return Err(Box::new(Loc::new(Error::InvalidUseId(id), loc))),
 				};
 
 				parse_punct(lexer, Punct::Semicolon)?;
@@ -440,10 +471,13 @@ impl<F: Clone> Parse<F> for Item<F> {
 					Meta(Id::IriRef(iri_ref), loc) => match IriBuf::try_from(iri_ref) {
 						Ok(iri) => Loc::new(iri, loc),
 						Err(iri_ref) => {
-							return Err(Loc::new(Error::InvalidUseId(Id::IriRef(iri_ref)), loc))
+							return Err(Box::new(Loc::new(
+								Error::InvalidUseId(Id::IriRef(iri_ref)),
+								loc,
+							)))
 						}
 					},
-					Meta(id, loc) => return Err(Loc::new(Error::InvalidUseId(id), loc)),
+					Meta(id, loc) => return Err(Box::new(Loc::new(Error::InvalidUseId(id), loc))),
 				};
 
 				parse_keyword(lexer, lexing::Keyword::As)?;
@@ -510,8 +544,8 @@ impl<F: Clone> Parse<F> for Item<F> {
 						)
 					}
 					Meta(unexpected, loc) => {
-						return Err(Loc::new(
-							Error::Unexpected(
+						return Err(Box::new(Loc::new(
+							Error::unexpected(
 								unexpected,
 								vec![
 									TokenKind::Begin(Delimiter::Brace),
@@ -519,7 +553,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 								],
 							),
 							loc,
-						));
+						)));
 					}
 				};
 
@@ -549,8 +583,8 @@ impl<F: Clone> Parse<F> for Item<F> {
 					}
 					Meta(Some(Token::Punct(Punct::Semicolon)), _) => None,
 					Meta(unexpected, loc) => {
-						return Err(Loc::new(
-							Error::Unexpected(
+						return Err(Box::new(Loc::new(
+							Error::unexpected(
 								unexpected,
 								vec![
 									TokenKind::Punct(Punct::Colon),
@@ -558,7 +592,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 								],
 							),
 							loc,
-						));
+						)));
 					}
 				};
 
@@ -602,8 +636,8 @@ impl<F: Clone> Parse<F> for Item<F> {
 						Loc(LayoutDescription::Normal(Vec::new()), loc)
 					}
 					Meta(unexpected, loc) => {
-						return Err(Loc::new(
-							Error::Unexpected(
+						return Err(Box::new(Loc::new(
+							Error::unexpected(
 								unexpected,
 								vec![
 									TokenKind::Begin(Delimiter::Brace),
@@ -611,7 +645,7 @@ impl<F: Clone> Parse<F> for Item<F> {
 								],
 							),
 							loc,
-						));
+						)));
 					}
 				};
 
@@ -629,10 +663,10 @@ impl<F: Clone> Parse<F> for Item<F> {
 					loc,
 				))
 			}
-			unexpected => Err(Loc::new(
-				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
+			unexpected => Err(Box::new(Loc::new(
+				Error::unexpected(Some(unexpected), Self::FIRST.to_vec()),
 				loc,
-			)),
+			))),
 		}
 	}
 }
@@ -650,7 +684,7 @@ impl<F: Clone> Parse<F> for LayoutDescription<F> {
 		lexer: &mut L,
 		token: Token,
 		loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		match token {
 			Token::Begin(Delimiter::Brace) => {
 				let Meta(fields, loc) = parse_block(lexer, loc)?;
@@ -673,7 +707,7 @@ impl<F: Clone> Parse<F> for PropertyDefinition<F> {
 		lexer: &mut L,
 		token: Token,
 		token_loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let (doc, k) = Documentation::try_parse_from(lexer, token, token_loc)?;
 
 		let id = Id::parse_from_continuation(lexer, k)?;
@@ -710,7 +744,7 @@ impl<F: Clone> Parse<F> for FieldDefinition<F> {
 		lexer: &mut L,
 		token: Token,
 		token_loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let (doc, k) = Documentation::try_parse_from(lexer, token, token_loc)?;
 		let id = Id::parse_from_continuation(lexer, k)?;
 		let mut loc = id.location().clone();
@@ -754,14 +788,14 @@ impl<F> Parse<F> for Alias {
 		_lexer: &mut L,
 		token: Token,
 		loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		match token {
 			Token::Id(Id::Name(alias)) => Ok(Loc::new(Alias(alias), loc)),
-			Token::Id(id) => Err(Loc::new(Error::InvalidAlias(id), loc)),
-			unexpected => Err(Loc::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::Id]),
+			Token::Id(id) => Err(Box::new(Loc::new(Error::InvalidAlias(id), loc))),
+			unexpected => Err(Box::new(Loc::new(
+				Error::unexpected(Some(unexpected), vec![TokenKind::Id]),
 				loc,
-			)),
+			))),
 		}
 	}
 }
@@ -773,14 +807,14 @@ impl<F> Parse<F> for Prefix {
 		_lexer: &mut L,
 		token: Token,
 		loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		match token {
 			Token::Id(Id::Name(alias)) => Ok(Loc::new(Prefix(alias), loc)),
-			Token::Id(id) => Err(Loc::new(Error::InvalidPrefix(id), loc)),
-			unexpected => Err(Loc::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::Id]),
+			Token::Id(id) => Err(Box::new(Loc::new(Error::InvalidPrefix(id), loc))),
+			unexpected => Err(Box::new(Loc::new(
+				Error::unexpected(Some(unexpected), vec![TokenKind::Id]),
 				loc,
-			)),
+			))),
 		}
 	}
 }
@@ -800,7 +834,7 @@ impl<F: Clone> Parse<F> for AnnotatedTypeExpr<F> {
 		lexer: &mut L,
 		token: Token,
 		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let mut annotations = Vec::new();
 
 		let k = match token {
@@ -845,7 +879,7 @@ impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
 		lexer: &mut L,
 		token: Token,
 		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let Meta(first, first_loc) = NamedInnerTypeExpr::parse_from(lexer, token, loc.clone())?;
 
 		match peek_token(lexer)? {
@@ -889,7 +923,7 @@ impl<F: Clone> Parse<F> for NamedInnerTypeExpr<F> {
 		lexer: &mut L,
 		token: Token,
 		loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let expr = InnerTypeExpr::parse_from(lexer, token, loc)?;
 		let mut loc = expr.location().clone();
 
@@ -927,7 +961,7 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 		lexer: &mut L,
 		token: Token,
 		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		match token {
 			Token::Keyword(Keyword::All) => {
 				#[allow(clippy::type_complexity)]
@@ -936,7 +970,7 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 					prop: Loc<Id, F>,
 					alias: Option<Loc<Alias, F>>,
 					mut loc: Location<F>,
-				) -> Result<Loc<TypeRestrictedProperty<F>, F>, Loc<Error<L::Error>, F>>
+				) -> Result<Loc<TypeRestrictedProperty<F>, F>, LocError<L::Error, F>>
 				where
 					F: Clone,
 				{
@@ -971,21 +1005,21 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 									parse_property_restriction(lexer, id, Some(alias), loc)?;
 								Ok(restriction.map(Self::PropertyRestriction))
 							}
-							Meta(unexpected, loc) => Err(Loc::new(
-								Error::Unexpected(
+							Meta(unexpected, loc) => Err(Box::new(Loc::new(
+								Error::unexpected(
 									Some(unexpected),
 									vec![TokenKind::Punct(lexing::Punct::Colon)],
 								),
 								loc,
-							)),
+							))),
 						}
 					}
 					Meta(Some(Token::Punct(lexing::Punct::Colon)), _) => {
 						let restriction = parse_property_restriction(lexer, id, None, loc)?;
 						Ok(restriction.map(Self::PropertyRestriction))
 					}
-					Meta(unexpected, loc) => Err(Loc::new(
-						Error::Unexpected(
+					Meta(unexpected, loc) => Err(Box::new(Loc::new(
+						Error::unexpected(
 							unexpected,
 							vec![
 								TokenKind::Keyword(Keyword::As),
@@ -993,7 +1027,7 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 							],
 						),
 						loc,
-					)),
+					))),
 				}
 			}
 			token => match token.no_keyword() {
@@ -1017,10 +1051,10 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 						.append(parse_end(lexer, Delimiter::Parenthesis)?.span());
 					Ok(Loc(Self::Outer(Box::new(outer)), loc))
 				}
-				unexpected => Err(Loc::new(
-					Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
+				unexpected => Err(Box::new(Loc::new(
+					Error::unexpected(Some(unexpected), Self::FIRST.to_vec()),
 					loc,
-				)),
+				))),
 			},
 		}
 	}
@@ -1041,7 +1075,7 @@ impl<F: Clone> Parse<F> for AnnotatedLayoutExpr<F> {
 		lexer: &mut L,
 		token: Token,
 		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let mut annotations = Vec::new();
 
 		let k = match token {
@@ -1086,7 +1120,7 @@ impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
 		lexer: &mut L,
 		token: Token,
 		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let Meta(first, first_loc) = NamedInnerLayoutExpr::parse_from(lexer, token, loc.clone())?;
 
 		match peek_token(lexer)? {
@@ -1130,7 +1164,7 @@ impl<F: Clone> Parse<F> for NamedInnerLayoutExpr<F> {
 		lexer: &mut L,
 		token: Token,
 		loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		let expr = InnerLayoutExpr::parse_from(lexer, token, loc)?;
 		let mut loc = expr.location().clone();
 		let name = if let Meta(Some(Token::Keyword(Keyword::As)), _) = peek_token(lexer)? {
@@ -1159,7 +1193,7 @@ impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
 		lexer: &mut L,
 		token: Token,
 		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, Loc<Error<L::Error>, F>> {
+	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
 		match token.no_keyword() {
 			Token::Id(id) => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
 			Token::Punct(lexing::Punct::Ampersand) => {
@@ -1181,10 +1215,10 @@ impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
 					.append(parse_end(lexer, Delimiter::Parenthesis)?.span());
 				Ok(Loc(Self::Outer(Box::new(outer)), loc))
 			}
-			unexpected => Err(Loc::new(
-				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
+			unexpected => Err(Box::new(Loc::new(
+				Error::unexpected(Some(unexpected), Self::FIRST.to_vec()),
 				loc,
-			)),
+			))),
 		}
 	}
 }

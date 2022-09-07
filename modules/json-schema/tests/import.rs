@@ -1,5 +1,4 @@
 use iref::Iri;
-use locspan::Loc;
 use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;

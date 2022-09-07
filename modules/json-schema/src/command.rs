@@ -21,10 +21,12 @@ pub struct Command {
 	type_property: Option<String>,
 }
 
+pub struct NotALayoutError<F>(pub IriBuf, pub treeldr::node::CausedTypes<F>);
+
 pub enum Error<F> {
 	NoLayoutName(String),
 	UndefinedLayout(IriBuf),
-	NotALayout(IriBuf, treeldr::node::CausedTypes<F>),
+	NotALayout(Box<NotALayoutError<F>>),
 	InfiniteSchema(String),
 	Serialization(serde_json::Error),
 }
@@ -34,7 +36,7 @@ impl<F> fmt::Display for Error<F> {
 		match self {
 			Self::NoLayoutName(iri) => write!(f, "layout `{}` has no name", iri),
 			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{}`", iri),
-			Self::NotALayout(iri, _) => write!(f, "node `{}` is not a layout", iri),
+			Self::NotALayout(e) => write!(f, "node `{}` is not a layout", e.0),
 			Self::InfiniteSchema(iri) => write!(f, "infinite schema `{}`", iri),
 			Self::Serialization(e) => write!(f, "JSON serialization failed: {}", e),
 		}
@@ -45,14 +47,16 @@ fn find_layout<F: Clone>(
 	vocabulary: &Vocabulary,
 	model: &treeldr::Model<F>,
 	iri: Iri,
-) -> Result<Ref<layout::Definition<F>>, Error<F>> {
+) -> Result<Ref<layout::Definition<F>>, Box<Error<F>>> {
 	let name = treeldr::vocab::Term::try_from_iri(iri, vocabulary)
 		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
 	model
 		.require_layout(treeldr::Id::Iri(name))
 		.map_err(|e| match e {
-			treeldr::Error::NodeUnknown(_) => Error::UndefinedLayout(iri.into()),
-			treeldr::Error::NodeInvalidType(e) => Error::NotALayout(iri.into(), e.found),
+			treeldr::Error::NodeUnknown(_) => Box::new(Error::UndefinedLayout(iri.into())),
+			treeldr::Error::NodeInvalidType(e) => Box::new(Error::NotALayout(Box::new(
+				NotALayoutError(iri.into(), e.found),
+			))),
 		})
 }
 
@@ -72,7 +76,7 @@ impl Command {
 		self,
 		vocabulary: &Vocabulary,
 		model: &treeldr::Model<F>,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Box<Error<F>>> {
 		// Find the layouts to generate.
 		let mut layouts = Vec::new();
 
@@ -102,7 +106,7 @@ impl Command {
 			main_layout_ref,
 		) {
 			Ok(()) => Ok(()),
-			Err(crate::Error::NoLayoutName(r)) => Err(Error::NoLayoutName(
+			Err(crate::Error::NoLayoutName(r)) => Err(Box::new(Error::NoLayoutName(
 				model
 					.layouts()
 					.get(r)
@@ -110,8 +114,8 @@ impl Command {
 					.id()
 					.display(vocabulary)
 					.to_string(),
-			)),
-			Err(crate::Error::InfiniteSchema(r)) => Err(Error::InfiniteSchema(
+			))),
+			Err(crate::Error::InfiniteSchema(r)) => Err(Box::new(Error::InfiniteSchema(
 				model
 					.layouts()
 					.get(r)
@@ -119,8 +123,8 @@ impl Command {
 					.id()
 					.display(vocabulary)
 					.to_string(),
-			)),
-			Err(crate::Error::Serialization(e)) => Err(Error::Serialization(e)),
+			))),
+			Err(crate::Error::Serialization(e)) => Err(Box::new(Error::Serialization(e))),
 		}
 	}
 }

@@ -265,7 +265,10 @@ impl<F: Clone> LocalContext<F> {
 				iri.path_mut().open();
 				Ok(iri)
 			}
-			_ => self.base_iri.clone().ok_or(Loc(LocalError::NoBaseIri, loc)),
+			_ => self
+				.base_iri
+				.clone()
+				.ok_or_else(|| Loc(LocalError::NoBaseIri, loc)),
 		}
 	}
 
