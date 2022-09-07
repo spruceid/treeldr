@@ -1,14 +1,21 @@
-<https://example.com/product.schema.json> <https://treeldr.org/fields> _:3 .
-<https://example.com/product.schema.json> <http://www.w3.org/2000/01/rdf-schema#label> "Product" .
-<https://example.com/product.schema.json> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
-<https://example.com/product.schema.json> <https://treeldr.org/name> "product" .
+_:7 <http://www.w3.org/2000/01/rdf-schema#label> "The unique identifier for a product" .
+_:7 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Field> .
+_:7 <https://treeldr.org/format> _:4 .
+_:7 <https://treeldr.org/name> "productId" .
+_:5 <http://www.w3.org/2000/01/rdf-schema#label> "The unique identifier for a product" .
+_:4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+_:4 <https://treeldr.org/required> <https://treeldr.org/Integer> .
+_:2 <https://treeldr.org/option> _:1 .
+_:2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+_:1 <https://treeldr.org/layoutFor> <http://www.w3.org/2000/01/rdf-schema#Resource> .
+_:1 <https://treeldr.org/name> "resource_id" .
+_:1 <https://treeldr.org/reference> <https://treeldr.org/IRI> .
+_:1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+_:8 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:7 .
+_:8 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+_:8 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
 <https://example.com/product.schema.json> <http://www.w3.org/2000/01/rdf-schema#comment> "A product from Acme's catalog" .
-_:2 <http://www.w3.org/2000/01/rdf-schema#label> "The unique identifier for a product" .
-_:2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Field> .
-_:2 <https://treeldr.org/name> "product_id" .
-_:2 <https://schema.org/valueRequired> <https://schema.org/True> .
-_:2 <https://treeldr.org/format> <https://treeldr.org/Integer> .
-_:3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:2 .
-_:3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
-_:3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
-_:0 <http://www.w3.org/2000/01/rdf-schema#label> "The unique identifier for a product" .
+<https://example.com/product.schema.json> <https://treeldr.org/fields> _:8 .
+<https://example.com/product.schema.json> <https://treeldr.org/name> "Product" .
+<https://example.com/product.schema.json> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<https://example.com/product.schema.json> <http://www.w3.org/2000/01/rdf-schema#label> "Product" .
