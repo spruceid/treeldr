@@ -17,8 +17,8 @@ item-list                  = item [ LWS item-list ]
 
 base                       = %s"base" LWS IRI-reference-literal LWS ";"
 use                        = %s"use" LWS IRI-reference-literal LWS %s"as" name ";"
-type                       = doc %s"type" LWS ref LWS type-description
-layout                     = doc %s"layout" LWS ref LWS layout-description
+type                       = doc %s"type" LWS id LWS type-description
+layout                     = doc %s"layout" LWS id LWS layout-description
 property                   = doc %s"property" LWS property-definition ";"
 
 type-description           = type-alias / normal-type-definition
