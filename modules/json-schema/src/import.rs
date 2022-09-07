@@ -459,7 +459,7 @@ fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 			let layout_id = Id::Blank(vocabulary.new_blank_label());
 			context.declare_layout(layout_id, None);
 			let layout = context.get_mut(layout_id).unwrap().as_layout_mut().unwrap();
-		
+
 			if is_required {
 				layout.set_required(layout_item_id, None)?;
 			} else {
