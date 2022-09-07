@@ -78,8 +78,31 @@ impl<F> Description<F> {
 
 					sub_layouts.push(SubLayout {
 						layout: field_layout_id.clone(),
-						connection: LayoutConnection::Field(field_id),
+						connection: LayoutConnection::FieldContainer(field_id),
 					});
+
+					let field_layout = context.require_layout(**field_layout_id, field_layout_id.causes().preferred().cloned())?;
+					if let Some(container_desc) = field_layout.description() {
+						match container_desc.as_standard() {
+							Some(standard_desc) => {
+								let item_layout_id = match standard_desc {
+									Description::Required(id) => id.clone(),
+									Description::Option(id) => id.clone(),
+									Description::Set(id) => id.clone(),
+									Description::Array(a) => a.item_layout().clone(),
+									_ => panic!("invalid field layout: not a container")
+								};
+		
+								sub_layouts.push(SubLayout {
+									layout: WithCauses::new(item_layout_id, container_desc.causes().clone()),
+									connection: LayoutConnection::FieldItem(field_id),
+								});
+							}
+							None => {
+								panic!("invalid field layout: not a container")
+							}
+						}
+					}
 				}
 			}
 			Description::Set(item_layout_id) => sub_layouts.push(SubLayout {
@@ -367,7 +390,8 @@ pub struct Definition<F, D = Description<F>> {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum LayoutConnection {
-	Field(Id),
+	FieldContainer(Id),
+	FieldItem(Id),
 	Variant(Id),
 	Item,
 }
@@ -653,7 +677,7 @@ impl<F: Clone + Ord> Definition<F> {
 
 			if let Some(parent_layout_name) = parent_layout.name() {
 				match parent.connection {
-					LayoutConnection::Field(field_id) => {
+					LayoutConnection::FieldItem(field_id) => {
 						let field = context
 							.require_layout_field(field_id, cause.clone())?
 							.inner();
