@@ -75,8 +75,8 @@ pub fn structure_builder<F>(
 
 /// Creates a JSON-LD node object from an enumeration.
 pub fn enum_builder<F>(
-	context: &Context<F>,
-	ty: &Enum<F>,
+	_context: &Context<F>,
+	_ty: &Enum<F>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	Ok(quote! {

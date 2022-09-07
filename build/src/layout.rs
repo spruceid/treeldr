@@ -81,20 +81,26 @@ impl<F> Description<F> {
 						connection: LayoutConnection::FieldContainer(field_id),
 					});
 
-					let field_layout = context.require_layout(**field_layout_id, field_layout_id.causes().preferred().cloned())?;
+					let field_layout = context.require_layout(
+						**field_layout_id,
+						field_layout_id.causes().preferred().cloned(),
+					)?;
 					if let Some(container_desc) = field_layout.description() {
 						match container_desc.as_standard() {
 							Some(standard_desc) => {
 								let item_layout_id = match standard_desc {
-									Description::Required(id) => id.clone(),
-									Description::Option(id) => id.clone(),
-									Description::Set(id) => id.clone(),
-									Description::Array(a) => a.item_layout().clone(),
-									_ => panic!("invalid field layout: not a container")
+									Description::Required(id) => *id,
+									Description::Option(id) => *id,
+									Description::Set(id) => *id,
+									Description::Array(a) => a.item_layout(),
+									_ => panic!("invalid field layout: not a container"),
 								};
-		
+
 								sub_layouts.push(SubLayout {
-									layout: WithCauses::new(item_layout_id, container_desc.causes().clone()),
+									layout: WithCauses::new(
+										item_layout_id,
+										container_desc.causes().clone(),
+									),
 									connection: LayoutConnection::FieldItem(field_id),
 								});
 							}

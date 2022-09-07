@@ -2,7 +2,7 @@ use grdf::Dataset;
 use iref::{Iri, IriBuf};
 use json_ld::{Expand, RdfQuads};
 use json_syntax::{Parse, Print};
-use locspan::{Span, Meta};
+use locspan::{Meta, Span};
 use treeldr_rust_macros::tldr;
 use treeldr_rust_prelude::{
 	json_ld::import_quad,
@@ -51,8 +51,7 @@ async fn main() {
 	// Read JSON-LD file.
 	let filename = "examples/basic_post.jsonld";
 	let input = std::fs::read_to_string(filename).unwrap();
-	let json = json_syntax::Value::parse_str(&input, |span| span)
-		.expect("invalid JSON");
+	let json = json_syntax::Value::parse_str(&input, |span| span).expect("invalid JSON");
 
 	// Expand JSON-LD.
 	let expanded_json_ld = json
@@ -83,12 +82,11 @@ async fn main() {
 	]);
 
 	// Schema to JSON-LD.
-	let mut json_ld_out: json_ld::syntax::Value<()> =
-		vc.into_json_ld();
-	json_ld_out
-		.as_object_mut()
-		.unwrap()
-		.insert(Meta("@context".into(), ()), Meta(VC_LD_CONTEXT_URL.as_str().into(), ()));
+	let mut json_ld_out: json_ld::syntax::Value<()> = vc.into_json_ld();
+	json_ld_out.as_object_mut().unwrap().insert(
+		Meta("@context".into(), ()),
+		Meta(VC_LD_CONTEXT_URL.as_str().into(), ()),
+	);
 
 	// Print the result.
 	println!("{}", json_ld_out.pretty_print());

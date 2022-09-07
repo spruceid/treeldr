@@ -56,16 +56,16 @@ fn from_object<F>(context: &Context<F>, ty: &Type<F>, object: TokenStream) -> To
 			let ty = context.layout_type(*item).unwrap();
 			from_object(context, ty, object)
 		}
-		Description::BuiltIn(BuiltIn::Option(item)) => {
+		Description::BuiltIn(BuiltIn::Option(_item)) => {
 			todo!("option")
 		}
-		Description::BuiltIn(BuiltIn::BTreeSet(item)) => {
+		Description::BuiltIn(BuiltIn::BTreeSet(_item)) => {
 			todo!("btreeset")
 		}
-		Description::BuiltIn(BuiltIn::OneOrMany(item)) => {
+		Description::BuiltIn(BuiltIn::OneOrMany(_item)) => {
 			todo!("oneormany")
 		}
-		Description::BuiltIn(BuiltIn::Vec(item)) => {
+		Description::BuiltIn(BuiltIn::Vec(_item)) => {
 			todo!("vec")
 		}
 		Description::Never => {
@@ -135,7 +135,7 @@ fn from_objects<F>(context: &Context<F>, ty: &Type<F>, objects: TokenStream) -> 
 				result
 			}
 		}
-		Description::Alias(_, layout) => {
+		Description::Alias(_, _layout) => {
 			quote! {
 				todo!("alias from RDF")
 			}
@@ -272,7 +272,7 @@ pub fn structure_reader<F>(
 /// from an RDF graph.
 pub fn enum_reader<F>(
 	context: &Context<F>,
-	ty: &Enum<F>,
+	_ty: &Enum<F>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	let id_ty = context.ident_type();
