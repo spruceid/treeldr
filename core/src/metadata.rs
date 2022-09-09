@@ -14,9 +14,3 @@ pub trait Merge {
 		self
 	}
 }
-
-pub trait MaybeLocated {
-	type File;
-
-	fn location(&self) -> Option<locspan::Location<Self::File>>;
-}

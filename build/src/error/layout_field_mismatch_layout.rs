@@ -1,15 +1,15 @@
 use treeldr::{Id, Vocabulary, vocab::Display};
-use locspan::Location;
+use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
-pub struct LayoutFieldMismatchLayout<F> {
+pub struct LayoutFieldMismatchLayout<M> {
 	pub id: Id,
 	pub expected: Id,
 	pub found: Id,
-	pub because: Option<Location<F>>
+	pub because: M
 }
 
-impl<F> super::AnyError<F> for LayoutFieldMismatchLayout<F> {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutFieldMismatchLayout<M> {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("layout mismatch for layout field `{}`", self.id.display(vocab))
 	}

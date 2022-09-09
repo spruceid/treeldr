@@ -1,7 +1,7 @@
 pub use crate::layout::Primitive;
 use iref::{Iri, IriBuf};
 use iref_enum::IriEnum;
-use locspan::{Loc, Location, Meta, Span};
+use locspan::Meta;
 use rdf_types::Quad;
 use std::{collections::HashMap, fmt};
 
@@ -406,17 +406,17 @@ impl fmt::Display for BlankLabel {
 	}
 }
 
-pub type Literal<F, N = Span> =
-	rdf_types::meta::Literal<Location<F, N>, rdf_types::StringLiteral, Term>;
+pub type Literal<M> =
+	rdf_types::meta::Literal<M, rdf_types::StringLiteral, Term>;
 
 pub type Id = rdf_types::Subject<Term, BlankLabel>;
 
 pub type GraphLabel = rdf_types::GraphLabel<Term, BlankLabel>;
 
-pub type Object<F, N = Span> = rdf_types::Object<Term, BlankLabel, Literal<F, N>>;
+pub type Object<M> = rdf_types::Object<Term, BlankLabel, Literal<M>>;
 
-pub type LocQuad<F, N = Span> =
-	rdf_types::meta::MetaQuad<Id, Term, Object<F, N>, GraphLabel, Location<F, N>>;
+pub type LocQuad<M> =
+	rdf_types::meta::MetaQuad<Id, Term, Object<M>, GraphLabel, M>;
 
 pub type StrippedLiteral = rdf_types::Literal<rdf_types::StringLiteral, Term>;
 
@@ -424,7 +424,7 @@ pub type StrippedObject = rdf_types::Object<Term, BlankLabel, StrippedLiteral>;
 
 pub type StrippedQuad = rdf_types::Quad<Id, Term, StrippedObject, GraphLabel>;
 
-pub fn strip_quad<F>(Meta(rdf_types::Quad(s, p, o, g), _): LocQuad<F>) -> StrippedQuad {
+pub fn strip_quad<M>(Meta(rdf_types::Quad(s, p, o, g), _): LocQuad<M>) -> StrippedQuad {
 	use locspan::Strip;
 	rdf_types::Quad(
 		s.into_value(),
@@ -434,15 +434,15 @@ pub fn strip_quad<F>(Meta(rdf_types::Quad(s, p, o, g), _): LocQuad<F>) -> Stripp
 	)
 }
 
-pub fn literal_from_rdf<F>(
-	literal: rdf_types::meta::Literal<Location<F>>,
+pub fn literal_from_rdf<M>(
+	literal: rdf_types::meta::Literal<M>,
 	ns: &mut Vocabulary,
-) -> Literal<F> {
+) -> Literal<M> {
 	match literal {
 		rdf_types::meta::Literal::String(s) => Literal::String(s),
 		rdf_types::meta::Literal::LangString(s, tag) => Literal::LangString(s, tag),
 		rdf_types::meta::Literal::TypedString(s, Meta(ty, ty_loc)) => {
-			Literal::TypedString(s, Loc(Term::from_iri(ty, ns), ty_loc))
+			Literal::TypedString(s, Meta(Term::from_iri(ty, ns), ty_loc))
 		}
 	}
 }
@@ -458,11 +458,11 @@ pub fn subject_from_rdf(
 	}
 }
 
-pub fn object_from_rdf<F>(
-	object: rdf_types::meta::Object<Location<F>>,
+pub fn object_from_rdf<M>(
+	object: rdf_types::meta::Object<M>,
 	ns: &mut Vocabulary,
 	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
-) -> Object<F> {
+) -> Object<M> {
 	match object {
 		rdf_types::Object::Iri(iri) => Object::Iri(Term::from_iri(iri, ns)),
 		rdf_types::Object::Blank(label) => Object::Blank(blank_label(label)),
@@ -508,11 +508,11 @@ pub fn graph_label_from_rdf(
 	}
 }
 
-pub fn loc_quad_from_rdf<F>(
-	Meta(rdf_types::Quad(s, p, o, g), loc): rdf_types::meta::MetaRdfQuad<Location<F>>,
+pub fn loc_quad_from_rdf<M>(
+	Meta(rdf_types::Quad(s, p, o, g), loc): rdf_types::meta::MetaRdfQuad<M>,
 	ns: &mut Vocabulary,
 	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
-) -> LocQuad<F> {
+) -> LocQuad<M> {
 	Meta(
 		rdf_types::Quad(
 			s.map(|s| subject_from_rdf(s, ns, &mut blank_label)),
@@ -524,8 +524,8 @@ pub fn loc_quad_from_rdf<F>(
 	)
 }
 
-pub fn stripped_loc_quad_from_rdf<F>(
-	Meta(rdf_types::Quad(s, p, o, g), _): rdf_types::meta::MetaRdfQuad<Location<F>>,
+pub fn stripped_loc_quad_from_rdf<M>(
+	Meta(rdf_types::Quad(s, p, o, g), _): rdf_types::meta::MetaRdfQuad<M>,
 	ns: &mut Vocabulary,
 	mut blank_label: impl FnMut(rdf_types::BlankIdBuf) -> BlankLabel,
 ) -> StrippedQuad {

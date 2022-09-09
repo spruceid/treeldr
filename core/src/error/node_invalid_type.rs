@@ -1,5 +1,5 @@
-use crate::{Id, node, Vocabulary, vocab::Display, metadata::MaybeLocated, reporting::MetadataDiagnostic};
-use locspan::Meta;
+use crate::{Id, node, Vocabulary, vocab::Display};
+use locspan::{Meta, MaybeLocated, Span};
 
 #[derive(Debug)]
 pub struct NodeInvalidType<M> {
@@ -25,16 +25,16 @@ impl NodeTypeName for node::Type {
 	}
 }
 
-impl<M: MetadataDiagnostic + MaybeLocated<File = M::FileId>> super::AnyError<M> for NodeInvalidType<M> where M::File: Clone {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeInvalidType<M> where M::File: Clone {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("invalid type for {}", self.id.display(vocab))
 	}
 
-	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
+	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		let mut labels = Vec::new();
 
 		for Meta(ty, metadata) in self.found.iter() {
-			if let Some(loc) = metadata.location() {
+			if let Some(loc) = metadata.optional_location().cloned() {
 				labels.push(loc.into_secondary_label().with_message(format!("declared as a {} here", ty.name())));
 			}
 		}

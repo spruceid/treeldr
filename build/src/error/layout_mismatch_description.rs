@@ -1,13 +1,13 @@
 use treeldr::{Id, Vocabulary, vocab::Display};
-use locspan::Location;
+use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
-pub struct LayoutMismatchDescription<F> {
+pub struct LayoutMismatchDescription<M> {
 	pub id: Id,
-	pub because: Option<Location<F>>
+	pub because: M
 }
 
-impl<F> super::AnyError<F> for LayoutMismatchDescription<F> {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutMismatchDescription<M> {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("implementation mismatch for layout `{}`", self.id.display(vocab))
 	}

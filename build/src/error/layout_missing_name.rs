@@ -1,9 +1,10 @@
 use treeldr::{Id, Vocabulary, vocab::Display};
+use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
 pub struct LayoutMissingName(pub Id);
 
-impl<F> super::AnyError<F> for LayoutMissingName {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutMissingName {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("no name defined for layout `{}`", self.0.display(vocab))
 	}

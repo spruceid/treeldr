@@ -1,15 +1,15 @@
 use treeldr::{Id, Vocabulary, vocab::Display, Name};
-use locspan::Location;
+use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
-pub struct LayoutMismatchName<F> {
+pub struct LayoutMismatchName<M> {
 	pub id: Id,
 	pub expected: Name,
 	pub found: Name,
-	pub because: Option<Location<F>>
+	pub because: M
 }
 
-impl<F> super::AnyError<F> for LayoutMismatchName<F> {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutMismatchName<M> {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("name mismatch for layout `{}`", self.id.display(vocab))
 	}

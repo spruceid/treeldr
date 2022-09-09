@@ -1,15 +1,11 @@
 use crate::{vocab, Vocabulary};
-use locspan::Meta;
-
-pub trait MetadataDiagnostic {
-	type FileId;
-}
+use locspan::{Meta, MaybeLocated};
 
 /// Error with diagnostic reporting support.
-pub trait Diagnose<M: MetadataDiagnostic> {
+pub trait Diagnose<M: MaybeLocated> {
 	fn message(&self) -> String;
 
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
+	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
@@ -17,7 +13,7 @@ pub trait Diagnose<M: MetadataDiagnostic> {
 		Vec::new()
 	}
 
-	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<M::FileId> {
+	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message())
 			.with_labels(self.labels())
@@ -26,10 +22,10 @@ pub trait Diagnose<M: MetadataDiagnostic> {
 }
 
 /// Error with diagnostic reporting support.
-pub trait DiagnoseWithMetadata<M: MetadataDiagnostic> {
+pub trait DiagnoseWithMetadata<M: MaybeLocated> {
 	fn message(&self, metadata: &M) -> String;
 
-	fn labels(&self, _metadata: &M) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
+	fn labels(&self, _metadata: &M) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
@@ -37,7 +33,7 @@ pub trait DiagnoseWithMetadata<M: MetadataDiagnostic> {
 		Vec::new()
 	}
 
-	fn diagnostic(&self, metadata: &M) -> codespan_reporting::diagnostic::Diagnostic<M::FileId> {
+	fn diagnostic(&self, metadata: &M) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message(metadata))
 			.with_labels(self.labels(metadata))
@@ -46,14 +42,14 @@ pub trait DiagnoseWithMetadata<M: MetadataDiagnostic> {
 }
 
 /// Error with diagnostic reporting support.
-pub trait DiagnoseWithMetadataAndVocabulary<M: MetadataDiagnostic> {
+pub trait DiagnoseWithMetadataAndVocabulary<M: MaybeLocated> {
 	fn message(&self, metadata: &M, vocabulary: &Vocabulary) -> String;
 
 	fn labels(
 		&self,
 		_metadata: &M,
 		_vocabulary: &Vocabulary,
-	) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
@@ -65,7 +61,7 @@ pub trait DiagnoseWithMetadataAndVocabulary<M: MetadataDiagnostic> {
 		&self,
 		metadata: &M,
 		vocabulary: &Vocabulary,
-	) -> codespan_reporting::diagnostic::Diagnostic<M::FileId> {
+	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message(metadata, vocabulary))
 			.with_labels(self.labels(metadata, vocabulary))
@@ -74,13 +70,13 @@ pub trait DiagnoseWithMetadataAndVocabulary<M: MetadataDiagnostic> {
 }
 
 /// Error with diagnostic reporting support.
-pub trait DiagnoseWithVocabulary<M: MetadataDiagnostic> {
+pub trait DiagnoseWithVocabulary<M: MaybeLocated> {
 	fn message(&self, vocabulary: &Vocabulary) -> String;
 
 	fn labels(
 		&self,
 		_vocabulary: &Vocabulary,
-	) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
@@ -91,7 +87,7 @@ pub trait DiagnoseWithVocabulary<M: MetadataDiagnostic> {
 	fn diagnostic(
 		&self,
 		vocabulary: &Vocabulary,
-	) -> codespan_reporting::diagnostic::Diagnostic<M::FileId> {
+	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message(vocabulary))
 			.with_labels(self.labels(vocabulary))
@@ -99,14 +95,14 @@ pub trait DiagnoseWithVocabulary<M: MetadataDiagnostic> {
 	}
 }
 
-impl<'t, 'v, M: MetadataDiagnostic, T: DiagnoseWithVocabulary<M>> Diagnose<M>
+impl<'t, 'v, M: MaybeLocated, T: DiagnoseWithVocabulary<M>> Diagnose<M>
 	for vocab::WithVocabulary<'t, 'v, T>
 {
 	fn message(&self) -> String {
 		self.value().message(self.vocabulary())
 	}
 
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
+	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		self.value().labels(self.vocabulary())
 	}
 
@@ -114,17 +110,17 @@ impl<'t, 'v, M: MetadataDiagnostic, T: DiagnoseWithVocabulary<M>> Diagnose<M>
 		self.value().notes(self.vocabulary())
 	}
 
-	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<M::FileId> {
+	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		self.value().diagnostic(self.vocabulary())
 	}
 }
 
-impl<M: MetadataDiagnostic, T: DiagnoseWithMetadata<M>> Diagnose<M> for Meta<T, M> {
+impl<M: MaybeLocated, T: DiagnoseWithMetadata<M>> Diagnose<M> for Meta<T, M> {
 	fn message(&self) -> String {
 		self.value().message(self.metadata())
 	}
 
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
+	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		self.value().labels(self.metadata())
 	}
 
@@ -132,12 +128,12 @@ impl<M: MetadataDiagnostic, T: DiagnoseWithMetadata<M>> Diagnose<M> for Meta<T, 
 		self.value().notes(self.metadata())
 	}
 
-	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<M::FileId> {
+	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		self.value().diagnostic(self.metadata())
 	}
 }
 
-impl<M: MetadataDiagnostic, T: DiagnoseWithMetadataAndVocabulary<M>> DiagnoseWithVocabulary<M>
+impl<M: MaybeLocated, T: DiagnoseWithMetadataAndVocabulary<M>> DiagnoseWithVocabulary<M>
 	for Meta<T, M>
 {
 	fn message(&self, vocabulary: &Vocabulary) -> String {
@@ -147,7 +143,7 @@ impl<M: MetadataDiagnostic, T: DiagnoseWithMetadataAndVocabulary<M>> DiagnoseWit
 	fn labels(
 		&self,
 		vocabulary: &Vocabulary,
-	) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		self.value().labels(self.metadata(), vocabulary)
 	}
 
@@ -158,7 +154,7 @@ impl<M: MetadataDiagnostic, T: DiagnoseWithMetadataAndVocabulary<M>> DiagnoseWit
 	fn diagnostic(
 		&self,
 		vocabulary: &Vocabulary,
-	) -> codespan_reporting::diagnostic::Diagnostic<M::FileId> {
+	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		self.value().diagnostic(self.metadata(), vocabulary)
 	}
 }

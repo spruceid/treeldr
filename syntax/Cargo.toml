@@ -9,7 +9,7 @@ edition = "2021"
 treeldr = { path = "../core" }
 treeldr-build = { path = "../build" }
 iref = "2.2"
-locspan = "0.7.2"
+locspan = "0.7.4"
 locspan-derive = "0.4"
 codespan-reporting = "0.11"
 rdf-types = { version = "0.9", features = ["meta"] }

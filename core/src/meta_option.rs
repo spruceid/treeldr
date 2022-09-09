@@ -1,7 +1,9 @@
 use locspan::Meta;
+use locspan_derive::StrippedPartialEq;
 
 /// Optional value with metadata.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, StrippedPartialEq)]
+#[stripped_ignore(M)]
 pub struct MetaOption<T, M> {
 	value: Option<Meta<T, M>>,
 }
@@ -91,7 +93,6 @@ impl<T, M> MetaOption<T, M> {
 	) -> Result<(), E>
 	where
 		T: PartialEq,
-		M: Ord,
 	{
 		match value.unwrap() {
 			Some(value) => {
@@ -165,6 +166,10 @@ impl<T, M> MetaOption<T, M> {
 
 	pub fn unwrap_or(self, default: Meta<T, M>) -> Meta<T, M> {
 		self.value.unwrap_or(default)
+	}
+
+	pub fn unwrap_or_else(self, f: impl FnOnce() -> Meta<T, M>) -> Meta<T, M> {
+		self.value.unwrap_or_else(f)
 	}
 
 	pub fn unwrap_or_else_try<E>(

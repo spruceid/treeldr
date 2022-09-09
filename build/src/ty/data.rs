@@ -1,6 +1,6 @@
 use crate::{context, Error};
-use locspan::Location;
-use treeldr::{Metadata, Id, WithCauses};
+use locspan::Meta;
+use treeldr::{Id, metadata::Merge};
 
 pub mod restriction;
 
@@ -8,35 +8,35 @@ pub use restriction::{Restriction, Restrictions};
 pub use treeldr::ty::data::Primitive;
 
 #[derive(Clone)]
-pub enum DataType<F> {
+pub enum DataType<M> {
 	Unknown,
-	Primitive(WithCauses<Primitive, F>),
-	Derived(Derived<F>),
+	Primitive(Meta<Primitive, M>),
+	Derived(Derived<M>),
 }
 
-impl<F> Default for DataType<F> {
+impl<M> Default for DataType<M> {
 	fn default() -> Self {
 		Self::Unknown
 	}
 }
 
-impl<F> DataType<F> {
+impl<M> DataType<M> {
 	pub fn set_primitive(
 		&mut self,
 		p: Primitive,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
+		cause: M,
+	) -> Result<(), Error<M>>
 	where
-		F: Ord,
+		M: Merge,
 	{
 		match self {
 			Self::Unknown => {
-				*self = Self::Primitive(WithCauses::new(p, cause));
+				*self = Self::Primitive(Meta(p, cause));
 				Ok(())
 			}
 			Self::Primitive(q) => {
-				if p == *q.inner() {
-					q.add_opt_cause(cause);
+				if p == **q {
+					q.metadata_mut().merge_with(cause);
 					Ok(())
 				} else {
 					todo!()
@@ -51,11 +51,8 @@ impl<F> DataType<F> {
 	pub fn set_derivation_base(
 		&mut self,
 		base: Id,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
-	where
-		F: Ord,
-	{
+		cause: M,
+	) -> Result<(), Error<M>> where M: Merge {
 		match self {
 			Self::Unknown => {
 				*self = Self::Derived(Derived::new(base, cause));
@@ -68,7 +65,7 @@ impl<F> DataType<F> {
 		}
 	}
 
-	pub fn as_derived_mut(&mut self) -> Option<&mut Derived<F>> {
+	pub fn as_derived_mut(&mut self) -> Option<&mut Derived<M>> {
 		match self {
 			Self::Derived(d) => Some(d),
 			_ => None,
@@ -77,10 +74,10 @@ impl<F> DataType<F> {
 
 	pub fn dependencies(
 		&self,
-		nodes: &context::allocated::Nodes<F>,
-	) -> Result<Vec<crate::Item<F>>, Error<F>>
+		nodes: &context::allocated::Nodes<M>,
+	) -> Result<Vec<crate::Item<M>>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
 		match self {
 			Self::Unknown => todo!(),
@@ -92,15 +89,15 @@ impl<F> DataType<F> {
 	pub fn build(
 		self,
 		id: Id,
-		nodes: &context::allocated::Nodes<F>,
-		dependencies: crate::Dependencies<F>,
-	) -> Result<treeldr::ty::Description<F>, Error<F>>
+		nodes: &context::allocated::Nodes<M>,
+		dependencies: crate::Dependencies<M>,
+	) -> Result<treeldr::ty::Description<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
 		let dt = match self {
 			Self::Unknown => todo!(),
-			Self::Primitive(p) => treeldr::ty::DataType::Primitive(p.into_inner()),
+			Self::Primitive(p) => treeldr::ty::DataType::Primitive(*p),
 			Self::Derived(d) => treeldr::ty::DataType::Derived(d.build(id, nodes, dependencies)?),
 		};
 
@@ -109,48 +106,42 @@ impl<F> DataType<F> {
 }
 
 #[derive(Clone)]
-pub struct Derived<F> {
-	base: WithCauses<Id, F>,
-	restrictions: Restrictions<F>,
+pub struct Derived<M> {
+	base: Meta<Id, M>,
+	restrictions: Restrictions<M>,
 }
 
-impl<F> Derived<F> {
-	pub fn new(base: Id, causes: impl Into<Metadata<F>>) -> Self
-	where
-		F: Ord,
-	{
+impl<M> Derived<M> {
+	pub fn new(base: Id, metadata: M) -> Self {
 		Self {
-			base: WithCauses::new(base, causes),
+			base: Meta(base, metadata),
 			restrictions: Restrictions::new(),
 		}
 	}
 
-	pub fn set_base(&mut self, base: Id, cause: Option<Location<F>>) -> Result<(), Error<F>>
-	where
-		F: Ord,
-	{
-		if *self.base.inner() == base {
-			self.base.add_opt_cause(cause);
+	pub fn set_base(&mut self, base: Id, cause: M) -> Result<(), Error<M>> where M: Merge {
+		if *self.base == base {
+			self.base.metadata_mut().merge_with(cause);
 			Ok(())
 		} else {
 			todo!()
 		}
 	}
 
-	pub fn restrictions_mut(&mut self) -> &mut Restrictions<F> {
+	pub fn restrictions_mut(&mut self) -> &mut Restrictions<M> {
 		&mut self.restrictions
 	}
 
 	pub fn primitive(
 		&self,
-		nodes: &context::allocated::Nodes<F>,
-		dependencies: crate::Dependencies<F>,
-	) -> Result<Primitive, Error<F>>
+		nodes: &context::allocated::Nodes<M>,
+		dependencies: crate::Dependencies<M>,
+	) -> Result<Primitive, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
-		let base_id = *self.base.inner();
-		let base_ref = **nodes.require_type(base_id, self.base.causes().preferred().cloned())?;
+		let base_id = *self.base;
+		let base_ref = **nodes.require_type(base_id, self.base.metadata())?;
 		let base = dependencies.ty(base_ref);
 		match base.description() {
 			treeldr::ty::Description::Data(dt) => Ok(dt.primitive()),
@@ -160,27 +151,27 @@ impl<F> Derived<F> {
 
 	pub fn dependencies(
 		&self,
-		nodes: &context::allocated::Nodes<F>,
-	) -> Result<Vec<crate::Item<F>>, Error<F>>
+		nodes: &context::allocated::Nodes<M>,
+	) -> Result<Vec<crate::Item<M>>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
 		Ok(vec![crate::Item::Type(**nodes.require_type(
-			*self.base.inner(),
-			self.base.causes().preferred().cloned(),
+			*self.base,
+			self.base.metadata(),
 		)?)])
 	}
 
 	pub fn build(
 		self,
 		id: Id,
-		nodes: &context::allocated::Nodes<F>,
-		dependencies: crate::Dependencies<F>,
-	) -> Result<treeldr::ty::data::Derived, Error<F>>
+		nodes: &context::allocated::Nodes<M>,
+		dependencies: crate::Dependencies<M>,
+	) -> Result<treeldr::ty::data::Derived, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
-		let base_id = *self.base.inner();
+		let base_id = *self.base;
 		match self.primitive(nodes, dependencies)? {
 			Primitive::Boolean => {
 				self.restrictions.build_boolean(id)?;

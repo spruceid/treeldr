@@ -2,7 +2,7 @@ use crate::Error;
 use std::collections::BTreeMap;
 use treeldr::{
 	ty::data::{restriction, RegExp},
-	value, Metadata, Id,
+	value, Id, metadata::Merge,
 };
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -31,11 +31,11 @@ pub enum String {
 }
 
 #[derive(Clone)]
-pub struct Restrictions<F> {
-	map: BTreeMap<Restriction, Metadata<F>>,
+pub struct Restrictions<M> {
+	map: BTreeMap<Restriction, M>,
 }
 
-impl<F> Default for Restrictions<F> {
+impl<M> Default for Restrictions<M> {
 	fn default() -> Self {
 		Self {
 			map: BTreeMap::new(),
@@ -43,22 +43,24 @@ impl<F> Default for Restrictions<F> {
 	}
 }
 
-impl<F> Restrictions<F> {
+impl<M> Restrictions<M> {
 	pub fn new() -> Self {
 		Self::default()
 	}
 
-	pub fn insert(&mut self, restriction: Restriction, causes: impl Into<Metadata<F>>)
-	where
-		F: Ord,
-	{
-		self.map
-			.entry(restriction)
-			.or_insert_with(Metadata::new)
-			.extend(causes.into())
+	pub fn insert(&mut self, restriction: Restriction, causes: M) where M: Merge {
+		use std::collections::btree_map::Entry;
+		match self.map.entry(restriction) {
+			Entry::Vacant(entry) => {
+				entry.insert(causes);
+			}
+			Entry::Occupied(mut entry) => {
+				entry.get_mut().merge_with(causes)
+			}
+		}
 	}
 
-	pub fn build_boolean(self, _id: Id) -> Result<(), Error<F>> {
+	pub fn build_boolean(self, _id: Id) -> Result<(), Error<M>> {
 		if let Some(_restriction) = self.map.into_iter().next() {
 			todo!()
 		}
@@ -66,7 +68,7 @@ impl<F> Restrictions<F> {
 		Ok(())
 	}
 
-	pub fn build_real(self, _id: Id) -> Result<restriction::real::Restrictions, Error<F>> {
+	pub fn build_real(self, _id: Id) -> Result<restriction::real::Restrictions, Error<M>> {
 		use restriction::real::{Max, Min};
 		let mut r = restriction::real::Restrictions::default();
 
@@ -87,7 +89,7 @@ impl<F> Restrictions<F> {
 		Ok(r)
 	}
 
-	pub fn build_float(self, _id: Id) -> Result<restriction::float::Restrictions, Error<F>> {
+	pub fn build_float(self, _id: Id) -> Result<restriction::float::Restrictions, Error<M>> {
 		use restriction::float::{Max, Min};
 		let mut r = restriction::float::Restrictions::default();
 
@@ -108,7 +110,7 @@ impl<F> Restrictions<F> {
 		Ok(r)
 	}
 
-	pub fn build_double(self, _id: Id) -> Result<restriction::double::Restrictions, Error<F>> {
+	pub fn build_double(self, _id: Id) -> Result<restriction::double::Restrictions, Error<M>> {
 		use restriction::double::{Max, Min};
 		let mut r = restriction::double::Restrictions::default();
 
@@ -129,7 +131,7 @@ impl<F> Restrictions<F> {
 		Ok(r)
 	}
 
-	pub fn build_string(self, _id: Id) -> Result<restriction::string::Restrictions, Error<F>> {
+	pub fn build_string(self, _id: Id) -> Result<restriction::string::Restrictions, Error<M>> {
 		let mut r = restriction::string::Restrictions::default();
 
 		for restriction in self.map.into_keys() {
@@ -148,7 +150,7 @@ impl<F> Restrictions<F> {
 		Ok(r)
 	}
 
-	pub fn build_date(self, _id: Id) -> Result<(), Error<F>> {
+	pub fn build_date(self, _id: Id) -> Result<(), Error<M>> {
 		if let Some(_restriction) = self.map.into_iter().next() {
 			todo!()
 		}
@@ -156,7 +158,7 @@ impl<F> Restrictions<F> {
 		Ok(())
 	}
 
-	pub fn build_time(self, _id: Id) -> Result<(), Error<F>> {
+	pub fn build_time(self, _id: Id) -> Result<(), Error<M>> {
 		if let Some(_restriction) = self.map.into_iter().next() {
 			todo!()
 		}
@@ -164,7 +166,7 @@ impl<F> Restrictions<F> {
 		Ok(())
 	}
 
-	pub fn build_datetime(self, _id: Id) -> Result<(), Error<F>> {
+	pub fn build_datetime(self, _id: Id) -> Result<(), Error<M>> {
 		if let Some(_restriction) = self.map.into_iter().next() {
 			todo!()
 		}
@@ -172,7 +174,7 @@ impl<F> Restrictions<F> {
 		Ok(())
 	}
 
-	pub fn build_duration(self, _id: Id) -> Result<(), Error<F>> {
+	pub fn build_duration(self, _id: Id) -> Result<(), Error<M>> {
 		if let Some(_restriction) = self.map.into_iter().next() {
 			todo!()
 		}

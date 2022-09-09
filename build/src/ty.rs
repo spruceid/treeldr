@@ -1,7 +1,7 @@
 use crate::{error, utils::TryCollect, Error, ObjectToId};
-use locspan::Location;
 use std::collections::BTreeMap;
-use treeldr::{Metadata, Id, MetaOption};
+use treeldr::{Id, MetaOption, metadata::Merge};
+use locspan::Meta;
 
 pub mod data;
 mod normal;
@@ -14,11 +14,11 @@ pub use treeldr::ty::Kind;
 
 /// Type definition.
 #[derive(Clone)]
-pub enum Description<F> {
-	Data(DataType<F>),
+pub enum Description<M> {
+	Data(DataType<M>),
 
 	/// Normal type.
-	Normal(Normal<F>),
+	Normal(Normal<M>),
 
 	/// Union/sum type.
 	Union(Id),
@@ -27,10 +27,10 @@ pub enum Description<F> {
 	Intersection(Id),
 
 	/// Property restriction.
-	Restriction(Restriction<F>),
+	Restriction(Restriction<M>),
 }
 
-impl<F: Clone + Ord> Description<F> {
+impl<M: Clone> Description<M> {
 	pub fn kind(&self) -> Kind {
 		match self {
 			Self::Data(_) => Kind::Data,
@@ -44,9 +44,9 @@ impl<F: Clone + Ord> Description<F> {
 	fn dependencies(
 		&self,
 		_id: Id,
-		nodes: &super::context::allocated::Nodes<F>,
-		causes: &Metadata<F>,
-	) -> Result<Vec<crate::Item<F>>, Error<F>> {
+		nodes: &super::context::allocated::Nodes<M>,
+		causes: &M,
+	) -> Result<Vec<crate::Item<M>>, Error<M>> {
 		let list_id = match self {
 			Description::Union(list_id) => Some(*list_id),
 			Description::Intersection(list_id) => Some(*list_id),
@@ -57,15 +57,14 @@ impl<F: Clone + Ord> Description<F> {
 		match list_id {
 			Some(list_id) => {
 				let dependencies = nodes
-					.require_list(list_id, causes.preferred().cloned())?
+					.require_list(list_id, causes)?
 					.iter(nodes)
 					.map(|item| {
-						let (object, ty_causes) = item?.clone().into_parts();
-						let ty_id = object.into_id(causes.preferred())?;
+						let Meta(object, ty_causes) = item?.clone();
+						let ty_id = object.into_id(causes)?;
 
-						let ty_ref = *nodes
-							.require_type(ty_id, ty_causes.preferred().cloned())?
-							.inner();
+						let ty_ref = **nodes
+							.require_type(ty_id, &ty_causes)?;
 
 						Ok(crate::Item::Type(ty_ref))
 					})
@@ -79,12 +78,12 @@ impl<F: Clone + Ord> Description<F> {
 	fn build(
 		self,
 		id: Id,
-		nodes: &super::context::allocated::Nodes<F>,
-		dependencies: crate::Dependencies<F>,
-		causes: Metadata<F>,
-	) -> Result<treeldr::ty::Description<F>, Error<F>>
+		nodes: &super::context::allocated::Nodes<M>,
+		dependencies: crate::Dependencies<M>,
+		causes: M,
+	) -> Result<treeldr::ty::Description<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		let desc = match self {
 			Self::Data(d) => d.build(id, nodes, dependencies)?,
@@ -94,23 +93,22 @@ impl<F: Clone + Ord> Description<F> {
 				let mut options = BTreeMap::new();
 
 				let items = nodes
-					.require_list(options_id, causes.preferred().cloned())?
+					.require_list(options_id, &causes)?
 					.iter(nodes);
 				for item in items {
-					let (object, causes) = item?.clone().into_parts();
-					let option_id = object.into_id(causes.preferred())?;
+					let Meta(object, causes) = item?.clone();
+					let option_id = object.into_id(&causes)?;
 
-					let (option_ty, option_causes) = nodes
-						.require_type(option_id, causes.into_preferred())?
-						.clone()
-						.into_parts();
+					let Meta(option_ty, option_causes) = nodes
+						.require_type(option_id, &causes)?
+						.clone();
 
 					match options.entry(option_ty) {
 						Entry::Vacant(entry) => {
 							entry.insert(option_causes);
 						}
 						Entry::Occupied(mut entry) => {
-							entry.get_mut().extend(option_causes);
+							entry.get_mut().merge_with(option_causes);
 						}
 					}
 				}
@@ -124,23 +122,22 @@ impl<F: Clone + Ord> Description<F> {
 				let mut types = BTreeMap::new();
 
 				let items = nodes
-					.require_list(types_id, causes.preferred().cloned())?
+					.require_list(types_id, &causes)?
 					.iter(nodes);
 				for item in items {
-					let (object, causes) = item?.clone().into_parts();
-					let option_id = object.into_id(causes.preferred())?;
+					let Meta(object, causes) = item?.clone();
+					let option_id = object.into_id(&causes)?;
 
-					let (ty, ty_causes) = nodes
-						.require_type(option_id, causes.into_preferred())?
-						.clone()
-						.into_parts();
+					let Meta(ty, ty_causes) = nodes
+						.require_type(option_id, &causes)?
+						.clone();
 
 					match types.entry(ty) {
 						Entry::Vacant(entry) => {
 							entry.insert(ty_causes);
 						}
 						Entry::Occupied(mut entry) => {
-							entry.get_mut().extend(ty_causes);
+							entry.get_mut().merge_with(ty_causes);
 						}
 					}
 				}
@@ -157,32 +154,32 @@ impl<F: Clone + Ord> Description<F> {
 	}
 }
 
-pub trait PseudoDescription<F>: Clone + From<Description<F>> {
-	fn as_standard(&self) -> Option<&Description<F>>;
+pub trait PseudoDescription<M>: Clone + From<Description<M>> {
+	fn as_standard(&self) -> Option<&Description<M>>;
 
-	fn as_standard_mut(&mut self) -> Option<&mut Description<F>>;
+	fn as_standard_mut(&mut self) -> Option<&mut Description<M>>;
 }
 
-impl<F: Clone> PseudoDescription<F> for Description<F> {
-	fn as_standard(&self) -> Option<&Description<F>> {
+impl<M: Clone> PseudoDescription<M> for Description<M> {
+	fn as_standard(&self) -> Option<&Description<M>> {
 		Some(self)
 	}
 
-	fn as_standard_mut(&mut self) -> Option<&mut Description<F>> {
+	fn as_standard_mut(&mut self) -> Option<&mut Description<M>> {
 		Some(self)
 	}
 }
 
 #[derive(Clone)]
-pub struct Definition<F, D = Description<F>> {
+pub struct Definition<M, D = Description<M>> {
 	/// Identifier of the type.
 	id: Id,
 
 	/// Type description.
-	desc: MetaOption<D, F>,
+	desc: MetaOption<D, M>,
 }
 
-impl<F, D> Definition<F, D> {
+impl<M, D> Definition<M, D> {
 	/// Create a new type.
 	///
 	/// By default, a normal type is created.
@@ -195,11 +192,11 @@ impl<F, D> Definition<F, D> {
 		}
 	}
 
-	pub fn description(&self) -> &MetaOption<D, F> {
+	pub fn description(&self) -> &MetaOption<D, M> {
 		&self.desc
 	}
 
-	pub fn try_map<U, E>(self, f: impl FnOnce(D) -> Result<U, E>) -> Result<Definition<F, U>, E> {
+	pub fn try_map<U, E>(self, f: impl FnOnce(D) -> Result<U, E>) -> Result<Definition<M, U>, E> {
 		Ok(Definition {
 			id: self.id,
 			desc: self.desc.try_map(f)?,
@@ -207,12 +204,12 @@ impl<F, D> Definition<F, D> {
 	}
 }
 
-impl<F, D: PseudoDescription<F>> Definition<F, D> {
-	pub fn require_datatype(&self, cause: Option<Location<F>>) -> Result<&DataType<F>, Error<F>>
+impl<M, D: PseudoDescription<M>> Definition<M, D> {
+	pub fn require_datatype(&self, cause: &M) -> Result<&DataType<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
-		let because = self.desc.causes().unwrap().preferred().cloned();
+		let because = self.desc.metadata().unwrap().clone();
 		match self.desc.value().and_then(|d| d.as_standard()) {
 			Some(Description::Data(d)) => Ok(d),
 			Some(other) => Err(Error::new(
@@ -223,7 +220,7 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					because,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 			None => Err(Error::new(
 				error::TypeMismatchKind {
@@ -233,22 +230,22 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					because,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
 	pub fn require_datatype_mut(
 		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<&mut DataType<F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut DataType<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
 		self.desc.set_once(cause.clone(), || {
 			Description::Data(DataType::default()).into()
 		});
-		let because = self.desc.causes().unwrap().preferred().cloned();
+		let because = self.desc.metadata().unwrap().clone();
 		match self.desc.value_mut().unwrap().as_standard_mut() {
 			Some(Description::Data(d)) => Ok(d),
 			Some(other) => Err(Error::new(
@@ -259,7 +256,7 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					because,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 			None => Err(Error::new(
 				error::TypeMismatchKind {
@@ -269,21 +266,21 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					because,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
 	pub fn require_normal_mut(
 		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<&mut Normal<F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Normal<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
 		self.desc
 			.set_once(cause.clone(), || Description::Normal(Normal::new()).into());
-		let because = self.desc.causes().unwrap().preferred().cloned();
+		let because = self.desc.metadata().unwrap().clone();
 		match self.desc.value_mut().unwrap().as_standard_mut() {
 			Some(Description::Normal(n)) => Ok(n),
 			Some(other) => Err(Error::new(
@@ -294,7 +291,7 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					because,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 			None => Err(Error::new(
 				error::TypeMismatchKind {
@@ -304,20 +301,20 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 					because,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
 	/// Declare that this type is a datatype.
-	pub fn declare_datatype(&mut self, cause: Option<Location<F>>) -> Result<(), Error<F>>
+	pub fn declare_datatype(&mut self, cause: M) -> Result<(), Error<M>>
 	where
-		F: Ord + Clone,
+		M: Clone,
 	{
 		self.desc.set_once(cause.clone(), || {
 			Description::Data(DataType::default()).into()
 		});
-		let because = self.desc.causes().unwrap().preferred().cloned();
+		let because = self.desc.metadata().unwrap().clone();
 		match self.desc.value_mut().unwrap().as_standard() {
 			Some(Description::Data(_)) => Ok(()),
 			Some(other) => Err(Error::new(
@@ -349,12 +346,12 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 	pub fn declare_property(
 		&mut self,
 		prop_ref: Id,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
+		cause: M,
+	) -> Result<(), Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
-		let n = self.require_normal_mut(cause.clone())?;
+		let n = self.require_normal_mut(&cause)?;
 		n.declare_property(prop_ref, cause);
 		Ok(())
 	}
@@ -362,14 +359,14 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 	pub fn declare_union(
 		&mut self,
 		options_ref: Id,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
+		cause: M,
+	) -> Result<(), Error<M>>
 	where
-		F: Ord + Clone,
+		M: Clone,
 	{
 		self.desc
 			.set_once(cause.clone(), || Description::Union(options_ref).into());
-		let because = self.desc.causes().unwrap().preferred().cloned();
+		let because = self.desc.metadata().unwrap().clone();
 		match self.desc.value_mut().unwrap().as_standard() {
 			Some(Description::Union(r)) => {
 				if *r == options_ref {
@@ -404,15 +401,15 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 	pub fn declare_intersection(
 		&mut self,
 		types_ref: Id,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
+		cause: M,
+	) -> Result<(), Error<M>>
 	where
-		F: Ord + Clone,
+		M: Clone,
 	{
 		self.desc.set_once(cause.clone(), || {
 			Description::Intersection(types_ref).into()
 		});
-		let because = self.desc.causes().unwrap().preferred().cloned();
+		let because = self.desc.metadata().unwrap().clone();
 		match self.desc.value_mut().unwrap().as_standard() {
 			Some(Description::Intersection(r)) => {
 				if *r == types_ref {
@@ -446,11 +443,11 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 
 	pub fn declare_restriction(
 		&mut self,
-		restriction: Restriction<F>,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
+		restriction: Restriction<M>,
+		cause: M,
+	) -> Result<(), Error<M>>
 	where
-		F: Ord + Clone,
+		M: Clone,
 	{
 		let mut restriction = Some(restriction);
 		self.desc.set_once(cause.clone(), || {
@@ -458,7 +455,7 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 		});
 		match restriction {
 			Some(restriction) => {
-				let because = self.desc.causes().unwrap().preferred().cloned();
+				let because = self.desc.metadata().unwrap().clone();
 				match self.desc.value_mut().unwrap().as_standard() {
 					Some(Description::Restriction(r)) => {
 						if *r == restriction {
@@ -494,31 +491,30 @@ impl<F, D: PseudoDescription<F>> Definition<F, D> {
 	}
 }
 
-impl<F: Clone + Ord> Definition<F> {
+impl<M: Clone> Definition<M> {
 	pub fn dependencies(
 		&self,
-		nodes: &super::context::allocated::Nodes<F>,
-		_causes: &Metadata<F>,
-	) -> Result<Vec<crate::Item<F>>, Error<F>> {
-		match self.desc.with_causes() {
-			Some(desc) => desc.dependencies(self.id, nodes, desc.causes()),
+		nodes: &super::context::allocated::Nodes<M>,
+		_causes: &M,
+	) -> Result<Vec<crate::Item<M>>, Error<M>> {
+		match self.desc.as_ref() {
+			Some(desc) => desc.dependencies(self.id, nodes, desc.metadata()),
 			None => Ok(Vec::new()),
 		}
 	}
 }
 
-impl<F: Clone + Ord> crate::Build<F> for Definition<F> {
-	type Target = treeldr::ty::Definition<F>;
+impl<M: Clone + Merge> crate::Build<M> for Definition<M> {
+	type Target = treeldr::ty::Definition<M>;
 
 	fn build(
 		self,
-		nodes: &mut super::context::allocated::Nodes<F>,
-		dependencies: crate::Dependencies<F>,
-		causes: Metadata<F>,
-	) -> Result<Self::Target, Error<F>> {
+		nodes: &mut super::context::allocated::Nodes<M>,
+		dependencies: crate::Dependencies<M>,
+		causes: M,
+	) -> Result<Self::Target, Error<M>> {
 		let desc = match self.desc.unwrap() {
-			Some(desc) => {
-				let (desc, desc_causes) = desc.into_parts();
+			Some(Meta(desc, desc_causes)) => {
 				desc.build(self.id, nodes, dependencies, desc_causes)?
 			}
 			None => treeldr::ty::Description::Normal(treeldr::ty::Normal::new()),

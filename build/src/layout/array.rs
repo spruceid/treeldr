@@ -1,19 +1,20 @@
 use crate::{error, Error};
 use derivative::Derivative;
+use locspan::Meta;
 use locspan_derive::StrippedPartialEq;
-use treeldr::{vocab, Metadata, Id, MetaOption, Name};
+use treeldr::{vocab, Id, MetaOption, Name, metadata::Merge};
 use vocab::{Rdf, Term};
 
 #[derive(Clone, Debug, Derivative)]
 #[derivative(PartialEq(bound = ""))]
-pub struct Array<F> {
+pub struct Array<M> {
 	item: Id,
 
-	semantics: Option<Semantics<F>>,
+	semantics: Option<Semantics<M>>,
 }
 
-impl<F> Array<F> {
-	pub fn new(item: Id, semantics: Option<Semantics<F>>) -> Self {
+impl<M> Array<M> {
+	pub fn new(item: Id, semantics: Option<Semantics<M>>) -> Self {
 		Self { item, semantics }
 	}
 
@@ -21,7 +22,7 @@ impl<F> Array<F> {
 		self.item
 	}
 
-	pub fn semantics(&self) -> Option<&Semantics<F>> {
+	pub fn semantics(&self) -> Option<&Semantics<M>> {
 		self.semantics.as_ref()
 	}
 
@@ -29,54 +30,48 @@ impl<F> Array<F> {
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Metadata<F>>,
-	) -> Result<(), Error<F>>
-	where
-		F: Clone + Ord,
-	{
+		metadata: M,
+	) -> Result<(), Error<M>> {
 		self.semantics
 			.get_or_insert_with(Semantics::default)
-			.set_first(id, value, causes)
+			.set_first(id, value, metadata)
 	}
 
 	pub fn set_list_rest(
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Metadata<F>>,
-	) -> Result<(), Error<F>>
+		metadata: M,
+	) -> Result<(), Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
 		self.semantics
 			.get_or_insert_with(Semantics::default)
-			.set_rest(id, value, causes)
+			.set_rest(id, value, metadata)
 	}
 
 	pub fn set_list_nil(
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Metadata<F>>,
-	) -> Result<(), Error<F>>
+		metadata: M,
+	) -> Result<(), Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
 		self.semantics
 			.get_or_insert_with(Semantics::default)
-			.set_nil(id, value, causes)
+			.set_nil(id, value, metadata)
 	}
 
 	pub fn try_unify(
 		self,
 		other: Self,
 		id: Id,
-		causes: &Metadata<F>,
-		other_causes: &Metadata<F>,
-	) -> Result<Self, Error<F>>
-	where
-		F: Clone + Ord,
-	{
+		metadata: M,
+		other_metadata: M,
+	) -> Result<Meta<Self, M>, Error<M>> where M: Merge {
 		if self.item == other.item {
 			let semantics = match (self.semantics, other.semantics) {
 				(Some(a), Some(b)) => Some(a.try_unify(b, id)?),
@@ -85,34 +80,36 @@ impl<F> Array<F> {
 				(None, None) => None,
 			};
 
-			Ok(Self {
-				item: self.item,
-				semantics,
-			})
+			Ok(Meta(
+				Self {
+					item: self.item,
+					semantics,
+				},
+				metadata.merged_with(other_metadata)
+			))
 		} else {
 			Err(Error::new(
 				error::LayoutMismatchDescription {
 					id,
-					because: causes.preferred().cloned(),
+					because: metadata,
 				}
 				.into(),
-				other_causes.preferred().cloned(),
+				other_metadata,
 			))
 		}
 	}
 
 	pub fn build(
 		self,
-		name: MetaOption<Name, F>,
-		nodes: &mut crate::context::allocated::Nodes<F>,
-		causes: &Metadata<F>,
-	) -> Result<treeldr::layout::Array<F>, Error<F>>
+		name: MetaOption<Name, M>,
+		nodes: &mut crate::context::allocated::Nodes<M>,
+		metadata: &M,
+	) -> Result<treeldr::layout::Array<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
-		let item_layout_ref = *nodes
-			.require_layout(self.item, causes.preferred().cloned())?
-			.inner();
+		let item_layout_ref = **nodes
+			.require_layout(self.item, metadata)?;
 		let semantics = self.semantics.map(|s| s.build(nodes)).transpose()?;
 
 		Ok(treeldr::layout::Array::new(
@@ -125,51 +122,47 @@ impl<F> Array<F> {
 
 #[derive(Clone, Debug, Derivative, StrippedPartialEq)]
 #[derivative(Default(bound = ""))]
-#[stripped_ignore(F)]
-pub struct Semantics<F> {
-	#[stripped_option]
-	first: MetaOption<Id, F>,
+#[stripped_ignore(M)]
+pub struct Semantics<M> {
+	first: MetaOption<Id, M>,
 
-	#[stripped_option]
-	rest: MetaOption<Id, F>,
+	rest: MetaOption<Id, M>,
 
-	#[stripped_option]
-	nil: MetaOption<Id, F>,
+	nil: MetaOption<Id, M>,
 }
 
-fn on_err<F: Clone + Ord>(id: Id, a_causes: &Metadata<F>, b_causes: &Metadata<F>) -> Error<F> {
+fn on_err<M>(id: Id, a_meta: M, b_meta: M) -> Error<M> {
 	Error::new(
 		error::LayoutMismatchDescription {
 			id,
-			because: a_causes.preferred().cloned(),
+			because: a_meta,
 		}
 		.into(),
-		b_causes.preferred().cloned(),
+		b_meta,
 	)
 }
 
-impl<F> Semantics<F> {
-	pub fn rdf_list(causes: impl Into<Metadata<F>>) -> Self
+impl<M> Semantics<M> {
+	pub fn rdf_list(metadata: M) -> Self
 	where
-		F: Clone,
+		M: Clone,
 	{
-		let causes = causes.into();
 		Self {
-			first: MetaOption::new(Id::Iri(Term::Rdf(Rdf::First)), causes.clone()),
-			rest: MetaOption::new(Id::Iri(Term::Rdf(Rdf::Rest)), causes.clone()),
-			nil: MetaOption::new(Id::Iri(Term::Rdf(Rdf::Nil)), causes),
+			first: MetaOption::new(Id::Iri(Term::Rdf(Rdf::First)), metadata.clone()),
+			rest: MetaOption::new(Id::Iri(Term::Rdf(Rdf::Rest)), metadata.clone()),
+			nil: MetaOption::new(Id::Iri(Term::Rdf(Rdf::Nil)), metadata),
 		}
 	}
 
-	pub fn first(&self) -> &MetaOption<Id, F> {
+	pub fn first(&self) -> &MetaOption<Id, M> {
 		&self.first
 	}
 
-	pub fn rest(&self) -> &MetaOption<Id, F> {
+	pub fn rest(&self) -> &MetaOption<Id, M> {
 		&self.rest
 	}
 
-	pub fn nil(&self) -> &MetaOption<Id, F> {
+	pub fn nil(&self) -> &MetaOption<Id, M> {
 		&self.nil
 	}
 
@@ -177,14 +170,11 @@ impl<F> Semantics<F> {
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Metadata<F>>,
-	) -> Result<(), Error<F>>
-	where
-		F: Clone + Ord,
-	{
+		metadata: M,
+	) -> Result<(), Error<M>> {
 		self.first
-			.try_set(value, causes, |_, _, a_causes, b_causes| {
-				on_err(id, a_causes, b_causes)
+			.try_set(value, metadata, |Meta(_, a_meta), Meta(_, b_meta)| {
+				on_err(id, a_meta, b_meta)
 			})
 	}
 
@@ -192,14 +182,14 @@ impl<F> Semantics<F> {
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Metadata<F>>,
-	) -> Result<(), Error<F>>
+		metadata: M,
+	) -> Result<(), Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
 		self.rest
-			.try_set(value, causes, |_, _, a_causes, b_causes| {
-				on_err(id, a_causes, b_causes)
+			.try_set(value, metadata, |Meta(_, a_meta), Meta(_, b_meta)| {
+				on_err(id, a_meta, b_meta)
 			})
 	}
 
@@ -207,31 +197,28 @@ impl<F> Semantics<F> {
 		&mut self,
 		id: Id,
 		value: Id,
-		causes: impl Into<Metadata<F>>,
-	) -> Result<(), Error<F>>
+		metadata: M,
+	) -> Result<(), Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
-		self.nil.try_set(value, causes, |_, _, a_causes, b_causes| {
-			on_err(id, a_causes, b_causes)
+		self.nil.try_set(value, metadata, |Meta(_, a_meta), Meta(_, b_meta)| {
+			on_err(id, a_meta, b_meta)
 		})
 	}
 
-	pub fn try_unify(mut self, other: Self, id: Id) -> Result<Self, Error<F>>
-	where
-		F: Clone + Ord,
-	{
+	pub fn try_unify(mut self, other: Self, id: Id) -> Result<Self, Error<M>> {
 		self.first
-			.try_set_opt(other.first, |_, _, a_causes, b_causes| {
-				on_err(id, a_causes, b_causes)
+			.try_set_opt(other.first, |Meta(_, a_meta), Meta(_, b_meta)| {
+				on_err(id, a_meta, b_meta)
 			})?;
 		self.rest
-			.try_set_opt(other.rest, |_, _, a_causes, b_causes| {
-				on_err(id, a_causes, b_causes)
+			.try_set_opt(other.rest, |Meta(_, a_meta), Meta(_, b_meta)| {
+				on_err(id, a_meta, b_meta)
 			})?;
 		self.nil
-			.try_set_opt(other.nil, |_, _, a_causes, b_causes| {
-				on_err(id, a_causes, b_causes)
+			.try_set_opt(other.nil, |Meta(_, a_meta), Meta(_, b_meta)| {
+				on_err(id, a_meta, b_meta)
 			})?;
 
 		Ok(self)
@@ -239,16 +226,16 @@ impl<F> Semantics<F> {
 
 	pub fn build(
 		self,
-		nodes: &mut crate::context::allocated::Nodes<F>,
-	) -> Result<treeldr::layout::array::Semantics<F>, Error<F>>
+		nodes: &mut crate::context::allocated::Nodes<M>,
+	) -> Result<treeldr::layout::array::Semantics<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
-		let first = self.first.try_map_with_causes(|id, causes| {
-			Ok(**nodes.require_property(id, causes.preferred().cloned())?)
+		let first = self.first.try_map_with_causes(|Meta(id, metadata)| {
+			Ok(Meta(**nodes.require_property(id, &metadata)?, metadata))
 		})?;
-		let rest = self.rest.try_map_with_causes(|id, causes| {
-			Ok(**nodes.require_property(id, causes.preferred().cloned())?)
+		let rest = self.rest.try_map_with_causes(|Meta(id, metadata)| {
+			Ok(Meta(**nodes.require_property(id, &metadata)?, metadata))
 		})?;
 
 		Ok(treeldr::layout::array::Semantics::new(
@@ -257,7 +244,7 @@ impl<F> Semantics<F> {
 	}
 }
 
-impl<F> PartialEq for Semantics<F> {
+impl<M> PartialEq for Semantics<M> {
 	fn eq(&self, other: &Self) -> bool {
 		self.first.value() == other.first.value()
 			&& self.rest.value() == other.rest.value()

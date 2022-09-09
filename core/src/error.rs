@@ -1,13 +1,13 @@
 use crate::{
-	metadata::MaybeLocated,
-	reporting::{Diagnose, MetadataDiagnostic},
+	reporting::Diagnose,
 	Vocabulary,
 };
+use locspan::{Span, MaybeLocated};
 
-pub trait AnyError<M: MetadataDiagnostic> {
+pub trait AnyError<M: MaybeLocated<Span=Span>> {
 	fn message(&self, vocab: &Vocabulary) -> String;
 
-	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
+	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
@@ -38,7 +38,7 @@ macro_rules! errors {
 			}
 		)*
 
-		impl<'c, 'a, M: MetadataDiagnostic + MaybeLocated<File = M::FileId>> Diagnose<M> for WithVocabulary<'c, 'a, M> where M::File: Clone {
+		impl<'c, 'a, M: MaybeLocated<Span=Span>> Diagnose<M> for WithVocabulary<'c, 'a, M> where M::File: Clone {
 			fn message(&self) -> String {
 				match self.error() {
 					$(
@@ -47,7 +47,7 @@ macro_rules! errors {
 				}
 			}
 
-			fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::FileId>> {
+			fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 				match self.error() {
 					$(
 						Error::$id(e) => AnyError::<M>::labels(e, self.vocabulary())

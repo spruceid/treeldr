@@ -1,23 +1,23 @@
 use treeldr::{Id, Vocabulary, vocab::Display};
-use locspan::Location;
+use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
-pub struct TypeMismatchUnion<F> {
+pub struct TypeMismatchUnion<M> {
 	pub id: Id,
 	pub expected: Id,
 	pub found: Id,
-	pub because: Option<Location<F>>
+	pub because: M
 }
 
-impl<F: Clone> super::AnyError<F> for TypeMismatchUnion<F> {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for TypeMismatchUnion<M> where M::File: Clone {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("expected union list {}, found {}", self.expected.display(vocab), self.found.display(vocab))
 	}
 
-	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		let mut labels = Vec::new();
-		if let Some(cause) = &self.because {
-			labels.push(cause.clone().into_secondary_label().with_message("union previously defined here".to_string()));
+		if let Some(cause) = self.because.optional_location().cloned() {
+			labels.push(cause.into_secondary_label().with_message("union previously defined here".to_string()));
 		}
 		labels
 	}
