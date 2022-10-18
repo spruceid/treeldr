@@ -237,7 +237,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 			.as_property_mut()
 			.unwrap();
 		prop.set_domain(Id::Iri(Term::Rdf(Rdf::List)), metadata.clone());
-		prop.set_range(Id::Iri(Term::Rdf(Rdf::List)), metadata.clone())
+		prop.set_range(Id::Iri(Term::Rdf(Rdf::List)), metadata)
 	}
 
 	pub fn define_xsd_types(&mut self, metadata: M) -> Result<(), Error<M>>

@@ -28,7 +28,7 @@ impl<M> Normal<M> {
 		use std::collections::hash_map::Entry;
 		match self.properties.entry(prop_ref) {
 			Entry::Vacant(entry) => {
-				entry.insert(cause.into());
+				entry.insert(cause);
 			}
 			Entry::Occupied(mut entry) => {
 				entry.get_mut().merge_with(cause)

@@ -84,7 +84,7 @@ impl<M> Definition<M> {
 		use std::collections::hash_map::Entry;
 		match self.domain.entry(ty_ref) {
 			Entry::Vacant(entry) => {
-				entry.insert(cause.into());
+				entry.insert(cause);
 			}
 			Entry::Occupied(mut entry) => {
 				entry.get_mut().merge_with(cause)
@@ -138,8 +138,8 @@ impl<M: Clone> crate::Build<M> for Definition<M> {
 				causes.clone(),
 			)
 		})?;
-		let range = Meta(nodes
-			.require_type(*range_id, range_id.metadata())?.value().clone(), range_id.into_metadata());
+		let range = Meta(*nodes
+			.require_type(*range_id, range_id.metadata())?.value(), range_id.into_metadata());
 
 		let required = self.required.unwrap_or_else(|| Meta(false, causes.clone()));
 		let functional = self.functional.unwrap_or_else(|| Meta(true, causes.clone()));

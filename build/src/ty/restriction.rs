@@ -50,7 +50,7 @@ impl<M> Restriction<M> {
 		use std::collections::btree_map::Entry;
 		match self.restrictions.entry(r) {
 			Entry::Vacant(entry) => {
-				entry.insert(metadata.into());
+				entry.insert(metadata);
 			}
 			Entry::Occupied(mut entry) => {
 				entry.get_mut().merge_with(metadata)

@@ -134,7 +134,7 @@ impl<M: Clone> Restrictions<M> {
 							restriction: other,
 						}
 						.into(),
-						causes.clone(),
+						causes,
 					))
 				}
 			}
@@ -189,7 +189,7 @@ impl<M: Clone> Restrictions<M> {
 							restriction: other,
 						}
 						.into(),
-						causes.clone(),
+						causes,
 					))
 				}
 			}
@@ -230,7 +230,7 @@ impl<M: Clone> Restrictions<M> {
 							restriction: other,
 						}
 						.into(),
-						causes.clone(),
+						causes,
 					))
 				}
 			}
@@ -271,7 +271,7 @@ impl<M: Clone> Restrictions<M> {
 							restriction: other,
 						}
 						.into(),
-						causes.clone(),
+						causes,
 					))
 				}
 			}
@@ -296,7 +296,7 @@ impl<M: Clone> Restrictions<M> {
 							restriction: other,
 						}
 						.into(),
-						causes.clone(),
+						causes,
 					))
 				}
 			}
@@ -314,7 +314,7 @@ impl<M: Clone> Restrictions<M> {
 					restriction,
 				}
 				.into(),
-				causes.clone(),
+				causes,
 			)),
 			None => Ok(()),
 		}
@@ -329,7 +329,7 @@ impl<M: Clone> Restrictions<M> {
 					restriction,
 				}
 				.into(),
-				causes.clone(),
+				causes,
 			)),
 			None => Ok(()),
 		}
@@ -344,7 +344,7 @@ impl<M: Clone> Restrictions<M> {
 					restriction,
 				}
 				.into(),
-				causes.clone(),
+				causes,
 			)),
 			None => Ok(()),
 		}
@@ -359,7 +359,7 @@ impl<M: Clone> Restrictions<M> {
 					restriction,
 				}
 				.into(),
-				causes.clone(),
+				causes,
 			)),
 			None => Ok(()),
 		}
@@ -374,7 +374,7 @@ impl<M: Clone> Restrictions<M> {
 					restriction,
 				}
 				.into(),
-				causes.clone(),
+				causes,
 			)),
 			None => Ok(()),
 		}
@@ -389,7 +389,7 @@ impl<M: Clone> Restrictions<M> {
 					restriction,
 				}
 				.into(),
-				causes.clone(),
+				causes,
 			)),
 			None => Ok(()),
 		}
