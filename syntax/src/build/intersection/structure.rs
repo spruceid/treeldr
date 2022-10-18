@@ -426,9 +426,7 @@ impl<M> FieldLayoutDescription<M> {
 				layout.set_set(item_layout, item_causes).ok();
 			}
 			Self::Array(semantics) => {
-				layout
-					.set_array(item_layout, semantics, item_causes)
-					.ok();
+				layout.set_array(item_layout, semantics, item_causes).ok();
 			}
 		}
 

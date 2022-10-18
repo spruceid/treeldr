@@ -4,6 +4,8 @@ use locspan::{MaybeLocated, Meta, Span, Spanned};
 use std::{fmt, fmt::Debug};
 use treeldr::reporting;
 
+pub type MetaError<L, M> = Meta<Box<Error<<L as Tokens>::Error>>, M>;
+
 /// Parse error.
 #[derive(Debug)]
 pub enum Error<E> {
@@ -86,26 +88,26 @@ pub struct Parser<L, F> {
 }
 
 impl<L: Tokens, F> Parser<L, F> {
-	fn next<M>(&mut self) -> Result<Meta<Option<Token>, Span>, Meta<Error<L::Error>, M>>
+	fn next<M>(&mut self) -> Result<Meta<Option<Token>, Span>, MetaError<L, M>>
 	where
 		F: FnMut(Span) -> M,
 	{
 		self.lexer
 			.next()
-			.map_err(|Meta(e, span)| Meta(Error::Lexer(e), (self.metadata_builder)(span)))
+			.map_err(|Meta(e, span)| Meta(Box::new(Error::Lexer(e)), (self.metadata_builder)(span)))
 	}
 
 	fn next_label(&mut self) -> Label {
 		self.lexer.next_label()
 	}
 
-	fn peek<M>(&mut self) -> Result<Meta<Option<&Token>, Span>, Meta<Error<L::Error>, M>>
+	fn peek<M>(&mut self) -> Result<Meta<Option<&Token>, Span>, MetaError<L, M>>
 	where
 		F: FnMut(Span) -> M,
 	{
 		self.lexer
 			.peek()
-			.map_err(|Meta(e, span)| Meta(Error::Lexer(e), (self.metadata_builder)(span)))
+			.map_err(|Meta(e, span)| Meta(Box::new(Error::Lexer(e)), (self.metadata_builder)(span)))
 	}
 
 	fn build_metadata<M>(&mut self, span: Span) -> M
@@ -119,13 +121,13 @@ impl<L: Tokens, F> Parser<L, F> {
 	fn next_expected<M>(
 		&mut self,
 		expected: impl FnOnce() -> Vec<TokenKind>,
-	) -> Result<Meta<Token, Span>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Token, Span>, MetaError<L, M>>
 	where
 		F: FnMut(Span) -> M,
 	{
 		match self.next()? {
 			Meta(None, span) => Err(Meta::new(
-				Error::Unexpected(None, expected()),
+				Box::new(Error::Unexpected(None, expected())),
 				(self.metadata_builder)(span),
 			)),
 			Meta(Some(token), span) => Ok(Meta::new(token, span)),
@@ -137,7 +139,7 @@ impl<L: Tokens, F> Parser<L, F> {
 		&mut self,
 		token_opt: Option<Meta<Token, Span>>,
 		expected: impl FnOnce() -> Vec<TokenKind>,
-	) -> Result<Meta<Token, Span>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Token, Span>, MetaError<L, M>>
 	where
 		F: FnMut(Span) -> M,
 	{
@@ -150,7 +152,7 @@ impl<L: Tokens, F> Parser<L, F> {
 	#[allow(clippy::type_complexity)]
 	fn parse_comma_separated_list<T: Parse<M>, M>(
 		&mut self,
-	) -> Result<Vec<Meta<T, M>>, Meta<Error<L::Error>, M>>
+	) -> Result<Vec<Meta<T, M>>, MetaError<L, M>>
 	where
 		F: FnMut(Span) -> M,
 	{
@@ -174,7 +176,7 @@ impl<L: Tokens, F> Parser<L, F> {
 	fn parse_block<T: Parse<M>, M>(
 		&mut self,
 		mut span: Span,
-	) -> Result<Meta<Vec<Meta<T, M>>, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Vec<Meta<T, M>>, M>, MetaError<L, M>>
 	where
 		F: FnMut(Span) -> M,
 	{
@@ -185,19 +187,19 @@ impl<L: Tokens, F> Parser<L, F> {
 				Ok(Meta(items, self.build_metadata(span)))
 			}
 			Meta(unexpected, span) => Err(Meta::new(
-				Error::Unexpected(
+				Box::new(Error::Unexpected(
 					unexpected,
 					vec![
 						TokenKind::Punct(Punct::Comma),
 						TokenKind::End(Delimiter::Brace),
 					],
-				),
+				)),
 				self.build_metadata(span),
 			)),
 		}
 	}
 
-	fn parse_keyword<M>(&mut self, keyword: lexing::Keyword) -> Result<(), Meta<Error<L::Error>, M>>
+	fn parse_keyword<M>(&mut self, keyword: lexing::Keyword) -> Result<(), MetaError<L, M>>
 	where
 		F: FnMut(Span) -> M,
 	{
@@ -206,13 +208,16 @@ impl<L: Tokens, F> Parser<L, F> {
 		match token {
 			Token::Keyword(k) if k == keyword => Ok(()),
 			unexpected => Err(Meta::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::Keyword(keyword)]),
+				Box::new(Error::Unexpected(
+					Some(unexpected),
+					vec![TokenKind::Keyword(keyword)],
+				)),
 				self.build_metadata(span),
 			)),
 		}
 	}
 
-	fn parse_punct<M>(&mut self, punct: lexing::Punct) -> Result<(), Meta<Error<L::Error>, M>>
+	fn parse_punct<M>(&mut self, punct: lexing::Punct) -> Result<(), MetaError<L, M>>
 	where
 		F: FnMut(Span) -> M,
 	{
@@ -221,13 +226,16 @@ impl<L: Tokens, F> Parser<L, F> {
 		match token {
 			Token::Punct(p) if p == punct => Ok(()),
 			unexpected => Err(Meta::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::Punct(punct)]),
+				Box::new(Error::Unexpected(
+					Some(unexpected),
+					vec![TokenKind::Punct(punct)],
+				)),
 				self.build_metadata(span),
 			)),
 		}
 	}
 
-	fn parse_end<M>(&mut self, delimiter: Delimiter) -> Result<Span, Meta<Error<L::Error>, M>>
+	fn parse_end<M>(&mut self, delimiter: Delimiter) -> Result<Span, MetaError<L, M>>
 	where
 		F: FnMut(Span) -> M,
 	{
@@ -236,7 +244,10 @@ impl<L: Tokens, F> Parser<L, F> {
 		match token {
 			Token::End(d) if d == delimiter => Ok(span),
 			unexpected => Err(Meta::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::End(delimiter)]),
+				Box::new(Error::Unexpected(
+					Some(unexpected),
+					vec![TokenKind::End(delimiter)],
+				)),
 				self.build_metadata(span),
 			)),
 		}
@@ -248,7 +259,7 @@ pub trait Parse<M>: Sized {
 	const FIRST: &'static [TokenKind];
 
 	#[allow(clippy::type_complexity)]
-	fn parse<L, F>(parser: &mut Parser<L, F>) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	fn parse<L, F>(parser: &mut Parser<L, F>) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -256,7 +267,7 @@ pub trait Parse<M>: Sized {
 		match parser.next()? {
 			Meta(Some(token), loc) => Self::parse_from(parser, token, loc),
 			Meta(None, loc) => Err(Meta(
-				Error::Unexpected(None, Self::FIRST.to_vec()),
+				Box::new(Error::Unexpected(None, Self::FIRST.to_vec())),
 				parser.build_metadata(loc),
 			)),
 		}
@@ -266,7 +277,7 @@ pub trait Parse<M>: Sized {
 	fn parse_from_continuation<L, F>(
 		parser: &mut Parser<L, F>,
 		token_opt: Option<Meta<Token, Span>>,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -282,15 +293,13 @@ pub trait Parse<M>: Sized {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M;
 
 	#[allow(clippy::type_complexity)]
-	fn try_parse<L, F>(
-		parser: &mut Parser<L, F>,
-	) -> Result<Option<Meta<Self, M>>, Meta<Error<L::Error>, M>>
+	fn try_parse<L, F>(parser: &mut Parser<L, F>) -> Result<Option<Meta<Self, M>>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -311,7 +320,7 @@ pub trait Parse<M>: Sized {
 	fn try_parse_from_continuation<L, F>(
 		parser: &mut Parser<L, F>,
 		token_opt: Option<Meta<Token, Span>>,
-	) -> Result<Option<Meta<Self, M>>, Meta<Error<L::Error>, M>>
+	) -> Result<Option<Meta<Self, M>>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -333,7 +342,7 @@ pub trait Parse<M>: Sized {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		loc: Span,
-	) -> Result<(Option<Meta<Self, M>>, Option<Meta<Token, Span>>), Meta<Error<L::Error>, M>>
+	) -> Result<(Option<Meta<Self, M>>, Option<Meta<Token, Span>>), MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -349,7 +358,7 @@ pub trait Parse<M>: Sized {
 impl<M: Spanned<Span = Span>> Parse<M> for Document<M> {
 	const FIRST: &'static [TokenKind] = Item::<M>::FIRST;
 
-	fn parse<L, F>(parser: &mut Parser<L, F>) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	fn parse<L, F>(parser: &mut Parser<L, F>) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -373,7 +382,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Document<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -432,7 +441,7 @@ impl<M> Parse<M> for Id {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		span: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -444,7 +453,7 @@ impl<M> Parse<M> for Id {
 				parser.build_metadata(span),
 			)),
 			unexpected => Err(Meta::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::Id]),
+				Box::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id])),
 				parser.build_metadata(span),
 			)),
 		}
@@ -458,7 +467,7 @@ impl<M> Parse<M> for Documentation<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		mut span: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -480,7 +489,7 @@ impl<M> Parse<M> for Documentation<M> {
 				}
 			}
 			unexpected => Err(Meta::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::Id]),
+				Box::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id])),
 				parser.build_metadata(span),
 			)),
 		}
@@ -500,7 +509,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		token_span: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -516,10 +525,13 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 					Meta(Id::IriRef(iri_ref), loc) => match IriBuf::try_from(iri_ref) {
 						Ok(iri) => Meta::new(iri, loc),
 						Err(iri_ref) => {
-							return Err(Meta::new(Error::InvalidUseId(Id::IriRef(iri_ref)), loc))
+							return Err(Meta::new(
+								Box::new(Error::InvalidUseId(Id::IriRef(iri_ref))),
+								loc,
+							))
 						}
 					},
-					Meta(id, loc) => return Err(Meta::new(Error::InvalidUseId(id), loc)),
+					Meta(id, loc) => return Err(Meta::new(Box::new(Error::InvalidUseId(id)), loc)),
 				};
 
 				parser.parse_punct(Punct::Semicolon)?;
@@ -532,10 +544,13 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 					Meta(Id::IriRef(iri_ref), loc) => match IriBuf::try_from(iri_ref) {
 						Ok(iri) => Meta::new(iri, loc),
 						Err(iri_ref) => {
-							return Err(Meta::new(Error::InvalidUseId(Id::IriRef(iri_ref)), loc))
+							return Err(Meta::new(
+								Box::new(Error::InvalidUseId(Id::IriRef(iri_ref))),
+								loc,
+							))
 						}
 					},
-					Meta(id, loc) => return Err(Meta::new(Error::InvalidUseId(id), loc)),
+					Meta(id, loc) => return Err(Meta::new(Box::new(Error::InvalidUseId(id)), loc)),
 				};
 
 				parser.parse_keyword(lexing::Keyword::As)?;
@@ -613,13 +628,13 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 					}
 					Meta(unexpected, loc) => {
 						return Err(Meta::new(
-							Error::Unexpected(
+							Box::new(Error::Unexpected(
 								unexpected,
 								vec![
 									TokenKind::Begin(Delimiter::Brace),
 									TokenKind::Punct(Punct::Equal),
 								],
-							),
+							)),
 							parser.build_metadata(loc),
 						));
 					}
@@ -652,13 +667,13 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 					Meta(Some(Token::Punct(Punct::Semicolon)), _) => None,
 					Meta(unexpected, loc) => {
 						return Err(Meta::new(
-							Error::Unexpected(
+							Box::new(Error::Unexpected(
 								unexpected,
 								vec![
 									TokenKind::Punct(Punct::Colon),
 									TokenKind::Punct(Punct::Semicolon),
 								],
-							),
+							)),
 							parser.build_metadata(loc),
 						));
 					}
@@ -706,13 +721,13 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 					),
 					Meta(unexpected, loc) => {
 						return Err(Meta::new(
-							Error::Unexpected(
+							Box::new(Error::Unexpected(
 								unexpected,
 								vec![
 									TokenKind::Begin(Delimiter::Brace),
 									TokenKind::Punct(Punct::Equal),
 								],
-							),
+							)),
 							parser.build_metadata(loc),
 						));
 					}
@@ -733,7 +748,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 				))
 			}
 			unexpected => Err(Meta::new(
-				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
+				Box::new(Error::Unexpected(Some(unexpected), Self::FIRST.to_vec())),
 				parser.build_metadata(loc),
 			)),
 		}
@@ -753,7 +768,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for LayoutDescription<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -783,7 +798,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for PropertyDefinition<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		token_span: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -827,7 +842,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for FieldDefinition<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		token_span: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -875,7 +890,7 @@ impl<M> Parse<M> for Alias {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -883,11 +898,11 @@ impl<M> Parse<M> for Alias {
 		match token {
 			Token::Id(Id::Name(alias)) => Ok(Meta::new(Alias(alias), parser.build_metadata(loc))),
 			Token::Id(id) => Err(Meta::new(
-				Error::InvalidAlias(id),
+				Box::new(Error::InvalidAlias(id)),
 				parser.build_metadata(loc),
 			)),
 			unexpected => Err(Meta::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::Id]),
+				Box::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id])),
 				parser.build_metadata(loc),
 			)),
 		}
@@ -901,7 +916,7 @@ impl<M> Parse<M> for Prefix {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -909,11 +924,11 @@ impl<M> Parse<M> for Prefix {
 		match token {
 			Token::Id(Id::Name(alias)) => Ok(Meta::new(Prefix(alias), parser.build_metadata(loc))),
 			Token::Id(id) => Err(Meta::new(
-				Error::InvalidPrefix(id),
+				Box::new(Error::InvalidPrefix(id)),
 				parser.build_metadata(loc),
 			)),
 			unexpected => Err(Meta::new(
-				Error::Unexpected(Some(unexpected), vec![TokenKind::Id]),
+				Box::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id])),
 				parser.build_metadata(loc),
 			)),
 		}
@@ -935,7 +950,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for AnnotatedTypeExpr<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		mut loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -987,7 +1002,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for OuterTypeExpr<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		mut loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -1041,7 +1056,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for NamedInnerTypeExpr<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -1083,7 +1098,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		mut loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -1096,7 +1111,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 					prop: Meta<Id, M>,
 					alias: Option<Meta<Alias, M>>,
 					mut loc: Span,
-				) -> Result<Meta<TypeRestrictedProperty<M>, M>, Meta<Error<L::Error>, M>>
+				) -> Result<Meta<TypeRestrictedProperty<M>, M>, MetaError<L, M>>
 				where
 					L: Tokens,
 					F: FnMut(Span) -> M,
@@ -1134,10 +1149,10 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 								Ok(restriction.map(Self::PropertyRestriction))
 							}
 							Meta(unexpected, loc) => Err(Meta::new(
-								Error::Unexpected(
+								Box::new(Error::Unexpected(
 									Some(unexpected),
 									vec![TokenKind::Punct(lexing::Punct::Colon)],
-								),
+								)),
 								parser.build_metadata(loc),
 							)),
 						}
@@ -1147,13 +1162,13 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 						Ok(restriction.map(Self::PropertyRestriction))
 					}
 					Meta(unexpected, loc) => Err(Meta::new(
-						Error::Unexpected(
+						Box::new(Error::Unexpected(
 							unexpected,
 							vec![
 								TokenKind::Keyword(Keyword::As),
 								TokenKind::Punct(lexing::Punct::Colon),
 							],
-						),
+						)),
 						parser.build_metadata(loc),
 					)),
 				}
@@ -1193,7 +1208,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 					))
 				}
 				unexpected => Err(Meta::new(
-					Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
+					Box::new(Error::Unexpected(Some(unexpected), Self::FIRST.to_vec())),
 					parser.build_metadata(loc),
 				)),
 			},
@@ -1216,7 +1231,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for AnnotatedLayoutExpr<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		mut loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -1268,7 +1283,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for OuterLayoutExpr<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		mut loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -1322,7 +1337,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for NamedInnerLayoutExpr<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -1355,7 +1370,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerLayoutExpr<M> {
 		parser: &mut Parser<L, F>,
 		token: Token,
 		mut loc: Span,
-	) -> Result<Meta<Self, M>, Meta<Error<L::Error>, M>>
+	) -> Result<Meta<Self, M>, MetaError<L, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -1393,7 +1408,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerLayoutExpr<M> {
 				))
 			}
 			unexpected => Err(Meta::new(
-				Error::Unexpected(Some(unexpected), Self::FIRST.to_vec()),
+				Box::new(Error::Unexpected(Some(unexpected), Self::FIRST.to_vec())),
 				parser.build_metadata(loc),
 			)),
 		}
