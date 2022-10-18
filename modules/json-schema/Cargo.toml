@@ -15,7 +15,7 @@ derivative = "2.2.0"
 
 # For the import function.
 treeldr-build = { path = "../../build" }
-locspan = "0.7"
+locspan = "0.7.9"
 rdf-types = { version = "0.9", features = ["meta"] }
 xsd-types = "0.3.0"
 

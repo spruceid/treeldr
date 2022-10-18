@@ -255,7 +255,7 @@ where
 		syntax::Lexer::<_, Infallible, _>::new(source_id, file.buffer().chars().map(Result::Ok));
 
 	log::debug!("ready for parsing.");
-	match syntax::Document::parse(&mut lexer) {
+	match syntax::Document::parse_in(&mut lexer) {
 		Ok(doc) => {
 			log::debug!("parsing succeeded.");
 			TreeLdrDocument {

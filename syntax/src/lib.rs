@@ -8,7 +8,7 @@ pub mod parsing;
 mod peekable3;
 
 pub use lexing::{Id, Label, Lexer};
-pub use parsing::Parse;
+pub use parsing::{Parse, Parser};
 pub use treeldr::{layout::Primitive, vocab};
 
 #[derive(Clone)]

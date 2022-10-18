@@ -24,3 +24,15 @@ pub trait Merge {
 		}
 	}
 }
+
+impl Merge for locspan::Span {
+	fn merge_with(&mut self, other: Self) {
+		*self = other
+	}
+}
+
+impl<F, S> Merge for locspan::Location<F, S> {
+	fn merge_with(&mut self, other: Self) {
+		*self = other
+	}
+}

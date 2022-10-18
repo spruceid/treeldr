@@ -23,7 +23,7 @@ treeldr-load = { path = "../load" }
 iref = "2.2"
 grdf = { version = "0.11", features = ["meta"] }
 log = "0.4"
-locspan = "0.7.4"
+locspan = "0.7.9"
 codespan-reporting = "0.11"
 stderrlog = "0.5"
 clap = { version = "3.0", features = ["derive"] }
