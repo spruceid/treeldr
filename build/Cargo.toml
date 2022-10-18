@@ -11,6 +11,6 @@ iref = "2.2"
 shelves = "0.2.6"
 derivative = "2.2.0"
 locspan = { version = "0.7.4", features = ["reporting"] }
-locspan-derive = "0.4"
+locspan-derive = "0.5"
 codespan-reporting = "0.11"
 grdf = { version = "0.11", features = ["meta"] }

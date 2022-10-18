@@ -13,7 +13,7 @@ static-iref = "2.0"
 log = "0.4"
 derivative = "2.2.0"
 locspan = { version = "0.7.4", features = ["reporting"] }
-locspan-derive = "0.4"
+locspan-derive = "0.5"
 codespan-reporting = "0.11"
 rdf-types = { version = "0.9", features = ["meta"] }
 xsd-types = "0.3.0"

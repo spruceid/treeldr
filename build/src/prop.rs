@@ -34,7 +34,7 @@ impl<M> Definition<M> {
 
 	pub fn set_required(&mut self, value: bool, cause: M) -> Result<(), Error<M>>
 	where
-		M: Ord + Clone,
+		M: Clone,
 	{
 		self.required
 			.try_set(value, cause, |Meta(expected, expected_meta), Meta(found, found_meta)| {
@@ -63,7 +63,7 @@ impl<M> Definition<M> {
 		cause: M,
 	) -> Result<(), Error<M>>
 	where
-		M: Ord + Clone,
+		M: Clone,
 	{
 		self.functional
 			.try_set(value, cause, |Meta(expected, expected_meta), Meta(found, found_meta)| {

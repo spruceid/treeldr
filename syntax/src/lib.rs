@@ -1,5 +1,6 @@
 use iref::IriBuf;
-use locspan::{Loc, Meta};
+use locspan::Meta;
+use locspan_derive::{StrippedEq, StrippedPartialEq};
 
 pub mod build;
 pub mod lexing;
@@ -11,22 +12,22 @@ pub use parsing::Parse;
 pub use treeldr::{layout::Primitive, vocab};
 
 #[derive(Clone)]
-pub struct Documentation<F> {
-	pub items: Vec<Loc<String, F>>,
+pub struct Documentation<M> {
+	pub items: Vec<Meta<String, M>>,
 }
 
-impl<F> Documentation<F> {
-	pub fn new(items: Vec<Loc<String, F>>) -> Self {
+impl<M> Documentation<M> {
+	pub fn new(items: Vec<Meta<String, M>>) -> Self {
 		Self { items }
 	}
 }
 
-pub struct Document<F> {
-	pub bases: Vec<Loc<IriBuf, F>>,
-	pub uses: Vec<Loc<Use<F>, F>>,
-	pub types: Vec<Loc<TypeDefinition<F>, F>>,
-	pub properties: Vec<Loc<PropertyDefinition<F>, F>>,
-	pub layouts: Vec<Loc<LayoutDefinition<F>, F>>,
+pub struct Document<M> {
+	pub bases: Vec<Meta<IriBuf, M>>,
+	pub uses: Vec<Meta<Use<M>, M>>,
+	pub types: Vec<Meta<TypeDefinition<M>, M>>,
+	pub properties: Vec<Meta<PropertyDefinition<M>, M>>,
+	pub layouts: Vec<Meta<LayoutDefinition<M>, M>>,
 }
 
 pub struct Prefix(String);
@@ -41,34 +42,34 @@ impl Prefix {
 	}
 }
 
-pub enum Item<F> {
-	Base(Loc<IriBuf, F>),
-	Use(Loc<Use<F>, F>),
-	Type(Loc<TypeDefinition<F>, F>),
-	Property(Loc<PropertyDefinition<F>, F>),
-	Layout(Loc<LayoutDefinition<F>, F>),
+pub enum Item<M> {
+	Base(Meta<IriBuf, M>),
+	Use(Meta<Use<M>, M>),
+	Type(Meta<TypeDefinition<M>, M>),
+	Property(Meta<PropertyDefinition<M>, M>),
+	Layout(Meta<LayoutDefinition<M>, M>),
 }
 
-pub struct Use<F> {
-	pub iri: Loc<IriBuf, F>,
-	pub prefix: Loc<Prefix, F>,
-	pub doc: Option<Loc<Documentation<F>, F>>,
+pub struct Use<M> {
+	pub iri: Meta<IriBuf, M>,
+	pub prefix: Meta<Prefix, M>,
+	pub doc: Option<Meta<Documentation<M>, M>>,
 }
 
-pub struct TypeDefinition<F> {
-	pub id: Loc<Id, F>,
-	pub description: Loc<TypeDescription<F>, F>,
-	pub doc: Option<Loc<Documentation<F>, F>>,
-	pub layout: Option<Loc<LayoutDescription<F>, F>>,
+pub struct TypeDefinition<M> {
+	pub id: Meta<Id, M>,
+	pub description: Meta<TypeDescription<M>, M>,
+	pub doc: Option<Meta<Documentation<M>, M>>,
+	pub layout: Option<Meta<LayoutDescription<M>, M>>,
 }
 
-impl<F: Clone> TypeDefinition<F> {
-	pub fn implicit_layout_definition(&self) -> LayoutDefinition<F> {
+impl<M: Clone> TypeDefinition<M> {
+	pub fn implicit_layout_definition(&self) -> LayoutDefinition<M> {
 		let description = match &self.layout {
 			Some(d) => d.clone(),
-			None => Loc(
+			None => Meta(
 				self.description.implicit_layout_description(),
-				self.description.location().clone(),
+				self.description.metadata().clone(),
 			),
 		};
 
@@ -81,19 +82,19 @@ impl<F: Clone> TypeDefinition<F> {
 	}
 }
 
-pub enum TypeDescription<F> {
-	Normal(Vec<Loc<PropertyDefinition<F>, F>>),
-	Alias(OuterTypeExpr<F>),
+pub enum TypeDescription<M> {
+	Normal(Vec<Meta<PropertyDefinition<M>, M>>),
+	Alias(OuterTypeExpr<M>),
 }
 
-impl<F: Clone> TypeDescription<F> {
-	pub fn implicit_layout_description(&self) -> LayoutDescription<F> {
+impl<M: Clone> TypeDescription<M> {
+	pub fn implicit_layout_description(&self) -> LayoutDescription<M> {
 		match self {
 			Self::Normal(properties) => LayoutDescription::Normal(
 				properties
 					.iter()
 					.map(|Meta(prop, prop_loc)| {
-						Loc(prop.implicit_field_definition(), prop_loc.clone())
+						Meta(prop.implicit_field_definition(), prop_loc.clone())
 					})
 					.collect(),
 			),
@@ -102,21 +103,21 @@ impl<F: Clone> TypeDescription<F> {
 	}
 }
 
-pub struct PropertyDefinition<F> {
-	pub id: Loc<Id, F>,
-	pub alias: Option<Loc<Alias, F>>,
-	pub ty: Option<Loc<AnnotatedTypeExpr<F>, F>>,
-	pub doc: Option<Loc<Documentation<F>, F>>,
+pub struct PropertyDefinition<M> {
+	pub id: Meta<Id, M>,
+	pub alias: Option<Meta<Alias, M>>,
+	pub ty: Option<Meta<AnnotatedTypeExpr<M>, M>>,
+	pub doc: Option<Meta<Documentation<M>, M>>,
 }
 
-impl<F: Clone> PropertyDefinition<F> {
-	pub fn implicit_field_definition(&self) -> FieldDefinition<F> {
+impl<M: Clone> PropertyDefinition<M> {
+	pub fn implicit_field_definition(&self) -> FieldDefinition<M> {
 		FieldDefinition {
 			id: self.id.clone(),
 			layout: self
 				.ty
 				.as_ref()
-				.map(|Meta(ty, ty_loc)| Loc(ty.implicit_layout_expr(), ty_loc.clone())),
+				.map(|Meta(ty, ty_loc)| Meta(ty.implicit_layout_expr(), ty_loc.clone())),
 			alias: None,
 			doc: self.doc.clone(),
 		}
@@ -151,17 +152,17 @@ impl Annotation {
 }
 
 /// Annotated type expression.
-pub struct AnnotatedTypeExpr<F> {
-	pub expr: Loc<OuterTypeExpr<F>, F>,
-	pub annotations: Vec<Loc<Annotation, F>>,
+pub struct AnnotatedTypeExpr<M> {
+	pub expr: Meta<OuterTypeExpr<M>, M>,
+	pub annotations: Vec<Meta<Annotation, M>>,
 }
 
-impl<F: Clone> AnnotatedTypeExpr<F> {
-	pub fn implicit_layout_expr(&self) -> AnnotatedLayoutExpr<F> {
+impl<M: Clone> AnnotatedTypeExpr<M> {
+	pub fn implicit_layout_expr(&self) -> AnnotatedLayoutExpr<M> {
 		AnnotatedLayoutExpr {
-			expr: Loc(
+			expr: Meta(
 				self.expr.implicit_layout_expr(),
-				self.expr.location().clone(),
+				self.expr.metadata().clone(),
 			),
 			annotations: self.annotations.clone(),
 		}
@@ -169,28 +170,28 @@ impl<F: Clone> AnnotatedTypeExpr<F> {
 }
 
 #[derive(Clone)]
-pub enum OuterTypeExpr<F> {
-	Inner(NamedInnerTypeExpr<F>),
-	Union(Label, Vec<Loc<NamedInnerTypeExpr<F>, F>>),
-	Intersection(Label, Vec<Loc<NamedInnerTypeExpr<F>, F>>),
+pub enum OuterTypeExpr<M> {
+	Inner(NamedInnerTypeExpr<M>),
+	Union(Label, Vec<Meta<NamedInnerTypeExpr<M>, M>>),
+	Intersection(Label, Vec<Meta<NamedInnerTypeExpr<M>, M>>),
 }
 
-impl<F: Clone> OuterTypeExpr<F> {
-	pub fn implicit_layout_expr(&self) -> OuterLayoutExpr<F> {
+impl<M: Clone> OuterTypeExpr<M> {
+	pub fn implicit_layout_expr(&self) -> OuterLayoutExpr<M> {
 		match self {
 			Self::Inner(i) => OuterLayoutExpr::Inner(i.implicit_layout_expr()),
 			Self::Union(label, options) => OuterLayoutExpr::Union(
 				*label,
 				options
 					.iter()
-					.map(|Meta(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
+					.map(|Meta(ty_expr, loc)| Meta(ty_expr.implicit_layout_expr(), loc.clone()))
 					.collect(),
 			),
 			Self::Intersection(label, types) => OuterLayoutExpr::Intersection(
 				*label,
 				types
 					.iter()
-					.map(|Meta(ty_expr, loc)| Loc(ty_expr.implicit_layout_expr(), loc.clone()))
+					.map(|Meta(ty_expr, loc)| Meta(ty_expr.implicit_layout_expr(), loc.clone()))
 					.collect(),
 			),
 		}
@@ -198,28 +199,28 @@ impl<F: Clone> OuterTypeExpr<F> {
 }
 
 #[derive(Clone)]
-pub struct NamedInnerTypeExpr<F> {
-	pub expr: Loc<InnerTypeExpr<F>, F>,
-	pub layout: NamedInnerTypeExprLayout<F>,
+pub struct NamedInnerTypeExpr<M> {
+	pub expr: Meta<InnerTypeExpr<M>, M>,
+	pub layout: NamedInnerTypeExprLayout<M>,
 }
 
 #[derive(Clone)]
-pub enum NamedInnerTypeExprLayout<F> {
-	Implicit(Option<Loc<Alias, F>>),
-	Explicit(Loc<NamedInnerLayoutExpr<F>, F>),
+pub enum NamedInnerTypeExprLayout<M> {
+	Implicit(Option<Meta<Alias, M>>),
+	Explicit(Meta<NamedInnerLayoutExpr<M>, M>),
 }
 
-impl<F: Clone> NamedInnerTypeExpr<F> {
-	pub fn as_id(&self) -> Option<Loc<Id, F>> {
+impl<M: Clone> NamedInnerTypeExpr<M> {
+	pub fn as_id(&self) -> Option<Meta<Id, M>> {
 		self.expr.as_id()
 	}
 
-	pub fn implicit_layout_expr(&self) -> NamedInnerLayoutExpr<F> {
+	pub fn implicit_layout_expr(&self) -> NamedInnerLayoutExpr<M> {
 		match &self.layout {
 			NamedInnerTypeExprLayout::Implicit(name) => NamedInnerLayoutExpr {
-				expr: Loc(
+				expr: Meta(
 					self.expr.implicit_layout_expr(),
-					self.expr.location().clone(),
+					self.expr.metadata().clone(),
 				),
 				name: name.clone(),
 			},
@@ -229,24 +230,24 @@ impl<F: Clone> NamedInnerTypeExpr<F> {
 }
 
 #[derive(Clone)]
-pub enum InnerTypeExpr<F> {
-	Id(Loc<Id, F>),
-	Reference(Box<Loc<Self, F>>),
+pub enum InnerTypeExpr<M> {
+	Id(Meta<Id, M>),
+	Reference(Box<Meta<Self, M>>),
 	Literal(Literal),
-	PropertyRestriction(TypeRestrictedProperty<F>),
-	List(Label, Box<Loc<OuterTypeExpr<F>, F>>),
-	Outer(Box<Loc<OuterTypeExpr<F>, F>>),
+	PropertyRestriction(TypeRestrictedProperty<M>),
+	List(Label, Box<Meta<OuterTypeExpr<M>, M>>),
+	Outer(Box<Meta<OuterTypeExpr<M>, M>>),
 }
 
-impl<F: Clone> InnerTypeExpr<F> {
-	pub fn as_id(&self) -> Option<Loc<Id, F>> {
+impl<M: Clone> InnerTypeExpr<M> {
+	pub fn as_id(&self) -> Option<Meta<Id, M>> {
 		match self {
 			Self::Id(id) => Some(id.clone()),
 			_ => None,
 		}
 	}
 
-	pub fn implicit_layout_expr(&self) -> InnerLayoutExpr<F> {
+	pub fn implicit_layout_expr(&self) -> InnerLayoutExpr<M> {
 		match self {
 			Self::Id(id) => InnerLayoutExpr::Id(id.clone()),
 			Self::Reference(r) => InnerLayoutExpr::Reference(r.clone()),
@@ -256,52 +257,52 @@ impl<F: Clone> InnerTypeExpr<F> {
 			}
 			Self::List(label, item) => InnerLayoutExpr::Array(
 				*label,
-				Box::new(Loc(item.implicit_layout_expr(), item.location().clone())),
+				Box::new(Meta(item.implicit_layout_expr(), item.metadata().clone())),
 			),
-			Self::Outer(outer) => InnerLayoutExpr::Outer(Box::new(Loc(
+			Self::Outer(outer) => InnerLayoutExpr::Outer(Box::new(Meta(
 				outer.implicit_layout_expr(),
-				outer.location().clone(),
+				outer.metadata().clone(),
 			))),
 		}
 	}
 }
 
 #[derive(Clone)]
-pub struct TypeRestrictedProperty<F> {
-	prop: Loc<Id, F>,
-	alias: Option<Loc<Alias, F>>,
-	restriction: Loc<TypePropertyRestriction<F>, F>,
+pub struct TypeRestrictedProperty<M> {
+	prop: Meta<Id, M>,
+	alias: Option<Meta<Alias, M>>,
+	restriction: Meta<TypePropertyRestriction<M>, M>,
 }
 
-impl<F: Clone> TypeRestrictedProperty<F> {
-	pub fn implicit_layout_restricted_field(&self) -> LayoutRestrictedField<F> {
+impl<M: Clone> TypeRestrictedProperty<M> {
+	pub fn implicit_layout_restricted_field(&self) -> LayoutRestrictedField<M> {
 		LayoutRestrictedField {
 			prop: self.prop.clone(),
 			alias: self.alias.clone(),
-			restriction: Loc(
+			restriction: Meta(
 				self.restriction.implicit_field_restriction(),
-				self.restriction.location().clone(),
+				self.restriction.metadata().clone(),
 			),
 		}
 	}
 }
 
 #[derive(Clone)]
-pub enum TypePropertyRangeRestriction<F> {
-	Any(Box<Loc<InnerTypeExpr<F>, F>>),
-	All(Box<Loc<InnerTypeExpr<F>, F>>),
+pub enum TypePropertyRangeRestriction<M> {
+	Any(Box<Meta<InnerTypeExpr<M>, M>>),
+	All(Box<Meta<InnerTypeExpr<M>, M>>),
 }
 
-impl<F: Clone> TypePropertyRangeRestriction<F> {
-	pub fn implicit_field_range_restriction(&self) -> LayoutFieldRangeRestriction<F> {
+impl<M: Clone> TypePropertyRangeRestriction<M> {
+	pub fn implicit_field_range_restriction(&self) -> LayoutFieldRangeRestriction<M> {
 		match self {
-			Self::Any(ty) => LayoutFieldRangeRestriction::Any(Box::new(Loc(
+			Self::Any(ty) => LayoutFieldRangeRestriction::Any(Box::new(Meta(
 				ty.implicit_layout_expr(),
-				ty.location().clone(),
+				ty.metadata().clone(),
 			))),
-			Self::All(ty) => LayoutFieldRangeRestriction::All(Box::new(Loc(
+			Self::All(ty) => LayoutFieldRangeRestriction::All(Box::new(Meta(
 				ty.implicit_layout_expr(),
-				ty.location().clone(),
+				ty.metadata().clone(),
 			))),
 		}
 	}
@@ -325,13 +326,13 @@ impl TypePropertyCardinalityRestriction {
 }
 
 #[derive(Clone)]
-pub enum TypePropertyRestriction<F> {
-	Range(TypePropertyRangeRestriction<F>),
+pub enum TypePropertyRestriction<M> {
+	Range(TypePropertyRangeRestriction<M>),
 	Cardinality(TypePropertyCardinalityRestriction),
 }
 
-impl<F: Clone> TypePropertyRestriction<F> {
-	pub fn implicit_field_restriction(&self) -> LayoutFieldRestriction<F> {
+impl<M: Clone> TypePropertyRestriction<M> {
+	pub fn implicit_field_restriction(&self) -> LayoutFieldRestriction<M> {
 		match self {
 			Self::Range(r) => LayoutFieldRestriction::Range(r.implicit_field_range_restriction()),
 			Self::Cardinality(c) => {
@@ -341,25 +342,25 @@ impl<F: Clone> TypePropertyRestriction<F> {
 	}
 }
 
-pub struct LayoutDefinition<F> {
-	pub id: Loc<Id, F>,
-	pub ty_id: Option<Loc<Id, F>>,
-	pub description: Loc<LayoutDescription<F>, F>,
-	pub doc: Option<Loc<Documentation<F>, F>>,
+pub struct LayoutDefinition<M> {
+	pub id: Meta<Id, M>,
+	pub ty_id: Option<Meta<Id, M>>,
+	pub description: Meta<LayoutDescription<M>, M>,
+	pub doc: Option<Meta<Documentation<M>, M>>,
 }
 
 #[derive(Clone)]
-pub enum LayoutDescription<F> {
-	Normal(Vec<Loc<FieldDefinition<F>, F>>),
-	Alias(OuterLayoutExpr<F>),
+pub enum LayoutDescription<M> {
+	Normal(Vec<Meta<FieldDefinition<M>, M>>),
+	Alias(OuterLayoutExpr<M>),
 }
 
 #[derive(Clone)]
-pub struct FieldDefinition<F> {
-	pub id: Loc<Id, F>,
-	pub layout: Option<Loc<AnnotatedLayoutExpr<F>, F>>,
-	pub alias: Option<Loc<Alias, F>>,
-	pub doc: Option<Loc<Documentation<F>, F>>,
+pub struct FieldDefinition<M> {
+	pub id: Meta<Id, M>,
+	pub layout: Option<Meta<AnnotatedLayoutExpr<M>, M>>,
+	pub alias: Option<Meta<Alias, M>>,
+	pub doc: Option<Meta<Documentation<M>, M>>,
 }
 
 #[derive(Clone, Debug)]
@@ -377,20 +378,20 @@ impl Alias {
 
 /// Annotated layout expression.
 #[derive(Clone)]
-pub struct AnnotatedLayoutExpr<F> {
-	pub expr: Loc<OuterLayoutExpr<F>, F>,
-	pub annotations: Vec<Loc<Annotation, F>>,
+pub struct AnnotatedLayoutExpr<M> {
+	pub expr: Meta<OuterLayoutExpr<M>, M>,
+	pub annotations: Vec<Meta<Annotation, M>>,
 }
 
 #[derive(Clone)]
-pub enum OuterLayoutExpr<F> {
-	Inner(NamedInnerLayoutExpr<F>),
-	Union(Label, Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
-	Intersection(Label, Vec<Loc<NamedInnerLayoutExpr<F>, F>>),
+pub enum OuterLayoutExpr<M> {
+	Inner(NamedInnerLayoutExpr<M>),
+	Union(Label, Vec<Meta<NamedInnerLayoutExpr<M>, M>>),
+	Intersection(Label, Vec<Meta<NamedInnerLayoutExpr<M>, M>>),
 }
 
-impl<F> OuterLayoutExpr<F> {
-	pub fn into_restriction(self) -> Result<LayoutRestrictedField<F>, Self> {
+impl<M> OuterLayoutExpr<M> {
+	pub fn into_restriction(self) -> Result<LayoutRestrictedField<M>, Self> {
 		match self {
 			Self::Inner(i) => i.into_restriction().map_err(Self::Inner),
 			other => Err(other),
@@ -399,31 +400,31 @@ impl<F> OuterLayoutExpr<F> {
 }
 
 #[derive(Clone)]
-pub struct NamedInnerLayoutExpr<F> {
-	pub expr: Loc<InnerLayoutExpr<F>, F>,
-	pub name: Option<Loc<Alias, F>>,
+pub struct NamedInnerLayoutExpr<M> {
+	pub expr: Meta<InnerLayoutExpr<M>, M>,
+	pub name: Option<Meta<Alias, M>>,
 }
 
-impl<F> NamedInnerLayoutExpr<F> {
+impl<M> NamedInnerLayoutExpr<M> {
 	#[allow(clippy::type_complexity)]
-	pub fn into_parts(self) -> (Loc<InnerLayoutExpr<F>, F>, Option<Loc<Alias, F>>) {
+	pub fn into_parts(self) -> (Meta<InnerLayoutExpr<M>, M>, Option<Meta<Alias, M>>) {
 		(self.expr, self.name)
 	}
 
-	pub fn as_id(&self) -> Option<Loc<Id, F>>
+	pub fn as_id(&self) -> Option<Meta<Id, M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		self.expr.as_id()
 	}
 
-	pub fn into_restriction(self) -> Result<LayoutRestrictedField<F>, Self> {
+	pub fn into_restriction(self) -> Result<LayoutRestrictedField<M>, Self> {
 		if self.name.is_some() {
 			Err(self)
 		} else {
 			let Meta(e, loc) = self.expr;
 			e.into_restriction().map_err(|other| Self {
-				expr: Loc(other, loc),
+				expr: Meta(other, loc),
 				name: None,
 			})
 		}
@@ -431,24 +432,24 @@ impl<F> NamedInnerLayoutExpr<F> {
 }
 
 #[derive(Clone)]
-pub enum InnerLayoutExpr<F> {
-	Id(Loc<Id, F>),
+pub enum InnerLayoutExpr<M> {
+	Id(Meta<Id, M>),
 	Primitive(Primitive),
-	Reference(Box<Loc<InnerTypeExpr<F>, F>>),
+	Reference(Box<Meta<InnerTypeExpr<M>, M>>),
 	Literal(Literal),
-	FieldRestriction(LayoutRestrictedField<F>),
-	Array(Label, Box<Loc<OuterLayoutExpr<F>, F>>),
-	Outer(Box<Loc<OuterLayoutExpr<F>, F>>),
+	FieldRestriction(LayoutRestrictedField<M>),
+	Array(Label, Box<Meta<OuterLayoutExpr<M>, M>>),
+	Outer(Box<Meta<OuterLayoutExpr<M>, M>>),
 }
 
-impl<F> InnerLayoutExpr<F> {
+impl<M> InnerLayoutExpr<M> {
 	pub fn is_namable(&self) -> bool {
 		!matches!(self, Self::Id(_))
 	}
 
-	pub fn as_id(&self) -> Option<Loc<Id, F>>
+	pub fn as_id(&self) -> Option<Meta<Id, M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self {
 			Self::Id(id) => Some(id.clone()),
@@ -456,7 +457,7 @@ impl<F> InnerLayoutExpr<F> {
 		}
 	}
 
-	pub fn into_restriction(self) -> Result<LayoutRestrictedField<F>, Self> {
+	pub fn into_restriction(self) -> Result<LayoutRestrictedField<M>, Self> {
 		match self {
 			Self::FieldRestriction(r) => Ok(r),
 			other => Err(other),
@@ -465,19 +466,19 @@ impl<F> InnerLayoutExpr<F> {
 }
 
 #[derive(Clone)]
-pub struct LayoutRestrictedField<F> {
-	prop: Loc<Id, F>,
-	alias: Option<Loc<Alias, F>>,
-	restriction: Loc<LayoutFieldRestriction<F>, F>,
+pub struct LayoutRestrictedField<M> {
+	prop: Meta<Id, M>,
+	alias: Option<Meta<Alias, M>>,
+	restriction: Meta<LayoutFieldRestriction<M>, M>,
 }
 
 #[derive(Clone)]
-pub enum LayoutFieldRangeRestriction<F> {
-	Any(Box<Loc<InnerLayoutExpr<F>, F>>),
-	All(Box<Loc<InnerLayoutExpr<F>, F>>),
+pub enum LayoutFieldRangeRestriction<M> {
+	Any(Box<Meta<InnerLayoutExpr<M>, M>>),
+	All(Box<Meta<InnerLayoutExpr<M>, M>>),
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, StrippedPartialEq, StrippedEq)]
 pub enum LayoutFieldCardinalityRestriction {
 	AtLeast(u32),
 	AtMost(u32),
@@ -485,9 +486,9 @@ pub enum LayoutFieldCardinalityRestriction {
 }
 
 #[derive(Clone)]
-pub enum LayoutFieldRestriction<F> {
+pub enum LayoutFieldRestriction<M> {
 	/// Affects the item of a collection layout?
-	Range(LayoutFieldRangeRestriction<F>),
+	Range(LayoutFieldRangeRestriction<M>),
 
 	/// Affects the size of a collection layout.
 	Cardinality(LayoutFieldCardinalityRestriction),

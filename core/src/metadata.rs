@@ -13,4 +13,14 @@ pub trait Merge {
 		self.merge_with(other);
 		self
 	}
+
+	fn merge_into_btree_map_entry<K: Ord>(self, entry: std::collections::btree_map::Entry<K, Self>) where Self: Sized {
+		use std::collections::btree_map::Entry;
+		match entry {
+			Entry::Vacant(e) => {
+				e.insert(self);
+			},
+			Entry::Occupied(mut e) => e.get_mut().merge_with(self)
+		}
+	}
 }
