@@ -285,11 +285,7 @@ impl<M: Clone> LocalContext<M> {
 			_ => self
 				.base_iri
 				.clone()
-<<<<<<< HEAD
-				.ok_or_else(|| Loc(LocalError::NoBaseIri, loc)),
-=======
 				.ok_or_else(|| Meta(LocalError::NoBaseIri, loc)),
->>>>>>> 43dcdfa (Refactoring the `syntax` lib.)
 		}
 	}
 

@@ -81,10 +81,8 @@ impl<M> Description<M> {
 						connection: LayoutConnection::FieldContainer(field_id),
 					});
 
-					let field_layout = context.require_layout(
-						**field_layout_id,
-						field_layout_id.metadata(),
-					)?;
+					let field_layout =
+						context.require_layout(**field_layout_id, field_layout_id.metadata())?;
 					if let Some(container_desc) = field_layout.description() {
 						match container_desc.as_standard() {
 							Some(standard_desc) => {
@@ -97,10 +95,7 @@ impl<M> Description<M> {
 								};
 
 								sub_layouts.push(SubLayout {
-									layout: Meta(
-										item_layout_id,
-										container_desc.metadata().clone(),
-									),
+									layout: Meta(item_layout_id, container_desc.metadata().clone()),
 									connection: LayoutConnection::FieldItem(field_id),
 								});
 							}
@@ -600,8 +595,7 @@ impl<M: Clone> Definition<M> {
 			if let Some(parent_layout_name) = parent_layout.name() {
 				match parent.connection {
 					LayoutConnection::FieldItem(field_id) => {
-						let field = context
-							.require_layout_field(field_id, &metadata)?.value();
+						let field = context.require_layout_field(field_id, &metadata)?.value();
 
 						if let Some(field_name) = field.name() {
 							let mut name = parent_layout_name.value().clone();
