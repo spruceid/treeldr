@@ -62,9 +62,7 @@ fn parse_treeldr<P: AsRef<Path>>(
 	let input = std::fs::read_to_string(path).expect("unable to read input file");
 	let ast = treeldr_syntax::Document::parse_str(&input, |span| span).expect("parse error");
 	let mut context = BuildContext::new();
-	context
-		.apply_built_in_definitions(vocabulary, Span::default())
-		.unwrap();
+	context.apply_built_in_definitions(vocabulary).unwrap();
 	let mut local_context =
 		treeldr_syntax::build::LocalContext::new(Some(iri!("http://www.example.com").into()));
 	ast.declare(&mut local_context, &mut context, vocabulary)

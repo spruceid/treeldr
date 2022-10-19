@@ -15,10 +15,10 @@ derivative = "2.2.0"
 locspan = { version = "0.7.11", features = ["reporting"] }
 locspan-derive = "0.5"
 codespan-reporting = "0.11"
-rdf-types = { version = "0.9", features = ["meta"] }
+rdf-types = { version = "0.10", features = ["meta"] }
 xsd-types = "0.3.0"
 num = "0.4.0"
-grdf = { version = "0.11", features = ["meta"] }
+grdf = { version = "0.12", features = ["meta"] }
 btree-range-map = { version = "0.2.6", features = ["ordered-float"] }
 lazy_static = "1.4.0"
 ordered-float = "3.0.0"

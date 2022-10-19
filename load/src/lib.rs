@@ -21,7 +21,7 @@ pub fn build_all(
 	mut documents: Vec<Document>,
 ) -> Result<treeldr::Model<source::Metadata>, BuildAllError> {
 	build_context
-		.apply_built_in_definitions(vocabulary, source::Metadata::default())
+		.apply_built_in_definitions(vocabulary)
 		.unwrap();
 
 	for doc in &mut documents {

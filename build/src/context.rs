@@ -67,7 +67,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		Ok(id)
 	}
 
-	pub fn apply_built_in_definitions(
+	pub fn apply_built_in_definitions_with(
 		&mut self,
 		vocabulary: &mut Vocabulary,
 		metadata: M,
@@ -78,6 +78,16 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		self.define_rdf_types(vocabulary, metadata.clone())?;
 		self.define_xsd_types(metadata.clone())?;
 		self.define_treeldr_types(metadata)
+	}
+
+	pub fn apply_built_in_definitions(
+		&mut self,
+		vocabulary: &mut Vocabulary,
+	) -> Result<(), Error<M>>
+	where
+		M: Default + Clone + Merge,
+	{
+		self.apply_built_in_definitions_with(vocabulary, M::default())
 	}
 
 	pub fn create_option_layout(

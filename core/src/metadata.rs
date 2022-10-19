@@ -49,6 +49,12 @@ pub trait Merge {
 	}
 }
 
+impl Merge for () {
+	fn merge_with(&mut self, _other: Self) {
+		()
+	}
+}
+
 impl Merge for locspan::Span {
 	fn merge_with(&mut self, other: Self) {
 		*self = other

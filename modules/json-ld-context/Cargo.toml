@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 treeldr = { path = "../../core", version = "0.1" }
-json-ld = { git = "https://github.com/timothee-haudebourg/json-ld.git", rev = "9366eb7" }
+json-ld = "0.7.0-beta"
 log = "0.4"
 iref = "2.2"
 serde_json = "1.0"

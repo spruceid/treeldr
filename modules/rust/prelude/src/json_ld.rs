@@ -1,6 +1,6 @@
 use crate::rdf::{Literal, Object, Subject};
 use iref::IriBuf;
-use json_ld::ValidReference;
+use json_ld::ValidId;
 use rdf_types::{BlankIdBuf, Quad};
 
 pub trait IntoJsonLd<M> {
@@ -35,7 +35,7 @@ impl<I: std::fmt::Display, B: std::fmt::Display, M> IntoJsonLd<M> for Subject<I,
 }
 
 pub type ImportedQuad<'a> =
-	Quad<Subject<IriBuf>, Subject<IriBuf>, Object<Subject<IriBuf>>, &'a ValidReference<IriBuf>>;
+	Quad<Subject<IriBuf>, Subject<IriBuf>, Object<Subject<IriBuf>>, &'a ValidId<IriBuf>>;
 
 pub fn import_quad(
 	Quad(subject, predicate, object, graph): json_ld::rdf::QuadRef<IriBuf, BlankIdBuf>,

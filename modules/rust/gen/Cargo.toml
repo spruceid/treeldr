@@ -17,11 +17,11 @@ treeldr-rust-macros = { path = "../macros" }
 treeldr-rust-prelude = { path = "../prelude" }
 chrono = "0.4.19"
 iref = "2.2"
-grdf = "0.11"
-json-ld = { git = "https://github.com/timothee-haudebourg/json-ld.git", rev = "9366eb7" }
+grdf = "0.12"
+json-ld = "0.7.0-beta"
 json-syntax = "0.8.11"
 decoded-char = "0.1"
 locspan = "0.7.11"
 async-std = { version = "1.12.0", features = ["attributes"] }
 log = "0.4.17"
-rdf-types = "0.9"
+rdf-types = "0.10"

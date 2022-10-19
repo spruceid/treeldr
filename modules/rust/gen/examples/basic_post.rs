@@ -43,19 +43,19 @@ pub mod schema {
 
 const VC_LD_CONTEXT_URL: Iri<'static> = iri!("https://www.w3.org/2018/credentials/v1");
 
-type JsonLd<'a> = json_ld::syntax::Value<Span>;
-type NoLoader<'a> = json_ld::loader::NoLoader<IriBuf, JsonLd<'a>, Span>;
+type JsonLd = json_ld::syntax::Value<Span>;
+type NoLoader = json_ld::loader::NoLoader<IriBuf, Span, JsonLd>;
 
 #[async_std::main]
 async fn main() {
 	// Read JSON-LD file.
 	let filename = "examples/basic_post.jsonld";
 	let input = std::fs::read_to_string(filename).unwrap();
-	let json = json_syntax::Value::parse_str(&input, |span| span).expect("invalid JSON");
+	let json_ld = json_ld::syntax::Value::parse_str(&input, |span| span).expect("invalid JSON");
 
 	// Expand JSON-LD.
-	let expanded_json_ld = json
-		.expand(None, &mut NoLoader::new())
+	let expanded_json_ld = json_ld
+		.expand(&mut NoLoader::new())
 		.await
 		.expect("expansion failed");
 
@@ -82,7 +82,7 @@ async fn main() {
 	]);
 
 	// Schema to JSON-LD.
-	let mut json_ld_out: json_ld::syntax::Value<()> = vc.into_json_ld();
+	let mut json_ld_out = vc.into_json_ld();
 	json_ld_out.as_object_mut().unwrap().insert(
 		Meta("@context".into(), ()),
 		Meta(VC_LD_CONTEXT_URL.as_str().into(), ()),
