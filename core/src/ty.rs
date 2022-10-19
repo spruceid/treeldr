@@ -1,4 +1,4 @@
-use crate::{Documentation, Id, Model};
+use crate::{BlankIdIndex, Documentation, Id, IriIndex, Model};
 
 pub mod data;
 mod intersection;
@@ -11,13 +11,14 @@ pub use data::DataType;
 pub use intersection::Intersection;
 pub use normal::Normal;
 pub use properties::{Properties, PseudoProperty};
+use rdf_types::Subject;
 pub use restriction::Restriction;
 pub use union::Union;
 
 /// Type definition.
-pub struct Definition<M> {
+pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
 	/// Identifier.
-	id: Id,
+	id: Subject<I, B>,
 
 	/// Metadata of the definition.
 	metadata: M,

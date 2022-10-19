@@ -1,4 +1,4 @@
-use crate::{vocab, Id};
+use crate::{vocab, Id, IriIndex};
 use iref_enum::IriEnum;
 use std::fmt;
 
@@ -97,7 +97,7 @@ impl Primitive {
 
 	pub fn id(&self) -> Id {
 		use vocab::{Term, TreeLdr};
-		Id::Iri(Term::TreeLdr(TreeLdr::Primitive(*self)))
+		Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Primitive(*self))))
 	}
 }
 

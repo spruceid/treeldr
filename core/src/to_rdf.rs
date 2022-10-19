@@ -1,15 +1,9 @@
-use crate::{layout, prop, ty, vocab, Documentation, Id, Model, Ref};
+use crate::{layout, prop, ty, vocab, Documentation, Id, IriIndex, Model, Ref};
 use rdf_types::{Literal, Object, Quad};
 use vocab::{StrippedObject, StrippedQuad, Term};
 
 pub trait Generator {
 	fn next(&mut self) -> Id;
-}
-
-impl Generator for crate::Vocabulary {
-	fn next(&mut self) -> Id {
-		Id::Blank(self.new_blank_label())
-	}
 }
 
 pub struct Options {
@@ -28,7 +22,7 @@ impl Default for Options {
 }
 
 fn is_standard_vocabulary(id: Id) -> bool {
-	!matches!(id, Id::Blank(_) | Id::Iri(Term::Unknown(_)))
+	!matches!(id, Id::Blank(_) | Id::Iri(IriIndex::Iri(_)))
 }
 
 impl<F> Model<F> {
@@ -62,7 +56,7 @@ impl<F> Model<F> {
 				if let Some(label) = node.label() {
 					quads.push(Quad(
 						id,
-						Term::Rdfs(vocab::Rdfs::Label),
+						IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Label)),
 						Object::Literal(Literal::String(label.to_string().into())),
 						None,
 					))
@@ -79,7 +73,7 @@ impl Documentation {
 		for block in self.blocks() {
 			quads.push(Quad(
 				id,
-				Term::Rdfs(vocab::Rdfs::Comment),
+				IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Comment)),
 				Object::Literal(Literal::String(block.as_str().to_string().into())),
 				None,
 			))
@@ -95,20 +89,25 @@ fn to_rdf_list<I: IntoIterator<Item = StrippedObject>>(
 where
 	I::IntoIter: DoubleEndedIterator,
 {
-	let mut head = Id::Iri(Term::Rdf(vocab::Rdf::Nil));
+	let mut head = Id::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::Nil)));
 
 	for item in iter.into_iter().rev() {
 		let id = generator.next();
 		quads.push(Quad(
 			id,
-			Term::Rdf(vocab::Rdf::Type),
-			Object::Iri(Term::Rdf(vocab::Rdf::List)),
+			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
+			Object::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::List))),
 			None,
 		));
-		quads.push(Quad(id, Term::Rdf(vocab::Rdf::First), item, None));
 		quads.push(Quad(
 			id,
-			Term::Rdf(vocab::Rdf::Rest),
+			IriIndex::Iri(Term::Rdf(vocab::Rdf::First)),
+			item,
+			None,
+		));
+		quads.push(Quad(
+			id,
+			IriIndex::Iri(Term::Rdf(vocab::Rdf::Rest)),
 			head.into_term(),
 			None,
 		));
@@ -133,8 +132,8 @@ impl<F> ty::Definition<F> {
 
 		quads.push(Quad(
 			self.id(),
-			Term::Rdf(vocab::Rdf::Type),
-			Object::Iri(Term::Rdfs(class)),
+			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
+			Object::Iri(IriIndex::Iri(Term::Rdfs(class))),
 			None,
 		));
 
@@ -156,7 +155,7 @@ impl ty::DataType {
 			Self::Derived(d) => {
 				quads.push(Quad(
 					id,
-					Term::Owl(vocab::Owl::OnDatatype),
+					IriIndex::Iri(Term::Owl(vocab::Owl::OnDatatype)),
 					d.base().into_term(),
 					None,
 				));
@@ -164,7 +163,7 @@ impl ty::DataType {
 				let restrictions_id = d.restrictions().to_rdf(generator, quads);
 				quads.push(Quad(
 					id,
-					Term::Owl(vocab::Owl::WithRestrictions),
+					IriIndex::Iri(Term::Owl(vocab::Owl::WithRestrictions)),
 					restrictions_id.into_term(),
 					None,
 				));
@@ -205,7 +204,7 @@ impl<'a> ty::data::restriction::real::Restriction<'a> {
 			Self::Min(Min::Included(min)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
 					Object::Literal(min.literal()),
 					None,
 				));
@@ -213,7 +212,7 @@ impl<'a> ty::data::restriction::real::Restriction<'a> {
 			Self::Min(Min::Excluded(min)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinExclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
 					Object::Literal(min.literal()),
 					None,
 				));
@@ -221,7 +220,7 @@ impl<'a> ty::data::restriction::real::Restriction<'a> {
 			Self::Max(Max::Included(max)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
 					Object::Literal(max.literal()),
 					None,
 				));
@@ -229,7 +228,7 @@ impl<'a> ty::data::restriction::real::Restriction<'a> {
 			Self::Max(Max::Excluded(max)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxExclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
 					Object::Literal(max.literal()),
 					None,
 				));
@@ -245,7 +244,7 @@ impl ty::data::restriction::float::Restriction {
 			Self::Min(Min::Included(min)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
 					Object::Literal(min.literal()),
 					None,
 				));
@@ -253,7 +252,7 @@ impl ty::data::restriction::float::Restriction {
 			Self::Min(Min::Excluded(min)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinExclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
 					Object::Literal(min.literal()),
 					None,
 				));
@@ -261,7 +260,7 @@ impl ty::data::restriction::float::Restriction {
 			Self::Max(Max::Included(max)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
 					Object::Literal(max.literal()),
 					None,
 				));
@@ -269,7 +268,7 @@ impl ty::data::restriction::float::Restriction {
 			Self::Max(Max::Excluded(max)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxExclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
 					Object::Literal(max.literal()),
 					None,
 				));
@@ -285,7 +284,7 @@ impl ty::data::restriction::double::Restriction {
 			Self::Min(Min::Included(min)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
 					Object::Literal(min.literal()),
 					None,
 				));
@@ -293,7 +292,7 @@ impl ty::data::restriction::double::Restriction {
 			Self::Min(Min::Excluded(min)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinExclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
 					Object::Literal(min.literal()),
 					None,
 				));
@@ -301,7 +300,7 @@ impl ty::data::restriction::double::Restriction {
 			Self::Max(Max::Included(max)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
 					Object::Literal(max.literal()),
 					None,
 				));
@@ -309,7 +308,7 @@ impl ty::data::restriction::double::Restriction {
 			Self::Max(Max::Excluded(max)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxExclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
 					Object::Literal(max.literal()),
 					None,
 				));
@@ -324,10 +323,10 @@ impl<'a> ty::data::restriction::string::Restriction<'a> {
 			Self::MinLength(min) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinLength),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinLength)),
 					Object::Literal(Literal::TypedString(
 						min.to_string().into(),
-						Term::Xsd(vocab::Xsd::Integer),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
 				));
@@ -335,10 +334,10 @@ impl<'a> ty::data::restriction::string::Restriction<'a> {
 			Self::MaxLength(max) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxLength),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxLength)),
 					Object::Literal(Literal::TypedString(
 						max.to_string().into(),
-						Term::Xsd(vocab::Xsd::Integer),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
 				));
@@ -346,7 +345,7 @@ impl<'a> ty::data::restriction::string::Restriction<'a> {
 			Self::Pattern(regexp) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::Pattern),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::Pattern)),
 					Object::Literal(Literal::String(regexp.to_string().into())),
 					None,
 				));
@@ -372,7 +371,7 @@ impl<F> ty::Union<F> {
 
 		quads.push(Quad(
 			id,
-			Term::Owl(vocab::Owl::UnionOf),
+			IriIndex::Iri(Term::Owl(vocab::Owl::UnionOf)),
 			list_id.into_term(),
 			None,
 		))
@@ -396,7 +395,7 @@ impl<F> ty::Intersection<F> {
 
 		quads.push(Quad(
 			id,
-			Term::Owl(vocab::Owl::IntersectionOf),
+			IriIndex::Iri(Term::Owl(vocab::Owl::IntersectionOf)),
 			list_id.into_term(),
 			None,
 		))
@@ -434,7 +433,7 @@ impl<F> ty::Restriction<F> {
 
 				quads.push(Quad(
 					id,
-					Term::Owl(vocab::Owl::IntersectionOf),
+					IriIndex::Iri(Term::Owl(vocab::Owl::IntersectionOf)),
 					list_id.into_term(),
 					None,
 				))
@@ -453,14 +452,14 @@ impl<F> prop::Restriction<F> {
 	) {
 		quads.push(Quad(
 			id,
-			Term::Rdf(vocab::Rdf::Type),
-			Object::Iri(Term::Owl(vocab::Owl::Restriction)),
+			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
+			Object::Iri(IriIndex::Iri(Term::Owl(vocab::Owl::Restriction))),
 			None,
 		));
 
 		quads.push(Quad(
 			id,
-			Term::Owl(vocab::Owl::OnProperty),
+			IriIndex::Iri(Term::Owl(vocab::Owl::OnProperty)),
 			model.properties().get(prop_ref).unwrap().id().into_term(),
 			None,
 		));
@@ -478,7 +477,7 @@ impl<F> prop::restriction::Range<F> {
 			Self::Any(ty_ref) => {
 				quads.push(Quad(
 					id,
-					Term::Owl(vocab::Owl::SomeValuesFrom),
+					IriIndex::Iri(Term::Owl(vocab::Owl::SomeValuesFrom)),
 					model.types().get(*ty_ref).unwrap().id().into_term(),
 					None,
 				));
@@ -486,7 +485,7 @@ impl<F> prop::restriction::Range<F> {
 			Self::All(ty_ref) => {
 				quads.push(Quad(
 					id,
-					Term::Owl(vocab::Owl::AllValuesFrom),
+					IriIndex::Iri(Term::Owl(vocab::Owl::AllValuesFrom)),
 					model.types().get(*ty_ref).unwrap().id().into_term(),
 					None,
 				));
@@ -501,10 +500,10 @@ impl prop::restriction::Cardinality {
 			Self::AtLeast(min) => {
 				quads.push(Quad(
 					id,
-					Term::Owl(vocab::Owl::MinCardinality),
+					IriIndex::Iri(Term::Owl(vocab::Owl::MinCardinality)),
 					Object::Literal(Literal::TypedString(
 						min.to_string().into(),
-						Term::Xsd(vocab::Xsd::PositiveInteger),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::PositiveInteger)),
 					)),
 					None,
 				));
@@ -512,10 +511,10 @@ impl prop::restriction::Cardinality {
 			Self::AtMost(max) => {
 				quads.push(Quad(
 					id,
-					Term::Owl(vocab::Owl::MaxCardinality),
+					IriIndex::Iri(Term::Owl(vocab::Owl::MaxCardinality)),
 					Object::Literal(Literal::TypedString(
 						max.to_string().into(),
-						Term::Xsd(vocab::Xsd::PositiveInteger),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::PositiveInteger)),
 					)),
 					None,
 				));
@@ -523,10 +522,10 @@ impl prop::restriction::Cardinality {
 			Self::Exactly(m) => {
 				quads.push(Quad(
 					id,
-					Term::Owl(vocab::Owl::Cardinality),
+					IriIndex::Iri(Term::Owl(vocab::Owl::Cardinality)),
 					Object::Literal(Literal::TypedString(
 						m.to_string().into(),
-						Term::Xsd(vocab::Xsd::PositiveInteger),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::PositiveInteger)),
 					)),
 					None,
 				));
@@ -539,15 +538,15 @@ impl<F> prop::Definition<F> {
 	pub fn to_rdf(&self, model: &Model<F>, quads: &mut Vec<StrippedQuad>) {
 		quads.push(Quad(
 			self.id(),
-			Term::Rdf(vocab::Rdf::Type),
-			Object::Iri(Term::Rdf(vocab::Rdf::Property)),
+			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
+			Object::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::Property))),
 			None,
 		));
 
 		for ty_ref in self.domain() {
 			quads.push(Quad(
 				self.id(),
-				Term::Rdfs(vocab::Rdfs::Domain),
+				IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Domain)),
 				model.types().get(ty_ref).unwrap().id().into_term(),
 				None,
 			))
@@ -555,7 +554,7 @@ impl<F> prop::Definition<F> {
 
 		quads.push(Quad(
 			self.id(),
-			Term::Rdfs(vocab::Rdfs::Range),
+			IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Range)),
 			model.types().get(**self.range()).unwrap().id().into_term(),
 			None,
 		));
@@ -563,8 +562,8 @@ impl<F> prop::Definition<F> {
 		if self.is_required() {
 			quads.push(Quad(
 				self.id(),
-				Term::Schema(vocab::Schema::ValueRequired),
-				Object::Iri(Term::Schema(vocab::Schema::True)),
+				IriIndex::Iri(Term::Schema(vocab::Schema::ValueRequired)),
+				Object::Iri(IriIndex::Iri(Term::Schema(vocab::Schema::True))),
 				None,
 			));
 		}
@@ -572,8 +571,8 @@ impl<F> prop::Definition<F> {
 		if !self.is_functional() {
 			quads.push(Quad(
 				self.id(),
-				Term::Schema(vocab::Schema::MultipleValues),
-				Object::Iri(Term::Schema(vocab::Schema::True)),
+				IriIndex::Iri(Term::Schema(vocab::Schema::MultipleValues)),
+				Object::Iri(IriIndex::Iri(Term::Schema(vocab::Schema::True))),
 				None,
 			));
 		}
@@ -589,15 +588,15 @@ impl<F> layout::Definition<F> {
 	) {
 		quads.push(Quad(
 			self.id(),
-			Term::Rdf(vocab::Rdf::Type),
-			Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)),
+			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
+			Object::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Layout))),
 			None,
 		));
 
 		if let Some(ty_ref) = self.ty() {
 			quads.push(Quad(
 				self.id(),
-				Term::TreeLdr(vocab::TreeLdr::LayoutFor),
+				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::LayoutFor)),
 				model.types().get(ty_ref).unwrap().id().into_term(),
 				None,
 			));
@@ -606,7 +605,7 @@ impl<F> layout::Definition<F> {
 		if let Some(name) = self.name() {
 			quads.push(Quad(
 				self.id(),
-				Term::TreeLdr(vocab::TreeLdr::Name),
+				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Name)),
 				Object::Literal(Literal::String(name.as_str().to_string().into())),
 				None,
 			));
@@ -624,7 +623,7 @@ impl<F> layout::Definition<F> {
 			layout::Description::Reference(r) => {
 				quads.push(Quad(
 					self.id(),
-					Term::TreeLdr(vocab::TreeLdr::Reference),
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Reference)),
 					model.layouts().get(r.id_layout()).unwrap().id().into_term(),
 					None,
 				));
@@ -632,7 +631,7 @@ impl<F> layout::Definition<F> {
 			layout::Description::Alias(_, alias_ref) => {
 				quads.push(Quad(
 					self.id(),
-					Term::TreeLdr(vocab::TreeLdr::Alias),
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Alias)),
 					model.layouts().get(*alias_ref).unwrap().id().into_term(),
 					None,
 				));
@@ -645,7 +644,7 @@ impl<F> layout::Required<F> {
 	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
 		quads.push(Quad(
 			id,
-			Term::TreeLdr(vocab::TreeLdr::Required),
+			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Required)),
 			model
 				.layouts()
 				.get(self.item_layout())
@@ -661,7 +660,7 @@ impl<F> layout::Optional<F> {
 	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
 		quads.push(Quad(
 			id,
-			Term::TreeLdr(vocab::TreeLdr::Option),
+			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Option)),
 			model
 				.layouts()
 				.get(self.item_layout())
@@ -677,7 +676,7 @@ impl<F> layout::Array<F> {
 	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
 		quads.push(Quad(
 			id,
-			Term::TreeLdr(vocab::TreeLdr::Array),
+			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Array)),
 			model
 				.layouts()
 				.get(self.item_layout())
@@ -691,7 +690,7 @@ impl<F> layout::Array<F> {
 			if let Some(first_prop) = semantics.first() {
 				quads.push(Quad(
 					id,
-					Term::TreeLdr(vocab::TreeLdr::ArrayListFirst),
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ArrayListFirst)),
 					model.properties().get(first_prop).unwrap().id().into_term(),
 					None,
 				));
@@ -700,7 +699,7 @@ impl<F> layout::Array<F> {
 			if let Some(rest_prop) = semantics.rest() {
 				quads.push(Quad(
 					id,
-					Term::TreeLdr(vocab::TreeLdr::ArrayListRest),
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ArrayListRest)),
 					model.properties().get(rest_prop).unwrap().id().into_term(),
 					None,
 				));
@@ -709,7 +708,7 @@ impl<F> layout::Array<F> {
 			if let Some(nil_value) = semantics.nil() {
 				quads.push(Quad(
 					id,
-					Term::TreeLdr(vocab::TreeLdr::ArrayListNil),
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ArrayListNil)),
 					nil_value.into_term(),
 					None,
 				));
@@ -722,7 +721,7 @@ impl<F> layout::Set<F> {
 	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
 		quads.push(Quad(
 			id,
-			Term::TreeLdr(vocab::TreeLdr::Set),
+			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Set)),
 			model
 				.layouts()
 				.get(self.item_layout())
@@ -739,7 +738,7 @@ impl layout::RestrictedPrimitive {
 		if self.is_restricted() {
 			quads.push(Quad(
 				id,
-				Term::TreeLdr(vocab::TreeLdr::DerivedFrom),
+				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::DerivedFrom)),
 				self.primitive().id().into_term(),
 				None,
 			));
@@ -747,17 +746,17 @@ impl layout::RestrictedPrimitive {
 			let restrictions_id = self.restrictions().to_rdf(generator, quads);
 			quads.push(Quad(
 				id,
-				Term::TreeLdr(vocab::TreeLdr::WithRestrictions),
+				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::WithRestrictions)),
 				restrictions_id.into_term(),
 				None,
 			));
 		} else {
 			match id {
-				Id::Iri(Term::TreeLdr(vocab::TreeLdr::Primitive(_))) => (),
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Primitive(_)))) => (),
 				_ => {
 					quads.push(Quad(
 						id,
-						Term::TreeLdr(vocab::TreeLdr::Alias),
+						IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Alias)),
 						self.primitive().id().into_term(),
 						None,
 					));
@@ -799,10 +798,10 @@ impl layout::primitive::restricted::integer::Restriction {
 			Self::MinInclusive(min) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
 					Object::Literal(Literal::TypedString(
 						min.to_string().into(),
-						Term::Xsd(vocab::Xsd::Integer),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
 				));
@@ -810,10 +809,10 @@ impl layout::primitive::restricted::integer::Restriction {
 			Self::MaxInclusive(min) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
 					Object::Literal(Literal::TypedString(
 						min.to_string().into(),
-						Term::Xsd(vocab::Xsd::Integer),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
 				));
@@ -828,10 +827,10 @@ impl layout::primitive::restricted::unsigned::Restriction {
 			Self::MinInclusive(min) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
 					Object::Literal(Literal::TypedString(
 						min.to_string().into(),
-						Term::Xsd(vocab::Xsd::Integer),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
 				));
@@ -839,10 +838,10 @@ impl layout::primitive::restricted::unsigned::Restriction {
 			Self::MaxInclusive(min) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
 					Object::Literal(Literal::TypedString(
 						min.to_string().into(),
-						Term::Xsd(vocab::Xsd::Integer),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
 				));
@@ -858,7 +857,7 @@ impl layout::primitive::restricted::float::Restriction {
 			Self::Min(Min::Included(min)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
 					Object::Literal(min.literal()),
 					None,
 				));
@@ -866,7 +865,7 @@ impl layout::primitive::restricted::float::Restriction {
 			Self::Min(Min::Excluded(min)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinExclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
 					Object::Literal(min.literal()),
 					None,
 				));
@@ -874,7 +873,7 @@ impl layout::primitive::restricted::float::Restriction {
 			Self::Max(Max::Included(max)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
 					Object::Literal(max.literal()),
 					None,
 				));
@@ -882,7 +881,7 @@ impl layout::primitive::restricted::float::Restriction {
 			Self::Max(Max::Excluded(max)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxExclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
 					Object::Literal(max.literal()),
 					None,
 				));
@@ -898,7 +897,7 @@ impl layout::primitive::restricted::double::Restriction {
 			Self::Min(Min::Included(min)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
 					Object::Literal(min.literal()),
 					None,
 				));
@@ -906,7 +905,7 @@ impl layout::primitive::restricted::double::Restriction {
 			Self::Min(Min::Excluded(min)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinExclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
 					Object::Literal(min.literal()),
 					None,
 				));
@@ -914,7 +913,7 @@ impl layout::primitive::restricted::double::Restriction {
 			Self::Max(Max::Included(max)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxInclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
 					Object::Literal(max.literal()),
 					None,
 				));
@@ -922,7 +921,7 @@ impl layout::primitive::restricted::double::Restriction {
 			Self::Max(Max::Excluded(max)) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxExclusive),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
 					Object::Literal(max.literal()),
 					None,
 				));
@@ -937,10 +936,10 @@ impl<'a> layout::primitive::restricted::string::Restriction<'a> {
 			Self::MinLength(min) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MinLength),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinLength)),
 					Object::Literal(Literal::TypedString(
 						xsd_types::IntegerBuf::from(*min).into_string().into(),
-						Term::Xsd(vocab::Xsd::Integer),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
 				));
@@ -948,10 +947,10 @@ impl<'a> layout::primitive::restricted::string::Restriction<'a> {
 			Self::MaxLength(max) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::MaxLength),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxLength)),
 					Object::Literal(Literal::TypedString(
 						xsd_types::IntegerBuf::from(*max).into_string().into(),
-						Term::Xsd(vocab::Xsd::Integer),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
 				));
@@ -959,7 +958,7 @@ impl<'a> layout::primitive::restricted::string::Restriction<'a> {
 			Self::Pattern(regexp) => {
 				quads.push(Quad(
 					id,
-					Term::Xsd(vocab::Xsd::Pattern),
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::Pattern)),
 					Object::Literal(Literal::String(regexp.to_string().into())),
 					None,
 				));
@@ -985,7 +984,7 @@ impl<F> layout::Struct<F> {
 
 		quads.push(Quad(
 			id,
-			Term::TreeLdr(vocab::TreeLdr::Fields),
+			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Fields)),
 			fields_list.into_term(),
 			None,
 		))
@@ -1003,15 +1002,15 @@ impl<F> layout::Field<F> {
 
 		quads.push(Quad(
 			id,
-			Term::Rdf(vocab::Rdf::Type),
-			Object::Iri(Term::TreeLdr(vocab::TreeLdr::Field)),
+			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
+			Object::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Field))),
 			None,
 		));
 
 		if let Some(prop_ref) = self.property() {
 			quads.push(Quad(
 				id,
-				Term::TreeLdr(vocab::TreeLdr::FieldFor),
+				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::FieldFor)),
 				model.properties().get(prop_ref).unwrap().id().into_term(),
 				None,
 			))
@@ -1019,14 +1018,14 @@ impl<F> layout::Field<F> {
 
 		quads.push(Quad(
 			id,
-			Term::TreeLdr(vocab::TreeLdr::Format),
+			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Format)),
 			model.layouts().get(self.layout()).unwrap().id().into_term(),
 			None,
 		));
 
 		quads.push(Quad(
 			id,
-			Term::TreeLdr(vocab::TreeLdr::Name),
+			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Name)),
 			Object::Literal(Literal::String(self.name().to_string().into())),
 			None,
 		));
@@ -1034,7 +1033,7 @@ impl<F> layout::Field<F> {
 		if let Some(label) = self.label() {
 			quads.push(Quad(
 				id,
-				Term::Rdfs(vocab::Rdfs::Label),
+				IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Label)),
 				Object::Literal(Literal::String(label.to_string().into())),
 				None,
 			));
@@ -1063,7 +1062,7 @@ impl<F> layout::Enum<F> {
 
 		quads.push(Quad(
 			id,
-			Term::TreeLdr(vocab::TreeLdr::Enumeration),
+			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Enumeration)),
 			variants_list.into_term(),
 			None,
 		))
@@ -1081,15 +1080,15 @@ impl<F> layout::Variant<F> {
 
 		quads.push(Quad(
 			id,
-			Term::Rdf(vocab::Rdf::Type),
-			Object::Iri(Term::TreeLdr(vocab::TreeLdr::Variant)),
+			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
+			Object::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Variant))),
 			None,
 		));
 
 		if let Some(layout) = self.layout() {
 			quads.push(Quad(
 				id,
-				Term::TreeLdr(vocab::TreeLdr::Format),
+				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Format)),
 				model.layouts().get(layout).unwrap().id().into_term(),
 				None,
 			))
@@ -1097,7 +1096,7 @@ impl<F> layout::Variant<F> {
 
 		quads.push(Quad(
 			id,
-			Term::TreeLdr(vocab::TreeLdr::Name),
+			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Name)),
 			Object::Literal(Literal::String(self.name().to_string().into())),
 			None,
 		));
@@ -1105,7 +1104,7 @@ impl<F> layout::Variant<F> {
 		if let Some(label) = self.label() {
 			quads.push(Quad(
 				id,
-				Term::Rdfs(vocab::Rdfs::Label),
+				IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Label)),
 				Object::Literal(Literal::String(label.to_string().into())),
 				None,
 			));

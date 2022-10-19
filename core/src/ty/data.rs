@@ -1,4 +1,4 @@
-use crate::{vocab, Id};
+use crate::{vocab, Id, IriIndex};
 
 pub mod regexp;
 pub mod restriction;
@@ -55,15 +55,15 @@ impl Primitive {
 	pub fn id(&self) -> Id {
 		use vocab::{Owl, Term, Xsd};
 		match self {
-			Self::Boolean => Id::Iri(Term::Xsd(Xsd::Boolean)),
-			Self::Real => Id::Iri(Term::Owl(Owl::Real)),
-			Self::Float => Id::Iri(Term::Xsd(Xsd::Float)),
-			Self::Double => Id::Iri(Term::Xsd(Xsd::Double)),
-			Self::String => Id::Iri(Term::Xsd(Xsd::String)),
-			Self::Date => Id::Iri(Term::Xsd(Xsd::Date)),
-			Self::Time => Id::Iri(Term::Xsd(Xsd::Time)),
-			Self::DateTime => Id::Iri(Term::Xsd(Xsd::DateTime)),
-			Self::Duration => Id::Iri(Term::Xsd(Xsd::Duration)),
+			Self::Boolean => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::Boolean))),
+			Self::Real => Id::Iri(IriIndex::Iri(Term::Owl(Owl::Real))),
+			Self::Float => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::Float))),
+			Self::Double => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::Double))),
+			Self::String => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::String))),
+			Self::Date => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::Date))),
+			Self::Time => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::Time))),
+			Self::DateTime => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::DateTime))),
+			Self::Duration => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::Duration))),
 		}
 	}
 }

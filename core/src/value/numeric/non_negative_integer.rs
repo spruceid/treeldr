@@ -1,5 +1,5 @@
 use super::Integer;
-use crate::vocab::StrippedLiteral;
+use crate::{vocab::StrippedLiteral, IriIndex};
 use std::fmt;
 
 /// Non Negative Integer number.
@@ -33,7 +33,7 @@ impl NonNegativeInteger {
 		use crate::vocab::{Term, Xsd};
 		StrippedLiteral::TypedString(
 			self.0.to_string().into(),
-			Term::Xsd(Xsd::NonNegativeInteger),
+			IriIndex::Iri(Term::Xsd(Xsd::NonNegativeInteger)),
 		)
 	}
 }
