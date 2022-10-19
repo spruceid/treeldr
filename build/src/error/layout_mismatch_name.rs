@@ -1,5 +1,7 @@
-use treeldr::{Id, Vocabulary, vocab::Display, Name};
+use treeldr::{Id, Name, IriIndex, BlankIdIndex};
+use rdf_types::Vocabulary;
 use locspan::{Span, MaybeLocated};
+use contextual::WithContext;
 
 #[derive(Debug)]
 pub struct LayoutMismatchName<M> {
@@ -10,7 +12,7 @@ pub struct LayoutMismatchName<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutMismatchName<M> {
-	fn message(&self, vocab: &Vocabulary) -> String {
-		format!("name mismatch for layout `{}`", self.id.display(vocab))
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+		format!("name mismatch for layout `{}`", self.id.with(vocab))
 	}
 }

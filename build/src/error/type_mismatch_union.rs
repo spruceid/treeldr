@@ -1,5 +1,7 @@
-use treeldr::{Id, Vocabulary, vocab::Display};
+use treeldr::{Id, IriIndex, BlankIdIndex};
+use rdf_types::Vocabulary;
 use locspan::{Span, MaybeLocated};
+use contextual::WithContext;
 
 #[derive(Debug)]
 pub struct TypeMismatchUnion<M> {
@@ -10,11 +12,11 @@ pub struct TypeMismatchUnion<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for TypeMismatchUnion<M> where M::File: Clone {
-	fn message(&self, vocab: &Vocabulary) -> String {
-		format!("expected union list {}, found {}", self.expected.display(vocab), self.found.display(vocab))
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+		format!("expected union list {}, found {}", self.expected.with(vocab), self.found.with(vocab))
 	}
 
-	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+	fn other_labels(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		let mut labels = Vec::new();
 		if let Some(cause) = self.because.optional_location().cloned() {
 			labels.push(cause.into_secondary_label().with_message("union previously defined here".to_string()));

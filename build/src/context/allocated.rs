@@ -3,7 +3,7 @@ use derivative::Derivative;
 use locspan::Meta;
 use shelves::{Ref, Shelf};
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{vocab, Id, MetaOption};
+use treeldr::{vocab, Id, IriIndex, MetaOption};
 
 #[derive(Clone, Derivative)]
 #[derivative(Default(bound = ""))]
@@ -375,7 +375,7 @@ impl<M: Clone> Nodes<M> {
 
 	pub fn require_list(&self, id: Id, cause: &M) -> Result<ListRef<M>, Error<M>> {
 		match id {
-			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
+			Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil))) => Ok(ListRef::Nil),
 			id => Ok(ListRef::Cons(
 				self.require(id, Some(node::Type::List), cause)?
 					.require_list(cause)?,

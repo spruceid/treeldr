@@ -1,5 +1,6 @@
 use derivative::Derivative;
-use treeldr::{vocab, Ref, Vocabulary};
+use rdf_types::VocabularyMut;
+use treeldr::{to_rdf::Generator, vocab, BlankIdIndex, IriIndex, Ref};
 
 pub mod context;
 pub mod error;
@@ -29,7 +30,7 @@ pub trait TryMap<M, E, A: Descriptions<M>, B: Descriptions<M>> {
 		causes: &M,
 		source: &Context<M, A>,
 		context: &mut Context<M, B>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
 	) -> Result<B::Type, E>;
 	fn layout(
 		&self,
@@ -37,7 +38,7 @@ pub trait TryMap<M, E, A: Descriptions<M>, B: Descriptions<M>> {
 		causes: &M,
 		source: &Context<M, A>,
 		context: &mut Context<M, B>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
 	) -> Result<B::Layout, E>;
 }
 
@@ -114,14 +115,14 @@ pub trait Document<M, D: Descriptions<M>> {
 		&self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M, D>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl Generator,
 	) -> Result<(), Self::Error>;
 
 	fn relate(
 		self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M, D>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl Generator,
 	) -> Result<(), Self::Error>;
 }
 

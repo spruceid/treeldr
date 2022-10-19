@@ -1,8 +1,8 @@
-use crate::{layout, prop, ty, vocab, Documentation, Id, IriIndex, Model, Ref};
-use rdf_types::{Literal, Object, Quad};
+use crate::{layout, prop, ty, vocab, Documentation, Id, IriIndex, Model, Ref, BlankIdIndex};
+use rdf_types::{Literal, Object, Quad, Vocabulary};
 use vocab::{StrippedObject, StrippedQuad, Term};
 
-pub trait Generator {
+pub trait Generator: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex> {
 	fn next(&mut self) -> Id;
 }
 

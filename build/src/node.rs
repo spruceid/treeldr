@@ -1,7 +1,8 @@
 use crate::{error, layout, list, prop, ty, Descriptions, Error, TryMap};
 use derivative::Derivative;
 use locspan::Meta;
-use treeldr::{Documentation, Id, MetaOption, Vocabulary};
+use rdf_types::VocabularyMut;
+use treeldr::{BlankIdIndex, Documentation, Id, IriIndex, MetaOption};
 
 pub use treeldr::node::{Type, Types, TypesMetadata};
 
@@ -30,7 +31,7 @@ impl<M, D: Descriptions<M>> Components<M, D> {
 		map: &impl TryMap<M, E, D, G>,
 		source: &crate::Context<M, D>,
 		target: &mut crate::Context<M, G>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
 	) -> Result<Components<M, G>, E>
 	where
 		M: Clone,

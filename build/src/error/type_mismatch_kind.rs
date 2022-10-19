@@ -1,5 +1,6 @@
-use treeldr::{Id, Vocabulary, ty::Kind};
+use treeldr::{Id, ty::Kind, IriIndex, BlankIdIndex};
 use locspan::{Span, MaybeLocated};
+use rdf_types::Vocabulary;
 
 #[derive(Debug)]
 pub struct TypeMismatchKind<M> {
@@ -27,7 +28,7 @@ impl KindName for Kind {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for TypeMismatchKind<M> where M::File: Clone {
-	fn message(&self, _vocab: &Vocabulary) -> String {
+	fn message(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
 		match (self.found, self.expected) {
 			(Some(found), Some(expected)) => format!("type is not {} but {}", found.name(), expected.name()),
 			(Some(found), None) => format!("type is not {}", found.name()),
@@ -36,7 +37,7 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for TypeMismatchKind<M> wher
 		}
 	}
 
-	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+	fn other_labels(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		let mut labels = Vec::new();
 		if let Some(cause) = self.because.optional_location().cloned() {
 			let message = match self.expected {

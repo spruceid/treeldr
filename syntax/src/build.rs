@@ -20,7 +20,7 @@ impl<M: Clone + MaybeLocated<Span = Span>> reporting::DiagnoseWithVocabulary<M> 
 where
 	M::File: Clone,
 {
-	fn message(&self, vocab: &Vocabulary) -> String {
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
 		match self {
 			Self::Global(e) => e.message(vocab),
 			Self::Local(e) => reporting::Diagnose::message(e),

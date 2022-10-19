@@ -1,5 +1,7 @@
-use treeldr::{Id, Vocabulary, vocab::{Object, Display}};
+use treeldr::{Id, vocab::Object, IriIndex, BlankIdIndex};
+use rdf_types::Vocabulary;
 use locspan::{Span, MaybeLocated};
+use contextual::WithContext;
 
 #[derive(Debug)]
 pub struct ListMismatchItem<M> {
@@ -10,7 +12,7 @@ pub struct ListMismatchItem<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for ListMismatchItem<M> {
-	fn message(&self, vocab: &Vocabulary) -> String {
-		format!("item mismatch for list `{}`", self.id.display(vocab))
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+		format!("item mismatch for list `{}`", self.id.with(vocab))
 	}
 }

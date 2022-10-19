@@ -1,12 +1,13 @@
 use crate::{
-	error, layout, node, prop, ty, Descriptions, Error, ListMut, ListRef, Node, ParentLayout,
-	Simplify, SubLayout,
+	error, layout, node, prop, ty, Descriptions, Error, IriIndex, ListMut, ListRef, Node,
+	ParentLayout, Simplify, SubLayout,
 };
 use derivative::Derivative;
 use locspan::Meta;
+use rdf_types::{Vocabulary, VocabularyMut};
 use shelves::Shelf;
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{metadata::Merge, vocab, Id, Model, Vocabulary};
+use treeldr::{metadata::Merge, to_rdf::Generator, vocab, BlankIdIndex, Id, Model};
 
 pub mod allocated;
 
@@ -58,8 +59,8 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 	where
 		M: Clone + Merge,
 	{
-		let id = Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Primitive(
-			primitive_layout,
+		let id = Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
+			vocab::TreeLdr::Primitive(primitive_layout),
 		)));
 		self.declare_layout(id, metadata.clone());
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
@@ -69,7 +70,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 
 	pub fn apply_built_in_definitions_with(
 		&mut self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl Generator,
 		metadata: M,
 	) -> Result<(), Error<M>>
 	where
@@ -82,7 +83,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 
 	pub fn apply_built_in_definitions(
 		&mut self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl Generator,
 	) -> Result<(), Error<M>>
 	where
 		M: Default + Clone + Merge,
@@ -92,14 +93,14 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 
 	pub fn create_option_layout(
 		&mut self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl Generator,
 		item_layout: Id,
 		cause: M,
 	) -> Result<Id, Error<M>>
 	where
 		M: Clone + Merge,
 	{
-		let id = Id::Blank(vocabulary.new_blank_label());
+		let id = vocabulary.next();
 		self.create_named_option_layout(id, item_layout, cause)
 	}
 
@@ -120,7 +121,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 
 	pub fn standard_reference(
 		&mut self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl Generator,
 		deref_ty: Id,
 		cause: M,
 		deref_cause: M,
@@ -140,7 +141,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 
 	pub fn create_reference(
 		&mut self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl Generator,
 		target_ty: Id,
 		cause: M,
 		deref_cause: M,
@@ -148,7 +149,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 	where
 		M: Clone + Merge,
 	{
-		let id = Id::Blank(vocabulary.new_blank_label());
+		let id = vocabulary.next();
 		self.create_named_reference(id, target_ty, cause, deref_cause)
 	}
 
@@ -166,8 +167,8 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
 		layout.set_type(target_ty, deref_cause)?;
 		layout.set_reference(
-			Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Primitive(
-				treeldr::layout::Primitive::Iri,
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
+				vocab::TreeLdr::Primitive(treeldr::layout::Primitive::Iri),
 			))),
 			cause,
 		)?;
@@ -176,7 +177,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 
 	pub fn define_rdf_types(
 		&mut self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl Generator,
 		metadata: M,
 	) -> Result<(), Error<M>>
 	where
@@ -184,13 +185,19 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 	{
 		use vocab::{Rdf, Rdfs, Term};
 		// rdfs:Resource
-		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Resource)), metadata.clone());
-		self.declare_layout(Id::Iri(Term::Rdfs(Rdfs::Resource)), metadata.clone());
-		let id_field = Id::Blank(vocabulary.new_blank_label());
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Resource))),
+			metadata.clone(),
+		);
+		self.declare_layout(
+			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Resource))),
+			metadata.clone(),
+		);
+		let id_field = vocabulary.next();
 		self.declare_layout_field(id_field, metadata.clone());
 		let resource_ref_layout = self.standard_reference(
 			vocabulary,
-			Id::Iri(Term::Rdfs(Rdfs::Resource)),
+			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Resource))),
 			metadata.clone(),
 			metadata.clone(),
 		)?;
@@ -202,7 +209,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 			.as_layout_field_mut()
 			.unwrap();
 		field.set_property(
-			Id::Iri(Term::TreeLdr(vocab::TreeLdr::Self_)),
+			Id::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Self_))),
 			metadata.clone(),
 		)?;
 		field.set_name(treeldr::Name::new("id").unwrap(), metadata.clone())?;
@@ -210,57 +217,96 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		let fields_id =
 			self.create_list(vocabulary, [Meta(id_field.into_term(), metadata.clone())])?;
 		let layout = self
-			.get_mut(Id::Iri(Term::Rdfs(Rdfs::Resource)))
+			.get_mut(Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Resource))))
 			.unwrap()
 			.as_layout_mut()
 			.unwrap();
 		layout.set_fields(fields_id, metadata.clone())?;
 
 		// rdfs:Class
-		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Class)), metadata.clone());
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Class))),
+			metadata.clone(),
+		);
 
 		// rdf:Property
-		self.declare_type(Id::Iri(Term::Rdf(Rdf::Property)), metadata.clone());
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Property))),
+			metadata.clone(),
+		);
 
 		// rdf:type
-		self.declare_property(Id::Iri(Term::Rdf(Rdf::Type)), metadata.clone());
+		self.declare_property(
+			Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Type))),
+			metadata.clone(),
+		);
 		let prop = self
-			.get_mut(Id::Iri(Term::Rdf(Rdf::Type)))
+			.get_mut(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Type))))
 			.unwrap()
 			.as_property_mut()
 			.unwrap();
-		prop.set_domain(Id::Iri(Term::Rdfs(Rdfs::Resource)), metadata.clone());
-		prop.set_range(Id::Iri(Term::Rdfs(Rdfs::Class)), metadata.clone())?;
+		prop.set_domain(
+			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Resource))),
+			metadata.clone(),
+		);
+		prop.set_range(
+			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Class))),
+			metadata.clone(),
+		)?;
 
 		// rdf:List
-		self.declare_type(Id::Iri(Term::Rdf(Rdf::List)), metadata.clone());
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List))),
+			metadata.clone(),
+		);
 		let list = self
-			.get_mut(Id::Iri(Term::Rdf(Rdf::List)))
+			.get_mut(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List))))
 			.unwrap()
 			.as_type_mut()
 			.unwrap();
-		list.declare_property(Id::Iri(Term::Rdf(Rdf::First)), metadata.clone())?;
-		list.declare_property(Id::Iri(Term::Rdf(Rdf::Rest)), metadata.clone())?;
+		list.declare_property(
+			Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::First))),
+			metadata.clone(),
+		)?;
+		list.declare_property(
+			Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Rest))),
+			metadata.clone(),
+		)?;
 
 		// rdf:first
-		self.declare_property(Id::Iri(Term::Rdf(Rdf::First)), metadata.clone());
+		self.declare_property(
+			Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::First))),
+			metadata.clone(),
+		);
 		let prop = self
-			.get_mut(Id::Iri(Term::Rdf(Rdf::First)))
+			.get_mut(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::First))))
 			.unwrap()
 			.as_property_mut()
 			.unwrap();
-		prop.set_domain(Id::Iri(Term::Rdf(Rdf::List)), metadata.clone());
-		prop.set_range(Id::Iri(Term::Rdfs(Rdfs::Resource)), metadata.clone())?;
+		prop.set_domain(
+			Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List))),
+			metadata.clone(),
+		);
+		prop.set_range(
+			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Resource))),
+			metadata.clone(),
+		)?;
 
 		// rdf:rest
-		self.declare_property(Id::Iri(Term::Rdf(Rdf::Rest)), metadata.clone());
+		self.declare_property(
+			Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Rest))),
+			metadata.clone(),
+		);
 		let prop = self
-			.get_mut(Id::Iri(Term::Rdf(Rdf::Rest)))
+			.get_mut(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Rest))))
 			.unwrap()
 			.as_property_mut()
 			.unwrap();
-		prop.set_domain(Id::Iri(Term::Rdf(Rdf::List)), metadata.clone());
-		prop.set_range(Id::Iri(Term::Rdf(Rdf::List)), metadata)
+		prop.set_domain(
+			Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List))),
+			metadata.clone(),
+		);
+		prop.set_range(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List))), metadata)
 	}
 
 	pub fn define_xsd_types(&mut self, metadata: M) -> Result<(), Error<M>>
@@ -269,7 +315,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 	{
 		use vocab::{Term, Xsd};
 		self.define_primitive_datatype(
-			Id::Iri(Term::Xsd(Xsd::String)),
+			Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::String))),
 			ty::data::Primitive::String,
 			metadata,
 		)?;
@@ -283,16 +329,18 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		use layout::Primitive;
 
 		self.declare_property(
-			Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)),
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_))),
 			metadata.clone(),
 		);
 		let prop = self
-			.get_mut(Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)))
+			.get_mut(Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
+				vocab::TreeLdr::Self_,
+			))))
 			.unwrap()
 			.as_property_mut()
 			.unwrap();
 		prop.set_range(
-			Id::Iri(vocab::Term::Rdfs(vocab::Rdfs::Resource)),
+			Id::Iri(IriIndex::Iri(vocab::Term::Rdfs(vocab::Rdfs::Resource))),
 			metadata.clone(),
 		)?;
 
@@ -315,7 +363,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 	pub fn try_map<G: Descriptions<M>, E>(
 		&self,
 		map: &impl crate::TryMap<M, E, D, G>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
 	) -> Result<Context<M, G>, E>
 	where
 		M: Clone,
@@ -334,7 +382,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 
 	pub fn simplify(
 		&self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
 	) -> Result<Context<M>, <D as Simplify<M>>::Error>
 	where
 		D: Simplify<M>,
@@ -437,7 +485,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 	/// Declare the given `id` as a list.
 	pub fn declare_list(&mut self, id: Id, cause: M) {
 		match id {
-			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => (),
+			Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil))) => (),
 			id => match self.nodes.get_mut(&id) {
 				Some(node) => node.declare_list(cause),
 				None => {
@@ -686,7 +734,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		M: Clone,
 	{
 		match id {
-			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
+			Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil))) => Ok(ListRef::Nil),
 			id => match self.get(id) {
 				Some(node) => Ok(ListRef::Cons(node.require_list(cause)?)),
 				None => Err(Meta(
@@ -706,7 +754,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		M: Clone,
 	{
 		match id {
-			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListMut::Nil),
+			Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil))) => Ok(ListMut::Nil),
 			id => match self.get_mut(id) {
 				Some(node) => Ok(ListMut::Cons(node.require_list_mut(cause)?)),
 				None => Err(Meta(
@@ -723,17 +771,17 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 
 	pub fn create_list<I: IntoIterator<Item = Meta<vocab::Object<M>, M>>>(
 		&mut self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut impl Generator,
 		list: I,
 	) -> Result<Id, Error<M>>
 	where
 		M: Clone,
 		I::IntoIter: DoubleEndedIterator,
 	{
-		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
+		let mut head = Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)));
 
 		for Meta(item, cause) in list.into_iter().rev() {
-			let id = Id::Blank(vocabulary.new_blank_label());
+			let id = vocabulary.next();
 
 			self.declare_list(id, cause.clone());
 			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
@@ -745,21 +793,22 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		Ok(head)
 	}
 
-	pub fn create_list_with<I: IntoIterator, C>(
+	pub fn create_list_with<I: IntoIterator, C, G>(
 		&mut self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut G,
 		list: I,
 		mut f: C,
 	) -> Result<Id, Error<M>>
 	where
 		M: Clone,
 		I::IntoIter: DoubleEndedIterator,
-		C: FnMut(I::Item, &mut Self, &mut Vocabulary) -> Meta<vocab::Object<M>, M>,
+		G: Generator,
+		C: FnMut(I::Item, &mut Self, &mut G) -> Meta<vocab::Object<M>, M>,
 	{
-		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
+		let mut head = Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)));
 
 		for item in list.into_iter().rev() {
-			let id = Id::Blank(vocabulary.new_blank_label());
+			let id = vocabulary.next();
 			let Meta(item, cause) = f(item, self, vocabulary);
 
 			self.declare_list(id, cause.clone());
@@ -772,9 +821,9 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		Ok(head)
 	}
 
-	pub fn try_create_list_with<E, I: IntoIterator, C>(
+	pub fn try_create_list_with<E, I: IntoIterator, C, G>(
 		&mut self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut G,
 		list: I,
 		mut f: C,
 	) -> Result<Id, E>
@@ -782,12 +831,13 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		M: Clone,
 		E: From<Error<M>>,
 		I::IntoIter: DoubleEndedIterator,
-		C: FnMut(I::Item, &mut Self, &mut Vocabulary) -> Result<Meta<vocab::Object<M>, M>, E>,
+		G: Generator,
+		C: FnMut(I::Item, &mut Self, &mut G) -> Result<Meta<vocab::Object<M>, M>, E>,
 	{
-		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
+		let mut head = Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)));
 
 		for item in list.into_iter().rev() {
-			let id = Id::Blank(vocabulary.new_blank_label());
+			let id = vocabulary.next();
 			let Meta(item, cause) = f(item, self, vocabulary)?;
 
 			self.declare_list(id, cause.clone());
@@ -837,7 +887,7 @@ impl<M: Clone> Context<M> {
 		Ok(())
 	}
 
-	pub fn assign_default_layouts(&mut self, vocabulary: &mut Vocabulary)
+	pub fn assign_default_layouts(&mut self, vocabulary: &mut impl Generator)
 	where
 		M: Merge,
 	{
@@ -863,7 +913,10 @@ impl<M: Clone> Context<M> {
 	}
 
 	/// Assigns default name for layouts/variants that don't have a name yet.
-	pub fn assign_default_names(&mut self, vocabulary: &Vocabulary) -> Result<(), Error<M>>
+	pub fn assign_default_names(
+		&mut self,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	) -> Result<(), Error<M>>
 	where
 		M: Clone,
 	{
@@ -959,7 +1012,7 @@ impl<M: Clone> Context<M> {
 		Ok(())
 	}
 
-	pub fn build(mut self, vocabulary: &mut Vocabulary) -> Result<Model<M>, Error<M>>
+	pub fn build(mut self, vocabulary: &mut impl Generator) -> Result<Model<M>, Error<M>>
 	where
 		M: Clone + Merge,
 	{

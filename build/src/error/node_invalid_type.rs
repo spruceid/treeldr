@@ -1,6 +1,7 @@
-use treeldr::{Id, node, Vocabulary, vocab::Display};
-use locspan::{Span, MaybeLocated};
-use locspan::Meta;
+use treeldr::{Id, node, IriIndex, BlankIdIndex};
+use locspan::{Span, MaybeLocated, Meta};
+use rdf_types::Vocabulary;
+use contextual::WithContext;
 
 #[derive(Debug)]
 pub struct NodeInvalidType<M> {
@@ -27,11 +28,11 @@ impl NodeTypeName for node::Type {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeInvalidType<M> where M::File: Clone {
-	fn message(&self, vocab: &Vocabulary) -> String {
-		format!("invalid type for {}", self.id.display(vocab))
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+		format!("invalid type for {}", self.id.with(vocab))
 	}
 
-	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+	fn other_labels(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		let mut labels = Vec::new();
 
 		for Meta(ty, ty_meta) in self.found.iter() {
@@ -43,7 +44,7 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeInvalidType<M> where
 		labels
 	}
 
-	fn notes(&self, _vocab: &Vocabulary) -> Vec<String> {
+	fn notes(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<String> {
 		let mut notes = Vec::new();
 
 		notes.push(format!("expected a {}", self.expected.name()));

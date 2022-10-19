@@ -1,6 +1,7 @@
 use crate::{error, Context, Descriptions, Error};
 use locspan::Meta;
-use treeldr::{Documentation, Id, MetaOption, Name, Vocabulary};
+use rdf_types::Vocabulary;
+use treeldr::{BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name};
 
 /// Layout field definition.
 #[derive(Clone)]
@@ -50,14 +51,14 @@ impl<M> Definition<M> {
 	pub fn default_name<D: Descriptions<M>>(
 		&self,
 		context: &Context<M, D>,
-		vocabulary: &Vocabulary,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 		metadata: M,
 	) -> Result<Option<Meta<Name, M>>, Error<M>>
 	where
 		M: Clone,
 	{
 		if let Id::Iri(term) = self.id {
-			if let Ok(Some(name)) = Name::from_iri(term.iri(vocabulary).unwrap()) {
+			if let Ok(Some(name)) = Name::from_iri(vocabulary.iri(&term).unwrap()) {
 				return Ok(Some(Meta::new(name, metadata)));
 			}
 		}
