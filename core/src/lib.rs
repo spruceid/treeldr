@@ -5,12 +5,13 @@ use std::fmt;
 
 pub use shelves::Ref;
 
-mod cause;
+// mod cause;
 mod doc;
 pub mod error;
 mod feature;
 pub mod layout;
-mod maybe_set;
+mod meta_option;
+pub mod metadata;
 pub mod name;
 pub mod node;
 pub mod prop;
@@ -21,11 +22,12 @@ pub mod utils;
 pub mod value;
 pub mod vocab;
 
-pub use cause::*;
+// pub use cause::*;
 pub use doc::Documentation;
 pub use error::Error;
 pub use feature::Feature;
-pub use maybe_set::*;
+pub use meta_option::MetaOption;
+pub use metadata::Metadata;
 pub use name::Name;
 pub use node::Node;
 pub use value::Value;

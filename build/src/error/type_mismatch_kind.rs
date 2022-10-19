@@ -1,12 +1,12 @@
 use treeldr::{Id, Vocabulary, ty::Kind};
-use locspan::Location;
+use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
-pub struct TypeMismatchKind<F> {
+pub struct TypeMismatchKind<M> {
 	pub id: Id,
 	pub expected: Option<Kind>,
 	pub found: Option<Kind>,
-	pub because: Option<Location<F>>
+	pub because: M
 }
 
 trait KindName {
@@ -26,7 +26,7 @@ impl KindName for Kind {
 	}
 }
 
-impl<F: Clone> super::AnyError<F> for TypeMismatchKind<F> {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for TypeMismatchKind<M> where M::File: Clone {
 	fn message(&self, _vocab: &Vocabulary) -> String {
 		match (self.found, self.expected) {
 			(Some(found), Some(expected)) => format!("type is not {} but {}", found.name(), expected.name()),
@@ -36,15 +36,15 @@ impl<F: Clone> super::AnyError<F> for TypeMismatchKind<F> {
 		}
 	}
 
-	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		let mut labels = Vec::new();
-		if let Some(cause) = &self.because {
+		if let Some(cause) = self.because.optional_location().cloned() {
 			let message = match self.expected {
 				Some(expected) => format!("previously used as {} here", expected.name()),
 				None => "previously defined here".into()
 			};
 
-			labels.push(cause.clone().into_secondary_label().with_message(message));
+			labels.push(cause.into_secondary_label().with_message(message));
 		}
 		labels
 	}

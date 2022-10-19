@@ -202,7 +202,7 @@ impl<'a, F> ContextBuilder<'a, F> {
 		let layout = self.model.layouts().get(layout_ref).unwrap();
 
 		use treeldr::layout::Description;
-		match layout.description() {
+		match layout.description().value() {
 			Description::Set(s) => self.insert_layout_terms(s.item_layout(), typed),
 			Description::Required(o) => self.insert_layout_terms(o.item_layout(), typed),
 			Description::Option(o) => self.insert_layout_terms(o.item_layout(), typed),
@@ -286,7 +286,7 @@ impl<'a, F> ContextBuilder<'a, F> {
 		let layout = self.model.layouts().get(layout_ref).unwrap();
 
 		use treeldr::layout::Description;
-		match layout.description() {
+		match layout.description().value() {
 			Description::Required(r) => self.generate_property_definition_type(r.item_layout()),
 			Description::Option(o) => self.generate_property_definition_type(o.item_layout()),
 			Description::Primitive(n, _) => {
@@ -305,7 +305,7 @@ impl<'a, F> ContextBuilder<'a, F> {
 		let layout = self.model.layouts().get(layout_ref).unwrap();
 
 		use treeldr::layout::Description;
-		match layout.description() {
+		match layout.description().value() {
 			Description::Set(_) => Some(Entry::new(
 				(),
 				Meta(Nullable::Some(Container::One(ContainerKind::Set)), ()),

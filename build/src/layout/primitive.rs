@@ -1,8 +1,9 @@
 use crate::{error, Error};
-use locspan::Location;
+use locspan::Meta;
+use treeldr::metadata::Merge;
 pub use treeldr::{
 	layout::{primitive::restricted, primitive::RegExp, Primitive},
-	Causes, Id, MaybeSet,
+	Id, MetaOption, Metadata,
 };
 
 pub mod restriction;
@@ -10,41 +11,41 @@ pub mod restriction;
 pub use restriction::{Restriction, Restrictions};
 
 #[derive(Clone, Debug)]
-pub struct Restricted<F> {
-	primitive: MaybeSet<Primitive, F>,
-	restrictions: Restrictions<F>,
+pub struct Restricted<M> {
+	primitive: MetaOption<Primitive, M>,
+	restrictions: Restrictions<M>,
 }
 
-impl<F> Default for Restricted<F> {
+impl<M> Default for Restricted<M> {
 	fn default() -> Self {
 		Self {
-			primitive: MaybeSet::default(),
+			primitive: MetaOption::default(),
 			restrictions: Restrictions::default(),
 		}
 	}
 }
 
-impl<F> PartialEq for Restricted<F> {
+impl<M> PartialEq for Restricted<M> {
 	fn eq(&self, other: &Self) -> bool {
 		self.primitive.value() == other.primitive.value()
 	}
 }
 
-impl<F> Eq for Restricted<F> {}
+impl<M> Eq for Restricted<M> {}
 
-impl<F> Restricted<F> {
+impl<M> Restricted<M> {
 	pub fn new() -> Self {
 		Self::default()
 	}
 
-	pub fn unrestricted(p: Primitive, causes: impl Into<Causes<F>>) -> Self {
+	pub fn unrestricted(p: Primitive, causes: M) -> Self {
 		Self {
-			primitive: MaybeSet::new(p, causes),
+			primitive: MetaOption::new(p, causes),
 			restrictions: Restrictions::default(),
 		}
 	}
 
-	pub fn primitive(&self) -> &MaybeSet<Primitive, F> {
+	pub fn primitive(&self) -> &MetaOption<Primitive, M> {
 		&self.primitive
 	}
 
@@ -52,53 +53,50 @@ impl<F> Restricted<F> {
 		&mut self,
 		id: Id,
 		primitive: Primitive,
-		cause: Option<Location<F>>,
-	) -> Result<(), Error<F>>
-	where
-		F: Clone + Ord,
-	{
+		cause: M,
+	) -> Result<(), Error<M>> {
 		self.primitive.try_set(
 			primitive,
 			cause,
-			|found, expected, found_causes, expected_causes| {
+			|Meta(found, found_meta), Meta(expected, expected_meta)| {
 				Error::new(
 					error::LayoutMismatchPrimitive {
 						id,
 						expected,
 						found,
-						because: found_causes.preferred().cloned(),
+						because: found_meta,
 					}
 					.into(),
-					expected_causes.preferred().cloned(),
+					expected_meta,
 				)
 			},
 		)
 	}
 
-	pub fn restrictions(&self) -> &Restrictions<F> {
+	pub fn restrictions(&self) -> &Restrictions<M> {
 		&self.restrictions
 	}
 
-	pub fn restrictions_mut(&mut self) -> &mut Restrictions<F> {
+	pub fn restrictions_mut(&mut self) -> &mut Restrictions<M> {
 		&mut self.restrictions
 	}
 
-	pub fn try_unify(mut self, id: Id, other: Self) -> Result<Self, Error<F>>
+	pub fn try_unify(mut self, id: Id, other: Self) -> Result<Self, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Merge,
 	{
 		self.primitive.try_set_opt(
 			other.primitive,
-			|found, expected, found_causes, expected_causes| {
+			|Meta(found, found_meta), Meta(expected, expected_meta)| {
 				Error::new(
 					error::LayoutMismatchPrimitive {
 						id,
 						expected,
 						found,
-						because: found_causes.preferred().cloned(),
+						because: found_meta,
 					}
 					.into(),
-					expected_causes.preferred().cloned(),
+					expected_meta,
 				)
 			},
 		)?;
@@ -112,22 +110,18 @@ impl<F> Restricted<F> {
 			&& self.restrictions.is_included_in(&other.restrictions)
 	}
 
-	pub fn build(
-		self,
-		id: Id,
-		causes: &Causes<F>,
-	) -> Result<treeldr::layout::RestrictedPrimitive, Error<F>>
+	pub fn build(self, id: Id, causes: &M) -> Result<treeldr::layout::RestrictedPrimitive, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let primitive = self.primitive.ok_or_else(|| {
 			Error::new(
 				error::LayoutMissingDatatypePrimitive(id).into(),
-				causes.preferred().cloned(),
+				causes.clone(),
 			)
 		})?;
 
-		match primitive.inner() {
+		match primitive.value() {
 			Primitive::Boolean => {
 				self.restrictions.build_boolean(id)?;
 				Ok(treeldr::layout::RestrictedPrimitive::Boolean)
@@ -177,10 +171,19 @@ impl<F> Restricted<F> {
 	}
 }
 
-impl<F: Ord> From<Primitive> for Restricted<F> {
+impl<M: Default> From<Primitive> for Restricted<M> {
 	fn from(p: Primitive) -> Self {
 		Self {
-			primitive: MaybeSet::new(p, None),
+			primitive: MetaOption::new(p, M::default()),
+			restrictions: Restrictions::default(),
+		}
+	}
+}
+
+impl<M> From<Meta<Primitive, M>> for Restricted<M> {
+	fn from(Meta(p, m): Meta<Primitive, M>) -> Self {
+		Self {
+			primitive: MetaOption::new(p, m),
 			restrictions: Restrictions::default(),
 		}
 	}

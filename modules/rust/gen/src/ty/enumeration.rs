@@ -3,13 +3,13 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use shelves::Ref;
 
-pub struct Enum<F> {
+pub struct Enum<M> {
 	ident: proc_macro2::Ident,
-	variants: Vec<Variant<F>>,
+	variants: Vec<Variant<M>>,
 }
 
-impl<F> Enum<F> {
-	pub fn new(ident: proc_macro2::Ident, variants: Vec<Variant<F>>) -> Self {
+impl<M> Enum<M> {
+	pub fn new(ident: proc_macro2::Ident, variants: Vec<Variant<M>>) -> Self {
 		Self { ident, variants }
 	}
 
@@ -17,29 +17,29 @@ impl<F> Enum<F> {
 		&self.ident
 	}
 
-	pub fn variants(&self) -> &[Variant<F>] {
+	pub fn variants(&self) -> &[Variant<M>] {
 		&self.variants
 	}
 }
 
-pub struct Variant<F> {
+pub struct Variant<M> {
 	ident: proc_macro2::Ident,
-	ty: Option<Ref<treeldr::layout::Definition<F>>>,
+	ty: Option<Ref<treeldr::layout::Definition<M>>>,
 }
 
-impl<F> Variant<F> {
-	pub fn new(ident: proc_macro2::Ident, ty: Option<Ref<treeldr::layout::Definition<F>>>) -> Self {
+impl<M> Variant<M> {
+	pub fn new(ident: proc_macro2::Ident, ty: Option<Ref<treeldr::layout::Definition<M>>>) -> Self {
 		Self { ident, ty }
 	}
 }
 
-impl<F> Generate<F> for Variant<F> {
+impl<M> Generate<M> for Variant<M> {
 	fn generate(
 		&self,
-		context: &Context<F>,
-		scope: Option<Ref<Module<F>>>,
+		context: &Context<M>,
+		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Error<M>> {
 		let ident = &self.ident;
 
 		match self.ty.as_ref() {

@@ -1,5 +1,6 @@
 use super::Properties;
-use crate::{prop, Ref, WithCauses};
+use crate::{metadata, prop, Ref};
+use locspan::Meta;
 
 /// Type restricted on a property.
 ///
@@ -7,34 +8,33 @@ use crate::{prop, Ref, WithCauses};
 /// A restricted type is a subset of the domain of the property which
 /// includes every instance for which the given property satisfies the
 /// given restriction.
-pub struct Restriction<F> {
-	properties: Properties<F>,
+pub struct Restriction<M> {
+	properties: Properties<M>,
 }
 
-impl<F> Restriction<F> {
+impl<M> Restriction<M> {
 	pub fn new(
-		prop: WithCauses<Ref<prop::Definition<F>>, F>,
-		restriction: prop::Restrictions<F>,
+		Meta(prop, causes): Meta<Ref<prop::Definition<M>>, M>,
+		restriction: prop::Restrictions<M>,
 	) -> Self
 	where
-		F: Ord,
+		M: metadata::Merge,
 	{
 		let mut properties = Properties::none();
-		let (prop, causes) = prop.into_parts();
 		properties.insert(prop, Some(restriction), causes);
 
 		Self { properties }
 	}
 
-	pub fn properties(&self) -> &Properties<F> {
+	pub fn properties(&self) -> &Properties<M> {
 		&self.properties
 	}
 
-	pub fn property(&self) -> Ref<prop::Definition<F>> {
+	pub fn property(&self) -> Ref<prop::Definition<M>> {
 		self.properties.included().next().unwrap().property()
 	}
 
-	pub fn restrictions(&self) -> &prop::Restrictions<F> {
+	pub fn restrictions(&self) -> &prop::Restrictions<M> {
 		self.properties.included().next().unwrap().restrictions()
 	}
 }

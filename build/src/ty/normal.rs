@@ -1,18 +1,17 @@
 use crate::{context, Error};
 use derivative::Derivative;
-use locspan::Location;
 use std::collections::HashMap;
-use treeldr::{Causes, Id};
+use treeldr::{metadata::Merge, Id};
 
 /// Normal type definition.
 #[derive(Clone, Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct Normal<F> {
+pub struct Normal<M> {
 	/// Properties.
-	properties: HashMap<Id, Causes<F>>,
+	properties: HashMap<Id, M>,
 }
 
-impl<F> Normal<F> {
+impl<M> Normal<M> {
 	pub fn new() -> Self {
 		Self::default()
 	}
@@ -21,39 +20,35 @@ impl<F> Normal<F> {
 		self.properties.is_empty()
 	}
 
-	pub fn properties(&self) -> impl Iterator<Item = (Id, &Causes<F>)> {
+	pub fn properties(&self) -> impl Iterator<Item = (Id, &M)> {
 		self.properties.iter().map(|(p, c)| (*p, c))
 	}
 
-	pub fn declare_property(&mut self, prop_ref: Id, cause: Option<Location<F>>)
+	pub fn declare_property(&mut self, prop_ref: Id, cause: M)
 	where
-		F: Ord,
+		M: Merge,
 	{
 		use std::collections::hash_map::Entry;
 		match self.properties.entry(prop_ref) {
 			Entry::Vacant(entry) => {
-				entry.insert(cause.into());
+				entry.insert(cause);
 			}
-			Entry::Occupied(mut entry) => {
-				if let Some(cause) = cause {
-					entry.get_mut().add(cause)
-				}
-			}
+			Entry::Occupied(mut entry) => entry.get_mut().merge_with(cause),
 		}
 	}
 
 	pub fn build(
 		self,
-		nodes: &context::allocated::Nodes<F>,
-	) -> Result<treeldr::ty::Description<F>, Error<F>>
+		nodes: &context::allocated::Nodes<M>,
+	) -> Result<treeldr::ty::Description<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		let mut result = treeldr::ty::Normal::new();
 
 		for (prop_id, prop_causes) in self.properties {
-			let prop_ref = nodes.require_property(prop_id, prop_causes.preferred().cloned())?;
-			result.insert_property(*prop_ref.inner(), prop_causes)
+			let prop_ref = nodes.require_property(prop_id, &prop_causes)?;
+			result.insert_property(**prop_ref, prop_causes)
 		}
 
 		Ok(treeldr::ty::Description::Normal(result))

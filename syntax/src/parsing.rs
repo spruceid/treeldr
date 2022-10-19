@@ -1,49 +1,30 @@
 use super::*;
+use decoded_char::DecodedChar;
 use lexing::{Delimiter, Keyword, Punct, Token, TokenKind, Tokens};
-use locspan::{Loc, Location, MapLocErr};
+use locspan::{MaybeLocated, MaybeSpanned, Meta, Span};
 use std::{fmt, fmt::Debug};
 use treeldr::reporting;
 
-#[derive(Debug)]
-pub struct Unexpected(Option<Token>, Vec<lexing::TokenKind>);
-
-impl Unexpected {
-	pub fn expected(&self) -> &[lexing::TokenKind] {
-		&self.1
-	}
-}
-
-impl fmt::Display for Unexpected {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match self {
-			Self(None, _) => write!(f, "unexpected end of text"),
-			Self(Some(token), _) => write!(f, "unexpected {}", token),
-		}
-	}
-}
-
-pub type LocError<E, F> = Box<Loc<Error<E>, F>>;
+pub type MetaError<E, M> = Meta<Box<Error<E>>, M>;
 
 /// Parse error.
 #[derive(Debug)]
 pub enum Error<E> {
-	Unexpected(Box<Unexpected>),
+	Unexpected(Option<Token>, Vec<lexing::TokenKind>),
 	InvalidUseId(Id),
 	InvalidPrefix(Id),
 	InvalidAlias(Id),
 	Lexer(E),
 }
 
-impl<E> Error<E> {
-	pub fn unexpected(token: Option<Token>, expected: Vec<lexing::TokenKind>) -> Self {
-		Self::Unexpected(Box::new(Unexpected(token, expected)))
-	}
-}
-
-impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithCause<F> for Error<E> {
-	fn message(&self, _cause: Option<&Location<F>>) -> String {
+impl<E: Debug + fmt::Display, M: MaybeLocated<Span = Span>> reporting::DiagnoseWithMetadata<M>
+	for Error<E>
+where
+	M::File: Clone,
+{
+	fn message(&self, _cause: &M) -> String {
 		match self {
-			Self::Unexpected(_) => "parsing error".to_owned(),
+			Self::Unexpected(_, _) => "parsing error".to_owned(),
 			Self::InvalidUseId(_) => "invalid use IRI".to_owned(),
 			Self::InvalidPrefix(_) => "invalid prefix".to_owned(),
 			Self::InvalidAlias(_) => "invalid alias".to_owned(),
@@ -51,25 +32,26 @@ impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithCause<F> for Erro
 		}
 	}
 
-	fn labels(&self, cause: Option<&Location<F>>) -> Vec<codespan_reporting::diagnostic::Label<F>> {
-		match cause {
+	fn labels(&self, cause: &M) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+		match cause.optional_location() {
 			Some(loc) => {
-				vec![
-					codespan_reporting::diagnostic::Label::primary(loc.file().clone(), loc.span())
-						.with_message(self.to_string()),
-				]
+				vec![codespan_reporting::diagnostic::Label::primary(
+					loc.file().clone(),
+					loc.optional_span().unwrap(),
+				)
+				.with_message(self.to_string())]
 			}
 			None => Vec::new(),
 		}
 	}
 
-	fn notes(&self, _cause: Option<&Location<F>>) -> Vec<String> {
-		if let Error::Unexpected(e) = self {
-			if !e.expected().is_empty() {
+	fn notes(&self, _cause: &M) -> Vec<String> {
+		if let Error::Unexpected(_, expected) = self {
+			if !expected.is_empty() {
 				let mut note = "expected ".to_owned();
 
-				let len = e.expected().len();
-				for (i, token) in e.expected().iter().enumerate() {
+				let len = expected.len();
+				for (i, token) in expected.iter().enumerate() {
 					if i > 0 {
 						if i + 1 == len {
 							note.push_str(" or ");
@@ -92,7 +74,8 @@ impl<E: Debug + fmt::Display, F: Clone> reporting::DiagnoseWithCause<F> for Erro
 impl<E: Debug + fmt::Display> fmt::Display for Error<E> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			Self::Unexpected(e) => fmt::Display::fmt(e, f),
+			Self::Unexpected(None, _) => write!(f, "unexpected end of text"),
+			Self::Unexpected(Some(token), _) => write!(f, "unexpected {}", token),
 			Self::InvalidUseId(id) => write!(f, "invalid use IRI `{}`", id),
 			Self::InvalidPrefix(id) => write!(f, "invalid prefix `{}`", id),
 			Self::InvalidAlias(id) => write!(f, "invalid alias `{}`", id),
@@ -101,47 +84,306 @@ impl<E: Debug + fmt::Display> fmt::Display for Error<E> {
 	}
 }
 
+/// TreeLDR parser.
+pub struct Parser<L, F> {
+	lexer: L,
+	metadata_builder: F,
+}
+
+impl<L: Tokens, F> Parser<L, F> {
+	pub fn new(lexer: L, metadata_builder: F) -> Self {
+		Self {
+			lexer,
+			metadata_builder,
+		}
+	}
+
+	fn next<M>(&mut self) -> Result<Meta<Option<Token>, Span>, MetaError<L::Error, M>>
+	where
+		F: FnMut(Span) -> M,
+	{
+		self.lexer
+			.next()
+			.map_err(|Meta(e, span)| Meta(Box::new(Error::Lexer(e)), (self.metadata_builder)(span)))
+	}
+
+	fn next_label(&mut self) -> Label {
+		self.lexer.next_label()
+	}
+
+	#[allow(clippy::type_complexity)]
+	fn peek<M>(&mut self) -> Result<Meta<Option<&Token>, Span>, MetaError<L::Error, M>>
+	where
+		F: FnMut(Span) -> M,
+	{
+		self.lexer
+			.peek()
+			.map_err(|Meta(e, span)| Meta(Box::new(Error::Lexer(e)), (self.metadata_builder)(span)))
+	}
+
+	fn build_metadata<M>(&mut self, span: Span) -> M
+	where
+		F: FnMut(Span) -> M,
+	{
+		(self.metadata_builder)(span)
+	}
+
+	#[allow(clippy::type_complexity)]
+	fn next_expected<M>(
+		&mut self,
+		expected: impl FnOnce() -> Vec<TokenKind>,
+	) -> Result<Meta<Token, Span>, MetaError<L::Error, M>>
+	where
+		F: FnMut(Span) -> M,
+	{
+		match self.next()? {
+			Meta(None, span) => Err(Meta::new(
+				Box::new(Error::Unexpected(None, expected())),
+				(self.metadata_builder)(span),
+			)),
+			Meta(Some(token), span) => Ok(Meta::new(token, span)),
+		}
+	}
+
+	#[allow(clippy::type_complexity)]
+	fn next_expected_token_from<M>(
+		&mut self,
+		token_opt: Option<Meta<Token, Span>>,
+		expected: impl FnOnce() -> Vec<TokenKind>,
+	) -> Result<Meta<Token, Span>, MetaError<L::Error, M>>
+	where
+		F: FnMut(Span) -> M,
+	{
+		match token_opt {
+			Some(token) => Ok(token),
+			None => self.next_expected(expected),
+		}
+	}
+
+	#[allow(clippy::type_complexity)]
+	fn parse_comma_separated_list<T: Parse<M>, M>(
+		&mut self,
+	) -> Result<Vec<Meta<T, M>>, MetaError<L::Error, M>>
+	where
+		F: FnMut(Span) -> M,
+	{
+		let mut list = Vec::new();
+
+		while let Some(item) = T::try_parse(self)? {
+			list.push(item);
+			match self.peek()? {
+				Meta(Some(Token::Punct(Punct::Comma)), _) => {
+					self.next()?;
+					// continue
+				}
+				_ => break,
+			}
+		}
+
+		Ok(list)
+	}
+
+	#[allow(clippy::type_complexity)]
+	fn parse_block<T: Parse<M>, M>(
+		&mut self,
+		mut span: Span,
+	) -> Result<Meta<Vec<Meta<T, M>>, M>, MetaError<L::Error, M>>
+	where
+		F: FnMut(Span) -> M,
+	{
+		let items = self.parse_comma_separated_list()?;
+		match self.next()? {
+			Meta(Some(Token::End(Delimiter::Brace)), end_span) => {
+				span.append(end_span);
+				Ok(Meta(items, self.build_metadata(span)))
+			}
+			Meta(unexpected, span) => Err(Meta::new(
+				Box::new(Error::Unexpected(
+					unexpected,
+					vec![
+						TokenKind::Punct(Punct::Comma),
+						TokenKind::End(Delimiter::Brace),
+					],
+				)),
+				self.build_metadata(span),
+			)),
+		}
+	}
+
+	fn parse_keyword<M>(&mut self, keyword: lexing::Keyword) -> Result<(), MetaError<L::Error, M>>
+	where
+		F: FnMut(Span) -> M,
+	{
+		let Meta(token, span) = self.next_expected(|| vec![TokenKind::Keyword(keyword)])?;
+
+		match token {
+			Token::Keyword(k) if k == keyword => Ok(()),
+			unexpected => Err(Meta::new(
+				Box::new(Error::Unexpected(
+					Some(unexpected),
+					vec![TokenKind::Keyword(keyword)],
+				)),
+				self.build_metadata(span),
+			)),
+		}
+	}
+
+	fn parse_punct<M>(&mut self, punct: lexing::Punct) -> Result<(), MetaError<L::Error, M>>
+	where
+		F: FnMut(Span) -> M,
+	{
+		let Meta(token, span) = self.next_expected(|| vec![TokenKind::Punct(punct)])?;
+
+		match token {
+			Token::Punct(p) if p == punct => Ok(()),
+			unexpected => Err(Meta::new(
+				Box::new(Error::Unexpected(
+					Some(unexpected),
+					vec![TokenKind::Punct(punct)],
+				)),
+				self.build_metadata(span),
+			)),
+		}
+	}
+
+	fn parse_end<M>(&mut self, delimiter: Delimiter) -> Result<Span, MetaError<L::Error, M>>
+	where
+		F: FnMut(Span) -> M,
+	{
+		let Meta(token, span) = self.next_expected(|| vec![TokenKind::End(delimiter)])?;
+
+		match token {
+			Token::End(d) if d == delimiter => Ok(span),
+			unexpected => Err(Meta::new(
+				Box::new(Error::Unexpected(
+					Some(unexpected),
+					vec![TokenKind::End(delimiter)],
+				)),
+				self.build_metadata(span),
+			)),
+		}
+	}
+}
+
 /// Parsable abstract syntax nodes.
-pub trait Parse<F>: Sized {
+pub trait Parse<M>: Sized {
 	const FIRST: &'static [TokenKind];
 
+	#[inline(always)]
+	fn parse_str<F>(
+		content: &str,
+		metadata_builder: F,
+	) -> Result<Meta<Self, M>, MetaError<lexing::Error, M>>
+	where
+		F: FnMut(Span) -> M,
+	{
+		Self::parse_utf8_infallible(content.chars(), metadata_builder)
+	}
+
+	#[inline(always)]
+	fn parse_utf8_infallible<C, F>(
+		chars: C,
+		metadata_builder: F,
+	) -> Result<Meta<Self, M>, MetaError<lexing::Error, M>>
+	where
+		C: Iterator<Item = char>,
+		F: FnMut(Span) -> M,
+	{
+		Self::parse_infallible(decoded_char::Utf8Decoded(chars), metadata_builder)
+	}
+
+	#[inline(always)]
+	fn parse_utf8<C, F, E>(
+		chars: C,
+		metadata_builder: F,
+	) -> Result<Meta<Self, M>, MetaError<lexing::Error<E>, M>>
+	where
+		C: Iterator<Item = Result<char, E>>,
+		F: FnMut(Span) -> M,
+	{
+		Self::parse(decoded_char::FallibleUtf8Decoded(chars), metadata_builder)
+	}
+
+	#[inline(always)]
+	fn parse_infallible<C, F>(
+		chars: C,
+		metadata_builder: F,
+	) -> Result<Meta<Self, M>, MetaError<lexing::Error, M>>
+	where
+		C: Iterator<Item = DecodedChar>,
+		F: FnMut(Span) -> M,
+	{
+		let lexer = Lexer::new(chars.map(Ok));
+		let mut parser = Parser::new(lexer, metadata_builder);
+		Self::parse_in(&mut parser)
+	}
+
+	#[inline(always)]
+	fn parse<C, F, E>(
+		chars: C,
+		metadata_builder: F,
+	) -> Result<Meta<Self, M>, MetaError<lexing::Error<E>, M>>
+	where
+		C: Iterator<Item = Result<DecodedChar, E>>,
+		F: FnMut(Span) -> M,
+	{
+		let lexer = Lexer::new(chars);
+		let mut parser = Parser::new(lexer, metadata_builder);
+		Self::parse_in(&mut parser)
+	}
+
 	#[allow(clippy::type_complexity)]
-	fn parse<L: Tokens<F>>(lexer: &mut L) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
-		match lexer.next().map_loc_err(Error::Lexer)? {
-			Meta(Some(token), loc) => Self::parse_from(lexer, token, loc),
-			Meta(None, loc) => Err(Box::new(Loc(
-				Error::unexpected(None, Self::FIRST.to_vec()),
-				loc,
-			))),
+	fn parse_in<L, F>(parser: &mut Parser<L, F>) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
+		match parser.next()? {
+			Meta(Some(token), loc) => Self::parse_from(parser, token, loc),
+			Meta(None, loc) => Err(Meta(
+				Box::new(Error::Unexpected(None, Self::FIRST.to_vec())),
+				parser.build_metadata(loc),
+			)),
 		}
 	}
 
 	#[allow(clippy::type_complexity)]
-	fn parse_from_continuation<L: Tokens<F>>(
-		lexer: &mut L,
-		token_opt: Option<Loc<Token, F>>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+	fn parse_from_continuation<L, F>(
+		parser: &mut Parser<L, F>,
+		token_opt: Option<Meta<Token, Span>>,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		match token_opt {
-			Some(Meta(token, loc)) => Self::parse_from(lexer, token, loc),
-			None => Self::parse(lexer),
+			Some(Meta(token, loc)) => Self::parse_from(parser, token, loc),
+			None => Self::parse_in(parser),
 		}
 	}
 
 	#[allow(clippy::type_complexity)]
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>>;
+		loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M;
 
 	#[allow(clippy::type_complexity)]
-	fn try_parse<L: Tokens<F>>(
-		lexer: &mut L,
-	) -> Result<Option<Loc<Self, F>>, LocError<L::Error, F>> {
-		match lexer.peek().map_loc_err(Error::Lexer)? {
+	fn try_parse<L, F>(
+		parser: &mut Parser<L, F>,
+	) -> Result<Option<Meta<Self, M>>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
+		match parser.peek()? {
 			Meta(Some(token), _) => {
 				if token.kind().matches_any(Self::FIRST) {
-					Ok(Some(Self::parse(lexer)?))
+					Ok(Some(Self::parse_in(parser)?))
 				} else {
 					Ok(None)
 				}
@@ -151,169 +393,55 @@ pub trait Parse<F>: Sized {
 	}
 
 	#[allow(clippy::type_complexity)]
-	fn try_parse_from_continuation<L: Tokens<F>>(
-		lexer: &mut L,
-		token_opt: Option<Loc<Token, F>>,
-	) -> Result<Option<Loc<Self, F>>, LocError<L::Error, F>> {
+	fn try_parse_from_continuation<L, F>(
+		parser: &mut Parser<L, F>,
+		token_opt: Option<Meta<Token, Span>>,
+	) -> Result<Option<Meta<Self, M>>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		match token_opt {
 			Some(Meta(token, loc)) => {
 				if token.kind().matches_any(Self::FIRST) {
-					Ok(Some(Self::parse_from(lexer, token, loc)?))
+					Ok(Some(Self::parse_from(parser, token, loc)?))
 				} else {
 					Ok(None)
 				}
 			}
-			None => Self::try_parse(lexer),
+			None => Self::try_parse(parser),
 		}
 	}
 
 	#[allow(clippy::type_complexity)]
-	fn try_parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn try_parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		loc: Location<F>,
-	) -> Result<(Option<Loc<Self, F>>, Option<Loc<Token, F>>), LocError<L::Error, F>> {
+		loc: Span,
+	) -> Result<(Option<Meta<Self, M>>, Option<Meta<Token, Span>>), MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		if token.kind().matches_any(Self::FIRST) {
-			Ok((Some(Self::parse_from(lexer, token, loc)?), None))
+			Ok((Some(Self::parse_from(parser, token, loc)?), None))
 		} else {
-			Ok((None, Some(Loc(token, loc))))
+			Ok((None, Some(Meta(token, loc))))
 		}
 	}
 }
 
-#[allow(clippy::type_complexity)]
-fn peek_token<F, L: Tokens<F>>(
-	tokens: &mut L,
-) -> Result<Loc<Option<&Token>, F>, LocError<L::Error, F>> {
-	tokens.peek().map_loc_err(Error::Lexer).map_err(Box::new)
-}
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for Document<M> {
+	const FIRST: &'static [TokenKind] = Item::<M>::FIRST;
 
-#[allow(clippy::type_complexity)]
-fn next_token<F, L: Tokens<F>>(
-	tokens: &mut L,
-) -> Result<Loc<Option<Token>, F>, LocError<L::Error, F>> {
-	tokens.next().map_loc_err(Error::Lexer).map_err(Box::new)
-}
-
-#[allow(clippy::type_complexity)]
-fn next_expected_token<F, L: Tokens<F>>(
-	tokens: &mut L,
-	expected: impl FnOnce() -> Vec<TokenKind>,
-) -> Result<Loc<Token, F>, LocError<L::Error, F>> {
-	match next_token(tokens)? {
-		Meta(None, loc) => Err(Box::new(Loc::new(Error::unexpected(None, expected()), loc))),
-		Meta(Some(token), loc) => Ok(Loc::new(token, loc)),
-	}
-}
-
-#[allow(clippy::type_complexity)]
-fn next_expected_token_from<F, L: Tokens<F>>(
-	tokens: &mut L,
-	token_opt: Option<Loc<Token, F>>,
-	expected: impl FnOnce() -> Vec<TokenKind>,
-) -> Result<Loc<Token, F>, LocError<L::Error, F>> {
-	match token_opt {
-		Some(token) => Ok(token),
-		None => next_expected_token(tokens, expected),
-	}
-}
-
-#[allow(clippy::type_complexity)]
-fn parse_comma_separated_list<F, L: Tokens<F>, T: Parse<F>>(
-	lexer: &mut L,
-) -> Result<Vec<Loc<T, F>>, LocError<L::Error, F>> {
-	let mut list = Vec::new();
-
-	while let Some(item) = T::try_parse(lexer)? {
-		list.push(item);
-		match peek_token(lexer)? {
-			Meta(Some(Token::Punct(Punct::Comma)), _) => {
-				next_token(lexer)?;
-				// continue
-			}
-			_ => break,
-		}
-	}
-
-	Ok(list)
-}
-
-#[allow(clippy::type_complexity)]
-fn parse_block<F, L: Tokens<F>, T: Parse<F>>(
-	lexer: &mut L,
-	mut loc: Location<F>,
-) -> Result<Loc<Vec<Loc<T, F>>, F>, LocError<L::Error, F>> {
-	let items = parse_comma_separated_list(lexer)?;
-	match next_token(lexer)? {
-		Meta(Some(Token::End(Delimiter::Brace)), end_loc) => {
-			loc.span_mut().append(end_loc.span());
-			Ok(Loc::new(items, loc))
-		}
-		Meta(unexpected, loc) => Err(Box::new(Loc::new(
-			Error::unexpected(
-				unexpected,
-				vec![
-					TokenKind::Punct(Punct::Comma),
-					TokenKind::End(Delimiter::Brace),
-				],
-			),
-			loc,
-		))),
-	}
-}
-
-fn parse_keyword<F, L: Tokens<F>>(
-	tokens: &mut L,
-	keyword: lexing::Keyword,
-) -> Result<(), LocError<L::Error, F>> {
-	let Meta(token, span) = next_expected_token(tokens, || vec![TokenKind::Keyword(keyword)])?;
-
-	match token {
-		Token::Keyword(k) if k == keyword => Ok(()),
-		unexpected => Err(Box::new(Loc::new(
-			Error::unexpected(Some(unexpected), vec![TokenKind::Keyword(keyword)]),
-			span,
-		))),
-	}
-}
-
-fn parse_punct<F, L: Tokens<F>>(
-	tokens: &mut L,
-	punct: lexing::Punct,
-) -> Result<(), LocError<L::Error, F>> {
-	let Meta(token, span) = next_expected_token(tokens, || vec![TokenKind::Punct(punct)])?;
-
-	match token {
-		Token::Punct(p) if p == punct => Ok(()),
-		unexpected => Err(Box::new(Loc::new(
-			Error::unexpected(Some(unexpected), vec![TokenKind::Punct(punct)]),
-			span,
-		))),
-	}
-}
-
-fn parse_end<F, L: Tokens<F>>(
-	tokens: &mut L,
-	delimiter: Delimiter,
-) -> Result<Location<F>, LocError<L::Error, F>> {
-	let Meta(token, loc) = next_expected_token(tokens, || vec![TokenKind::End(delimiter)])?;
-
-	match token {
-		Token::End(d) if d == delimiter => Ok(loc),
-		unexpected => Err(Box::new(Loc::new(
-			Error::unexpected(Some(unexpected), vec![TokenKind::End(delimiter)]),
-			loc,
-		))),
-	}
-}
-
-impl<F: Clone> Parse<F> for Document<F> {
-	const FIRST: &'static [TokenKind] = Item::<F>::FIRST;
-
-	fn parse<L: Tokens<F>>(lexer: &mut L) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
-		match lexer.next().map_loc_err(Error::Lexer)? {
-			Meta(Some(token), loc) => Self::parse_from(lexer, token, loc),
-			Meta(None, loc) => Ok(Loc::new(
+	fn parse_in<L, F>(parser: &mut Parser<L, F>) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
+		match parser.next()? {
+			Meta(Some(token), span) => Self::parse_from(parser, token, span),
+			Meta(None, span) => Ok(Meta::new(
 				Self {
 					bases: Vec::new(),
 					uses: Vec::new(),
@@ -321,23 +449,28 @@ impl<F: Clone> Parse<F> for Document<F> {
 					properties: Vec::new(),
 					layouts: Vec::new(),
 				},
-				loc,
+				parser.build_metadata(span),
 			)),
 		}
 	}
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+		loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		let mut bases = Vec::new();
 		let mut uses = Vec::new();
 		let mut types = Vec::new();
 		let mut properties = Vec::new();
 		let mut layouts = Vec::new();
 
-		let Meta(first_item, mut loc) = Item::parse_from(lexer, token, loc)?;
+		let Meta(first_item, first_meta) = Item::parse_from(parser, token, loc)?;
+		let mut loc = first_meta.optional_span().unwrap();
 		match first_item {
 			Item::Base(i) => bases.push(i),
 			Item::Use(i) => uses.push(i),
@@ -347,10 +480,10 @@ impl<F: Clone> Parse<F> for Document<F> {
 		}
 
 		loop {
-			match peek_token(lexer)? {
+			match parser.peek()? {
 				Meta(Some(_), _) => {
-					let Meta(item, item_loc) = Item::parse(lexer)?;
-					loc.span_mut().append(item_loc.span());
+					let Meta(item, item_meta) = Item::parse_in(parser)?;
+					loc.append(item_meta.optional_span().unwrap());
 
 					match item {
 						Item::Base(i) => bases.push(i),
@@ -361,7 +494,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 					}
 				}
 				Meta(None, _) => {
-					break Ok(Loc::new(
+					break Ok(Meta::new(
 						Self {
 							bases,
 							uses,
@@ -369,7 +502,7 @@ impl<F: Clone> Parse<F> for Document<F> {
 							properties,
 							layouts,
 						},
-						loc,
+						parser.build_metadata(loc),
 					));
 				}
 			}
@@ -377,57 +510,69 @@ impl<F: Clone> Parse<F> for Document<F> {
 	}
 }
 
-impl<F> Parse<F> for Id {
+impl<M> Parse<M> for Id {
 	const FIRST: &'static [TokenKind] = &[TokenKind::Id];
 
-	fn parse_from<L: Tokens<F>>(
-		_lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+		span: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		match token {
-			Token::Id(id) => Ok(Loc::new(id, loc)),
-			Token::Keyword(kw) => Ok(Loc::new(Id::Name(kw.to_string()), loc)),
-			unexpected => Err(Box::new(Loc::new(
-				Error::unexpected(Some(unexpected), vec![TokenKind::Id]),
-				loc,
-			))),
+			Token::Id(id) => Ok(Meta::new(id, parser.build_metadata(span))),
+			Token::Keyword(kw) => Ok(Meta::new(
+				Id::Name(kw.to_string()),
+				parser.build_metadata(span),
+			)),
+			unexpected => Err(Meta::new(
+				Box::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id])),
+				parser.build_metadata(span),
+			)),
 		}
 	}
 }
 
-impl<F: Clone> Parse<F> for Documentation<F> {
+impl<M> Parse<M> for Documentation<M> {
 	const FIRST: &'static [TokenKind] = &[TokenKind::Doc];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+		mut span: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		let mut items = Vec::new();
 		match token {
 			Token::Doc(doc) => {
-				items.push(Loc(doc, loc.clone()));
+				items.push(Meta(doc, parser.build_metadata(span)));
 				loop {
-					match peek_token(lexer)? {
+					match parser.peek()? {
 						Meta(Some(token), _) if token.is_doc() => {
-							let doc = next_token(lexer)?.unwrap().map(|t| t.into_doc().unwrap());
-							loc.span_mut().append(doc.span());
-							items.push(doc)
+							let Meta(doc, doc_span) =
+								parser.next()?.unwrap().map(|t| t.into_doc().unwrap());
+							span.append(doc_span);
+							items.push(Meta(doc, parser.build_metadata(doc_span)))
 						}
-						_ => break Ok(Loc::new(Self::new(items), loc)),
+						_ => break Ok(Meta::new(Self::new(items), parser.build_metadata(span))),
 					}
 				}
 			}
-			unexpected => Err(Box::new(Loc::new(
-				Error::unexpected(Some(unexpected), vec![TokenKind::Id]),
-				loc,
-			))),
+			unexpected => Err(Meta::new(
+				Box::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id])),
+				parser.build_metadata(span),
+			)),
 		}
 	}
 }
 
-impl<F: Clone> Parse<F> for Item<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for Item<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Doc,
 		TokenKind::Keyword(lexing::Keyword::Base),
@@ -436,242 +581,257 @@ impl<F: Clone> Parse<F> for Item<F> {
 		TokenKind::Keyword(lexing::Keyword::Layout),
 	];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		token_loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
-		let (doc, k) = Documentation::try_parse_from(lexer, token, token_loc)?;
+		token_span: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
+		let (doc, k) = Documentation::try_parse_from(parser, token, token_span)?;
 
-		let Meta(token, mut loc) = next_expected_token_from(lexer, k, || Self::FIRST.to_vec())?;
+		let Meta(token, mut loc) = parser.next_expected_token_from(k, || Self::FIRST.to_vec())?;
 
 		match token {
 			Token::Keyword(lexing::Keyword::Base) => {
-				let id = Id::parse(lexer)?;
+				let id = Id::parse_in(parser)?;
 				let iri = match id {
 					Meta(Id::IriRef(iri_ref), loc) => match IriBuf::try_from(iri_ref) {
-						Ok(iri) => Loc::new(iri, loc),
+						Ok(iri) => Meta::new(iri, loc),
 						Err(iri_ref) => {
-							return Err(Box::new(Loc::new(
-								Error::InvalidUseId(Id::IriRef(iri_ref)),
+							return Err(Meta::new(
+								Box::new(Error::InvalidUseId(Id::IriRef(iri_ref))),
 								loc,
-							)))
+							))
 						}
 					},
-					Meta(id, loc) => return Err(Box::new(Loc::new(Error::InvalidUseId(id), loc))),
+					Meta(id, loc) => return Err(Meta::new(Box::new(Error::InvalidUseId(id)), loc)),
 				};
 
-				parse_punct(lexer, Punct::Semicolon)?;
+				parser.parse_punct(Punct::Semicolon)?;
 
-				Ok(Loc::new(Item::Base(iri), loc))
+				Ok(Meta::new(Item::Base(iri), parser.build_metadata(loc)))
 			}
 			Token::Keyword(lexing::Keyword::Use) => {
-				let id = Id::parse(lexer)?;
+				let id = Id::parse_in(parser)?;
 				let iri = match id {
 					Meta(Id::IriRef(iri_ref), loc) => match IriBuf::try_from(iri_ref) {
-						Ok(iri) => Loc::new(iri, loc),
+						Ok(iri) => Meta::new(iri, loc),
 						Err(iri_ref) => {
-							return Err(Box::new(Loc::new(
-								Error::InvalidUseId(Id::IriRef(iri_ref)),
+							return Err(Meta::new(
+								Box::new(Error::InvalidUseId(Id::IriRef(iri_ref))),
 								loc,
-							)))
+							))
 						}
 					},
-					Meta(id, loc) => return Err(Box::new(Loc::new(Error::InvalidUseId(id), loc))),
+					Meta(id, loc) => return Err(Meta::new(Box::new(Error::InvalidUseId(id)), loc)),
 				};
 
-				parse_keyword(lexer, lexing::Keyword::As)?;
+				parser.parse_keyword(lexing::Keyword::As)?;
 
-				let prefix = Prefix::parse(lexer)?;
-				loc.span_mut().append(prefix.span());
+				let prefix = Prefix::parse_in(parser)?;
+				loc.append(prefix.metadata().optional_span().unwrap());
 
-				parse_punct(lexer, Punct::Semicolon)?;
+				parser.parse_punct(Punct::Semicolon)?;
 
-				Ok(Loc::new(
-					Item::Use(Loc::new(Use { iri, prefix, doc }, loc.clone())),
-					loc,
+				Ok(Meta::new(
+					Item::Use(Meta::new(
+						Use { iri, prefix, doc },
+						parser.build_metadata(loc),
+					)),
+					parser.build_metadata(loc),
 				))
 			}
 			Token::Keyword(lexing::Keyword::Type) => {
-				let id = Id::parse(lexer)?;
+				let id = Id::parse_in(parser)?;
 
-				let (description, layout) = match next_token(lexer)? {
+				let (description, layout) = match parser.next()? {
 					Meta(Some(Token::Begin(Delimiter::Brace)), block_loc) => {
-						let Meta(properties, properties_loc) = parse_block(lexer, block_loc)?;
+						let Meta(properties, properties_loc) = parser.parse_block(block_loc)?;
 
-						let layout = match peek_token(lexer)?.value() {
+						let layout = match parser.peek()?.value() {
 							Some(Token::Keyword(Keyword::With)) => {
-								next_token(lexer)?;
-								let layout = LayoutDescription::parse(lexer)?;
-								loc.span_mut().append(layout.span());
+								parser.next()?;
+								let layout = LayoutDescription::parse_in(parser)?;
+								loc.append(layout.metadata().optional_span().unwrap());
 								Some(layout)
 							}
 							_ => None,
 						};
 
 						(
-							Loc(TypeDescription::Normal(properties), properties_loc),
+							Meta(TypeDescription::Normal(properties), properties_loc),
 							layout,
 						)
 					}
 					Meta(Some(Token::Punct(Punct::Equal)), _) => {
-						let Meta(expr, expr_loc) = OuterTypeExpr::parse(lexer)?;
+						let Meta(expr, expr_loc) = OuterTypeExpr::parse_in(parser)?;
 
-						let layout = match peek_token(lexer)?.value() {
+						let layout = match parser.peek()?.value() {
 							Some(Token::Keyword(Keyword::With)) => {
-								next_token(lexer)?;
-								let layout = LayoutDescription::parse(lexer)?;
-								loc.span_mut().append(layout.span());
+								parser.next()?;
+								let layout = LayoutDescription::parse_in(parser)?;
+								loc.append(layout.metadata().optional_span().unwrap());
 								Some(layout)
 							}
 							_ => {
-								parse_punct(lexer, Punct::Semicolon)?;
+								parser.parse_punct(Punct::Semicolon)?;
 								None
 							}
 						};
 
-						(Loc(TypeDescription::Alias(expr), expr_loc), layout)
+						(Meta(TypeDescription::Alias(expr), expr_loc), layout)
 					}
-					Meta(Some(Token::Punct(Punct::Semicolon)), loc) => {
-						(Loc(TypeDescription::Normal(Vec::new()), loc), None)
-					}
+					Meta(Some(Token::Punct(Punct::Semicolon)), loc) => (
+						Meta(
+							TypeDescription::Normal(Vec::new()),
+							parser.build_metadata(loc),
+						),
+						None,
+					),
 					Meta(Some(Token::Keyword(Keyword::With)), _) => {
-						let layout = LayoutDescription::parse(lexer)?;
-						loc.span_mut().append(layout.span());
+						let layout = LayoutDescription::parse_in(parser)?;
+						loc.append(layout.metadata().optional_span().unwrap());
 						(
-							Loc(TypeDescription::Normal(Vec::new()), loc.clone()),
+							Meta(
+								TypeDescription::Normal(Vec::new()),
+								parser.build_metadata(loc),
+							),
 							Some(layout),
 						)
 					}
 					Meta(unexpected, loc) => {
-						return Err(Box::new(Loc::new(
-							Error::unexpected(
+						return Err(Meta::new(
+							Box::new(Error::Unexpected(
 								unexpected,
 								vec![
 									TokenKind::Begin(Delimiter::Brace),
 									TokenKind::Punct(Punct::Equal),
 								],
-							),
-							loc,
-						)));
+							)),
+							parser.build_metadata(loc),
+						));
 					}
 				};
 
-				loc.span_mut().append(description.span());
-				Ok(Loc::new(
-					Item::Type(Loc::new(
+				loc.append(description.metadata().optional_span().unwrap());
+				Ok(Meta::new(
+					Item::Type(Meta::new(
 						TypeDefinition {
 							id,
 							description,
 							doc,
 							layout,
 						},
-						loc.clone(),
+						parser.build_metadata(loc),
 					)),
-					loc,
+					parser.build_metadata(loc),
 				))
 			}
 			Token::Keyword(lexing::Keyword::Property) => {
-				let id = Id::parse(lexer)?;
+				let id = Id::parse_in(parser)?;
 
-				let ty = match next_token(lexer)? {
+				let ty = match parser.next()? {
 					Meta(Some(Token::Punct(Punct::Colon)), _) => {
-						let ty = AnnotatedTypeExpr::parse(lexer)?;
-						loc.span_mut().append(ty.span());
-						parse_punct(lexer, Punct::Semicolon)?;
+						let ty = AnnotatedTypeExpr::parse_in(parser)?;
+						loc.append(ty.metadata().optional_span().unwrap());
+						parser.parse_punct(Punct::Semicolon)?;
 						Some(ty)
 					}
 					Meta(Some(Token::Punct(Punct::Semicolon)), _) => None,
 					Meta(unexpected, loc) => {
-						return Err(Box::new(Loc::new(
-							Error::unexpected(
+						return Err(Meta::new(
+							Box::new(Error::Unexpected(
 								unexpected,
 								vec![
 									TokenKind::Punct(Punct::Colon),
 									TokenKind::Punct(Punct::Semicolon),
 								],
-							),
-							loc,
-						)));
+							)),
+							parser.build_metadata(loc),
+						));
 					}
 				};
 
-				Ok(Loc::new(
-					Item::Property(Loc::new(
+				Ok(Meta::new(
+					Item::Property(Meta::new(
 						PropertyDefinition {
 							id,
 							alias: None,
 							ty,
 							doc,
 						},
-						loc.clone(),
+						parser.build_metadata(loc),
 					)),
-					loc,
+					parser.build_metadata(loc),
 				))
 			}
 			Token::Keyword(lexing::Keyword::Layout) => {
-				let id = Id::parse(lexer)?;
+				let id = Id::parse_in(parser)?;
 
-				let ty_id = match peek_token(lexer)?.value() {
+				let ty_id = match parser.peek()?.value() {
 					Some(Token::Keyword(Keyword::For)) => {
-						next_token(lexer)?;
-						let ty_id = Id::parse(lexer)?;
-						loc.span_mut().append(ty_id.span());
+						parser.next()?;
+						let ty_id = Id::parse_in(parser)?;
+						loc.append(ty_id.metadata().optional_span().unwrap());
 						Some(ty_id)
 					}
 					_ => None,
 				};
 
-				let description = match next_token(lexer)? {
+				let description = match parser.next()? {
 					Meta(Some(Token::Begin(Delimiter::Brace)), block_loc) => {
-						let Meta(fields, fields_loc) = parse_block(lexer, block_loc)?;
-						Loc(LayoutDescription::Normal(fields), fields_loc)
+						let Meta(fields, fields_loc) = parser.parse_block(block_loc)?;
+						Meta(LayoutDescription::Normal(fields), fields_loc)
 					}
 					Meta(Some(Token::Punct(Punct::Equal)), _) => {
-						let Meta(expr, expr_loc) = OuterLayoutExpr::parse(lexer)?;
-						parse_punct(lexer, Punct::Semicolon)?;
-						Loc(LayoutDescription::Alias(expr), expr_loc)
+						let Meta(expr, expr_loc) = OuterLayoutExpr::parse_in(parser)?;
+						parser.parse_punct(Punct::Semicolon)?;
+						Meta(LayoutDescription::Alias(expr), expr_loc)
 					}
-					Meta(Some(Token::Punct(Punct::Semicolon)), loc) => {
-						Loc(LayoutDescription::Normal(Vec::new()), loc)
-					}
+					Meta(Some(Token::Punct(Punct::Semicolon)), loc) => Meta(
+						LayoutDescription::Normal(Vec::new()),
+						parser.build_metadata(loc),
+					),
 					Meta(unexpected, loc) => {
-						return Err(Box::new(Loc::new(
-							Error::unexpected(
+						return Err(Meta::new(
+							Box::new(Error::Unexpected(
 								unexpected,
 								vec![
 									TokenKind::Begin(Delimiter::Brace),
 									TokenKind::Punct(Punct::Equal),
 								],
-							),
-							loc,
-						)));
+							)),
+							parser.build_metadata(loc),
+						));
 					}
 				};
 
-				loc.span_mut().append(description.span());
-				Ok(Loc::new(
-					Item::Layout(Loc::new(
+				loc.append(description.metadata().optional_span().unwrap());
+				Ok(Meta::new(
+					Item::Layout(Meta::new(
 						LayoutDefinition {
 							id,
 							ty_id,
 							description,
 							doc,
 						},
-						loc.clone(),
+						parser.build_metadata(loc),
 					)),
-					loc,
+					parser.build_metadata(loc),
 				))
 			}
-			unexpected => Err(Box::new(Loc::new(
-				Error::unexpected(Some(unexpected), Self::FIRST.to_vec()),
-				loc,
-			))),
+			unexpected => Err(Meta::new(
+				Box::new(Error::Unexpected(Some(unexpected), Self::FIRST.to_vec())),
+				parser.build_metadata(loc),
+			)),
 		}
 	}
 }
 
-impl<F: Clone> Parse<F> for LayoutDescription<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for LayoutDescription<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Begin(Delimiter::Brace),
 		TokenKind::Punct(Punct::Semicolon),
@@ -680,146 +840,178 @@ impl<F: Clone> Parse<F> for LayoutDescription<F> {
 		TokenKind::Literal,
 	];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+		loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		match token {
 			Token::Begin(Delimiter::Brace) => {
-				let Meta(fields, loc) = parse_block(lexer, loc)?;
-				Ok(Loc(LayoutDescription::Normal(fields), loc))
+				let Meta(fields, loc) = parser.parse_block(loc)?;
+				Ok(Meta(LayoutDescription::Normal(fields), loc))
 			}
-			Token::Punct(Punct::Semicolon) => Ok(Loc(LayoutDescription::Normal(Vec::new()), loc)),
+			Token::Punct(Punct::Semicolon) => Ok(Meta(
+				LayoutDescription::Normal(Vec::new()),
+				parser.build_metadata(loc),
+			)),
 			other => {
-				let Meta(expr, expr_loc) = OuterLayoutExpr::parse_from(lexer, other, loc)?;
-				parse_punct(lexer, Punct::Semicolon)?;
-				Ok(Loc(LayoutDescription::Alias(expr), expr_loc))
+				let Meta(expr, expr_loc) = OuterLayoutExpr::parse_from(parser, other, loc)?;
+				parser.parse_punct(Punct::Semicolon)?;
+				Ok(Meta(LayoutDescription::Alias(expr), expr_loc))
 			}
 		}
 	}
 }
 
-impl<F: Clone> Parse<F> for PropertyDefinition<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for PropertyDefinition<M> {
 	const FIRST: &'static [TokenKind] = &[TokenKind::Doc, TokenKind::Id];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		token_loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
-		let (doc, k) = Documentation::try_parse_from(lexer, token, token_loc)?;
+		token_span: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
+		let (doc, k) = Documentation::try_parse_from(parser, token, token_span)?;
 
-		let id = Id::parse_from_continuation(lexer, k)?;
-		let mut loc = id.location().clone();
+		let id = Id::parse_from_continuation(parser, k)?;
+		let mut loc = id.metadata().optional_span().unwrap();
 
-		let alias = match peek_token(lexer)? {
+		let alias = match parser.peek()? {
 			Meta(Some(Token::Keyword(lexing::Keyword::As)), _) => {
-				next_token(lexer)?;
-				let alias = Alias::parse(lexer)?;
-				loc.span_mut().append(alias.span());
+				parser.next()?;
+				let alias = Alias::parse_in(parser)?;
+				loc.append(alias.metadata().optional_span().unwrap());
 				Some(alias)
 			}
 			_ => None,
 		};
 
-		let ty = match peek_token(lexer)?.into_value() {
+		let ty = match parser.peek()?.into_value() {
 			Some(Token::Punct(lexing::Punct::Colon)) => {
-				next_token(lexer)?;
-				let ty = AnnotatedTypeExpr::parse(lexer)?;
-				loc.span_mut().append(ty.span());
+				parser.next()?;
+				let ty = AnnotatedTypeExpr::parse_in(parser)?;
+				loc.append(ty.metadata().optional_span().unwrap());
 				Some(ty)
 			}
 			_ => None,
 		};
 
-		Ok(Loc::new(Self { id, alias, ty, doc }, loc))
+		Ok(Meta::new(
+			Self { id, alias, ty, doc },
+			parser.build_metadata(loc),
+		))
 	}
 }
 
-impl<F: Clone> Parse<F> for FieldDefinition<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for FieldDefinition<M> {
 	const FIRST: &'static [TokenKind] = &[TokenKind::Doc, TokenKind::Id];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		token_loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
-		let (doc, k) = Documentation::try_parse_from(lexer, token, token_loc)?;
-		let id = Id::parse_from_continuation(lexer, k)?;
-		let mut loc = id.location().clone();
+		token_span: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
+		let (doc, k) = Documentation::try_parse_from(parser, token, token_span)?;
+		let id = Id::parse_from_continuation(parser, k)?;
+		let mut loc = id.metadata().optional_span().unwrap();
 
-		let alias = match peek_token(lexer)? {
+		let alias = match parser.peek()? {
 			Meta(Some(Token::Keyword(lexing::Keyword::As)), _) => {
-				next_token(lexer)?;
-				let alias = Alias::parse(lexer)?;
-				loc.span_mut().append(alias.span());
+				parser.next()?;
+				let alias = Alias::parse_in(parser)?;
+				loc.append(alias.metadata().optional_span().unwrap());
 				Some(alias)
 			}
 			_ => None,
 		};
 
-		let layout = match peek_token(lexer)?.into_value() {
+		let layout = match parser.peek()?.into_value() {
 			Some(Token::Punct(lexing::Punct::Colon)) => {
-				next_token(lexer)?;
-				let ty = AnnotatedLayoutExpr::parse(lexer)?;
-				loc.span_mut().append(ty.span());
+				parser.next()?;
+				let ty = AnnotatedLayoutExpr::parse_in(parser)?;
+				loc.append(ty.metadata().optional_span().unwrap());
 				Some(ty)
 			}
 			_ => None,
 		};
 
-		Ok(Loc::new(
+		Ok(Meta::new(
 			Self {
 				id,
 				layout,
 				alias,
 				doc,
 			},
-			loc,
+			parser.build_metadata(loc),
 		))
 	}
 }
 
-impl<F> Parse<F> for Alias {
+impl<M> Parse<M> for Alias {
 	const FIRST: &'static [TokenKind] = &[TokenKind::Id];
 
-	fn parse_from<L: Tokens<F>>(
-		_lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+		loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		match token {
-			Token::Id(Id::Name(alias)) => Ok(Loc::new(Alias(alias), loc)),
-			Token::Id(id) => Err(Box::new(Loc::new(Error::InvalidAlias(id), loc))),
-			unexpected => Err(Box::new(Loc::new(
-				Error::unexpected(Some(unexpected), vec![TokenKind::Id]),
-				loc,
-			))),
+			Token::Id(Id::Name(alias)) => Ok(Meta::new(Alias(alias), parser.build_metadata(loc))),
+			Token::Id(id) => Err(Meta::new(
+				Box::new(Error::InvalidAlias(id)),
+				parser.build_metadata(loc),
+			)),
+			unexpected => Err(Meta::new(
+				Box::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id])),
+				parser.build_metadata(loc),
+			)),
 		}
 	}
 }
 
-impl<F> Parse<F> for Prefix {
+impl<M> Parse<M> for Prefix {
 	const FIRST: &'static [TokenKind] = &[TokenKind::Id];
 
-	fn parse_from<L: Tokens<F>>(
-		_lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+		loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		match token {
-			Token::Id(Id::Name(alias)) => Ok(Loc::new(Prefix(alias), loc)),
-			Token::Id(id) => Err(Box::new(Loc::new(Error::InvalidPrefix(id), loc))),
-			unexpected => Err(Box::new(Loc::new(
-				Error::unexpected(Some(unexpected), vec![TokenKind::Id]),
-				loc,
-			))),
+			Token::Id(Id::Name(alias)) => Ok(Meta::new(Prefix(alias), parser.build_metadata(loc))),
+			Token::Id(id) => Err(Meta::new(
+				Box::new(Error::InvalidPrefix(id)),
+				parser.build_metadata(loc),
+			)),
+			unexpected => Err(Meta::new(
+				Box::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id])),
+				parser.build_metadata(loc),
+			)),
 		}
 	}
 }
 
-impl<F: Clone> Parse<F> for AnnotatedTypeExpr<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for AnnotatedTypeExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Keyword(Keyword::Annotation(Annotation::Multiple)),
 		TokenKind::Keyword(Keyword::Annotation(Annotation::Required)),
@@ -830,43 +1022,50 @@ impl<F: Clone> Parse<F> for AnnotatedTypeExpr<F> {
 		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+		mut loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		let mut annotations = Vec::new();
 
 		let k = match token {
 			Token::Keyword(Keyword::Annotation(a)) => {
-				annotations.push(Loc::new(a, loc.clone()));
+				annotations.push(Meta::new(a, parser.build_metadata(loc)));
 				while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) =
-					peek_token(lexer)?
+					parser.peek()?
 				{
-					loc.span_mut().append(a_loc.span());
-					annotations.push(Loc::new(*a, a_loc));
-					next_token(lexer)?;
+					loc.append(a_loc);
+					annotations.push(Meta::new(*a, parser.build_metadata(a_loc)));
+					parser.next()?;
 				}
 
 				None
 			}
-			token => Some(Loc(token, loc.clone())),
+			token => Some(Meta(token, loc)),
 		};
 
-		let expr = OuterTypeExpr::parse_from_continuation(lexer, k)?;
-		loc.span_mut().append(expr.span());
+		let expr = OuterTypeExpr::parse_from_continuation(parser, k)?;
+		loc.append(expr.metadata().optional_span().unwrap());
 
-		while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) = peek_token(lexer)? {
-			loc.span_mut().append(a_loc.span());
-			annotations.push(Loc::new(*a, a_loc));
-			next_token(lexer)?;
+		while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) = parser.peek()? {
+			loc.append(a_loc);
+			annotations.push(Meta::new(*a, parser.build_metadata(a_loc)));
+			parser.next()?;
 		}
 
-		Ok(Loc::new(Self { expr, annotations }, loc))
+		Ok(Meta::new(
+			Self { expr, annotations },
+			parser.build_metadata(loc),
+		))
 	}
 }
 
-impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for OuterTypeExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
@@ -875,42 +1074,52 @@ impl<F: Clone> Parse<F> for OuterTypeExpr<F> {
 		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
-		let Meta(first, first_loc) = NamedInnerTypeExpr::parse_from(lexer, token, loc.clone())?;
+		mut loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
+		let Meta(first, first_loc) = NamedInnerTypeExpr::parse_from(parser, token, loc)?;
 
-		match peek_token(lexer)? {
+		match parser.peek()? {
 			Meta(Some(Token::Punct(Punct::Pipe)), _) => {
-				let mut options = vec![Loc(first, first_loc)];
-				while let Meta(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
-					next_token(lexer)?;
-					let item = NamedInnerTypeExpr::parse(lexer)?;
-					loc.span_mut().append(item.span());
+				let mut options = vec![Meta(first, first_loc)];
+				while let Meta(Some(Token::Punct(Punct::Pipe)), _) = parser.peek()? {
+					parser.next()?;
+					let item = NamedInnerTypeExpr::parse_in(parser)?;
+					loc.append(item.metadata().optional_span().unwrap());
 					options.push(item);
 				}
 
-				Ok(Loc(Self::Union(lexer.next_label(), options), loc))
+				Ok(Meta(
+					Self::Union(parser.next_label(), options),
+					parser.build_metadata(loc),
+				))
 			}
 			Meta(Some(Token::Punct(Punct::Ampersand)), _) => {
-				let mut types = vec![Loc(first, first_loc)];
-				while let Meta(Some(Token::Punct(Punct::Ampersand)), _) = peek_token(lexer)? {
-					next_token(lexer)?;
-					let item = NamedInnerTypeExpr::parse(lexer)?;
-					loc.span_mut().append(item.span());
+				let mut types = vec![Meta(first, first_loc)];
+				while let Meta(Some(Token::Punct(Punct::Ampersand)), _) = parser.peek()? {
+					parser.next()?;
+					let item = NamedInnerTypeExpr::parse_in(parser)?;
+					loc.append(item.metadata().optional_span().unwrap());
 					types.push(item);
 				}
 
-				Ok(Loc(Self::Intersection(lexer.next_label(), types), loc))
+				Ok(Meta(
+					Self::Intersection(parser.next_label(), types),
+					parser.build_metadata(loc),
+				))
 			}
-			_ => Ok(Loc(Self::Inner(first), first_loc)),
+			_ => Ok(Meta(Self::Inner(first), first_loc)),
 		}
 	}
 }
 
-impl<F: Clone> Parse<F> for NamedInnerTypeExpr<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for NamedInnerTypeExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
@@ -919,35 +1128,39 @@ impl<F: Clone> Parse<F> for NamedInnerTypeExpr<F> {
 		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
-		let expr = InnerTypeExpr::parse_from(lexer, token, loc)?;
-		let mut loc = expr.location().clone();
+		loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
+		let expr = InnerTypeExpr::parse_from(parser, token, loc)?;
+		let mut loc = expr.metadata().optional_span().unwrap();
 
-		let layout = match peek_token(lexer)? {
+		let layout = match parser.peek()? {
 			Meta(Some(Token::Keyword(Keyword::With)), _) => {
-				next_token(lexer)?;
-				let layout = NamedInnerLayoutExpr::parse(lexer)?;
-				loc.span_mut().append(layout.span());
+				parser.next()?;
+				let layout = NamedInnerLayoutExpr::parse_in(parser)?;
+				loc.append(layout.metadata().optional_span().unwrap());
 				NamedInnerTypeExprLayout::Explicit(layout)
 			}
 			Meta(Some(Token::Keyword(Keyword::As)), _) => {
-				next_token(lexer)?;
-				let name = Alias::parse(lexer)?;
-				loc.span_mut().append(name.span());
+				parser.next()?;
+				let name = Alias::parse_in(parser)?;
+				loc.append(name.metadata().optional_span().unwrap());
 				NamedInnerTypeExprLayout::Implicit(Some(name))
 			}
 			_ => NamedInnerTypeExprLayout::Implicit(None),
 		};
 
-		Ok(Loc(Self { expr, layout }, loc))
+		Ok(Meta(Self { expr, layout }, parser.build_metadata(loc)))
 	}
 }
 
-impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Keyword(Keyword::All),
@@ -957,110 +1170,129 @@ impl<F: Clone> Parse<F> for InnerTypeExpr<F> {
 		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+		mut loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		match token {
 			Token::Keyword(Keyword::All) => {
 				#[allow(clippy::type_complexity)]
-				fn parse_property_restriction<F, L: Tokens<F>>(
-					lexer: &mut L,
-					prop: Loc<Id, F>,
-					alias: Option<Loc<Alias, F>>,
-					mut loc: Location<F>,
-				) -> Result<Loc<TypeRestrictedProperty<F>, F>, LocError<L::Error, F>>
+				fn parse_property_restriction<L, F, M>(
+					parser: &mut Parser<L, F>,
+					prop: Meta<Id, M>,
+					alias: Option<Meta<Alias, M>>,
+					mut loc: Span,
+				) -> Result<Meta<TypeRestrictedProperty<M>, M>, MetaError<L::Error, M>>
 				where
-					F: Clone,
+					L: Tokens,
+					F: FnMut(Span) -> M,
+					M: MaybeSpanned<Span = Span>,
 				{
-					let ty = InnerTypeExpr::parse(lexer)?;
-					let restriction_loc = ty.location().clone();
-					loc.span_mut().append(ty.span());
-					Ok(Loc(
+					let ty = InnerTypeExpr::parse_in(parser)?;
+					let restriction_loc = ty.metadata().optional_span().unwrap();
+					loc.append(ty.metadata().optional_span().unwrap());
+					Ok(Meta(
 						TypeRestrictedProperty {
 							prop,
 							alias,
-							restriction: Loc(
+							restriction: Meta(
 								TypePropertyRestriction::Range(TypePropertyRangeRestriction::All(
 									Box::new(ty),
 								)),
-								restriction_loc,
+								parser.build_metadata(restriction_loc),
 							),
 						},
-						loc,
+						parser.build_metadata(loc),
 					))
 				}
 
-				let id = Id::parse(lexer)?;
+				let id = Id::parse_in(parser)?;
 
-				match next_token(lexer)? {
+				match parser.next()? {
 					Meta(Some(Token::Keyword(lexing::Keyword::As)), _) => {
-						let alias = Alias::parse(lexer)?;
-						match next_expected_token(lexer, || {
-							vec![TokenKind::Punct(lexing::Punct::Colon)]
-						})? {
+						let alias = Alias::parse_in(parser)?;
+						match parser
+							.next_expected(|| vec![TokenKind::Punct(lexing::Punct::Colon)])?
+						{
 							Meta(Token::Punct(lexing::Punct::Colon), _) => {
 								let restriction =
-									parse_property_restriction(lexer, id, Some(alias), loc)?;
+									parse_property_restriction(parser, id, Some(alias), loc)?;
 								Ok(restriction.map(Self::PropertyRestriction))
 							}
-							Meta(unexpected, loc) => Err(Box::new(Loc::new(
-								Error::unexpected(
+							Meta(unexpected, loc) => Err(Meta::new(
+								Box::new(Error::Unexpected(
 									Some(unexpected),
 									vec![TokenKind::Punct(lexing::Punct::Colon)],
-								),
-								loc,
-							))),
+								)),
+								parser.build_metadata(loc),
+							)),
 						}
 					}
 					Meta(Some(Token::Punct(lexing::Punct::Colon)), _) => {
-						let restriction = parse_property_restriction(lexer, id, None, loc)?;
+						let restriction = parse_property_restriction(parser, id, None, loc)?;
 						Ok(restriction.map(Self::PropertyRestriction))
 					}
-					Meta(unexpected, loc) => Err(Box::new(Loc::new(
-						Error::unexpected(
+					Meta(unexpected, loc) => Err(Meta::new(
+						Box::new(Error::Unexpected(
 							unexpected,
 							vec![
 								TokenKind::Keyword(Keyword::As),
 								TokenKind::Punct(lexing::Punct::Colon),
 							],
-						),
-						loc,
-					))),
+						)),
+						parser.build_metadata(loc),
+					)),
 				}
 			}
 			token => match token.no_keyword() {
-				Token::Id(id) => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
+				Token::Id(id) => Ok(Meta::new(
+					Self::Id(Meta::new(id, parser.build_metadata(loc))),
+					parser.build_metadata(loc),
+				)),
 				Token::Punct(lexing::Punct::Ampersand) => {
-					let arg = Self::parse(lexer)?;
-					loc.span_mut().set_end(arg.span().end());
-					Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
+					let arg = Self::parse_in(parser)?;
+					loc.set_end(arg.metadata().optional_span().unwrap().end());
+					Ok(Meta::new(
+						Self::Reference(Box::new(arg)),
+						parser.build_metadata(loc),
+					))
 				}
-				Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
+				Token::Literal(lit) => {
+					Ok(Meta::new(Self::Literal(lit), parser.build_metadata(loc)))
+				}
 				Token::Begin(Delimiter::Bracket) => {
-					let label = lexer.next_label();
-					let item = OuterTypeExpr::parse(lexer)?;
-					let end_loc = parse_end(lexer, Delimiter::Bracket)?;
-					loc.span_mut().append(end_loc.span());
-					Ok(Loc::new(Self::List(label, Box::new(item)), loc))
+					let label = parser.next_label();
+					let item = OuterTypeExpr::parse_in(parser)?;
+					let end_loc = parser.parse_end(Delimiter::Bracket)?;
+					loc.append(end_loc);
+					Ok(Meta::new(
+						Self::List(label, Box::new(item)),
+						parser.build_metadata(loc),
+					))
 				}
 				Token::Begin(Delimiter::Parenthesis) => {
-					let outer = OuterTypeExpr::parse(lexer)?;
-					loc.span_mut()
-						.append(parse_end(lexer, Delimiter::Parenthesis)?.span());
-					Ok(Loc(Self::Outer(Box::new(outer)), loc))
+					let outer = OuterTypeExpr::parse_in(parser)?;
+					loc.append(parser.parse_end(Delimiter::Parenthesis)?);
+					Ok(Meta(
+						Self::Outer(Box::new(outer)),
+						parser.build_metadata(loc),
+					))
 				}
-				unexpected => Err(Box::new(Loc::new(
-					Error::unexpected(Some(unexpected), Self::FIRST.to_vec()),
-					loc,
-				))),
+				unexpected => Err(Meta::new(
+					Box::new(Error::Unexpected(Some(unexpected), Self::FIRST.to_vec())),
+					parser.build_metadata(loc),
+				)),
 			},
 		}
 	}
 }
 
-impl<F: Clone> Parse<F> for AnnotatedLayoutExpr<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for AnnotatedLayoutExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Keyword(Keyword::Annotation(Annotation::Multiple)),
 		TokenKind::Keyword(Keyword::Annotation(Annotation::Required)),
@@ -1071,43 +1303,50 @@ impl<F: Clone> Parse<F> for AnnotatedLayoutExpr<F> {
 		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+		mut loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		let mut annotations = Vec::new();
 
 		let k = match token {
 			Token::Keyword(Keyword::Annotation(a)) => {
-				annotations.push(Loc::new(a, loc.clone()));
+				annotations.push(Meta::new(a, parser.build_metadata(loc)));
 				while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) =
-					peek_token(lexer)?
+					parser.peek()?
 				{
-					loc.span_mut().append(a_loc.span());
-					annotations.push(Loc::new(*a, a_loc));
-					next_token(lexer)?;
+					loc.append(a_loc);
+					annotations.push(Meta::new(*a, parser.build_metadata(a_loc)));
+					parser.next()?;
 				}
 
 				None
 			}
-			token => Some(Loc(token, loc.clone())),
+			token => Some(Meta(token, loc)),
 		};
 
-		let expr = OuterLayoutExpr::parse_from_continuation(lexer, k)?;
-		loc.span_mut().append(expr.span());
+		let expr = OuterLayoutExpr::parse_from_continuation(parser, k)?;
+		loc.append(expr.metadata().optional_span().unwrap());
 
-		while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) = peek_token(lexer)? {
-			loc.span_mut().append(a_loc.span());
-			annotations.push(Loc::new(*a, a_loc));
-			next_token(lexer)?;
+		while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) = parser.peek()? {
+			loc.append(a_loc);
+			annotations.push(Meta::new(*a, parser.build_metadata(a_loc)));
+			parser.next()?;
 		}
 
-		Ok(Loc::new(Self { expr, annotations }, loc))
+		Ok(Meta::new(
+			Self { expr, annotations },
+			parser.build_metadata(loc),
+		))
 	}
 }
 
-impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for OuterLayoutExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
@@ -1116,42 +1355,52 @@ impl<F: Clone> Parse<F> for OuterLayoutExpr<F> {
 		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
-		let Meta(first, first_loc) = NamedInnerLayoutExpr::parse_from(lexer, token, loc.clone())?;
+		mut loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
+		let Meta(first, first_loc) = NamedInnerLayoutExpr::parse_from(parser, token, loc)?;
 
-		match peek_token(lexer)? {
+		match parser.peek()? {
 			Meta(Some(Token::Punct(Punct::Pipe)), _) => {
-				let mut options = vec![Loc(first, first_loc)];
-				while let Meta(Some(Token::Punct(Punct::Pipe)), _) = peek_token(lexer)? {
-					next_token(lexer)?;
-					let item = NamedInnerLayoutExpr::parse(lexer)?;
-					loc.span_mut().append(item.span());
+				let mut options = vec![Meta(first, first_loc)];
+				while let Meta(Some(Token::Punct(Punct::Pipe)), _) = parser.peek()? {
+					parser.next()?;
+					let item = NamedInnerLayoutExpr::parse_in(parser)?;
+					loc.append(item.metadata().optional_span().unwrap());
 					options.push(item);
 				}
 
-				Ok(Loc(Self::Union(lexer.next_label(), options), loc))
+				Ok(Meta(
+					Self::Union(parser.next_label(), options),
+					parser.build_metadata(loc),
+				))
 			}
 			Meta(Some(Token::Punct(Punct::Ampersand)), _) => {
-				let mut layouts = vec![Loc(first, first_loc)];
-				while let Meta(Some(Token::Punct(Punct::Ampersand)), _) = peek_token(lexer)? {
-					next_token(lexer)?;
-					let item = NamedInnerLayoutExpr::parse(lexer)?;
-					loc.span_mut().append(item.span());
+				let mut layouts = vec![Meta(first, first_loc)];
+				while let Meta(Some(Token::Punct(Punct::Ampersand)), _) = parser.peek()? {
+					parser.next()?;
+					let item = NamedInnerLayoutExpr::parse_in(parser)?;
+					loc.append(item.metadata().optional_span().unwrap());
 					layouts.push(item);
 				}
 
-				Ok(Loc(Self::Intersection(lexer.next_label(), layouts), loc))
+				Ok(Meta(
+					Self::Intersection(parser.next_label(), layouts),
+					parser.build_metadata(loc),
+				))
 			}
-			_ => Ok(Loc(Self::Inner(first), first_loc)),
+			_ => Ok(Meta(Self::Inner(first), first_loc)),
 		}
 	}
 }
 
-impl<F: Clone> Parse<F> for NamedInnerLayoutExpr<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for NamedInnerLayoutExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
@@ -1160,27 +1409,31 @@ impl<F: Clone> Parse<F> for NamedInnerLayoutExpr<F> {
 		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
-		let expr = InnerLayoutExpr::parse_from(lexer, token, loc)?;
-		let mut loc = expr.location().clone();
-		let name = if let Meta(Some(Token::Keyword(Keyword::As)), _) = peek_token(lexer)? {
-			next_token(lexer)?;
-			let name = Alias::parse(lexer)?;
-			loc.span_mut().append(name.span());
+		loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
+		let expr = InnerLayoutExpr::parse_from(parser, token, loc)?;
+		let mut loc = expr.metadata().optional_span().unwrap();
+		let name = if let Meta(Some(Token::Keyword(Keyword::As)), _) = parser.peek()? {
+			parser.next()?;
+			let name = Alias::parse_in(parser)?;
+			loc.append(name.metadata().optional_span().unwrap());
 			Some(name)
 		} else {
 			None
 		};
 
-		Ok(Loc(Self { expr, name }, loc))
+		Ok(Meta(Self { expr, name }, parser.build_metadata(loc)))
 	}
 }
 
-impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for InnerLayoutExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
@@ -1189,36 +1442,51 @@ impl<F: Clone> Parse<F> for InnerLayoutExpr<F> {
 		TokenKind::Begin(Delimiter::Parenthesis),
 	];
 
-	fn parse_from<L: Tokens<F>>(
-		lexer: &mut L,
+	fn parse_from<L, F>(
+		parser: &mut Parser<L, F>,
 		token: Token,
-		mut loc: Location<F>,
-	) -> Result<Loc<Self, F>, LocError<L::Error, F>> {
+		mut loc: Span,
+	) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
+	where
+		L: Tokens,
+		F: FnMut(Span) -> M,
+	{
 		match token.no_keyword() {
-			Token::Id(id) => Ok(Loc::new(Self::Id(Loc::new(id, loc.clone())), loc)),
+			Token::Id(id) => Ok(Meta::new(
+				Self::Id(Meta::new(id, parser.build_metadata(loc))),
+				parser.build_metadata(loc),
+			)),
 			Token::Punct(lexing::Punct::Ampersand) => {
-				let arg = InnerTypeExpr::parse(lexer)?;
-				loc.span_mut().append(arg.span());
-				Ok(Loc::new(Self::Reference(Box::new(arg)), loc))
+				let arg = InnerTypeExpr::parse_in(parser)?;
+				loc.append(arg.metadata().optional_span().unwrap());
+				Ok(Meta::new(
+					Self::Reference(Box::new(arg)),
+					parser.build_metadata(loc),
+				))
 			}
-			Token::Literal(lit) => Ok(Loc::new(Self::Literal(lit), loc)),
+			Token::Literal(lit) => Ok(Meta::new(Self::Literal(lit), parser.build_metadata(loc))),
 			Token::Begin(Delimiter::Bracket) => {
-				let label = lexer.next_label();
-				let item = OuterLayoutExpr::parse(lexer)?;
-				let end_loc = parse_end(lexer, Delimiter::Bracket)?;
-				loc.span_mut().append(end_loc.span());
-				Ok(Loc::new(Self::Array(label, Box::new(item)), loc))
+				let label = parser.next_label();
+				let item = OuterLayoutExpr::parse_in(parser)?;
+				let end_loc = parser.parse_end(Delimiter::Bracket)?;
+				loc.append(end_loc);
+				Ok(Meta::new(
+					Self::Array(label, Box::new(item)),
+					parser.build_metadata(loc),
+				))
 			}
 			Token::Begin(Delimiter::Parenthesis) => {
-				let outer = OuterLayoutExpr::parse(lexer)?;
-				loc.span_mut()
-					.append(parse_end(lexer, Delimiter::Parenthesis)?.span());
-				Ok(Loc(Self::Outer(Box::new(outer)), loc))
+				let outer = OuterLayoutExpr::parse_in(parser)?;
+				loc.append(parser.parse_end(Delimiter::Parenthesis)?);
+				Ok(Meta(
+					Self::Outer(Box::new(outer)),
+					parser.build_metadata(loc),
+				))
 			}
-			unexpected => Err(Box::new(Loc::new(
-				Error::unexpected(Some(unexpected), Self::FIRST.to_vec()),
-				loc,
-			))),
+			unexpected => Err(Meta::new(
+				Box::new(Error::Unexpected(Some(unexpected), Self::FIRST.to_vec())),
+				parser.build_metadata(loc),
+			)),
 		}
 	}
 }

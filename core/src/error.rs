@@ -1,9 +1,10 @@
 use crate::{reporting::Diagnose, Vocabulary};
+use locspan::{MaybeLocated, Span};
 
-pub trait AnyError<F> {
+pub trait AnyError<M: MaybeLocated<Span = Span>> {
 	fn message(&self, vocab: &Vocabulary) -> String;
 
-	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
@@ -20,33 +21,33 @@ macro_rules! errors {
 		)*
 
 		#[derive(Debug)]
-		pub enum Error<F> {
+		pub enum Error<M> {
 			$(
 				$id( $id $(<$arg>)? )
 			),*
 		}
 
 		$(
-			impl<F> From<$id $(<$arg>)?> for Error<F> {
+			impl<M> From<$id $(<$arg>)?> for Error<M> {
 				fn from(e: $id $(<$arg>)?) -> Self {
 					Self::$id(e)
 				}
 			}
 		)*
 
-		impl<'c, 'a, F: Clone> Diagnose<F> for WithVocabulary<'c, 'a, F> {
+		impl<'c, 'a, M: MaybeLocated<Span=Span>> Diagnose<M> for WithVocabulary<'c, 'a, M> where M::File: Clone {
 			fn message(&self) -> String {
 				match self.error() {
 					$(
-						Error::$id(e) => AnyError::<F>::message(e, self.vocabulary())
+						Error::$id(e) => AnyError::<M>::message(e, self.vocabulary())
 					),*
 				}
 			}
 
-			fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+			fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 				match self.error() {
 					$(
-						Error::$id(e) => e.labels(self.vocabulary())
+						Error::$id(e) => AnyError::<M>::labels(e, self.vocabulary())
 					),*
 				}
 			}
@@ -54,7 +55,7 @@ macro_rules! errors {
 			fn notes(&self) -> Vec<String> {
 				match self.error() {
 					$(
-						Error::$id(e) => AnyError::<F>::notes(e, self.vocabulary())
+						Error::$id(e) => AnyError::<M>::notes(e, self.vocabulary())
 					),*
 				}
 			}
@@ -64,24 +65,24 @@ macro_rules! errors {
 
 errors! {
 	node_unknown::NodeUnknown,
-	node_invalid_type::NodeInvalidType<F>
+	node_invalid_type::NodeInvalidType<M>
 }
 
-impl<F> Error<F> {
-	pub fn with_vocabulary<'c>(&self, vocab: &'c Vocabulary) -> WithVocabulary<'c, '_, F> {
+impl<M> Error<M> {
+	pub fn with_vocabulary<'c>(&self, vocab: &'c Vocabulary) -> WithVocabulary<'c, '_, M> {
 		WithVocabulary(vocab, self)
 	}
 }
 
 /// Caused error with contextual information.
-pub struct WithVocabulary<'c, 'a, F>(&'c Vocabulary, &'a Error<F>);
+pub struct WithVocabulary<'c, 'a, M>(&'c Vocabulary, &'a Error<M>);
 
-impl<'c, 'a, F> WithVocabulary<'c, 'a, F> {
+impl<'c, 'a, M> WithVocabulary<'c, 'a, M> {
 	fn vocabulary(&self) -> &'c Vocabulary {
 		self.0
 	}
 
-	fn error(&self) -> &'a Error<F> {
+	fn error(&self) -> &'a Error<M> {
 		self.1
 	}
 }

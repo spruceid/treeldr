@@ -1,9 +1,9 @@
 use crate::{error, layout, list, prop, ty, Descriptions, Error, TryMap};
 use derivative::Derivative;
-use locspan::Location;
-use treeldr::{Caused, Causes, Documentation, Id, MaybeSet, Vocabulary, WithCauses};
+use locspan::Meta;
+use treeldr::{Documentation, Id, MetaOption, Vocabulary};
 
-pub use treeldr::node::{CausedTypes, Type, Types};
+pub use treeldr::node::{Type, Types, TypesMetadata};
 
 #[derive(Clone)]
 pub struct Node<T> {
@@ -14,34 +14,40 @@ pub struct Node<T> {
 }
 
 #[derive(Derivative)]
-#[derivative(Clone(bound = "F: Clone"))]
-pub struct Components<F, D: Descriptions<F> = crate::StandardDescriptions> {
-	pub ty: MaybeSet<ty::Definition<F, D::Type>, F>,
-	pub property: MaybeSet<prop::Definition<F>, F>,
-	pub layout: MaybeSet<layout::Definition<F, D::Layout>, F>,
-	pub layout_field: MaybeSet<layout::field::Definition<F>, F>,
-	pub layout_variant: MaybeSet<layout::variant::Definition<F>, F>,
-	pub list: MaybeSet<list::Definition<F>, F>,
+#[derivative(Clone(bound = "M: Clone"))]
+pub struct Components<M, D: Descriptions<M> = crate::StandardDescriptions> {
+	pub ty: MetaOption<ty::Definition<M, D::Type>, M>,
+	pub property: MetaOption<prop::Definition<M>, M>,
+	pub layout: MetaOption<layout::Definition<M, D::Layout>, M>,
+	pub layout_field: MetaOption<layout::field::Definition<M>, M>,
+	pub layout_variant: MetaOption<layout::variant::Definition<M>, M>,
+	pub list: MetaOption<list::Definition<M>, M>,
 }
 
-impl<F, D: Descriptions<F>> Components<F, D> {
-	pub fn try_map<G: Descriptions<F>, E>(
+impl<M, D: Descriptions<M>> Components<M, D> {
+	pub fn try_map<G: Descriptions<M>, E>(
 		self,
-		map: &impl TryMap<F, E, D, G>,
-		source: &crate::Context<F, D>,
-		target: &mut crate::Context<F, G>,
+		map: &impl TryMap<M, E, D, G>,
+		source: &crate::Context<M, D>,
+		target: &mut crate::Context<M, G>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<Components<F, G>, E>
+	) -> Result<Components<M, G>, E>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		Ok(Components {
-			ty: self.ty.try_map_with_causes(|d, causes| {
-				d.try_map(|d| map.ty(d, causes, source, target, vocabulary))
+			ty: self.ty.try_map_with_causes(|Meta(d, metadata)| {
+				Ok(Meta(
+					d.try_map(|d| map.ty(d, &metadata, source, target, vocabulary))?,
+					metadata,
+				))
 			})?,
 			property: self.property,
-			layout: self.layout.try_map_with_causes(|d, causes| {
-				d.try_map(|d| map.layout(d, causes, source, target, vocabulary))
+			layout: self.layout.try_map_with_causes(|Meta(d, metadata)| {
+				Ok(Meta(
+					d.try_map(|d| map.layout(d, &metadata, source, target, vocabulary))?,
+					metadata,
+				))
 			})?,
 			layout_field: self.layout_field,
 			layout_variant: self.layout_variant,
@@ -111,125 +117,125 @@ impl<T> Node<T> {
 	}
 }
 
-pub type PropertyOrLayoutField<'a, F> = (
-	Option<&'a mut WithCauses<prop::Definition<F>, F>>,
-	Option<&'a mut WithCauses<layout::field::Definition<F>, F>>,
+pub type PropertyOrLayoutField<'a, M> = (
+	Option<&'a mut Meta<prop::Definition<M>, M>>,
+	Option<&'a mut Meta<layout::field::Definition<M>, M>>,
 );
 
-pub type LayoutFieldOrVariant<'a, F> = (
-	Option<&'a mut WithCauses<layout::field::Definition<F>, F>>,
-	Option<&'a mut WithCauses<layout::variant::Definition<F>, F>>,
+pub type LayoutFieldOrVariant<'a, M> = (
+	Option<&'a mut Meta<layout::field::Definition<M>, M>>,
+	Option<&'a mut Meta<layout::variant::Definition<M>, M>>,
 );
 
-impl<F, D: Descriptions<F>> Node<Components<F, D>> {
+impl<M, D: Descriptions<M>> Node<Components<M, D>> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::default(),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::default(),
+				ty: MetaOption::default(),
+				property: MetaOption::default(),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_type(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_type(id: Id, metadata: M) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::new(ty::Definition::new(id), causes),
-				property: MaybeSet::default(),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::default(),
+				ty: MetaOption::new(ty::Definition::new(id), metadata),
+				property: MetaOption::default(),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_property(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_property(id: Id, metadata: M) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::new(prop::Definition::new(id), causes),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::default(),
+				ty: MetaOption::default(),
+				property: MetaOption::new(prop::Definition::new(id), metadata),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_layout(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_layout(id: Id, metadata: M) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::default(),
-				layout: MaybeSet::new(layout::Definition::new(id), causes),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::default(),
+				ty: MetaOption::default(),
+				property: MetaOption::default(),
+				layout: MetaOption::new(layout::Definition::new(id), metadata),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_layout_field(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_layout_field(id: Id, metadata: M) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::default(),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::new(layout::field::Definition::new(id), causes),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::default(),
+				ty: MetaOption::default(),
+				property: MetaOption::default(),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::new(layout::field::Definition::new(id), metadata),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_layout_variant(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_layout_variant(id: Id, metadata: M) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::default(),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::new(layout::variant::Definition::new(id), causes),
-				list: MaybeSet::default(),
+				ty: MetaOption::default(),
+				property: MetaOption::default(),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::new(layout::variant::Definition::new(id), metadata),
+				list: MetaOption::default(),
 			},
 		}
 	}
 
-	pub fn new_list(id: Id, causes: impl Into<Causes<F>>) -> Self {
+	pub fn new_list(id: Id, metadata: M) -> Self {
 		Self {
 			id,
 			label: None,
 			doc: Documentation::default(),
 			value: Components {
-				ty: MaybeSet::default(),
-				property: MaybeSet::default(),
-				layout: MaybeSet::default(),
-				layout_field: MaybeSet::default(),
-				layout_variant: MaybeSet::default(),
-				list: MaybeSet::new(list::Definition::new(id), causes),
+				ty: MetaOption::default(),
+				property: MetaOption::default(),
+				layout: MetaOption::default(),
+				layout_field: MetaOption::default(),
+				layout_variant: MetaOption::default(),
+				list: MetaOption::new(list::Definition::new(id), metadata),
 			},
 		}
 	}
@@ -245,41 +251,17 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 		}
 	}
 
-	pub fn caused_types(&self) -> CausedTypes<F>
+	pub fn caused_types(&self) -> TypesMetadata<M>
 	where
-		F: Clone,
+		M: Clone,
 	{
-		CausedTypes {
-			ty: self
-				.value
-				.ty
-				.causes()
-				.map(|causes| causes.preferred().cloned()),
-			property: self
-				.value
-				.property
-				.causes()
-				.map(|causes| causes.preferred().cloned()),
-			layout: self
-				.value
-				.layout
-				.causes()
-				.map(|causes| causes.preferred().cloned()),
-			layout_field: self
-				.value
-				.layout_field
-				.causes()
-				.map(|causes| causes.preferred().cloned()),
-			layout_variant: self
-				.value
-				.layout_variant
-				.causes()
-				.map(|causes| causes.preferred().cloned()),
-			list: self
-				.value
-				.list
-				.causes()
-				.map(|causes| causes.preferred().cloned()),
+		TypesMetadata {
+			ty: self.value.ty.metadata().cloned(),
+			property: self.value.property.metadata().cloned(),
+			layout: self.value.layout.metadata().cloned(),
+			layout_field: self.value.layout_field.metadata().cloned(),
+			layout_variant: self.value.layout_variant.metadata().cloned(),
+			list: self.value.list.metadata().cloned(),
 		}
 	}
 
@@ -307,133 +289,108 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 		self.value.list.is_set()
 	}
 
-	pub fn as_type(&self) -> Option<&WithCauses<ty::Definition<F, D::Type>, F>> {
-		self.value.ty.with_causes()
+	pub fn as_type(&self) -> Option<&Meta<ty::Definition<M, D::Type>, M>> {
+		self.value.ty.as_ref()
 	}
 
-	pub fn as_property(&self) -> Option<&WithCauses<prop::Definition<F>, F>> {
-		self.value.property.with_causes()
+	pub fn as_property(&self) -> Option<&Meta<prop::Definition<M>, M>> {
+		self.value.property.as_ref()
 	}
 
-	pub fn as_layout(&self) -> Option<&WithCauses<layout::Definition<F, D::Layout>, F>> {
-		self.value.layout.with_causes()
+	pub fn as_layout(&self) -> Option<&Meta<layout::Definition<M, D::Layout>, M>> {
+		self.value.layout.as_ref()
 	}
 
-	pub fn as_layout_field(&self) -> Option<&WithCauses<layout::field::Definition<F>, F>> {
-		self.value.layout_field.with_causes()
+	pub fn as_layout_field(&self) -> Option<&Meta<layout::field::Definition<M>, M>> {
+		self.value.layout_field.as_ref()
 	}
 
-	pub fn as_layout_variant(&self) -> Option<&WithCauses<layout::variant::Definition<F>, F>> {
-		self.value.layout_variant.with_causes()
+	pub fn as_layout_variant(&self) -> Option<&Meta<layout::variant::Definition<M>, M>> {
+		self.value.layout_variant.as_ref()
 	}
 
-	pub fn as_list(&self) -> Option<&WithCauses<list::Definition<F>, F>> {
-		self.value.list.with_causes()
+	pub fn as_list(&self) -> Option<&Meta<list::Definition<M>, M>> {
+		self.value.list.as_ref()
 	}
 
-	pub fn as_type_mut(&mut self) -> Option<&mut WithCauses<ty::Definition<F, D::Type>, F>> {
-		self.value.ty.with_causes_mut()
+	pub fn as_type_mut(&mut self) -> Option<&mut Meta<ty::Definition<M, D::Type>, M>> {
+		self.value.ty.as_mut()
 	}
 
-	pub fn as_property_mut(&mut self) -> Option<&mut WithCauses<prop::Definition<F>, F>> {
-		self.value.property.with_causes_mut()
+	pub fn as_property_mut(&mut self) -> Option<&mut Meta<prop::Definition<M>, M>> {
+		self.value.property.as_mut()
 	}
 
-	pub fn as_layout_mut(
-		&mut self,
-	) -> Option<&mut WithCauses<layout::Definition<F, D::Layout>, F>> {
-		self.value.layout.with_causes_mut()
+	pub fn as_layout_mut(&mut self) -> Option<&mut Meta<layout::Definition<M, D::Layout>, M>> {
+		self.value.layout.as_mut()
 	}
 
-	pub fn as_layout_field_mut(
-		&mut self,
-	) -> Option<&mut WithCauses<layout::field::Definition<F>, F>> {
-		self.value.layout_field.with_causes_mut()
+	pub fn as_layout_field_mut(&mut self) -> Option<&mut Meta<layout::field::Definition<M>, M>> {
+		self.value.layout_field.as_mut()
 	}
 
 	pub fn as_layout_variant_mut(
 		&mut self,
-	) -> Option<&mut WithCauses<layout::variant::Definition<F>, F>> {
-		self.value.layout_variant.with_causes_mut()
+	) -> Option<&mut Meta<layout::variant::Definition<M>, M>> {
+		self.value.layout_variant.as_mut()
 	}
 
-	pub fn as_list_mut(&mut self) -> Option<&mut WithCauses<list::Definition<F>, F>> {
-		self.value.list.with_causes_mut()
+	pub fn as_list_mut(&mut self) -> Option<&mut Meta<list::Definition<M>, M>> {
+		self.value.list.as_mut()
 	}
 
-	pub fn declare_type(&mut self, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_type(&mut self, cause: M) {
 		self.value
 			.ty
 			.set_once(cause, || ty::Definition::new(self.id))
 	}
 
-	pub fn declare_property(&mut self, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_property(&mut self, cause: M) {
 		self.value
 			.property
 			.set_once(cause, || prop::Definition::new(self.id))
 	}
 
-	pub fn declare_layout(&mut self, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_layout(&mut self, cause: M) {
 		self.value
 			.layout
 			.set_once(cause, || layout::Definition::new(self.id))
 	}
 
-	pub fn declare_layout_field(&mut self, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_layout_field(&mut self, cause: M) {
 		self.value
 			.layout_field
 			.set_once(cause, || layout::field::Definition::new(self.id))
 	}
 
-	pub fn declare_layout_variant(&mut self, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_layout_variant(&mut self, cause: M) {
 		self.value
 			.layout_variant
 			.set_once(cause, || layout::variant::Definition::new(self.id))
 	}
 
-	pub fn declare_list(&mut self, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_list(&mut self, cause: M) {
 		self.value
 			.list
 			.set_once(cause, || list::Definition::new(self.id))
 	}
 
 	#[allow(clippy::type_complexity)]
-	pub fn require_type(
-		&self,
-		cause: Option<Location<F>>,
-	) -> Result<&WithCauses<ty::Definition<F, D::Type>, F>, Error<F>>
+	pub fn require_type(&self, cause: &M) -> Result<&Meta<ty::Definition<M, D::Type>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.ty.with_causes() {
+		match self.value.ty.as_ref() {
 			Some(ty) => Ok(ty),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::Type,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -441,44 +398,44 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 	#[allow(clippy::type_complexity)]
 	pub fn require_type_mut(
 		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<ty::Definition<F, D::Type>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Meta<ty::Definition<M, D::Type>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.ty.with_causes_mut() {
+		match self.value.ty.as_mut() {
 			Some(ty) => Ok(ty),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::Type,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
 	pub fn require_property_mut(
 		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<prop::Definition<F>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Meta<prop::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.property.with_causes_mut() {
+		match self.value.property.as_mut() {
 			Some(prop) => Ok(prop),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::Property,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -486,22 +443,22 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 	#[allow(clippy::type_complexity)]
 	pub fn require_layout(
 		&self,
-		cause: Option<Location<F>>,
-	) -> Result<&WithCauses<layout::Definition<F, D::Layout>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&Meta<layout::Definition<M, D::Layout>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.layout.with_causes() {
+		match self.value.layout.as_ref() {
 			Some(layout) => Ok(layout),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::Layout,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -509,212 +466,206 @@ impl<F, D: Descriptions<F>> Node<Components<F, D>> {
 	#[allow(clippy::type_complexity)]
 	pub fn require_layout_mut(
 		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<layout::Definition<F, D::Layout>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Meta<layout::Definition<M, D::Layout>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.layout.with_causes_mut() {
+		match self.value.layout.as_mut() {
 			Some(layout) => Ok(layout),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::Layout,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
 	pub fn require_layout_field(
 		&self,
-		cause: Option<Location<F>>,
-	) -> Result<&WithCauses<layout::field::Definition<F>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&Meta<layout::field::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.layout_field.with_causes() {
+		match self.value.layout_field.as_ref() {
 			Some(field) => Ok(field),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::LayoutField,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
 	pub fn require_layout_field_mut(
 		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<layout::field::Definition<F>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Meta<layout::field::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.layout_field.with_causes_mut() {
+		match self.value.layout_field.as_mut() {
 			Some(field) => Ok(field),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::LayoutField,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
 	pub fn require_layout_variant(
 		&self,
-		cause: Option<Location<F>>,
-	) -> Result<&WithCauses<layout::variant::Definition<F>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&Meta<layout::variant::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.layout_variant.with_causes() {
+		match self.value.layout_variant.as_ref() {
 			Some(variant) => Ok(variant),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::LayoutVariant,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
 	pub fn require_layout_variant_mut(
 		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<layout::variant::Definition<F>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Meta<layout::variant::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.layout_variant.with_causes_mut() {
+		match self.value.layout_variant.as_mut() {
 			Some(variant) => Ok(variant),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::LayoutVariant,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
 	pub fn require_property_or_layout_field_mut(
 		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<PropertyOrLayoutField<F>, Error<F>>
+		cause: &M,
+	) -> Result<PropertyOrLayoutField<M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
 
 		let (prop, layout_field) = (
-			self.value.property.with_causes_mut(),
-			self.value.layout_field.with_causes_mut(),
+			self.value.property.as_mut(),
+			self.value.layout_field.as_mut(),
 		);
 
 		if prop.is_some() || layout_field.is_some() {
 			Ok((prop, layout_field))
 		} else {
-			Err(Caused::new(
+			Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::Property,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			))
 		}
 	}
 
 	pub fn require_layout_field_or_variant_mut(
 		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<LayoutFieldOrVariant<F>, Error<F>>
+		cause: &M,
+	) -> Result<LayoutFieldOrVariant<M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
 
 		let (layout_field, layout_variant) = (
-			self.value.layout_field.with_causes_mut(),
-			self.value.layout_variant.with_causes_mut(),
+			self.value.layout_field.as_mut(),
+			self.value.layout_variant.as_mut(),
 		);
 
 		if layout_field.is_some() || layout_variant.is_some() {
 			Ok((layout_field, layout_variant))
 		} else {
-			Err(Caused::new(
+			Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::LayoutField,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			))
 		}
 	}
 
-	pub fn require_list(
-		&self,
-		cause: Option<Location<F>>,
-	) -> Result<&WithCauses<list::Definition<F>, F>, Error<F>>
+	pub fn require_list(&self, cause: &M) -> Result<&Meta<list::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.list.with_causes() {
+		match self.value.list.as_ref() {
 			Some(list) => Ok(list),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::List,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
-	pub fn require_list_mut(
-		&mut self,
-		cause: Option<Location<F>>,
-	) -> Result<&mut list::Definition<F>, Error<F>>
+	pub fn require_list_mut(&mut self, cause: &M) -> Result<&mut list::Definition<M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let types = self.caused_types();
-		match self.value.list.with_causes_mut() {
+		match self.value.list.as_mut() {
 			Some(list) => Ok(list),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeInvalidType {
 					id: self.id,
 					expected: Type::List,
 					found: types,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}

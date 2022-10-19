@@ -1,24 +1,24 @@
 use super::Properties;
-use crate::{prop::restriction, Causes, Model, Ref};
+use crate::{metadata, prop::restriction, Model, Ref};
 use std::collections::BTreeMap;
 
 /// Intersection type.
-pub struct Intersection<F> {
+pub struct Intersection<M> {
 	/// Types in the intersection.
-	types: BTreeMap<Ref<super::Definition<F>>, Causes<F>>,
+	types: BTreeMap<Ref<super::Definition<M>>, M>,
 
 	/// Properties in the intersection.
-	properties: Properties<F>,
+	properties: Properties<M>,
 }
 
-impl<F> Intersection<F> {
+impl<M> Intersection<M> {
 	pub fn new<'a, G>(
-		types: BTreeMap<Ref<super::Definition<F>>, Causes<F>>,
+		types: BTreeMap<Ref<super::Definition<M>>, M>,
 		get: G,
 	) -> Result<Self, restriction::Contradiction>
 	where
-		F: 'a + Clone + Ord,
-		G: 'a + Fn(Ref<super::Definition<F>>) -> &'a super::Definition<F>,
+		M: 'a + Clone + metadata::Merge,
+		G: 'a + Fn(Ref<super::Definition<M>>) -> &'a super::Definition<M>,
 	{
 		let mut properties = Properties::all();
 		for &ty_ref in types.keys() {
@@ -29,15 +29,15 @@ impl<F> Intersection<F> {
 		Ok(Self { types, properties })
 	}
 
-	pub fn types(&self) -> impl '_ + DoubleEndedIterator<Item = Ref<super::Definition<F>>> {
+	pub fn types(&self) -> impl '_ + DoubleEndedIterator<Item = Ref<super::Definition<M>>> {
 		self.types.keys().cloned()
 	}
 
-	pub fn properties(&self) -> &Properties<F> {
+	pub fn properties(&self) -> &Properties<M> {
 		&self.properties
 	}
 
-	pub fn is_datatype(&self, model: &Model<F>) -> bool {
+	pub fn is_datatype(&self, model: &Model<M>) -> bool {
 		self.types
 			.iter()
 			.any(|(ty_ref, _)| model.types().get(*ty_ref).unwrap().is_datatype(model))

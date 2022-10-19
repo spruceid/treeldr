@@ -1,15 +1,15 @@
 use treeldr::{Id, Vocabulary, vocab::Display};
-use locspan::Location;
+use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
-pub struct LayoutMismatchPrimitive<F> {
+pub struct LayoutMismatchPrimitive<M> {
 	pub id: Id,
 	pub expected: treeldr::layout::Primitive,
 	pub found: treeldr::layout::Primitive,
-	pub because: Option<Location<F>>
+	pub because: M
 }
 
-impl<F> super::AnyError<F> for LayoutMismatchPrimitive<F> {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutMismatchPrimitive<M> {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("datatype primitive mismatch for layout `{}`", self.id.display(vocab))
 	}

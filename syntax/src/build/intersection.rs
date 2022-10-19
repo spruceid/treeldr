@@ -1,8 +1,8 @@
 use super::{Descriptions, Error, LayoutDescription, LayoutRestrictedField, LocalError};
 use derivative::Derivative;
-use locspan::{Loc, Meta};
+use locspan::Meta;
 use std::collections::BTreeMap;
-use treeldr::{Causes, Id, MaybeSet, Vocabulary, WithCauses};
+use treeldr::{metadata::Merge, Id, MetaOption, Vocabulary};
 use treeldr_build::{
 	layout::{Array, RestrictedPrimitive},
 	Context, ObjectToId,
@@ -15,41 +15,44 @@ pub use enumeration::*;
 pub use structure::*;
 
 #[derive(Clone)]
-pub struct IntersectedLayout<F> {
-	ids: BTreeMap<Id, Causes<F>>,
-	desc: WithCauses<IntersectedLayoutDescription<F>, F>,
+pub struct IntersectedLayout<M> {
+	ids: BTreeMap<Id, M>,
+	desc: Meta<IntersectedLayoutDescription<M>, M>,
 }
 
-impl<F> PartialEq for IntersectedLayout<F> {
+impl<M> PartialEq for IntersectedLayout<M> {
 	fn eq(&self, other: &Self) -> bool {
 		self.ids.keys().any(|id| other.ids.contains_key(id))
 			|| (self.ids.is_empty()
 				&& other.ids.is_empty()
-				&& self.desc.inner() == other.desc.inner())
+				&& self.desc.value() == other.desc.value())
 	}
 }
 
 #[derive(Clone, Derivative)]
 #[derivative(PartialEq(bound = ""))]
-pub enum IntersectedLayoutDescription<F> {
+pub enum IntersectedLayoutDescription<M> {
 	Never,
-	Primitive(RestrictedPrimitive<F>),
-	Struct(IntersectedStruct<F>),
+	Primitive(RestrictedPrimitive<M>),
+	Struct(IntersectedStruct<M>),
 	Reference(Id),
-	Enum(IntersectedEnum<F>),
+	Enum(IntersectedEnum<M>),
 	Required(Id),
 	Option(Id),
 	Set(Id),
-	Array(Array<F>),
+	Array(Array<M>),
 	Alias(Id),
 }
 
-impl<F: Clone + Ord> IntersectedLayout<F> {
-	pub fn try_from_iter<I: IntoIterator<Item = WithCauses<Id, F>>>(
+impl<M: Clone> IntersectedLayout<M> {
+	pub fn try_from_iter<I: IntoIterator<Item = Meta<Id, M>>>(
 		ids: I,
-		context: &Context<F, Descriptions>,
-		causes: Causes<F>,
-	) -> Result<Self, Error<F>> {
+		context: &Context<M, Descriptions>,
+		causes: M,
+	) -> Result<Self, Error<M>>
+	where
+		M: Merge,
+	{
 		let mut ids = ids.into_iter();
 		match ids.next() {
 			Some(first_id) => {
@@ -66,25 +69,24 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 		}
 	}
 
-	pub fn new(id: WithCauses<Id, F>) -> Result<Self, Error<F>> {
-		let (id, causes) = id.into_parts();
+	pub fn new(Meta(id, meta): Meta<Id, M>) -> Result<Self, Error<M>> {
 		Ok(Self {
 			ids: BTreeMap::new(),
-			desc: WithCauses::new(IntersectedLayoutDescription::Alias(id), causes),
+			desc: Meta::new(IntersectedLayoutDescription::Alias(id), meta),
 		})
 	}
 
 	pub fn from_parts(
-		ids: BTreeMap<Id, Causes<F>>,
-		desc: WithCauses<IntersectedLayoutDescription<F>, F>,
+		ids: BTreeMap<Id, M>,
+		desc: Meta<IntersectedLayoutDescription<M>, M>,
 	) -> Self {
 		Self { ids, desc }
 	}
 
-	pub fn never(causes: Causes<F>) -> Self {
+	pub fn never(causes: M) -> Self {
 		Self {
 			ids: BTreeMap::new(),
-			desc: WithCauses::new(IntersectedLayoutDescription::Never, causes),
+			desc: Meta::new(IntersectedLayoutDescription::Never, causes),
 		}
 	}
 
@@ -92,9 +94,12 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 		self.desc.is_never()
 	}
 
-	pub fn compress(&mut self, context: &Context<F, Descriptions>) -> Result<(), Error<F>> {
+	pub fn compress(&mut self, context: &Context<M, Descriptions>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
 		if self.ids.is_empty() {
-			let (desc, causes) = self.desc.parts_mut();
+			let Meta(desc, causes) = &mut self.desc;
 			self.ids = desc.compress(context, causes)?;
 		}
 
@@ -109,16 +114,19 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 		self.desc.needs_id()
 	}
 
-	pub fn id(&self) -> Option<(Id, &Causes<F>)> {
+	pub fn id(&self) -> Option<(Id, &M)> {
 		self.ids.iter().next().map(|(id, causes)| (*id, causes))
 	}
 
-	pub fn shared_id(&self, other: &Self) -> Option<WithCauses<Id, F>> {
+	pub fn shared_id(&self, other: &Self) -> Option<Meta<Id, M>>
+	where
+		M: Merge,
+	{
 		for (id, causes) in &self.ids {
 			if let Some(other_causes) = other.ids.get(id) {
-				return Some(WithCauses::new(
+				return Some(Meta::new(
 					*id,
-					causes.clone().with(other_causes.iter().cloned()),
+					causes.clone().merged_with(other_causes.clone()),
 				));
 			}
 		}
@@ -126,18 +134,21 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 		None
 	}
 
-	pub fn into_required_id(self) -> Result<WithCauses<Id, F>, Error<F>> {
+	pub fn into_required_id(self) -> Result<Meta<Id, M>, Error<M>> {
 		match self.ids.into_iter().next() {
-			Some((id, causes)) => Ok(WithCauses::new(id, causes)),
+			Some((id, causes)) => Ok(Meta::new(id, causes)),
 			None => todo!("anonymous intersection"),
 		}
 	}
 
 	pub fn intersected_with_id(
 		self,
-		other: &WithCauses<Id, F>,
-		context: &Context<F, Descriptions>,
-	) -> Result<Self, Error<F>> {
+		other: &Meta<Id, M>,
+		context: &Context<M, Descriptions>,
+	) -> Result<Self, Error<M>>
+	where
+		M: Merge,
+	{
 		let other = Self::new(other.clone())?;
 		self.intersected_with(other, context)
 	}
@@ -145,20 +156,22 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 	pub fn intersected_with(
 		mut self,
 		mut other: Self,
-		context: &Context<F, Descriptions>,
-	) -> Result<Self, Error<F>> {
+		context: &Context<M, Descriptions>,
+	) -> Result<Self, Error<M>>
+	where
+		M: Merge,
+	{
 		self.compress(context)?;
 		other.compress(context)?;
 
 		match self.shared_id(&other) {
-			Some(id) => {
-				let (id, causes) = id.into_parts();
+			Some(Meta(id, causes)) => {
 				let mut ids = BTreeMap::new();
 				ids.insert(id, causes.clone());
 
 				Ok(Self {
 					ids,
-					desc: WithCauses::new(IntersectedLayoutDescription::Alias(id), causes),
+					desc: Meta::new(IntersectedLayoutDescription::Alias(id), causes),
 				})
 			}
 			None => {
@@ -170,12 +183,12 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 					return Ok(other);
 				}
 
-				let (desc, causes) = self.desc.into_parts();
-				let other_causes = other.desc.causes().clone();
+				let Meta(desc, causes) = self.desc;
+				let other_causes = other.desc.metadata().clone();
 
 				Ok(Self {
 					ids: BTreeMap::new(),
-					desc: WithCauses::new(
+					desc: Meta::new(
 						desc.intersected_with(
 							causes.clone(),
 							self.ids,
@@ -183,7 +196,7 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 							other.ids,
 							context,
 						)?,
-						causes.with(other_causes),
+						causes.merged_with(other_causes),
 					),
 				})
 			}
@@ -192,8 +205,11 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 
 	pub fn apply_restrictions(
 		self,
-		restricted_fields: Vec<Loc<LayoutRestrictedField<F>, F>>,
-	) -> Result<Self, Error<F>> {
+		restricted_fields: Vec<Meta<LayoutRestrictedField<M>, M>>,
+	) -> Result<Self, Error<M>>
+	where
+		M: Merge,
+	{
 		if restricted_fields.is_empty() {
 			Ok(self)
 		} else {
@@ -206,64 +222,73 @@ impl<F: Clone + Ord> IntersectedLayout<F> {
 		}
 	}
 
-	pub fn description(&self) -> &IntersectedLayoutDescription<F> {
+	pub fn description(&self) -> &IntersectedLayoutDescription<M> {
 		&self.desc
 	}
 
-	pub fn into_description(self) -> WithCauses<IntersectedLayoutDescription<F>, F> {
+	pub fn into_description(self) -> Meta<IntersectedLayoutDescription<M>, M> {
 		self.desc
 	}
 
 	pub fn into_standard_description(
 		self,
-		source: &Context<F, Descriptions>,
-		target: &mut Context<F>,
+		source: &Context<M, Descriptions>,
+		target: &mut Context<M>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
+	) -> Result<treeldr_build::layout::Description<M>, Error<M>>
+	where
+		M: Merge,
+	{
 		match self.ids.into_iter().next() {
 			Some((id, _)) => Ok(treeldr_build::layout::Description::Alias(id)),
 			None => self
 				.desc
-				.into_inner()
+				.into_value()
 				.into_standard_description(source, target, vocabulary),
 		}
 	}
 
 	pub fn into_layout(
 		self,
-		source: &Context<F, Descriptions>,
-		target: &mut Context<F>,
+		source: &Context<M, Descriptions>,
+		target: &mut Context<M>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<WithCauses<Id, F>, Error<F>> {
+	) -> Result<Meta<Id, M>, Error<M>>
+	where
+		M: Merge,
+	{
 		match self.ids.into_iter().next() {
-			Some((id, causes)) => Ok(WithCauses::new(id, causes)),
+			Some((id, causes)) => Ok(Meta::new(id, causes)),
 			None => {
-				let (desc, causes) = self.desc.into_parts();
+				let Meta(desc, causes) = self.desc;
 				let standard_desc = desc.into_standard_description(source, target, vocabulary)?;
 
 				let id = Id::Blank(vocabulary.new_blank_label());
-				target.declare_layout(id, causes.preferred().cloned());
+				target.declare_layout(id, causes.clone());
 				target
 					.get_mut(id)
 					.unwrap()
 					.as_layout_mut()
 					.unwrap()
-					.replace_description(MaybeSet::new(standard_desc, causes.clone()));
+					.replace_description(MetaOption::new(standard_desc, causes.clone()));
 
-				Ok(WithCauses::new(id, causes))
+				Ok(Meta::new(id, causes))
 			}
 		}
 	}
 }
 
-impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
+impl<M: Clone> IntersectedLayoutDescription<M> {
 	pub fn new(
-		desc: Option<&WithCauses<LayoutDescription<F>, F>>,
-		context: &Context<F, Descriptions>,
-	) -> Result<Self, Error<F>> {
+		desc: Option<&Meta<LayoutDescription<M>, M>>,
+		context: &Context<M, Descriptions>,
+	) -> Result<Self, Error<M>>
+	where
+		M: Merge,
+	{
 		match desc {
 			None => Ok(Self::Never),
-			Some(desc) => match desc.inner() {
+			Some(desc) => match desc.value() {
 				LayoutDescription::Standard(standard_desc) => match standard_desc {
 					treeldr_build::layout::Description::Never => Ok(Self::Never),
 					treeldr_build::layout::Description::Primitive(n) => {
@@ -271,10 +296,10 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 					}
 					treeldr_build::layout::Description::Reference(r) => Ok(Self::Reference(*r)),
 					treeldr_build::layout::Description::Struct(fields_id) => Ok(Self::Struct(
-						IntersectedStruct::new(*fields_id, context, desc.causes())?,
+						IntersectedStruct::new(*fields_id, context, desc.metadata())?,
 					)),
 					treeldr_build::layout::Description::Enum(variants_id) => Ok(Self::Enum(
-						IntersectedEnum::new(*variants_id, context, desc.causes())?,
+						IntersectedEnum::new(*variants_id, context, desc.metadata())?,
 					)),
 					treeldr_build::layout::Description::Required(r) => Ok(Self::Required(*r)),
 					treeldr_build::layout::Description::Option(s) => Ok(Self::Option(*s)),
@@ -283,21 +308,23 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 					treeldr_build::layout::Description::Alias(a) => Ok(Self::Alias(*a)),
 				},
 				LayoutDescription::Intersection(layouts_id, restricted_fields) => {
-					let layout_list =
-						context.require_list(*layouts_id, desc.causes().preferred().cloned())?;
+					let layout_list = context.require_list(*layouts_id, desc.metadata())?;
 					let mut layouts = Vec::new();
 					for obj in layout_list.iter(context) {
 						let obj = obj?;
-						layouts.push(WithCauses::new(
-							obj.as_id(obj.causes().preferred())?,
-							obj.causes().clone(),
+						layouts.push(Meta::new(
+							obj.as_id(obj.metadata())?,
+							obj.metadata().clone(),
 						))
 					}
 
-					let mut result =
-						IntersectedLayout::try_from_iter(layouts, context, desc.causes().clone())?;
+					let mut result = IntersectedLayout::try_from_iter(
+						layouts,
+						context,
+						desc.metadata().clone(),
+					)?;
 					result = result.apply_restrictions(restricted_fields.clone())?;
-					Ok(result.into_description().into_inner())
+					Ok(result.into_description().into_value())
 				}
 			},
 		}
@@ -317,17 +344,17 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 
 	pub fn compress(
 		&mut self,
-		context: &Context<F, Descriptions>,
-		causes: &Causes<F>,
-	) -> Result<BTreeMap<Id, Causes<F>>, Error<F>> {
+		context: &Context<M, Descriptions>,
+		causes: &M,
+	) -> Result<BTreeMap<Id, M>, Error<M>>
+	where
+		M: Merge,
+	{
 		let mut aliases = BTreeMap::new();
-
-		let mut causes = causes;
 
 		while let Self::Alias(id) = self {
 			if aliases.insert(*id, causes.clone()).is_none() {
-				let layout = context.require_layout(*id, causes.preferred().cloned())?;
-				causes = layout.causes();
+				let layout = context.require_layout(*id, causes)?;
 				*self = Self::new(layout.description(), context)?;
 			} else {
 				break;
@@ -357,18 +384,20 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 
 	pub fn intersected_with(
 		self,
-		causes: Causes<F>,
-		ids: BTreeMap<Id, Causes<F>>,
-		other: WithCauses<IntersectedLayoutDescription<F>, F>,
-		other_ids: BTreeMap<Id, Causes<F>>,
-		context: &Context<F, Descriptions>,
-	) -> Result<Self, Error<F>> {
-		let (other, other_causes) = other.into_parts();
+		causes: M,
+		ids: BTreeMap<Id, M>,
+		Meta(other, other_causes): Meta<IntersectedLayoutDescription<M>, M>,
+		other_ids: BTreeMap<Id, M>,
+		context: &Context<M, Descriptions>,
+	) -> Result<Self, Error<M>>
+	where
+		M: Merge,
+	{
 		match other {
 			Self::Enum(b) => match self {
 				Self::Enum(a) => a.intersected_with(b, context),
 				non_enum => b.intersected_with_non_enum(
-					IntersectedLayout::from_parts(ids, WithCauses::new(non_enum, causes)),
+					IntersectedLayout::from_parts(ids, Meta::new(non_enum, causes)),
 					context,
 				),
 			},
@@ -387,22 +416,19 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 					_ => Ok(Self::Never),
 				},
 				Self::Enum(a) => a.intersected_with_non_enum(
-					IntersectedLayout::from_parts(other_ids, WithCauses::new(other, other_causes)),
+					IntersectedLayout::from_parts(other_ids, Meta::new(other, other_causes)),
 					context,
 				),
 				Self::Required(a) => match other {
 					Self::Required(b) => {
 						eprintln!("case B");
 						let c = IntersectedLayout::try_from_iter(
-							[
-								WithCauses::new(a, causes.clone()),
-								WithCauses::new(b, other_causes),
-							],
+							[Meta::new(a, causes.clone()), Meta::new(b, other_causes)],
 							context,
 							causes,
 						)?
 						.into_required_id()?
-						.into_inner();
+						.into_value();
 						Ok(Self::Required(c))
 					}
 					_ => Ok(Self::Never),
@@ -410,15 +436,12 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 				Self::Option(a) => match other {
 					Self::Option(b) => {
 						let c = IntersectedLayout::try_from_iter(
-							[
-								WithCauses::new(a, causes.clone()),
-								WithCauses::new(b, other_causes),
-							],
+							[Meta::new(a, causes.clone()), Meta::new(b, other_causes)],
 							context,
 							causes,
 						)?
 						.into_required_id()?
-						.into_inner();
+						.into_value();
 						Ok(Self::Option(c))
 					}
 					_ => Ok(Self::Never),
@@ -439,15 +462,13 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 		}
 	}
 
-	// pub fn intersected_with_id(self, other: &WithCauses<Id, F>, context: &Context<F, Descriptions>) -> Result<Self, Error<F>> {
-	// 	let other = IntersectedLayout::new(other.clone(), context)?;
-	// 	self.intersected_with(other.into_description())
-	// }
-
 	pub fn apply_restrictions(
 		self,
-		restricted_fields: Vec<Loc<LayoutRestrictedField<F>, F>>,
-	) -> Result<Self, Error<F>> {
+		restricted_fields: Vec<Meta<LayoutRestrictedField<M>, M>>,
+	) -> Result<Self, Error<M>>
+	where
+		M: Merge,
+	{
 		match self {
 			Self::Struct(mut s) => {
 				if s.apply_restrictions(restricted_fields)? {
@@ -458,7 +479,7 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 			}
 			other => {
 				if let Some(Meta(_, loc)) = restricted_fields.get(0) {
-					return Err(Loc(LocalError::UnexpectedFieldRestriction, loc.clone()).into());
+					return Err(Meta(LocalError::UnexpectedFieldRestriction, loc.clone()).into());
 				}
 
 				Ok(other)
@@ -468,10 +489,13 @@ impl<F: Clone + Ord> IntersectedLayoutDescription<F> {
 
 	pub fn into_standard_description(
 		self,
-		source: &Context<F, Descriptions>,
-		target: &mut Context<F>,
+		source: &Context<M, Descriptions>,
+		target: &mut Context<M>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
+	) -> Result<treeldr_build::layout::Description<M>, Error<M>>
+	where
+		M: Merge,
+	{
 		match self {
 			Self::Never => Ok(treeldr_build::layout::Description::Never),
 			Self::Primitive(n) => Ok(treeldr_build::layout::Description::Primitive(n)),

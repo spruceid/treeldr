@@ -1,11 +1,11 @@
 use crate::{vocab, Vocabulary};
-use locspan::{Loc, Location};
+use locspan::{MaybeLocated, Meta};
 
 /// Error with diagnostic reporting support.
-pub trait Diagnose<F> {
+pub trait Diagnose<M: MaybeLocated> {
 	fn message(&self) -> String;
 
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
@@ -13,7 +13,7 @@ pub trait Diagnose<F> {
 		Vec::new()
 	}
 
-	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<F> {
+	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message())
 			.with_labels(self.labels())
@@ -22,64 +22,89 @@ pub trait Diagnose<F> {
 }
 
 /// Error with diagnostic reporting support.
-pub trait DiagnoseWithCause<F> {
-	fn message(&self, cause: Option<&Location<F>>) -> String;
+pub trait DiagnoseWithMetadata<M: MaybeLocated> {
+	fn message(&self, metadata: &M) -> String;
 
-	fn labels(
-		&self,
-		_cause: Option<&Location<F>>,
-	) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn labels(&self, _metadata: &M) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
-	fn notes(&self, _cause: Option<&Location<F>>) -> Vec<String> {
+	fn notes(&self, _metadata: &M) -> Vec<String> {
 		Vec::new()
 	}
 
-	fn diagnostic(
-		&self,
-		cause: Option<&Location<F>>,
-	) -> codespan_reporting::diagnostic::Diagnostic<F> {
+	fn diagnostic(&self, metadata: &M) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		codespan_reporting::diagnostic::Diagnostic::error()
-			.with_message(self.message(cause))
-			.with_labels(self.labels(cause))
-			.with_notes(self.notes(cause))
+			.with_message(self.message(metadata))
+			.with_labels(self.labels(metadata))
+			.with_notes(self.notes(metadata))
 	}
 }
 
 /// Error with diagnostic reporting support.
-pub trait DiagnoseWithCauseAndVocabulary<F> {
-	fn message(&self, cause: Option<&Location<F>>, vocabulary: &Vocabulary) -> String;
+pub trait DiagnoseWithMetadataAndVocabulary<M: MaybeLocated> {
+	fn message(&self, metadata: &M, vocabulary: &Vocabulary) -> String;
 
 	fn labels(
 		&self,
-		_cause: Option<&Location<F>>,
+		_metadata: &M,
 		_vocabulary: &Vocabulary,
-	) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
-	fn notes(&self, _cause: Option<&Location<F>>, _vocabulary: &Vocabulary) -> Vec<String> {
+	fn notes(&self, _metadata: &M, _vocabulary: &Vocabulary) -> Vec<String> {
 		Vec::new()
 	}
 
 	fn diagnostic(
 		&self,
-		cause: Option<&Location<F>>,
+		metadata: &M,
 		vocabulary: &Vocabulary,
-	) -> codespan_reporting::diagnostic::Diagnostic<F> {
+	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		codespan_reporting::diagnostic::Diagnostic::error()
-			.with_message(self.message(cause, vocabulary))
-			.with_labels(self.labels(cause, vocabulary))
-			.with_notes(self.notes(cause, vocabulary))
+			.with_message(self.message(metadata, vocabulary))
+			.with_labels(self.labels(metadata, vocabulary))
+			.with_notes(self.notes(metadata, vocabulary))
+	}
+}
+
+impl<M: MaybeLocated, T: DiagnoseWithMetadataAndVocabulary<M>> DiagnoseWithMetadataAndVocabulary<M>
+	for Box<T>
+{
+	fn message(&self, metadata: &M, vocabulary: &Vocabulary) -> String {
+		T::message(self, metadata, vocabulary)
+	}
+
+	fn labels(
+		&self,
+		metadata: &M,
+		vocabulary: &Vocabulary,
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+		T::labels(self, metadata, vocabulary)
+	}
+
+	fn notes(&self, metadata: &M, vocabulary: &Vocabulary) -> Vec<String> {
+		T::notes(self, metadata, vocabulary)
+	}
+
+	fn diagnostic(
+		&self,
+		metadata: &M,
+		vocabulary: &Vocabulary,
+	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
+		T::diagnostic(self, metadata, vocabulary)
 	}
 }
 
 /// Error with diagnostic reporting support.
-pub trait DiagnoseWithVocabulary<F> {
+pub trait DiagnoseWithVocabulary<M: MaybeLocated> {
 	fn message(&self, vocabulary: &Vocabulary) -> String;
 
-	fn labels(&self, _vocabulary: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn labels(
+		&self,
+		_vocabulary: &Vocabulary,
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
@@ -87,7 +112,10 @@ pub trait DiagnoseWithVocabulary<F> {
 		Vec::new()
 	}
 
-	fn diagnostic(&self, vocabulary: &Vocabulary) -> codespan_reporting::diagnostic::Diagnostic<F> {
+	fn diagnostic(
+		&self,
+		vocabulary: &Vocabulary,
+	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message(vocabulary))
 			.with_labels(self.labels(vocabulary))
@@ -95,12 +123,32 @@ pub trait DiagnoseWithVocabulary<F> {
 	}
 }
 
-impl<'t, 'v, F, T: DiagnoseWithVocabulary<F>> Diagnose<F> for vocab::WithVocabulary<'t, 'v, T> {
+impl<M: MaybeLocated, T: DiagnoseWithMetadata<M>> DiagnoseWithMetadata<M> for Box<T> {
+	fn message(&self, metadata: &M) -> String {
+		T::message(self, metadata)
+	}
+
+	fn labels(&self, metadata: &M) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+		T::labels(self, metadata)
+	}
+
+	fn notes(&self, metadata: &M) -> Vec<String> {
+		T::notes(self, metadata)
+	}
+
+	fn diagnostic(&self, metadata: &M) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
+		T::diagnostic(self, metadata)
+	}
+}
+
+impl<'t, 'v, M: MaybeLocated, T: DiagnoseWithVocabulary<M>> Diagnose<M>
+	for vocab::WithVocabulary<'t, 'v, T>
+{
 	fn message(&self) -> String {
 		self.value().message(self.vocabulary())
 	}
 
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		self.value().labels(self.vocabulary())
 	}
 
@@ -108,79 +156,51 @@ impl<'t, 'v, F, T: DiagnoseWithVocabulary<F>> Diagnose<F> for vocab::WithVocabul
 		self.value().notes(self.vocabulary())
 	}
 
-	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<F> {
+	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		self.value().diagnostic(self.vocabulary())
 	}
 }
 
-impl<F, T: DiagnoseWithCause<F>> Diagnose<F> for crate::Caused<T, F> {
+impl<M: MaybeLocated, T: DiagnoseWithMetadata<M>> Diagnose<M> for Meta<T, M> {
 	fn message(&self) -> String {
-		self.inner().message(self.cause())
+		self.value().message(self.metadata())
 	}
 
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
-		self.inner().labels(self.cause())
+	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+		self.value().labels(self.metadata())
 	}
 
 	fn notes(&self) -> Vec<String> {
-		self.inner().notes(self.cause())
+		self.value().notes(self.metadata())
 	}
 
-	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<F> {
-		self.inner().diagnostic(self.cause())
+	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
+		self.value().diagnostic(self.metadata())
 	}
 }
 
-impl<F, T: DiagnoseWithCauseAndVocabulary<F>> DiagnoseWithVocabulary<F> for crate::Caused<T, F> {
+impl<M: MaybeLocated, T: DiagnoseWithMetadataAndVocabulary<M>> DiagnoseWithVocabulary<M>
+	for Meta<T, M>
+{
 	fn message(&self, vocabulary: &Vocabulary) -> String {
-		self.inner().message(self.cause(), vocabulary)
+		self.value().message(self.metadata(), vocabulary)
 	}
 
-	fn labels(&self, vocabulary: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
-		self.inner().labels(self.cause(), vocabulary)
+	fn labels(
+		&self,
+		vocabulary: &Vocabulary,
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+		self.value().labels(self.metadata(), vocabulary)
 	}
 
 	fn notes(&self, vocabulary: &Vocabulary) -> Vec<String> {
-		self.inner().notes(self.cause(), vocabulary)
+		self.value().notes(self.metadata(), vocabulary)
 	}
 
-	fn diagnostic(&self, vocabulary: &Vocabulary) -> codespan_reporting::diagnostic::Diagnostic<F> {
-		self.inner().diagnostic(self.cause(), vocabulary)
-	}
-}
-
-impl<F, T: DiagnoseWithCause<F>> Diagnose<F> for Loc<T, F> {
-	fn message(&self) -> String {
-		self.value().message(Some(self.location()))
-	}
-
-	fn labels(&self) -> Vec<codespan_reporting::diagnostic::Label<F>> {
-		self.value().labels(Some(self.location()))
-	}
-
-	fn notes(&self) -> Vec<String> {
-		self.value().notes(Some(self.location()))
-	}
-
-	fn diagnostic(&self) -> codespan_reporting::diagnostic::Diagnostic<F> {
-		self.value().diagnostic(Some(self.location()))
-	}
-}
-
-impl<F, T: DiagnoseWithCauseAndVocabulary<F>> DiagnoseWithVocabulary<F> for Loc<T, F> {
-	fn message(&self, vocabulary: &Vocabulary) -> String {
-		self.value().message(Some(self.location()), vocabulary)
-	}
-
-	fn labels(&self, vocabulary: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
-		self.value().labels(Some(self.location()), vocabulary)
-	}
-
-	fn notes(&self, vocabulary: &Vocabulary) -> Vec<String> {
-		self.value().notes(Some(self.location()), vocabulary)
-	}
-
-	fn diagnostic(&self, vocabulary: &Vocabulary) -> codespan_reporting::diagnostic::Diagnostic<F> {
-		self.value().diagnostic(Some(self.location()), vocabulary)
+	fn diagnostic(
+		&self,
+		vocabulary: &Vocabulary,
+	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
+		self.value().diagnostic(self.metadata(), vocabulary)
 	}
 }

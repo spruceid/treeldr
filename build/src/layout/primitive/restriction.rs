@@ -1,8 +1,9 @@
 use crate::{error, Error};
 use std::collections::BTreeMap;
+use treeldr::metadata::Merge;
 pub use treeldr::{
 	layout::{primitive::restricted, primitive::RegExp, Primitive},
-	value, Causes, Id, MaybeSet,
+	value, Id, MetaOption,
 };
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -27,11 +28,11 @@ pub enum String {
 }
 
 #[derive(Clone, Debug)]
-pub struct Restrictions<F> {
-	map: BTreeMap<Restriction, Causes<F>>,
+pub struct Restrictions<M> {
+	map: BTreeMap<Restriction, M>,
 }
 
-impl<F> Default for Restrictions<F> {
+impl<M> Default for Restrictions<M> {
 	fn default() -> Self {
 		Self {
 			map: BTreeMap::default(),
@@ -39,27 +40,30 @@ impl<F> Default for Restrictions<F> {
 	}
 }
 
-impl<F> PartialEq for Restrictions<F> {
+impl<M> PartialEq for Restrictions<M> {
 	fn eq(&self, other: &Self) -> bool {
 		self.map.len() == other.map.len()
 			&& self.map.keys().zip(other.map.keys()).all(|(a, b)| a == b)
 	}
 }
 
-impl<F> Eq for Restrictions<F> {}
+impl<M> Eq for Restrictions<M> {}
 
-impl<F> Restrictions<F> {
+impl<M> Restrictions<M> {
 	pub fn is_included_in(&self, other: &Self) -> bool {
 		self.map.keys().all(|r| other.map.contains_key(r))
 	}
 }
 
-impl<F: Ord> Restrictions<F> {
-	pub fn insert(&mut self, restriction: Restriction, causes: impl Into<Causes<F>>) {
-		self.map
-			.entry(restriction)
-			.or_insert_with(Causes::new)
-			.extend(causes.into())
+impl<M: Merge> Restrictions<M> {
+	pub fn insert(&mut self, restriction: Restriction, metadata: M) {
+		use std::collections::btree_map::Entry;
+		match self.map.entry(restriction) {
+			Entry::Vacant(entry) => {
+				entry.insert(metadata);
+			}
+			Entry::Occupied(mut entry) => entry.get_mut().merge_with(metadata),
+		}
 	}
 
 	pub fn unify(&mut self, other: Self) {
@@ -69,8 +73,8 @@ impl<F: Ord> Restrictions<F> {
 	}
 }
 
-impl<F: Clone> Restrictions<F> {
-	pub fn build_boolean(self, id: Id) -> Result<(), Error<F>> {
+impl<M: Clone> Restrictions<M> {
+	pub fn build_boolean(self, id: Id) -> Result<(), Error<M>> {
 		match self.map.into_iter().next() {
 			Some((restriction, causes)) => Err(Error::new(
 				error::LayoutDatatypeRestrictionInvalid {
@@ -79,13 +83,13 @@ impl<F: Clone> Restrictions<F> {
 					restriction,
 				}
 				.into(),
-				causes.preferred().cloned(),
+				causes,
 			)),
 			None => Ok(()),
 		}
 	}
 
-	pub fn build_integer(self, id: Id) -> Result<restricted::integer::Restrictions, Error<F>> {
+	pub fn build_integer(self, id: Id) -> Result<restricted::integer::Restrictions, Error<M>> {
 		let mut r = restricted::integer::Restrictions::default();
 
 		for (restriction, causes) in self.map {
@@ -128,7 +132,7 @@ impl<F: Clone> Restrictions<F> {
 							restriction: other,
 						}
 						.into(),
-						causes.preferred().cloned(),
+						causes,
 					))
 				}
 			}
@@ -140,7 +144,7 @@ impl<F: Clone> Restrictions<F> {
 	pub fn build_unsigned_integer(
 		self,
 		id: Id,
-	) -> Result<restricted::unsigned::Restrictions, Error<F>> {
+	) -> Result<restricted::unsigned::Restrictions, Error<M>> {
 		let mut r = restricted::unsigned::Restrictions::default();
 
 		for (restriction, causes) in self.map {
@@ -183,7 +187,7 @@ impl<F: Clone> Restrictions<F> {
 							restriction: other,
 						}
 						.into(),
-						causes.preferred().cloned(),
+						causes,
 					))
 				}
 			}
@@ -192,7 +196,7 @@ impl<F: Clone> Restrictions<F> {
 		Ok(r)
 	}
 
-	pub fn build_float(self, id: Id) -> Result<restricted::float::Restrictions, Error<F>> {
+	pub fn build_float(self, id: Id) -> Result<restricted::float::Restrictions, Error<M>> {
 		use restricted::float::{Max, Min};
 		let mut r = restricted::float::Restrictions::default();
 
@@ -224,7 +228,7 @@ impl<F: Clone> Restrictions<F> {
 							restriction: other,
 						}
 						.into(),
-						causes.preferred().cloned(),
+						causes,
 					))
 				}
 			}
@@ -233,7 +237,7 @@ impl<F: Clone> Restrictions<F> {
 		Ok(r)
 	}
 
-	pub fn build_double(self, id: Id) -> Result<restricted::double::Restrictions, Error<F>> {
+	pub fn build_double(self, id: Id) -> Result<restricted::double::Restrictions, Error<M>> {
 		use restricted::double::{Max, Min};
 		let mut r = restricted::double::Restrictions::default();
 
@@ -265,7 +269,7 @@ impl<F: Clone> Restrictions<F> {
 							restriction: other,
 						}
 						.into(),
-						causes.preferred().cloned(),
+						causes,
 					))
 				}
 			}
@@ -274,7 +278,7 @@ impl<F: Clone> Restrictions<F> {
 		Ok(r)
 	}
 
-	pub fn build_string(self, id: Id) -> Result<restricted::string::Restrictions, Error<F>> {
+	pub fn build_string(self, id: Id) -> Result<restricted::string::Restrictions, Error<M>> {
 		let mut p = restricted::string::Restrictions::default();
 
 		for (restriction, causes) in self.map.into_iter() {
@@ -290,7 +294,7 @@ impl<F: Clone> Restrictions<F> {
 							restriction: other,
 						}
 						.into(),
-						causes.preferred().cloned(),
+						causes,
 					))
 				}
 			}
@@ -299,7 +303,7 @@ impl<F: Clone> Restrictions<F> {
 		Ok(p)
 	}
 
-	pub fn build_time(self, id: Id) -> Result<(), Error<F>> {
+	pub fn build_time(self, id: Id) -> Result<(), Error<M>> {
 		match self.map.into_iter().next() {
 			Some((restriction, causes)) => Err(Error::new(
 				error::LayoutDatatypeRestrictionInvalid {
@@ -308,13 +312,13 @@ impl<F: Clone> Restrictions<F> {
 					restriction,
 				}
 				.into(),
-				causes.preferred().cloned(),
+				causes,
 			)),
 			None => Ok(()),
 		}
 	}
 
-	pub fn build_date(self, id: Id) -> Result<(), Error<F>> {
+	pub fn build_date(self, id: Id) -> Result<(), Error<M>> {
 		match self.map.into_iter().next() {
 			Some((restriction, causes)) => Err(Error::new(
 				error::LayoutDatatypeRestrictionInvalid {
@@ -323,13 +327,13 @@ impl<F: Clone> Restrictions<F> {
 					restriction,
 				}
 				.into(),
-				causes.preferred().cloned(),
+				causes,
 			)),
 			None => Ok(()),
 		}
 	}
 
-	pub fn build_date_time(self, id: Id) -> Result<(), Error<F>> {
+	pub fn build_date_time(self, id: Id) -> Result<(), Error<M>> {
 		match self.map.into_iter().next() {
 			Some((restriction, causes)) => Err(Error::new(
 				error::LayoutDatatypeRestrictionInvalid {
@@ -338,13 +342,13 @@ impl<F: Clone> Restrictions<F> {
 					restriction,
 				}
 				.into(),
-				causes.preferred().cloned(),
+				causes,
 			)),
 			None => Ok(()),
 		}
 	}
 
-	pub fn build_iri(self, id: Id) -> Result<(), Error<F>> {
+	pub fn build_iri(self, id: Id) -> Result<(), Error<M>> {
 		match self.map.into_iter().next() {
 			Some((restriction, causes)) => Err(Error::new(
 				error::LayoutDatatypeRestrictionInvalid {
@@ -353,13 +357,13 @@ impl<F: Clone> Restrictions<F> {
 					restriction,
 				}
 				.into(),
-				causes.preferred().cloned(),
+				causes,
 			)),
 			None => Ok(()),
 		}
 	}
 
-	pub fn build_uri(self, id: Id) -> Result<(), Error<F>> {
+	pub fn build_uri(self, id: Id) -> Result<(), Error<M>> {
 		match self.map.into_iter().next() {
 			Some((restriction, causes)) => Err(Error::new(
 				error::LayoutDatatypeRestrictionInvalid {
@@ -368,13 +372,13 @@ impl<F: Clone> Restrictions<F> {
 					restriction,
 				}
 				.into(),
-				causes.preferred().cloned(),
+				causes,
 			)),
 			None => Ok(()),
 		}
 	}
 
-	pub fn build_url(self, id: Id) -> Result<(), Error<F>> {
+	pub fn build_url(self, id: Id) -> Result<(), Error<M>> {
 		match self.map.into_iter().next() {
 			Some((restriction, causes)) => Err(Error::new(
 				error::LayoutDatatypeRestrictionInvalid {
@@ -383,7 +387,7 @@ impl<F: Clone> Restrictions<F> {
 					restriction,
 				}
 				.into(),
-				causes.preferred().cloned(),
+				causes,
 			)),
 			None => Ok(()),
 		}

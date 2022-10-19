@@ -41,7 +41,9 @@ pub fn generate<F>(
 	}
 
 	let layout = model.layouts().get(layout_ref).unwrap();
-	let name = layout.name().ok_or(Error::NoLayoutName(layout_ref))?;
+	let name = layout
+		.name()
+		.ok_or_else(|| Error::NoLayoutName(layout_ref))?;
 
 	let mut json_schema = generate_layout(
 		vocabulary,
@@ -72,7 +74,7 @@ pub fn generate<F>(
 				.get(layout_ref)
 				.unwrap()
 				.name()
-				.ok_or(Error::NoLayoutName(layout_ref))?
+				.ok_or_else(|| Error::NoLayoutName(layout_ref))?
 				.to_string();
 
 			let json_schema = generate_layout(
@@ -157,7 +159,7 @@ fn generate_layout_schema<F>(
 	layout: &layout::Definition<F>,
 ) -> Result<serde_json::Value, Error<F>> {
 	use treeldr::layout::Description;
-	match layout.description() {
+	match layout.description().value() {
 		Description::Never(_) => Ok(serde_json::Value::Bool(false)),
 		Description::Reference(_) => {
 			let mut json = serde_json::Map::new();
@@ -325,7 +327,7 @@ fn generate_layout_defs_ref<F>(
 				.get(layout_ref)
 				.unwrap()
 				.name()
-				.ok_or(Error::NoLayoutName(layout_ref))?
+				.ok_or_else(|| Error::NoLayoutName(layout_ref))?
 		)
 		.into(),
 	);
@@ -343,7 +345,7 @@ fn generate_layout_ref<F>(
 	let layout = model.layouts().get(layout_ref).unwrap();
 
 	use treeldr::layout::Description;
-	match layout.description() {
+	match layout.description().value() {
 		Description::Never(_) => Ok(serde_json::Value::Bool(false)),
 		Description::Reference(_) => {
 			let mut json = serde_json::Map::new();

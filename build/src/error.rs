@@ -1,16 +1,19 @@
-use locspan::Location;
-use treeldr::{reporting::DiagnoseWithCauseAndVocabulary, Caused, Vocabulary};
+use locspan::{MaybeLocated, Meta, Span};
+use treeldr::{reporting::DiagnoseWithMetadataAndVocabulary, Vocabulary};
 
-pub type Error<F> = Caused<Description<F>, F>;
+pub type Error<M> = Meta<Description<M>, M>;
 
-pub trait AnyError<F> {
+pub trait AnyError<M: MaybeLocated<Span = Span>> {
 	fn message(&self, vocab: &Vocabulary) -> String;
 
 	fn primary_label(&self, _vocab: &Vocabulary) -> Option<String> {
 		Some("here".to_string())
 	}
 
-	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+	fn other_labels(
+		&self,
+		_vocab: &Vocabulary,
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
@@ -27,38 +30,38 @@ macro_rules! errors {
 		)*
 
 		#[derive(Debug)]
-		pub enum Description<F> {
+		pub enum Description<M> {
 			$(
 				$id( $id $(<$($arg),+>)? )
 			),*
 		}
 
 		$(
-			impl<F> From<$id $(<$($arg),+>)?> for Description<F> {
+			impl<M> From<$id $(<$($arg),+>)?> for Description<M> {
 				fn from(e: $id $(<$($arg),+>)?) -> Self {
 					Self::$id(e)
 				}
 			}
 		)*
 
-		impl<F: Clone> DiagnoseWithCauseAndVocabulary<F> for Description<F> {
-			fn message(&self, _cause: Option<&Location<F>>, vocabulary: &Vocabulary) -> String {
+		impl<M: MaybeLocated<Span=Span>> DiagnoseWithMetadataAndVocabulary<M> for Description<M> where M::File: Clone {
+			fn message(&self, _cause: &M, vocabulary: &Vocabulary) -> String {
 				match self {
 					$(
-						Self::$id(e) => AnyError::<F>::message(e, vocabulary)
+						Self::$id(e) => AnyError::<M>::message(e, vocabulary)
 					),*
 				}
 			}
 
-			fn labels(&self, cause: Option<&Location<F>>, vocabulary: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<F>> {
+			fn labels(&self, metadata: &M, vocabulary: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 				match self {
 					$(
 						Self::$id(e) => {
-							let mut labels = e.other_labels(vocabulary);
+							let mut labels = AnyError::<M>::other_labels(e, vocabulary);
 
-							if let Some(cause) = cause {
-								let label = cause.clone().into_primary_label();
-								let label = match AnyError::<F>::primary_label(e, vocabulary) {
+							if let Some(loc) = metadata.optional_location().cloned() {
+								let label = loc.into_primary_label();
+								let label = match AnyError::<M>::primary_label(e, vocabulary) {
 									Some(msg) => label.with_message(msg),
 									None => label
 								};
@@ -72,10 +75,10 @@ macro_rules! errors {
 				}
 			}
 
-			fn notes(&self, _cause: Option<&Location<F>>, vocabulary: &Vocabulary) -> Vec<String> {
+			fn notes(&self, _cause: &M, vocabulary: &Vocabulary) -> Vec<String> {
 				match self {
 					$(
-						Self::$id(e) => AnyError::<F>::notes(e, vocabulary)
+						Self::$id(e) => AnyError::<M>::notes(e, vocabulary)
 					),*
 				}
 			}
@@ -86,37 +89,37 @@ macro_rules! errors {
 errors! {
 	unimplemented_feature::UnimplementedFeature,
 	node_unknown::NodeUnknown,
-	node_invalid_type::NodeInvalidType<F>,
-	type_mismatch_kind::TypeMismatchKind<F>,
-	type_mismatch_union::TypeMismatchUnion<F>,
-	type_mismatch_intersection::TypeMismatchIntersection<F>,
-	property_mismatch_functional::PropertyMismatchFunctional<F>,
-	property_mismatch_required::PropertyMismatchRequired<F>,
-	property_mismatch_type::PropertyMismatchType<F>,
+	node_invalid_type::NodeInvalidType<M>,
+	type_mismatch_kind::TypeMismatchKind<M>,
+	type_mismatch_union::TypeMismatchUnion<M>,
+	type_mismatch_intersection::TypeMismatchIntersection<M>,
+	property_mismatch_functional::PropertyMismatchFunctional<M>,
+	property_mismatch_required::PropertyMismatchRequired<M>,
+	property_mismatch_type::PropertyMismatchType<M>,
 	property_missing_type::PropertyMissingType,
-	layout_mismatch_primitive::LayoutMismatchPrimitive<F>,
-	layout_mismatch_description::LayoutMismatchDescription<F>,
-	layout_mismatch_name::LayoutMismatchName<F>,
-	layout_mismatch_type::LayoutMismatchType<F>,
+	layout_mismatch_primitive::LayoutMismatchPrimitive<M>,
+	layout_mismatch_description::LayoutMismatchDescription<M>,
+	layout_mismatch_name::LayoutMismatchName<M>,
+	layout_mismatch_type::LayoutMismatchType<M>,
 	layout_missing_name::LayoutMissingName,
 	layout_missing_description::LayoutMissingDescription,
 	layout_missing_datatype_primitive::LayoutMissingDatatypePrimitive,
 	layout_intersection_failed::LayoutIntersectionFailed,
-	layout_field_mismatch_functional::LayoutFieldMismatchFunctional<F>,
-	layout_field_mismatch_layout::LayoutFieldMismatchLayout<F>,
-	layout_field_mismatch_name::LayoutFieldMismatchName<F>,
-	layout_field_mismatch_property::LayoutFieldMismatchProperty<F>,
-	layout_field_mismatch_required::LayoutFieldMismatchRequired<F>,
+	layout_field_mismatch_functional::LayoutFieldMismatchFunctional<M>,
+	layout_field_mismatch_layout::LayoutFieldMismatchLayout<M>,
+	layout_field_mismatch_name::LayoutFieldMismatchName<M>,
+	layout_field_mismatch_property::LayoutFieldMismatchProperty<M>,
+	layout_field_mismatch_required::LayoutFieldMismatchRequired<M>,
 	layout_field_missing_layout::LayoutFieldMissingLayout,
 	layout_field_missing_name::LayoutFieldMissingName,
 	layout_infinite_size::LayoutInfiniteSize,
 	layout_variant_missing_name::LayoutVariantMissingName,
 	layout_datatype_restriction_invalid::LayoutDatatypeRestrictionInvalid,
-	list_mismatch_item::ListMismatchItem<F>,
-	list_mismatch_rest::ListMismatchRest<F>,
+	list_mismatch_item::ListMismatchItem<M>,
+	list_mismatch_rest::ListMismatchRest<M>,
 	list_missing_item::ListMissingItem,
 	list_missing_rest::ListMissingRest,
 	regexp_invalid::RegExpInvalid,
 	name_invalid::NameInvalid,
-	literal_unexpected::LiteralUnexpected<F>
+	literal_unexpected::LiteralUnexpected<M>
 }

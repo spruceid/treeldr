@@ -1,7 +1,7 @@
 use crate::{context, Error};
-use locspan::Location;
+use locspan::Meta;
 use std::collections::BTreeMap;
-use treeldr::{Causes, Id, WithCauses};
+use treeldr::{metadata::Merge, Id};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RangeRestriction {
@@ -18,14 +18,14 @@ pub enum PropertyRestriction {
 }
 
 #[derive(Clone)]
-pub struct Restriction<F> {
-	property: WithCauses<Id, F>,
-	restrictions: BTreeMap<PropertyRestriction, Causes<F>>,
+pub struct Restriction<M> {
+	property: Meta<Id, M>,
+	restrictions: BTreeMap<PropertyRestriction, M>,
 }
 
-impl<F> PartialEq for Restriction<F> {
+impl<M> PartialEq for Restriction<M> {
 	fn eq(&self, other: &Self) -> bool {
-		self.property.inner() == other.property.inner()
+		*self.property == *other.property
 			&& self.restrictions.len() == other.restrictions.len()
 			&& self
 				.restrictions
@@ -35,40 +35,36 @@ impl<F> PartialEq for Restriction<F> {
 	}
 }
 
-impl<F> Restriction<F> {
-	pub fn new(property: WithCauses<Id, F>) -> Self {
+impl<M> Restriction<M> {
+	pub fn new(property: Meta<Id, M>) -> Self {
 		Self {
 			property,
 			restrictions: BTreeMap::new(),
 		}
 	}
 
-	pub fn add_restriction(&mut self, r: PropertyRestriction, cause: Option<Location<F>>)
+	pub fn add_restriction(&mut self, r: PropertyRestriction, metadata: M)
 	where
-		F: Ord,
+		M: Merge,
 	{
 		use std::collections::btree_map::Entry;
 		match self.restrictions.entry(r) {
 			Entry::Vacant(entry) => {
-				entry.insert(cause.into());
+				entry.insert(metadata);
 			}
-			Entry::Occupied(mut entry) => {
-				if let Some(cause) = cause {
-					entry.get_mut().add(cause)
-				}
-			}
+			Entry::Occupied(mut entry) => entry.get_mut().merge_with(metadata),
 		}
 	}
 
 	pub fn build(
 		self,
-		nodes: &context::allocated::Nodes<F>,
-	) -> Result<treeldr::ty::Description<F>, Error<F>>
+		nodes: &context::allocated::Nodes<M>,
+	) -> Result<treeldr::ty::Description<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
-		let (prop_id, prop_causes) = self.property.into_parts();
-		let prop_ref = nodes.require_property(prop_id, prop_causes.preferred().cloned())?;
+		let Meta(prop_id, prop_causes) = self.property;
+		let prop_ref = nodes.require_property(prop_id, &prop_causes)?;
 
 		let mut restrictions = treeldr::prop::Restrictions::new();
 		for (restriction, restriction_causes) in self.restrictions {
@@ -80,19 +76,19 @@ impl<F> Restriction<F> {
 		}
 
 		let result =
-			treeldr::ty::Restriction::new(WithCauses::new(**prop_ref, prop_causes), restrictions);
+			treeldr::ty::Restriction::new(Meta::new(**prop_ref, prop_causes), restrictions);
 		Ok(treeldr::ty::Description::Restriction(result))
 	}
 }
 
 impl PropertyRestriction {
-	pub fn build<F>(
+	pub fn build<M>(
 		self,
-		nodes: &context::allocated::Nodes<F>,
-		causes: &Causes<F>,
-	) -> Result<treeldr::prop::Restriction<F>, Error<F>>
+		nodes: &context::allocated::Nodes<M>,
+		causes: &M,
+	) -> Result<treeldr::prop::Restriction<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
 		match self {
 			Self::Range(r) => Ok(treeldr::prop::Restriction::Range(r.build(nodes, causes)?)),
@@ -102,21 +98,21 @@ impl PropertyRestriction {
 }
 
 impl RangeRestriction {
-	pub fn build<F>(
+	pub fn build<M>(
 		self,
-		nodes: &context::allocated::Nodes<F>,
-		causes: &Causes<F>,
-	) -> Result<treeldr::prop::restriction::Range<F>, Error<F>>
+		nodes: &context::allocated::Nodes<M>,
+		causes: &M,
+	) -> Result<treeldr::prop::restriction::Range<M>, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 	{
 		match self {
 			Self::Any(id) => {
-				let ty_ref = nodes.require_type(id, causes.preferred().cloned())?;
+				let ty_ref = nodes.require_type(id, causes)?;
 				Ok(treeldr::prop::restriction::Range::Any(**ty_ref))
 			}
 			Self::All(id) => {
-				let ty_ref = nodes.require_type(id, causes.preferred().cloned())?;
+				let ty_ref = nodes.require_type(id, causes)?;
 				Ok(treeldr::prop::restriction::Range::All(**ty_ref))
 			}
 		}

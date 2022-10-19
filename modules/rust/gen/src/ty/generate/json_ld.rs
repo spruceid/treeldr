@@ -11,9 +11,9 @@ pub enum Error {
 }
 
 /// Creates a JSON-LD node object from a structure.
-pub fn structure_builder<F>(
-	context: &Context<F>,
-	ty: &Struct<F>,
+pub fn structure_builder<M>(
+	context: &Context<M>,
+	ty: &Struct<M>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	let mut insert_field = Vec::new();
@@ -25,7 +25,7 @@ pub fn structure_builder<F>(
 		let layout_ref = field.layout();
 		let layout = context.model().layouts().get(layout_ref).unwrap();
 
-		insert_field.push(match layout.description() {
+		insert_field.push(match layout.description().value() {
 			treeldr::layout::Description::Required(_) => {
 				quote! {
 					result.insert(
@@ -74,9 +74,9 @@ pub fn structure_builder<F>(
 }
 
 /// Creates a JSON-LD node object from an enumeration.
-pub fn enum_builder<F>(
-	_context: &Context<F>,
-	_ty: &Enum<F>,
+pub fn enum_builder<M>(
+	_context: &Context<M>,
+	_ty: &Enum<M>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	Ok(quote! {

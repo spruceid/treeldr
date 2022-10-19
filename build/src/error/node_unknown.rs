@@ -1,4 +1,5 @@
 use treeldr::{Id, node, Vocabulary, vocab::Display};
+use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
 pub struct NodeUnknown {
@@ -6,7 +7,7 @@ pub struct NodeUnknown {
 	pub expected_ty: Option<node::Type>
 }
 
-impl<F> super::AnyError<F> for NodeUnknown {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeUnknown {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("unknown node {}", self.id.display(vocab))
 	}

@@ -3,33 +3,33 @@ use crate::{
 	Simplify, SubLayout,
 };
 use derivative::Derivative;
-use locspan::Location;
+use locspan::Meta;
 use shelves::Shelf;
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{vocab, Caused, Id, Model, Vocabulary, WithCauses};
+use treeldr::{metadata::Merge, vocab, Id, Model, Vocabulary};
 
 pub mod allocated;
 
 /// TreeLDR build context.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct Context<F, D: Descriptions<F> = crate::StandardDescriptions> {
+pub struct Context<M, D: Descriptions<M> = crate::StandardDescriptions> {
 	/// Nodes.
-	nodes: BTreeMap<Id, Node<node::Components<F, D>>>,
+	nodes: BTreeMap<Id, Node<node::Components<M, D>>>,
 
-	layout_relations: HashMap<Id, LayoutRelations<F>>,
+	layout_relations: HashMap<Id, LayoutRelations<M>>,
 
 	standard_references: HashMap<Id, Id>,
 }
 
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
-struct LayoutRelations<F> {
-	sub: Vec<SubLayout<F>>,
-	parent: Vec<WithCauses<ParentLayout, F>>,
+struct LayoutRelations<M> {
+	sub: Vec<SubLayout<M>>,
+	parent: Vec<Meta<ParentLayout, M>>,
 }
 
-impl<F, D: Descriptions<F>> Context<F, D> {
+impl<M, D: Descriptions<M>> Context<M, D> {
 	pub fn new() -> Self {
 		Self::default()
 	}
@@ -38,53 +38,66 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		&mut self,
 		id: Id,
 		primitive_type: ty::data::Primitive,
-	) -> Result<Id, Error<F>>
+		metadata: M,
+	) -> Result<Id, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
-		self.declare_type(id, None);
+		self.declare_type(id, metadata.clone());
 		let ty = self.get_mut(id).unwrap().as_type_mut().unwrap();
-		let dt = ty.require_datatype_mut(None)?;
-		dt.set_primitive(primitive_type, None)?;
+		let dt = ty.require_datatype_mut(&metadata)?;
+		dt.set_primitive(primitive_type, metadata)?;
 		Ok(id)
 	}
 
 	pub fn define_primitive_layout(
 		&mut self,
 		primitive_layout: layout::Primitive,
-	) -> Result<Id, Error<F>>
+		metadata: M,
+	) -> Result<Id, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		let id = Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Primitive(
 			primitive_layout,
 		)));
-		self.declare_layout(id, None);
+		self.declare_layout(id, metadata.clone());
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
-		layout.set_primitive(primitive_layout.into(), None)?;
+		layout.set_primitive(Meta(primitive_layout, metadata.clone()).into(), metadata)?;
 		Ok(id)
+	}
+
+	pub fn apply_built_in_definitions_with(
+		&mut self,
+		vocabulary: &mut Vocabulary,
+		metadata: M,
+	) -> Result<(), Error<M>>
+	where
+		M: Clone + Merge,
+	{
+		self.define_rdf_types(vocabulary, metadata.clone())?;
+		self.define_xsd_types(metadata.clone())?;
+		self.define_treeldr_types(metadata)
 	}
 
 	pub fn apply_built_in_definitions(
 		&mut self,
 		vocabulary: &mut Vocabulary,
-	) -> Result<(), Error<F>>
+	) -> Result<(), Error<M>>
 	where
-		F: Clone + Ord,
+		M: Default + Clone + Merge,
 	{
-		self.define_rdf_types(vocabulary)?;
-		self.define_xsd_types()?;
-		self.define_treeldr_types()
+		self.apply_built_in_definitions_with(vocabulary, M::default())
 	}
 
 	pub fn create_option_layout(
 		&mut self,
 		vocabulary: &mut Vocabulary,
 		item_layout: Id,
-		cause: Option<Location<F>>,
-	) -> Result<Id, Error<F>>
+		cause: M,
+	) -> Result<Id, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		let id = Id::Blank(vocabulary.new_blank_label());
 		self.create_named_option_layout(id, item_layout, cause)
@@ -94,10 +107,10 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		&mut self,
 		id: Id,
 		item_layout: Id,
-		cause: Option<Location<F>>,
-	) -> Result<Id, Error<F>>
+		cause: M,
+	) -> Result<Id, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		self.declare_layout(id, cause.clone());
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
@@ -109,11 +122,11 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		&mut self,
 		vocabulary: &mut Vocabulary,
 		deref_ty: Id,
-		cause: Option<Location<F>>,
-		deref_cause: Option<Location<F>>,
-	) -> Result<Id, Error<F>>
+		cause: M,
+		deref_cause: M,
+	) -> Result<Id, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		match self.standard_references.get(&deref_ty).cloned() {
 			Some(id) => Ok(id),
@@ -129,11 +142,11 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		&mut self,
 		vocabulary: &mut Vocabulary,
 		target_ty: Id,
-		cause: Option<Location<F>>,
-		deref_cause: Option<Location<F>>,
-	) -> Result<Id, Error<F>>
+		cause: M,
+		deref_cause: M,
+	) -> Result<Id, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		let id = Id::Blank(vocabulary.new_blank_label());
 		self.create_named_reference(id, target_ty, cause, deref_cause)
@@ -143,11 +156,11 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		&mut self,
 		id: Id,
 		target_ty: Id,
-		cause: Option<Location<F>>,
-		deref_cause: Option<Location<F>>,
-	) -> Result<Id, Error<F>>
+		cause: M,
+		deref_cause: M,
+	) -> Result<Id, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		self.declare_layout(id, cause.clone());
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
@@ -161,131 +174,151 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		Ok(id)
 	}
 
-	pub fn define_rdf_types(&mut self, vocabulary: &mut Vocabulary) -> Result<(), Error<F>>
+	pub fn define_rdf_types(
+		&mut self,
+		vocabulary: &mut Vocabulary,
+		metadata: M,
+	) -> Result<(), Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		use vocab::{Rdf, Rdfs, Term};
 		// rdfs:Resource
-		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
-		self.declare_layout(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
+		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Resource)), metadata.clone());
+		self.declare_layout(Id::Iri(Term::Rdfs(Rdfs::Resource)), metadata.clone());
 		let id_field = Id::Blank(vocabulary.new_blank_label());
-		self.declare_layout_field(id_field, None);
-		let resource_ref_layout =
-			self.standard_reference(vocabulary, Id::Iri(Term::Rdfs(Rdfs::Resource)), None, None)?;
-		let field_layout = self.create_option_layout(vocabulary, resource_ref_layout, None)?;
+		self.declare_layout_field(id_field, metadata.clone());
+		let resource_ref_layout = self.standard_reference(
+			vocabulary,
+			Id::Iri(Term::Rdfs(Rdfs::Resource)),
+			metadata.clone(),
+			metadata.clone(),
+		)?;
+		let field_layout =
+			self.create_option_layout(vocabulary, resource_ref_layout, metadata.clone())?;
 		let field = self
 			.get_mut(id_field)
 			.unwrap()
 			.as_layout_field_mut()
 			.unwrap();
-		field.set_property(Id::Iri(Term::TreeLdr(vocab::TreeLdr::Self_)), None)?;
-		field.set_name(treeldr::Name::new("id").unwrap(), None)?;
-		field.set_layout(field_layout, None)?;
-		let fields_id = self.create_list(vocabulary, [Caused::new(id_field.into_term(), None)])?;
+		field.set_property(
+			Id::Iri(Term::TreeLdr(vocab::TreeLdr::Self_)),
+			metadata.clone(),
+		)?;
+		field.set_name(treeldr::Name::new("id").unwrap(), metadata.clone())?;
+		field.set_layout(field_layout, metadata.clone())?;
+		let fields_id =
+			self.create_list(vocabulary, [Meta(id_field.into_term(), metadata.clone())])?;
 		let layout = self
 			.get_mut(Id::Iri(Term::Rdfs(Rdfs::Resource)))
 			.unwrap()
 			.as_layout_mut()
 			.unwrap();
-		layout.set_fields(fields_id, None)?;
+		layout.set_fields(fields_id, metadata.clone())?;
 
 		// rdfs:Class
-		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Class)), None);
+		self.declare_type(Id::Iri(Term::Rdfs(Rdfs::Class)), metadata.clone());
 
 		// rdf:Property
-		self.declare_type(Id::Iri(Term::Rdf(Rdf::Property)), None);
+		self.declare_type(Id::Iri(Term::Rdf(Rdf::Property)), metadata.clone());
 
 		// rdf:type
-		self.declare_property(Id::Iri(Term::Rdf(Rdf::Type)), None);
+		self.declare_property(Id::Iri(Term::Rdf(Rdf::Type)), metadata.clone());
 		let prop = self
 			.get_mut(Id::Iri(Term::Rdf(Rdf::Type)))
 			.unwrap()
 			.as_property_mut()
 			.unwrap();
-		prop.set_domain(Id::Iri(Term::Rdfs(Rdfs::Resource)), None);
-		prop.set_range(Id::Iri(Term::Rdfs(Rdfs::Class)), None)?;
+		prop.set_domain(Id::Iri(Term::Rdfs(Rdfs::Resource)), metadata.clone());
+		prop.set_range(Id::Iri(Term::Rdfs(Rdfs::Class)), metadata.clone())?;
 
 		// rdf:List
-		self.declare_type(Id::Iri(Term::Rdf(Rdf::List)), None);
+		self.declare_type(Id::Iri(Term::Rdf(Rdf::List)), metadata.clone());
 		let list = self
 			.get_mut(Id::Iri(Term::Rdf(Rdf::List)))
 			.unwrap()
 			.as_type_mut()
 			.unwrap();
-		list.declare_property(Id::Iri(Term::Rdf(Rdf::First)), None)?;
-		list.declare_property(Id::Iri(Term::Rdf(Rdf::Rest)), None)?;
+		list.declare_property(Id::Iri(Term::Rdf(Rdf::First)), metadata.clone())?;
+		list.declare_property(Id::Iri(Term::Rdf(Rdf::Rest)), metadata.clone())?;
 
 		// rdf:first
-		self.declare_property(Id::Iri(Term::Rdf(Rdf::First)), None);
+		self.declare_property(Id::Iri(Term::Rdf(Rdf::First)), metadata.clone());
 		let prop = self
 			.get_mut(Id::Iri(Term::Rdf(Rdf::First)))
 			.unwrap()
 			.as_property_mut()
 			.unwrap();
-		prop.set_domain(Id::Iri(Term::Rdf(Rdf::List)), None);
-		prop.set_range(Id::Iri(Term::Rdfs(Rdfs::Resource)), None)?;
+		prop.set_domain(Id::Iri(Term::Rdf(Rdf::List)), metadata.clone());
+		prop.set_range(Id::Iri(Term::Rdfs(Rdfs::Resource)), metadata.clone())?;
 
 		// rdf:rest
-		self.declare_property(Id::Iri(Term::Rdf(Rdf::Rest)), None);
+		self.declare_property(Id::Iri(Term::Rdf(Rdf::Rest)), metadata.clone());
 		let prop = self
 			.get_mut(Id::Iri(Term::Rdf(Rdf::Rest)))
 			.unwrap()
 			.as_property_mut()
 			.unwrap();
-		prop.set_domain(Id::Iri(Term::Rdf(Rdf::List)), None);
-		prop.set_range(Id::Iri(Term::Rdf(Rdf::List)), None)
+		prop.set_domain(Id::Iri(Term::Rdf(Rdf::List)), metadata.clone());
+		prop.set_range(Id::Iri(Term::Rdf(Rdf::List)), metadata)
 	}
 
-	pub fn define_xsd_types(&mut self) -> Result<(), Error<F>>
+	pub fn define_xsd_types(&mut self, metadata: M) -> Result<(), Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		use vocab::{Term, Xsd};
 		self.define_primitive_datatype(
 			Id::Iri(Term::Xsd(Xsd::String)),
 			ty::data::Primitive::String,
+			metadata,
 		)?;
 		Ok(())
 	}
 
-	pub fn define_treeldr_types(&mut self) -> Result<(), Error<F>>
+	pub fn define_treeldr_types(&mut self, metadata: M) -> Result<(), Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		use layout::Primitive;
 
-		self.declare_property(Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)), None);
+		self.declare_property(
+			Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)),
+			metadata.clone(),
+		);
 		let prop = self
 			.get_mut(Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)))
 			.unwrap()
 			.as_property_mut()
 			.unwrap();
-		prop.set_range(Id::Iri(vocab::Term::Rdfs(vocab::Rdfs::Resource)), None)?;
+		prop.set_range(
+			Id::Iri(vocab::Term::Rdfs(vocab::Rdfs::Resource)),
+			metadata.clone(),
+		)?;
 
-		self.define_primitive_layout(Primitive::Boolean)?;
-		self.define_primitive_layout(Primitive::Integer)?;
-		self.define_primitive_layout(Primitive::UnsignedInteger)?;
-		self.define_primitive_layout(Primitive::Float)?;
-		self.define_primitive_layout(Primitive::Double)?;
-		self.define_primitive_layout(Primitive::String)?;
-		self.define_primitive_layout(Primitive::Time)?;
-		self.define_primitive_layout(Primitive::Date)?;
-		self.define_primitive_layout(Primitive::DateTime)?;
-		self.define_primitive_layout(Primitive::Iri)?;
-		self.define_primitive_layout(Primitive::Uri)?;
-		self.define_primitive_layout(Primitive::Url)?;
+		self.define_primitive_layout(Primitive::Boolean, metadata.clone())?;
+		self.define_primitive_layout(Primitive::Integer, metadata.clone())?;
+		self.define_primitive_layout(Primitive::UnsignedInteger, metadata.clone())?;
+		self.define_primitive_layout(Primitive::Float, metadata.clone())?;
+		self.define_primitive_layout(Primitive::Double, metadata.clone())?;
+		self.define_primitive_layout(Primitive::String, metadata.clone())?;
+		self.define_primitive_layout(Primitive::Time, metadata.clone())?;
+		self.define_primitive_layout(Primitive::Date, metadata.clone())?;
+		self.define_primitive_layout(Primitive::DateTime, metadata.clone())?;
+		self.define_primitive_layout(Primitive::Iri, metadata.clone())?;
+		self.define_primitive_layout(Primitive::Uri, metadata.clone())?;
+		self.define_primitive_layout(Primitive::Url, metadata)?;
 
 		Ok(())
 	}
 
-	pub fn try_map<G: Descriptions<F>, E>(
+	pub fn try_map<G: Descriptions<M>, E>(
 		&self,
-		map: &impl crate::TryMap<F, E, D, G>,
+		map: &impl crate::TryMap<M, E, D, G>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<Context<F, G>, E>
+	) -> Result<Context<M, G>, E>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let mut target = Context::new();
 
@@ -302,30 +335,30 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn simplify(
 		&self,
 		vocabulary: &mut Vocabulary,
-	) -> Result<Context<F>, <D as Simplify<F>>::Error>
+	) -> Result<Context<M>, <D as Simplify<M>>::Error>
 	where
-		D: Simplify<F>,
-		F: Clone + Ord,
+		D: Simplify<M>,
+		M: Clone,
 	{
 		let map = D::TryMap::default();
 		self.try_map(&map, vocabulary)
 	}
 
 	/// Returns the node associated to the given `Id`, if any.
-	pub fn get(&self, id: Id) -> Option<&Node<node::Components<F, D>>> {
+	pub fn get(&self, id: Id) -> Option<&Node<node::Components<M, D>>> {
 		self.nodes.get(&id)
 	}
 
 	/// Returns a mutable reference to the node associated to the given `Id`, if any.
-	pub fn get_mut(&mut self, id: Id) -> Option<&mut Node<node::Components<F, D>>> {
+	pub fn get_mut(&mut self, id: Id) -> Option<&mut Node<node::Components<M, D>>> {
 		self.nodes.get_mut(&id)
 	}
 
-	pub fn nodes(&self) -> impl Iterator<Item = (Id, &Node<node::Components<F, D>>)> {
+	pub fn nodes(&self) -> impl Iterator<Item = (Id, &Node<node::Components<M, D>>)> {
 		self.nodes.iter().map(|(id, node)| (*id, node))
 	}
 
-	pub fn nodes_mut(&mut self) -> impl Iterator<Item = (Id, &mut Node<node::Components<F, D>>)> {
+	pub fn nodes_mut(&mut self) -> impl Iterator<Item = (Id, &mut Node<node::Components<M, D>>)> {
 		self.nodes.iter_mut().map(|(id, node)| (*id, node))
 	}
 
@@ -334,34 +367,25 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	/// Replaces any previous node with the same [`Node::id`].
 	pub fn insert(
 		&mut self,
-		node: Node<node::Components<F, D>>,
-	) -> Option<Node<node::Components<F, D>>> {
+		node: Node<node::Components<M, D>>,
+	) -> Option<Node<node::Components<M, D>>> {
 		self.nodes.insert(node.id(), node)
 	}
 
-	pub fn add_label(&mut self, id: Id, label: String, _cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn add_label(&mut self, id: Id, label: String, _cause: M) {
 		if let Some(node) = self.nodes.get_mut(&id) {
 			node.add_label(label)
 		}
 	}
 
-	pub fn add_comment(&mut self, id: Id, comment: String, _cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn add_comment(&mut self, id: Id, comment: String, _cause: M) {
 		if let Some(node) = self.nodes.get_mut(&id) {
 			node.documentation_mut().add(comment)
 		}
 	}
 
 	/// Declare the given `id` as a type.
-	pub fn declare_type(&mut self, id: Id, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_type(&mut self, id: Id, cause: M) {
 		match self.nodes.get_mut(&id) {
 			Some(node) => node.declare_type(cause),
 			None => {
@@ -371,10 +395,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	}
 
 	/// Declare the given `id` as a property.
-	pub fn declare_property(&mut self, id: Id, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_property(&mut self, id: Id, cause: M) {
 		match self.nodes.get_mut(&id) {
 			Some(node) => node.declare_property(cause),
 			None => {
@@ -384,10 +405,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	}
 
 	/// Declare the given `id` as a layout.
-	pub fn declare_layout(&mut self, id: Id, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_layout(&mut self, id: Id, cause: M) {
 		match self.nodes.get_mut(&id) {
 			Some(node) => node.declare_layout(cause),
 			None => {
@@ -397,10 +415,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	}
 
 	/// Declare the given `id` as a layout field.
-	pub fn declare_layout_field(&mut self, id: Id, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_layout_field(&mut self, id: Id, cause: M) {
 		match self.nodes.get_mut(&id) {
 			Some(node) => node.declare_layout_field(cause),
 			None => {
@@ -410,10 +425,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	}
 
 	/// Declare the given `id` as a layout variant.
-	pub fn declare_layout_variant(&mut self, id: Id, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_layout_variant(&mut self, id: Id, cause: M) {
 		match self.nodes.get_mut(&id) {
 			Some(node) => node.declare_layout_variant(cause),
 			None => {
@@ -423,10 +435,7 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	}
 
 	/// Declare the given `id` as a list.
-	pub fn declare_list(&mut self, id: Id, cause: Option<Location<F>>)
-	where
-		F: Ord,
-	{
+	pub fn declare_list(&mut self, id: Id, cause: M) {
 		match id {
 			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => (),
 			id => match self.nodes.get_mut(&id) {
@@ -441,20 +450,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_mut(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<&mut Node<node::Components<F, D>>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Node<node::Components<M, D>>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get_mut(id) {
 			Some(node) => Ok(node),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: None,
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -463,20 +472,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_type_mut(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<ty::Definition<F, D::Type>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Meta<ty::Definition<M, D::Type>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get_mut(id) {
 			Some(node) => node.require_type_mut(cause),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::Type),
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -484,20 +493,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_property_mut(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<prop::Definition<F>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Meta<prop::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get_mut(id) {
 			Some(node) => node.require_property_mut(cause),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::Property),
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -506,20 +515,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_layout(
 		&self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<&WithCauses<layout::Definition<F, D::Layout>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&Meta<layout::Definition<M, D::Layout>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get(id) {
 			Some(node) => node.require_layout(cause),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::Layout),
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -528,20 +537,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_layout_mut(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<layout::Definition<F, D::Layout>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Meta<layout::Definition<M, D::Layout>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get_mut(id) {
 			Some(node) => node.require_layout_mut(cause),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::Layout),
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -549,20 +558,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_layout_field(
 		&self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<&WithCauses<layout::field::Definition<F>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&Meta<layout::field::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get(id) {
 			Some(node) => node.require_layout_field(cause),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::LayoutField),
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -570,20 +579,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_layout_field_mut(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<layout::field::Definition<F>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Meta<layout::field::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get_mut(id) {
 			Some(node) => node.require_layout_field_mut(cause),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::LayoutField),
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -591,20 +600,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_layout_variant(
 		&self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<&WithCauses<layout::variant::Definition<F>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&Meta<layout::variant::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get(id) {
 			Some(node) => node.require_layout_variant(cause),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::LayoutVariant),
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -612,20 +621,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_layout_variant_mut(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<&mut WithCauses<layout::variant::Definition<F>, F>, Error<F>>
+		cause: &M,
+	) -> Result<&mut Meta<layout::variant::Definition<M>, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get_mut(id) {
 			Some(node) => node.require_layout_variant_mut(cause),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::LayoutVariant),
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -633,20 +642,20 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_property_or_layout_field_mut(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<node::PropertyOrLayoutField<F>, Error<F>>
+		cause: &M,
+	) -> Result<node::PropertyOrLayoutField<M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get_mut(id) {
 			Some(node) => node.require_property_or_layout_field_mut(cause),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::Property),
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
@@ -654,82 +663,77 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	pub fn require_layout_field_or_variant_mut(
 		&mut self,
 		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<node::LayoutFieldOrVariant<F>, Error<F>>
+		cause: &M,
+	) -> Result<node::LayoutFieldOrVariant<M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match self.get_mut(id) {
 			Some(node) => node.require_layout_field_or_variant_mut(cause),
-			None => Err(Caused::new(
+			None => Err(Meta(
 				error::NodeUnknown {
 					id,
 					expected_ty: Some(node::Type::Property),
 				}
 				.into(),
-				cause,
+				cause.clone(),
 			)),
 		}
 	}
 
-	pub fn require_list(&self, id: Id, cause: Option<Location<F>>) -> Result<ListRef<F>, Error<F>>
+	pub fn require_list(&self, id: Id, cause: &M) -> Result<ListRef<M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match id {
 			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListRef::Nil),
 			id => match self.get(id) {
 				Some(node) => Ok(ListRef::Cons(node.require_list(cause)?)),
-				None => Err(Caused::new(
+				None => Err(Meta(
 					error::NodeUnknown {
 						id,
 						expected_ty: Some(node::Type::List),
 					}
 					.into(),
-					cause,
+					cause.clone(),
 				)),
 			},
 		}
 	}
 
-	pub fn require_list_mut(
-		&mut self,
-		id: Id,
-		cause: Option<Location<F>>,
-	) -> Result<ListMut<F>, Error<F>>
+	pub fn require_list_mut(&mut self, id: Id, cause: &M) -> Result<ListMut<M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		match id {
 			Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)) => Ok(ListMut::Nil),
 			id => match self.get_mut(id) {
 				Some(node) => Ok(ListMut::Cons(node.require_list_mut(cause)?)),
-				None => Err(Caused::new(
+				None => Err(Meta(
 					error::NodeUnknown {
 						id,
 						expected_ty: Some(node::Type::List),
 					}
 					.into(),
-					cause,
+					cause.clone(),
 				)),
 			},
 		}
 	}
 
-	pub fn create_list<I: IntoIterator<Item = Caused<vocab::Object<F>, F>>>(
+	pub fn create_list<I: IntoIterator<Item = Meta<vocab::Object<M>, M>>>(
 		&mut self,
 		vocabulary: &mut Vocabulary,
 		list: I,
-	) -> Result<Id, Error<F>>
+	) -> Result<Id, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 		I::IntoIter: DoubleEndedIterator,
 	{
 		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
 
-		for item in list.into_iter().rev() {
+		for Meta(item, cause) in list.into_iter().rev() {
 			let id = Id::Blank(vocabulary.new_blank_label());
-			let (item, cause) = item.into_parts();
 
 			self.declare_list(id, cause.clone());
 			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
@@ -746,17 +750,17 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		vocabulary: &mut Vocabulary,
 		list: I,
 		mut f: C,
-	) -> Result<Id, Error<F>>
+	) -> Result<Id, Error<M>>
 	where
-		F: Clone + Ord,
+		M: Clone,
 		I::IntoIter: DoubleEndedIterator,
-		C: FnMut(I::Item, &mut Self, &mut Vocabulary) -> Caused<vocab::Object<F>, F>,
+		C: FnMut(I::Item, &mut Self, &mut Vocabulary) -> Meta<vocab::Object<M>, M>,
 	{
 		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
 
 		for item in list.into_iter().rev() {
 			let id = Id::Blank(vocabulary.new_blank_label());
-			let (item, cause) = f(item, self, vocabulary).into_parts();
+			let Meta(item, cause) = f(item, self, vocabulary);
 
 			self.declare_list(id, cause.clone());
 			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
@@ -775,16 +779,16 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 		mut f: C,
 	) -> Result<Id, E>
 	where
-		F: Clone + Ord,
-		E: From<Error<F>>,
+		M: Clone,
+		E: From<Error<M>>,
 		I::IntoIter: DoubleEndedIterator,
-		C: FnMut(I::Item, &mut Self, &mut Vocabulary) -> Result<Caused<vocab::Object<F>, F>, E>,
+		C: FnMut(I::Item, &mut Self, &mut Vocabulary) -> Result<Meta<vocab::Object<M>, M>, E>,
 	{
 		let mut head = Id::Iri(vocab::Term::Rdf(vocab::Rdf::Nil));
 
 		for item in list.into_iter().rev() {
 			let id = Id::Blank(vocabulary.new_blank_label());
-			let (item, cause) = f(item, self, vocabulary)?.into_parts();
+			let Meta(item, cause) = f(item, self, vocabulary)?;
 
 			self.declare_list(id, cause.clone());
 			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
@@ -797,19 +801,19 @@ impl<F, D: Descriptions<F>> Context<F, D> {
 	}
 }
 
-impl<F: Clone + Ord> Context<F> {
+impl<M: Clone> Context<M> {
 	/// Compute the `use` relation between all the layouts.
 	///
 	/// A layout is used by another layout if it is the layout of one of its
 	/// fields.
 	/// The purpose of this function is to declare to each layout how it it used
 	/// using the `layout::Definition::add_use` method.
-	pub fn compute_uses(&mut self) -> Result<(), Error<F>>
+	pub fn compute_uses(&mut self) -> Result<(), Error<M>>
 	where
-		F: Ord + Clone,
+		M: Clone,
 	{
 		for (id, node) in &self.nodes {
-			if let Some(layout) = node.value().layout.with_causes() {
+			if let Some(layout) = node.value().layout.as_ref() {
 				let sub_layouts = layout.sub_layouts(self)?;
 
 				for sub_layout in &sub_layouts {
@@ -817,12 +821,12 @@ impl<F: Clone + Ord> Context<F> {
 						.entry(*sub_layout.layout)
 						.or_default()
 						.parent
-						.push(WithCauses::new(
+						.push(Meta::new(
 							ParentLayout {
 								layout: *id,
 								connection: sub_layout.connection,
 							},
-							sub_layout.layout.causes().clone(),
+							sub_layout.layout.metadata().clone(),
 						))
 				}
 
@@ -833,7 +837,10 @@ impl<F: Clone + Ord> Context<F> {
 		Ok(())
 	}
 
-	pub fn assign_default_layouts(&mut self, vocabulary: &mut Vocabulary) {
+	pub fn assign_default_layouts(&mut self, vocabulary: &mut Vocabulary)
+	where
+		M: Merge,
+	{
 		let mut default_layouts = BTreeMap::new();
 		for (id, node) in &self.nodes {
 			if let Some(field) = node.as_layout_field() {
@@ -856,24 +863,21 @@ impl<F: Clone + Ord> Context<F> {
 	}
 
 	/// Assigns default name for layouts/variants that don't have a name yet.
-	pub fn assign_default_names(&mut self, vocabulary: &Vocabulary) -> Result<(), Error<F>>
+	pub fn assign_default_names(&mut self, vocabulary: &Vocabulary) -> Result<(), Error<M>>
 	where
-		F: Ord + Clone,
+		M: Clone,
 	{
 		// Start with the fields.
 		let mut default_field_names = BTreeMap::new();
 		for (id, node) in &self.nodes {
 			if let Some(field) = node.as_layout_field() {
-				if let Some(name) =
-					field.default_name(vocabulary, field.causes().preferred().cloned())
-				{
+				if let Some(name) = field.default_name(vocabulary, field.metadata().clone()) {
 					default_field_names.insert(*id, name);
 				}
 			}
 		}
-		for (id, name) in default_field_names {
-			let (name, cause) = name.into_parts();
-			let field = self.require_layout_field_mut(id, cause.clone())?;
+		for (id, Meta(name, cause)) in default_field_names {
+			let field = self.require_layout_field_mut(id, &cause)?;
 			if field.name().is_none() {
 				field.set_name(name, cause)?;
 			}
@@ -920,13 +924,12 @@ impl<F: Clone + Ord> Context<F> {
 			for id in component {
 				let layout = self.nodes.get(id).unwrap().as_layout().unwrap();
 				let parent_layouts = &self.layout_relations.get(id).unwrap().parent;
-				if let Some(name) = layout.default_name(
+				if let Some(Meta(name, cause)) = layout.default_name(
 					self,
 					vocabulary,
 					parent_layouts,
-					layout.causes().preferred().cloned(),
+					layout.metadata().clone(),
 				)? {
-					let (name, cause) = name.into_parts();
 					let layout = self.get_mut(*id).unwrap().as_layout_mut().unwrap();
 					if layout.name().is_none() {
 						layout.set_name(name, cause)?;
@@ -940,15 +943,14 @@ impl<F: Clone + Ord> Context<F> {
 		for (id, node) in &self.nodes {
 			if let Some(layout) = node.as_layout_variant() {
 				if let Some(name) =
-					layout.default_name(self, vocabulary, layout.causes().preferred().cloned())?
+					layout.default_name(self, vocabulary, layout.metadata().clone())?
 				{
 					default_variant_names.insert(*id, name);
 				}
 			}
 		}
-		for (id, name) in default_variant_names {
-			let (name, cause) = name.into_parts();
-			let layout = self.require_layout_variant_mut(id, cause.clone())?;
+		for (id, Meta(name, cause)) in default_variant_names {
+			let layout = self.require_layout_variant_mut(id, &cause)?;
 			if layout.name().is_none() {
 				layout.set_name(name, cause)?;
 			}
@@ -957,9 +959,9 @@ impl<F: Clone + Ord> Context<F> {
 		Ok(())
 	}
 
-	pub fn build(mut self, vocabulary: &mut Vocabulary) -> Result<Model<F>, Error<F>>
+	pub fn build(mut self, vocabulary: &mut Vocabulary) -> Result<Model<M>, Error<M>>
 	where
-		F: Ord + Clone,
+		M: Clone + Merge,
 	{
 		use crate::utils::SccGraph;
 		use crate::Build;
@@ -1013,20 +1015,19 @@ impl<F: Clone + Ord> Context<F> {
 
 				match item {
 					crate::Item::Type(ty_ref) => {
-						let (_, ty) = types_to_build[ty_ref.index()].take().unwrap();
-						let (ty, causes) = ty.into_parts();
+						let (_, Meta(ty, causes)) = types_to_build[ty_ref.index()].take().unwrap();
 						let built_ty = ty.build(&mut allocated_nodes, dependencies, causes)?;
 						built_types[ty_ref.index()] = Some(built_ty)
 					}
 					crate::Item::Property(prop_ref) => {
-						let (_, prop) = properties_to_build[prop_ref.index()].take().unwrap();
-						let (prop, causes) = prop.into_parts();
+						let (_, Meta(prop, causes)) =
+							properties_to_build[prop_ref.index()].take().unwrap();
 						let built_prop = prop.build(&mut allocated_nodes, dependencies, causes)?;
 						built_properties[prop_ref.index()] = Some(built_prop)
 					}
 					crate::Item::Layout(layout_ref) => {
-						let (_, layout) = layouts_to_build[layout_ref.index()].take().unwrap();
-						let (layout, causes) = layout.into_parts();
+						let (_, Meta(layout, causes)) =
+							layouts_to_build[layout_ref.index()].take().unwrap();
 						let built_layout =
 							layout.build(&mut allocated_nodes, dependencies, causes)?;
 						built_layouts[layout_ref.index()] = Some(built_layout)

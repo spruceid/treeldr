@@ -1,162 +1,153 @@
 use super::{error, Error};
-use locspan::Location;
-use treeldr::{Caused, Causes, Documentation, Id, MaybeSet, Name, Vocabulary, WithCauses};
+use locspan::Meta;
+use treeldr::{metadata::Merge, Documentation, Id, MetaOption, Name, Vocabulary};
 
 /// Layout field definition.
 #[derive(Clone)]
-pub struct Definition<F> {
+pub struct Definition<M> {
 	id: Id,
-	prop: MaybeSet<Id, F>,
-	name: MaybeSet<Name, F>,
-	layout: MaybeSet<Id, F>,
+	prop: MetaOption<Id, M>,
+	name: MetaOption<Name, M>,
+	layout: MetaOption<Id, M>,
 }
 
-pub enum DefaultLayout<F> {
-	Functional(WithCauses<Id, F>),
-	NonFunctional(WithCauses<Id, F>),
+pub enum DefaultLayout<M> {
+	Functional(Meta<Id, M>),
+	NonFunctional(Meta<Id, M>),
 }
 
-impl<F> DefaultLayout<F> {
-	pub fn build<D: crate::Descriptions<F>>(
+impl<M> DefaultLayout<M> {
+	pub fn build<D: crate::Descriptions<M>>(
 		self,
-		context: &mut crate::Context<F, D>,
+		context: &mut crate::Context<M, D>,
 		vocabulary: &mut Vocabulary,
-	) -> WithCauses<Id, F>
+	) -> Meta<Id, M>
 	where
-		F: Clone + Ord,
+		M: Clone + Merge,
 	{
 		match self {
 			Self::Functional(layout) => layout,
-			Self::NonFunctional(item) => {
+			Self::NonFunctional(Meta(item, meta)) => {
 				let id = Id::Blank(vocabulary.new_blank_label());
-				let causes = item.causes().clone();
-
-				context.declare_layout(id, causes.preferred().cloned());
+				context.declare_layout(id, meta.clone());
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
 
-				let (item, item_causes) = item.into_parts();
-				layout
-					.set_array(item, None, item_causes.preferred().cloned())
-					.ok();
+				layout.set_array(item, None, meta.clone()).ok();
 
-				WithCauses::new(id, causes)
+				Meta(id, meta)
 			}
 		}
 	}
 }
 
-impl<F> Definition<F> {
+impl<M> Definition<M> {
 	pub fn new(id: Id) -> Self {
 		Self {
 			id,
-			prop: MaybeSet::default(),
-			name: MaybeSet::default(),
-			layout: MaybeSet::default(),
+			prop: MetaOption::default(),
+			name: MetaOption::default(),
+			layout: MetaOption::default(),
 		}
 	}
 
-	pub fn property(&self) -> Option<&WithCauses<Id, F>> {
-		self.prop.with_causes()
+	pub fn property(&self) -> Option<&Meta<Id, M>> {
+		self.prop.as_ref()
 	}
 
-	pub fn set_property(&mut self, prop_ref: Id, cause: Option<Location<F>>) -> Result<(), Error<F>>
-	where
-		F: Ord + Clone,
-	{
-		self.prop
-			.try_set(prop_ref, cause, |expected, found, because, causes| {
+	pub fn set_property(&mut self, prop_ref: Id, metadata: M) -> Result<(), Error<M>> {
+		self.prop.try_set(
+			prop_ref,
+			metadata,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::LayoutFieldMismatchProperty {
 						id: self.id,
 						expected,
 						found,
-						because: because.preferred().cloned(),
+						because: expected_meta,
 					}
 					.into(),
-					causes.preferred().cloned(),
+					found_meta,
 				)
-			})
+			},
+		)
 	}
 
-	pub fn replace_property(&mut self, prop: MaybeSet<Id, F>) {
+	pub fn replace_property(&mut self, prop: MetaOption<Id, M>) {
 		self.prop = prop
 	}
 
-	pub fn default_name(
-		&self,
-		vocabulary: &Vocabulary,
-		cause: Option<Location<F>>,
-	) -> Option<Caused<Name, F>>
+	pub fn default_name(&self, vocabulary: &Vocabulary, metadata: M) -> Option<Meta<Name, M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		self.id
 			.as_iri()
 			.and_then(|term| term.iri(vocabulary))
 			.and_then(|iri| Name::from_iri(iri).ok().flatten())
-			.map(|name| Caused::new(name, cause))
+			.map(|name| Meta::new(name, metadata))
 	}
 
-	pub fn name(&self) -> Option<&WithCauses<Name, F>> {
-		self.name.with_causes()
+	pub fn name(&self) -> Option<&Meta<Name, M>> {
+		self.name.as_ref()
 	}
 
-	pub fn set_name(&mut self, name: Name, cause: Option<Location<F>>) -> Result<(), Error<F>>
-	where
-		F: Ord + Clone,
-	{
-		self.name
-			.try_set(name, cause, |expected, found, because, causes| {
+	pub fn set_name(&mut self, name: Name, metadata: M) -> Result<(), Error<M>> {
+		self.name.try_set(
+			name,
+			metadata,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::LayoutFieldMismatchName {
 						id: self.id,
 						expected,
 						found,
-						because: because.preferred().cloned(),
+						because: expected_meta,
 					}
 					.into(),
-					causes.preferred().cloned(),
+					found_meta,
 				)
-			})
+			},
+		)
 	}
 
-	pub fn replace_name(&mut self, name: MaybeSet<Name, F>) {
+	pub fn replace_name(&mut self, name: MetaOption<Name, M>) {
 		self.name = name
 	}
 
-	pub fn layout(&self) -> Option<&WithCauses<Id, F>> {
-		self.layout.with_causes()
+	pub fn layout(&self) -> Option<&Meta<Id, M>> {
+		self.layout.as_ref()
 	}
 
-	pub fn set_layout(&mut self, layout_ref: Id, cause: Option<Location<F>>) -> Result<(), Error<F>>
-	where
-		F: Ord + Clone,
-	{
-		self.layout
-			.try_set(layout_ref, cause, |expected, found, because, causes| {
+	pub fn set_layout(&mut self, layout_ref: Id, metadata: M) -> Result<(), Error<M>> {
+		self.layout.try_set(
+			layout_ref,
+			metadata,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::LayoutFieldMismatchLayout {
 						id: self.id,
 						expected,
 						found,
-						because: because.preferred().cloned(),
+						because: expected_meta,
 					}
 					.into(),
-					causes.preferred().cloned(),
+					found_meta,
 				)
-			})
+			},
+		)
 	}
 
-	pub fn replace_layout(&mut self, layout: MaybeSet<Id, F>) {
+	pub fn replace_layout(&mut self, layout: MetaOption<Id, M>) {
 		self.layout = layout
 	}
 
-	pub fn default_layout<D: crate::Descriptions<F>>(
+	pub fn default_layout<D: crate::Descriptions<M>>(
 		&self,
-		context: &crate::Context<F, D>,
-	) -> Option<DefaultLayout<F>>
+		context: &crate::Context<M, D>,
+	) -> Option<DefaultLayout<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		let prop_id = self.property()?;
 		let prop = context.get(**prop_id)?.as_property()?;
@@ -174,36 +165,36 @@ impl<F> Definition<F> {
 		}
 	}
 
-	pub fn require_layout(&self, causes: &Causes<F>) -> Result<&WithCauses<Id, F>, Error<F>>
+	pub fn require_layout(&self, causes: &M) -> Result<&Meta<Id, M>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		self.layout.value_or_else(|| {
 			Error::new(
 				error::LayoutFieldMissingLayout(self.id).into(),
-				causes.preferred().cloned(),
+				causes.clone(),
 			)
 		})
 	}
 }
 
-pub trait Build<F> {
-	fn require_name(&self) -> Result<WithCauses<Name, F>, Error<F>>;
+pub trait Build<M> {
+	fn require_name(&self) -> Result<Meta<Name, M>, Error<M>>;
 
 	fn build(
 		&self,
 		label: Option<String>,
 		doc: Documentation,
-		nodes: &super::super::context::allocated::Nodes<F>,
-	) -> Result<treeldr::layout::Field<F>, Error<F>>;
+		nodes: &super::super::context::allocated::Nodes<M>,
+	) -> Result<treeldr::layout::Field<M>, Error<M>>;
 }
 
-impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
-	fn require_name(&self) -> Result<WithCauses<Name, F>, Error<F>> {
+impl<M: Clone> Build<M> for Meta<Definition<M>, M> {
+	fn require_name(&self) -> Result<Meta<Name, M>, Error<M>> {
 		self.name.clone().ok_or_else(|| {
-			Caused::new(
+			Meta::new(
 				error::LayoutFieldMissingName(self.id).into(),
-				self.causes().preferred().cloned(),
+				self.metadata().clone(),
 			)
 		})
 	}
@@ -212,18 +203,21 @@ impl<F: Ord + Clone> Build<F> for WithCauses<Definition<F>, F> {
 		&self,
 		label: Option<String>,
 		doc: Documentation,
-		nodes: &super::super::context::allocated::Nodes<F>,
-	) -> Result<treeldr::layout::Field<F>, Error<F>> {
-		let prop = self.prop.clone().try_map_with_causes(|prop_id, causes| {
-			Ok(**nodes.require_property(prop_id, causes.preferred().cloned())?)
-		})?;
+		nodes: &super::super::context::allocated::Nodes<M>,
+	) -> Result<treeldr::layout::Field<M>, Error<M>> {
+		let prop = self
+			.prop
+			.clone()
+			.try_map_with_causes(|Meta(prop_id, causes)| {
+				Ok(Meta(**nodes.require_property(prop_id, &causes)?, causes))
+			})?;
 
 		let name = self.require_name()?;
 
-		let layout_id = self.require_layout(self.causes())?;
+		let layout_id = self.require_layout(self.metadata())?;
 		let layout = nodes
-			.require_layout(*layout_id.inner(), layout_id.causes().preferred().cloned())?
-			.clone_with_causes(layout_id.causes().clone());
+			.require_layout(**layout_id, layout_id.metadata())?
+			.clone();
 
 		Ok(treeldr::layout::Field::new(prop, name, label, layout, doc))
 	}

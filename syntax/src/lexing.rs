@@ -1,17 +1,18 @@
 use super::{peekable3::Peekable3, Annotation, Literal};
+use decoded_char::DecodedChar;
 use iref::IriRefBuf;
-use locspan::{ErrAt, Loc, Location, Meta, Span};
+use locspan::{ErrAt, Meta, Span};
 use std::fmt;
 
 /// Fallible tokens iterator with lookahead.
-pub trait Tokens<F> {
-	type Error: fmt::Debug;
+pub trait Tokens {
+	type Error;
 
 	#[allow(clippy::type_complexity)]
-	fn peek(&mut self) -> Result<Loc<Option<&Token>, F>, Loc<Self::Error, F>>;
+	fn peek(&mut self) -> Result<Meta<Option<&Token>, Span>, Meta<Self::Error, Span>>;
 
 	#[allow(clippy::type_complexity)]
-	fn next(&mut self) -> Result<Loc<Option<Token>, F>, Loc<Self::Error, F>>;
+	fn next(&mut self) -> Result<Meta<Option<Token>, Span>, Meta<Self::Error, Span>>;
 
 	fn next_label(&mut self) -> Label;
 }
@@ -291,7 +292,7 @@ impl fmt::Display for Keyword {
 
 /// Lexing error.
 #[derive(Debug)]
-pub enum Error<E> {
+pub enum Error<E = std::convert::Infallible> {
 	InvalidId(String),
 	InvalidCodepoint(u32),
 	InvalidSuffix(String),
@@ -323,8 +324,8 @@ impl<E> From<E> for Error<E> {
 /// Characters iterator.
 struct Chars<C: Iterator>(Peekable3<C>);
 
-impl<E, C: Iterator<Item = Result<char, E>>> Chars<C> {
-	fn peek(&mut self) -> Result<Option<char>, Error<E>> {
+impl<E, C: Iterator<Item = Result<DecodedChar, E>>> Chars<C> {
+	fn peek(&mut self) -> Result<Option<DecodedChar>, Error<E>> {
 		match self.0.peek() {
 			None => Ok(None),
 			Some(Ok(c)) => Ok(Some(*c)),
@@ -332,7 +333,7 @@ impl<E, C: Iterator<Item = Result<char, E>>> Chars<C> {
 		}
 	}
 
-	fn peek2(&mut self) -> Result<Option<char>, Error<E>> {
+	fn peek2(&mut self) -> Result<Option<DecodedChar>, Error<E>> {
 		match self.0.peek2() {
 			None => Ok(None),
 			Some(Ok(c)) => Ok(Some(*c)),
@@ -343,7 +344,7 @@ impl<E, C: Iterator<Item = Result<char, E>>> Chars<C> {
 		}
 	}
 
-	fn peek3(&mut self) -> Result<Option<char>, Error<E>> {
+	fn peek3(&mut self) -> Result<Option<DecodedChar>, Error<E>> {
 		match self.0.peek3() {
 			None => Ok(None),
 			Some(Ok(c)) => Ok(Some(*c)),
@@ -355,42 +356,37 @@ impl<E, C: Iterator<Item = Result<char, E>>> Chars<C> {
 		}
 	}
 
-	fn next(&mut self) -> Result<Option<char>, Error<E>> {
+	fn next(&mut self) -> Result<Option<DecodedChar>, Error<E>> {
 		self.0.next().transpose().map_err(Error::Stream)
 	}
 }
 
-struct Position<F> {
-	file: F,
+struct Position {
 	span: Span,
 	last_span: Span,
 }
 
-impl<F: Clone> Position<F> {
-	fn current(&self) -> Location<F> {
-		Location::new(self.file.clone(), self.span)
-	}
-
-	fn current_span(&self) -> Span {
+impl Position {
+	fn current(&self) -> Span {
 		self.span
 	}
 
-	fn end(&self) -> Location<F> {
-		Location::new(self.file.clone(), self.span.end().into())
+	fn end(&self) -> Span {
+		self.span.end().into()
 	}
 
-	fn last(&self) -> Location<F> {
-		Location::new(self.file.clone(), self.last_span)
+	fn last(&self) -> Span {
+		self.last_span
 	}
 }
 
 /// Lexer.
 ///
 /// Changes a character iterator into a `Token` iterator.
-pub struct Lexer<F, E, C: Iterator<Item = Result<char, E>>> {
+pub struct Lexer<E, C: Iterator<Item = Result<DecodedChar, E>>> {
 	chars: Chars<C>,
-	pos: Position<F>,
-	lookahead: Option<Loc<Token, F>>,
+	pos: Position,
+	lookahead: Option<Meta<Token, Span>>,
 	label_count: usize,
 }
 
@@ -405,12 +401,11 @@ pub enum DocOrRegExp {
 	RegExp(String),
 }
 
-impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
-	pub fn new(file: F, chars: C) -> Self {
+impl<E, C: Iterator<Item = Result<DecodedChar, E>>> Lexer<E, C> {
+	pub fn new(chars: C) -> Self {
 		Self {
 			chars: Chars(Peekable3::new(chars)),
 			pos: Position {
-				file,
 				span: Span::default(),
 				last_span: Span::default(),
 			},
@@ -425,43 +420,66 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		Label(l)
 	}
 
-	fn peek_char(&mut self) -> Result<Option<char>, Loc<Error<E>, F>> {
+	fn peek_decoded_char(&mut self) -> Result<Option<DecodedChar>, Meta<Error<E>, Span>> {
 		self.chars.peek().err_at(|| self.pos.end())
 	}
 
-	fn peek_char2(&mut self) -> Result<Option<char>, Loc<Error<E>, F>> {
-		let offset = self.peek_char()?.map(char::len_utf8).unwrap_or(0);
+	fn peek_char(&mut self) -> Result<Option<char>, Meta<Error<E>, Span>> {
+		self.peek_decoded_char()
+			.map(|c| c.map(DecodedChar::into_char))
+	}
+
+	fn peek_decoded_char2(&mut self) -> Result<Option<DecodedChar>, Meta<Error<E>, Span>> {
+		let offset = self
+			.peek_decoded_char()?
+			.map(DecodedChar::into_len)
+			.unwrap_or(0);
 		self.chars
 			.peek2()
-			.err_at(|| Location::new(self.pos.file.clone(), (self.pos.span.end() + offset).into()))
+			.err_at(|| (self.pos.span.end() + offset).into())
 	}
 
-	fn peek_char3(&mut self) -> Result<Option<char>, Loc<Error<E>, F>> {
-		let offset = self.peek_char()?.map(char::len_utf8).unwrap_or(0)
-			+ self.peek_char2()?.map(char::len_utf8).unwrap_or(0);
+	fn peek_char2(&mut self) -> Result<Option<char>, Meta<Error<E>, Span>> {
+		self.peek_decoded_char2()
+			.map(|c| c.map(DecodedChar::into_char))
+	}
+
+	fn peek_decoded_char3(&mut self) -> Result<Option<DecodedChar>, Meta<Error<E>, Span>> {
+		let offset =
+			self.peek_decoded_char()?
+				.map(DecodedChar::into_len)
+				.unwrap_or(0) + self
+				.peek_decoded_char2()?
+				.map(DecodedChar::into_len)
+				.unwrap_or(0);
 		self.chars
 			.peek3()
-			.err_at(|| Location::new(self.pos.file.clone(), (self.pos.span.end() + offset).into()))
+			.err_at(|| (self.pos.span.end() + offset).into())
 	}
 
-	fn next_char(&mut self) -> Result<Option<char>, Loc<Error<E>, F>> {
+	fn peek_char3(&mut self) -> Result<Option<char>, Meta<Error<E>, Span>> {
+		self.peek_decoded_char3()
+			.map(|c| c.map(DecodedChar::into_char))
+	}
+
+	fn next_char(&mut self) -> Result<Option<char>, Meta<Error<E>, Span>> {
 		match self.chars.next().err_at(|| self.pos.end())? {
 			Some(c) => {
-				self.pos.span.push(c.len_utf8());
+				self.pos.span.push(c.len());
 				self.pos.last_span.clear();
-				self.pos.last_span.push(c.len_utf8());
-				Ok(Some(c))
+				self.pos.last_span.push(c.len());
+				Ok(Some(*c))
 			}
 			None => Ok(None),
 		}
 	}
 
-	fn expect_char(&mut self) -> Result<char, Loc<Error<E>, F>> {
+	fn expect_char(&mut self) -> Result<char, Meta<Error<E>, Span>> {
 		self.next_char()?
-			.ok_or_else(|| Loc(Error::Unexpected(None), self.pos.end()))
+			.ok_or_else(|| Meta(Error::Unexpected(None), self.pos.end()))
 	}
 
-	fn skip_whitespaces(&mut self) -> Result<(), Loc<Error<E>, F>> {
+	fn skip_whitespaces(&mut self) -> Result<(), Meta<Error<E>, Span>> {
 		while let Some(c) = self.peek_char()? {
 			if c.is_whitespace() {
 				self.next_char()?;
@@ -493,7 +511,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		Ok(())
 	}
 
-	fn next_regexp(&mut self, first: char) -> Result<String, Loc<Error<E>, F>> {
+	fn next_regexp(&mut self, first: char) -> Result<String, Meta<Error<E>, Span>> {
 		let mut regexp = String::new();
 
 		let first = match first {
@@ -518,7 +536,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		Ok(regexp)
 	}
 
-	fn next_doc_or_regexp(&mut self) -> Result<DocOrRegExp, Loc<Error<E>, F>> {
+	fn next_doc_or_regexp(&mut self) -> Result<DocOrRegExp, Meta<Error<E>, Span>> {
 		match self.expect_char()? {
 			'/' => {
 				// doc
@@ -539,7 +557,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		}
 	}
 
-	fn next_string_literal(&mut self) -> Result<String, Loc<Error<E>, F>> {
+	fn next_string_literal(&mut self) -> Result<String, Meta<Error<E>, Span>> {
 		let mut string = String::new();
 
 		loop {
@@ -558,34 +576,31 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 		Ok(string)
 	}
 
-	fn next_hex_char(&mut self, mut span: Span, len: u8) -> Result<char, Loc<Error<E>, F>> {
+	fn next_hex_char(&mut self, mut span: Span, len: u8) -> Result<char, Meta<Error<E>, Span>> {
 		let mut codepoint = 0;
 
 		for _ in 0..len {
 			let c = self.expect_char()?;
 			match c.to_digit(16) {
 				Some(d) => codepoint = codepoint << 4 | d,
-				None => return Err(Loc(Error::Unexpected(Some(c)), self.pos.last())),
+				None => return Err(Meta(Error::Unexpected(Some(c)), self.pos.last())),
 			}
 		}
 
-		span.set_end(self.pos.current_span().end());
+		span.set_end(self.pos.current().end());
 		match char::try_from(codepoint) {
 			Ok(c) => Ok(c),
-			Err(_) => Err(Loc(
-				Error::InvalidCodepoint(codepoint),
-				Location::new(self.pos.file.clone(), span),
-			)),
+			Err(_) => Err(Meta(Error::InvalidCodepoint(codepoint), span)),
 		}
 	}
 
-	fn next_escape(&mut self) -> Result<char, Loc<Error<E>, F>> {
+	fn next_escape(&mut self) -> Result<char, Meta<Error<E>, Span>> {
 		match self.next_char()? {
 			Some(
 				c @ ('_' | '~' | '.' | '-' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ','
 				| ';' | '=' | '/' | '?' | '#' | '@' | '%'),
 			) => Ok(c),
-			unexpected => Err(Loc(Error::Unexpected(unexpected), self.pos.last())),
+			unexpected => Err(Meta(Error::Unexpected(unexpected), self.pos.last())),
 		}
 	}
 
@@ -598,7 +613,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 	/// PNAME_NS     ::= PN_PREFIX? ':'
 	/// PNAME_LN     ::= PNAME_NS PN_LOCAL
 	/// ```
-	fn next_prefixed_name(&mut self, first: char) -> Result<PrefixedName, Loc<Error<E>, F>> {
+	fn next_prefixed_name(&mut self, first: char) -> Result<PrefixedName, Meta<Error<E>, Span>> {
 		// PNAME_NS or Keyword
 		let mut prefix = String::new();
 		match first {
@@ -637,7 +652,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 									None => Ok(PrefixedName::Name(prefix)),
 								}
 							} else {
-								Err(Loc(Error::Unexpected(unexpected), self.pos.end()))
+								Err(Meta(Error::Unexpected(unexpected), self.pos.end()))
 							}
 						}
 					}
@@ -661,19 +676,19 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 					}
 				}
 			}
-			unexpected => return Err(Loc(Error::Unexpected(Some(unexpected)), self.pos.last())),
+			unexpected => return Err(Meta(Error::Unexpected(Some(unexpected)), self.pos.last())),
 		};
 
 		// PN_LOCAL
 		let mut suffix = String::new();
-		let mut suffix_span = self.pos.current_span().next();
+		let mut suffix_span = self.pos.current().next();
 
 		let c = self.expect_char()?;
 		if is_pn_chars_u(c) || c.is_ascii_digit() || matches!(c, ':' | '%' | '\\') {
 			let c = match c {
 				'%' => {
 					// percent encoded.
-					self.next_hex_char(self.pos.current_span().end().into(), 2)?
+					self.next_hex_char(self.pos.current().end().into(), 2)?
 				}
 				'\\' => {
 					// escape sequence.
@@ -698,7 +713,7 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 						let c = match self.expect_char()? {
 							'%' => {
 								// percent encoded.
-								self.next_hex_char(self.pos.current_span().end().into(), 2)?
+								self.next_hex_char(self.pos.current().end().into(), 2)?
 							}
 							'\\' => {
 								// escape sequence.
@@ -710,23 +725,22 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 						suffix.push(c);
 					}
 					_ => {
-						suffix_span.set_end(self.pos.current_span().end());
+						suffix_span.set_end(self.pos.current().end());
 						break match IriRefBuf::from_string(suffix) {
 							Ok(suffix) => Ok(PrefixedName::CompactIri(prefix, suffix)),
-							Err((_, invalid_suffix)) => Err(Loc(
-								Error::InvalidSuffix(invalid_suffix),
-								Location::new(self.pos.file.clone(), suffix_span),
-							)),
+							Err((_, invalid_suffix)) => {
+								Err(Meta(Error::InvalidSuffix(invalid_suffix), suffix_span))
+							}
 						};
 					}
 				}
 			}
 		} else {
-			Err(Loc(Error::Unexpected(Some(c)), self.pos.last()))
+			Err(Meta(Error::Unexpected(Some(c)), self.pos.last()))
 		}
 	}
 
-	fn next_iri(&mut self) -> Result<Id, Loc<Error<E>, F>> {
+	fn next_iri(&mut self) -> Result<Id, Meta<Error<E>, Span>> {
 		let mut iri = String::new();
 
 		while let Some(c) = self.next_char()? {
@@ -739,13 +753,13 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 
 		let iri = match iri.try_into() {
 			Ok(iri_ref) => iri_ref,
-			Err((_, id)) => return Err(Loc::new(Error::InvalidId(id), self.pos.current())),
+			Err((_, id)) => return Err(Meta::new(Error::InvalidId(id), self.pos.current())),
 		};
 
 		Ok(Id::IriRef(iri))
 	}
 
-	fn consume(&mut self) -> Result<Loc<Option<Token>, F>, Loc<Error<E>, F>> {
+	fn consume(&mut self) -> Result<Meta<Option<Token>, Span>, Meta<Error<E>, Span>> {
 		self.skip_whitespaces()?;
 		match self.next_char()? {
 			Some(c) => match c {
@@ -755,13 +769,13 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 						DocOrRegExp::RegExp(exp) => Token::Literal(Literal::RegExp(exp)),
 					};
 
-					Ok(Loc::new(Some(token), self.pos.current()))
+					Ok(Meta::new(Some(token), self.pos.current()))
 				}
-				'"' => Ok(Loc(
+				'"' => Ok(Meta(
 					Some(Token::Literal(Literal::String(self.next_string_literal()?))),
 					self.pos.current(),
 				)),
-				'<' => Ok(Loc::new(
+				'<' => Ok(Meta::new(
 					Some(Token::Id(self.next_iri()?)),
 					self.pos.current(),
 				)),
@@ -775,17 +789,17 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 							PrefixedName::Name(name) => Token::Id(Id::Name(name)),
 						};
 
-						Ok(Loc::new(Some(token), self.pos.current()))
+						Ok(Meta::new(Some(token), self.pos.current()))
 					} else {
 						match Delimiter::from_start(c) {
-							Some(d) => Ok(Loc::new(Some(Token::Begin(d)), self.pos.current())),
+							Some(d) => Ok(Meta::new(Some(Token::Begin(d)), self.pos.current())),
 							None => match Delimiter::from_end(c) {
-								Some(d) => Ok(Loc::new(Some(Token::End(d)), self.pos.current())),
+								Some(d) => Ok(Meta::new(Some(Token::End(d)), self.pos.current())),
 								None => match Punct::from_char(c) {
 									Some(p) => {
-										Ok(Loc::new(Some(Token::Punct(p)), self.pos.current()))
+										Ok(Meta::new(Some(Token::Punct(p)), self.pos.current()))
 									}
-									None => Err(Loc::new(
+									None => Err(Meta::new(
 										Error::Unexpected(Some(c)),
 										self.pos.current(),
 									)),
@@ -795,40 +809,40 @@ impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Lexer<F, E, C> {
 					}
 				}
 			},
-			None => Ok(Loc::new(None, self.pos.end())),
+			None => Ok(Meta::new(None, self.pos.end())),
 		}
 	}
 
 	#[allow(clippy::type_complexity)]
-	fn peek(&mut self) -> Result<Loc<Option<&Token>, F>, Loc<Error<E>, F>> {
+	fn peek(&mut self) -> Result<Meta<Option<&Token>, Span>, Meta<Error<E>, Span>> {
 		if self.lookahead.is_none() {
 			if let Meta(Some(token), loc) = self.consume()? {
-				self.lookahead = Some(Loc::new(token, loc));
+				self.lookahead = Some(Meta::new(token, loc));
 			}
 		}
 
 		match &self.lookahead {
-			Some(Meta(token, loc)) => Ok(Loc::new(Some(token), loc.clone())),
-			None => Ok(Loc::new(None, self.pos.end())),
+			Some(Meta(token, loc)) => Ok(Meta::new(Some(token), *loc)),
+			None => Ok(Meta::new(None, self.pos.end())),
 		}
 	}
 
-	fn next(&mut self) -> Result<Loc<Option<Token>, F>, Loc<Error<E>, F>> {
+	fn next(&mut self) -> Result<Meta<Option<Token>, Span>, Meta<Error<E>, Span>> {
 		match self.lookahead.take() {
-			Some(Meta(token, loc)) => Ok(Loc::new(Some(token), loc)),
+			Some(Meta(token, loc)) => Ok(Meta::new(Some(token), loc)),
 			None => self.consume(),
 		}
 	}
 }
 
-impl<F: Clone, E: fmt::Debug, C: Iterator<Item = Result<char, E>>> Tokens<F> for Lexer<F, E, C> {
+impl<E, C: Iterator<Item = Result<DecodedChar, E>>> Tokens for Lexer<E, C> {
 	type Error = Error<E>;
 
-	fn peek(&mut self) -> Result<Loc<Option<&Token>, F>, Loc<Error<E>, F>> {
+	fn peek(&mut self) -> Result<Meta<Option<&Token>, Span>, Meta<Error<E>, Span>> {
 		self.peek()
 	}
 
-	fn next(&mut self) -> Result<Loc<Option<Token>, F>, Loc<Error<E>, F>> {
+	fn next(&mut self) -> Result<Meta<Option<Token>, Span>, Meta<Error<E>, Span>> {
 		self.next()
 	}
 
@@ -837,12 +851,12 @@ impl<F: Clone, E: fmt::Debug, C: Iterator<Item = Result<char, E>>> Tokens<F> for
 	}
 }
 
-impl<F: Clone, E, C: Iterator<Item = Result<char, E>>> Iterator for Lexer<F, E, C> {
-	type Item = Result<Loc<Token, F>, Loc<Error<E>, F>>;
+impl<E, C: Iterator<Item = Result<DecodedChar, E>>> Iterator for Lexer<E, C> {
+	type Item = Result<Meta<Token, Span>, Meta<Error<E>, Span>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self.next() {
-			Ok(Meta(Some(token), loc)) => Some(Ok(Loc::new(token, loc))),
+			Ok(Meta(Some(token), loc)) => Some(Ok(Meta::new(token, loc))),
 			Ok(Meta(None, _)) => None,
 			Err(e) => Some(Err(e)),
 		}

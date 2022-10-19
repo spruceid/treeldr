@@ -10,10 +10,10 @@ pub enum IdentType {
 }
 
 impl IdentType {
-	pub fn for_property<F>(
+	pub fn for_property<M>(
 		&self,
-		context: &Context<F>,
-		prop_ref: Ref<treeldr::prop::Definition<F>>,
+		context: &Context<M>,
+		prop_ref: Ref<treeldr::prop::Definition<M>>,
 	) -> TokenStream {
 		match self {
 			Self::RdfSubject => {
@@ -57,16 +57,16 @@ impl quote::ToTokens for Referenced<IdentType> {
 	}
 }
 
-pub struct Context<'a, F> {
-	model: &'a treeldr::Model<F>,
+pub struct Context<'a, M> {
+	model: &'a treeldr::Model<M>,
 	vocabulary: &'a treeldr::Vocabulary,
-	modules: Shelf<Vec<Module<F>>>,
-	layouts: shelves::Map<treeldr::layout::Definition<F>, HashMap<usize, Type<F>>>,
+	modules: Shelf<Vec<Module<M>>>,
+	layouts: shelves::Map<treeldr::layout::Definition<M>, HashMap<usize, Type<M>>>,
 	ident_type: IdentType,
 }
 
-impl<'a, F> Context<'a, F> {
-	pub fn new(model: &'a treeldr::Model<F>, vocabulary: &'a treeldr::Vocabulary) -> Self {
+impl<'a, M> Context<'a, M> {
+	pub fn new(model: &'a treeldr::Model<M>, vocabulary: &'a treeldr::Vocabulary) -> Self {
 		Self {
 			model,
 			vocabulary,
@@ -76,7 +76,7 @@ impl<'a, F> Context<'a, F> {
 		}
 	}
 
-	pub fn model(&self) -> &'a treeldr::Model<F> {
+	pub fn model(&self) -> &'a treeldr::Model<M> {
 		self.model
 	}
 
@@ -88,11 +88,11 @@ impl<'a, F> Context<'a, F> {
 		self.vocabulary
 	}
 
-	pub fn module(&self, r: Ref<Module<F>>) -> Option<&Module<F>> {
+	pub fn module(&self, r: Ref<Module<M>>) -> Option<&Module<M>> {
 		self.modules.get(r)
 	}
 
-	pub fn module_path(&self, r: Option<Ref<Module<F>>>) -> Path {
+	pub fn module_path(&self, r: Option<Ref<Module<M>>>) -> Path {
 		match r {
 			Some(module_ref) => self
 				.module(module_ref)
@@ -102,7 +102,7 @@ impl<'a, F> Context<'a, F> {
 		}
 	}
 
-	pub fn parent_module_path(&self, r: Option<module::Parent<F>>) -> Option<Path> {
+	pub fn parent_module_path(&self, r: Option<module::Parent<M>>) -> Option<Path> {
 		match r {
 			Some(module::Parent::Extern) => None,
 			Some(module::Parent::Ref(module_ref)) => Some(
@@ -114,15 +114,15 @@ impl<'a, F> Context<'a, F> {
 		}
 	}
 
-	pub fn layout_type(&self, r: Ref<treeldr::layout::Definition<F>>) -> Option<&Type<F>> {
+	pub fn layout_type(&self, r: Ref<treeldr::layout::Definition<M>>) -> Option<&Type<M>> {
 		self.layouts.get(r)
 	}
 
 	pub fn add_module(
 		&mut self,
-		parent: Option<Ref<Module<F>>>,
+		parent: Option<Ref<Module<M>>>,
 		ident: proc_macro2::Ident,
-	) -> Ref<Module<F>> {
+	) -> Ref<Module<M>> {
 		let r = self.modules.insert(Module::new(parent, ident));
 		if let Some(parent) = parent {
 			self.modules
@@ -136,8 +136,8 @@ impl<'a, F> Context<'a, F> {
 
 	pub fn add_layout(
 		&mut self,
-		module: Option<module::Parent<F>>,
-		layout_ref: Ref<treeldr::layout::Definition<F>>,
+		module: Option<module::Parent<M>>,
+		layout_ref: Ref<treeldr::layout::Definition<M>>,
 	) {
 		let layout = self
 			.model()

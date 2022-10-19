@@ -1,4 +1,4 @@
-use crate::{Causes, Documentation, Id, Model};
+use crate::{Documentation, Id, Model};
 
 pub mod data;
 mod intersection;
@@ -15,28 +15,28 @@ pub use restriction::Restriction;
 pub use union::Union;
 
 /// Type definition.
-pub struct Definition<F> {
+pub struct Definition<M> {
 	/// Identifier.
 	id: Id,
 
-	/// Causes of the definition.
-	causes: Causes<F>,
+	/// Metadata of the definition.
+	metadata: M,
 
 	/// Type description.
-	desc: Description<F>,
+	desc: Description<M>,
 }
 
 /// Type definition.
-pub enum Description<F> {
+pub enum Description<M> {
 	Empty,
 	Data(DataType),
-	Normal(Normal<F>),
-	Union(Union<F>),
-	Intersection(Intersection<F>),
-	Restriction(Restriction<F>),
+	Normal(Normal<M>),
+	Union(Union<M>),
+	Intersection(Intersection<M>),
+	Restriction(Restriction<M>),
 }
 
-impl<F> Description<F> {
+impl<M> Description<M> {
 	pub fn kind(&self) -> Kind {
 		match self {
 			Self::Empty => Kind::Empty,
@@ -48,7 +48,7 @@ impl<F> Description<F> {
 		}
 	}
 
-	pub fn is_datatype(&self, model: &Model<F>) -> bool {
+	pub fn is_datatype(&self, model: &Model<M>) -> bool {
 		match self {
 			Self::Data(_) => true,
 			Self::Union(u) => u.is_datatype(model),
@@ -68,11 +68,11 @@ pub enum Kind {
 	Restriction,
 }
 
-impl<F> Definition<F> {
-	pub fn new(id: Id, desc: Description<F>, causes: impl Into<Causes<F>>) -> Self {
+impl<M> Definition<M> {
+	pub fn new(id: Id, desc: Description<M>, causes: impl Into<M>) -> Self {
 		Self {
 			id,
-			causes: causes.into(),
+			metadata: causes.into(),
 			desc,
 		}
 	}
@@ -82,23 +82,23 @@ impl<F> Definition<F> {
 		self.id
 	}
 
-	pub fn causes(&self) -> &Causes<F> {
-		&self.causes
+	pub fn causes(&self) -> &M {
+		&self.metadata
 	}
 
-	pub fn description(&self) -> &Description<F> {
+	pub fn description(&self) -> &Description<M> {
 		&self.desc
 	}
 
-	pub fn label<'m>(&self, model: &'m crate::Model<F>) -> Option<&'m str> {
+	pub fn label<'m>(&self, model: &'m crate::Model<M>) -> Option<&'m str> {
 		model.get(self.id).unwrap().label()
 	}
 
-	pub fn documentation<'m>(&self, model: &'m crate::Model<F>) -> &'m Documentation {
+	pub fn documentation<'m>(&self, model: &'m crate::Model<M>) -> &'m Documentation {
 		model.get(self.id).unwrap().documentation()
 	}
 
-	pub fn properties(&self) -> Option<&Properties<F>> {
+	pub fn properties(&self) -> Option<&Properties<M>> {
 		match &self.desc {
 			Description::Empty => None,
 			Description::Data(_) => None,
@@ -109,7 +109,7 @@ impl<F> Definition<F> {
 		}
 	}
 
-	pub fn is_datatype(&self, model: &Model<F>) -> bool {
+	pub fn is_datatype(&self, model: &Model<M>) -> bool {
 		self.desc.is_datatype(model)
 	}
 }

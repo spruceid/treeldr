@@ -4,13 +4,13 @@ use quote::quote;
 use shelves::Ref;
 use treeldr::Name;
 
-pub struct Struct<F> {
+pub struct Struct<M> {
 	ident: proc_macro2::Ident,
-	fields: Vec<Field<F>>,
+	fields: Vec<Field<M>>,
 }
 
-impl<F> Struct<F> {
-	pub fn new(ident: proc_macro2::Ident, fields: Vec<Field<F>>) -> Self {
+impl<M> Struct<M> {
+	pub fn new(ident: proc_macro2::Ident, fields: Vec<Field<M>>) -> Self {
 		Self { ident, fields }
 	}
 
@@ -18,11 +18,11 @@ impl<F> Struct<F> {
 		&self.ident
 	}
 
-	pub fn fields(&self) -> &[Field<F>] {
+	pub fn fields(&self) -> &[Field<M>] {
 		&self.fields
 	}
 
-	pub fn impl_default(&self, context: &Context<F>) -> bool {
+	pub fn impl_default(&self, context: &Context<M>) -> bool {
 		self.fields
 			.iter()
 			.all(|f| f.ty(context).impl_default(context))
@@ -31,35 +31,35 @@ impl<F> Struct<F> {
 
 // #[derive(Derivative)]
 // #[derivative(Clone(bound = ""), Copy(bound = ""))]
-// pub struct FieldType<F> {
-// 	layout: Ref<treeldr::layout::Definition<F>>,
+// pub struct FieldType<M> {
+// 	layout: Ref<treeldr::layout::Definition<M>>,
 // }
 
-// impl<F> FieldType<F> {
-// 	pub fn new(layout: Ref<treeldr::layout::Definition<F>>) -> Self {
+// impl<M> FieldType<M> {
+// 	pub fn new(layout: Ref<treeldr::layout::Definition<M>>) -> Self {
 // 		Self { layout }
 // 	}
 
-// 	pub fn layout(&self) -> Ref<treeldr::layout::Definition<F>> {
+// 	pub fn layout(&self) -> Ref<treeldr::layout::Definition<M>> {
 // 		self.layout
 // 	}
 
-// 	pub fn ty<'c>(&self, context: &'c Context<F>) -> &'c super::Type<F> {
+// 	pub fn ty<'c>(&self, context: &'c Context<M>) -> &'c super::Type<M> {
 // 		context.layout_type(self.layout).unwrap()
 // 	}
 
-// 	pub fn impl_default(&self, context: &Context<F>) -> bool {
+// 	pub fn impl_default(&self, context: &Context<M>) -> bool {
 // 		self.ty(context).impl_default(context)
 // 	}
 // }
 
-// impl<F> Generate<F> for FieldType<F> {
+// impl<M> Generate<M> for FieldType<M> {
 // 	fn generate(
 // 		&self,
-// 		context: &Context<F>,
-// 		scope: Option<Ref<Module<F>>>,
+// 		context: &Context<M>,
+// 		scope: Option<Ref<Module<M>>>,
 // 		tokens: &mut TokenStream,
-// 	) -> Result<(), Error<F>> {
+// 	) -> Result<(), Error<M>> {
 // 		let layout = self.layout.with(context, scope).into_tokens()?;
 
 // 		tokens.extend(layout);
@@ -68,21 +68,21 @@ impl<F> Struct<F> {
 // 	}
 // }
 
-pub struct Field<F> {
+pub struct Field<M> {
 	name: Name,
 	ident: proc_macro2::Ident,
-	layout: Ref<treeldr::layout::Definition<F>>,
-	prop: Option<Ref<treeldr::prop::Definition<F>>>,
+	layout: Ref<treeldr::layout::Definition<M>>,
+	prop: Option<Ref<treeldr::prop::Definition<M>>>,
 	label: Option<String>,
 	doc: treeldr::Documentation,
 }
 
-impl<F> Field<F> {
+impl<M> Field<M> {
 	pub fn new(
 		name: Name,
 		ident: proc_macro2::Ident,
-		layout: Ref<treeldr::layout::Definition<F>>,
-		prop: Option<Ref<treeldr::prop::Definition<F>>>,
+		layout: Ref<treeldr::layout::Definition<M>>,
+		prop: Option<Ref<treeldr::prop::Definition<M>>>,
 		label: Option<String>,
 		doc: treeldr::Documentation,
 	) -> Self {
@@ -104,15 +104,15 @@ impl<F> Field<F> {
 		&self.ident
 	}
 
-	pub fn layout(&self) -> Ref<treeldr::layout::Definition<F>> {
+	pub fn layout(&self) -> Ref<treeldr::layout::Definition<M>> {
 		self.layout
 	}
 
-	pub fn ty<'c>(&self, context: &'c Context<F>) -> &'c super::Type<F> {
+	pub fn ty<'c>(&self, context: &'c Context<M>) -> &'c super::Type<M> {
 		context.layout_type(self.layout).unwrap()
 	}
 
-	pub fn property(&self) -> Option<Ref<treeldr::prop::Definition<F>>> {
+	pub fn property(&self) -> Option<Ref<treeldr::prop::Definition<M>>> {
 		self.prop
 	}
 
@@ -125,13 +125,13 @@ impl<F> Field<F> {
 	}
 }
 
-impl<F> Generate<F> for Field<F> {
+impl<M> Generate<M> for Field<M> {
 	fn generate(
 		&self,
-		context: &Context<F>,
-		scope: Option<Ref<Module<F>>>,
+		context: &Context<M>,
+		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Error<M>> {
 		let ident = &self.ident;
 		let ty = self.layout.with(context, scope).into_tokens()?;
 		let doc = super::generate::doc_attribute(self.label(), self.documentation());

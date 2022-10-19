@@ -1,27 +1,30 @@
 //! JSON Schema import functions.
 use crate::schema::{self, RegularSchema, Schema};
 use iref::{Iri, IriBuf};
-use locspan::{Loc, Location};
+use locspan::{Located, Meta, Span};
 use rdf_types::Quad;
-use treeldr::{vocab, Caused, Id, Name, Vocabulary};
+use treeldr::{metadata::Merge, vocab, Id, Name, Vocabulary};
 use treeldr_build::{Context, Descriptions};
 use vocab::{LocQuad, Object, Term};
 
 /// Import error.
 #[derive(Debug)]
-pub enum Error<F> {
+pub enum Error<M> {
 	UnsupportedType,
 	InvalidPropertyName(String),
-	Build(treeldr_build::Error<F>),
+	Build(treeldr_build::Error<M>),
 }
 
-impl<F> From<treeldr_build::Error<F>> for Error<F> {
-	fn from(e: treeldr_build::Error<F>) -> Self {
+impl<M> From<treeldr_build::Error<M>> for Error<M> {
+	fn from(e: treeldr_build::Error<M>) -> Self {
 		Self::Build(e)
 	}
 }
 
-impl<F: Clone> treeldr::reporting::DiagnoseWithVocabulary<F> for Error<F> {
+impl<M: Located<Span = Span>> treeldr::reporting::DiagnoseWithVocabulary<M> for Error<M>
+where
+	M::File: Clone,
+{
 	fn message(&self, vocabulary: &Vocabulary) -> String {
 		match self {
 			Self::UnsupportedType => "unsupported schema `type` value.".to_string(),
@@ -31,17 +34,17 @@ impl<F: Clone> treeldr::reporting::DiagnoseWithVocabulary<F> for Error<F> {
 	}
 }
 
-pub fn import_schema<F: Clone + Ord, D: Descriptions<F>>(
+pub fn import_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 	schema: &Schema,
 	base_iri: Option<Iri>,
-	context: &mut Context<F, D>,
+	context: &mut Context<M, D>,
 	vocabulary: &mut Vocabulary,
-) -> Result<Id, Error<F>> {
+) -> Result<Id, Error<M>> {
 	match schema {
 		Schema::True => todo!(),
 		Schema::False => {
 			let id = Id::Blank(vocabulary.new_blank_label());
-			context.declare_layout(id, None);
+			context.declare_layout(id, M::default());
 			Ok(id)
 		}
 		Schema::Ref(r) => {
@@ -56,17 +59,17 @@ pub fn import_schema<F: Clone + Ord, D: Descriptions<F>>(
 	}
 }
 
-pub fn import_sub_schema<F: Clone + Ord, D: Descriptions<F>>(
+pub fn import_sub_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 	schema: &Schema,
 	base_iri: Option<Iri>,
-	context: &mut Context<F, D>,
+	context: &mut Context<M, D>,
 	vocabulary: &mut Vocabulary,
-) -> Result<Id, Error<F>> {
+) -> Result<Id, Error<M>> {
 	match schema {
 		Schema::True => todo!(),
 		Schema::False => {
 			let id = Id::Blank(vocabulary.new_blank_label());
-			context.declare_layout(id, None);
+			context.declare_layout(id, M::default());
 			Ok(id)
 		}
 		Schema::Ref(r) => {
@@ -107,7 +110,7 @@ impl LayoutKind {
 	// 	matches!(self, Self::Struct)
 	// }
 
-	pub fn refine<F>(&mut self, other: Self) -> Result<(), Error<F>> {
+	pub fn refine<M>(&mut self, other: Self) -> Result<(), Error<M>> {
 		*self = match (*self, other) {
 			(Self::Unknown, k) => k,
 			(Self::Boolean, Self::Boolean) => Self::Boolean,
@@ -127,13 +130,13 @@ impl LayoutKind {
 	}
 }
 
-pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
+pub fn import_regular_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 	schema: &RegularSchema,
 	_top_level: bool,
 	base_iri: Option<Iri>,
-	context: &mut Context<F, D>,
+	context: &mut Context<M, D>,
 	vocabulary: &mut Vocabulary,
-) -> Result<Id, Error<F>> {
+) -> Result<Id, Error<M>> {
 	if let Some(defs) = &schema.defs {
 		for schema in defs.values() {
 			import_sub_schema(schema, base_iri, context, vocabulary)?;
@@ -186,7 +189,7 @@ pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
 	}
 
 	// Declare the layout.
-	context.declare_layout(id, None);
+	context.declare_layout(id, M::default());
 
 	let node = context.get_mut(id).unwrap();
 	if let Some(title) = &schema.meta_data.title {
@@ -201,10 +204,10 @@ pub fn import_regular_schema<F: Clone + Ord, D: Descriptions<F>>(
 
 	let layout = node.as_layout_mut().unwrap();
 	if let Some(name) = name {
-		layout.set_name(name, None)?;
+		layout.set_name(name, M::default())?;
 	}
 
-	layout.set_description(desc.into(), None)?;
+	layout.set_description(desc.into(), M::default())?;
 
 	Ok(id)
 }
@@ -247,12 +250,12 @@ fn into_numeric(
 	}
 }
 
-fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
+fn import_layout_description<M: Default + Clone + Merge, D: Descriptions<M>>(
 	schema: &RegularSchema,
 	base_iri: Option<Iri>,
-	context: &mut Context<F, D>,
+	context: &mut Context<M, D>,
 	vocabulary: &mut Vocabulary,
-) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
+) -> Result<treeldr_build::layout::Description<M>, Error<M>> {
 	let mut kind = LayoutKind::Unknown;
 	if let Some(types) = &schema.validation.any.ty {
 		for ty in types {
@@ -323,7 +326,8 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 						let primitive = primitive_layout.unwrap();
 						let mut restricted =
 							treeldr_build::layout::primitive::Restricted::unrestricted(
-								primitive, None,
+								primitive,
+								M::default(),
 							);
 						let restrictions = restricted.restrictions_mut();
 
@@ -332,7 +336,7 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 								Restriction::Numeric(Numeric::InclusiveMinimum(into_numeric(
 									primitive, min,
 								))),
-								None,
+								M::default(),
 							)
 						}
 
@@ -341,7 +345,7 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 								Restriction::Numeric(Numeric::ExclusiveMinimum(into_numeric(
 									primitive, min,
 								))),
-								None,
+								M::default(),
 							)
 						}
 
@@ -350,7 +354,7 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 								Restriction::Numeric(Numeric::InclusiveMaximum(into_numeric(
 									primitive, max,
 								))),
-								None,
+								M::default(),
 							)
 						}
 
@@ -359,7 +363,7 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 								Restriction::Numeric(Numeric::ExclusiveMaximum(into_numeric(
 									primitive, max,
 								))),
-								None,
+								M::default(),
 							)
 						}
 
@@ -371,21 +375,21 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 
 					let mut restricted = treeldr_build::layout::RestrictedPrimitive::unrestricted(
 						treeldr::layout::Primitive::String,
-						None,
+						M::default(),
 					);
 					let restrictions = restricted.restrictions_mut();
 
 					if let Some(cnst) = &schema.validation.any.cnst {
 						restrictions.insert(
 							Restriction::String(String::Pattern(cnst.to_string().into())),
-							None,
+							M::default(),
 						);
 					}
 
 					if let Some(pattern) = &schema.validation.string.pattern {
 						restrictions.insert(
 							Restriction::String(String::Pattern(pattern.to_string().into())),
-							None,
+							M::default(),
 						);
 					}
 
@@ -407,15 +411,15 @@ fn import_layout_description<F: Clone + Ord, D: Descriptions<F>>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn import_array_schema<F: Clone + Ord, D: Descriptions<F>>(
+fn import_array_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 	schema: &RegularSchema,
 	_top_level: bool,
 	array: &schema::ArraySchema,
 	kind: &mut LayoutKind,
 	base_iri: Option<Iri>,
-	context: &mut Context<F, D>,
+	context: &mut Context<M, D>,
 	vocabulary: &mut Vocabulary,
-) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
+) -> Result<treeldr_build::layout::Description<M>, Error<M>> {
 	let item_type = match &array.items {
 		Some(items) => import_sub_schema(items, base_iri, context, vocabulary)?,
 		None => todo!(),
@@ -432,15 +436,15 @@ fn import_array_schema<F: Clone + Ord, D: Descriptions<F>>(
 	}
 }
 
-fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
+fn import_object_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 	schema: &RegularSchema,
 	_top_level: bool,
 	object: &schema::ObjectSchema,
 	base_iri: Option<Iri>,
-	context: &mut Context<F, D>,
+	context: &mut Context<M, D>,
 	vocabulary: &mut Vocabulary,
-) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
-	let mut fields: Vec<Caused<Object<F>, F>> = Vec::new();
+) -> Result<treeldr_build::layout::Description<M>, Error<M>> {
+	let mut fields: Vec<Meta<Object<M>, M>> = Vec::new();
 
 	if let Some(properties) = &object.properties {
 		fields.reserve(properties.len());
@@ -457,17 +461,17 @@ fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 			}
 
 			let layout_id = Id::Blank(vocabulary.new_blank_label());
-			context.declare_layout(layout_id, None);
+			context.declare_layout(layout_id, M::default());
 			let layout = context.get_mut(layout_id).unwrap().as_layout_mut().unwrap();
 
 			if is_required {
-				layout.set_required(layout_item_id, None)?;
+				layout.set_required(layout_item_id, M::default())?;
 			} else {
-				layout.set_option(layout_item_id, None)?;
+				layout.set_option(layout_item_id, M::default())?;
 			}
 
 			let field_id = Id::Blank(vocabulary.new_blank_label());
-			context.declare_layout_field(field_id, None);
+			context.declare_layout_field(field_id, M::default());
 			let field_node = context.get_mut(field_id).unwrap();
 
 			if let Some(meta) = &prop_schema.meta_data() {
@@ -479,13 +483,13 @@ fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 			let field = field_node.as_layout_field_mut().unwrap();
 
 			match Name::new(prop) {
-				Ok(name) => field.set_name(name, None)?,
+				Ok(name) => field.set_name(name, M::default())?,
 				Err(_) => return Err(Error::InvalidPropertyName(prop.to_string())),
 			}
 
-			field.set_layout(layout_id, None)?;
+			field.set_layout(layout_id, M::default())?;
 
-			fields.push(Caused::new(field_id.into_term(), None));
+			fields.push(Meta(field_id.into_term(), M::default()));
 		}
 	}
 
@@ -493,7 +497,7 @@ fn import_object_schema<F: Clone + Ord, D: Descriptions<F>>(
 	Ok(treeldr_build::layout::Description::Struct(fields_id))
 }
 
-fn format_layout<F>(format: schema::Format) -> Result<treeldr::layout::Primitive, Error<F>> {
+fn format_layout<M>(format: schema::Format) -> Result<treeldr::layout::Primitive, Error<M>> {
 	use treeldr::layout::Primitive;
 	let layout = match format {
 		schema::Format::DateTime => Primitive::DateTime,
@@ -520,75 +524,74 @@ fn format_layout<F>(format: schema::Format) -> Result<treeldr::layout::Primitive
 	Ok(layout)
 }
 
-pub trait TryIntoRdfList<F, C, T> {
+pub trait TryIntoRdfList<M, C, T> {
 	fn try_into_rdf_list<E, K>(
 		self,
 		ctx: &mut C,
 		vocab: &mut Vocabulary,
-		quads: &mut Vec<LocQuad<F>>,
-		loc: Location<F>,
+		quads: &mut Vec<LocQuad<M>>,
+		meta: M,
 		f: K,
-	) -> Result<Loc<Object<F>, F>, E>
+	) -> Result<Meta<Object<M>, M>, E>
 	where
-		K: FnMut(T, &mut C, &mut Vocabulary, &mut Vec<LocQuad<F>>) -> Result<Loc<Object<F>, F>, E>;
+		K: FnMut(T, &mut C, &mut Vocabulary, &mut Vec<LocQuad<M>>) -> Result<Meta<Object<M>, M>, E>;
 }
 
-impl<F: Clone, C, I: DoubleEndedIterator> TryIntoRdfList<F, C, I::Item> for I {
+impl<M: Clone + Merge, C, I: DoubleEndedIterator> TryIntoRdfList<M, C, I::Item> for I {
 	fn try_into_rdf_list<E, K>(
 		self,
 		ctx: &mut C,
 		vocab: &mut Vocabulary,
-		quads: &mut Vec<LocQuad<F>>,
-		loc: Location<F>,
+		quads: &mut Vec<LocQuad<M>>,
+		meta: M,
 		mut f: K,
-	) -> Result<Loc<Object<F>, F>, E>
+	) -> Result<Meta<Object<M>, M>, E>
 	where
 		K: FnMut(
 			I::Item,
 			&mut C,
 			&mut Vocabulary,
-			&mut Vec<LocQuad<F>>,
-		) -> Result<Loc<Object<F>, F>, E>,
+			&mut Vec<LocQuad<M>>,
+		) -> Result<Meta<Object<M>, M>, E>,
 	{
 		use vocab::Rdf;
-		let mut head = Loc(Object::Iri(Term::Rdf(Rdf::Nil)), loc);
+		let mut head = Meta(Object::Iri(Term::Rdf(Rdf::Nil)), meta.clone());
 		for item in self.rev() {
 			let item = f(item, ctx, vocab, quads)?;
 			let item_label = vocab.new_blank_label();
-			let item_loc = item.location().clone();
-			let list_loc = head.location().clone().with(item_loc.span());
+			let item_loc = item.metadata().clone();
 
-			quads.push(Loc(
+			quads.push(Meta(
 				Quad(
-					Loc(Id::Blank(item_label), list_loc.clone()),
-					Loc(Term::Rdf(Rdf::Type), list_loc.clone()),
-					Loc(Object::Iri(Term::Rdf(Rdf::List)), list_loc.clone()),
+					Meta(Id::Blank(item_label), item_loc.clone()),
+					Meta(Term::Rdf(Rdf::Type), item_loc.clone()),
+					Meta(Object::Iri(Term::Rdf(Rdf::List)), item_loc.clone()),
 					None,
 				),
 				item_loc.clone(),
 			));
 
-			quads.push(Loc(
+			quads.push(Meta(
 				Quad(
-					Loc(Id::Blank(item_label), item_loc.clone()),
-					Loc(Term::Rdf(Rdf::First), item_loc.clone()),
+					Meta(Id::Blank(item_label), item_loc.clone()),
+					Meta(Term::Rdf(Rdf::First), item_loc.clone()),
 					item,
 					None,
 				),
 				item_loc.clone(),
 			));
 
-			quads.push(Loc(
+			quads.push(Meta(
 				Quad(
-					Loc(Id::Blank(item_label), head.location().clone()),
-					Loc(Term::Rdf(Rdf::Rest), head.location().clone()),
+					Meta(Id::Blank(item_label), meta.clone()),
+					Meta(Term::Rdf(Rdf::Rest), meta.clone()),
 					head,
 					None,
 				),
 				item_loc.clone(),
 			));
 
-			head = Loc(Object::Blank(item_label), list_loc);
+			head = Meta(Object::Blank(item_label), meta.clone());
 		}
 
 		Ok(head)

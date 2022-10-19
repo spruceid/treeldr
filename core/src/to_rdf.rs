@@ -556,12 +556,7 @@ impl<F> prop::Definition<F> {
 		quads.push(Quad(
 			self.id(),
 			Term::Rdfs(vocab::Rdfs::Range),
-			model
-				.types()
-				.get(*self.range().inner())
-				.unwrap()
-				.id()
-				.into_term(),
+			model.types().get(**self.range()).unwrap().id().into_term(),
 			None,
 		));
 
@@ -617,7 +612,7 @@ impl<F> layout::Definition<F> {
 			));
 		}
 
-		match self.description() {
+		match self.description().value() {
 			layout::Description::Never(_) => (),
 			layout::Description::Primitive(n, _) => n.to_rdf(self.id(), generator, quads),
 			layout::Description::Struct(s) => s.to_rdf(model, self.id(), generator, quads),

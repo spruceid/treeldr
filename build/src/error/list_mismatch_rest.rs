@@ -1,15 +1,15 @@
 use treeldr::{Id, Vocabulary, vocab::Display};
-use locspan::Location;
+use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
-pub struct ListMismatchRest<F> {
+pub struct ListMismatchRest<M> {
 	pub id: Id,
 	pub expected: Id,
 	pub found: Id,
-	pub because: Option<Location<F>>
+	pub because: M
 }
 
-impl<F> super::AnyError<F> for ListMismatchRest<F> {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for ListMismatchRest<M> {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("rest mismatch for list `{}`", self.id.display(vocab))
 	}

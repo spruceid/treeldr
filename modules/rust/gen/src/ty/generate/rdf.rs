@@ -7,7 +7,7 @@ pub enum Error {
 	NoDefaultImplForOrphanField,
 }
 
-fn primitive_from_literal<F>(context: &Context<F>, p: Primitive, lit: TokenStream) -> TokenStream {
+fn primitive_from_literal<M>(context: &Context<M>, p: Primitive, lit: TokenStream) -> TokenStream {
 	let id_ty = context.ident_type();
 
 	match p {
@@ -50,7 +50,7 @@ fn primitive_from_literal<F>(context: &Context<F>, p: Primitive, lit: TokenStrea
 	}
 }
 
-fn from_object<F>(context: &Context<F>, ty: &Type<F>, object: TokenStream) -> TokenStream {
+fn from_object<M>(context: &Context<M>, ty: &Type<M>, object: TokenStream) -> TokenStream {
 	match ty.description() {
 		Description::BuiltIn(BuiltIn::Required(item)) => {
 			let ty = context.layout_type(*item).unwrap();
@@ -109,7 +109,7 @@ fn from_object<F>(context: &Context<F>, ty: &Type<F>, object: TokenStream) -> To
 	}
 }
 
-fn from_objects<F>(context: &Context<F>, ty: &Type<F>, objects: TokenStream) -> TokenStream {
+fn from_objects<M>(context: &Context<M>, ty: &Type<M>, objects: TokenStream) -> TokenStream {
 	match ty.description() {
 		Description::BuiltIn(BuiltIn::Vec(item)) => {
 			let object = quote! { object };
@@ -146,9 +146,9 @@ fn from_objects<F>(context: &Context<F>, ty: &Type<F>, objects: TokenStream) -> 
 
 /// Generate a function that extracts an instance of the given structure
 /// from an RDF graph.
-pub fn structure_reader<F>(
-	context: &Context<F>,
-	ty: &Struct<F>,
+pub fn structure_reader<M>(
+	context: &Context<M>,
+	ty: &Struct<M>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	let mut fields_init = Vec::with_capacity(ty.fields().len());
@@ -167,7 +167,7 @@ pub fn structure_reader<F>(
 					== treeldr::Id::Iri(treeldr::vocab::Term::TreeLdr(
 						treeldr::vocab::TreeLdr::Self_,
 					)) {
-					match layout.description() {
+					match layout.description().value() {
 						treeldr::layout::Description::Required(_) => {
 							quote! {
 								::treeldr_rust_prelude::Id::from_ref(id)
@@ -190,7 +190,7 @@ pub fn structure_reader<F>(
 					let id = quote! { ::treeldr_rust_prelude::Id::from_ref(id) }; // FIXME: same limitation
 					let objects = quote! { graph.objects(&#id, &#prop_id) };
 
-					match layout.description() {
+					match layout.description().value() {
 						treeldr::layout::Description::Required(_) => {
 							let object = quote! { object };
 							let from_object =
@@ -270,9 +270,9 @@ pub fn structure_reader<F>(
 
 /// Generate a function that extracts an instance of the given enumeration
 /// from an RDF graph.
-pub fn enum_reader<F>(
-	context: &Context<F>,
-	_ty: &Enum<F>,
+pub fn enum_reader<M>(
+	context: &Context<M>,
+	_ty: &Enum<M>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	let id_ty = context.ident_type();

@@ -1,10 +1,10 @@
-use locspan::Meta;
+use locspan::{Meta, Span};
 use static_iref::iri;
 use std::collections::HashMap;
 use std::path::Path;
 use treeldr::vocab::{BlankLabel, GraphLabel, Id, StrippedObject, Term, Vocabulary};
 
-type BuildContext = treeldr_build::Context<(), treeldr_syntax::build::Descriptions>;
+type BuildContext = treeldr_build::Context<Span, treeldr_syntax::build::Descriptions>;
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
@@ -57,11 +57,10 @@ fn parse_treeldr<P: AsRef<Path>>(
 	path: P,
 ) -> grdf::BTreeDataset<Id, Term, StrippedObject, GraphLabel> {
 	use treeldr_build::Document;
-	use treeldr_syntax::{Lexer, Parse};
+	use treeldr_syntax::Parse;
 
 	let input = std::fs::read_to_string(path).expect("unable to read input file");
-	let mut lexer = Lexer::new((), input.chars().map(infallible));
-	let ast = treeldr_syntax::Document::parse(&mut lexer).expect("parse error");
+	let ast = treeldr_syntax::Document::parse_str(&input, |span| span).expect("parse error");
 	let mut context = BuildContext::new();
 	context.apply_built_in_definitions(vocabulary).unwrap();
 	let mut local_context =

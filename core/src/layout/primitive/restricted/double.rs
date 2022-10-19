@@ -159,7 +159,7 @@ impl Iterator for Iter {
 	type Item = Restriction;
 
 	fn size_hint(&self) -> (usize, Option<usize>) {
-		let len = if self.min.is_some() { 1 } else { 0 } + if self.max.is_some() { 1 } else { 0 };
+		let len = usize::from(self.min.is_some()) + usize::from(self.max.is_some());
 		(len, Some(len))
 	}
 

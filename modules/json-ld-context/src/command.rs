@@ -16,7 +16,7 @@ pub struct Command {
 
 pub enum Error<F> {
 	UndefinedLayout(IriBuf),
-	NotALayout(IriBuf, treeldr::node::CausedTypes<F>),
+	NotALayout(IriBuf, treeldr::node::TypesMetadata<F>),
 	Generation(crate::Error),
 }
 

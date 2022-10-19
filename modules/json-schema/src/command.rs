@@ -21,12 +21,12 @@ pub struct Command {
 	type_property: Option<String>,
 }
 
-pub struct NotALayoutError<F>(pub IriBuf, pub treeldr::node::CausedTypes<F>);
+pub struct NotALayoutError<M>(pub IriBuf, pub treeldr::node::TypesMetadata<M>);
 
-pub enum Error<F> {
+pub enum Error<M> {
 	NoLayoutName(String),
 	UndefinedLayout(IriBuf),
-	NotALayout(Box<NotALayoutError<F>>),
+	NotALayout(Box<NotALayoutError<M>>),
 	InfiniteSchema(String),
 	Serialization(serde_json::Error),
 }

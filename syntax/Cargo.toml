@@ -9,14 +9,15 @@ edition = "2021"
 treeldr = { path = "../core" }
 treeldr-build = { path = "../build" }
 iref = "2.2"
-locspan = "0.7.2"
-locspan-derive = "0.4"
+locspan = "0.7.11"
+locspan-derive = "0.5"
 codespan-reporting = "0.11"
-rdf-types = { version = "0.9", features = ["meta"] }
+rdf-types = { version = "0.10", features = ["meta"] }
 derivative = "2.2.0"
 thiserror = "1.0.31"
+decoded-char = "0.1.1"
 
 [dev-dependencies]
 static-iref = "2.0"
-nquads-syntax = "0.6.0"
-grdf = "0.11"
+nquads-syntax = "0.7.0"
+grdf = "0.12"

@@ -1,39 +1,39 @@
 use super::{IntersectedLayout, IntersectedLayoutDescription};
 use crate::build::{Descriptions, Error};
-use treeldr::{Caused, Causes, Id, MaybeSet, Name, Vocabulary, WithCauses};
+use locspan::Meta;
+use treeldr::{metadata::Merge, Id, MetaOption, Name, Vocabulary};
 use treeldr_build::{Context, ObjectToId};
 
 #[derive(Clone)]
-pub struct IntersectedEnum<F> {
-	variants: Vec<WithCauses<IntersectedVariant<F>, F>>,
+pub struct IntersectedEnum<M> {
+	variants: Vec<Meta<IntersectedVariant<M>, M>>,
 }
 
-impl<F: Clone + Ord> IntersectedEnum<F> {
+impl<M: Clone> IntersectedEnum<M> {
 	pub fn new(
 		variants_id: Id,
-		context: &Context<F, Descriptions>,
-		causes: &Causes<F>,
-	) -> Result<Self, Error<F>> {
+		context: &Context<M, Descriptions>,
+		causes: &M,
+	) -> Result<Self, Error<M>>
+	where
+		M: Merge,
+	{
 		let mut variants = Vec::new();
 
-		for variant_obj in context
-			.require_list(variants_id, causes.preferred().cloned())?
-			.iter(context)
-		{
+		for variant_obj in context.require_list(variants_id, causes)?.iter(context) {
 			let variant_obj = variant_obj?;
-			let variant_id = variant_obj.as_id(variant_obj.causes().preferred())?;
-			let variant = context
-				.require_layout_variant(variant_id, variant_obj.causes().preferred().cloned())?;
-			variants.push(WithCauses::new(
+			let variant_id = variant_obj.as_id(variant_obj.metadata())?;
+			let variant = context.require_layout_variant(variant_id, variant_obj.metadata())?;
+			variants.push(Meta::new(
 				IntersectedVariant {
 					name: variant.name().cloned().into(),
 					layout: IntersectedLayout::try_from_iter(
-						variant.layout().with_causes().cloned(),
+						variant.layout().as_ref().cloned(),
 						context,
-						variant_obj.causes().clone(),
+						variant_obj.metadata().clone(),
 					)?,
 				},
-				variant.causes().clone(),
+				variant.metadata().clone(),
 			))
 		}
 
@@ -62,25 +62,27 @@ impl<F: Clone + Ord> IntersectedEnum<F> {
 
 	pub fn intersected_with(
 		mut self,
-		mut other: IntersectedEnum<F>,
-		context: &Context<F, Descriptions>,
-	) -> Result<IntersectedLayoutDescription<F>, Error<F>> {
+		mut other: IntersectedEnum<M>,
+		context: &Context<M, Descriptions>,
+	) -> Result<IntersectedLayoutDescription<M>, Error<M>>
+	where
+		M: Merge,
+	{
 		let mut variants = std::mem::take(&mut self.variants);
 		variants.reverse();
 		other.variants.reverse();
 
 		'next_variant: while !variants.is_empty() && !other.variants.is_empty() {
-			if let Some(variant) = variants.pop() {
-				let (variant, causes) = variant.into_parts();
+			if let Some(Meta(variant, causes)) = variants.pop() {
 				while let Some(other_variant) = other.variants.pop() {
 					if variant.matches(&other_variant) {
-						let (other_variant, other_causes) = other_variant.into_parts();
+						let Meta(other_variant, other_causes) = other_variant;
 						if let Some(intersected_variant) =
 							variant.intersected_with(other_variant, context)?
 						{
-							self.variants.push(WithCauses::new(
+							self.variants.push(Meta::new(
 								intersected_variant,
-								causes.with(other_causes),
+								causes.merged_with(other_causes),
 							))
 						}
 
@@ -106,10 +108,10 @@ impl<F: Clone + Ord> IntersectedEnum<F> {
 		match self.variants.len() {
 			0 => Ok(IntersectedLayoutDescription::Never),
 			1 => {
-				let variant = self.variants.into_iter().next().unwrap().into_inner();
+				let variant = self.variants.into_iter().next().unwrap().into_value();
 				match variant.layout.id() {
 					Some((id, _)) => Ok(IntersectedLayoutDescription::Alias(id)),
-					None => Ok(variant.layout.into_description().into_inner()),
+					None => Ok(variant.layout.into_description().into_value()),
 				}
 			}
 			_ => Ok(IntersectedLayoutDescription::Enum(self)),
@@ -118,27 +120,29 @@ impl<F: Clone + Ord> IntersectedEnum<F> {
 
 	pub fn intersected_with_non_enum(
 		mut self,
-		other: IntersectedLayout<F>,
-		context: &Context<F, Descriptions>,
-	) -> Result<IntersectedLayoutDescription<F>, Error<F>> {
+		other: IntersectedLayout<M>,
+		context: &Context<M, Descriptions>,
+	) -> Result<IntersectedLayoutDescription<M>, Error<M>>
+	where
+		M: Merge,
+	{
 		let variants = std::mem::take(&mut self.variants);
 
-		for variant in variants {
-			let (mut variant, causes) = variant.into_parts();
+		for Meta(mut variant, causes) in variants {
 			variant.layout = variant.layout.intersected_with(other.clone(), context)?;
 
 			if variant.layout.has_id() {
-				self.variants.push(WithCauses::new(variant, causes))
+				self.variants.push(Meta::new(variant, causes))
 			}
 		}
 
 		match self.variants.len() {
 			0 => Ok(IntersectedLayoutDescription::Never),
 			1 => {
-				let variant = self.variants.into_iter().next().unwrap().into_inner();
+				let variant = self.variants.into_iter().next().unwrap().into_value();
 				match variant.layout.id() {
 					Some((id, _)) => Ok(IntersectedLayoutDescription::Alias(id)),
-					None => Ok(variant.layout.into_description().into_inner()),
+					None => Ok(variant.layout.into_description().into_value()),
 				}
 			}
 			_ => Ok(IntersectedLayoutDescription::Enum(self)),
@@ -147,14 +151,17 @@ impl<F: Clone + Ord> IntersectedEnum<F> {
 
 	pub fn into_standard_description(
 		self,
-		source: &Context<F, Descriptions>,
-		target: &mut Context<F>,
+		source: &Context<M, Descriptions>,
+		target: &mut Context<M>,
 		vocabulary: &mut Vocabulary,
-	) -> Result<treeldr_build::layout::Description<F>, Error<F>> {
+	) -> Result<treeldr_build::layout::Description<M>, Error<M>>
+	where
+		M: Merge,
+	{
 		match self.variants.len() {
 			0 => Ok(treeldr_build::layout::Description::Never),
 			1 => {
-				let variant = self.variants.into_iter().next().unwrap().into_inner();
+				let variant = self.variants.into_iter().next().unwrap().into_value();
 				match variant.layout.id() {
 					Some((id, _)) => Ok(treeldr_build::layout::Description::Alias(id)),
 					None => variant
@@ -163,16 +170,15 @@ impl<F: Clone + Ord> IntersectedEnum<F> {
 				}
 			}
 			_ => {
-				let variants_id = target.try_create_list_with::<Error<F>, _, _>(
+				let variants_id = target.try_create_list_with::<Error<M>, _, _>(
 					vocabulary,
 					self.variants,
-					|variant, target, vocabulary| {
-						let (variant, causes) = variant.into_parts();
-						Ok(Caused::new(
+					|Meta(variant, meta), target, vocabulary| {
+						Ok(Meta(
 							variant
-								.into_variant(source, target, vocabulary, &causes)?
+								.into_variant(source, target, vocabulary, &meta)?
 								.into_term(),
-							causes.preferred().cloned(),
+							meta,
 						))
 					},
 				)?;
@@ -183,35 +189,38 @@ impl<F: Clone + Ord> IntersectedEnum<F> {
 	}
 }
 
-impl<F> PartialEq for IntersectedEnum<F> {
+impl<M> PartialEq for IntersectedEnum<M> {
 	fn eq(&self, other: &Self) -> bool {
 		self.variants.len() == other.variants.len()
 			&& self
 				.variants
 				.iter()
 				.zip(&other.variants)
-				.all(|(a, b)| a.inner() == b.inner())
+				.all(|(a, b)| a.value() == b.value())
 	}
 }
 
 #[derive(Clone)]
-pub struct IntersectedVariant<F> {
-	name: MaybeSet<Name, F>,
-	layout: IntersectedLayout<F>,
+pub struct IntersectedVariant<M> {
+	name: MetaOption<Name, M>,
+	layout: IntersectedLayout<M>,
 }
 
-impl<F: Clone + Ord> IntersectedVariant<F> {
+impl<M: Clone> IntersectedVariant<M> {
 	pub fn into_variant(
 		self,
-		source: &Context<F, Descriptions>,
-		target: &mut Context<F>,
+		source: &Context<M, Descriptions>,
+		target: &mut Context<M>,
 		vocabulary: &mut Vocabulary,
-		causes: &Causes<F>,
-	) -> Result<Id, Error<F>> {
+		causes: &M,
+	) -> Result<Id, Error<M>>
+	where
+		M: Merge,
+	{
 		let layout = self.layout.into_layout(source, target, vocabulary)?;
 
 		let id = Id::Blank(vocabulary.new_blank_label());
-		target.declare_layout_variant(id, causes.preferred().cloned());
+		target.declare_layout_variant(id, causes.clone());
 
 		let def = target.get_mut(id).unwrap().as_layout_variant_mut().unwrap();
 
@@ -232,16 +241,18 @@ impl<F: Clone + Ord> IntersectedVariant<F> {
 	pub fn intersected_with(
 		self,
 		other: Self,
-		context: &Context<F, Descriptions>,
-	) -> Result<Option<Self>, Error<F>> {
+		context: &Context<M, Descriptions>,
+	) -> Result<Option<Self>, Error<M>>
+	where
+		M: Merge,
+	{
 		let name = match (self.name.unwrap(), other.name.unwrap()) {
-			(Some(a), Some(b)) => {
-				let (a, causes) = a.into_parts();
-				MaybeSet::new(a, causes.with(b.into_causes()))
+			(Some(Meta(a, causes)), Some(b)) => {
+				MetaOption::new(a, causes.merged_with(b.into_metadata()))
 			}
 			(Some(a), _) => a.into(),
 			(_, Some(b)) => b.into(),
-			(None, None) => MaybeSet::default(),
+			(None, None) => MetaOption::default(),
 		};
 
 		let layout = self.layout.intersected_with(other.layout, context)?;
@@ -254,7 +265,7 @@ impl<F: Clone + Ord> IntersectedVariant<F> {
 	}
 }
 
-impl<F> PartialEq for IntersectedVariant<F> {
+impl<M> PartialEq for IntersectedVariant<M> {
 	fn eq(&self, other: &Self) -> bool {
 		self.name.value() == other.name.value() && self.layout == other.layout
 	}

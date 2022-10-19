@@ -1,15 +1,15 @@
 use treeldr::{Id, Vocabulary, vocab::Display};
-use locspan::Location;
+use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
-pub struct PropertyMismatchType<F> {
+pub struct PropertyMismatchType<M> {
 	pub id: Id,
 	pub expected: Id,
 	pub found: Id,
-	pub because: Option<Location<F>>
+	pub because: M
 }
 
-impl<F> super::AnyError<F> for PropertyMismatchType<F> {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for PropertyMismatchType<M> {
 	fn message(&self, vocab: &Vocabulary) -> String {
 		format!("type mismatch for property `{}`", self.id.display(vocab))
 	}

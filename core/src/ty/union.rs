@@ -1,19 +1,19 @@
 use super::Properties;
-use crate::{Causes, Model, Ref};
+use crate::{metadata, Model, Ref};
 use std::collections::BTreeMap;
 
-pub struct Union<F> {
-	options: BTreeMap<Ref<super::Definition<F>>, Causes<F>>,
+pub struct Union<M> {
+	options: BTreeMap<Ref<super::Definition<M>>, M>,
 
 	/// Properties in the union.
-	properties: Properties<F>,
+	properties: Properties<M>,
 }
 
-impl<F> Union<F> {
-	pub fn new<'a, G>(options: BTreeMap<Ref<super::Definition<F>>, Causes<F>>, get: G) -> Self
+impl<M> Union<M> {
+	pub fn new<'a, G>(options: BTreeMap<Ref<super::Definition<M>>, M>, get: G) -> Self
 	where
-		F: 'a + Clone + Ord,
-		G: 'a + Fn(Ref<super::Definition<F>>) -> &'a super::Definition<F>,
+		M: 'a + Clone + metadata::Merge,
+		G: 'a + Fn(Ref<super::Definition<M>>) -> &'a super::Definition<M>,
 	{
 		let mut properties = Properties::none();
 		for &ty_ref in options.keys() {
@@ -28,15 +28,15 @@ impl<F> Union<F> {
 		}
 	}
 
-	pub fn options(&self) -> impl '_ + DoubleEndedIterator<Item = Ref<super::Definition<F>>> {
+	pub fn options(&self) -> impl '_ + DoubleEndedIterator<Item = Ref<super::Definition<M>>> {
 		self.options.keys().cloned()
 	}
 
-	pub fn properties(&self) -> &Properties<F> {
+	pub fn properties(&self) -> &Properties<M> {
 		&self.properties
 	}
 
-	pub fn is_datatype(&self, model: &Model<F>) -> bool {
+	pub fn is_datatype(&self, model: &Model<M>) -> bool {
 		self.options
 			.iter()
 			.all(|(ty_ref, _)| model.types().get(*ty_ref).unwrap().is_datatype(model))

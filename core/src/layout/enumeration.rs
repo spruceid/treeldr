@@ -1,84 +1,70 @@
-use crate::{Causes, Documentation, MaybeSet, Name, Ref, WithCauses};
-use locspan::Location;
+use crate::{Documentation, MetaOption, Name, Ref};
+use locspan::Meta;
 
 /// Enum layout.
 #[derive(Clone)]
-pub struct Enum<F> {
-	name: WithCauses<Name, F>,
-	variants: Vec<WithCauses<Variant<F>, F>>,
+pub struct Enum<M> {
+	name: Meta<Name, M>,
+	variants: Vec<Meta<Variant<M>, M>>,
 }
 
-pub struct Parts<F> {
-	pub name: WithCauses<Name, F>,
-	pub variants: Vec<WithCauses<Variant<F>, F>>,
+pub struct Parts<M> {
+	pub name: Meta<Name, M>,
+	pub variants: Vec<Meta<Variant<M>, M>>,
 }
 
-impl<F> Enum<F> {
-	pub fn new(name: WithCauses<Name, F>, variants: Vec<WithCauses<Variant<F>, F>>) -> Self {
+impl<M> Enum<M> {
+	pub fn new(name: Meta<Name, M>, variants: Vec<Meta<Variant<M>, M>>) -> Self {
 		Self { name, variants }
 	}
 
-	pub fn into_parts(self) -> Parts<F> {
+	pub fn into_parts(self) -> Parts<M> {
 		Parts {
 			name: self.name,
 			variants: self.variants,
 		}
 	}
 
-	pub fn name(&self) -> &Name {
+	pub fn name(&self) -> &Meta<Name, M> {
 		&self.name
 	}
 
-	pub fn into_name(self) -> WithCauses<Name, F> {
+	pub fn into_name(self) -> Meta<Name, M> {
 		self.name
 	}
 
-	pub fn name_causes(&self) -> &Causes<F> {
-		self.name.causes()
+	pub fn set_name(&mut self, new_name: Name, metadata: M) -> Meta<Name, M> {
+		std::mem::replace(&mut self.name, Meta::new(new_name, metadata))
 	}
 
-	pub fn set_name(&mut self, new_name: Name, cause: Option<Location<F>>) -> WithCauses<Name, F>
-	where
-		F: Ord,
-	{
-		std::mem::replace(&mut self.name, WithCauses::new(new_name, cause))
-	}
-
-	pub fn variants(&self) -> &[WithCauses<Variant<F>, F>] {
+	pub fn variants(&self) -> &[Meta<Variant<M>, M>] {
 		&self.variants
 	}
 
-	// pub fn fields(&self) -> Fields<F> {
-	// 	Fields {
-	// 		variants: self.variants.iter(),
-	// 		current_fields: None,
-	// 	}
-	// }
-
-	pub fn composing_layouts(&self) -> ComposingLayouts<F> {
+	pub fn composing_layouts(&self) -> ComposingLayouts<M> {
 		ComposingLayouts(self.variants.iter())
 	}
 }
 
 #[derive(Clone)]
-pub struct Variant<F> {
-	name: WithCauses<Name, F>,
-	layout: MaybeSet<Ref<super::Definition<F>>, F>,
+pub struct Variant<M> {
+	name: Meta<Name, M>,
+	layout: MetaOption<Ref<super::Definition<M>>, M>,
 	label: Option<String>,
 	doc: Documentation,
 }
 
-pub struct VariantParts<F> {
-	pub name: WithCauses<Name, F>,
-	pub layout: MaybeSet<Ref<super::Definition<F>>, F>,
+pub struct VariantParts<M> {
+	pub name: Meta<Name, M>,
+	pub layout: MetaOption<Ref<super::Definition<M>>, M>,
 	pub label: Option<String>,
 	pub doc: Documentation,
 }
 
-impl<F> Variant<F> {
+impl<M> Variant<M> {
 	pub fn new(
-		name: WithCauses<Name, F>,
-		layout: MaybeSet<Ref<super::Definition<F>>, F>,
+		name: Meta<Name, M>,
+		layout: MetaOption<Ref<super::Definition<M>>, M>,
 		label: Option<String>,
 		doc: Documentation,
 	) -> Self {
@@ -90,7 +76,7 @@ impl<F> Variant<F> {
 		}
 	}
 
-	pub fn into_parts(self) -> VariantParts<F> {
+	pub fn into_parts(self) -> VariantParts<M> {
 		VariantParts {
 			name: self.name,
 			layout: self.layout,
@@ -107,7 +93,7 @@ impl<F> Variant<F> {
 		self.label.as_deref()
 	}
 
-	pub fn layout(&self) -> Option<Ref<super::Definition<F>>> {
+	pub fn layout(&self) -> Option<Ref<super::Definition<M>>> {
 		self.layout.value().cloned()
 	}
 
@@ -116,10 +102,10 @@ impl<F> Variant<F> {
 	}
 }
 
-pub struct ComposingLayouts<'a, F>(std::slice::Iter<'a, WithCauses<Variant<F>, F>>);
+pub struct ComposingLayouts<'a, M>(std::slice::Iter<'a, Meta<Variant<M>, M>>);
 
-impl<'a, F> Iterator for ComposingLayouts<'a, F> {
-	type Item = Ref<super::Definition<F>>;
+impl<'a, M> Iterator for ComposingLayouts<'a, M> {
+	type Item = Ref<super::Definition<M>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		for variant in self.0.by_ref() {
@@ -132,13 +118,13 @@ impl<'a, F> Iterator for ComposingLayouts<'a, F> {
 	}
 }
 
-// pub struct Fields<'a, F> {
-// 	variants: std::slice::Iter<'a, WithCauses<Ref<super::Definition<F>>, F>>,
-// 	current_fields: Option<std::slice::Iter<'a, Field<F>>>,
+// pub struct Fields<'a, M> {
+// 	variants: std::slice::Iter<'a, Meta<Ref<super::Definition<M>>, M>>,
+// 	current_fields: Option<std::slice::Iter<'a, Field<M>>>,
 // }
 
-// impl<'a, F> Iterator for Fields<'a, F> {
-// 	type Item = &'a Field<F>;
+// impl<'a, M> Iterator for Fields<'a, M> {
+// 	type Item = &'a Field<M>;
 
 // 	fn next(&mut self) -> Option<Self::Item> {
 // 		loop {
