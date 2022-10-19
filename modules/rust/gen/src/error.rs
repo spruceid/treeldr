@@ -4,12 +4,12 @@ use std::fmt;
 use thiserror::Error;
 
 #[derive(Error)]
-pub enum Error<F> {
-	UnreachableType(Ref<treeldr::layout::Definition<F>>),
+pub enum Error<M> {
+	UnreachableType(Ref<treeldr::layout::Definition<M>>),
 }
 
-impl<F> crate::fmt::Display<F> for Error<F> {
-	fn fmt(&self, context: &Context<F>, f: &mut fmt::Formatter) -> fmt::Result {
+impl<M> crate::fmt::Display<M> for Error<M> {
+	fn fmt(&self, context: &Context<M>, f: &mut fmt::Formatter) -> fmt::Result {
 		use treeldr::vocab::Display;
 		match self {
 			Self::UnreachableType(layout_ref) => {

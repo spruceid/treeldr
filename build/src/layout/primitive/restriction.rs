@@ -61,10 +61,8 @@ impl<M: Merge> Restrictions<M> {
 		match self.map.entry(restriction) {
 			Entry::Vacant(entry) => {
 				entry.insert(metadata);
-			},
-			Entry::Occupied(mut entry) => {
-				entry.get_mut().merge_with(metadata)
 			}
+			Entry::Occupied(mut entry) => entry.get_mut().merge_with(metadata),
 		}
 	}
 
@@ -85,7 +83,7 @@ impl<M: Clone> Restrictions<M> {
 					restriction,
 				}
 				.into(),
-				causes
+				causes,
 			)),
 			None => Ok(()),
 		}

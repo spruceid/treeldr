@@ -22,6 +22,10 @@ impl<'a> DisplayPath<'a> for PathBuf {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct FileId(usize);
 
+pub type Location = locspan::Location<FileId>;
+
+pub type Metadata = treeldr::Metadata<Location>;
+
 pub struct File<P = PathBuf> {
 	source: P,
 	base_iri: Option<IriBuf>,
@@ -194,7 +198,7 @@ impl Buffer {
 	}
 
 	#[inline(always)]
-	fn as_str(&self) -> &str {
+	pub fn as_str(&self) -> &str {
 		self.data.as_str()
 	}
 

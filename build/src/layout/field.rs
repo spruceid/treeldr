@@ -1,6 +1,6 @@
 use super::{error, Error};
 use locspan::Meta;
-use treeldr::{Documentation, Id, MetaOption, Name, Vocabulary, metadata::Merge};
+use treeldr::{metadata::Merge, Documentation, Id, MetaOption, Name, Vocabulary};
 
 /// Layout field definition.
 #[derive(Clone)]
@@ -32,9 +32,7 @@ impl<M> DefaultLayout<M> {
 				context.declare_layout(id, meta.clone());
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
 
-				layout
-					.set_array(item, None, meta.clone())
-					.ok();
+				layout.set_array(item, None, meta.clone()).ok();
 
 				Meta(id, meta)
 			}
@@ -57,8 +55,10 @@ impl<M> Definition<M> {
 	}
 
 	pub fn set_property(&mut self, prop_ref: Id, metadata: M) -> Result<(), Error<M>> {
-		self.prop
-			.try_set(prop_ref, metadata, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.prop.try_set(
+			prop_ref,
+			metadata,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::LayoutFieldMismatchProperty {
 						id: self.id,
@@ -69,18 +69,15 @@ impl<M> Definition<M> {
 					.into(),
 					found_meta,
 				)
-			})
+			},
+		)
 	}
 
 	pub fn replace_property(&mut self, prop: MetaOption<Id, M>) {
 		self.prop = prop
 	}
 
-	pub fn default_name(
-		&self,
-		vocabulary: &Vocabulary,
-		metadata: M,
-	) -> Option<Meta<Name, M>>
+	pub fn default_name(&self, vocabulary: &Vocabulary, metadata: M) -> Option<Meta<Name, M>>
 	where
 		M: Clone,
 	{
@@ -96,8 +93,10 @@ impl<M> Definition<M> {
 	}
 
 	pub fn set_name(&mut self, name: Name, metadata: M) -> Result<(), Error<M>> {
-		self.name
-			.try_set(name, metadata, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.name.try_set(
+			name,
+			metadata,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::LayoutFieldMismatchName {
 						id: self.id,
@@ -108,7 +107,8 @@ impl<M> Definition<M> {
 					.into(),
 					found_meta,
 				)
-			})
+			},
+		)
 	}
 
 	pub fn replace_name(&mut self, name: MetaOption<Name, M>) {
@@ -120,8 +120,10 @@ impl<M> Definition<M> {
 	}
 
 	pub fn set_layout(&mut self, layout_ref: Id, metadata: M) -> Result<(), Error<M>> {
-		self.layout
-			.try_set(layout_ref, metadata, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.layout.try_set(
+			layout_ref,
+			metadata,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::LayoutFieldMismatchLayout {
 						id: self.id,
@@ -132,7 +134,8 @@ impl<M> Definition<M> {
 					.into(),
 					found_meta,
 				)
-			})
+			},
+		)
 	}
 
 	pub fn replace_layout(&mut self, layout: MetaOption<Id, M>) {
@@ -202,9 +205,12 @@ impl<M: Clone> Build<M> for Meta<Definition<M>, M> {
 		doc: Documentation,
 		nodes: &super::super::context::allocated::Nodes<M>,
 	) -> Result<treeldr::layout::Field<M>, Error<M>> {
-		let prop = self.prop.clone().try_map_with_causes(|Meta(prop_id, causes)| {
-			Ok(Meta(**nodes.require_property(prop_id, &causes)?, causes))
-		})?;
+		let prop = self
+			.prop
+			.clone()
+			.try_map_with_causes(|Meta(prop_id, causes)| {
+				Ok(Meta(**nodes.require_property(prop_id, &causes)?, causes))
+			})?;
 
 		let name = self.require_name()?;
 

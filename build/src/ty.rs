@@ -1,7 +1,7 @@
 use crate::{error, utils::TryCollect, Error, ObjectToId};
-use std::collections::BTreeMap;
-use treeldr::{Id, MetaOption, metadata::Merge};
 use locspan::Meta;
+use std::collections::BTreeMap;
+use treeldr::{metadata::Merge, Id, MetaOption};
 
 pub mod data;
 mod normal;
@@ -63,8 +63,7 @@ impl<M: Clone> Description<M> {
 						let Meta(object, ty_causes) = item?.clone();
 						let ty_id = object.into_id(causes)?;
 
-						let ty_ref = **nodes
-							.require_type(ty_id, &ty_causes)?;
+						let ty_ref = **nodes.require_type(ty_id, &ty_causes)?;
 
 						Ok(crate::Item::Type(ty_ref))
 					})
@@ -92,16 +91,13 @@ impl<M: Clone> Description<M> {
 				use std::collections::btree_map::Entry;
 				let mut options = BTreeMap::new();
 
-				let items = nodes
-					.require_list(options_id, &causes)?
-					.iter(nodes);
+				let items = nodes.require_list(options_id, &causes)?.iter(nodes);
 				for item in items {
 					let Meta(object, causes) = item?.clone();
 					let option_id = object.into_id(&causes)?;
 
-					let Meta(option_ty, option_causes) = nodes
-						.require_type(option_id, &causes)?
-						.clone();
+					let Meta(option_ty, option_causes) =
+						nodes.require_type(option_id, &causes)?.clone();
 
 					match options.entry(option_ty) {
 						Entry::Vacant(entry) => {
@@ -121,16 +117,12 @@ impl<M: Clone> Description<M> {
 				use std::collections::btree_map::Entry;
 				let mut types = BTreeMap::new();
 
-				let items = nodes
-					.require_list(types_id, &causes)?
-					.iter(nodes);
+				let items = nodes.require_list(types_id, &causes)?.iter(nodes);
 				for item in items {
 					let Meta(object, causes) = item?.clone();
 					let option_id = object.into_id(&causes)?;
 
-					let Meta(ty, ty_causes) = nodes
-						.require_type(option_id, &causes)?
-						.clone();
+					let Meta(ty, ty_causes) = nodes.require_type(option_id, &causes)?.clone();
 
 					match types.entry(ty) {
 						Entry::Vacant(entry) => {
@@ -235,10 +227,7 @@ impl<M, D: PseudoDescription<M>> Definition<M, D> {
 		}
 	}
 
-	pub fn require_datatype_mut(
-		&mut self,
-		cause: &M,
-	) -> Result<&mut DataType<M>, Error<M>>
+	pub fn require_datatype_mut(&mut self, cause: &M) -> Result<&mut DataType<M>, Error<M>>
 	where
 		M: Clone,
 	{
@@ -271,10 +260,7 @@ impl<M, D: PseudoDescription<M>> Definition<M, D> {
 		}
 	}
 
-	pub fn require_normal_mut(
-		&mut self,
-		cause: &M,
-	) -> Result<&mut Normal<M>, Error<M>>
+	pub fn require_normal_mut(&mut self, cause: &M) -> Result<&mut Normal<M>, Error<M>>
 	where
 		M: Clone,
 	{
@@ -343,11 +329,7 @@ impl<M, D: PseudoDescription<M>> Definition<M, D> {
 	/// Declare a property of type.
 	///
 	/// The type must be normal.
-	pub fn declare_property(
-		&mut self,
-		prop_ref: Id,
-		cause: M,
-	) -> Result<(), Error<M>>
+	pub fn declare_property(&mut self, prop_ref: Id, cause: M) -> Result<(), Error<M>>
 	where
 		M: Clone + Merge,
 	{
@@ -356,11 +338,7 @@ impl<M, D: PseudoDescription<M>> Definition<M, D> {
 		Ok(())
 	}
 
-	pub fn declare_union(
-		&mut self,
-		options_ref: Id,
-		cause: M,
-	) -> Result<(), Error<M>>
+	pub fn declare_union(&mut self, options_ref: Id, cause: M) -> Result<(), Error<M>>
 	where
 		M: Clone,
 	{
@@ -398,11 +376,7 @@ impl<M, D: PseudoDescription<M>> Definition<M, D> {
 		}
 	}
 
-	pub fn declare_intersection(
-		&mut self,
-		types_ref: Id,
-		cause: M,
-	) -> Result<(), Error<M>>
+	pub fn declare_intersection(&mut self, types_ref: Id, cause: M) -> Result<(), Error<M>>
 	where
 		M: Clone,
 	{

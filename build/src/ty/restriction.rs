@@ -1,7 +1,7 @@
 use crate::{context, Error};
 use locspan::Meta;
 use std::collections::BTreeMap;
-use treeldr::{Id, metadata::Merge};
+use treeldr::{metadata::Merge, Id};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RangeRestriction {
@@ -52,9 +52,7 @@ impl<M> Restriction<M> {
 			Entry::Vacant(entry) => {
 				entry.insert(metadata);
 			}
-			Entry::Occupied(mut entry) => {
-				entry.get_mut().merge_with(metadata)
-			}
+			Entry::Occupied(mut entry) => entry.get_mut().merge_with(metadata),
 		}
 	}
 

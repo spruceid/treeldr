@@ -1,16 +1,19 @@
-use locspan::{Meta, Span, MaybeLocated};
+use locspan::{MaybeLocated, Meta, Span};
 use treeldr::{reporting::DiagnoseWithMetadataAndVocabulary, Vocabulary};
 
 pub type Error<M> = Meta<Description<M>, M>;
 
-pub trait AnyError<M: MaybeLocated<Span=Span>> {
+pub trait AnyError<M: MaybeLocated<Span = Span>> {
 	fn message(&self, vocab: &Vocabulary) -> String;
 
 	fn primary_label(&self, _vocab: &Vocabulary) -> Option<String> {
 		Some("here".to_string())
 	}
 
-	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+	fn other_labels(
+		&self,
+		_vocab: &Vocabulary,
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 

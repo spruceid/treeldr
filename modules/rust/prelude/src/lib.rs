@@ -1,4 +1,3 @@
-#![feature(generic_associated_types)]
 pub use static_iref;
 
 pub mod id;

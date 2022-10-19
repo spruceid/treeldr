@@ -1,8 +1,9 @@
 use crate::{error, list::ListMut, Context, Descriptions, Document, Error};
 use locspan::Meta;
 use treeldr::{
+	metadata::Merge,
 	vocab::{self, GraphLabel, Object, Term},
-	Id, Name, Vocabulary, metadata::Merge,
+	Id, Name, Vocabulary,
 };
 
 fn expect_id<M>(Meta(value, loc): Meta<vocab::Object<M>, M>) -> Result<Meta<Id, M>, Error<M>> {
@@ -13,7 +14,9 @@ fn expect_id<M>(Meta(value, loc): Meta<vocab::Object<M>, M>) -> Result<Meta<Id, 
 	}
 }
 
-fn expect_boolean<M>(Meta(value, loc): Meta<vocab::Object<M>, M>) -> Result<Meta<bool, M>, Error<M>> {
+fn expect_boolean<M>(
+	Meta(value, loc): Meta<vocab::Object<M>, M>,
+) -> Result<Meta<bool, M>, Error<M>> {
 	match value {
 		vocab::Object::Iri(vocab::Term::Schema(vocab::Schema::True)) => Ok(Meta(true, loc)),
 		vocab::Object::Iri(vocab::Term::Schema(vocab::Schema::False)) => Ok(Meta(false, loc)),

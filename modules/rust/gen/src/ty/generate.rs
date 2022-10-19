@@ -57,13 +57,13 @@ pub fn doc_attribute(label: Option<&str>, doc: &treeldr::Documentation) -> Vec<T
 		.collect()
 }
 
-impl<F> Generate<F> for BuiltIn<F> {
+impl<M> Generate<M> for BuiltIn<M> {
 	fn generate(
 		&self,
-		context: &Context<F>,
-		scope: Option<Ref<Module<F>>>,
+		context: &Context<M>,
+		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Error<M>> {
 		match self {
 			Self::Required(item) => {
 				item.generate(context, scope, tokens)?;
@@ -90,13 +90,13 @@ impl<F> Generate<F> for BuiltIn<F> {
 	}
 }
 
-impl<F> Generate<F> for Referenced<BuiltIn<F>> {
+impl<M> Generate<M> for Referenced<BuiltIn<M>> {
 	fn generate(
 		&self,
-		context: &Context<F>,
-		scope: Option<Ref<Module<F>>>,
+		context: &Context<M>,
+		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Error<M>> {
 		match self.0 {
 			BuiltIn::Required(item) => {
 				Referenced(item).generate(context, scope, tokens)?;
@@ -123,13 +123,13 @@ impl<F> Generate<F> for Referenced<BuiltIn<F>> {
 	}
 }
 
-impl<F> Generate<F> for Type<F> {
+impl<M> Generate<M> for Type<M> {
 	fn generate(
 		&self,
-		context: &Context<F>,
-		scope: Option<Ref<Module<F>>>,
+		context: &Context<M>,
+		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Error<M>> {
 		let doc = doc_attribute(self.label(), self.documentation());
 
 		match &self.desc {
@@ -230,13 +230,13 @@ impl<F> Generate<F> for Type<F> {
 	}
 }
 
-impl<F> Generate<F> for Ref<treeldr::layout::Definition<F>> {
+impl<M> Generate<M> for Ref<treeldr::layout::Definition<M>> {
 	fn generate(
 		&self,
-		context: &Context<F>,
-		scope: Option<Ref<Module<F>>>,
+		context: &Context<M>,
+		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Error<M>> {
 		let ty = context
 			.layout_type(*self)
 			.expect("undefined generated layout");
@@ -277,13 +277,13 @@ impl<F> Generate<F> for Ref<treeldr::layout::Definition<F>> {
 	}
 }
 
-impl<F> Generate<F> for Referenced<Ref<treeldr::layout::Definition<F>>> {
+impl<M> Generate<M> for Referenced<Ref<treeldr::layout::Definition<M>>> {
 	fn generate(
 		&self,
-		context: &Context<F>,
-		scope: Option<Ref<Module<F>>>,
+		context: &Context<M>,
+		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Error<M>> {
 		let ty = context
 			.layout_type(self.0)
 			.expect("undefined generated layout");
@@ -326,13 +326,13 @@ impl<F> Generate<F> for Referenced<Ref<treeldr::layout::Definition<F>>> {
 	}
 }
 
-impl<F> Generate<F> for treeldr::layout::Primitive {
+impl<M> Generate<M> for treeldr::layout::Primitive {
 	fn generate(
 		&self,
-		_context: &Context<F>,
-		_scope: Option<Ref<Module<F>>>,
+		_context: &Context<M>,
+		_scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Error<M>> {
 		tokens.extend(match self {
 			Self::Boolean => quote! { bool },
 			Self::Integer => quote! { i32 },
@@ -352,13 +352,13 @@ impl<F> Generate<F> for treeldr::layout::Primitive {
 	}
 }
 
-impl<F> Generate<F> for Referenced<treeldr::layout::Primitive> {
+impl<M> Generate<M> for Referenced<treeldr::layout::Primitive> {
 	fn generate(
 		&self,
-		_context: &Context<F>,
-		_scope: Option<Ref<Module<F>>>,
+		_context: &Context<M>,
+		_scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<F>> {
+	) -> Result<(), Error<M>> {
 		tokens.extend(match self.0 {
 			Primitive::Boolean => quote! { bool },
 			Primitive::Integer => quote! { i32 },

@@ -2,7 +2,7 @@ use crate::{error, Error};
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::StrippedPartialEq;
-use treeldr::{vocab, Id, MetaOption, Name, metadata::Merge};
+use treeldr::{metadata::Merge, vocab, Id, MetaOption, Name};
 use vocab::{Rdf, Term};
 
 #[derive(Clone, Debug, Derivative)]
@@ -26,23 +26,13 @@ impl<M> Array<M> {
 		self.semantics.as_ref()
 	}
 
-	pub fn set_list_first(
-		&mut self,
-		id: Id,
-		value: Id,
-		metadata: M,
-	) -> Result<(), Error<M>> {
+	pub fn set_list_first(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>> {
 		self.semantics
 			.get_or_insert_with(Semantics::default)
 			.set_first(id, value, metadata)
 	}
 
-	pub fn set_list_rest(
-		&mut self,
-		id: Id,
-		value: Id,
-		metadata: M,
-	) -> Result<(), Error<M>>
+	pub fn set_list_rest(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>>
 	where
 		M: Clone,
 	{
@@ -51,12 +41,7 @@ impl<M> Array<M> {
 			.set_rest(id, value, metadata)
 	}
 
-	pub fn set_list_nil(
-		&mut self,
-		id: Id,
-		value: Id,
-		metadata: M,
-	) -> Result<(), Error<M>>
+	pub fn set_list_nil(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>>
 	where
 		M: Clone,
 	{
@@ -71,7 +56,10 @@ impl<M> Array<M> {
 		id: Id,
 		metadata: M,
 		other_metadata: M,
-	) -> Result<Meta<Self, M>, Error<M>> where M: Merge {
+	) -> Result<Meta<Self, M>, Error<M>>
+	where
+		M: Merge,
+	{
 		if self.item == other.item {
 			let semantics = match (self.semantics, other.semantics) {
 				(Some(a), Some(b)) => Some(a.try_unify(b, id)?),
@@ -85,7 +73,7 @@ impl<M> Array<M> {
 					item: self.item,
 					semantics,
 				},
-				metadata.merged_with(other_metadata)
+				metadata.merged_with(other_metadata),
 			))
 		} else {
 			Err(Error::new(
@@ -108,8 +96,7 @@ impl<M> Array<M> {
 	where
 		M: Clone,
 	{
-		let item_layout_ref = **nodes
-			.require_layout(self.item, metadata)?;
+		let item_layout_ref = **nodes.require_layout(self.item, metadata)?;
 		let semantics = self.semantics.map(|s| s.build(nodes)).transpose()?;
 
 		Ok(treeldr::layout::Array::new(
@@ -166,24 +153,14 @@ impl<M> Semantics<M> {
 		&self.nil
 	}
 
-	pub fn set_first(
-		&mut self,
-		id: Id,
-		value: Id,
-		metadata: M,
-	) -> Result<(), Error<M>> {
+	pub fn set_first(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>> {
 		self.first
 			.try_set(value, metadata, |Meta(_, a_meta), Meta(_, b_meta)| {
 				on_err(id, a_meta, b_meta)
 			})
 	}
 
-	pub fn set_rest(
-		&mut self,
-		id: Id,
-		value: Id,
-		metadata: M,
-	) -> Result<(), Error<M>>
+	pub fn set_rest(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>>
 	where
 		M: Clone,
 	{
@@ -193,18 +170,14 @@ impl<M> Semantics<M> {
 			})
 	}
 
-	pub fn set_nil(
-		&mut self,
-		id: Id,
-		value: Id,
-		metadata: M,
-	) -> Result<(), Error<M>>
+	pub fn set_nil(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>>
 	where
 		M: Clone,
 	{
-		self.nil.try_set(value, metadata, |Meta(_, a_meta), Meta(_, b_meta)| {
-			on_err(id, a_meta, b_meta)
-		})
+		self.nil
+			.try_set(value, metadata, |Meta(_, a_meta), Meta(_, b_meta)| {
+				on_err(id, a_meta, b_meta)
+			})
 	}
 
 	pub fn try_unify(mut self, other: Self, id: Id) -> Result<Self, Error<M>> {

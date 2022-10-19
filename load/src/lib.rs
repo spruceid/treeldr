@@ -2,26 +2,26 @@ use codespan_reporting::term::{
 	self,
 	termcolor::{ColorChoice, StandardStream},
 };
-use std::convert::Infallible;
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
+use treeldr::reporting::Diagnose;
 use treeldr_syntax as syntax;
 
 mod source;
 pub use source::*;
 
 pub use treeldr::{reporting, vocab::BorrowWithVocabulary, Vocabulary};
-pub type BuildContext = treeldr_build::Context<source::FileId, syntax::build::Descriptions>;
+pub type BuildContext = treeldr_build::Context<source::Metadata, syntax::build::Descriptions>;
 
 /// Build all the given documents.
 pub fn build_all(
 	vocabulary: &mut treeldr::Vocabulary,
 	build_context: &mut BuildContext,
 	mut documents: Vec<Document>,
-) -> Result<treeldr::Model<source::FileId>, BuildAllError> {
+) -> Result<treeldr::Model<source::Metadata>, BuildAllError> {
 	build_context
-		.apply_built_in_definitions(vocabulary)
+		.apply_built_in_definitions(vocabulary, source::Metadata::default())
 		.unwrap();
 
 	for doc in &mut documents {
@@ -36,7 +36,7 @@ pub fn build_all(
 
 	let build_context = build_context
 		.simplify(vocabulary)
-		.map_err(BuildAllError::Simplification)?;
+		.map_err(BuildAllError::simplification)?;
 	build_context
 		.build(vocabulary)
 		.map_err(BuildAllError::Build)
@@ -55,8 +55,8 @@ pub enum LoadError {
 }
 
 pub struct TreeLdrDocument {
-	doc: syntax::Document<source::FileId>,
-	local_context: syntax::build::LocalContext<source::FileId>,
+	doc: syntax::Document<source::Metadata>,
+	local_context: syntax::build::LocalContext<source::Metadata>,
 }
 
 impl TreeLdrDocument {
@@ -64,7 +64,7 @@ impl TreeLdrDocument {
 		&mut self,
 		context: &mut BuildContext,
 		vocabulary: &mut Vocabulary,
-	) -> Result<(), syntax::build::Error<source::FileId>> {
+	) -> Result<(), syntax::build::Error<source::Metadata>> {
 		use treeldr_build::Document;
 		self.doc
 			.declare(&mut self.local_context, context, vocabulary)
@@ -74,7 +74,7 @@ impl TreeLdrDocument {
 		mut self,
 		context: &mut BuildContext,
 		vocabulary: &mut Vocabulary,
-	) -> Result<(), syntax::build::Error<source::FileId>> {
+	) -> Result<(), syntax::build::Error<source::Metadata>> {
 		use treeldr_build::Document;
 		self.doc
 			.relate(&mut self.local_context, context, vocabulary)
@@ -84,11 +84,21 @@ impl TreeLdrDocument {
 pub enum BuildAllError {
 	Declaration(LangError),
 	Link(LangError),
-	Simplification(<syntax::build::Descriptions as treeldr_build::Simplify<source::FileId>>::Error),
-	Build(treeldr_build::Error<source::FileId>),
+	Simplification(
+		Box<<syntax::build::Descriptions as treeldr_build::Simplify<source::Metadata>>::Error>,
+	),
+	Build(treeldr_build::Error<source::Metadata>),
 }
 
-impl treeldr::reporting::DiagnoseWithVocabulary<source::FileId> for BuildAllError {
+impl BuildAllError {
+	pub fn simplification(
+		e: <syntax::build::Descriptions as treeldr_build::Simplify<source::Metadata>>::Error,
+	) -> Self {
+		Self::Simplification(Box::new(e))
+	}
+}
+
+impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllError {
 	fn message(&self, vocabulary: &Vocabulary) -> String {
 		match self {
 			Self::Declaration(e) => e.message(vocabulary),
@@ -121,25 +131,25 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::FileId> for BuildAllErro
 }
 
 pub enum LangError {
-	TreeLdr(syntax::build::Error<source::FileId>),
+	TreeLdr(syntax::build::Error<source::Metadata>),
 	#[cfg(feature = "json-schema")]
-	JsonSchema(treeldr_json_schema::import::Error<source::FileId>),
+	JsonSchema(treeldr_json_schema::import::Error<source::Metadata>),
 }
 
-impl From<syntax::build::Error<source::FileId>> for LangError {
-	fn from(e: syntax::build::Error<source::FileId>) -> Self {
+impl From<syntax::build::Error<source::Metadata>> for LangError {
+	fn from(e: syntax::build::Error<source::Metadata>) -> Self {
 		Self::TreeLdr(e)
 	}
 }
 
 #[cfg(feature = "json-schema")]
-impl From<treeldr_json_schema::import::Error<source::FileId>> for LangError {
-	fn from(e: treeldr_json_schema::import::Error<source::FileId>) -> Self {
+impl From<treeldr_json_schema::import::Error<source::Metadata>> for LangError {
+	fn from(e: treeldr_json_schema::import::Error<source::Metadata>) -> Self {
 		Self::JsonSchema(e)
 	}
 }
 
-impl treeldr::reporting::DiagnoseWithVocabulary<source::FileId> for LangError {
+impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError {
 	fn message(&self, vocabulary: &Vocabulary) -> String {
 		match self {
 			Self::TreeLdr(e) => e.message(vocabulary),
@@ -248,14 +258,12 @@ where
 	P: DisplayPath<'f>,
 {
 	use syntax::Parse;
-	use treeldr::reporting::Diagnose;
 	let file = files.get(source_id).unwrap();
 
-	let mut lexer =
-		syntax::Lexer::<_, Infallible, _>::new(source_id, file.buffer().chars().map(Result::Ok));
-
 	log::debug!("ready for parsing.");
-	match syntax::Document::parse_in(&mut lexer) {
+	match syntax::Document::parse_str(file.buffer().as_str(), |span| {
+		source::Metadata::Extern(Location::new(source_id, span))
+	}) {
 		Ok(doc) => {
 			log::debug!("parsing succeeded.");
 			TreeLdrDocument {
@@ -278,7 +286,7 @@ where
 #[cfg(feature = "json-schema")]
 pub fn import_json_schema(
 	files: &source::Files,
-	source_id: source::FileId,
+	source_id: source::Metadata,
 ) -> treeldr_json_schema::Schema {
 	let file = files.get(source_id).unwrap();
 	let json: serde_json::Value = serde_json::from_str(file.buffer()).expect("invalid JSON");

@@ -10,7 +10,7 @@ use treeldr_syntax as syntax;
 mod source;
 use source::Source;
 
-type BuildContext = treeldr_build::Context<load::FileId, syntax::build::Descriptions>;
+type BuildContext = treeldr_build::Context<load::Metadata, syntax::build::Descriptions>;
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]

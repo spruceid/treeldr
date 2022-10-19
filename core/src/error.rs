@@ -1,10 +1,7 @@
-use crate::{
-	reporting::Diagnose,
-	Vocabulary,
-};
-use locspan::{Span, MaybeLocated};
+use crate::{reporting::Diagnose, Vocabulary};
+use locspan::{MaybeLocated, Span};
 
-pub trait AnyError<M: MaybeLocated<Span=Span>> {
+pub trait AnyError<M: MaybeLocated<Span = Span>> {
 	fn message(&self, vocab: &Vocabulary) -> String;
 
 	fn labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {

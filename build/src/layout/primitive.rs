@@ -3,7 +3,7 @@ use locspan::Meta;
 use treeldr::metadata::Merge;
 pub use treeldr::{
 	layout::{primitive::restricted, primitive::RegExp, Primitive},
-	Metadata, Id, MetaOption,
+	Id, MetaOption, Metadata,
 };
 
 pub mod restriction;
@@ -81,7 +81,10 @@ impl<M> Restricted<M> {
 		&mut self.restrictions
 	}
 
-	pub fn try_unify(mut self, id: Id, other: Self) -> Result<Self, Error<M>> where M: Merge {
+	pub fn try_unify(mut self, id: Id, other: Self) -> Result<Self, Error<M>>
+	where
+		M: Merge,
+	{
 		self.primitive.try_set_opt(
 			other.primitive,
 			|Meta(found, found_meta), Meta(expected, expected_meta)| {
@@ -107,11 +110,7 @@ impl<M> Restricted<M> {
 			&& self.restrictions.is_included_in(&other.restrictions)
 	}
 
-	pub fn build(
-		self,
-		id: Id,
-		causes: &M,
-	) -> Result<treeldr::layout::RestrictedPrimitive, Error<M>>
+	pub fn build(self, id: Id, causes: &M) -> Result<treeldr::layout::RestrictedPrimitive, Error<M>>
 	where
 		M: Clone,
 	{

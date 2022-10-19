@@ -1,5 +1,5 @@
 use crate::{vocab, Vocabulary};
-use locspan::{Meta, MaybeLocated};
+use locspan::{MaybeLocated, Meta};
 
 /// Error with diagnostic reporting support.
 pub trait Diagnose<M: MaybeLocated> {
@@ -69,6 +69,34 @@ pub trait DiagnoseWithMetadataAndVocabulary<M: MaybeLocated> {
 	}
 }
 
+impl<M: MaybeLocated, T: DiagnoseWithMetadataAndVocabulary<M>> DiagnoseWithMetadataAndVocabulary<M>
+	for Box<T>
+{
+	fn message(&self, metadata: &M, vocabulary: &Vocabulary) -> String {
+		T::message(self, metadata, vocabulary)
+	}
+
+	fn labels(
+		&self,
+		metadata: &M,
+		vocabulary: &Vocabulary,
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+		T::labels(self, metadata, vocabulary)
+	}
+
+	fn notes(&self, metadata: &M, vocabulary: &Vocabulary) -> Vec<String> {
+		T::notes(self, metadata, vocabulary)
+	}
+
+	fn diagnostic(
+		&self,
+		metadata: &M,
+		vocabulary: &Vocabulary,
+	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
+		T::diagnostic(self, metadata, vocabulary)
+	}
+}
+
 /// Error with diagnostic reporting support.
 pub trait DiagnoseWithVocabulary<M: MaybeLocated> {
 	fn message(&self, vocabulary: &Vocabulary) -> String;
@@ -92,6 +120,24 @@ pub trait DiagnoseWithVocabulary<M: MaybeLocated> {
 			.with_message(self.message(vocabulary))
 			.with_labels(self.labels(vocabulary))
 			.with_notes(self.notes(vocabulary))
+	}
+}
+
+impl<M: MaybeLocated, T: DiagnoseWithMetadata<M>> DiagnoseWithMetadata<M> for Box<T> {
+	fn message(&self, metadata: &M) -> String {
+		T::message(self, metadata)
+	}
+
+	fn labels(&self, metadata: &M) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+		T::labels(self, metadata)
+	}
+
+	fn notes(&self, metadata: &M) -> Vec<String> {
+		T::notes(self, metadata)
+	}
+
+	fn diagnostic(&self, metadata: &M) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
+		T::diagnostic(self, metadata)
 	}
 }
 

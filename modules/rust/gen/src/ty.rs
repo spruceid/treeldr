@@ -11,17 +11,17 @@ pub mod structure;
 use enumeration::Enum;
 use structure::Struct;
 
-pub struct Type<F> {
-	module: Option<module::Parent<F>>,
-	desc: Description<F>,
+pub struct Type<M> {
+	module: Option<module::Parent<M>>,
+	desc: Description<M>,
 	label: Option<String>,
 	doc: treeldr::Documentation,
 }
 
-impl<F> Type<F> {
+impl<M> Type<M> {
 	pub fn new(
-		module: Option<module::Parent<F>>,
-		desc: Description<F>,
+		module: Option<module::Parent<M>>,
+		desc: Description<M>,
 		label: Option<String>,
 		doc: treeldr::Documentation,
 	) -> Self {
@@ -41,37 +41,37 @@ impl<F> Type<F> {
 		&self.doc
 	}
 
-	pub fn path(&self, context: &Context<F>, ident: proc_macro2::Ident) -> Option<Path> {
+	pub fn path(&self, context: &Context<M>, ident: proc_macro2::Ident) -> Option<Path> {
 		let mut path = context.parent_module_path(self.module)?;
 		path.push(path::Segment::Ident(ident));
 		Some(path)
 	}
 
-	pub fn impl_default(&self, context: &Context<F>) -> bool {
+	pub fn impl_default(&self, context: &Context<M>) -> bool {
 		self.desc.impl_default(context)
 	}
 
-	pub fn module(&self) -> Option<module::Parent<F>> {
+	pub fn module(&self) -> Option<module::Parent<M>> {
 		self.module
 	}
 
-	pub fn description(&self) -> &Description<F> {
+	pub fn description(&self) -> &Description<M> {
 		&self.desc
 	}
 }
 
-pub enum Description<F> {
-	BuiltIn(BuiltIn<F>),
+pub enum Description<M> {
+	BuiltIn(BuiltIn<M>),
 	Never,
-	Alias(proc_macro2::Ident, Ref<treeldr::layout::Definition<F>>),
+	Alias(proc_macro2::Ident, Ref<treeldr::layout::Definition<M>>),
 	Reference,
 	Primitive(Primitive),
-	Struct(Struct<F>),
-	Enum(Enum<F>),
+	Struct(Struct<M>),
+	Enum(Enum<M>),
 }
 
-impl<F> Description<F> {
-	pub fn impl_default(&self, context: &Context<F>) -> bool {
+impl<M> Description<M> {
+	pub fn impl_default(&self, context: &Context<M>) -> bool {
 		match self {
 			Self::BuiltIn(b) => b.impl_default(),
 			Self::Never => false,
@@ -89,38 +89,38 @@ impl<F> Description<F> {
 
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Copy(bound = ""))]
-pub enum BuiltIn<F> {
+pub enum BuiltIn<M> {
 	/// Required type, erased.
-	Required(Ref<treeldr::layout::Definition<F>>),
+	Required(Ref<treeldr::layout::Definition<M>>),
 
 	/// Option.
-	Option(Ref<treeldr::layout::Definition<F>>),
+	Option(Ref<treeldr::layout::Definition<M>>),
 
 	/// Vec.
-	Vec(Ref<treeldr::layout::Definition<F>>),
+	Vec(Ref<treeldr::layout::Definition<M>>),
 
 	/// BTreeSet.
-	BTreeSet(Ref<treeldr::layout::Definition<F>>),
+	BTreeSet(Ref<treeldr::layout::Definition<M>>),
 
 	/// OneOrMany, for non empty sets.
-	OneOrMany(Ref<treeldr::layout::Definition<F>>),
+	OneOrMany(Ref<treeldr::layout::Definition<M>>),
 }
 
-impl<F> BuiltIn<F> {
+impl<M> BuiltIn<M> {
 	pub fn impl_default(&self) -> bool {
 		!matches!(self, Self::Required(_))
 	}
 }
 
-impl<F> Description<F> {
-	pub fn new(context: &Context<F>, layout_ref: Ref<treeldr::layout::Definition<F>>) -> Self {
+impl<M> Description<M> {
+	pub fn new(context: &Context<M>, layout_ref: Ref<treeldr::layout::Definition<M>>) -> Self {
 		let layout = context
 			.model()
 			.layouts()
 			.get(layout_ref)
 			.expect("undefined described layout");
 
-		match layout.description() {
+		match layout.description().value() {
 			treeldr::layout::Description::Never(_) => Self::Never,
 			treeldr::layout::Description::Alias(name, alias_ref) => {
 				let ident = generate::type_ident_of_name(name);

@@ -1,6 +1,6 @@
 use crate::{error, utils::TryCollect, Context, Descriptions, Error, ObjectToId};
 use locspan::Meta;
-use treeldr::{Id, MetaOption, Name, Vocabulary, metadata::Merge};
+use treeldr::{metadata::Merge, Id, MetaOption, Name, Vocabulary};
 
 pub mod array;
 pub mod field;
@@ -69,9 +69,7 @@ impl<M> Description<M> {
 
 		match self {
 			Description::Struct(fields_id) => {
-				let fields = context
-					.require_list(*fields_id, metadata)?
-					.iter(context);
+				let fields = context.require_list(*fields_id, metadata)?.iter(context);
 				for item in fields {
 					let Meta(object, metadata) = item?.clone();
 					let field_id = object.into_id(&metadata)?;
@@ -85,7 +83,7 @@ impl<M> Description<M> {
 
 					let field_layout = context.require_layout(
 						**field_layout_id,
-						field_layout_id.causes().preferred().cloned(),
+						field_layout_id.metadata(),
 					)?;
 					if let Some(container_desc) = field_layout.description() {
 						match container_desc.as_standard() {
@@ -99,9 +97,9 @@ impl<M> Description<M> {
 								};
 
 								sub_layouts.push(SubLayout {
-									layout: WithCauses::new(
+									layout: Meta(
 										item_layout_id,
-										container_desc.causes().clone(),
+										container_desc.metadata().clone(),
 									),
 									connection: LayoutConnection::FieldItem(field_id),
 								});
@@ -157,12 +155,7 @@ impl<M> Description<M> {
 		where
 			M: Clone,
 		{
-			name.ok_or_else(|| {
-				Meta(
-					error::LayoutMissingName(id).into(),
-					metadata.clone(),
-				)
-			})
+			name.ok_or_else(|| Meta(error::LayoutMissingName(id).into(), metadata.clone()))
 		}
 
 		match self {
@@ -172,8 +165,7 @@ impl<M> Description<M> {
 				name,
 			)),
 			Description::Reference(layout_id) => {
-				let layout_ref = **nodes
-					.require_layout(layout_id, metadata)?;
+				let layout_ref = **nodes.require_layout(layout_id, metadata)?;
 				let r = treeldr::layout::Reference::new(name, layout_ref);
 				Ok(treeldr::layout::Description::Reference(r))
 			}
@@ -186,8 +178,7 @@ impl<M> Description<M> {
 						let Meta(object, metadata) = item?.clone();
 						let field_id = object.into_id(&metadata)?;
 
-						let field =
-							nodes.require_layout_field(field_id, &metadata)?;
+						let field = nodes.require_layout_field(field_id, &metadata)?;
 						let node = nodes.get(field_id).unwrap();
 						let label = node.label().map(String::from);
 						let doc = node.documentation().clone();
@@ -208,17 +199,11 @@ impl<M> Description<M> {
 						let Meta(object, variant_causes) = item?.clone();
 						let variant_id = object.into_id(&variant_causes)?;
 
-						let variant = nodes.require_layout_variant(
-							variant_id,
-							&variant_causes,
-						)?;
+						let variant = nodes.require_layout_variant(variant_id, &variant_causes)?;
 						let node = nodes.get(variant_id).unwrap();
 						let label = node.label().map(String::from);
 						let doc = node.documentation().clone();
-						Ok(Meta(
-							variant.build(label, doc, nodes)?,
-							variant_causes,
-						))
+						Ok(Meta(variant.build(label, doc, nodes)?, variant_causes))
 					})
 					.try_collect()?;
 
@@ -226,22 +211,19 @@ impl<M> Description<M> {
 				Ok(treeldr::layout::Description::Enum(enm))
 			}
 			Description::Required(item_layout_id) => {
-				let item_layout_ref = **nodes
-					.require_layout(item_layout_id, metadata)?;
+				let item_layout_ref = **nodes.require_layout(item_layout_id, metadata)?;
 				Ok(treeldr::layout::Description::Required(
 					treeldr::layout::Required::new(name, item_layout_ref),
 				))
 			}
 			Description::Option(item_layout_id) => {
-				let item_layout_ref = **nodes
-					.require_layout(item_layout_id, metadata)?;
+				let item_layout_ref = **nodes.require_layout(item_layout_id, metadata)?;
 				Ok(treeldr::layout::Description::Option(
 					treeldr::layout::Optional::new(name, item_layout_ref),
 				))
 			}
 			Description::Set(item_layout_id) => {
-				let item_layout_ref = **nodes
-					.require_layout(item_layout_id, metadata)?;
+				let item_layout_ref = **nodes.require_layout(item_layout_id, metadata)?;
 				Ok(treeldr::layout::Description::Set(
 					treeldr::layout::Set::new(name, item_layout_ref),
 				))
@@ -252,8 +234,7 @@ impl<M> Description<M> {
 			Description::Alias(alias_layout_id) => {
 				let name = require_name(id, name, metadata)?;
 
-				let alias_layout_ref = **nodes
-					.require_layout(alias_layout_id, metadata)?;
+				let alias_layout_ref = **nodes.require_layout(alias_layout_id, metadata)?;
 				Ok(treeldr::layout::Description::Alias(name, alias_layout_ref))
 			}
 		}
@@ -271,7 +252,9 @@ pub trait PseudoDescription<M>: Clone + From<Description<M>> {
 		id: Id,
 		metadata: M,
 		other_causes: M,
-	) -> Result<Meta<Self, M>, Error<M>> where M: Merge;
+	) -> Result<Meta<Self, M>, Error<M>>
+	where
+		M: Merge;
 }
 
 impl<M: Clone> PseudoDescription<M> for Description<M> {
@@ -289,25 +272,37 @@ impl<M: Clone> PseudoDescription<M> for Description<M> {
 		id: Id,
 		meta: M,
 		other_meta: M,
-	) -> Result<Meta<Self, M>, Error<M>> where M: Merge {
+	) -> Result<Meta<Self, M>, Error<M>>
+	where
+		M: Merge,
+	{
 		match (self, other) {
 			(Self::Never, Self::Never) => Ok(Meta(Self::Never, meta.merged_with(other_meta))),
-			(Self::Primitive(a), Self::Primitive(b)) => Ok(Meta(Self::Primitive(a.try_unify(id, b)?), meta.merged_with(other_meta))),
-			(Self::Struct(a), Self::Struct(b)) if a == b => Ok(Meta(Self::Struct(a), meta.merged_with(other_meta))),
-			(Self::Reference(a), Self::Reference(b)) if a == b => Ok(Meta(Self::Reference(a), meta.merged_with(other_meta))),
-			(Self::Enum(a), Self::Enum(b)) if a == b => Ok(Meta(Self::Enum(a), meta.merged_with(other_meta))),
-			(Self::Set(a), Self::Set(b)) if a == b => Ok(Meta(Self::Set(a), meta.merged_with(other_meta))),
+			(Self::Primitive(a), Self::Primitive(b)) => Ok(Meta(
+				Self::Primitive(a.try_unify(id, b)?),
+				meta.merged_with(other_meta),
+			)),
+			(Self::Struct(a), Self::Struct(b)) if a == b => {
+				Ok(Meta(Self::Struct(a), meta.merged_with(other_meta)))
+			}
+			(Self::Reference(a), Self::Reference(b)) if a == b => {
+				Ok(Meta(Self::Reference(a), meta.merged_with(other_meta)))
+			}
+			(Self::Enum(a), Self::Enum(b)) if a == b => {
+				Ok(Meta(Self::Enum(a), meta.merged_with(other_meta)))
+			}
+			(Self::Set(a), Self::Set(b)) if a == b => {
+				Ok(Meta(Self::Set(a), meta.merged_with(other_meta)))
+			}
 			(Self::Array(a), Self::Array(b)) => {
 				let Meta(result, meta) = a.try_unify(b, id, meta, other_meta)?;
 				Ok(Meta(Self::Array(result), meta))
 			}
-			(Self::Alias(a), Self::Alias(b)) if a == b => Ok(Meta(Self::Alias(a), meta.merged_with(other_meta))),
+			(Self::Alias(a), Self::Alias(b)) if a == b => {
+				Ok(Meta(Self::Alias(a), meta.merged_with(other_meta)))
+			}
 			_ => Err(Error::new(
-				error::LayoutMismatchDescription {
-					id,
-					because: meta,
-				}
-				.into(),
+				error::LayoutMismatchDescription { id, because: meta }.into(),
 				other_meta,
 			)),
 		}
@@ -372,19 +367,22 @@ impl<M, D> Definition<M, D> {
 	}
 
 	pub fn set_name(&mut self, name: Name, metadata: M) -> Result<(), Error<M>> {
-		self.name
-			.try_set(name, metadata, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.name.try_set(
+			name,
+			metadata,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::LayoutMismatchName {
 						id: self.id,
 						expected,
 						found,
-						because: expected_meta
+						because: expected_meta,
 					}
 					.into(),
-					found_meta
+					found_meta,
 				)
-			})
+			},
+		)
 	}
 
 	pub fn description(&self) -> Option<&Meta<D, M>> {
@@ -400,19 +398,22 @@ impl<M, D> Definition<M, D> {
 	where
 		M: Clone,
 	{
-		self.ty
-			.try_set(ty_ref, metadata, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.ty.try_set(
+			ty_ref,
+			metadata,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::LayoutMismatchType {
 						id: self.id,
 						expected,
 						found,
-						because: expected_meta
+						because: expected_meta,
 					}
 					.into(),
-					found_meta
+					found_meta,
 				)
-			})
+			},
+		)
 	}
 
 	pub fn set_description(&mut self, desc: D, metadata: M) -> Result<(), Error<M>>
@@ -420,10 +421,13 @@ impl<M, D> Definition<M, D> {
 		M: Merge,
 		D: PseudoDescription<M>,
 	{
-		self.desc
-			.try_unify(desc, metadata, |Meta(current_desc, current_meta), Meta(desc, meta)| {
+		self.desc.try_unify(
+			desc,
+			metadata,
+			|Meta(current_desc, current_meta), Meta(desc, meta)| {
 				current_desc.try_unify(desc, self.id, current_meta, meta)
-			})
+			},
+		)
 	}
 
 	pub fn replace_description(&mut self, desc: MetaOption<D, M>) {
@@ -457,11 +461,7 @@ impl<M: Merge, D: PseudoDescription<M>> Definition<M, D> {
 		self.set_description(Description::Struct(fields).into(), metadata)
 	}
 
-	pub fn set_reference(
-		&mut self,
-		id_layout: Id,
-		metadata: M,
-	) -> Result<(), Error<M>> {
+	pub fn set_reference(&mut self, id_layout: Id, metadata: M) -> Result<(), Error<M>> {
 		self.set_description(Description::Reference(id_layout).into(), metadata)
 	}
 
@@ -495,11 +495,7 @@ impl<M: Merge, D: PseudoDescription<M>> Definition<M, D> {
 }
 
 impl<M: Clone, D: PseudoDescription<M>> Definition<M, D> {
-	pub fn set_array_list_first(
-		&mut self,
-		first_prop: Id,
-		metadata: M,
-	) -> Result<(), Error<M>> {
+	pub fn set_array_list_first(&mut self, first_prop: Id, metadata: M) -> Result<(), Error<M>> {
 		let id = self.id;
 		match self.description_mut() {
 			Some(desc) => match desc.0.as_standard_mut() {
@@ -517,11 +513,7 @@ impl<M: Clone, D: PseudoDescription<M>> Definition<M, D> {
 		}
 	}
 
-	pub fn set_array_list_rest(
-		&mut self,
-		value: Id,
-		metadata: M,
-	) -> Result<(), Error<M>> {
+	pub fn set_array_list_rest(&mut self, value: Id, metadata: M) -> Result<(), Error<M>> {
 		let id = self.id;
 		match self.description_mut() {
 			Some(desc) => match desc.0.as_standard_mut() {
@@ -539,11 +531,7 @@ impl<M: Clone, D: PseudoDescription<M>> Definition<M, D> {
 		}
 	}
 
-	pub fn set_array_list_nil(
-		&mut self,
-		value: Id,
-		metadata: M,
-	) -> Result<(), Error<M>> {
+	pub fn set_array_list_nil(&mut self, value: Id, metadata: M) -> Result<(), Error<M>> {
 		let id = self.id;
 		match self.description_mut() {
 			Some(desc) => match desc.0.as_standard_mut() {
@@ -607,8 +595,7 @@ impl<M: Clone> Definition<M> {
 
 		if parent_layouts.len() == 1 {
 			let parent = &parent_layouts[0];
-			let parent_layout = context
-				.require_layout(parent.layout, &metadata)?.value();
+			let parent_layout = context.require_layout(parent.layout, &metadata)?.value();
 
 			if let Some(parent_layout_name) = parent_layout.name() {
 				match parent.connection {
@@ -658,8 +645,13 @@ impl<M: Clone> crate::Build<M> for Definition<M> {
 			)
 		})?;
 
-		let desc = Meta(desc.build(self.id, self.name, nodes, &desc_metadata)?, desc_metadata);
+		let desc = Meta(
+			desc.build(self.id, self.name, nodes, &desc_metadata)?,
+			desc_metadata,
+		);
 
-		Ok(treeldr::layout::Definition::new(self.id, ty, desc, metadata))
+		Ok(treeldr::layout::Definition::new(
+			self.id, ty, desc, metadata,
+		))
 	}
 }

@@ -3,7 +3,7 @@ use derivative::Derivative;
 use locspan::Meta;
 use treeldr::{Documentation, Id, MetaOption, Vocabulary};
 
-pub use treeldr::node::{TypesMetadata, Type, Types};
+pub use treeldr::node::{Type, Types, TypesMetadata};
 
 #[derive(Clone)]
 pub struct Node<T> {
@@ -37,11 +37,17 @@ impl<M, D: Descriptions<M>> Components<M, D> {
 	{
 		Ok(Components {
 			ty: self.ty.try_map_with_causes(|Meta(d, metadata)| {
-				Ok(Meta(d.try_map(|d| map.ty(d, &metadata, source, target, vocabulary))?, metadata))
+				Ok(Meta(
+					d.try_map(|d| map.ty(d, &metadata, source, target, vocabulary))?,
+					metadata,
+				))
 			})?,
 			property: self.property,
 			layout: self.layout.try_map_with_causes(|Meta(d, metadata)| {
-				Ok(Meta(d.try_map(|d| map.layout(d, &metadata, source, target, vocabulary))?, metadata))
+				Ok(Meta(
+					d.try_map(|d| map.layout(d, &metadata, source, target, vocabulary))?,
+					metadata,
+				))
 			})?,
 			layout_field: self.layout_field,
 			layout_variant: self.layout_variant,
@@ -250,36 +256,12 @@ impl<M, D: Descriptions<M>> Node<Components<M, D>> {
 		M: Clone,
 	{
 		TypesMetadata {
-			ty: self
-				.value
-				.ty
-				.metadata()
-				.cloned(),
-			property: self
-				.value
-				.property
-				.metadata()
-				.cloned(),
-			layout: self
-				.value
-				.layout
-				.metadata()
-				.cloned(),
-			layout_field: self
-				.value
-				.layout_field
-				.metadata()
-				.cloned(),
-			layout_variant: self
-				.value
-				.layout_variant
-				.metadata()
-				.cloned(),
-			list: self
-				.value
-				.list
-				.metadata()
-				.cloned(),
+			ty: self.value.ty.metadata().cloned(),
+			property: self.value.property.metadata().cloned(),
+			layout: self.value.layout.metadata().cloned(),
+			layout_field: self.value.layout_field.metadata().cloned(),
+			layout_variant: self.value.layout_variant.metadata().cloned(),
+			list: self.value.list.metadata().cloned(),
 		}
 	}
 
@@ -339,15 +321,11 @@ impl<M, D: Descriptions<M>> Node<Components<M, D>> {
 		self.value.property.as_mut()
 	}
 
-	pub fn as_layout_mut(
-		&mut self,
-	) -> Option<&mut Meta<layout::Definition<M, D::Layout>, M>> {
+	pub fn as_layout_mut(&mut self) -> Option<&mut Meta<layout::Definition<M, D::Layout>, M>> {
 		self.value.layout.as_mut()
 	}
 
-	pub fn as_layout_field_mut(
-		&mut self,
-	) -> Option<&mut Meta<layout::field::Definition<M>, M>> {
+	pub fn as_layout_field_mut(&mut self) -> Option<&mut Meta<layout::field::Definition<M>, M>> {
 		self.value.layout_field.as_mut()
 	}
 
@@ -398,10 +376,7 @@ impl<M, D: Descriptions<M>> Node<Components<M, D>> {
 	}
 
 	#[allow(clippy::type_complexity)]
-	pub fn require_type(
-		&self,
-		cause: &M,
-	) -> Result<&Meta<ty::Definition<M, D::Type>, M>, Error<M>>
+	pub fn require_type(&self, cause: &M) -> Result<&Meta<ty::Definition<M, D::Type>, M>, Error<M>>
 	where
 		M: Clone,
 	{
@@ -657,10 +632,7 @@ impl<M, D: Descriptions<M>> Node<Components<M, D>> {
 		}
 	}
 
-	pub fn require_list(
-		&self,
-		cause: &M,
-	) -> Result<&Meta<list::Definition<M>, M>, Error<M>>
+	pub fn require_list(&self, cause: &M) -> Result<&Meta<list::Definition<M>, M>, Error<M>>
 	where
 		M: Clone,
 	{
@@ -679,10 +651,7 @@ impl<M, D: Descriptions<M>> Node<Components<M, D>> {
 		}
 	}
 
-	pub fn require_list_mut(
-		&mut self,
-		cause: &M,
-	) -> Result<&mut list::Definition<M>, Error<M>>
+	pub fn require_list_mut(&mut self, cause: &M) -> Result<&mut list::Definition<M>, Error<M>>
 	where
 		M: Clone,
 	{

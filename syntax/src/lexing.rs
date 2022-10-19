@@ -1,6 +1,6 @@
 use super::{peekable3::Peekable3, Annotation, Literal};
-use iref::IriRefBuf;
 use decoded_char::DecodedChar;
+use iref::IriRefBuf;
 use locspan::{ErrAt, Meta, Span};
 use std::fmt;
 
@@ -425,30 +425,41 @@ impl<E, C: Iterator<Item = Result<DecodedChar, E>>> Lexer<E, C> {
 	}
 
 	fn peek_char(&mut self) -> Result<Option<char>, Meta<Error<E>, Span>> {
-		self.peek_decoded_char().map(|c| c.map(DecodedChar::into_char))
+		self.peek_decoded_char()
+			.map(|c| c.map(DecodedChar::into_char))
 	}
 
 	fn peek_decoded_char2(&mut self) -> Result<Option<DecodedChar>, Meta<Error<E>, Span>> {
-		let offset = self.peek_decoded_char()?.map(DecodedChar::into_len).unwrap_or(0);
+		let offset = self
+			.peek_decoded_char()?
+			.map(DecodedChar::into_len)
+			.unwrap_or(0);
 		self.chars
 			.peek2()
 			.err_at(|| (self.pos.span.end() + offset).into())
 	}
 
 	fn peek_char2(&mut self) -> Result<Option<char>, Meta<Error<E>, Span>> {
-		self.peek_decoded_char2().map(|c| c.map(DecodedChar::into_char))
+		self.peek_decoded_char2()
+			.map(|c| c.map(DecodedChar::into_char))
 	}
 
 	fn peek_decoded_char3(&mut self) -> Result<Option<DecodedChar>, Meta<Error<E>, Span>> {
-		let offset = self.peek_decoded_char()?.map(DecodedChar::into_len).unwrap_or(0)
-			+ self.peek_decoded_char2()?.map(DecodedChar::into_len).unwrap_or(0);
+		let offset =
+			self.peek_decoded_char()?
+				.map(DecodedChar::into_len)
+				.unwrap_or(0) + self
+				.peek_decoded_char2()?
+				.map(DecodedChar::into_len)
+				.unwrap_or(0);
 		self.chars
 			.peek3()
 			.err_at(|| (self.pos.span.end() + offset).into())
 	}
 
 	fn peek_char3(&mut self) -> Result<Option<char>, Meta<Error<E>, Span>> {
-		self.peek_decoded_char3().map(|c| c.map(DecodedChar::into_char))
+		self.peek_decoded_char3()
+			.map(|c| c.map(DecodedChar::into_char))
 	}
 
 	fn next_char(&mut self) -> Result<Option<char>, Meta<Error<E>, Span>> {

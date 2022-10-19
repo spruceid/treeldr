@@ -1,7 +1,7 @@
 use super::*;
-use lexing::{Delimiter, Keyword, Punct, Token, TokenKind, Tokens};
-use locspan::{MaybeLocated, Meta, Span, Spanned};
 use decoded_char::DecodedChar;
+use lexing::{Delimiter, Keyword, Punct, Token, TokenKind, Tokens};
+use locspan::{MaybeLocated, MaybeSpanned, Meta, Span};
 use std::{fmt, fmt::Debug};
 use treeldr::reporting;
 
@@ -35,10 +35,11 @@ where
 	fn labels(&self, cause: &M) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		match cause.optional_location() {
 			Some(loc) => {
-				vec![
-					codespan_reporting::diagnostic::Label::primary(loc.file().clone(), loc.span())
-						.with_message(self.to_string()),
-				]
+				vec![codespan_reporting::diagnostic::Label::primary(
+					loc.file().clone(),
+					loc.optional_span().unwrap(),
+				)
+				.with_message(self.to_string())]
 			}
 			None => Vec::new(),
 		}
@@ -271,10 +272,10 @@ pub trait Parse<M>: Sized {
 	#[inline(always)]
 	fn parse_str<F>(
 		content: &str,
-		metadata_builder: F
+		metadata_builder: F,
 	) -> Result<Meta<Self, M>, MetaError<lexing::Error, M>>
 	where
-		F: FnMut(Span) -> M
+		F: FnMut(Span) -> M,
 	{
 		Self::parse_utf8_infallible(content.chars(), metadata_builder)
 	}
@@ -282,11 +283,11 @@ pub trait Parse<M>: Sized {
 	#[inline(always)]
 	fn parse_utf8_infallible<C, F>(
 		chars: C,
-		metadata_builder: F
+		metadata_builder: F,
 	) -> Result<Meta<Self, M>, MetaError<lexing::Error, M>>
 	where
 		C: Iterator<Item = char>,
-		F: FnMut(Span) -> M
+		F: FnMut(Span) -> M,
 	{
 		Self::parse_infallible(decoded_char::Utf8Decoded(chars), metadata_builder)
 	}
@@ -294,11 +295,11 @@ pub trait Parse<M>: Sized {
 	#[inline(always)]
 	fn parse_utf8<C, F, E>(
 		chars: C,
-		metadata_builder: F
+		metadata_builder: F,
 	) -> Result<Meta<Self, M>, MetaError<lexing::Error<E>, M>>
 	where
 		C: Iterator<Item = Result<char, E>>,
-		F: FnMut(Span) -> M
+		F: FnMut(Span) -> M,
 	{
 		Self::parse(decoded_char::FallibleUtf8Decoded(chars), metadata_builder)
 	}
@@ -306,11 +307,11 @@ pub trait Parse<M>: Sized {
 	#[inline(always)]
 	fn parse_infallible<C, F>(
 		chars: C,
-		metadata_builder: F
+		metadata_builder: F,
 	) -> Result<Meta<Self, M>, MetaError<lexing::Error, M>>
 	where
 		C: Iterator<Item = DecodedChar>,
-		F: FnMut(Span) -> M
+		F: FnMut(Span) -> M,
 	{
 		let lexer = Lexer::new(chars.map(Ok));
 		let mut parser = Parser::new(lexer, metadata_builder);
@@ -320,11 +321,11 @@ pub trait Parse<M>: Sized {
 	#[inline(always)]
 	fn parse<C, F, E>(
 		chars: C,
-		metadata_builder: F
+		metadata_builder: F,
 	) -> Result<Meta<Self, M>, MetaError<lexing::Error<E>, M>>
 	where
 		C: Iterator<Item = Result<DecodedChar, E>>,
-		F: FnMut(Span) -> M
+		F: FnMut(Span) -> M,
 	{
 		let lexer = Lexer::new(chars);
 		let mut parser = Parser::new(lexer, metadata_builder);
@@ -372,7 +373,9 @@ pub trait Parse<M>: Sized {
 		F: FnMut(Span) -> M;
 
 	#[allow(clippy::type_complexity)]
-	fn try_parse<L, F>(parser: &mut Parser<L, F>) -> Result<Option<Meta<Self, M>>, MetaError<L::Error, M>>
+	fn try_parse<L, F>(
+		parser: &mut Parser<L, F>,
+	) -> Result<Option<Meta<Self, M>>, MetaError<L::Error, M>>
 	where
 		L: Tokens,
 		F: FnMut(Span) -> M,
@@ -428,7 +431,7 @@ pub trait Parse<M>: Sized {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for Document<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for Document<M> {
 	const FIRST: &'static [TokenKind] = Item::<M>::FIRST;
 
 	fn parse_in<L, F>(parser: &mut Parser<L, F>) -> Result<Meta<Self, M>, MetaError<L::Error, M>>
@@ -467,7 +470,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Document<M> {
 		let mut layouts = Vec::new();
 
 		let Meta(first_item, first_meta) = Item::parse_from(parser, token, loc)?;
-		let mut loc = first_meta.span();
+		let mut loc = first_meta.optional_span().unwrap();
 		match first_item {
 			Item::Base(i) => bases.push(i),
 			Item::Use(i) => uses.push(i),
@@ -480,7 +483,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Document<M> {
 			match parser.peek()? {
 				Meta(Some(_), _) => {
 					let Meta(item, item_meta) = Item::parse_in(parser)?;
-					loc.append(item_meta.span());
+					loc.append(item_meta.optional_span().unwrap());
 
 					match item {
 						Item::Base(i) => bases.push(i),
@@ -569,7 +572,7 @@ impl<M> Parse<M> for Documentation<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for Item<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Doc,
 		TokenKind::Keyword(lexing::Keyword::Base),
@@ -629,7 +632,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 				parser.parse_keyword(lexing::Keyword::As)?;
 
 				let prefix = Prefix::parse_in(parser)?;
-				loc.append(prefix.metadata().span());
+				loc.append(prefix.metadata().optional_span().unwrap());
 
 				parser.parse_punct(Punct::Semicolon)?;
 
@@ -652,7 +655,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 							Some(Token::Keyword(Keyword::With)) => {
 								parser.next()?;
 								let layout = LayoutDescription::parse_in(parser)?;
-								loc.append(layout.metadata().span());
+								loc.append(layout.metadata().optional_span().unwrap());
 								Some(layout)
 							}
 							_ => None,
@@ -670,7 +673,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 							Some(Token::Keyword(Keyword::With)) => {
 								parser.next()?;
 								let layout = LayoutDescription::parse_in(parser)?;
-								loc.append(layout.metadata().span());
+								loc.append(layout.metadata().optional_span().unwrap());
 								Some(layout)
 							}
 							_ => {
@@ -690,7 +693,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 					),
 					Meta(Some(Token::Keyword(Keyword::With)), _) => {
 						let layout = LayoutDescription::parse_in(parser)?;
-						loc.append(layout.metadata().span());
+						loc.append(layout.metadata().optional_span().unwrap());
 						(
 							Meta(
 								TypeDescription::Normal(Vec::new()),
@@ -713,7 +716,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 					}
 				};
 
-				loc.append(description.metadata().span());
+				loc.append(description.metadata().optional_span().unwrap());
 				Ok(Meta::new(
 					Item::Type(Meta::new(
 						TypeDefinition {
@@ -733,7 +736,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 				let ty = match parser.next()? {
 					Meta(Some(Token::Punct(Punct::Colon)), _) => {
 						let ty = AnnotatedTypeExpr::parse_in(parser)?;
-						loc.append(ty.metadata().span());
+						loc.append(ty.metadata().optional_span().unwrap());
 						parser.parse_punct(Punct::Semicolon)?;
 						Some(ty)
 					}
@@ -772,7 +775,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 					Some(Token::Keyword(Keyword::For)) => {
 						parser.next()?;
 						let ty_id = Id::parse_in(parser)?;
-						loc.append(ty_id.metadata().span());
+						loc.append(ty_id.metadata().optional_span().unwrap());
 						Some(ty_id)
 					}
 					_ => None,
@@ -806,7 +809,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 					}
 				};
 
-				loc.append(description.metadata().span());
+				loc.append(description.metadata().optional_span().unwrap());
 				Ok(Meta::new(
 					Item::Layout(Meta::new(
 						LayoutDefinition {
@@ -828,7 +831,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for Item<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for LayoutDescription<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for LayoutDescription<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Begin(Delimiter::Brace),
 		TokenKind::Punct(Punct::Semicolon),
@@ -864,7 +867,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for LayoutDescription<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for PropertyDefinition<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for PropertyDefinition<M> {
 	const FIRST: &'static [TokenKind] = &[TokenKind::Doc, TokenKind::Id];
 
 	fn parse_from<L, F>(
@@ -879,13 +882,13 @@ impl<M: Spanned<Span = Span>> Parse<M> for PropertyDefinition<M> {
 		let (doc, k) = Documentation::try_parse_from(parser, token, token_span)?;
 
 		let id = Id::parse_from_continuation(parser, k)?;
-		let mut loc = id.metadata().span();
+		let mut loc = id.metadata().optional_span().unwrap();
 
 		let alias = match parser.peek()? {
 			Meta(Some(Token::Keyword(lexing::Keyword::As)), _) => {
 				parser.next()?;
 				let alias = Alias::parse_in(parser)?;
-				loc.append(alias.metadata().span());
+				loc.append(alias.metadata().optional_span().unwrap());
 				Some(alias)
 			}
 			_ => None,
@@ -895,7 +898,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for PropertyDefinition<M> {
 			Some(Token::Punct(lexing::Punct::Colon)) => {
 				parser.next()?;
 				let ty = AnnotatedTypeExpr::parse_in(parser)?;
-				loc.append(ty.metadata().span());
+				loc.append(ty.metadata().optional_span().unwrap());
 				Some(ty)
 			}
 			_ => None,
@@ -908,7 +911,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for PropertyDefinition<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for FieldDefinition<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for FieldDefinition<M> {
 	const FIRST: &'static [TokenKind] = &[TokenKind::Doc, TokenKind::Id];
 
 	fn parse_from<L, F>(
@@ -922,13 +925,13 @@ impl<M: Spanned<Span = Span>> Parse<M> for FieldDefinition<M> {
 	{
 		let (doc, k) = Documentation::try_parse_from(parser, token, token_span)?;
 		let id = Id::parse_from_continuation(parser, k)?;
-		let mut loc = id.metadata().span();
+		let mut loc = id.metadata().optional_span().unwrap();
 
 		let alias = match parser.peek()? {
 			Meta(Some(Token::Keyword(lexing::Keyword::As)), _) => {
 				parser.next()?;
 				let alias = Alias::parse_in(parser)?;
-				loc.append(alias.metadata().span());
+				loc.append(alias.metadata().optional_span().unwrap());
 				Some(alias)
 			}
 			_ => None,
@@ -938,7 +941,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for FieldDefinition<M> {
 			Some(Token::Punct(lexing::Punct::Colon)) => {
 				parser.next()?;
 				let ty = AnnotatedLayoutExpr::parse_in(parser)?;
-				loc.append(ty.metadata().span());
+				loc.append(ty.metadata().optional_span().unwrap());
 				Some(ty)
 			}
 			_ => None,
@@ -1008,7 +1011,7 @@ impl<M> Parse<M> for Prefix {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for AnnotatedTypeExpr<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for AnnotatedTypeExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Keyword(Keyword::Annotation(Annotation::Multiple)),
 		TokenKind::Keyword(Keyword::Annotation(Annotation::Required)),
@@ -1047,7 +1050,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for AnnotatedTypeExpr<M> {
 		};
 
 		let expr = OuterTypeExpr::parse_from_continuation(parser, k)?;
-		loc.append(expr.metadata().span());
+		loc.append(expr.metadata().optional_span().unwrap());
 
 		while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) = parser.peek()? {
 			loc.append(a_loc);
@@ -1062,7 +1065,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for AnnotatedTypeExpr<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for OuterTypeExpr<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for OuterTypeExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
@@ -1088,7 +1091,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for OuterTypeExpr<M> {
 				while let Meta(Some(Token::Punct(Punct::Pipe)), _) = parser.peek()? {
 					parser.next()?;
 					let item = NamedInnerTypeExpr::parse_in(parser)?;
-					loc.append(item.metadata().span());
+					loc.append(item.metadata().optional_span().unwrap());
 					options.push(item);
 				}
 
@@ -1102,7 +1105,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for OuterTypeExpr<M> {
 				while let Meta(Some(Token::Punct(Punct::Ampersand)), _) = parser.peek()? {
 					parser.next()?;
 					let item = NamedInnerTypeExpr::parse_in(parser)?;
-					loc.append(item.metadata().span());
+					loc.append(item.metadata().optional_span().unwrap());
 					types.push(item);
 				}
 
@@ -1116,7 +1119,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for OuterTypeExpr<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for NamedInnerTypeExpr<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for NamedInnerTypeExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
@@ -1135,19 +1138,19 @@ impl<M: Spanned<Span = Span>> Parse<M> for NamedInnerTypeExpr<M> {
 		F: FnMut(Span) -> M,
 	{
 		let expr = InnerTypeExpr::parse_from(parser, token, loc)?;
-		let mut loc = expr.metadata().span();
+		let mut loc = expr.metadata().optional_span().unwrap();
 
 		let layout = match parser.peek()? {
 			Meta(Some(Token::Keyword(Keyword::With)), _) => {
 				parser.next()?;
 				let layout = NamedInnerLayoutExpr::parse_in(parser)?;
-				loc.append(layout.metadata().span());
+				loc.append(layout.metadata().optional_span().unwrap());
 				NamedInnerTypeExprLayout::Explicit(layout)
 			}
 			Meta(Some(Token::Keyword(Keyword::As)), _) => {
 				parser.next()?;
 				let name = Alias::parse_in(parser)?;
-				loc.append(name.metadata().span());
+				loc.append(name.metadata().optional_span().unwrap());
 				NamedInnerTypeExprLayout::Implicit(Some(name))
 			}
 			_ => NamedInnerTypeExprLayout::Implicit(None),
@@ -1157,7 +1160,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for NamedInnerTypeExpr<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Keyword(Keyword::All),
@@ -1188,11 +1191,11 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 				where
 					L: Tokens,
 					F: FnMut(Span) -> M,
-					M: Spanned<Span = Span>,
+					M: MaybeSpanned<Span = Span>,
 				{
 					let ty = InnerTypeExpr::parse_in(parser)?;
-					let restriction_loc = ty.metadata().span();
-					loc.append(ty.metadata().span());
+					let restriction_loc = ty.metadata().optional_span().unwrap();
+					loc.append(ty.metadata().optional_span().unwrap());
 					Ok(Meta(
 						TypeRestrictedProperty {
 							prop,
@@ -1253,7 +1256,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 				)),
 				Token::Punct(lexing::Punct::Ampersand) => {
 					let arg = Self::parse_in(parser)?;
-					loc.set_end(arg.metadata().span().end());
+					loc.set_end(arg.metadata().optional_span().unwrap().end());
 					Ok(Meta::new(
 						Self::Reference(Box::new(arg)),
 						parser.build_metadata(loc),
@@ -1289,7 +1292,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for AnnotatedLayoutExpr<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for AnnotatedLayoutExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Keyword(Keyword::Annotation(Annotation::Multiple)),
 		TokenKind::Keyword(Keyword::Annotation(Annotation::Required)),
@@ -1328,7 +1331,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for AnnotatedLayoutExpr<M> {
 		};
 
 		let expr = OuterLayoutExpr::parse_from_continuation(parser, k)?;
-		loc.append(expr.metadata().span());
+		loc.append(expr.metadata().optional_span().unwrap());
 
 		while let Meta(Some(Token::Keyword(Keyword::Annotation(a))), a_loc) = parser.peek()? {
 			loc.append(a_loc);
@@ -1343,7 +1346,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for AnnotatedLayoutExpr<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for OuterLayoutExpr<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for OuterLayoutExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
@@ -1369,7 +1372,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for OuterLayoutExpr<M> {
 				while let Meta(Some(Token::Punct(Punct::Pipe)), _) = parser.peek()? {
 					parser.next()?;
 					let item = NamedInnerLayoutExpr::parse_in(parser)?;
-					loc.append(item.metadata().span());
+					loc.append(item.metadata().optional_span().unwrap());
 					options.push(item);
 				}
 
@@ -1383,7 +1386,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for OuterLayoutExpr<M> {
 				while let Meta(Some(Token::Punct(Punct::Ampersand)), _) = parser.peek()? {
 					parser.next()?;
 					let item = NamedInnerLayoutExpr::parse_in(parser)?;
-					loc.append(item.metadata().span());
+					loc.append(item.metadata().optional_span().unwrap());
 					layouts.push(item);
 				}
 
@@ -1397,7 +1400,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for OuterLayoutExpr<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for NamedInnerLayoutExpr<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for NamedInnerLayoutExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
@@ -1416,11 +1419,11 @@ impl<M: Spanned<Span = Span>> Parse<M> for NamedInnerLayoutExpr<M> {
 		F: FnMut(Span) -> M,
 	{
 		let expr = InnerLayoutExpr::parse_from(parser, token, loc)?;
-		let mut loc = expr.metadata().span();
+		let mut loc = expr.metadata().optional_span().unwrap();
 		let name = if let Meta(Some(Token::Keyword(Keyword::As)), _) = parser.peek()? {
 			parser.next()?;
 			let name = Alias::parse_in(parser)?;
-			loc.append(name.metadata().span());
+			loc.append(name.metadata().optional_span().unwrap());
 			Some(name)
 		} else {
 			None
@@ -1430,7 +1433,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for NamedInnerLayoutExpr<M> {
 	}
 }
 
-impl<M: Spanned<Span = Span>> Parse<M> for InnerLayoutExpr<M> {
+impl<M: MaybeSpanned<Span = Span>> Parse<M> for InnerLayoutExpr<M> {
 	const FIRST: &'static [TokenKind] = &[
 		TokenKind::Id,
 		TokenKind::Punct(Punct::Ampersand),
@@ -1455,7 +1458,7 @@ impl<M: Spanned<Span = Span>> Parse<M> for InnerLayoutExpr<M> {
 			)),
 			Token::Punct(lexing::Punct::Ampersand) => {
 				let arg = InnerTypeExpr::parse_in(parser)?;
-				loc.append(arg.metadata().span());
+				loc.append(arg.metadata().optional_span().unwrap());
 				Ok(Meta::new(
 					Self::Reference(Box::new(arg)),
 					parser.build_metadata(loc),

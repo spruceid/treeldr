@@ -1,8 +1,9 @@
 use crate::Error;
 use std::collections::BTreeMap;
 use treeldr::{
+	metadata::Merge,
 	ty::data::{restriction, RegExp},
-	value, Id, metadata::Merge,
+	value, Id,
 };
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -48,15 +49,16 @@ impl<M> Restrictions<M> {
 		Self::default()
 	}
 
-	pub fn insert(&mut self, restriction: Restriction, causes: M) where M: Merge {
+	pub fn insert(&mut self, restriction: Restriction, causes: M)
+	where
+		M: Merge,
+	{
 		use std::collections::btree_map::Entry;
 		match self.map.entry(restriction) {
 			Entry::Vacant(entry) => {
 				entry.insert(causes);
 			}
-			Entry::Occupied(mut entry) => {
-				entry.get_mut().merge_with(causes)
-			}
+			Entry::Occupied(mut entry) => entry.get_mut().merge_with(causes),
 		}
 	}
 

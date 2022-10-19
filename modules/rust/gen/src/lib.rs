@@ -16,27 +16,27 @@ pub use module::Module;
 pub use path::Path;
 pub use ty::Type;
 
-pub trait Generate<F> {
+pub trait Generate<M> {
 	fn generate(
 		&self,
-		context: &Context<F>,
-		scope: Option<Ref<Module<F>>>,
+		context: &Context<M>,
+		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<F>>;
+	) -> Result<(), Error<M>>;
 
 	fn with<'a, 'c>(
 		&self,
-		context: &'c Context<'a, F>,
-		scope: Option<Ref<Module<F>>>,
-	) -> With<'a, 'c, '_, F, Self> {
+		context: &'c Context<'a, M>,
+		scope: Option<Ref<Module<M>>>,
+	) -> With<'a, 'c, '_, M, Self> {
 		With(context, scope, self)
 	}
 }
 
-pub struct With<'a, 'c, 't, F, T: ?Sized>(&'c Context<'a, F>, Option<Ref<Module<F>>>, &'t T);
+pub struct With<'a, 'c, 't, M, T: ?Sized>(&'c Context<'a, M>, Option<Ref<Module<M>>>, &'t T);
 
-impl<'a, 'c, 't, F, T: ?Sized + Generate<F>> With<'a, 'c, 't, F, T> {
-	pub fn into_tokens(self) -> Result<TokenStream, Error<F>> {
+impl<'a, 'c, 't, M, T: ?Sized + Generate<M>> With<'a, 'c, 't, M, T> {
+	pub fn into_tokens(self) -> Result<TokenStream, Error<M>> {
 		let mut tokens = TokenStream::new();
 		self.2.generate(self.0, self.1, &mut tokens)?;
 		Ok(tokens)

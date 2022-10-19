@@ -406,8 +406,7 @@ impl fmt::Display for BlankLabel {
 	}
 }
 
-pub type Literal<M> =
-	rdf_types::meta::Literal<M, rdf_types::StringLiteral, Term>;
+pub type Literal<M> = rdf_types::meta::Literal<M, rdf_types::StringLiteral, Term>;
 
 pub type Id = rdf_types::Subject<Term, BlankLabel>;
 
@@ -415,8 +414,7 @@ pub type GraphLabel = rdf_types::GraphLabel<Term, BlankLabel>;
 
 pub type Object<M> = rdf_types::Object<Term, BlankLabel, Literal<M>>;
 
-pub type LocQuad<M> =
-	rdf_types::meta::MetaQuad<Id, Term, Object<M>, GraphLabel, M>;
+pub type LocQuad<M> = rdf_types::meta::MetaQuad<Id, Term, Object<M>, GraphLabel, M>;
 
 pub type StrippedLiteral = rdf_types::Literal<rdf_types::StringLiteral, Term>;
 

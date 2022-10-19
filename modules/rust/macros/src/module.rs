@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use syn::spanned::Spanned;
 use thiserror::Error;
 
-pub type GenContext<'a> = treeldr_rust_gen::Context<'a, treeldr_load::FileId>;
+pub type GenContext<'a> = treeldr_rust_gen::Context<'a, treeldr_load::Metadata>;
 
 #[derive(Error, Debug)]
 pub enum ParseError {
@@ -31,7 +31,7 @@ pub enum ParseError {
 
 pub type SpannedParseError = (ParseError, Span);
 
-pub type GenError = treeldr_rust_gen::Error<treeldr_load::FileId>;
+pub type GenError = treeldr_rust_gen::Error<treeldr_load::Metadata>;
 
 pub struct Inputs {
 	list: Vec<Input>,
@@ -197,7 +197,7 @@ pub struct Prefix {
 	/// Module content.
 	content: Vec<syn::Item>,
 
-	module: Option<treeldr_rust_gen::Ref<treeldr_rust_gen::Module<treeldr_load::FileId>>>,
+	module: Option<treeldr_rust_gen::Ref<treeldr_rust_gen::Module<treeldr_load::Metadata>>>,
 }
 
 pub struct PrefixAttributes {

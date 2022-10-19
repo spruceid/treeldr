@@ -18,16 +18,14 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set_first(
-		&mut self,
-		object: Object<M>,
-		cause: M,
-	) -> Result<(), Error<M>>
+	pub fn set_first(&mut self, object: Object<M>, cause: M) -> Result<(), Error<M>>
 	where
 		M: Clone,
 	{
-		self.first
-			.try_set_stripped(object, cause, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.first.try_set_stripped(
+			object,
+			cause,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Meta(
 					error::ListMismatchItem {
 						id: self.id,
@@ -36,17 +34,20 @@ impl<M> Definition<M> {
 						because: expected_meta.clone(),
 					}
 					.into(),
-					found_meta
+					found_meta,
 				)
-			})
+			},
+		)
 	}
 
 	pub fn set_rest(&mut self, list: Id, cause: M) -> Result<(), Error<M>>
 	where
 		M: Clone,
 	{
-		self.rest
-			.try_set(list, cause, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.rest.try_set(
+			list,
+			cause,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::ListMismatchRest {
 						id: self.id,
@@ -57,7 +58,8 @@ impl<M> Definition<M> {
 					.into(),
 					found_meta,
 				)
-			})
+			},
+		)
 	}
 }
 
@@ -109,24 +111,16 @@ impl<'l, M: Clone, C: RequireList<M>> Iterator for Iter<'l, M, C> {
 			Self::Nil => None,
 			Self::Cons(nodes, d) => {
 				let item = d.first.value_or_else(|| {
-					Meta(
-						error::ListMissingItem(d.id).into(),
-						d.metadata().clone(),
-					)
+					Meta(error::ListMissingItem(d.id).into(), d.metadata().clone())
 				});
 
 				let rest_id = d.rest.value_or_else(|| {
-					Meta(
-						error::ListMissingRest(d.id).into(),
-						d.metadata().clone(),
-					)
+					Meta(error::ListMissingRest(d.id).into(), d.metadata().clone())
 				});
 
 				match rest_id {
 					Ok(Meta(rest_id, meta)) => {
-						match nodes
-							.require_list(*rest_id, meta)
-						{
+						match nodes.require_list(*rest_id, meta) {
 							Ok(ListRef::Cons(rest)) => *self = Self::Cons(*nodes, rest),
 							Ok(ListRef::Nil) => *self = Self::Nil,
 							Err(e) => return Some(Err(e)),

@@ -1,7 +1,7 @@
 use crate::{error, Error};
 use locspan::Meta;
 use std::collections::HashMap;
-use treeldr::{Id, MetaOption, metadata::Merge};
+use treeldr::{metadata::Merge, Id, MetaOption};
 
 /// Property definition.
 #[derive(Clone)]
@@ -36,8 +36,10 @@ impl<M> Definition<M> {
 	where
 		M: Clone,
 	{
-		self.required
-			.try_set(value, cause, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.required.try_set(
+			value,
+			cause,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::PropertyMismatchRequired {
 						id: self.id,
@@ -48,7 +50,8 @@ impl<M> Definition<M> {
 					.into(),
 					found_meta,
 				)
-			})
+			},
+		)
 	}
 
 	/// Checks if this property is functional,
@@ -57,16 +60,14 @@ impl<M> Definition<M> {
 		self.functional.value().cloned().unwrap_or(true)
 	}
 
-	pub fn set_functional(
-		&mut self,
-		value: bool,
-		cause: M,
-	) -> Result<(), Error<M>>
+	pub fn set_functional(&mut self, value: bool, cause: M) -> Result<(), Error<M>>
 	where
 		M: Clone,
 	{
-		self.functional
-			.try_set(value, cause, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.functional.try_set(
+			value,
+			cause,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::PropertyMismatchFunctional {
 						id: self.id,
@@ -77,18 +78,20 @@ impl<M> Definition<M> {
 					.into(),
 					found_meta,
 				)
-			})
+			},
+		)
 	}
 
-	pub fn set_domain(&mut self, ty_ref: Id, cause: M) where M: Merge {
+	pub fn set_domain(&mut self, ty_ref: Id, cause: M)
+	where
+		M: Merge,
+	{
 		use std::collections::hash_map::Entry;
 		match self.domain.entry(ty_ref) {
 			Entry::Vacant(entry) => {
 				entry.insert(cause);
 			}
-			Entry::Occupied(mut entry) => {
-				entry.get_mut().merge_with(cause)
-			}
+			Entry::Occupied(mut entry) => entry.get_mut().merge_with(cause),
 		}
 	}
 
@@ -96,8 +99,10 @@ impl<M> Definition<M> {
 	where
 		M: Clone,
 	{
-		self.range
-			.try_set(ty, cause, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.range.try_set(
+			ty,
+			cause,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::PropertyMismatchType {
 						id: self.id,
@@ -108,7 +113,8 @@ impl<M> Definition<M> {
 					.into(),
 					found_meta,
 				)
-			})
+			},
+		)
 	}
 
 	pub fn dependencies(
@@ -132,17 +138,18 @@ impl<M: Clone> crate::Build<M> for Definition<M> {
 		_dependencies: crate::Dependencies<M>,
 		causes: M,
 	) -> Result<Self::Target, Error<M>> {
-		let range_id = self.range.ok_or_else(|| {
-			Meta(
-				error::PropertyMissingType(self.id).into(),
-				causes.clone(),
-			)
-		})?;
-		let range = Meta(*nodes
-			.require_type(*range_id, range_id.metadata())?.value(), range_id.into_metadata());
+		let range_id = self
+			.range
+			.ok_or_else(|| Meta(error::PropertyMissingType(self.id).into(), causes.clone()))?;
+		let range = Meta(
+			*nodes.require_type(*range_id, range_id.metadata())?.value(),
+			range_id.into_metadata(),
+		);
 
 		let required = self.required.unwrap_or_else(|| Meta(false, causes.clone()));
-		let functional = self.functional.unwrap_or_else(|| Meta(true, causes.clone()));
+		let functional = self
+			.functional
+			.unwrap_or_else(|| Meta(true, causes.clone()));
 
 		let mut result =
 			treeldr::prop::Definition::new(self.id, range, required, functional, causes);

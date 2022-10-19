@@ -22,30 +22,12 @@ impl<M> Node<Components<M>> {
 		M: Clone,
 	{
 		node::TypesMetadata {
-			ty: self
-				.value()
-				.ty
-				.metadata().cloned(),
-			property: self
-				.value()
-				.property
-				.metadata().cloned(),
-			layout: self
-				.value()
-				.property
-				.metadata().cloned(),
-			layout_field: self
-				.value()
-				.layout_field
-				.metadata().cloned(),
-			layout_variant: self
-				.value()
-				.layout_variant
-				.metadata().cloned(),
-			list: self
-				.value()
-				.list
-				.metadata().cloned(),
+			ty: self.value().ty.metadata().cloned(),
+			property: self.value().property.metadata().cloned(),
+			layout: self.value().property.metadata().cloned(),
+			layout_field: self.value().layout_field.metadata().cloned(),
+			layout_variant: self.value().layout_variant.metadata().cloned(),
+			list: self.value().list.metadata().cloned(),
 		}
 	}
 
@@ -154,10 +136,7 @@ impl<M> Node<Components<M>> {
 		}
 	}
 
-	pub fn require_list(
-		&self,
-		cause: &M,
-	) -> Result<&Meta<list::Definition<M>, M>, Error<M>>
+	pub fn require_list(&self, cause: &M) -> Result<&Meta<list::Definition<M>, M>, Error<M>>
 	where
 		M: Clone,
 	{
@@ -270,15 +249,30 @@ impl<M: Clone> Nodes<M> {
 		let mut allocated_nodes = BTreeMap::new();
 		for (id, node) in nodes {
 			let allocated_node = node.map(|components| Components {
-				ty: components
-					.ty
-					.map_with_causes(|Meta(ty, meta)| Meta(shelves.types.insert((id, Meta(ty, meta.clone()))).cast(), meta)),
-				property: components
-					.property
-					.map_with_causes(|Meta(prop, meta)| Meta(shelves.properties.insert((id, Meta(prop, meta.clone()))).cast(), meta)),
-				layout: components
-					.layout
-					.map_with_causes(|Meta(layout, meta)| Meta(shelves.layouts.insert((id, Meta(layout, meta.clone()))).cast(), meta)),
+				ty: components.ty.map_with_causes(|Meta(ty, meta)| {
+					Meta(
+						shelves.types.insert((id, Meta(ty, meta.clone()))).cast(),
+						meta,
+					)
+				}),
+				property: components.property.map_with_causes(|Meta(prop, meta)| {
+					Meta(
+						shelves
+							.properties
+							.insert((id, Meta(prop, meta.clone())))
+							.cast(),
+						meta,
+					)
+				}),
+				layout: components.layout.map_with_causes(|Meta(layout, meta)| {
+					Meta(
+						shelves
+							.layouts
+							.insert((id, Meta(layout, meta.clone())))
+							.cast(),
+						meta,
+					)
+				}),
 				layout_field: components.layout_field,
 				layout_variant: components.layout_variant,
 				list: components.list,

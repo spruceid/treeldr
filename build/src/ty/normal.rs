@@ -1,7 +1,7 @@
 use crate::{context, Error};
 use derivative::Derivative;
 use std::collections::HashMap;
-use treeldr::{Id, metadata::Merge};
+use treeldr::{metadata::Merge, Id};
 
 /// Normal type definition.
 #[derive(Clone, Derivative)]
@@ -24,15 +24,16 @@ impl<M> Normal<M> {
 		self.properties.iter().map(|(p, c)| (*p, c))
 	}
 
-	pub fn declare_property(&mut self, prop_ref: Id, cause: M) where M: Merge {
+	pub fn declare_property(&mut self, prop_ref: Id, cause: M)
+	where
+		M: Merge,
+	{
 		use std::collections::hash_map::Entry;
 		match self.properties.entry(prop_ref) {
 			Entry::Vacant(entry) => {
 				entry.insert(cause);
 			}
-			Entry::Occupied(mut entry) => {
-				entry.get_mut().merge_with(cause)
-			}
+			Entry::Occupied(mut entry) => entry.get_mut().merge_with(cause),
 		}
 	}
 

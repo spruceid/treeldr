@@ -1,6 +1,6 @@
 use crate::{context, Error};
 use locspan::Meta;
-use treeldr::{Id, metadata::Merge};
+use treeldr::{metadata::Merge, Id};
 
 pub mod restriction;
 
@@ -21,11 +21,7 @@ impl<M> Default for DataType<M> {
 }
 
 impl<M> DataType<M> {
-	pub fn set_primitive(
-		&mut self,
-		p: Primitive,
-		cause: M,
-	) -> Result<(), Error<M>>
+	pub fn set_primitive(&mut self, p: Primitive, cause: M) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
@@ -48,11 +44,10 @@ impl<M> DataType<M> {
 		}
 	}
 
-	pub fn set_derivation_base(
-		&mut self,
-		base: Id,
-		cause: M,
-	) -> Result<(), Error<M>> where M: Merge {
+	pub fn set_derivation_base(&mut self, base: Id, cause: M) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
 		match self {
 			Self::Unknown => {
 				*self = Self::Derived(Derived::new(base, cause));
@@ -119,7 +114,10 @@ impl<M> Derived<M> {
 		}
 	}
 
-	pub fn set_base(&mut self, base: Id, cause: M) -> Result<(), Error<M>> where M: Merge {
+	pub fn set_base(&mut self, base: Id, cause: M) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
 		if *self.base == base {
 			self.base.metadata_mut().merge_with(cause);
 			Ok(())
@@ -156,10 +154,9 @@ impl<M> Derived<M> {
 	where
 		M: Clone,
 	{
-		Ok(vec![crate::Item::Type(**nodes.require_type(
-			*self.base,
-			self.base.metadata(),
-		)?)])
+		Ok(vec![crate::Item::Type(
+			**nodes.require_type(*self.base, self.base.metadata())?,
+		)])
 	}
 
 	pub fn build(

@@ -6,7 +6,7 @@ use derivative::Derivative;
 use locspan::Meta;
 use shelves::Shelf;
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{vocab, Id, Model, Vocabulary, metadata::Merge};
+use treeldr::{metadata::Merge, vocab, Id, Model, Vocabulary};
 
 pub mod allocated;
 
@@ -38,7 +38,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		&mut self,
 		id: Id,
 		primitive_type: ty::data::Primitive,
-		metadata: M
+		metadata: M,
 	) -> Result<Id, Error<M>>
 	where
 		M: Clone + Merge,
@@ -53,7 +53,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 	pub fn define_primitive_layout(
 		&mut self,
 		primitive_layout: layout::Primitive,
-		metadata: M
+		metadata: M,
 	) -> Result<Id, Error<M>>
 	where
 		M: Clone + Merge,
@@ -70,7 +70,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 	pub fn apply_built_in_definitions(
 		&mut self,
 		vocabulary: &mut Vocabulary,
-		metadata: M
+		metadata: M,
 	) -> Result<(), Error<M>>
 	where
 		M: Clone + Merge,
@@ -164,7 +164,11 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		Ok(id)
 	}
 
-	pub fn define_rdf_types(&mut self, vocabulary: &mut Vocabulary, metadata: M) -> Result<(), Error<M>>
+	pub fn define_rdf_types(
+		&mut self,
+		vocabulary: &mut Vocabulary,
+		metadata: M,
+	) -> Result<(), Error<M>>
 	where
 		M: Clone + Merge,
 	{
@@ -174,18 +178,27 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		self.declare_layout(Id::Iri(Term::Rdfs(Rdfs::Resource)), metadata.clone());
 		let id_field = Id::Blank(vocabulary.new_blank_label());
 		self.declare_layout_field(id_field, metadata.clone());
-		let resource_ref_layout =
-			self.standard_reference(vocabulary, Id::Iri(Term::Rdfs(Rdfs::Resource)), metadata.clone(), metadata.clone())?;
-		let field_layout = self.create_option_layout(vocabulary, resource_ref_layout, metadata.clone())?;
+		let resource_ref_layout = self.standard_reference(
+			vocabulary,
+			Id::Iri(Term::Rdfs(Rdfs::Resource)),
+			metadata.clone(),
+			metadata.clone(),
+		)?;
+		let field_layout =
+			self.create_option_layout(vocabulary, resource_ref_layout, metadata.clone())?;
 		let field = self
 			.get_mut(id_field)
 			.unwrap()
 			.as_layout_field_mut()
 			.unwrap();
-		field.set_property(Id::Iri(Term::TreeLdr(vocab::TreeLdr::Self_)), metadata.clone())?;
+		field.set_property(
+			Id::Iri(Term::TreeLdr(vocab::TreeLdr::Self_)),
+			metadata.clone(),
+		)?;
 		field.set_name(treeldr::Name::new("id").unwrap(), metadata.clone())?;
 		field.set_layout(field_layout, metadata.clone())?;
-		let fields_id = self.create_list(vocabulary, [Meta(id_field.into_term(), metadata.clone())])?;
+		let fields_id =
+			self.create_list(vocabulary, [Meta(id_field.into_term(), metadata.clone())])?;
 		let layout = self
 			.get_mut(Id::Iri(Term::Rdfs(Rdfs::Resource)))
 			.unwrap()
@@ -248,7 +261,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		self.define_primitive_datatype(
 			Id::Iri(Term::Xsd(Xsd::String)),
 			ty::data::Primitive::String,
-			metadata
+			metadata,
 		)?;
 		Ok(())
 	}
@@ -259,13 +272,19 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 	{
 		use layout::Primitive;
 
-		self.declare_property(Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)), metadata.clone());
+		self.declare_property(
+			Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)),
+			metadata.clone(),
+		);
 		let prop = self
 			.get_mut(Id::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)))
 			.unwrap()
 			.as_property_mut()
 			.unwrap();
-		prop.set_range(Id::Iri(vocab::Term::Rdfs(vocab::Rdfs::Resource)), metadata.clone())?;
+		prop.set_range(
+			Id::Iri(vocab::Term::Rdfs(vocab::Rdfs::Resource)),
+			metadata.clone(),
+		)?;
 
 		self.define_primitive_layout(Primitive::Boolean, metadata.clone())?;
 		self.define_primitive_layout(Primitive::Integer, metadata.clone())?;
@@ -672,11 +691,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		}
 	}
 
-	pub fn require_list_mut(
-		&mut self,
-		id: Id,
-		cause: &M,
-	) -> Result<ListMut<M>, Error<M>>
+	pub fn require_list_mut(&mut self, id: Id, cause: &M) -> Result<ListMut<M>, Error<M>>
 	where
 		M: Clone,
 	{
@@ -812,7 +827,10 @@ impl<M: Clone> Context<M> {
 		Ok(())
 	}
 
-	pub fn assign_default_layouts(&mut self, vocabulary: &mut Vocabulary) where M: Merge {
+	pub fn assign_default_layouts(&mut self, vocabulary: &mut Vocabulary)
+	where
+		M: Merge,
+	{
 		let mut default_layouts = BTreeMap::new();
 		for (id, node) in &self.nodes {
 			if let Some(field) = node.as_layout_field() {
@@ -843,9 +861,7 @@ impl<M: Clone> Context<M> {
 		let mut default_field_names = BTreeMap::new();
 		for (id, node) in &self.nodes {
 			if let Some(field) = node.as_layout_field() {
-				if let Some(name) =
-					field.default_name(vocabulary, field.metadata().clone())
-				{
+				if let Some(name) = field.default_name(vocabulary, field.metadata().clone()) {
 					default_field_names.insert(*id, name);
 				}
 			}
@@ -994,12 +1010,14 @@ impl<M: Clone> Context<M> {
 						built_types[ty_ref.index()] = Some(built_ty)
 					}
 					crate::Item::Property(prop_ref) => {
-						let (_, Meta(prop, causes)) = properties_to_build[prop_ref.index()].take().unwrap();
+						let (_, Meta(prop, causes)) =
+							properties_to_build[prop_ref.index()].take().unwrap();
 						let built_prop = prop.build(&mut allocated_nodes, dependencies, causes)?;
 						built_properties[prop_ref.index()] = Some(built_prop)
 					}
 					crate::Item::Layout(layout_ref) => {
-						let (_, Meta(layout, causes)) = layouts_to_build[layout_ref.index()].take().unwrap();
+						let (_, Meta(layout, causes)) =
+							layouts_to_build[layout_ref.index()].take().unwrap();
 						let built_layout =
 							layout.build(&mut allocated_nodes, dependencies, causes)?;
 						built_layouts[layout_ref.index()] = Some(built_layout)

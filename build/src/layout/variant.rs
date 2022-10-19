@@ -24,8 +24,10 @@ impl<M> Definition<M> {
 	}
 
 	pub fn set_name(&mut self, name: Name, metadata: M) -> Result<(), Error<M>> {
-		self.name
-			.try_set(name, metadata, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.name.try_set(
+			name,
+			metadata,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::LayoutFieldMismatchName {
 						id: self.id,
@@ -36,7 +38,8 @@ impl<M> Definition<M> {
 					.into(),
 					found_meta,
 				)
-			})
+			},
+		)
 	}
 
 	pub fn replace_name(&mut self, name: MetaOption<Name, M>) {
@@ -60,8 +63,7 @@ impl<M> Definition<M> {
 		}
 
 		if let Some(layout_id) = self.layout.as_ref() {
-			let layout = context
-				.require_layout(**layout_id, layout_id.metadata())?;
+			let layout = context.require_layout(**layout_id, layout_id.metadata())?;
 			if let Some(name) = layout.name() {
 				return Ok(Some(Meta::new(name.value().clone(), metadata)));
 			}
@@ -78,8 +80,10 @@ impl<M> Definition<M> {
 	where
 		M: Clone,
 	{
-		self.layout
-			.try_set(layout_ref, metadata, |Meta(expected, expected_meta), Meta(found, found_meta)| {
+		self.layout.try_set(
+			layout_ref,
+			metadata,
+			|Meta(expected, expected_meta), Meta(found, found_meta)| {
 				Error::new(
 					error::LayoutFieldMismatchLayout {
 						id: self.id,
@@ -90,7 +94,8 @@ impl<M> Definition<M> {
 					.into(),
 					found_meta,
 				)
-			})
+			},
+		)
 	}
 
 	pub fn replace_layout(&mut self, layout: MetaOption<Id, M>) {
