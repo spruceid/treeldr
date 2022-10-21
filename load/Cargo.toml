@@ -10,7 +10,8 @@ treeldr = { path = "../core" }
 treeldr-build = { path = "../build" }
 treeldr-syntax = { path = "../syntax" }
 iref = "2.2"
-grdf = { version = "0.12", features = ["meta"] }
+rdf-types = "0.12.2"
+grdf = { version = "0.14", features = ["meta"] }
 log = "0.4"
 locspan = "0.7.11"
 codespan-reporting = "0.11"
