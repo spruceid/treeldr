@@ -5,7 +5,6 @@ use std::fmt;
 
 pub use shelves::Ref;
 
-// mod cause;
 mod doc;
 pub mod error;
 mod feature;
@@ -22,7 +21,6 @@ pub mod utils;
 pub mod value;
 pub mod vocab;
 
-// pub use cause::*;
 pub use doc::Documentation;
 pub use error::Error;
 pub use feature::Feature;
@@ -31,36 +29,36 @@ pub use metadata::Metadata;
 pub use name::Name;
 pub use node::Node;
 pub use value::Value;
-pub use vocab::{Id, Vocabulary};
+pub use vocab::{BlankIdIndex, Id, IriIndex};
 
 /// TreeLDR model.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct Model<F> {
+pub struct Model<M> {
 	/// Nodes.
-	nodes: HashMap<Id, Node<F>>,
+	nodes: HashMap<Id, Node<M>>,
 
 	/// Type definitions.
-	types: Shelf<Vec<ty::Definition<F>>>,
+	types: Shelf<Vec<ty::Definition<M>>>,
 
 	/// Property definitions.
-	properties: Shelf<Vec<prop::Definition<F>>>,
+	properties: Shelf<Vec<prop::Definition<M>>>,
 
 	/// Layout definitions.
-	layouts: Shelf<Vec<layout::Definition<F>>>,
+	layouts: Shelf<Vec<layout::Definition<M>>>,
 }
 
-impl<F> Model<F> {
+impl<M> Model<M> {
 	/// Creates a new empty context.
 	pub fn new() -> Self {
 		Self::default()
 	}
 
 	pub fn from_parts(
-		nodes: HashMap<Id, Node<F>>,
-		types: Shelf<Vec<ty::Definition<F>>>,
-		properties: Shelf<Vec<prop::Definition<F>>>,
-		layouts: Shelf<Vec<layout::Definition<F>>>,
+		nodes: HashMap<Id, Node<M>>,
+		types: Shelf<Vec<ty::Definition<M>>>,
+		properties: Shelf<Vec<prop::Definition<M>>>,
+		layouts: Shelf<Vec<layout::Definition<M>>>,
 	) -> Self {
 		Self {
 			nodes,
@@ -70,69 +68,69 @@ impl<F> Model<F> {
 		}
 	}
 
-	/// Returns the node associated to the given `Id`, if any.
-	pub fn get(&self, id: Id) -> Option<&Node<F>> {
+	/// Returns the node associated to the given `id`, if any.
+	pub fn get(&self, id: Id) -> Option<&Node<M>> {
 		self.nodes.get(&id)
 	}
 
-	/// Returns a mutable reference to the node associated to the given `Id`, if any.
-	pub fn get_mut(&mut self, id: Id) -> Option<&mut Node<F>> {
+	/// Returns a mutable reference to the node associated to the given `id`, if any.
+	pub fn get_mut(&mut self, id: Id) -> Option<&mut Node<M>> {
 		self.nodes.get_mut(&id)
 	}
 
-	pub fn nodes(&self) -> impl Iterator<Item = (Id, &Node<F>)> {
-		self.nodes.iter().map(|(id, node)| (*id, node))
+	pub fn nodes(&self) -> impl Iterator<Item = (Id, &Node<M>)> {
+		self.nodes.iter().map(|(i, n)| (*i, n))
 	}
 
-	pub fn nodes_mut(&mut self) -> impl Iterator<Item = (Id, &mut Node<F>)> {
-		self.nodes.iter_mut().map(|(id, node)| (*id, node))
+	pub fn nodes_mut(&mut self) -> impl Iterator<Item = (Id, &mut Node<M>)> {
+		self.nodes.iter_mut().map(|(i, n)| (*i, n))
 	}
 
 	/// Inserts the given node to the context.
 	///
 	/// Replaces any previous node with the same [`Node::id`].
-	pub fn insert(&mut self, node: Node<F>) -> Option<Node<F>> {
+	pub fn insert(&mut self, node: Node<M>) -> Option<Node<M>> {
 		self.nodes.insert(node.id(), node)
 	}
 
 	/// Returns a reference to the collection of type definitions.
-	pub fn types(&self) -> &Shelf<Vec<ty::Definition<F>>> {
+	pub fn types(&self) -> &Shelf<Vec<ty::Definition<M>>> {
 		&self.types
 	}
 
 	/// Returns a mutable reference to the collection of type definitions.
-	pub fn types_mut(&mut self) -> &mut Shelf<Vec<ty::Definition<F>>> {
+	pub fn types_mut(&mut self) -> &mut Shelf<Vec<ty::Definition<M>>> {
 		&mut self.types
 	}
 
 	/// Returns a reference to the collection of property definitions.
-	pub fn properties(&self) -> &Shelf<Vec<prop::Definition<F>>> {
+	pub fn properties(&self) -> &Shelf<Vec<prop::Definition<M>>> {
 		&self.properties
 	}
 
 	/// Returns a mutable reference to the collection of property definitions.
-	pub fn properties_mut(&mut self) -> &mut Shelf<Vec<prop::Definition<F>>> {
+	pub fn properties_mut(&mut self) -> &mut Shelf<Vec<prop::Definition<M>>> {
 		&mut self.properties
 	}
 
 	/// Returns a reference to the collection of layout definitions.
-	pub fn layouts(&self) -> &Shelf<Vec<layout::Definition<F>>> {
+	pub fn layouts(&self) -> &Shelf<Vec<layout::Definition<M>>> {
 		&self.layouts
 	}
 
 	/// Returns a mutable reference to the collection of layout definitions.
-	pub fn layouts_mut(&mut self) -> &mut Shelf<Vec<layout::Definition<F>>> {
+	pub fn layouts_mut(&mut self) -> &mut Shelf<Vec<layout::Definition<M>>> {
 		&mut self.layouts
 	}
 
-	pub fn require(&self, id: Id, expected_ty: Option<node::Type>) -> Result<&Node<F>, Error<F>> {
+	pub fn require(&self, id: Id, expected_ty: Option<node::Type>) -> Result<&Node<M>, Error<M>> {
 		self.get(id)
 			.ok_or_else(|| error::NodeUnknown { id, expected_ty }.into())
 	}
 
-	pub fn require_layout(&self, id: Id) -> Result<Ref<layout::Definition<F>>, Error<F>>
+	pub fn require_layout(&self, id: Id) -> Result<Ref<layout::Definition<M>>, Error<M>>
 	where
-		F: Clone,
+		M: Clone,
 	{
 		self.require(id, Some(node::Type::Layout))?.require_layout()
 	}

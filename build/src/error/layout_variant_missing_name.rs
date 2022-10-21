@@ -1,15 +1,17 @@
-use treeldr::{Id, Vocabulary, vocab::Display};
+use treeldr::{Id, IriIndex, BlankIdIndex};
+use rdf_types::Vocabulary;
 use locspan::{Span, MaybeLocated};
+use contextual::WithContext;
 
 #[derive(Debug)]
 pub struct LayoutVariantMissingName(pub Id);
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutVariantMissingName {
-	fn message(&self, vocab: &Vocabulary) -> String {
-		format!("no name defined for variant `{}`", self.0.display(vocab))
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+		format!("no name defined for variant `{}`", self.0.with(vocab))
 	}
 
-	fn notes(&self, _vocab: &Vocabulary) -> Vec<String> {
+	fn notes(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<String> {
 		match self.0 {
 			Id::Blank(_) => {
 				vec!["variant name could not be derived from a blank node identifier.".to_string()]

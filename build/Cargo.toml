@@ -6,11 +6,12 @@ edition = "2021"
 [dependencies]
 treeldr = { path = "../core" }
 log = "0.4"
-rdf-types = { version = "0.10", features = ["meta"] }
+rdf-types = { version = "0.12", features = ["meta"] }
 iref = "2.2"
 shelves = "0.2.6"
 derivative = "2.2.0"
 locspan = { version = "0.7.11", features = ["reporting"] }
 locspan-derive = "0.5"
 codespan-reporting = "0.11"
-grdf = { version = "0.12", features = ["meta"] }
+grdf = { version = "0.14", features = ["meta"] }
+contextual = "0.1.3"

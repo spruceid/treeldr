@@ -2,7 +2,7 @@ use crate::{error, Error};
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::StrippedPartialEq;
-use treeldr::{metadata::Merge, vocab, Id, MetaOption, Name};
+use treeldr::{metadata::Merge, vocab, Id, IriIndex, MetaOption, Name};
 use vocab::{Rdf, Term};
 
 #[derive(Clone, Debug, Derivative)]
@@ -135,9 +135,15 @@ impl<M> Semantics<M> {
 		M: Clone,
 	{
 		Self {
-			first: MetaOption::new(Id::Iri(Term::Rdf(Rdf::First)), metadata.clone()),
-			rest: MetaOption::new(Id::Iri(Term::Rdf(Rdf::Rest)), metadata.clone()),
-			nil: MetaOption::new(Id::Iri(Term::Rdf(Rdf::Nil)), metadata),
+			first: MetaOption::new(
+				Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::First))),
+				metadata.clone(),
+			),
+			rest: MetaOption::new(
+				Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Rest))),
+				metadata.clone(),
+			),
+			nil: MetaOption::new(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Nil))), metadata),
 		}
 	}
 

@@ -1,5 +1,5 @@
 use super::{Decimal, Integer};
-use crate::vocab::StrippedLiteral;
+use crate::{vocab::StrippedLiteral, IriIndex};
 use num::{BigInt, BigRational, Signed, Zero};
 use std::fmt;
 use std::fmt::Write;
@@ -119,12 +119,14 @@ impl Rational {
 	pub fn literal(&self) -> StrippedLiteral {
 		use crate::vocab::{Owl, Term, Xsd};
 		match self.lexical_decimal() {
-			Some(decimal) => {
-				StrippedLiteral::TypedString(decimal.into_string().into(), Term::Xsd(Xsd::Decimal))
-			}
-			None => {
-				StrippedLiteral::TypedString(self.0.to_string().into(), Term::Owl(Owl::Rational))
-			}
+			Some(decimal) => StrippedLiteral::TypedString(
+				decimal.into_string().into(),
+				IriIndex::Iri(Term::Xsd(Xsd::Decimal)),
+			),
+			None => StrippedLiteral::TypedString(
+				self.0.to_string().into(),
+				IriIndex::Iri(Term::Owl(Owl::Rational)),
+			),
 		}
 	}
 }

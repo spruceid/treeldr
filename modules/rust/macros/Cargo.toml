@@ -10,6 +10,7 @@ proc-macro = true
 treeldr = { path = "../../../core" }
 treeldr-load = { path = "../../../load" }
 treeldr-rust-gen = { path = "../gen" }
+rdf-types = "0.12.2"
 syn = { version = "1.0", features = ["full"] }
 litrs = "0.2.3"
 quote = "1.0"
@@ -18,3 +19,4 @@ proc-macro-error = "1.0"
 iref = "2.2"
 thiserror = "1.0.31"
 codespan-reporting = "0.11"
+contextual = "0.1.3"

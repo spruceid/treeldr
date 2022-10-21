@@ -1,9 +1,10 @@
 use crate::{error, list::ListMut, Context, Descriptions, Document, Error};
 use locspan::Meta;
+use rdf_types::{Generator, VocabularyMut};
 use treeldr::{
 	metadata::Merge,
 	vocab::{self, GraphLabel, Object, Term},
-	Id, Name, Vocabulary,
+	BlankIdIndex, Id, IriIndex, Name,
 };
 
 fn expect_id<M>(Meta(value, loc): Meta<vocab::Object<M>, M>) -> Result<Meta<Id, M>, Error<M>> {
@@ -18,8 +19,12 @@ fn expect_boolean<M>(
 	Meta(value, loc): Meta<vocab::Object<M>, M>,
 ) -> Result<Meta<bool, M>, Error<M>> {
 	match value {
-		vocab::Object::Iri(vocab::Term::Schema(vocab::Schema::True)) => Ok(Meta(true, loc)),
-		vocab::Object::Iri(vocab::Term::Schema(vocab::Schema::False)) => Ok(Meta(false, loc)),
+		vocab::Object::Iri(IriIndex::Iri(vocab::Term::Schema(vocab::Schema::True))) => {
+			Ok(Meta(true, loc))
+		}
+		vocab::Object::Iri(IriIndex::Iri(vocab::Term::Schema(vocab::Schema::False))) => {
+			Ok(Meta(false, loc))
+		}
 		_ => panic!("expected a boolean value"),
 	}
 }
@@ -39,11 +44,12 @@ impl<M: Clone + Ord + Merge, D: Descriptions<M>> Document<M, D>
 	type LocalContext = ();
 	type Error = Error<M>;
 
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		_: &mut (),
 		context: &mut Context<M, D>,
-		_vocabulary: &mut Vocabulary,
+		_vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
 		// Step 1: find out the type of each node.
 		for Meta(quad, loc) in self.loc_quads() {
@@ -51,27 +57,27 @@ impl<M: Clone + Ord + Merge, D: Descriptions<M>> Document<M, D>
 
 			if let Term::Rdf(vocab::Rdf::Type) = quad.predicate().value() {
 				match quad.object().value() {
-					Object::Iri(Term::Rdf(vocab::Rdf::Property)) => {
+					Object::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::Property))) => {
 						context.declare_property(id, loc.clone());
 					}
-					Object::Iri(Term::Rdf(vocab::Rdf::List)) => {
+					Object::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::List))) => {
 						context.declare_list(id, loc.clone());
 					}
-					Object::Iri(Term::Rdfs(vocab::Rdfs::Class)) => {
+					Object::Iri(IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Class))) => {
 						context.declare_type(id, loc.clone());
 					}
-					Object::Iri(Term::Rdfs(vocab::Rdfs::Datatype)) => {
+					Object::Iri(IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Datatype))) => {
 						context.declare_type(id, loc.clone());
 						let ty = context.get_mut(id).unwrap().as_type_mut().unwrap();
 						ty.declare_datatype(loc.clone())?;
 					}
-					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Layout)) => {
+					Object::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Layout))) => {
 						context.declare_layout(id, loc.clone());
 					}
-					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Field)) => {
+					Object::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Field))) => {
 						context.declare_layout_field(id, loc.clone());
 					}
-					Object::Iri(Term::TreeLdr(vocab::TreeLdr::Variant)) => {
+					Object::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Variant))) => {
 						context.declare_layout_variant(id, loc.clone());
 					}
 					_ => (),
@@ -82,11 +88,12 @@ impl<M: Clone + Ord + Merge, D: Descriptions<M>> Document<M, D>
 		Ok(())
 	}
 
-	fn relate(
+	fn relate<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		_: &mut (),
 		context: &mut Context<M, D>,
-		_vocabulary: &mut Vocabulary,
+		_vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
 		// Step 2: find out the properties of each node.
 		for Meta(rdf_types::Quad(subject, predicate, object, _graph), loc) in self.into_meta_quads()

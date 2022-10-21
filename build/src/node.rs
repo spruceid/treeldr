@@ -1,7 +1,8 @@
 use crate::{error, layout, list, prop, ty, Descriptions, Error, TryMap};
 use derivative::Derivative;
 use locspan::Meta;
-use treeldr::{Documentation, Id, MetaOption, Vocabulary};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{BlankIdIndex, Documentation, Id, IriIndex, MetaOption};
 
 pub use treeldr::node::{Type, Types, TypesMetadata};
 
@@ -25,12 +26,17 @@ pub struct Components<M, D: Descriptions<M> = crate::StandardDescriptions> {
 }
 
 impl<M, D: Descriptions<M>> Components<M, D> {
-	pub fn try_map<G: Descriptions<M>, E>(
+	pub fn try_map<
+		G: Descriptions<M>,
+		E,
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+	>(
 		self,
 		map: &impl TryMap<M, E, D, G>,
 		source: &crate::Context<M, D>,
 		target: &mut crate::Context<M, G>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Components<M, G>, E>
 	where
 		M: Clone,
@@ -38,14 +44,14 @@ impl<M, D: Descriptions<M>> Components<M, D> {
 		Ok(Components {
 			ty: self.ty.try_map_with_causes(|Meta(d, metadata)| {
 				Ok(Meta(
-					d.try_map(|d| map.ty(d, &metadata, source, target, vocabulary))?,
+					d.try_map(|d| map.ty(d, &metadata, source, target, vocabulary, generator))?,
 					metadata,
 				))
 			})?,
 			property: self.property,
 			layout: self.layout.try_map_with_causes(|Meta(d, metadata)| {
 				Ok(Meta(
-					d.try_map(|d| map.layout(d, &metadata, source, target, vocabulary))?,
+					d.try_map(|d| map.layout(d, &metadata, source, target, vocabulary, generator))?,
 					metadata,
 				))
 			})?,

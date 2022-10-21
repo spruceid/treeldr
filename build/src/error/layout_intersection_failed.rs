@@ -1,5 +1,7 @@
-use treeldr::{Id, Vocabulary, vocab::Display};
+use treeldr::{Id, IriIndex, BlankIdIndex};
+use rdf_types::Vocabulary;
 use locspan::{Span, MaybeLocated};
+use contextual::WithContext;
 
 #[derive(Debug)]
 pub struct LayoutIntersectionFailed {
@@ -7,7 +9,7 @@ pub struct LayoutIntersectionFailed {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutIntersectionFailed {
-	fn message(&self, vocab: &Vocabulary) -> String {
-		format!("intersection `{}` failed", self.id.display(vocab))
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+		format!("intersection `{}` failed", self.id.with(vocab))
 	}
 }

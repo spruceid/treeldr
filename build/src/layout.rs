@@ -1,6 +1,7 @@
 use crate::{error, utils::TryCollect, Context, Descriptions, Error, ObjectToId};
 use locspan::Meta;
-use treeldr::{metadata::Merge, Id, MetaOption, Name, Vocabulary};
+use rdf_types::IriVocabulary;
+use treeldr::{metadata::Merge, Id, IriIndex, MetaOption, Name};
 
 pub mod array;
 pub mod field;
@@ -568,12 +569,12 @@ impl<M: Clone> Definition<M> {
 	pub fn default_name<C: Descriptions<M>>(
 		&self,
 		context: &Context<M, C>,
-		vocabulary: &Vocabulary,
+		vocabulary: &impl IriVocabulary<Iri = IriIndex>,
 		parent_layouts: &[Meta<ParentLayout, M>],
 		metadata: M,
 	) -> Result<Option<Meta<Name, M>>, Error<M>> {
 		if let Id::Iri(term) = self.id {
-			if let Ok(Some(name)) = Name::from_iri(term.iri(vocabulary).unwrap()) {
+			if let Ok(Some(name)) = Name::from_iri(vocabulary.iri(&term).unwrap()) {
 				return Ok(Some(Meta(name, metadata)));
 			}
 		}

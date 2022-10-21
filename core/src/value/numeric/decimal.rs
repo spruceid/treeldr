@@ -1,5 +1,5 @@
 use super::{Integer, Rational};
-use crate::vocab::StrippedLiteral;
+use crate::{vocab::StrippedLiteral, IriIndex};
 use num::BigInt;
 use std::fmt;
 
@@ -64,7 +64,7 @@ impl Decimal {
 				use crate::vocab::{Term, Xsd};
 				StrippedLiteral::TypedString(
 					self.0.lexical_decimal().unwrap().into_string().into(),
-					Term::Xsd(Xsd::Decimal),
+					IriIndex::Iri(Term::Xsd(Xsd::Decimal)),
 				)
 			}
 		}

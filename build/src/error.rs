@@ -1,23 +1,30 @@
 use locspan::{MaybeLocated, Meta, Span};
-use treeldr::{reporting::DiagnoseWithMetadataAndVocabulary, Vocabulary};
+use rdf_types::Vocabulary;
+use treeldr::{reporting::DiagnoseWithMetadataAndVocabulary, BlankIdIndex, IriIndex};
 
 pub type Error<M> = Meta<Description<M>, M>;
 
 pub trait AnyError<M: MaybeLocated<Span = Span>> {
-	fn message(&self, vocab: &Vocabulary) -> String;
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String;
 
-	fn primary_label(&self, _vocab: &Vocabulary) -> Option<String> {
+	fn primary_label(
+		&self,
+		_vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	) -> Option<String> {
 		Some("here".to_string())
 	}
 
 	fn other_labels(
 		&self,
-		_vocab: &Vocabulary,
+		_vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
-	fn notes(&self, _vocab: &Vocabulary) -> Vec<String> {
+	fn notes(
+		&self,
+		_vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	) -> Vec<String> {
 		Vec::new()
 	}
 }
@@ -45,7 +52,7 @@ macro_rules! errors {
 		)*
 
 		impl<M: MaybeLocated<Span=Span>> DiagnoseWithMetadataAndVocabulary<M> for Description<M> where M::File: Clone {
-			fn message(&self, _cause: &M, vocabulary: &Vocabulary) -> String {
+			fn message(&self, _cause: &M, vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
 				match self {
 					$(
 						Self::$id(e) => AnyError::<M>::message(e, vocabulary)
@@ -53,7 +60,7 @@ macro_rules! errors {
 				}
 			}
 
-			fn labels(&self, metadata: &M, vocabulary: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+			fn labels(&self, metadata: &M, vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 				match self {
 					$(
 						Self::$id(e) => {
@@ -75,7 +82,7 @@ macro_rules! errors {
 				}
 			}
 
-			fn notes(&self, _cause: &M, vocabulary: &Vocabulary) -> Vec<String> {
+			fn notes(&self, _cause: &M, vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<String> {
 				match self {
 					$(
 						Self::$id(e) => AnyError::<M>::notes(e, vocabulary)

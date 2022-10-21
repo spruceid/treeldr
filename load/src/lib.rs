@@ -2,43 +2,45 @@ use codespan_reporting::term::{
 	self,
 	termcolor::{ColorChoice, StandardStream},
 };
+use rdf_types::{Generator, Vocabulary, VocabularyMut};
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use treeldr::reporting::Diagnose;
+use treeldr::{reporting::Diagnose, BlankIdIndex, IriIndex};
 use treeldr_syntax as syntax;
 
 mod source;
 pub use source::*;
 
-pub use treeldr::{reporting, vocab::BorrowWithVocabulary, Vocabulary};
+pub use treeldr::reporting;
 pub type BuildContext = treeldr_build::Context<source::Metadata, syntax::build::Descriptions>;
 
 /// Build all the given documents.
-pub fn build_all(
-	vocabulary: &mut treeldr::Vocabulary,
+pub fn build_all<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	vocabulary: &mut V,
+	generator: &mut impl Generator<V>,
 	build_context: &mut BuildContext,
 	mut documents: Vec<Document>,
 ) -> Result<treeldr::Model<source::Metadata>, BuildAllError> {
 	build_context
-		.apply_built_in_definitions(vocabulary)
+		.apply_built_in_definitions(vocabulary, generator)
 		.unwrap();
 
 	for doc in &mut documents {
-		doc.declare(build_context, vocabulary)
+		doc.declare(build_context, vocabulary, generator)
 			.map_err(BuildAllError::Declaration)?
 	}
 
 	for doc in documents {
-		doc.build(build_context, vocabulary)
+		doc.build(build_context, vocabulary, generator)
 			.map_err(BuildAllError::Link)?
 	}
 
 	let build_context = build_context
-		.simplify(vocabulary)
+		.simplify(vocabulary, generator)
 		.map_err(BuildAllError::simplification)?;
 	build_context
-		.build(vocabulary)
+		.build(vocabulary, generator)
 		.map_err(BuildAllError::Build)
 }
 
@@ -60,24 +62,26 @@ pub struct TreeLdrDocument {
 }
 
 impl TreeLdrDocument {
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
 		context: &mut BuildContext,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), syntax::build::Error<source::Metadata>> {
 		use treeldr_build::Document;
 		self.doc
-			.declare(&mut self.local_context, context, vocabulary)
+			.declare(&mut self.local_context, context, vocabulary, generator)
 	}
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		mut self,
 		context: &mut BuildContext,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), syntax::build::Error<source::Metadata>> {
 		use treeldr_build::Document;
 		self.doc
-			.relate(&mut self.local_context, context, vocabulary)
+			.relate(&mut self.local_context, context, vocabulary, generator)
 	}
 }
 
@@ -99,7 +103,10 @@ impl BuildAllError {
 }
 
 impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllError {
-	fn message(&self, vocabulary: &Vocabulary) -> String {
+	fn message(
+		&self,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	) -> String {
 		match self {
 			Self::Declaration(e) => e.message(vocabulary),
 			Self::Link(e) => e.message(vocabulary),
@@ -110,7 +117,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllEr
 
 	fn labels(
 		&self,
-		vocabulary: &Vocabulary,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	) -> Vec<codespan_reporting::diagnostic::Label<source::FileId>> {
 		match self {
 			Self::Declaration(e) => e.labels(vocabulary),
@@ -120,7 +127,10 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllEr
 		}
 	}
 
-	fn notes(&self, vocabulary: &Vocabulary) -> Vec<String> {
+	fn notes(
+		&self,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	) -> Vec<String> {
 		match self {
 			Self::Declaration(e) => e.notes(vocabulary),
 			Self::Link(e) => e.notes(vocabulary),
@@ -150,7 +160,10 @@ impl From<treeldr_json_schema::import::Error<source::Metadata>> for LangError {
 }
 
 impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError {
-	fn message(&self, vocabulary: &Vocabulary) -> String {
+	fn message(
+		&self,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	) -> String {
 		match self {
 			Self::TreeLdr(e) => e.message(vocabulary),
 			#[cfg(feature = "json-schema")]
@@ -160,7 +173,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 
 	fn labels(
 		&self,
-		vocabulary: &Vocabulary,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	) -> Vec<codespan_reporting::diagnostic::Label<source::FileId>> {
 		match self {
 			Self::TreeLdr(e) => e.labels(vocabulary),
@@ -169,7 +182,10 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 		}
 	}
 
-	fn notes(&self, vocabulary: &Vocabulary) -> Vec<String> {
+	fn notes(
+		&self,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	) -> Vec<String> {
 		match self {
 			Self::TreeLdr(e) => e.notes(vocabulary),
 			#[cfg(feature = "json-schema")]
@@ -215,32 +231,34 @@ impl Document {
 		}
 	}
 
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
 		context: &mut BuildContext,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), LangError> {
 		match self {
 			Self::TreeLdr(d) => {
-				d.declare(context, vocabulary)?;
+				d.declare(context, vocabulary, generator)?;
 				Ok(())
 			}
 			#[cfg(feature = "json-schema")]
 			Self::JsonSchema(s) => {
-				treeldr_json_schema::import_schema(s, None, context, vocabulary)?;
+				treeldr_json_schema::import_schema(s, None, context, vocabulary, generator)?;
 				Ok(())
 			}
 		}
 	}
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		context: &mut BuildContext,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), LangError> {
 		match self {
 			Self::TreeLdr(d) => {
-				d.build(context, vocabulary)?;
+				d.build(context, vocabulary, generator)?;
 				Ok(())
 			}
 			#[cfg(feature = "json-schema")]

@@ -1,4 +1,4 @@
-use crate::vocab::StrippedLiteral;
+use crate::{vocab::StrippedLiteral, IriIndex};
 use num::{BigInt, Signed, Zero};
 use std::fmt;
 
@@ -37,7 +37,10 @@ impl Integer {
 
 	pub fn literal(&self) -> StrippedLiteral {
 		use crate::vocab::{Term, Xsd};
-		StrippedLiteral::TypedString(self.0.to_string().into(), Term::Xsd(Xsd::Integer))
+		StrippedLiteral::TypedString(
+			self.0.to_string().into(),
+			IriIndex::Iri(Term::Xsd(Xsd::Integer)),
+		)
 	}
 }
 

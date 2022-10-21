@@ -1,6 +1,7 @@
 use super::{error, Error};
 use locspan::Meta;
-use treeldr::{metadata::Merge, Documentation, Id, MetaOption, Name, Vocabulary};
+use rdf_types::{Generator, Vocabulary, VocabularyMut};
+use treeldr::{metadata::Merge, BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name};
 
 /// Layout field definition.
 #[derive(Clone)]
@@ -17,10 +18,14 @@ pub enum DefaultLayout<M> {
 }
 
 impl<M> DefaultLayout<M> {
-	pub fn build<D: crate::Descriptions<M>>(
+	pub fn build<
+		D: crate::Descriptions<M>,
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+	>(
 		self,
 		context: &mut crate::Context<M, D>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Meta<Id, M>
 	where
 		M: Clone + Merge,
@@ -28,7 +33,7 @@ impl<M> DefaultLayout<M> {
 		match self {
 			Self::Functional(layout) => layout,
 			Self::NonFunctional(Meta(item, meta)) => {
-				let id = Id::Blank(vocabulary.new_blank_label());
+				let id = generator.next(vocabulary);
 				context.declare_layout(id, meta.clone());
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
 
@@ -77,13 +82,17 @@ impl<M> Definition<M> {
 		self.prop = prop
 	}
 
-	pub fn default_name(&self, vocabulary: &Vocabulary, metadata: M) -> Option<Meta<Name, M>>
+	pub fn default_name(
+		&self,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		metadata: M,
+	) -> Option<Meta<Name, M>>
 	where
 		M: Clone,
 	{
 		self.id
 			.as_iri()
-			.and_then(|term| term.iri(vocabulary))
+			.and_then(|term| vocabulary.iri(term))
 			.and_then(|iri| Name::from_iri(iri).ok().flatten())
 			.map(|name| Meta::new(name, metadata))
 	}

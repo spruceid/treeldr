@@ -3,6 +3,7 @@ use codespan_reporting::term::{
 	self,
 	termcolor::{ColorChoice, StandardStream},
 };
+use contextual::WithContext;
 use std::path::PathBuf;
 use treeldr_load as load;
 use treeldr_syntax as syntax;
@@ -69,11 +70,16 @@ fn main() {
 	}
 
 	use treeldr::reporting::Diagnose;
-	use treeldr::vocab::BorrowWithVocabulary;
-	let mut vocabulary = treeldr::Vocabulary::new();
+	let mut vocabulary = rdf_types::IndexVocabulary::new();
+	let mut generator = rdf_types::generator::Blank::new();
 	let mut build_context = BuildContext::new();
 
-	match load::build_all(&mut vocabulary, &mut build_context, documents) {
+	match load::build_all(
+		&mut vocabulary,
+		&mut generator,
+		&mut build_context,
+		documents,
+	) {
 		Ok(model) =>
 		{
 			#[allow(unused_variables)]
@@ -81,17 +87,17 @@ fn main() {
 				Some(Command::Rdf {
 					include_standard_vocabulary,
 				}) => {
-					use treeldr::vocab::RdfDisplay;
 					let mut quads = Vec::new();
 					model.to_rdf_with(
 						&mut vocabulary,
+						&mut generator,
 						&mut quads,
 						treeldr::to_rdf::Options {
 							ignore_standard_vocabulary: !include_standard_vocabulary,
 						},
 					);
 					for quad in quads {
-						println!("{} .", quad.rdf_display(&vocabulary))
+						println!("{} .", quad.with(&vocabulary))
 					}
 				}
 				#[cfg(feature = "json-schema")]
@@ -102,7 +108,7 @@ fn main() {
 			}
 		}
 		Err(e) => {
-			let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
+			let diagnostic = e.with(&vocabulary).diagnostic();
 			let writer = StandardStream::stderr(ColorChoice::Always);
 			let config = codespan_reporting::term::Config::default();
 			term::emit(&mut writer.lock(), &config, &files, &diagnostic)

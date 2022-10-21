@@ -1,5 +1,6 @@
-use crate::{ty, Documentation, Id};
+use crate::{ty, BlankIdIndex, Documentation, Id, IriIndex};
 use locspan::Meta;
+use rdf_types::Subject;
 use shelves::Ref;
 use std::collections::HashMap;
 
@@ -8,8 +9,8 @@ pub mod restriction;
 pub use restriction::{Restriction, Restrictions};
 
 /// Property definition.
-pub struct Definition<M> {
-	id: Id,
+pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
+	id: Subject<I, B>,
 	domain: HashMap<Ref<ty::Definition<M>>, M>,
 	range: Meta<Ref<ty::Definition<M>>, M>,
 	required: Meta<bool, M>,

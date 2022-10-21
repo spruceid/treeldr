@@ -60,7 +60,7 @@ async fn main() {
 		.expect("expansion failed");
 
 	// JSON-LD to RDF.
-	let mut generator = json_ld::id::generator::Blank::new(Span::default());
+	let mut generator = rdf_types::generator::Blank::new().with_default_metadata();
 	let dataset: grdf::HashDataset<_, _, _, _> = expanded_json_ld
 		.rdf_quads(&mut generator, None)
 		.map(import_quad)

@@ -2,6 +2,7 @@ use codespan_reporting::term::{
 	self,
 	termcolor::{ColorChoice, StandardStream},
 };
+use contextual::WithContext;
 use proc_macro::TokenStream;
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use std::collections::HashMap;
@@ -42,10 +43,16 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 						}
 					}
 
-					let mut vocabulary = load::Vocabulary::new();
+					let mut vocabulary = rdf_types::IndexVocabulary::new();
+					let mut generator = rdf_types::generator::Blank::new();
 					let mut build_context = load::BuildContext::new();
 
-					match load::build_all(&mut vocabulary, &mut build_context, documents) {
+					match load::build_all(
+						&mut vocabulary,
+						&mut generator,
+						&mut build_context,
+						documents,
+					) {
 						Ok(model) => {
 							let mut gen_context =
 								treeldr_rust_gen::Context::new(&model, &vocabulary);
@@ -61,9 +68,8 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 						}
 						Err(e) => {
 							use load::reporting::Diagnose;
-							use load::BorrowWithVocabulary;
 
-							let diagnostic = e.with_vocabulary(&vocabulary).diagnostic();
+							let diagnostic = e.with(&vocabulary).diagnostic();
 							let writer = StandardStream::stderr(ColorChoice::Always);
 							let config = codespan_reporting::term::Config::default();
 							term::emit(&mut writer.lock(), &config, &files, &diagnostic)

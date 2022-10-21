@@ -1,5 +1,7 @@
-use treeldr::{Id, node, Vocabulary, vocab::Display};
+use treeldr::{Id, node, IriIndex, BlankIdIndex};
 use locspan::{Span, MaybeLocated};
+use rdf_types::Vocabulary;
+use contextual::WithContext;
 
 #[derive(Debug)]
 pub struct NodeUnknown {
@@ -8,7 +10,7 @@ pub struct NodeUnknown {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeUnknown {
-	fn message(&self, vocab: &Vocabulary) -> String {
-		format!("unknown node {}", self.id.display(vocab))
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+		format!("unknown node {}", self.id.with(vocab))
 	}
 }

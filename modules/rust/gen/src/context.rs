@@ -1,8 +1,10 @@
 use crate::{module, ty, Module, Path, Referenced, Type};
 use proc_macro2::TokenStream;
 use quote::quote;
+use rdf_types::Vocabulary;
 use shelves::{Ref, Shelf};
 use std::collections::HashMap;
+use treeldr::{BlankIdIndex, IriIndex};
 
 #[derive(Clone, Copy)]
 pub enum IdentType {
@@ -10,9 +12,9 @@ pub enum IdentType {
 }
 
 impl IdentType {
-	pub fn for_property<M>(
+	pub fn for_property<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
 		&self,
-		context: &Context<M>,
+		context: &Context<V, M>,
 		prop_ref: Ref<treeldr::prop::Definition<M>>,
 	) -> TokenStream {
 		match self {
@@ -20,7 +22,7 @@ impl IdentType {
 				let prop = context.model().properties().get(prop_ref).unwrap();
 				match prop.id() {
 					treeldr::Id::Iri(id) => {
-						let iri = id.iri(context.vocabulary()).unwrap();
+						let iri = context.vocabulary().iri(&id).unwrap();
 						let iri_literal = iri.as_str();
 						quote! { ::treeldr_rust_prelude::rdf::SubjectRef::Iri(::treeldr_rust_prelude::static_iref::iri!(#iri_literal)) }
 					}
@@ -57,16 +59,16 @@ impl quote::ToTokens for Referenced<IdentType> {
 	}
 }
 
-pub struct Context<'a, M> {
+pub struct Context<'a, V, M> {
 	model: &'a treeldr::Model<M>,
-	vocabulary: &'a treeldr::Vocabulary,
+	vocabulary: &'a V,
 	modules: Shelf<Vec<Module<M>>>,
 	layouts: shelves::Map<treeldr::layout::Definition<M>, HashMap<usize, Type<M>>>,
 	ident_type: IdentType,
 }
 
-impl<'a, M> Context<'a, M> {
-	pub fn new(model: &'a treeldr::Model<M>, vocabulary: &'a treeldr::Vocabulary) -> Self {
+impl<'a, V, M> Context<'a, V, M> {
+	pub fn new(model: &'a treeldr::Model<M>, vocabulary: &'a V) -> Self {
 		Self {
 			model,
 			vocabulary,
@@ -84,7 +86,7 @@ impl<'a, M> Context<'a, M> {
 		self.ident_type
 	}
 
-	pub fn vocabulary(&self) -> &'a treeldr::Vocabulary {
+	pub fn vocabulary(&self) -> &'a V {
 		self.vocabulary
 	}
 

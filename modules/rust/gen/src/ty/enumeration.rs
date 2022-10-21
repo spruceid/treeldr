@@ -1,7 +1,9 @@
 use crate::{Context, Error, Generate, Module};
 use proc_macro2::TokenStream;
 use quote::quote;
+use rdf_types::Vocabulary;
 use shelves::Ref;
+use treeldr::{BlankIdIndex, IriIndex};
 
 pub struct Enum<M> {
 	ident: proc_macro2::Ident,
@@ -34,9 +36,9 @@ impl<M> Variant<M> {
 }
 
 impl<M> Generate<M> for Variant<M> {
-	fn generate(
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		context: &Context<M>,
+		context: &Context<V, M>,
 		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {

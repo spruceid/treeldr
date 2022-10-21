@@ -1,5 +1,7 @@
-use treeldr::{Id, Vocabulary, vocab::Display};
+use treeldr::{Id, IriIndex, BlankIdIndex};
+use rdf_types::Vocabulary;
 use locspan::{Span, MaybeLocated};
+use contextual::WithContext;
 
 #[derive(Debug)]
 pub struct TypeMismatchIntersection<M> {
@@ -10,11 +12,11 @@ pub struct TypeMismatchIntersection<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for TypeMismatchIntersection<M> where M::File: Clone {
-	fn message(&self, vocab: &Vocabulary) -> String {
-		format!("expected intersection list {}, found {}", self.expected.display(vocab), self.found.display(vocab))
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+		format!("expected intersection list {}, found {}", self.expected.with(vocab), self.found.with(vocab))
 	}
 
-	fn other_labels(&self, _vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+	fn other_labels(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		let mut labels = Vec::new();
 		if let Some(loc) = self.because.optional_location().cloned() {
 			labels.push(loc.into_secondary_label().with_message("intersection previously defined here".to_string()));

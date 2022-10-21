@@ -1,5 +1,6 @@
-use crate::{ty, Documentation, Id, MetaOption, Name};
+use crate::{ty, BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name};
 use locspan::Meta;
+use rdf_types::Subject;
 use shelves::Ref;
 
 pub mod array;
@@ -43,9 +44,9 @@ pub enum Kind {
 }
 
 /// Layout definition.
-pub struct Definition<M> {
+pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
 	/// Identifier of the layout.
-	id: Id,
+	id: Subject<I, B>,
 
 	/// Type represented by this layout.
 	ty: MetaOption<Ref<ty::Definition<M>>, M>,

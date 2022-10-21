@@ -1,36 +1,23 @@
+use contextual::WithContext;
 use iref::Iri;
+use locspan::Meta;
+use rdf_types::{BlankIdBuf, IriVocabularyMut, VocabularyMut};
 use static_iref::iri;
-use std::collections::HashMap;
 use std::path::Path;
-use treeldr::vocab::{BlankLabel, GraphLabel, Id, StrippedObject, Term, Vocabulary};
+use treeldr::{
+	vocab::{GraphLabel, Id, StrippedObject},
+	BlankIdIndex, IriIndex,
+};
 use treeldr_build::Context;
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
 }
 
-#[derive(Default)]
-struct BlankIdGenerator(HashMap<rdf_types::BlankIdBuf, BlankLabel>);
-
-impl BlankIdGenerator {
-	pub fn generate(&mut self, label: rdf_types::BlankIdBuf) -> BlankLabel {
-		use std::collections::hash_map::Entry;
-		let len = self.0.len() as u32;
-		match self.0.entry(label) {
-			Entry::Occupied(entry) => entry.get().clone(),
-			Entry::Vacant(entry) => {
-				let label = BlankLabel::new(len);
-				entry.insert(label);
-				label
-			}
-		}
-	}
-}
-
-fn parse_nquads<P: AsRef<Path>>(
-	vocabulary: &mut Vocabulary,
+fn parse_nquads<P: AsRef<Path>, V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	vocabulary: &mut V,
 	path: P,
-) -> grdf::HashDataset<Id, Term, StrippedObject, GraphLabel> {
+) -> grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel> {
 	use nquads_syntax::{lexing::Utf8Decoded, Document, Lexer, Parse};
 
 	let buffer = std::fs::read_to_string(path).expect("unable to read file");
@@ -38,18 +25,15 @@ fn parse_nquads<P: AsRef<Path>>(
 		(),
 		Utf8Decoded::new(buffer.chars().map(infallible)).peekable(),
 	);
-	let quads = Document::parse(&mut lexer)
-		.expect("parse error")
-		.into_value();
+	let Meta(quads, _) = Document::parse(&mut lexer).expect("parse error");
 
-	let mut generator = BlankIdGenerator::default();
-	let mut generate = move |label| generator.generate(label);
+	let generate = move |vocabulary: &mut V, label: BlankIdBuf| {
+		vocabulary.insert_blank_id(label.as_blank_id_ref())
+	};
 
 	quads
 		.into_iter()
-		.map(move |quad| {
-			treeldr::vocab::stripped_loc_quad_from_rdf(quad, vocabulary, &mut generate)
-		})
+		.map(move |quad| treeldr::vocab::stripped_loc_quad_from_rdf(quad, vocabulary, generate))
 		.collect()
 }
 
@@ -59,33 +43,40 @@ fn parse_json_schema<P: AsRef<Path>>(path: P) -> treeldr_json_schema::Schema {
 	treeldr_json_schema::Schema::try_from(json).expect("invalid JSON Schema")
 }
 
-fn import_json_schema<P: AsRef<Path>>(
-	vocabulary: &mut Vocabulary,
+fn import_json_schema<P: AsRef<Path>, V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	vocabulary: &mut V,
 	path: P,
-) -> (grdf::HashDataset<Id, Term, StrippedObject, GraphLabel>, Id) {
+) -> (
+	grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel>,
+	Id,
+) {
 	let input = parse_json_schema(path);
 	let mut context: Context<()> = Context::new();
-	context.apply_built_in_definitions(vocabulary).unwrap();
-
-	let id = treeldr_json_schema::import_schema(&input, None, &mut context, vocabulary)
-		.expect("import failed");
-	let model = context.build(vocabulary).expect("build failed");
+	let mut generator = rdf_types::generator::Blank::new_with_prefix("t".to_string());
+	context
+		.apply_built_in_definitions(vocabulary, &mut generator)
+		.unwrap();
+	let id =
+		treeldr_json_schema::import_schema(&input, None, &mut context, vocabulary, &mut generator)
+			.expect("import failed");
+	let model = context
+		.build(vocabulary, &mut generator)
+		.expect("build failed");
 
 	let mut quads = Vec::new();
-	model.to_rdf(vocabulary, &mut quads);
+	model.to_rdf(vocabulary, &mut generator, &mut quads);
 	(quads.into_iter().collect(), id)
 }
 
 fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O, expected_iri: Iri) {
-	use treeldr::vocab::RdfDisplay;
-	let mut vocabulary = Vocabulary::new();
-	let expected_id = Id::Iri(Term::from_iri(expected_iri.into(), &mut vocabulary));
+	let mut vocabulary = rdf_types::IndexVocabulary::<IriIndex, BlankIdIndex>::new();
+	let expected_id = Id::Iri(vocabulary.insert(expected_iri));
 
 	let (output, id) = import_json_schema(&mut vocabulary, input_path);
 	let expected_output = parse_nquads(&mut vocabulary, expected_output_path);
 
 	for quad in output.quads() {
-		eprintln!("{} .", quad.rdf_display(&vocabulary))
+		eprintln!("{} .", quad.with(&vocabulary))
 	}
 
 	assert!(output.is_isomorphic_to(&expected_output));

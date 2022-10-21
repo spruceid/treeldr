@@ -2,12 +2,18 @@
 use crate::ty::{BuiltIn, Context, Description, Enum, Primitive, Struct, Type};
 use proc_macro2::TokenStream;
 use quote::quote;
+use rdf_types::Vocabulary;
+use treeldr::{BlankIdIndex, IriIndex};
 
 pub enum Error {
 	NoDefaultImplForOrphanField,
 }
 
-fn primitive_from_literal<M>(context: &Context<M>, p: Primitive, lit: TokenStream) -> TokenStream {
+fn primitive_from_literal<V, M>(
+	context: &Context<V, M>,
+	p: Primitive,
+	lit: TokenStream,
+) -> TokenStream {
 	let id_ty = context.ident_type();
 
 	match p {
@@ -50,7 +56,7 @@ fn primitive_from_literal<M>(context: &Context<M>, p: Primitive, lit: TokenStrea
 	}
 }
 
-fn from_object<M>(context: &Context<M>, ty: &Type<M>, object: TokenStream) -> TokenStream {
+fn from_object<V, M>(context: &Context<V, M>, ty: &Type<M>, object: TokenStream) -> TokenStream {
 	match ty.description() {
 		Description::BuiltIn(BuiltIn::Required(item)) => {
 			let ty = context.layout_type(*item).unwrap();
@@ -109,7 +115,7 @@ fn from_object<M>(context: &Context<M>, ty: &Type<M>, object: TokenStream) -> To
 	}
 }
 
-fn from_objects<M>(context: &Context<M>, ty: &Type<M>, objects: TokenStream) -> TokenStream {
+fn from_objects<V, M>(context: &Context<V, M>, ty: &Type<M>, objects: TokenStream) -> TokenStream {
 	match ty.description() {
 		Description::BuiltIn(BuiltIn::Vec(item)) => {
 			let object = quote! { object };
@@ -146,8 +152,8 @@ fn from_objects<M>(context: &Context<M>, ty: &Type<M>, objects: TokenStream) -> 
 
 /// Generate a function that extracts an instance of the given structure
 /// from an RDF graph.
-pub fn structure_reader<M>(
-	context: &Context<M>,
+pub fn structure_reader<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
+	context: &Context<V, M>,
 	ty: &Struct<M>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
@@ -164,9 +170,9 @@ pub fn structure_reader<M>(
 				let layout = context.model().layouts().get(layout_ref).unwrap();
 
 				if prop.id()
-					== treeldr::Id::Iri(treeldr::vocab::Term::TreeLdr(
+					== treeldr::Id::Iri(IriIndex::Iri(treeldr::vocab::Term::TreeLdr(
 						treeldr::vocab::TreeLdr::Self_,
-					)) {
+					))) {
 					match layout.description().value() {
 						treeldr::layout::Description::Required(_) => {
 							quote! {
@@ -270,8 +276,8 @@ pub fn structure_reader<M>(
 
 /// Generate a function that extracts an instance of the given enumeration
 /// from an RDF graph.
-pub fn enum_reader<M>(
-	context: &Context<M>,
+pub fn enum_reader<V, M>(
+	context: &Context<V, M>,
 	_ty: &Enum<M>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {

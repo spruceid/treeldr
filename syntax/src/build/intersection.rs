@@ -1,8 +1,9 @@
 use super::{Descriptions, Error, LayoutDescription, LayoutRestrictedField, LocalError};
 use derivative::Derivative;
 use locspan::Meta;
+use rdf_types::{Generator, VocabularyMut};
 use std::collections::BTreeMap;
-use treeldr::{metadata::Merge, Id, MetaOption, Vocabulary};
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, MetaOption};
 use treeldr_build::{
 	layout::{Array, RestrictedPrimitive},
 	Context, ObjectToId,
@@ -230,11 +231,12 @@ impl<M: Clone> IntersectedLayout<M> {
 		self.desc
 	}
 
-	pub fn into_standard_description(
+	pub fn into_standard_description<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<treeldr_build::layout::Description<M>, Error<M>>
 	where
 		M: Merge,
@@ -244,15 +246,16 @@ impl<M: Clone> IntersectedLayout<M> {
 			None => self
 				.desc
 				.into_value()
-				.into_standard_description(source, target, vocabulary),
+				.into_standard_description(source, target, vocabulary, generator),
 		}
 	}
 
-	pub fn into_layout(
+	pub fn into_layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Meta<Id, M>, Error<M>>
 	where
 		M: Merge,
@@ -261,9 +264,10 @@ impl<M: Clone> IntersectedLayout<M> {
 			Some((id, causes)) => Ok(Meta::new(id, causes)),
 			None => {
 				let Meta(desc, causes) = self.desc;
-				let standard_desc = desc.into_standard_description(source, target, vocabulary)?;
+				let standard_desc =
+					desc.into_standard_description(source, target, vocabulary, generator)?;
 
-				let id = Id::Blank(vocabulary.new_blank_label());
+				let id = generator.next(vocabulary);
 				target.declare_layout(id, causes.clone());
 				target
 					.get_mut(id)
@@ -487,11 +491,12 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 		}
 	}
 
-	pub fn into_standard_description(
+	pub fn into_standard_description<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<treeldr_build::layout::Description<M>, Error<M>>
 	where
 		M: Merge,
@@ -500,8 +505,8 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 			Self::Never => Ok(treeldr_build::layout::Description::Never),
 			Self::Primitive(n) => Ok(treeldr_build::layout::Description::Primitive(n)),
 			Self::Reference(r) => Ok(treeldr_build::layout::Description::Reference(r)),
-			Self::Struct(s) => s.into_standard_description(source, target, vocabulary),
-			Self::Enum(e) => e.into_standard_description(source, target, vocabulary),
+			Self::Struct(s) => s.into_standard_description(source, target, vocabulary, generator),
+			Self::Enum(e) => e.into_standard_description(source, target, vocabulary, generator),
 			Self::Required(r) => Ok(treeldr_build::layout::Description::Required(r)),
 			Self::Option(o) => Ok(treeldr_build::layout::Description::Option(o)),
 			Self::Set(s) => Ok(treeldr_build::layout::Description::Set(s)),

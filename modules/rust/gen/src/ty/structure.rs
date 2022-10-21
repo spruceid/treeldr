@@ -1,8 +1,9 @@
 use crate::{Context, Error, Generate, Module};
 use proc_macro2::TokenStream;
 use quote::quote;
+use rdf_types::Vocabulary;
 use shelves::Ref;
-use treeldr::Name;
+use treeldr::{BlankIdIndex, IriIndex, Name};
 
 pub struct Struct<M> {
 	ident: proc_macro2::Ident,
@@ -22,7 +23,7 @@ impl<M> Struct<M> {
 		&self.fields
 	}
 
-	pub fn impl_default(&self, context: &Context<M>) -> bool {
+	pub fn impl_default<V>(&self, context: &Context<V, M>) -> bool {
 		self.fields
 			.iter()
 			.all(|f| f.ty(context).impl_default(context))
@@ -108,7 +109,7 @@ impl<M> Field<M> {
 		self.layout
 	}
 
-	pub fn ty<'c>(&self, context: &'c Context<M>) -> &'c super::Type<M> {
+	pub fn ty<'c, V>(&self, context: &'c Context<V, M>) -> &'c super::Type<M> {
 		context.layout_type(self.layout).unwrap()
 	}
 
@@ -126,9 +127,9 @@ impl<M> Field<M> {
 }
 
 impl<M> Generate<M> for Field<M> {
-	fn generate(
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		context: &Context<M>,
+		context: &Context<V, M>,
 		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {

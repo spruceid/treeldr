@@ -41,13 +41,13 @@ impl<M> Type<M> {
 		&self.doc
 	}
 
-	pub fn path(&self, context: &Context<M>, ident: proc_macro2::Ident) -> Option<Path> {
+	pub fn path<V>(&self, context: &Context<V, M>, ident: proc_macro2::Ident) -> Option<Path> {
 		let mut path = context.parent_module_path(self.module)?;
 		path.push(path::Segment::Ident(ident));
 		Some(path)
 	}
 
-	pub fn impl_default(&self, context: &Context<M>) -> bool {
+	pub fn impl_default<V>(&self, context: &Context<V, M>) -> bool {
 		self.desc.impl_default(context)
 	}
 
@@ -71,7 +71,7 @@ pub enum Description<M> {
 }
 
 impl<M> Description<M> {
-	pub fn impl_default(&self, context: &Context<M>) -> bool {
+	pub fn impl_default<V>(&self, context: &Context<V, M>) -> bool {
 		match self {
 			Self::BuiltIn(b) => b.impl_default(),
 			Self::Never => false,
@@ -113,7 +113,10 @@ impl<M> BuiltIn<M> {
 }
 
 impl<M> Description<M> {
-	pub fn new(context: &Context<M>, layout_ref: Ref<treeldr::layout::Definition<M>>) -> Self {
+	pub fn new<V>(
+		context: &Context<V, M>,
+		layout_ref: Ref<treeldr::layout::Definition<M>>,
+	) -> Self {
 		let layout = context
 			.model()
 			.layouts()

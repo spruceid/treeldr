@@ -1,4 +1,6 @@
-use treeldr::{layout, vocab::Display, Ref, Vocabulary};
+use contextual::WithContext;
+use rdf_types::Vocabulary;
+use treeldr::{layout, BlankIdIndex, IriIndex, Ref};
 
 mod command;
 pub mod embedding;
@@ -18,7 +20,7 @@ pub enum Error<F> {
 
 /// Generate a JSON Schema from a TreeLDR model.
 pub fn generate<F>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -116,7 +118,7 @@ fn remove_newlines(s: &str) -> String {
 }
 
 fn generate_layout<F>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -136,7 +138,7 @@ fn generate_layout<F>(
 	if let Some(schema) = schema.as_object_mut() {
 		schema.insert(
 			"$id".into(),
-			layout.id().display(vocabulary).to_string().into(),
+			layout.id().with(vocabulary).to_string().into(),
 		);
 
 		if let Some(description) = layout.preferred_documentation(model).short_description() {
@@ -151,7 +153,7 @@ fn generate_layout<F>(
 }
 
 fn generate_layout_schema<F>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -210,7 +212,7 @@ fn generate_layout_schema<F>(
 			let alias = model.layouts().get(*alias_ref).unwrap();
 			json.insert(
 				"$ref".into(),
-				alias.id().display(vocabulary).to_string().into(),
+				alias.id().with(vocabulary).to_string().into(),
 			);
 			Ok(json.into())
 		}
@@ -218,7 +220,7 @@ fn generate_layout_schema<F>(
 }
 
 fn generate_struct<F>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -281,7 +283,7 @@ fn generate_struct<F>(
 }
 
 fn embed_layout<F>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -335,7 +337,7 @@ fn generate_layout_defs_ref<F>(
 }
 
 fn generate_layout_ref<F>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -391,7 +393,7 @@ fn generate_layout_ref<F>(
 			let layout = model.layouts().get(layout_ref).unwrap();
 			json.insert(
 				"$ref".into(),
-				layout.id().display(vocabulary).to_string().into(),
+				layout.id().with(vocabulary).to_string().into(),
 			);
 			Ok(json.into())
 		}
@@ -399,7 +401,7 @@ fn generate_layout_ref<F>(
 }
 
 fn generate_option_type<F>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -424,7 +426,7 @@ fn generate_option_type<F>(
 }
 
 fn generate_set_type<F>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -446,7 +448,7 @@ fn generate_set_type<F>(
 }
 
 fn generate_list_type<F>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
@@ -467,7 +469,7 @@ fn generate_list_type<F>(
 }
 
 fn generate_enum_type<F>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,

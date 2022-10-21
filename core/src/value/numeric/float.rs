@@ -1,4 +1,4 @@
-use crate::vocab::StrippedLiteral;
+use crate::{vocab::StrippedLiteral, IriIndex};
 use std::fmt;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -15,7 +15,10 @@ impl Float {
 
 	pub fn literal(&self) -> StrippedLiteral {
 		use crate::vocab::{Term, Xsd};
-		StrippedLiteral::TypedString(self.0.to_string().into(), Term::Xsd(Xsd::Float))
+		StrippedLiteral::TypedString(
+			self.0.to_string().into(),
+			IriIndex::Iri(Term::Xsd(Xsd::Float)),
+		)
 	}
 
 	pub fn unwrap(self) -> ordered_float::NotNan<f32> {
