@@ -111,14 +111,14 @@ This will generate the given JSON Schema for the same layout:
 		"name": {
 			"description": "Full name",
 			"type": "string"
-		}
+		},
 		"parent": {
 			"description": "Parents",
 			"type": "array",
 			"item": {
 			"$ref": "https://example.com/person.schema.json"
 			}
-		}
+		},
 		"age": {
 			"description": "Age",
 			"type": "integer",
