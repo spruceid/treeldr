@@ -2,8 +2,8 @@
 use crate::schema::{self, RegularSchema, Schema};
 use iref::{Iri, IriBuf};
 use locspan::{Located, Meta, Span};
-use rdf_types::Quad;
-use treeldr::{metadata::Merge, vocab, Id, Name, Vocabulary};
+use rdf_types::{Generator, Quad, Vocabulary, VocabularyMut};
+use treeldr::{metadata::Merge, vocab, BlankIdIndex, Id, IriIndex, Name};
 use treeldr_build::{Context, Descriptions};
 use vocab::{LocQuad, Object, Term};
 
@@ -25,7 +25,10 @@ impl<M: Located<Span = Span>> treeldr::reporting::DiagnoseWithVocabulary<M> for 
 where
 	M::File: Clone,
 {
-	fn message(&self, vocabulary: &Vocabulary) -> String {
+	fn message(
+		&self,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	) -> String {
 		match self {
 			Self::UnsupportedType => "unsupported schema `type` value.".to_string(),
 			Self::InvalidPropertyName(name) => format!("invalid property name `{}`", name),
@@ -34,52 +37,62 @@ where
 	}
 }
 
-pub fn import_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
+pub fn import_schema<
+	M: Default + Clone + Merge,
+	D: Descriptions<M>,
+	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+>(
 	schema: &Schema,
 	base_iri: Option<Iri>,
 	context: &mut Context<M, D>,
-	vocabulary: &mut Vocabulary,
+	vocabulary: &mut V,
+	generator: &mut impl Generator<V>,
 ) -> Result<Id, Error<M>> {
 	match schema {
 		Schema::True => todo!(),
 		Schema::False => {
-			let id = Id::Blank(vocabulary.new_blank_label());
+			let id = generator.next(vocabulary);
 			context.declare_layout(id, M::default());
 			Ok(id)
 		}
 		Schema::Ref(r) => {
 			let iri = r.target.resolved(base_iri.unwrap());
-			let id = Id::Iri(vocab::Term::from_iri(iri, vocabulary));
+			let id = Id::Iri(vocabulary.insert(iri.as_iri()));
 			Ok(id)
 		}
 		Schema::DynamicRef(_) => todo!(),
 		Schema::Regular(schema) => {
-			import_regular_schema(schema, true, base_iri, context, vocabulary)
+			import_regular_schema(schema, true, base_iri, context, vocabulary, generator)
 		}
 	}
 }
 
-pub fn import_sub_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
+pub fn import_sub_schema<
+	M: Default + Clone + Merge,
+	D: Descriptions<M>,
+	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+>(
 	schema: &Schema,
 	base_iri: Option<Iri>,
 	context: &mut Context<M, D>,
-	vocabulary: &mut Vocabulary,
+	vocabulary: &mut V,
+	generator: &mut impl Generator<V>,
 ) -> Result<Id, Error<M>> {
 	match schema {
 		Schema::True => todo!(),
 		Schema::False => {
-			let id = Id::Blank(vocabulary.new_blank_label());
+			let id = generator.next(vocabulary);
 			context.declare_layout(id, M::default());
 			Ok(id)
 		}
 		Schema::Ref(r) => {
 			let iri = r.target.resolved(base_iri.unwrap());
-			let id = Id::Iri(vocab::Term::from_iri(iri, vocabulary));
+			let id = Id::Iri(vocabulary.insert(iri.as_iri()));
 			Ok(id)
 		}
 		Schema::DynamicRef(_) => todo!(),
 		Schema::Regular(schema) => {
-			import_regular_schema(schema, false, base_iri, context, vocabulary)
+			import_regular_schema(schema, false, base_iri, context, vocabulary, generator)
 		}
 	}
 }
@@ -130,16 +143,21 @@ impl LayoutKind {
 	}
 }
 
-pub fn import_regular_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
+pub fn import_regular_schema<
+	M: Default + Clone + Merge,
+	D: Descriptions<M>,
+	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+>(
 	schema: &RegularSchema,
 	_top_level: bool,
 	base_iri: Option<Iri>,
 	context: &mut Context<M, D>,
-	vocabulary: &mut Vocabulary,
+	vocabulary: &mut V,
+	generator: &mut impl Generator<V>,
 ) -> Result<Id, Error<M>> {
 	if let Some(defs) = &schema.defs {
 		for schema in defs.values() {
-			import_sub_schema(schema, base_iri, context, vocabulary)?;
+			import_sub_schema(schema, base_iri, context, vocabulary, generator)?;
 		}
 	}
 
@@ -153,6 +171,7 @@ pub fn import_regular_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 		base_iri.as_ref().map(Iri::from),
 		context,
 		vocabulary,
+		generator,
 	)?;
 
 	if let treeldr_build::layout::Description::Primitive(primitive) = &desc {
@@ -169,13 +188,13 @@ pub fn import_regular_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 
 	let (id, mut name) = match &schema.id {
 		Some(iri) => {
-			let id = Id::Iri(vocab::Term::from_iri(iri.clone(), vocabulary));
+			let id = Id::Iri(vocabulary.insert(iri.as_iri()));
 			let name = Name::from_iri(iri.as_iri()).ok().flatten();
 
 			(id, name)
 		}
 		None => {
-			let id = Id::Blank(vocabulary.new_blank_label());
+			let id = generator.next(vocabulary);
 			(id, None)
 		}
 	};
@@ -250,11 +269,16 @@ fn into_numeric(
 	}
 }
 
-fn import_layout_description<M: Default + Clone + Merge, D: Descriptions<M>>(
+fn import_layout_description<
+	M: Default + Clone + Merge,
+	D: Descriptions<M>,
+	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+>(
 	schema: &RegularSchema,
 	base_iri: Option<Iri>,
 	context: &mut Context<M, D>,
-	vocabulary: &mut Vocabulary,
+	vocabulary: &mut V,
+	generator: &mut impl Generator<V>,
 ) -> Result<treeldr_build::layout::Description<M>, Error<M>> {
 	let mut kind = LayoutKind::Unknown;
 	if let Some(types) = &schema.validation.any.ty {
@@ -398,12 +422,12 @@ fn import_layout_description<M: Default + Clone + Merge, D: Descriptions<M>>(
 				}
 				LayoutKind::ArrayOrSet | LayoutKind::Array | LayoutKind::Set => {
 					import_array_schema(
-						schema, false, array, &mut kind, base_iri, context, vocabulary,
+						schema, false, array, &mut kind, base_iri, context, vocabulary, generator,
 					)
 				}
-				LayoutKind::Struct => {
-					import_object_schema(schema, false, object, base_iri, context, vocabulary)
-				}
+				LayoutKind::Struct => import_object_schema(
+					schema, false, object, base_iri, context, vocabulary, generator,
+				),
 			}
 		}
 		_ => todo!(),
@@ -411,17 +435,22 @@ fn import_layout_description<M: Default + Clone + Merge, D: Descriptions<M>>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn import_array_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
+fn import_array_schema<
+	M: Default + Clone + Merge,
+	D: Descriptions<M>,
+	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+>(
 	schema: &RegularSchema,
 	_top_level: bool,
 	array: &schema::ArraySchema,
 	kind: &mut LayoutKind,
 	base_iri: Option<Iri>,
 	context: &mut Context<M, D>,
-	vocabulary: &mut Vocabulary,
+	vocabulary: &mut V,
+	generator: &mut impl Generator<V>,
 ) -> Result<treeldr_build::layout::Description<M>, Error<M>> {
 	let item_type = match &array.items {
-		Some(items) => import_sub_schema(items, base_iri, context, vocabulary)?,
+		Some(items) => import_sub_schema(items, base_iri, context, vocabulary, generator)?,
 		None => todo!(),
 	};
 
@@ -436,13 +465,18 @@ fn import_array_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 	}
 }
 
-fn import_object_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
+fn import_object_schema<
+	M: Default + Clone + Merge,
+	D: Descriptions<M>,
+	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+>(
 	schema: &RegularSchema,
 	_top_level: bool,
 	object: &schema::ObjectSchema,
 	base_iri: Option<Iri>,
 	context: &mut Context<M, D>,
-	vocabulary: &mut Vocabulary,
+	vocabulary: &mut V,
+	generator: &mut impl Generator<V>,
 ) -> Result<treeldr_build::layout::Description<M>, Error<M>> {
 	let mut fields: Vec<Meta<Object<M>, M>> = Vec::new();
 
@@ -451,7 +485,8 @@ fn import_object_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 
 		// First, we build each field.
 		for (prop, prop_schema) in properties {
-			let layout_item_id = import_sub_schema(prop_schema, base_iri, context, vocabulary)?;
+			let layout_item_id =
+				import_sub_schema(prop_schema, base_iri, context, vocabulary, generator)?;
 
 			let mut is_required = false;
 			if let Some(required) = &schema.validation.object.required {
@@ -460,7 +495,7 @@ fn import_object_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 				}
 			}
 
-			let layout_id = Id::Blank(vocabulary.new_blank_label());
+			let layout_id = generator.next(vocabulary);
 			context.declare_layout(layout_id, M::default());
 			let layout = context.get_mut(layout_id).unwrap().as_layout_mut().unwrap();
 
@@ -470,7 +505,7 @@ fn import_object_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 				layout.set_option(layout_item_id, M::default())?;
 			}
 
-			let field_id = Id::Blank(vocabulary.new_blank_label());
+			let field_id = generator.next(vocabulary);
 			context.declare_layout_field(field_id, M::default());
 			let field_node = context.get_mut(field_id).unwrap();
 
@@ -493,7 +528,7 @@ fn import_object_schema<M: Default + Clone + Merge, D: Descriptions<M>>(
 		}
 	}
 
-	let fields_id = context.create_list(vocabulary, fields)?;
+	let fields_id = context.create_list(vocabulary, generator, fields)?;
 	Ok(treeldr_build::layout::Description::Struct(fields_id))
 }
 
@@ -525,23 +560,27 @@ fn format_layout<M>(format: schema::Format) -> Result<treeldr::layout::Primitive
 }
 
 pub trait TryIntoRdfList<M, C, T> {
-	fn try_into_rdf_list<E, K>(
+	fn try_into_rdf_list<E, K, V, G>(
 		self,
 		ctx: &mut C,
-		vocab: &mut Vocabulary,
+		vocab: &mut V,
+		generator: &mut G,
 		quads: &mut Vec<LocQuad<M>>,
 		meta: M,
 		f: K,
 	) -> Result<Meta<Object<M>, M>, E>
 	where
-		K: FnMut(T, &mut C, &mut Vocabulary, &mut Vec<LocQuad<M>>) -> Result<Meta<Object<M>, M>, E>;
+		K: FnMut(T, &mut C, &mut V, &mut G, &mut Vec<LocQuad<M>>) -> Result<Meta<Object<M>, M>, E>,
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+		G: Generator<V>;
 }
 
 impl<M: Clone + Merge, C, I: DoubleEndedIterator> TryIntoRdfList<M, C, I::Item> for I {
-	fn try_into_rdf_list<E, K>(
+	fn try_into_rdf_list<E, K, V, G>(
 		self,
 		ctx: &mut C,
-		vocab: &mut Vocabulary,
+		vocab: &mut V,
+		generator: &mut G,
 		quads: &mut Vec<LocQuad<M>>,
 		meta: M,
 		mut f: K,
@@ -550,22 +589,31 @@ impl<M: Clone + Merge, C, I: DoubleEndedIterator> TryIntoRdfList<M, C, I::Item> 
 		K: FnMut(
 			I::Item,
 			&mut C,
-			&mut Vocabulary,
+			&mut V,
+			&mut G,
 			&mut Vec<LocQuad<M>>,
 		) -> Result<Meta<Object<M>, M>, E>,
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+		G: Generator<V>,
 	{
 		use vocab::Rdf;
-		let mut head = Meta(Object::Iri(Term::Rdf(Rdf::Nil)), meta.clone());
+		let mut head = Meta(
+			Object::Iri(IriIndex::Iri(Term::Rdf(Rdf::Nil))),
+			meta.clone(),
+		);
 		for item in self.rev() {
-			let item = f(item, ctx, vocab, quads)?;
-			let item_label = vocab.new_blank_label();
+			let item = f(item, ctx, vocab, generator, quads)?;
+			let item_label = generator.next(vocab);
 			let item_loc = item.metadata().clone();
 
 			quads.push(Meta(
 				Quad(
-					Meta(Id::Blank(item_label), item_loc.clone()),
-					Meta(Term::Rdf(Rdf::Type), item_loc.clone()),
-					Meta(Object::Iri(Term::Rdf(Rdf::List)), item_loc.clone()),
+					Meta(item_label, item_loc.clone()),
+					Meta(IriIndex::Iri(Term::Rdf(Rdf::Type)), item_loc.clone()),
+					Meta(
+						Object::Iri(IriIndex::Iri(Term::Rdf(Rdf::List))),
+						item_loc.clone(),
+					),
 					None,
 				),
 				item_loc.clone(),
@@ -573,8 +621,8 @@ impl<M: Clone + Merge, C, I: DoubleEndedIterator> TryIntoRdfList<M, C, I::Item> 
 
 			quads.push(Meta(
 				Quad(
-					Meta(Id::Blank(item_label), item_loc.clone()),
-					Meta(Term::Rdf(Rdf::First), item_loc.clone()),
+					Meta(item_label, item_loc.clone()),
+					Meta(IriIndex::Iri(Term::Rdf(Rdf::First)), item_loc.clone()),
 					item,
 					None,
 				),
@@ -583,15 +631,15 @@ impl<M: Clone + Merge, C, I: DoubleEndedIterator> TryIntoRdfList<M, C, I::Item> 
 
 			quads.push(Meta(
 				Quad(
-					Meta(Id::Blank(item_label), meta.clone()),
-					Meta(Term::Rdf(Rdf::Rest), meta.clone()),
+					Meta(item_label, meta.clone()),
+					Meta(IriIndex::Iri(Term::Rdf(Rdf::Rest)), meta.clone()),
 					head,
 					None,
 				),
 				item_loc.clone(),
 			));
 
-			head = Meta(Object::Blank(item_label), meta.clone());
+			head = Meta(item_label.into_term(), meta.clone());
 		}
 
 		Ok(head)

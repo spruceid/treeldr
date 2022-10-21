@@ -2,8 +2,10 @@ use crate::{path::Segment, Context, Error, Generate, Path};
 use derivative::Derivative;
 use proc_macro2::TokenStream;
 use quote::quote;
+use rdf_types::Vocabulary;
 use shelves::Ref;
 use std::collections::HashSet;
+use treeldr::{BlankIdIndex, IriIndex};
 
 pub struct Module<M> {
 	parent: Option<Ref<Self>>,
@@ -26,7 +28,7 @@ impl<M> Module<M> {
 		&self.ident
 	}
 
-	pub fn path(&self, context: &Context<M>) -> Path {
+	pub fn path<V>(&self, context: &Context<V, M>) -> Path {
 		let mut path = context.module_path(self.parent);
 		path.push(Segment::Ident(self.ident.clone()));
 		path
@@ -50,9 +52,9 @@ impl<M> Module<M> {
 }
 
 impl<M> Generate<M> for Module<M> {
-	fn generate(
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		context: &Context<M>,
+		context: &Context<V, M>,
 		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {
@@ -70,9 +72,9 @@ impl<M> Generate<M> for Module<M> {
 }
 
 impl<M> Generate<M> for Ref<Module<M>> {
-	fn generate(
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		context: &Context<M>,
+		context: &Context<V, M>,
 		_scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {

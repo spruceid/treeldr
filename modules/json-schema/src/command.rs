@@ -1,8 +1,10 @@
 use crate::embedding;
+use contextual::WithContext;
 use embedding::Embedding;
 use iref::{Iri, IriBuf};
+use rdf_types::Vocabulary;
 use std::fmt;
-use treeldr::{layout, vocab::Display, Ref, Vocabulary};
+use treeldr::{layout, BlankIdIndex, IriIndex, Ref};
 
 #[derive(clap::Args)]
 /// Generate a JSON Schema from a TreeLDR model.
@@ -44,11 +46,12 @@ impl<F> fmt::Display for Error<F> {
 }
 
 fn find_layout<F: Clone>(
-	vocabulary: &Vocabulary,
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	iri: Iri,
 ) -> Result<Ref<layout::Definition<F>>, Box<Error<F>>> {
-	let name = treeldr::vocab::Term::try_from_iri(iri, vocabulary)
+	let name = vocabulary
+		.get(iri)
 		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
 	model
 		.require_layout(treeldr::Id::Iri(name))
@@ -61,7 +64,11 @@ fn find_layout<F: Clone>(
 }
 
 impl Command {
-	pub fn execute<F: Clone>(self, vocabulary: &Vocabulary, model: &treeldr::Model<F>) {
+	pub fn execute<F: Clone>(
+		self,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		model: &treeldr::Model<F>,
+	) {
 		log::info!("generating JSON Schema.");
 		match self.try_execute(vocabulary, model) {
 			Ok(()) => (),
@@ -74,7 +81,7 @@ impl Command {
 
 	fn try_execute<F: Clone>(
 		self,
-		vocabulary: &Vocabulary,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 		model: &treeldr::Model<F>,
 	) -> Result<(), Box<Error<F>>> {
 		// Find the layouts to generate.
@@ -112,7 +119,7 @@ impl Command {
 					.get(r)
 					.unwrap()
 					.id()
-					.display(vocabulary)
+					.with(vocabulary)
 					.to_string(),
 			))),
 			Err(crate::Error::InfiniteSchema(r)) => Err(Box::new(Error::InfiniteSchema(
@@ -121,7 +128,7 @@ impl Command {
 					.get(r)
 					.unwrap()
 					.id()
-					.display(vocabulary)
+					.with(vocabulary)
 					.to_string(),
 			))),
 			Err(crate::Error::Serialization(e)) => Err(Box::new(Error::Serialization(e))),

@@ -2,7 +2,9 @@ use super::{BuiltIn, Description, Primitive, Type};
 use crate::{Context, Error, Generate, Module, Referenced};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
+use rdf_types::Vocabulary;
 use shelves::Ref;
+use treeldr::{BlankIdIndex, IriIndex};
 
 mod json_ld;
 mod rdf;
@@ -58,9 +60,9 @@ pub fn doc_attribute(label: Option<&str>, doc: &treeldr::Documentation) -> Vec<T
 }
 
 impl<M> Generate<M> for BuiltIn<M> {
-	fn generate(
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		context: &Context<M>,
+		context: &Context<V, M>,
 		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {
@@ -91,9 +93,9 @@ impl<M> Generate<M> for BuiltIn<M> {
 }
 
 impl<M> Generate<M> for Referenced<BuiltIn<M>> {
-	fn generate(
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		context: &Context<M>,
+		context: &Context<V, M>,
 		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {
@@ -124,9 +126,9 @@ impl<M> Generate<M> for Referenced<BuiltIn<M>> {
 }
 
 impl<M> Generate<M> for Type<M> {
-	fn generate(
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		context: &Context<M>,
+		context: &Context<V, M>,
 		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {
@@ -231,9 +233,9 @@ impl<M> Generate<M> for Type<M> {
 }
 
 impl<M> Generate<M> for Ref<treeldr::layout::Definition<M>> {
-	fn generate(
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		context: &Context<M>,
+		context: &Context<V, M>,
 		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {
@@ -278,9 +280,9 @@ impl<M> Generate<M> for Ref<treeldr::layout::Definition<M>> {
 }
 
 impl<M> Generate<M> for Referenced<Ref<treeldr::layout::Definition<M>>> {
-	fn generate(
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		context: &Context<M>,
+		context: &Context<V, M>,
 		scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {
@@ -327,9 +329,9 @@ impl<M> Generate<M> for Referenced<Ref<treeldr::layout::Definition<M>>> {
 }
 
 impl<M> Generate<M> for treeldr::layout::Primitive {
-	fn generate(
+	fn generate<V>(
 		&self,
-		_context: &Context<M>,
+		_context: &Context<V, M>,
 		_scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {
@@ -353,9 +355,9 @@ impl<M> Generate<M> for treeldr::layout::Primitive {
 }
 
 impl<M> Generate<M> for Referenced<treeldr::layout::Primitive> {
-	fn generate(
+	fn generate<V>(
 		&self,
-		_context: &Context<M>,
+		_context: &Context<V, M>,
 		_scope: Option<Ref<Module<M>>>,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error<M>> {

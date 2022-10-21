@@ -40,12 +40,12 @@ pub type ImportedQuad<'a> =
 pub fn import_quad(
 	Quad(subject, predicate, object, graph): json_ld::rdf::QuadRef<IriBuf, BlankIdBuf>,
 ) -> ImportedQuad {
-	let subject = subject.as_ref().clone().into_rdf_subject();
-	let predicate = predicate.as_ref().clone().into_rdf_subject();
+	let subject = subject.as_ref().clone();
+	let predicate = predicate.as_ref().clone();
 
 	let object = match object {
 		json_ld::rdf::Value::Literal(l) => Object::Literal(import_literal(l)),
-		json_ld::rdf::Value::Reference(r) => Object::Id(r.into_rdf_subject()),
+		json_ld::rdf::Value::Reference(r) => Object::Id(r),
 	};
 
 	Quad(subject, predicate, object, graph)

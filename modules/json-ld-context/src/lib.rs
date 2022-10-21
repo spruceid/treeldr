@@ -1,15 +1,15 @@
+use contextual::WithContext;
 use derivative::Derivative;
 use json_ld::syntax::{
 	context::term_definition, Container, ContainerKind, Entry, Keyword, Nullable,
 };
 use locspan::Meta;
+use rdf_types::Vocabulary;
 use std::collections::HashMap;
 use std::fmt;
 use treeldr::{
 	layout::{self, Field},
-	prop, ty,
-	vocab::Display,
-	Ref, Vocabulary,
+	prop, ty, BlankIdIndex, IriIndex, Ref,
 };
 
 mod command;
@@ -23,21 +23,21 @@ pub struct Options {
 
 #[derive(Derivative)]
 #[derivative(PartialEq(bound = ""), Clone(bound = ""), Copy(bound = ""))]
-pub enum TermDefinition<F> {
+pub enum TermDefinition<M> {
 	Property {
-		property_ref: Ref<prop::Definition<F>>,
-		layout_ref: Ref<layout::Definition<F>>,
+		property_ref: Ref<prop::Definition<M>>,
+		layout_ref: Ref<layout::Definition<M>>,
 	},
 	Type {
-		type_ref: Ref<ty::Definition<F>>,
-		layout_ref: Ref<layout::Definition<F>>,
+		type_ref: Ref<ty::Definition<M>>,
+		layout_ref: Ref<layout::Definition<M>>,
 	},
 }
 
-impl<F> TermDefinition<F> {
-	pub fn build(
+impl<M> TermDefinition<M> {
+	pub fn build<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		builder: &ContextBuilder<F>,
+		builder: &ContextBuilder<V, M>,
 	) -> Result<Nullable<json_ld::syntax::context::TermDefinition<()>>, Error> {
 		let mut definition = json_ld::syntax::context::term_definition::Expanded::new();
 
@@ -50,7 +50,7 @@ impl<F> TermDefinition<F> {
 					term_definition::Id::Keyword(Keyword::Type)
 				} else {
 					let property = builder.model.properties().get(property_ref).unwrap();
-					term_definition::Id::Term(property.id().display(builder.vocabulary).to_string())
+					term_definition::Id::Term(property.id().with(builder.vocabulary).to_string())
 				};
 
 				definition.id = Some(Entry::new((), Meta(Nullable::Some(id), ())));
@@ -64,7 +64,7 @@ impl<F> TermDefinition<F> {
 			} => {
 				let ty = builder.model.types().get(type_ref).unwrap();
 				let syntax_id =
-					term_definition::Id::Term(ty.id().display(builder.vocabulary).to_string());
+					term_definition::Id::Term(ty.id().with(builder.vocabulary).to_string());
 
 				definition.id = Some(Entry::new((), Meta(Nullable::Some(syntax_id), ())));
 				definition.context = builder.generate_type_definition_context(layout_ref)?;
@@ -77,21 +77,21 @@ impl<F> TermDefinition<F> {
 
 type ContextEntry = Entry<Box<json_ld::syntax::context::Value<()>>, ()>;
 
-pub struct ContextBuilder<'a, F> {
-	vocabulary: &'a Vocabulary,
-	model: &'a treeldr::Model<F>,
+pub struct ContextBuilder<'a, V, M> {
+	vocabulary: &'a V,
+	model: &'a treeldr::Model<M>,
 	options: &'a Options,
-	parent: Option<&'a ContextBuilder<'a, F>>,
-	terms: HashMap<String, TermDefinition<F>>,
+	parent: Option<&'a Self>,
+	terms: HashMap<String, TermDefinition<M>>,
 	do_propagate: bool,
 }
 
-impl<'a, F> ContextBuilder<'a, F> {
+impl<'a, V, M> ContextBuilder<'a, V, M> {
 	pub fn new(
-		vocabulary: &'a Vocabulary,
-		model: &'a treeldr::Model<F>,
+		vocabulary: &'a V,
+		model: &'a treeldr::Model<M>,
 		options: &'a Options,
-		parent: Option<&'a ContextBuilder<'a, F>>,
+		parent: Option<&'a Self>,
 		do_propagate: bool,
 	) -> Self {
 		Self {
@@ -104,7 +104,7 @@ impl<'a, F> ContextBuilder<'a, F> {
 		}
 	}
 
-	pub fn propagate_context(&'a self) -> Option<&'a ContextBuilder<'a, F>> {
+	pub fn propagate_context(&'a self) -> Option<&'a Self> {
 		if self.do_propagate {
 			Some(self)
 		} else {
@@ -116,7 +116,7 @@ impl<'a, F> ContextBuilder<'a, F> {
 		self.terms.is_empty()
 	}
 
-	pub fn contains(&self, term: &str, definition: &TermDefinition<F>) -> bool {
+	pub fn contains(&self, term: &str, definition: &TermDefinition<M>) -> bool {
 		match self.terms.get(term) {
 			Some(d) => d == definition,
 			None => match self.parent {
@@ -126,7 +126,7 @@ impl<'a, F> ContextBuilder<'a, F> {
 		}
 	}
 
-	pub fn insert(&mut self, term: String, definition: TermDefinition<F>) -> Result<(), Error> {
+	pub fn insert(&mut self, term: String, definition: TermDefinition<M>) -> Result<(), Error> {
 		if let Some(parent) = self.parent {
 			if parent.contains(&term, &definition) {
 				return Ok(());
@@ -149,7 +149,7 @@ impl<'a, F> ContextBuilder<'a, F> {
 		}
 	}
 
-	pub fn insert_field(&mut self, field: &'a Field<F>) -> Result<(), Error> {
+	pub fn insert_field(&mut self, field: &'a Field<M>) -> Result<(), Error> {
 		match field.property() {
 			Some(property_ref) => {
 				let term = field.name().to_string();
@@ -164,24 +164,9 @@ impl<'a, F> ContextBuilder<'a, F> {
 		}
 	}
 
-	pub fn is_type_property(&self, property_ref: Ref<prop::Definition<F>>) -> bool {
-		let property = self.model.properties().get(property_ref).unwrap();
-		match property.id().as_iri() {
-			Some(iri) => iri.iri(self.vocabulary).unwrap() == json_ld::rdf::RDF_TYPE,
-			None => false,
-		}
-	}
-
-	pub fn is_type_field(&self, field: &Field<F>) -> bool {
-		match field.property() {
-			Some(property_ref) => self.is_type_property(property_ref),
-			None => false,
-		}
-	}
-
 	pub fn insert_typed_layout(
 		&mut self,
-		layout_ref: Ref<layout::Definition<F>>,
+		layout_ref: Ref<layout::Definition<M>>,
 	) -> Result<(), Error> {
 		let layout = self.model.layouts().get(layout_ref).unwrap();
 
@@ -194,9 +179,66 @@ impl<'a, F> ContextBuilder<'a, F> {
 		self.insert(term, definition)
 	}
 
+	/// Generate the `@type` entry of a term definition.
+	fn generate_property_definition_type(
+		&self,
+		layout_ref: Ref<layout::Definition<M>>,
+	) -> Option<Entry<Nullable<term_definition::Type>, ()>> {
+		let layout = self.model.layouts().get(layout_ref).unwrap();
+
+		use treeldr::layout::Description;
+		match layout.description().value() {
+			Description::Required(r) => self.generate_property_definition_type(r.item_layout()),
+			Description::Option(o) => self.generate_property_definition_type(o.item_layout()),
+			Description::Primitive(n, _) => {
+				let syntax_ty = generate_primitive_type(n);
+				Some(Entry::new((), Meta(Nullable::Some(syntax_ty), ())))
+			}
+			_ => None,
+		}
+	}
+
+	/// Generate the `@container` entry of a term definition.
+	fn generate_property_definition_container(
+		&self,
+		layout_ref: Ref<layout::Definition<M>>,
+	) -> Option<Entry<Nullable<Container<()>>, ()>> {
+		let layout = self.model.layouts().get(layout_ref).unwrap();
+
+		use treeldr::layout::Description;
+		match layout.description().value() {
+			Description::Set(_) => Some(Entry::new(
+				(),
+				Meta(Nullable::Some(Container::One(ContainerKind::Set)), ()),
+			)),
+			Description::Array(_) => Some(Entry::new(
+				(),
+				Meta(Nullable::Some(Container::One(ContainerKind::List)), ()),
+			)),
+			_ => None,
+		}
+	}
+}
+
+impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilder<'a, V, M> {
+	pub fn is_type_property(&self, property_ref: Ref<prop::Definition<M>>) -> bool {
+		let property = self.model.properties().get(property_ref).unwrap();
+		match property.id().as_iri() {
+			Some(iri) => self.vocabulary.iri(iri).unwrap() == json_ld::rdf::RDF_TYPE,
+			None => false,
+		}
+	}
+
+	pub fn is_type_field(&self, field: &Field<M>) -> bool {
+		match field.property() {
+			Some(property_ref) => self.is_type_property(property_ref),
+			None => false,
+		}
+	}
+
 	pub fn insert_layout_terms(
 		&mut self,
-		layout_ref: Ref<layout::Definition<F>>,
+		layout_ref: Ref<layout::Definition<M>>,
 		typed: bool,
 	) -> Result<(), Error> {
 		let layout = self.model.layouts().get(layout_ref).unwrap();
@@ -233,7 +275,7 @@ impl<'a, F> ContextBuilder<'a, F> {
 	/// Generate the `@context` entry of a property definition.
 	fn generate_property_definition_context(
 		&self,
-		layout_ref: Ref<layout::Definition<F>>,
+		layout_ref: Ref<layout::Definition<M>>,
 	) -> Result<Option<ContextEntry>, Error> {
 		let mut builder = ContextBuilder::new(
 			self.vocabulary,
@@ -257,7 +299,7 @@ impl<'a, F> ContextBuilder<'a, F> {
 	/// Generate the `@context` entry of a type definition.
 	fn generate_type_definition_context(
 		&self,
-		layout_ref: Ref<layout::Definition<F>>,
+		layout_ref: Ref<layout::Definition<M>>,
 	) -> Result<Option<ContextEntry>, Error> {
 		let mut builder = ContextBuilder::new(
 			self.vocabulary,
@@ -275,46 +317,6 @@ impl<'a, F> ContextBuilder<'a, F> {
 			let context = builder.build()?;
 
 			Ok(Some(Entry::new((), Meta(Box::new(context), ()))))
-		}
-	}
-
-	/// Generate the `@type` entry of a term definition.
-	fn generate_property_definition_type(
-		&self,
-		layout_ref: Ref<layout::Definition<F>>,
-	) -> Option<Entry<Nullable<term_definition::Type>, ()>> {
-		let layout = self.model.layouts().get(layout_ref).unwrap();
-
-		use treeldr::layout::Description;
-		match layout.description().value() {
-			Description::Required(r) => self.generate_property_definition_type(r.item_layout()),
-			Description::Option(o) => self.generate_property_definition_type(o.item_layout()),
-			Description::Primitive(n, _) => {
-				let syntax_ty = generate_primitive_type(n);
-				Some(Entry::new((), Meta(Nullable::Some(syntax_ty), ())))
-			}
-			_ => None,
-		}
-	}
-
-	/// Generate the `@container` entry of a term definition.
-	fn generate_property_definition_container(
-		&self,
-		layout_ref: Ref<layout::Definition<F>>,
-	) -> Option<Entry<Nullable<Container<()>>, ()>> {
-		let layout = self.model.layouts().get(layout_ref).unwrap();
-
-		use treeldr::layout::Description;
-		match layout.description().value() {
-			Description::Set(_) => Some(Entry::new(
-				(),
-				Meta(Nullable::Some(Container::One(ContainerKind::Set)), ()),
-			)),
-			Description::Array(_) => Some(Entry::new(
-				(),
-				Meta(Nullable::Some(Container::One(ContainerKind::List)), ()),
-			)),
-			_ => None,
 		}
 	}
 
@@ -348,11 +350,11 @@ impl fmt::Display for Error {
 }
 
 /// Generate a JSON-LD context from a TreeLDR model.
-pub fn generate<F>(
-	vocabulary: &Vocabulary,
-	model: &treeldr::Model<F>,
+pub fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
+	vocabulary: &V,
+	model: &treeldr::Model<M>,
 	options: Options,
-	layouts: Vec<Ref<layout::Definition<F>>>,
+	layouts: Vec<Ref<layout::Definition<M>>>,
 ) -> Result<json_ld::syntax::context::Value<()>, Error> {
 	let mut builder = ContextBuilder::new(vocabulary, model, &options, None, true);
 

@@ -11,8 +11,8 @@ pub enum Error {
 }
 
 /// Creates a JSON-LD node object from a structure.
-pub fn structure_builder<M>(
-	context: &Context<M>,
+pub fn structure_builder<V, M>(
+	context: &Context<V, M>,
 	ty: &Struct<M>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
@@ -74,8 +74,8 @@ pub fn structure_builder<M>(
 }
 
 /// Creates a JSON-LD node object from an enumeration.
-pub fn enum_builder<M>(
-	_context: &Context<M>,
+pub fn enum_builder<V, M>(
+	_context: &Context<V, M>,
 	_ty: &Enum<M>,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {

@@ -2,11 +2,13 @@ use iref::IriBuf;
 use litrs::Literal;
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::quote;
+use rdf_types::Vocabulary;
 use std::path::PathBuf;
 use syn::spanned::Spanned;
 use thiserror::Error;
+use treeldr::{BlankIdIndex, IriIndex};
 
-pub type GenContext<'a> = treeldr_rust_gen::Context<'a, treeldr_load::Metadata>;
+pub type GenContext<'a, V> = treeldr_rust_gen::Context<'a, V, treeldr_load::Metadata>;
 
 #[derive(Error, Debug)]
 pub enum ParseError {
@@ -125,7 +127,11 @@ impl Module {
 		}
 	}
 
-	pub fn bind(&mut self, vocabulary: &treeldr_load::Vocabulary, context: &mut GenContext) {
+	pub fn bind<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&mut self,
+		vocabulary: &V,
+		context: &mut GenContext<V>,
+	) {
 		use std::collections::HashMap;
 		let mut map = HashMap::new();
 
@@ -135,7 +141,7 @@ impl Module {
 
 			for (layout_ref, layout) in context.model().layouts() {
 				if let treeldr::Id::Iri(term) = layout.id() {
-					let iri = term.iri(vocabulary).unwrap();
+					let iri = vocabulary.iri(&term).unwrap();
 
 					if iri
 						.as_str()
@@ -161,7 +167,10 @@ impl Module {
 		}
 	}
 
-	pub fn generate(&self, context: &GenContext) -> Result<TokenStream, GenError> {
+	pub fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &GenContext<V>,
+	) -> Result<TokenStream, GenError> {
 		let attrs = &self.attrs;
 		let vis = &self.vis;
 		let ident = &self.ident;
@@ -311,7 +320,10 @@ impl Prefix {
 		}
 	}
 
-	pub fn generate(&self, context: &GenContext) -> Result<TokenStream, GenError> {
+	pub fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &GenContext<V>,
+	) -> Result<TokenStream, GenError> {
 		use treeldr_rust_gen::Generate;
 		let attrs = &self.attrs;
 		let vis = &self.vis;
