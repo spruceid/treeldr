@@ -4,10 +4,10 @@ use crate::{
 };
 use derivative::Derivative;
 use locspan::Meta;
-use rdf_types::{Vocabulary, VocabularyMut};
+use rdf_types::{Generator, Vocabulary, VocabularyMut};
 use shelves::Shelf;
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{metadata::Merge, to_rdf::Generator, vocab, BlankIdIndex, Id, Model};
+use treeldr::{metadata::Merge, vocab, BlankIdIndex, Id, Model};
 
 pub mod allocated;
 
@@ -68,39 +68,44 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		Ok(id)
 	}
 
-	pub fn apply_built_in_definitions_with(
+	pub fn apply_built_in_definitions_with<
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+	>(
 		&mut self,
-		vocabulary: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		metadata: M,
 	) -> Result<(), Error<M>>
 	where
 		M: Clone + Merge,
 	{
-		self.define_rdf_types(vocabulary, metadata.clone())?;
+		self.define_rdf_types(vocabulary, generator, metadata.clone())?;
 		self.define_xsd_types(metadata.clone())?;
 		self.define_treeldr_types(metadata)
 	}
 
-	pub fn apply_built_in_definitions(
+	pub fn apply_built_in_definitions<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
-		vocabulary: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>>
 	where
 		M: Default + Clone + Merge,
 	{
-		self.apply_built_in_definitions_with(vocabulary, M::default())
+		self.apply_built_in_definitions_with(vocabulary, generator, M::default())
 	}
 
-	pub fn create_option_layout(
+	pub fn create_option_layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
-		vocabulary: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		item_layout: Id,
 		cause: M,
 	) -> Result<Id, Error<M>>
 	where
 		M: Clone + Merge,
 	{
-		let id = vocabulary.next();
+		let id = generator.next(vocabulary);
 		self.create_named_option_layout(id, item_layout, cause)
 	}
 
@@ -119,9 +124,10 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		Ok(id)
 	}
 
-	pub fn standard_reference(
+	pub fn standard_reference<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
-		vocabulary: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		deref_ty: Id,
 		cause: M,
 		deref_cause: M,
@@ -132,16 +138,18 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		match self.standard_references.get(&deref_ty).cloned() {
 			Some(id) => Ok(id),
 			None => {
-				let id = self.create_reference(vocabulary, deref_ty, cause, deref_cause)?;
+				let id =
+					self.create_reference(vocabulary, generator, deref_ty, cause, deref_cause)?;
 				self.standard_references.insert(deref_ty, id);
 				Ok(id)
 			}
 		}
 	}
 
-	pub fn create_reference(
+	pub fn create_reference<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
-		vocabulary: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		target_ty: Id,
 		cause: M,
 		deref_cause: M,
@@ -149,7 +157,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 	where
 		M: Clone + Merge,
 	{
-		let id = vocabulary.next();
+		let id = generator.next(vocabulary);
 		self.create_named_reference(id, target_ty, cause, deref_cause)
 	}
 
@@ -175,9 +183,10 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		Ok(id)
 	}
 
-	pub fn define_rdf_types(
+	pub fn define_rdf_types<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
-		vocabulary: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		metadata: M,
 	) -> Result<(), Error<M>>
 	where
@@ -193,16 +202,21 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Resource))),
 			metadata.clone(),
 		);
-		let id_field = vocabulary.next();
+		let id_field = generator.next(vocabulary);
 		self.declare_layout_field(id_field, metadata.clone());
 		let resource_ref_layout = self.standard_reference(
 			vocabulary,
+			generator,
 			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Resource))),
 			metadata.clone(),
 			metadata.clone(),
 		)?;
-		let field_layout =
-			self.create_option_layout(vocabulary, resource_ref_layout, metadata.clone())?;
+		let field_layout = self.create_option_layout(
+			vocabulary,
+			generator,
+			resource_ref_layout,
+			metadata.clone(),
+		)?;
 		let field = self
 			.get_mut(id_field)
 			.unwrap()
@@ -214,8 +228,11 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		)?;
 		field.set_name(treeldr::Name::new("id").unwrap(), metadata.clone())?;
 		field.set_layout(field_layout, metadata.clone())?;
-		let fields_id =
-			self.create_list(vocabulary, [Meta(id_field.into_term(), metadata.clone())])?;
+		let fields_id = self.create_list(
+			vocabulary,
+			generator,
+			[Meta(id_field.into_term(), metadata.clone())],
+		)?;
 		let layout = self
 			.get_mut(Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Resource))))
 			.unwrap()
@@ -360,10 +377,15 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		Ok(())
 	}
 
-	pub fn try_map<G: Descriptions<M>, E>(
+	pub fn try_map<
+		G: Descriptions<M>,
+		E,
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+	>(
 		&self,
 		map: &impl crate::TryMap<M, E, D, G>,
-		vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Context<M, G>, E>
 	where
 		M: Clone,
@@ -373,23 +395,24 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		for (id, node) in &self.nodes {
 			let mapped_node = node
 				.clone()
-				.try_map(|desc| desc.try_map(map, self, &mut target, vocabulary))?;
+				.try_map(|desc| desc.try_map(map, self, &mut target, vocabulary, generator))?;
 			target.nodes.insert(*id, mapped_node);
 		}
 
 		Ok(target)
 	}
 
-	pub fn simplify(
+	pub fn simplify<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Context<M>, <D as Simplify<M>>::Error>
 	where
 		D: Simplify<M>,
 		M: Clone,
 	{
 		let map = D::TryMap::default();
-		self.try_map(&map, vocabulary)
+		self.try_map(&map, vocabulary, generator)
 	}
 
 	/// Returns the node associated to the given `Id`, if any.
@@ -769,9 +792,13 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		}
 	}
 
-	pub fn create_list<I: IntoIterator<Item = Meta<vocab::Object<M>, M>>>(
+	pub fn create_list<
+		I: IntoIterator<Item = Meta<vocab::Object<M>, M>>,
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+	>(
 		&mut self,
-		vocabulary: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		list: I,
 	) -> Result<Id, Error<M>>
 	where
@@ -781,7 +808,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		let mut head = Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)));
 
 		for Meta(item, cause) in list.into_iter().rev() {
-			let id = vocabulary.next();
+			let id = generator.next(vocabulary);
 
 			self.declare_list(id, cause.clone());
 			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
@@ -793,22 +820,23 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		Ok(head)
 	}
 
-	pub fn create_list_with<I: IntoIterator, C, G>(
+	pub fn create_list_with<I: IntoIterator, C, V>(
 		&mut self,
-		vocabulary: &mut G,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		list: I,
 		mut f: C,
 	) -> Result<Id, Error<M>>
 	where
 		M: Clone,
 		I::IntoIter: DoubleEndedIterator,
-		G: Generator,
-		C: FnMut(I::Item, &mut Self, &mut G) -> Meta<vocab::Object<M>, M>,
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+		C: FnMut(I::Item, &mut Self, &mut V) -> Meta<vocab::Object<M>, M>,
 	{
 		let mut head = Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)));
 
 		for item in list.into_iter().rev() {
-			let id = vocabulary.next();
+			let id = generator.next(vocabulary);
 			let Meta(item, cause) = f(item, self, vocabulary);
 
 			self.declare_list(id, cause.clone());
@@ -821,9 +849,10 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		Ok(head)
 	}
 
-	pub fn try_create_list_with<E, I: IntoIterator, C, G>(
+	pub fn try_create_list_with<E, I: IntoIterator, C, V, G>(
 		&mut self,
-		vocabulary: &mut G,
+		vocabulary: &mut V,
+		generator: &mut G,
 		list: I,
 		mut f: C,
 	) -> Result<Id, E>
@@ -831,14 +860,15 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		M: Clone,
 		E: From<Error<M>>,
 		I::IntoIter: DoubleEndedIterator,
-		G: Generator,
-		C: FnMut(I::Item, &mut Self, &mut G) -> Result<Meta<vocab::Object<M>, M>, E>,
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+		G: Generator<V>,
+		C: FnMut(I::Item, &mut Self, &mut V, &mut G) -> Result<Meta<vocab::Object<M>, M>, E>,
 	{
 		let mut head = Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)));
 
 		for item in list.into_iter().rev() {
-			let id = vocabulary.next();
-			let Meta(item, cause) = f(item, self, vocabulary)?;
+			let id = generator.next(vocabulary);
+			let Meta(item, cause) = f(item, self, vocabulary, generator)?;
 
 			self.declare_list(id, cause.clone());
 			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
@@ -887,8 +917,11 @@ impl<M: Clone> Context<M> {
 		Ok(())
 	}
 
-	pub fn assign_default_layouts(&mut self, vocabulary: &mut impl Generator)
-	where
+	pub fn assign_default_layouts<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&mut self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+	) where
 		M: Merge,
 	{
 		let mut default_layouts = BTreeMap::new();
@@ -903,7 +936,7 @@ impl<M: Clone> Context<M> {
 		}
 
 		for (id, default_layout) in default_layouts {
-			let default_layout = default_layout.build(self, vocabulary);
+			let default_layout = default_layout.build(self, vocabulary, generator);
 			self.get_mut(id)
 				.unwrap()
 				.as_layout_field_mut()
@@ -1012,14 +1045,18 @@ impl<M: Clone> Context<M> {
 		Ok(())
 	}
 
-	pub fn build(mut self, vocabulary: &mut impl Generator) -> Result<Model<M>, Error<M>>
+	pub fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		mut self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+	) -> Result<Model<M>, Error<M>>
 	where
 		M: Clone + Merge,
 	{
 		use crate::utils::SccGraph;
 		use crate::Build;
 
-		self.assign_default_layouts(vocabulary);
+		self.assign_default_layouts(vocabulary, generator);
 		self.compute_uses()?;
 		self.assign_default_names(vocabulary)?;
 

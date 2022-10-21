@@ -1,10 +1,10 @@
 use crate::{error, list::ListMut, Context, Descriptions, Document, Error};
 use locspan::Meta;
+use rdf_types::{Generator, VocabularyMut};
 use treeldr::{
 	metadata::Merge,
-	to_rdf::Generator,
 	vocab::{self, GraphLabel, Object, Term},
-	Id, IriIndex, Name,
+	BlankIdIndex, Id, IriIndex, Name,
 };
 
 fn expect_id<M>(Meta(value, loc): Meta<vocab::Object<M>, M>) -> Result<Meta<Id, M>, Error<M>> {
@@ -44,11 +44,12 @@ impl<M: Clone + Ord + Merge, D: Descriptions<M>> Document<M, D>
 	type LocalContext = ();
 	type Error = Error<M>;
 
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		_: &mut (),
 		context: &mut Context<M, D>,
-		_vocabulary: &mut impl Generator,
+		_vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
 		// Step 1: find out the type of each node.
 		for Meta(quad, loc) in self.loc_quads() {
@@ -87,11 +88,12 @@ impl<M: Clone + Ord + Merge, D: Descriptions<M>> Document<M, D>
 		Ok(())
 	}
 
-	fn relate(
+	fn relate<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		_: &mut (),
 		context: &mut Context<M, D>,
-		_vocabulary: &mut impl Generator,
+		_vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
 		// Step 2: find out the properties of each node.
 		for Meta(rdf_types::Quad(subject, predicate, object, _graph), loc) in self.into_meta_quads()

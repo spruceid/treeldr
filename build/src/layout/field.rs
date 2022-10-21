@@ -1,9 +1,7 @@
 use super::{error, Error};
 use locspan::Meta;
-use rdf_types::Vocabulary;
-use treeldr::{
-	metadata::Merge, to_rdf::Generator, BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name,
-};
+use rdf_types::{Generator, Vocabulary, VocabularyMut};
+use treeldr::{metadata::Merge, BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name};
 
 /// Layout field definition.
 #[derive(Clone)]
@@ -20,10 +18,14 @@ pub enum DefaultLayout<M> {
 }
 
 impl<M> DefaultLayout<M> {
-	pub fn build<D: crate::Descriptions<M>>(
+	pub fn build<
+		D: crate::Descriptions<M>,
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+	>(
 		self,
 		context: &mut crate::Context<M, D>,
-		vocabulary: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Meta<Id, M>
 	where
 		M: Clone + Merge,
@@ -31,7 +33,7 @@ impl<M> DefaultLayout<M> {
 		match self {
 			Self::Functional(layout) => layout,
 			Self::NonFunctional(Meta(item, meta)) => {
-				let id = vocabulary.next();
+				let id = generator.next(vocabulary);
 				context.declare_layout(id, meta.clone());
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
 

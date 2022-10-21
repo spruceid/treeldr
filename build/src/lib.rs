@@ -1,6 +1,6 @@
 use derivative::Derivative;
-use rdf_types::VocabularyMut;
-use treeldr::{to_rdf::Generator, vocab, BlankIdIndex, IriIndex, Ref};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{vocab, BlankIdIndex, IriIndex, Ref};
 
 pub mod context;
 pub mod error;
@@ -24,21 +24,24 @@ pub trait Descriptions<M>: Sized {
 }
 
 pub trait TryMap<M, E, A: Descriptions<M>, B: Descriptions<M>> {
-	fn ty(
+	fn ty<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		a: A::Type,
 		causes: &M,
 		source: &Context<M, A>,
 		context: &mut Context<M, B>,
-		vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<B::Type, E>;
-	fn layout(
+
+	fn layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		a: A::Layout,
 		causes: &M,
 		source: &Context<M, A>,
 		context: &mut Context<M, B>,
-		vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<B::Layout, E>;
 }
 
@@ -111,18 +114,20 @@ pub trait Document<M, D: Descriptions<M>> {
 	type LocalContext;
 	type Error;
 
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M, D>,
-		vocabulary: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Self::Error>;
 
-	fn relate(
+	fn relate<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M, D>,
-		vocabulary: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Self::Error>;
 }
 
