@@ -1,9 +1,10 @@
 use iref::{IriBuf, IriRef, IriRefBuf};
 use locspan::{BorrowStripped, MaybeLocated, Meta, Span};
 use locspan_derive::{StrippedEq, StrippedPartialEq};
+use rdf_types::{Generator, Vocabulary, VocabularyMut};
 use std::collections::{BTreeMap, HashMap};
 use thiserror::Error;
-use treeldr::{metadata::Merge, reporting, vocab::*, Id, Name, Vocabulary};
+use treeldr::{metadata::Merge, reporting, vocab::*, Id, Name};
 use treeldr_build::{Context, ObjectToId};
 
 mod intersection;
@@ -27,7 +28,10 @@ where
 		}
 	}
 
-	fn labels(&self, vocab: &Vocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+	fn labels(
+		&self,
+		vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		match self {
 			Self::Global(e) => e.labels(vocab),
 			Self::Local(e) => reporting::Diagnose::labels(e),
@@ -235,10 +239,11 @@ impl<M> LocalContext<M> {
 		}
 	}
 
-	pub fn anonymous_id(
+	pub fn anonymous_id<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
 		label: Option<crate::Label>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		loc: M,
 	) -> Meta<Id, M>
 	where
@@ -253,7 +258,7 @@ impl<M> LocalContext<M> {
 						let id = self
 							.next_id
 							.take()
-							.unwrap_or_else(|| Meta(Id::Blank(vocabulary.new_blank_label()), loc));
+							.unwrap_or_else(|| Meta(generator.next(vocabulary), loc));
 						entry.insert(id.clone());
 						id
 					}
@@ -262,7 +267,7 @@ impl<M> LocalContext<M> {
 			None => self
 				.next_id
 				.take()
-				.unwrap_or_else(|| Meta(Id::Blank(vocabulary.new_blank_label()), loc)),
+				.unwrap_or_else(|| Meta(generator.next(vocabulary), loc)),
 		};
 
 		self.next_id.take();
@@ -273,12 +278,12 @@ impl<M> LocalContext<M> {
 impl<M: Clone> LocalContext<M> {
 	pub fn base_iri(
 		&self,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 		loc: M,
 	) -> Result<IriBuf, Meta<LocalError<M>, M>> {
 		match &self.scope {
 			Some(Id::Iri(scope)) => {
-				let mut iri = scope.iri(vocabulary).unwrap().to_owned();
+				let mut iri = vocabulary.iri(scope).unwrap().to_owned();
 				iri.path_mut().open();
 				Ok(iri)
 			}
@@ -378,7 +383,7 @@ impl<M: Clone> LocalContext<M> {
 		let ty = context.get_mut(*id).unwrap().as_type_mut().unwrap();
 
 		let dt = ty.require_datatype_mut(loc)?;
-		dt.set_derivation_base(Id::Iri(Term::Xsd(Xsd::String)), loc.clone())?;
+		dt.set_derivation_base(Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::String))), loc.clone())?;
 		let derived = dt.as_derived_mut().unwrap();
 		derived.restrictions_mut().insert(
 			treeldr_build::ty::data::Restriction::String(
@@ -451,10 +456,11 @@ impl<M: Clone> LocalContext<M> {
 	}
 
 	/// Inserts a new literal type.
-	pub fn insert_literal_type(
+	pub fn insert_literal_type<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		Meta(lit, meta): Meta<crate::Literal, M>,
 	) -> Result<Meta<Id, M>, Error<M>>
 	where
@@ -481,7 +487,7 @@ impl<M: Clone> LocalContext<M> {
 				let id = self
 					.next_id
 					.take()
-					.unwrap_or_else(|| Meta(Id::Blank(vocabulary.new_blank_label()), meta.clone()));
+					.unwrap_or_else(|| Meta(generator.next(vocabulary), meta.clone()));
 
 				Self::generate_literal_type(&id, false, context, Meta(entry.key(), &meta))?;
 				entry.insert(LiteralData {
@@ -496,10 +502,11 @@ impl<M: Clone> LocalContext<M> {
 	}
 
 	/// Inserts a new literal layout.
-	pub fn insert_literal_layout(
+	pub fn insert_literal_layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		Meta(lit, meta): Meta<crate::Literal, M>,
 	) -> Result<Meta<Id, M>, Error<M>>
 	where
@@ -526,7 +533,7 @@ impl<M: Clone> LocalContext<M> {
 				let id = self
 					.next_id
 					.take()
-					.unwrap_or_else(|| Meta(Id::Blank(vocabulary.new_blank_label()), meta.clone()));
+					.unwrap_or_else(|| Meta(generator.next(vocabulary), meta.clone()));
 
 				Self::generate_literal_layout(&id, false, context, Meta(entry.key(), &meta))?;
 				entry.insert(LiteralData {
@@ -545,11 +552,12 @@ impl<M: Clone + Merge> treeldr_build::Document<M, Descriptions> for crate::Docum
 	type LocalContext = LocalContext<M>;
 	type Error = Error<M>;
 
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
 		let mut declared_base_iri = None;
 		for Meta(base_iri, loc) in &self.bases {
@@ -575,40 +583,41 @@ impl<M: Clone + Merge> treeldr_build::Document<M, Descriptions> for crate::Docum
 		}
 
 		for import in &self.uses {
-			import.declare(local_context, context, vocabulary)?
+			import.declare(local_context, context, vocabulary, generator)?
 		}
 
 		for ty in &self.types {
-			ty.declare(local_context, context, vocabulary)?
+			ty.declare(local_context, context, vocabulary, generator)?
 		}
 
 		for prop in &self.properties {
-			prop.declare(local_context, context, vocabulary)?
+			prop.declare(local_context, context, vocabulary, generator)?
 		}
 
 		for layout in &self.layouts {
-			layout.declare(local_context, context, vocabulary)?
+			layout.declare(local_context, context, vocabulary, generator)?
 		}
 
 		Ok(())
 	}
 
-	fn relate(
+	fn relate<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
 		for ty in self.types {
-			ty.build(local_context, context, vocabulary)?
+			ty.build(local_context, context, vocabulary, generator)?
 		}
 
 		for prop in self.properties {
-			prop.build(local_context, context, vocabulary)?;
+			prop.build(local_context, context, vocabulary, generator)?;
 		}
 
 		for layout in self.layouts {
-			layout.build(local_context, context, vocabulary)?
+			layout.build(local_context, context, vocabulary, generator)?
 		}
 
 		Ok(())
@@ -616,33 +625,36 @@ impl<M: Clone + Merge> treeldr_build::Document<M, Descriptions> for crate::Docum
 }
 
 pub trait Declare<M: Clone + Merge> {
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>>;
 }
 
 pub trait Build<M: Clone + Merge> {
 	type Target;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>>;
 }
 
 impl<M: Clone + Merge> Build<M> for Meta<crate::Documentation<M>, M> {
 	type Target = (Option<String>, Option<String>);
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		_local_context: &mut LocalContext<M>,
 		_context: &mut Context<M, Descriptions>,
-		_vocabulary: &mut Vocabulary,
+		_vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(doc, loc) = self;
 		let mut label = String::new();
@@ -696,11 +708,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::Documentation<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::Id, M> {
 	type Target = Meta<Id, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		_context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(id, loc) = self;
 		let iri = match id {
@@ -717,16 +730,17 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::Id, M> {
 			}
 		};
 
-		Ok(Meta(Id::Iri(Term::from_iri(iri, vocabulary)), loc))
+		Ok(Meta(Id::Iri(vocabulary.insert(iri.as_iri())), loc))
 	}
 }
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::Use<M>, M> {
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		local_context: &mut LocalContext<M>,
 		_context: &mut Context<M, Descriptions>,
-		_vocabulary: &mut Vocabulary,
+		_vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
 		local_context
 			.declare_prefix(
@@ -739,19 +753,23 @@ impl<M: Clone + Merge> Declare<M> for Meta<crate::Use<M>, M> {
 }
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::TypeDefinition<M>, M> {
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
-		let Meta(id, _) = self.id.clone().build(local_context, context, vocabulary)?;
+		let Meta(id, _) = self
+			.id
+			.clone()
+			.build(local_context, context, vocabulary, generator)?;
 		context.declare_type(id, self.metadata().clone());
 
 		if let Meta(crate::TypeDescription::Normal(properties), _) = &self.description {
 			for prop in properties {
 				local_context.scope = Some(id);
-				prop.declare(local_context, context, vocabulary)?;
+				prop.declare(local_context, context, vocabulary, generator)?;
 				local_context.scope = None
 			}
 		}
@@ -763,23 +781,26 @@ impl<M: Clone + Merge> Declare<M> for Meta<crate::TypeDefinition<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 	type Target = ();
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
 		let implicit_layout = Meta(self.implicit_layout_definition(), self.metadata().clone());
 
 		let Meta(def, _) = self;
-		let Meta(id, id_loc) = def.id.build(local_context, context, vocabulary)?;
+		let Meta(id, id_loc) = def
+			.id
+			.build(local_context, context, vocabulary, generator)?;
 
 		match def.description {
 			Meta(crate::TypeDescription::Normal(properties), _) => {
 				for property in properties {
 					local_context.scope = Some(id);
 					let Meta(prop_id, prop_loc) =
-						property.build(local_context, context, vocabulary)?;
+						property.build(local_context, context, vocabulary, generator)?;
 					local_context.scope = None;
 
 					let prop = context.get_mut(prop_id).unwrap().as_property_mut().unwrap();
@@ -790,13 +811,13 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 			}
 			Meta(crate::TypeDescription::Alias(expr), expr_loc) => {
 				local_context.next_id = Some(Meta(id, id_loc));
-				Meta(expr, expr_loc).build(local_context, context, vocabulary)?;
+				Meta(expr, expr_loc).build(local_context, context, vocabulary, generator)?;
 				local_context.next_id = None
 			}
 		}
 
 		if let Some(doc) = def.doc {
-			let (label, doc) = doc.build(local_context, context, vocabulary)?;
+			let (label, doc) = doc.build(local_context, context, vocabulary, generator)?;
 			let node = context.get_mut(id).unwrap();
 
 			if let Some(label) = label {
@@ -809,8 +830,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 		}
 
 		local_context.implicit_definition = true;
-		implicit_layout.declare(local_context, context, vocabulary)?;
-		implicit_layout.build(local_context, context, vocabulary)?;
+		implicit_layout.declare(local_context, context, vocabulary, generator)?;
+		implicit_layout.build(local_context, context, vocabulary, generator)?;
 		local_context.implicit_definition = false;
 
 		Ok(())
@@ -820,29 +841,33 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::OuterTypeExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(ty, loc) = self;
 
 		match ty {
 			crate::OuterTypeExpr::Inner(e) => {
-				Meta(e, loc).build(local_context, context, vocabulary)
+				Meta(e, loc).build(local_context, context, vocabulary, generator)
 			}
 			crate::OuterTypeExpr::Union(label, options) => {
-				let Meta(id, _) = local_context.anonymous_id(Some(label), vocabulary, loc.clone());
+				let Meta(id, _) =
+					local_context.anonymous_id(Some(label), vocabulary, generator, loc.clone());
 				if id.is_blank() {
 					context.declare_type(id, loc.clone());
 				}
 
-				let options_list = context.try_create_list_with::<Error<M>, _, _>(
+				let options_list = context.try_create_list_with::<Error<M>, _, _, _, _>(
 					vocabulary,
+					generator,
 					options,
-					|ty_expr, context, vocabulary| {
-						let Meta(id, loc) = ty_expr.build(local_context, context, vocabulary)?;
+					|ty_expr, context, vocabulary, generator| {
+						let Meta(id, loc) =
+							ty_expr.build(local_context, context, vocabulary, generator)?;
 						Ok(Meta(id.into_term(), loc))
 					},
 				)?;
@@ -853,16 +878,19 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterTypeExpr<M>, M> {
 				Ok(Meta(id, loc))
 			}
 			crate::OuterTypeExpr::Intersection(label, types) => {
-				let Meta(id, _) = local_context.anonymous_id(Some(label), vocabulary, loc.clone());
+				let Meta(id, _) =
+					local_context.anonymous_id(Some(label), vocabulary, generator, loc.clone());
 				if id.is_blank() {
 					context.declare_type(id, loc.clone());
 				}
 
-				let types_list = context.try_create_list_with::<Error<M>, _, _>(
+				let types_list = context.try_create_list_with::<Error<M>, _, _, _, _>(
 					vocabulary,
+					generator,
 					types,
-					|ty_expr, context, vocabulary| {
-						let Meta(id, loc) = ty_expr.build(local_context, context, vocabulary)?;
+					|ty_expr, context, vocabulary, generator| {
+						let Meta(id, loc) =
+							ty_expr.build(local_context, context, vocabulary, generator)?;
 						Ok(Meta(id.into_term(), loc))
 					},
 				)?;
@@ -879,49 +907,57 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterTypeExpr<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::NamedInnerTypeExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		self.into_value()
 			.expr
-			.build(local_context, context, vocabulary)
+			.build(local_context, context, vocabulary, generator)
 	}
 }
 
 impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(ty, loc) = self;
 
 		match ty {
-			crate::InnerTypeExpr::Outer(outer) => outer.build(local_context, context, vocabulary),
+			crate::InnerTypeExpr::Outer(outer) => {
+				outer.build(local_context, context, vocabulary, generator)
+			}
 			crate::InnerTypeExpr::Id(id) => {
 				if let Some(Meta(id, id_loc)) = local_context.next_id.take() {
 					return Err(Meta(LocalError::TypeAlias(id, id_loc), loc).into());
 				}
 
-				id.build(local_context, context, vocabulary)
+				id.build(local_context, context, vocabulary, generator)
 			}
-			crate::InnerTypeExpr::Reference(r) => r.build(local_context, context, vocabulary),
+			crate::InnerTypeExpr::Reference(r) => {
+				r.build(local_context, context, vocabulary, generator)
+			}
 			crate::InnerTypeExpr::Literal(lit) => {
-				local_context.insert_literal_type(context, vocabulary, Meta(lit, loc))
+				local_context.insert_literal_type(context, vocabulary, generator, Meta(lit, loc))
 			}
 			crate::InnerTypeExpr::PropertyRestriction(r) => {
-				let Meta(id, loc) = local_context.anonymous_id(None, vocabulary, loc);
+				let Meta(id, loc) = local_context.anonymous_id(None, vocabulary, generator, loc);
 				if id.is_blank() {
 					context.declare_type(id, loc.clone());
 				}
 
-				let prop_id = r.prop.build(local_context, context, vocabulary)?;
+				let prop_id = r
+					.prop
+					.build(local_context, context, vocabulary, generator)?;
 				let mut restrictions = treeldr_build::ty::Restriction::new(prop_id);
 
 				let Meta(restriction, restriction_loc) = r.restriction;
@@ -929,11 +965,13 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 					crate::TypePropertyRestriction::Range(r) => {
 						let r = match r {
 							crate::TypePropertyRangeRestriction::Any(id) => {
-								let Meta(id, _) = id.build(local_context, context, vocabulary)?;
+								let Meta(id, _) =
+									id.build(local_context, context, vocabulary, generator)?;
 								treeldr_build::ty::RangeRestriction::Any(id)
 							}
 							crate::TypePropertyRangeRestriction::All(id) => {
-								let Meta(id, _) = id.build(local_context, context, vocabulary)?;
+								let Meta(id, _) =
+									id.build(local_context, context, vocabulary, generator)?;
 								treeldr_build::ty::RangeRestriction::All(id)
 							}
 						};
@@ -965,19 +1003,20 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 				Ok(Meta(id, loc))
 			}
 			crate::InnerTypeExpr::List(label, item) => {
-				let Meta(id, _) = local_context.anonymous_id(Some(label), vocabulary, loc.clone());
+				let Meta(id, _) =
+					local_context.anonymous_id(Some(label), vocabulary, generator, loc.clone());
 				if id.is_blank() {
 					context.declare_type(id, loc.clone());
 				}
 
-				let Meta(item_id, _) = item.build(local_context, context, vocabulary)?;
+				let Meta(item_id, _) = item.build(local_context, context, vocabulary, generator)?;
 
 				// Restriction on the `rdf:first` property.
 				let Meta(first_restriction_id, _) =
-					local_context.anonymous_id(None, vocabulary, loc.clone());
+					local_context.anonymous_id(None, vocabulary, generator, loc.clone());
 				context.declare_type(first_restriction_id, loc.clone());
 				let mut first_restriction = treeldr_build::ty::Restriction::new(Meta::new(
-					Id::Iri(Term::Rdf(Rdf::First)),
+					Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::First))),
 					loc.clone(),
 				));
 				first_restriction.add_restriction(
@@ -995,10 +1034,10 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 
 				// Restriction on the `rdf:rest` property.
 				let Meta(rest_restriction_id, _) =
-					local_context.anonymous_id(None, vocabulary, loc.clone());
+					local_context.anonymous_id(None, vocabulary, generator, loc.clone());
 				context.declare_type(rest_restriction_id, loc.clone());
 				let mut rest_restriction = treeldr_build::ty::Restriction::new(Meta::new(
-					Id::Iri(Term::Rdf(Rdf::Rest)),
+					Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Rest))),
 					loc.clone(),
 				));
 				rest_restriction.add_restriction(
@@ -1017,8 +1056,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 				// Intersection list.
 				let types_id = context.create_list(
 					vocabulary,
+					generator,
 					[
-						Meta(Object::Iri(Term::Rdf(Rdf::List)), loc.clone()),
+						Meta(
+							Object::Iri(IriIndex::Iri(Term::Rdf(Rdf::List))),
+							loc.clone(),
+						),
 						Meta(first_restriction_id.into_term(), loc.clone()),
 						Meta(rest_restriction_id.into_term(), loc.clone()),
 					],
@@ -1034,13 +1077,17 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 }
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::PropertyDefinition<M>, M> {
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
-		let Meta(id, _) = self.id.clone().build(local_context, context, vocabulary)?;
+		let Meta(id, _) = self
+			.id
+			.clone()
+			.build(local_context, context, vocabulary, generator)?;
 		context.declare_property(id, self.metadata().clone());
 		Ok(())
 	}
@@ -1049,18 +1096,21 @@ impl<M: Clone + Merge> Declare<M> for Meta<crate::PropertyDefinition<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(def, loc) = self;
-		let Meta(id, id_loc) = def.id.build(local_context, context, vocabulary)?;
+		let Meta(id, id_loc) = def
+			.id
+			.build(local_context, context, vocabulary, generator)?;
 
 		let doc = def
 			.doc
-			.map(|doc| doc.build(local_context, context, vocabulary))
+			.map(|doc| doc.build(local_context, context, vocabulary, generator))
 			.transpose()?;
 
 		let mut functional = true;
@@ -1072,7 +1122,9 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 			.ty
 			.map(|Meta(ty, _)| -> Result<_, Error<M>> {
 				let scope = local_context.scope.take();
-				let range = ty.expr.build(local_context, context, vocabulary)?;
+				let range = ty
+					.expr
+					.build(local_context, context, vocabulary, generator)?;
 				local_context.scope = scope;
 
 				for Meta(ann, ann_loc) in ty.annotations {
@@ -1122,13 +1174,17 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 }
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::LayoutDefinition<M>, M> {
-	fn declare(
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
-		let Meta(id, _) = self.id.clone().build(local_context, context, vocabulary)?;
+		let Meta(id, _) = self
+			.id
+			.clone()
+			.build(local_context, context, vocabulary, generator)?;
 		context.declare_layout(id, self.metadata().clone());
 		Ok(())
 	}
@@ -1137,17 +1193,20 @@ impl<M: Clone + Merge> Declare<M> for Meta<crate::LayoutDefinition<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 	type Target = ();
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
 		let Meta(def, _) = self;
-		let Meta(id, id_loc) = def.id.build(local_context, context, vocabulary)?;
+		let Meta(id, id_loc) = def
+			.id
+			.build(local_context, context, vocabulary, generator)?;
 
 		if let Some(doc) = def.doc {
-			let (label, doc) = doc.build(local_context, context, vocabulary)?;
+			let (label, doc) = doc.build(local_context, context, vocabulary, generator)?;
 			let node = context.get_mut(id).unwrap();
 
 			if let Some(label) = label {
@@ -1161,7 +1220,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 
 		let ty_id = match def.ty_id {
 			Some(ty_id) => {
-				let Meta(ty_id, ty_id_loc) = ty_id.build(local_context, context, vocabulary)?;
+				let Meta(ty_id, ty_id_loc) =
+					ty_id.build(local_context, context, vocabulary, generator)?;
 				context
 					.get_mut(id)
 					.unwrap()
@@ -1175,13 +1235,14 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 
 		match def.description {
 			Meta(crate::LayoutDescription::Normal(fields), fields_loc) => {
-				let fields_list = context.try_create_list_with::<Error<M>, _, _>(
+				let fields_list = context.try_create_list_with::<Error<M>, _, _, _, _>(
 					vocabulary,
+					generator,
 					fields,
-					|field, context, vocabulary| {
+					|field, context, vocabulary, generator| {
 						local_context.scope = ty_id;
 						let Meta(item, item_loc) =
-							field.build(local_context, context, vocabulary)?;
+							field.build(local_context, context, vocabulary, generator)?;
 						local_context.scope = None;
 						Ok(Meta(item.into_term(), item_loc))
 					},
@@ -1196,7 +1257,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 			}
 			Meta(crate::LayoutDescription::Alias(expr), expr_loc) => {
 				local_context.next_id = Some(Meta(id, id_loc));
-				Meta(expr, expr_loc).build(local_context, context, vocabulary)?;
+				Meta(expr, expr_loc).build(local_context, context, vocabulary, generator)?;
 				local_context.next_id = None;
 			}
 		}
@@ -1208,11 +1269,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::Alias, M> {
 	type Target = Meta<treeldr::Name, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		_local_context: &mut LocalContext<M>,
 		_context: &mut Context<M, Descriptions>,
-		_vocabulary: &mut Vocabulary,
+		_vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(name, loc) = self;
 		match treeldr::Name::new(name.as_str()) {
@@ -1229,30 +1291,33 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::Alias, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(ty, loc) = self;
 
 		match ty {
 			crate::OuterLayoutExpr::Inner(e) => {
-				Meta(e, loc).build(local_context, context, vocabulary)
+				Meta(e, loc).build(local_context, context, vocabulary, generator)
 			}
 			crate::OuterLayoutExpr::Union(label, options) => {
-				let Meta(id, _) = local_context.anonymous_id(Some(label), vocabulary, loc.clone());
+				let Meta(id, _) =
+					local_context.anonymous_id(Some(label), vocabulary, generator, loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, loc.clone());
 				}
 
-				let variants = context.try_create_list_with::<Error<M>, _, _>(
+				let variants = context.try_create_list_with::<Error<M>, _, _, _, _>(
 					vocabulary,
+					generator,
 					options,
-					|layout_expr, context, vocabulary| {
+					|layout_expr, context, vocabulary, generator| {
 						let loc = layout_expr.metadata().clone();
-						let variant_id = Id::Blank(vocabulary.new_blank_label());
+						let variant_id = generator.next(vocabulary);
 
 						let (layout_expr, variant_name) = if layout_expr.value().expr.is_namable() {
 							let name = layout_expr.value().name.clone();
@@ -1267,10 +1332,10 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 						};
 
 						let Meta(layout, layout_loc) =
-							layout_expr.build(local_context, context, vocabulary)?;
+							layout_expr.build(local_context, context, vocabulary, generator)?;
 
 						let variant_name = variant_name
-							.map(|name| name.build(local_context, context, vocabulary))
+							.map(|name| name.build(local_context, context, vocabulary, generator))
 							.transpose()?;
 
 						context.declare_layout_variant(variant_id, loc.clone());
@@ -1299,7 +1364,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 				Ok(Meta(id, loc))
 			}
 			crate::OuterLayoutExpr::Intersection(label, layouts) => {
-				let Meta(id, _) = local_context.anonymous_id(Some(label), vocabulary, loc.clone());
+				let Meta(id, _) =
+					local_context.anonymous_id(Some(label), vocabulary, generator, loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, loc.clone());
 				}
@@ -1312,17 +1378,19 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 							local_context,
 							context,
 							vocabulary,
+							generator,
 						)?),
 						Err(other) => true_layouts.push(Meta(other, loc)),
 					}
 				}
 
-				let layouts_list = context.try_create_list_with::<Error<M>, _, _>(
+				let layouts_list = context.try_create_list_with::<Error<M>, _, _, _, _>(
 					vocabulary,
+					generator,
 					true_layouts,
-					|layout_expr, context, vocabulary| {
+					|layout_expr, context, vocabulary, generator| {
 						let Meta(id, loc) =
-							layout_expr.build(local_context, context, vocabulary)?;
+							layout_expr.build(local_context, context, vocabulary, generator)?;
 						Ok(Meta(id.into_term(), loc))
 					},
 				)?;
@@ -1345,24 +1413,30 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutRestrictedField<M>, M> {
 	type Target = Meta<LayoutRestrictedField<M>, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(r, loc) = self;
 
 		let field_name = match r.alias {
-			Some(alias) => Some(alias.build(local_context, context, vocabulary)?),
+			Some(alias) => Some(alias.build(local_context, context, vocabulary, generator)?),
 			None => None,
 		};
 
 		Ok(Meta(
 			LayoutRestrictedField {
-				field_prop: Some(r.prop.build(local_context, context, vocabulary)?),
+				field_prop: Some(
+					r.prop
+						.build(local_context, context, vocabulary, generator)?,
+				),
 				field_name,
-				restriction: r.restriction.build(local_context, context, vocabulary)?,
+				restriction: r
+					.restriction
+					.build(local_context, context, vocabulary, generator)?,
 			},
 			loc,
 		))
@@ -1372,18 +1446,22 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutRestrictedField<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutFieldRestriction<M>, M> {
 	type Target = Meta<LayoutFieldRestriction, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(r, loc) = self;
 
 		let r = match r {
-			crate::LayoutFieldRestriction::Range(r) => {
-				LayoutFieldRestriction::Range(r.build(local_context, context, vocabulary)?)
-			}
+			crate::LayoutFieldRestriction::Range(r) => LayoutFieldRestriction::Range(r.build(
+				local_context,
+				context,
+				vocabulary,
+				generator,
+			)?),
 			crate::LayoutFieldRestriction::Cardinality(c) => LayoutFieldRestriction::Cardinality(c),
 		};
 
@@ -1394,19 +1472,22 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutFieldRestriction<M>, M> {
 impl<M: Clone + Merge> Build<M> for crate::LayoutFieldRangeRestriction<M> {
 	type Target = LayoutFieldRangeRestriction;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		match self {
 			Self::Any(layout_expr) => {
-				let Meta(id, _) = layout_expr.build(local_context, context, vocabulary)?;
+				let Meta(id, _) =
+					layout_expr.build(local_context, context, vocabulary, generator)?;
 				Ok(LayoutFieldRangeRestriction::Any(id))
 			}
 			Self::All(layout_expr) => {
-				let Meta(id, _) = layout_expr.build(local_context, context, vocabulary)?;
+				let Meta(id, _) =
+					layout_expr.build(local_context, context, vocabulary, generator)?;
 				Ok(LayoutFieldRangeRestriction::All(id))
 			}
 		}
@@ -1416,18 +1497,21 @@ impl<M: Clone + Merge> Build<M> for crate::LayoutFieldRangeRestriction<M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::NamedInnerLayoutExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(this, loc) = self;
 		let is_namable = this.expr.is_namable();
-		let Meta(id, expr_loc) = this.expr.build(local_context, context, vocabulary)?;
+		let Meta(id, expr_loc) = this
+			.expr
+			.build(local_context, context, vocabulary, generator)?;
 
 		if let Some(name) = this.name {
-			let Meta(name, name_loc) = name.build(local_context, context, vocabulary)?;
+			let Meta(name, name_loc) = name.build(local_context, context, vocabulary, generator)?;
 			if is_namable {
 				context
 					.get_mut(id)
@@ -1447,20 +1531,23 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::NamedInnerLayoutExpr<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(expr, loc) = self;
 
 		match expr {
-			crate::InnerLayoutExpr::Outer(outer) => outer.build(local_context, context, vocabulary),
+			crate::InnerLayoutExpr::Outer(outer) => {
+				outer.build(local_context, context, vocabulary, generator)
+			}
 			crate::InnerLayoutExpr::Id(id) => {
 				let alias_id = local_context.next_id.take();
 
-				let id = id.build(local_context, context, vocabulary)?;
+				let id = id.build(local_context, context, vocabulary, generator)?;
 
 				match alias_id {
 					Some(Meta(alias_id, alias_id_loc)) => {
@@ -1477,7 +1564,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 				}
 			}
 			crate::InnerLayoutExpr::Primitive(p) => {
-				let Meta(id, _) = local_context.anonymous_id(None, vocabulary, loc.clone());
+				let Meta(id, _) =
+					local_context.anonymous_id(None, vocabulary, generator, loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, loc.clone());
 				}
@@ -1494,7 +1582,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 				let id = local_context.next_id.take();
 
 				let Meta(deref_ty, deref_loc) =
-					ty_expr.build(local_context, context, vocabulary)?;
+					ty_expr.build(local_context, context, vocabulary, generator)?;
 
 				let id = match id {
 					Some(Meta(id, _)) => {
@@ -1504,32 +1592,37 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 
 						let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
 						layout.set_type(deref_ty, deref_loc)?;
-						let id_layout = Id::Iri(Term::TreeLdr(TreeLdr::Primitive(
+						let id_layout = Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Primitive(
 							treeldr::layout::Primitive::Iri,
-						)));
+						))));
 						layout.set_reference(id_layout, loc.clone())?;
 						id
 					}
-					None => {
-						context.standard_reference(vocabulary, deref_ty, loc.clone(), deref_loc)?
-					}
+					None => context.standard_reference(
+						vocabulary,
+						generator,
+						deref_ty,
+						loc.clone(),
+						deref_loc,
+					)?,
 				};
 
 				Ok(Meta(id, loc))
 			}
 			crate::InnerLayoutExpr::Literal(lit) => {
-				local_context.insert_literal_layout(context, vocabulary, Meta(lit, loc))
+				local_context.insert_literal_layout(context, vocabulary, generator, Meta(lit, loc))
 			}
 			crate::InnerLayoutExpr::FieldRestriction(_) => {
 				Err(Meta(LocalError::PropertyRestrictionOutsideIntersection, loc).into())
 			}
 			crate::InnerLayoutExpr::Array(label, item) => {
-				let Meta(id, _) = local_context.anonymous_id(Some(label), vocabulary, loc.clone());
+				let Meta(id, _) =
+					local_context.anonymous_id(Some(label), vocabulary, generator, loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, loc.clone());
 				}
 
-				let Meta(item_id, _) = item.build(local_context, context, vocabulary)?;
+				let Meta(item_id, _) = item.build(local_context, context, vocabulary, generator)?;
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
 				let semantics = if local_context.implicit_definition {
@@ -1552,23 +1645,26 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M, Descriptions>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(def, loc) = self;
 
-		let id = Id::Blank(vocabulary.new_blank_label());
+		let id = generator.next(vocabulary);
 
-		let Meta(prop_id, prop_id_loc) = def.id.build(local_context, context, vocabulary)?;
+		let Meta(prop_id, prop_id_loc) =
+			def.id
+				.build(local_context, context, vocabulary, generator)?;
 
 		let Meta(name, name_loc) = def
 			.alias
 			.unwrap_or_else(|| match prop_id {
 				Id::Iri(id) => {
-					let iri = id.iri(vocabulary).unwrap();
+					let iri = vocabulary.iri(&id).unwrap();
 
 					let id = match iri.fragment() {
 						Some(fragment) => fragment.to_string(),
@@ -1583,7 +1679,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 				}
 				_ => panic!("invalid property IRI"),
 			})
-			.build(local_context, context, vocabulary)?;
+			.build(local_context, context, vocabulary, generator)?;
 
 		let mut required_loc = None;
 		let mut multiple_loc = None;
@@ -1591,7 +1687,9 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 		let layout = match def.layout {
 			Some(Meta(layout, _)) => {
 				let scope = local_context.scope.take();
-				let layout_id = layout.expr.build(local_context, context, vocabulary)?;
+				let layout_id = layout
+					.expr
+					.build(local_context, context, vocabulary, generator)?;
 				local_context.scope = scope;
 
 				for Meta(ann, ann_loc) in layout.annotations {
@@ -1606,7 +1704,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 						match multiple_loc {
 							Some(multiple_loc) => {
 								// Wrap inside non-empty set.
-								let container_id = Id::Blank(vocabulary.new_blank_label());
+								let container_id = generator.next(vocabulary);
 								context.declare_layout(container_id, multiple_loc.clone());
 								let container_layout = context
 									.get_mut(container_id)
@@ -1619,7 +1717,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 							}
 							None => {
 								// Wrap inside non-empty set.
-								let container_id = Id::Blank(vocabulary.new_blank_label());
+								let container_id = generator.next(vocabulary);
 								context.declare_layout(container_id, required_loc.clone());
 								let container_layout = context
 									.get_mut(container_id)
@@ -1636,7 +1734,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 						match multiple_loc {
 							Some(multiple_loc) => {
 								// Wrap inside set.
-								let container_id = Id::Blank(vocabulary.new_blank_label());
+								let container_id = generator.next(vocabulary);
 								context.declare_layout(container_id, multiple_loc.clone());
 								let container_layout = context
 									.get_mut(container_id)
@@ -1649,7 +1747,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 							}
 							None => {
 								// Wrap inside option.
-								let container_id = Id::Blank(vocabulary.new_blank_label());
+								let container_id = generator.next(vocabulary);
 								let Meta(item_layout_id, item_layout_loc) = layout_id;
 								context.declare_layout(container_id, item_layout_loc.clone());
 								let container_layout = context
@@ -1672,7 +1770,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 
 		let doc = def
 			.doc
-			.map(|doc| doc.build(local_context, context, vocabulary))
+			.map(|doc| doc.build(local_context, context, vocabulary, generator))
 			.transpose()?;
 
 		context.declare_layout_field(id, loc.clone());
@@ -1708,11 +1806,12 @@ pub enum LayoutDescription<M> {
 }
 
 impl<M: Clone> LayoutDescription<M> {
-	pub fn simplify(
+	pub fn simplify<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		causes: &M,
 	) -> Result<treeldr_build::layout::Description<M>, Error<M>>
 	where
@@ -1733,7 +1832,7 @@ impl<M: Clone> LayoutDescription<M> {
 
 				let mut result = IntersectedLayout::try_from_iter(layouts, source, causes.clone())?;
 				result = result.apply_restrictions(restricted_fields)?;
-				result.into_standard_description(source, target, vocabulary)
+				result.into_standard_description(source, target, vocabulary, generator)
 			}
 		}
 	}
@@ -1751,26 +1850,28 @@ impl<M: Clone + Merge>
 	treeldr_build::TryMap<M, Error<M>, Descriptions, treeldr_build::StandardDescriptions>
 	for TrySimplify
 {
-	fn ty(
+	fn ty<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		a: treeldr_build::ty::Description<M>,
 		_causes: &M,
 		_source: &Context<M, Descriptions>,
 		_target: &mut Context<M>,
-		_vocabulary: &mut Vocabulary,
+		_vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
 	) -> Result<treeldr_build::ty::Description<M>, Error<M>> {
 		Ok(a)
 	}
 
-	fn layout(
+	fn layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		a: LayoutDescription<M>,
 		causes: &M,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<treeldr_build::layout::Description<M>, Error<M>> {
-		a.simplify(source, target, vocabulary, causes)
+		a.simplify(source, target, vocabulary, generator, causes)
 	}
 }
 

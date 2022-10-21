@@ -5,8 +5,9 @@ use crate::build::{
 };
 use locspan::{BorrowStripped, Meta};
 use locspan_derive::StrippedPartialEq;
+use rdf_types::{Generator, VocabularyMut};
 use std::collections::BTreeMap;
-use treeldr::{metadata::Merge, vocab::*, Id, MetaOption, Name};
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, MetaOption, Name};
 use treeldr_build::{Context, ObjectToId};
 
 #[derive(Clone)]
@@ -204,24 +205,25 @@ impl<M: Clone> IntersectedStruct<M> {
 		Ok(true)
 	}
 
-	pub fn into_standard_description(
+	pub fn into_standard_description<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<treeldr_build::layout::Description<M>, Error<M>>
 	where
 		M: Merge,
 	{
 		let mut fields = Vec::new();
 		for Meta(field, causes) in self.fields {
-			match field.into_field(source, target, vocabulary, causes.clone())? {
+			match field.into_field(source, target, vocabulary, generator, causes.clone())? {
 				Some(field_id) => fields.push(Meta(field_id.into_term(), causes)),
 				None => return Ok(treeldr_build::layout::Description::Never),
 			}
 		}
 
-		let fields_id = target.create_list(vocabulary, fields)?;
+		let fields_id = target.create_list(vocabulary, generator, fields)?;
 		Ok(treeldr_build::layout::Description::Struct(fields_id))
 	}
 }
@@ -343,19 +345,20 @@ impl<M> FieldLayout<M> {
 		}
 	}
 
-	pub fn into_layout(
+	pub fn into_layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		causes: M,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Option<Meta<Id, M>>, Error<M>>
 	where
 		M: Clone + Merge,
 	{
 		match self
 			.restrictions
-			.into_layout(causes, source, target, vocabulary)?
+			.into_layout(causes, source, target, vocabulary, generator)?
 		{
 			Some(item_layout) => {
 				let Meta(desc, desc_causes) = self.desc;
@@ -364,6 +367,7 @@ impl<M> FieldLayout<M> {
 					desc_causes,
 					target,
 					vocabulary,
+					generator,
 				)))
 			}
 			None => Ok(None),
@@ -400,18 +404,19 @@ impl<M> FieldLayoutDescription<M> {
 		}
 	}
 
-	pub fn into_layout(
+	pub fn into_layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		item_layout: Meta<Id, M>,
 		causes: M,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Meta<Id, M>
 	where
 		M: Clone + Merge,
 	{
 		let Meta(item_layout, item_causes) = item_layout;
-		let id = Id::Blank(vocabulary.new_blank_label());
+		let id = generator.next(vocabulary);
 		target.declare_layout(id, causes.clone());
 		let layout = target.get_mut(id).unwrap().as_layout_mut().unwrap();
 
@@ -446,11 +451,12 @@ impl<M: Clone> IntersectedField<M> {
 		self.layout.is_required()
 	}
 
-	pub fn into_field(
+	pub fn into_field<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		causes: M,
 	) -> Result<Option<Id>, Error<M>>
 	where
@@ -459,9 +465,9 @@ impl<M: Clone> IntersectedField<M> {
 		let cause = causes.clone();
 		Ok(self
 			.layout
-			.into_layout(causes, source, target, vocabulary)?
+			.into_layout(causes, source, target, vocabulary, generator)?
 			.map(|layout| {
-				let id = Id::Blank(vocabulary.new_blank_label());
+				let id = generator.next(vocabulary);
 				target.declare_layout_field(id, cause);
 
 				let def = target.get_mut(id).unwrap().as_layout_field_mut().unwrap();
@@ -563,12 +569,13 @@ impl<M> FieldRestrictions<M> {
 		})
 	}
 
-	pub fn into_layout(
+	pub fn into_layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		causes: M,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<Option<Meta<Id, M>>, Error<M>>
 	where
 		M: Clone + Merge,
@@ -591,7 +598,9 @@ impl<M> FieldRestrictions<M> {
 		)?;
 
 		if result.has_id() || !result.needs_id() {
-			Ok(Some(result.into_layout(source, target, vocabulary)?))
+			Ok(Some(
+				result.into_layout(source, target, vocabulary, generator)?,
+			))
 		} else {
 			Err(Meta(
 				LocalError::AnonymousFieldLayoutIntersection(

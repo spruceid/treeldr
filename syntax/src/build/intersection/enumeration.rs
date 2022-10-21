@@ -1,7 +1,8 @@
 use super::{IntersectedLayout, IntersectedLayoutDescription};
 use crate::build::{Descriptions, Error};
 use locspan::Meta;
-use treeldr::{metadata::Merge, Id, MetaOption, Name, Vocabulary};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, MetaOption, Name};
 use treeldr_build::{Context, ObjectToId};
 
 #[derive(Clone)]
@@ -149,11 +150,12 @@ impl<M: Clone> IntersectedEnum<M> {
 		}
 	}
 
-	pub fn into_standard_description(
+	pub fn into_standard_description<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 	) -> Result<treeldr_build::layout::Description<M>, Error<M>>
 	where
 		M: Merge,
@@ -166,17 +168,18 @@ impl<M: Clone> IntersectedEnum<M> {
 					Some((id, _)) => Ok(treeldr_build::layout::Description::Alias(id)),
 					None => variant
 						.layout
-						.into_standard_description(source, target, vocabulary),
+						.into_standard_description(source, target, vocabulary, generator),
 				}
 			}
 			_ => {
-				let variants_id = target.try_create_list_with::<Error<M>, _, _>(
+				let variants_id = target.try_create_list_with::<Error<M>, _, _, _, _>(
 					vocabulary,
+					generator,
 					self.variants,
-					|Meta(variant, meta), target, vocabulary| {
+					|Meta(variant, meta), target, vocabulary, generator| {
 						Ok(Meta(
 							variant
-								.into_variant(source, target, vocabulary, &meta)?
+								.into_variant(source, target, vocabulary, generator, &meta)?
 								.into_term(),
 							meta,
 						))
@@ -207,19 +210,22 @@ pub struct IntersectedVariant<M> {
 }
 
 impl<M: Clone> IntersectedVariant<M> {
-	pub fn into_variant(
+	pub fn into_variant<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		source: &Context<M, Descriptions>,
 		target: &mut Context<M>,
-		vocabulary: &mut Vocabulary,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		causes: &M,
 	) -> Result<Id, Error<M>>
 	where
 		M: Merge,
 	{
-		let layout = self.layout.into_layout(source, target, vocabulary)?;
+		let layout = self
+			.layout
+			.into_layout(source, target, vocabulary, generator)?;
 
-		let id = Id::Blank(vocabulary.new_blank_label());
+		let id = generator.next(vocabulary);
 		target.declare_layout_variant(id, causes.clone());
 
 		let def = target.get_mut(id).unwrap().as_layout_variant_mut().unwrap();
