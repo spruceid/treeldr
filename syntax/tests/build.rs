@@ -75,99 +75,87 @@ fn parse_treeldr<P: AsRef<Path>>(
 	quads.into_iter().collect()
 }
 
-fn test<I: AsRef<Path>, O: AsRef<Path>>(input_path: I, expected_output_path: O) {
-	let mut vocabulary = rdf_types::IndexVocabulary::<IriIndex, BlankIdIndex>::new();
-	let output = parse_treeldr(&mut vocabulary, input_path);
-	let expected_output = parse_nquads(&mut vocabulary, expected_output_path);
+pub enum Test {
+	Positive {
+		input: &'static str,
+		expected_output: &'static str,
+	},
+	Negative {
+		input: &'static str,
+	},
+}
 
-	for quad in output.quads() {
-		println!("{} .", quad.with(&vocabulary))
+impl Test {
+	fn run(self) {
+		match self {
+			Self::Positive {
+				input,
+				expected_output,
+			} => {
+				let mut vocabulary = rdf_types::IndexVocabulary::<IriIndex, BlankIdIndex>::new();
+				let output = parse_treeldr(&mut vocabulary, input);
+				let expected_output = parse_nquads(&mut vocabulary, expected_output);
+
+				for quad in output.quads() {
+					println!("{} .", quad.with(&vocabulary))
+				}
+
+				assert!(output.is_isomorphic_to(&expected_output))
+			}
+			Self::Negative { input } => {
+				let mut vocabulary = rdf_types::IndexVocabulary::<IriIndex, BlankIdIndex>::new();
+				let output = parse_treeldr(&mut vocabulary, input);
+				for quad in output.quads() {
+					println!("{} .", quad.with(&vocabulary))
+				}
+			}
+		}
 	}
-
-	assert!(output.is_isomorphic_to(&expected_output))
 }
 
-fn negative_test<I: AsRef<Path>>(input_path: I) {
-	let mut vocabulary = rdf_types::IndexVocabulary::<IriIndex, BlankIdIndex>::new();
-	let output = parse_treeldr(&mut vocabulary, input_path);
-	for quad in output.quads() {
-		println!("{} .", quad.with(&vocabulary))
-	}
+macro_rules! positive {
+	{ $($id:ident),* } => {
+		$(
+			#[test]
+			fn $id () {
+				Test::Positive {
+					input: concat!("tests/build/", stringify!($id), "-in.tldr"),
+					expected_output: concat!("tests/build/", stringify!($id), "-out.nq")
+				}.run()
+			}
+		)*
+	};
 }
 
-#[test]
-fn t001() {
-	test("tests/001-in.tldr", "tests/001-out.nq")
+macro_rules! negative {
+	{ $($id:ident),* } => {
+		$(
+			#[test]
+			#[should_panic]
+			fn $id () {
+				Test::Negative {
+					input: concat!("tests/build/", stringify!($id), "-in.tldr")
+				}.run()
+			}
+		)*
+	};
 }
 
-#[test]
-fn t002() {
-	test("tests/002-in.tldr", "tests/002-out.nq")
+positive! {
+	t001,
+	t002,
+	t003,
+	t004,
+	t005,
+	t007,
+	t008,
+	t009,
+	t010,
+	t011,
+	t012
 }
 
-#[test]
-fn t003() {
-	test("tests/003-in.tldr", "tests/003-out.nq")
-}
-
-#[test]
-fn t004() {
-	test("tests/004-in.tldr", "tests/004-out.nq")
-}
-
-#[test]
-fn t005() {
-	test("tests/005-in.tldr", "tests/005-out.nq")
-}
-
-#[test]
-fn t007() {
-	test("tests/007-in.tldr", "tests/007-out.nq")
-}
-
-#[test]
-fn t008() {
-	test("tests/008-in.tldr", "tests/008-out.nq")
-}
-
-#[test]
-fn t009() {
-	test("tests/009-in.tldr", "tests/009-out.nq")
-}
-
-#[test]
-fn t010() {
-	test("tests/010-in.tldr", "tests/010-out.nq")
-}
-
-#[test]
-fn t011() {
-	test("tests/011-in.tldr", "tests/011-out.nq")
-}
-
-#[test]
-fn t012() {
-	test("tests/012-in.tldr", "tests/012-out.nq")
-}
-
-#[test]
-fn t013() {
-	test("tests/013-in.tldr", "tests/013-out.nq")
-}
-
-#[test]
-fn t014() {
-	test("tests/014-in.tldr", "tests/014-out.nq")
-}
-
-#[test]
-#[should_panic]
-fn e01() {
-	negative_test("tests/e01.tldr")
-}
-
-#[test]
-#[should_panic]
-fn e02() {
-	negative_test("tests/e02.tldr")
+negative! {
+	e01,
+	e02
 }

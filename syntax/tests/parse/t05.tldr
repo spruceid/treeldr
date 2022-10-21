@@ -1,0 +1,1 @@
+type Name { prop1: Type1, prop2: Type2 }
