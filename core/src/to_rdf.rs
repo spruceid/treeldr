@@ -1,10 +1,6 @@
-use crate::{layout, prop, ty, vocab, Documentation, Id, IriIndex, Model, Ref, BlankIdIndex};
-use rdf_types::{Literal, Object, Quad, Vocabulary};
+use crate::{layout, prop, ty, vocab, BlankIdIndex, Documentation, Id, IriIndex, Model, Ref};
+use rdf_types::{Generator, Literal, Object, Quad, Vocabulary};
 use vocab::{StrippedObject, StrippedQuad, Term};
-
-pub trait Generator: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex> {
-	fn next(&mut self) -> Id;
-}
 
 pub struct Options {
 	/// Ignore standard definitions.
@@ -22,17 +18,23 @@ impl Default for Options {
 }
 
 fn is_standard_vocabulary(id: Id) -> bool {
-	!matches!(id, Id::Blank(_) | Id::Iri(IriIndex::Iri(_)))
+	matches!(id, Id::Iri(IriIndex::Iri(_)))
 }
 
 impl<F> Model<F> {
-	pub fn to_rdf(&self, generator: &mut impl Generator, quads: &mut Vec<StrippedQuad>) {
-		self.to_rdf_with(generator, quads, Options::default())
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+	) {
+		self.to_rdf_with(vocabulary, generator, quads, Options::default())
 	}
 
-	pub fn to_rdf_with(
+	pub fn to_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
-		generator: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) {
@@ -40,7 +42,7 @@ impl<F> Model<F> {
 			if !options.ignore_standard_vocabulary || !is_standard_vocabulary(id) {
 				if let Some(ty_ref) = node.as_type() {
 					let ty = self.types().get(ty_ref).unwrap();
-					ty.to_rdf(self, generator, quads)
+					ty.to_rdf(self, vocabulary, generator, quads)
 				}
 
 				if let Some(prop_ref) = node.as_property() {
@@ -50,7 +52,7 @@ impl<F> Model<F> {
 
 				if let Some(layout_ref) = node.as_layout() {
 					let layout = self.layouts().get(layout_ref).unwrap();
-					layout.to_rdf(self, generator, quads)
+					layout.to_rdf(vocabulary, self, generator, quads)
 				}
 
 				if let Some(label) = node.label() {
@@ -81,8 +83,12 @@ impl Documentation {
 	}
 }
 
-fn to_rdf_list<I: IntoIterator<Item = StrippedObject>>(
-	generator: &mut impl Generator,
+fn to_rdf_list<
+	V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	I: IntoIterator<Item = StrippedObject>,
+>(
+	vocabulary: &mut V,
+	generator: &mut impl Generator<V>,
 	quads: &mut Vec<StrippedQuad>,
 	iter: I,
 ) -> Id
@@ -92,7 +98,7 @@ where
 	let mut head = Id::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::Nil)));
 
 	for item in iter.into_iter().rev() {
-		let id = generator.next();
+		let id = generator.next(vocabulary);
 		quads.push(Quad(
 			id,
 			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
@@ -118,10 +124,11 @@ where
 }
 
 impl<F> ty::Definition<F> {
-	pub fn to_rdf(
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		model: &Model<F>,
-		generator: &mut impl Generator,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 	) {
 		let class = if self.is_datatype(model) {
@@ -139,17 +146,27 @@ impl<F> ty::Definition<F> {
 
 		match self.description() {
 			ty::Description::Empty => (),
-			ty::Description::Data(d) => d.to_rdf(self.id(), generator, quads),
+			ty::Description::Data(d) => d.to_rdf(self.id(), vocabulary, generator, quads),
 			ty::Description::Normal(_) => (),
-			ty::Description::Union(u) => u.to_rdf(model, self.id(), generator, quads),
-			ty::Description::Intersection(i) => i.to_rdf(model, self.id(), generator, quads),
-			ty::Description::Restriction(r) => r.to_rdf(model, self.id(), generator, quads),
+			ty::Description::Union(u) => u.to_rdf(vocabulary, model, self.id(), generator, quads),
+			ty::Description::Intersection(i) => {
+				i.to_rdf(vocabulary, model, self.id(), generator, quads)
+			}
+			ty::Description::Restriction(r) => {
+				r.to_rdf(vocabulary, model, self.id(), generator, quads)
+			}
 		}
 	}
 }
 
 impl ty::DataType {
-	pub fn to_rdf(&self, id: Id, generator: &mut impl Generator, quads: &mut Vec<StrippedQuad>) {
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		id: Id,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+	) {
 		match self {
 			Self::Primitive(_) => (),
 			Self::Derived(d) => {
@@ -160,7 +177,7 @@ impl ty::DataType {
 					None,
 				));
 
-				let restrictions_id = d.restrictions().to_rdf(generator, quads);
+				let restrictions_id = d.restrictions().to_rdf(vocabulary, generator, quads);
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Owl(vocab::Owl::WithRestrictions)),
@@ -173,16 +190,21 @@ impl ty::DataType {
 }
 
 impl<'a> ty::data::Restrictions<'a> {
-	pub fn to_rdf(self, generator: &mut impl Generator, quads: &mut Vec<StrippedQuad>) -> Id {
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+	) -> Id {
 		let restrictions: Vec<_> = self
 			.map(|restriction| {
-				let id = generator.next();
+				let id = generator.next(vocabulary);
 				restriction.to_rdf(id, quads);
 				id.into_term()
 			})
 			.collect();
 
-		to_rdf_list(generator, quads, restrictions)
+		to_rdf_list(vocabulary, generator, quads, restrictions)
 	}
 }
 
@@ -355,14 +377,16 @@ impl<'a> ty::data::restriction::string::Restriction<'a> {
 }
 
 impl<F> ty::Union<F> {
-	pub fn to_rdf(
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
+		vocabulary: &mut V,
 		model: &Model<F>,
 		id: Id,
-		generator: &mut impl Generator,
+		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 	) {
 		let list_id = to_rdf_list(
+			vocabulary,
 			generator,
 			quads,
 			self.options()
@@ -379,14 +403,16 @@ impl<F> ty::Union<F> {
 }
 
 impl<F> ty::Intersection<F> {
-	pub fn to_rdf(
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
+		vocabulary: &mut V,
 		model: &Model<F>,
 		id: Id,
-		generator: &mut impl Generator,
+		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 	) {
 		let list_id = to_rdf_list(
+			vocabulary,
 			generator,
 			quads,
 			self.types()
@@ -403,11 +429,12 @@ impl<F> ty::Intersection<F> {
 }
 
 impl<F> ty::Restriction<F> {
-	pub fn to_rdf(
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
+		vocabulary: &mut V,
 		model: &Model<F>,
 		id: Id,
-		generator: &mut impl Generator,
+		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 	) {
 		match self.restrictions().len() {
@@ -423,13 +450,13 @@ impl<F> ty::Restriction<F> {
 					.restrictions()
 					.iter()
 					.map(|restriction| {
-						let id = generator.next();
+						let id = generator.next(vocabulary);
 						restriction.to_rdf(model, id, self.property(), quads);
 						id.into_term()
 					})
 					.collect();
 
-				let list_id = to_rdf_list(generator, quads, restrictions);
+				let list_id = to_rdf_list(vocabulary, generator, quads, restrictions);
 
 				quads.push(Quad(
 					id,
@@ -580,10 +607,11 @@ impl<F> prop::Definition<F> {
 }
 
 impl<F> layout::Definition<F> {
-	pub fn to_rdf(
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
+		vocabulary: &mut V,
 		model: &Model<F>,
-		generator: &mut impl Generator,
+		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 	) {
 		quads.push(Quad(
@@ -613,9 +641,15 @@ impl<F> layout::Definition<F> {
 
 		match self.description().value() {
 			layout::Description::Never(_) => (),
-			layout::Description::Primitive(n, _) => n.to_rdf(self.id(), generator, quads),
-			layout::Description::Struct(s) => s.to_rdf(model, self.id(), generator, quads),
-			layout::Description::Enum(e) => e.to_rdf(model, self.id(), generator, quads),
+			layout::Description::Primitive(n, _) => {
+				n.to_rdf(vocabulary, self.id(), generator, quads)
+			}
+			layout::Description::Struct(s) => {
+				s.to_rdf(vocabulary, model, self.id(), generator, quads)
+			}
+			layout::Description::Enum(e) => {
+				e.to_rdf(vocabulary, model, self.id(), generator, quads)
+			}
 			layout::Description::Required(r) => r.to_rdf(model, self.id(), quads),
 			layout::Description::Option(o) => o.to_rdf(model, self.id(), quads),
 			layout::Description::Array(a) => a.to_rdf(model, self.id(), quads),
@@ -734,7 +768,13 @@ impl<F> layout::Set<F> {
 }
 
 impl layout::RestrictedPrimitive {
-	pub fn to_rdf(&self, id: Id, generator: &mut impl Generator, quads: &mut Vec<StrippedQuad>) {
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		vocabulary: &mut V,
+		id: Id,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+	) {
 		if self.is_restricted() {
 			quads.push(Quad(
 				id,
@@ -743,7 +783,7 @@ impl layout::RestrictedPrimitive {
 				None,
 			));
 
-			let restrictions_id = self.restrictions().to_rdf(generator, quads);
+			let restrictions_id = self.restrictions().to_rdf(vocabulary, generator, quads);
 			quads.push(Quad(
 				id,
 				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::WithRestrictions)),
@@ -767,16 +807,21 @@ impl layout::RestrictedPrimitive {
 }
 
 impl<'a> layout::primitive::Restrictions<'a> {
-	pub fn to_rdf(self, generator: &mut impl Generator, quads: &mut Vec<StrippedQuad>) -> Id {
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+	) -> Id {
 		let restrictions: Vec<_> = self
 			.map(|restriction| {
-				let id = generator.next();
+				let id = generator.next(vocabulary);
 				restriction.to_rdf(id, quads);
 				id.into_term()
 			})
 			.collect();
 
-		to_rdf_list(generator, quads, restrictions)
+		to_rdf_list(vocabulary, generator, quads, restrictions)
 	}
 }
 
@@ -968,19 +1013,24 @@ impl<'a> layout::primitive::restricted::string::Restriction<'a> {
 }
 
 impl<F> layout::Struct<F> {
-	pub fn to_rdf(
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
+		vocabulary: &mut V,
 		model: &Model<F>,
 		id: Id,
-		generator: &mut impl Generator,
+		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 	) {
 		let mut fields = Vec::with_capacity(self.fields().len());
 		for field in self.fields() {
-			fields.push(field.to_rdf(model, generator, quads).into_term());
+			fields.push(
+				field
+					.to_rdf(vocabulary, model, generator, quads)
+					.into_term(),
+			);
 		}
 
-		let fields_list = to_rdf_list(generator, quads, fields);
+		let fields_list = to_rdf_list(vocabulary, generator, quads, fields);
 
 		quads.push(Quad(
 			id,
@@ -992,13 +1042,14 @@ impl<F> layout::Struct<F> {
 }
 
 impl<F> layout::Field<F> {
-	pub fn to_rdf(
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
+		vocabulary: &mut V,
 		model: &Model<F>,
-		generator: &mut impl Generator,
+		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 	) -> Id {
-		let id = generator.next();
+		let id = generator.next(vocabulary);
 
 		quads.push(Quad(
 			id,
@@ -1046,19 +1097,24 @@ impl<F> layout::Field<F> {
 }
 
 impl<F> layout::Enum<F> {
-	pub fn to_rdf(
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
+		vocabulary: &mut V,
 		model: &Model<F>,
 		id: Id,
-		generator: &mut impl Generator,
+		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 	) {
 		let mut variants = Vec::with_capacity(self.variants().len());
 		for variant in self.variants() {
-			variants.push(variant.to_rdf(model, generator, quads).into_term());
+			variants.push(
+				variant
+					.to_rdf(vocabulary, model, generator, quads)
+					.into_term(),
+			);
 		}
 
-		let variants_list = to_rdf_list(generator, quads, variants);
+		let variants_list = to_rdf_list(vocabulary, generator, quads, variants);
 
 		quads.push(Quad(
 			id,
@@ -1070,13 +1126,14 @@ impl<F> layout::Enum<F> {
 }
 
 impl<F> layout::Variant<F> {
-	pub fn to_rdf(
+	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
+		vocabulary: &mut V,
 		model: &Model<F>,
-		generator: &mut impl Generator,
+		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 	) -> Id {
-		let id = generator.next();
+		let id = generator.next(vocabulary);
 
 		quads.push(Quad(
 			id,
