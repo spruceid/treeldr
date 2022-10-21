@@ -1,0 +1,4 @@
+layout Name {
+	field1: Layout1,
+	field2: Layout2
+}

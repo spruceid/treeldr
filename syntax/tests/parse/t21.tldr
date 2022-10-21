@@ -1,0 +1,11 @@
+type Name
+// comment
+{ // comment
+	prop1: Type1, // comment
+	// comment
+
+	prop2: Type2 // comment
+
+	// comment
+	
+}
