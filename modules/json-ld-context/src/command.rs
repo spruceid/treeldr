@@ -77,7 +77,7 @@ impl Command {
 			rdf_type_to_layout_name: self.rdf_type_to_layout_name,
 		};
 
-		match crate::generate(vocabulary, model, options, layouts) {
+		match crate::generate(vocabulary, model, options, &layouts) {
 			Ok(definition) => {
 				use json_ld::syntax::Print;
 				println!("{}", definition.pretty_print());

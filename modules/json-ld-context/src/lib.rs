@@ -337,6 +337,7 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 	}
 }
 
+#[derive(Debug)]
 pub enum Error {
 	Ambiguity(String),
 }
@@ -354,12 +355,12 @@ pub fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
 	vocabulary: &V,
 	model: &treeldr::Model<M>,
 	options: Options,
-	layouts: Vec<Ref<layout::Definition<M>>>,
+	layouts: &[Ref<layout::Definition<M>>],
 ) -> Result<json_ld::syntax::context::Value<()>, Error> {
 	let mut builder = ContextBuilder::new(vocabulary, model, &options, None, true);
 
 	for layout_ref in layouts {
-		builder.insert_layout_terms(layout_ref, false)?;
+		builder.insert_layout_terms(*layout_ref, false)?;
 	}
 
 	builder.build()
