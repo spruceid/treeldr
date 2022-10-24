@@ -1,0 +1,12 @@
+use <https://treeldr.org/> as tldr;
+
+type Integer with tldr:Integer;
+
+type Foo {
+	prop1: Integer,
+	bar: Bar
+}
+
+type Bar {
+	prop2: Integer
+}

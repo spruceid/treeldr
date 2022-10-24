@@ -16,3 +16,8 @@ clap = { version = "3.0", features = ["derive"] }
 locspan = "0.7.11"
 derivative = "2.2.0"
 contextual = "0.1.3"
+
+[dev-dependencies]
+treeldr-syntax = { path = "../../syntax", version = "0.1" }
+treeldr-build = { path = "../../build", version = "0.1" }
+static-iref = "2.0.0"
