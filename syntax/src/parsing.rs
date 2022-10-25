@@ -960,7 +960,7 @@ impl<M: MaybeSpanned<Span = Span>> Parse<M> for FieldDefinition<M> {
 }
 
 impl<M> Parse<M> for Alias {
-	const FIRST: &'static [TokenKind] = &[TokenKind::Id];
+	const FIRST: &'static [TokenKind] = &[TokenKind::Id, TokenKind::Literal];
 
 	fn parse_from<L, F>(
 		parser: &mut Parser<L, F>,
@@ -977,6 +977,9 @@ impl<M> Parse<M> for Alias {
 				Box::new(Error::InvalidAlias(id)),
 				parser.build_metadata(loc),
 			)),
+			Token::Literal(Literal::String(alias)) => {
+				Ok(Meta::new(Alias(alias), parser.build_metadata(loc)))
+			}
 			unexpected => Err(Meta::new(
 				Box::new(Error::Unexpected(Some(unexpected), vec![TokenKind::Id])),
 				parser.build_metadata(loc),

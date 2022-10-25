@@ -18,7 +18,7 @@ pub use command::Command;
 /// Generator options.
 #[derive(Default)]
 pub struct Options {
-	rdf_type_to_layout_name: bool,
+	pub rdf_type_to_layout_name: bool,
 }
 
 #[derive(Derivative)]
@@ -324,10 +324,12 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		let mut definition = json_ld::syntax::context::Definition::new();
 
 		for (term, term_definition) in &self.terms {
-			definition.bindings.insert(
-				Meta(term.clone().into(), ()),
-				Meta(term_definition.build(self)?, ()),
-			);
+			if term != "@type" {
+				definition.bindings.insert(
+					Meta(term.clone().into(), ()),
+					Meta(term_definition.build(self)?, ()),
+				);
+			}
 		}
 
 		Ok(json_ld::syntax::context::Value::One(Meta(

@@ -24,7 +24,7 @@ _:11 <http://www.w3.org/2000/01/rdf-schema#label> "Name of the product" .
 <https://example.com/product.schema.json> <http://www.w3.org/2000/01/rdf-schema#label> "Product" .
 <https://example.com/product.schema.json> <http://www.w3.org/2000/01/rdf-schema#comment> "A product from Acme's catalog" .
 <https://example.com/product.schema.json> <https://treeldr.org/fields> _:13 .
-<https://example.com/product.schema.json> <https://treeldr.org/name> "Product" .
+<https://example.com/product.schema.json> <https://treeldr.org/name> "product" .
 <https://example.com/product.schema.json> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 _:12 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
 _:12 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:11 .
