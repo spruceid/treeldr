@@ -118,7 +118,7 @@ impl<M: Clone> PropertyDefinition<M> {
 				.ty
 				.as_ref()
 				.map(|Meta(ty, ty_loc)| Meta(ty.implicit_layout_expr(), ty_loc.clone())),
-			alias: None,
+			alias: self.alias.clone(),
 			doc: self.doc.clone(),
 		}
 	}
