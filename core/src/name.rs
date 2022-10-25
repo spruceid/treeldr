@@ -50,13 +50,13 @@ impl Deref for Name {
 	type Target = str;
 
 	fn deref(&self) -> &str {
-		&self.normalized
+		self.as_str()
 	}
 }
 
 impl Borrow<str> for Name {
 	fn borrow(&self) -> &str {
-		&self.normalized
+		self.as_str()
 	}
 }
 
@@ -78,8 +78,7 @@ fn normalize(id: &str) -> Result<String, InvalidName> {
 
 	while let Some(c) = chars.next() {
 		match c {
-			c if c.is_ascii_digit() && result.is_empty() => break,
-			'_' | ' ' | '-' => {
+			'_' | ' ' | '-' | '.' | ',' | '/' => {
 				if !boundary {
 					boundary = true
 				}
@@ -98,9 +97,7 @@ fn normalize(id: &str) -> Result<String, InvalidName> {
 
 				result.push(c.to_lowercase().next().unwrap());
 			}
-			_ => {
-				return Err(InvalidName);
-			}
+			_ => (),
 		}
 
 		prev = Some(c);

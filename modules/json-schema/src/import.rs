@@ -189,7 +189,8 @@ pub fn import_regular_schema<
 	let (id, mut name) = match &schema.id {
 		Some(iri) => {
 			let id = Id::Iri(vocabulary.insert(iri.as_iri()));
-			let name = Name::from_iri(iri.as_iri()).ok().flatten();
+			let iri_without_ext = strip_json_schema_extension(iri.as_iri());
+			let name = Name::from_iri(iri_without_ext).ok().flatten();
 
 			(id, name)
 		}
@@ -229,6 +230,16 @@ pub fn import_regular_schema<
 	layout.set_description(desc.into(), M::default())?;
 
 	Ok(id)
+}
+
+fn strip_json_schema_extension(iri: Iri) -> Iri {
+	match iri.into_str().strip_suffix(".schema.json") {
+		Some(s) => match Iri::new(s) {
+			Ok(result) => result,
+			Err(_) => iri,
+		},
+		None => iri,
+	}
 }
 
 fn into_numeric(

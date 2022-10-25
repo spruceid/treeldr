@@ -8,6 +8,7 @@ use rdf_types::IriVocabulary;
 use static_iref::iri;
 use treeldr::Id;
 use treeldr_build::Document;
+use treeldr_json_ld_context::Options;
 use treeldr_syntax::Parse;
 
 pub enum Test {
@@ -15,10 +16,12 @@ pub enum Test {
 		input: &'static str,
 		layouts: &'static [&'static str],
 		expected_output: &'static str,
+		options: Options,
 	},
 	Negative {
 		input: &'static str,
 		layouts: &'static [&'static str],
+		options: Options,
 	},
 }
 
@@ -29,6 +32,7 @@ impl Test {
 				input,
 				layouts,
 				expected_output,
+				options,
 			} => {
 				let ast =
 					treeldr_syntax::Document::parse_str(&input, |span| span).expect("parse error");
@@ -78,13 +82,9 @@ impl Test {
 					})
 					.collect();
 
-				let output = treeldr_json_ld_context::generate(
-					&vocabulary,
-					&model,
-					treeldr_json_ld_context::Options::default(),
-					&layouts,
-				)
-				.expect("unable to generate LD context");
+				let output =
+					treeldr_json_ld_context::generate(&vocabulary, &model, options, &layouts)
+						.expect("unable to generate LD context");
 
 				let expected = json_ld::syntax::Value::parse_str(expected_output, |_| ())
 					.expect("invalid JSON");
@@ -104,7 +104,11 @@ impl Test {
 
 				assert!(success)
 			}
-			Self::Negative { input, layouts } => {
+			Self::Negative {
+				input,
+				layouts,
+				options,
+			} => {
 				let ast =
 					treeldr_syntax::Document::parse_str(&input, |span| span).expect("parse error");
 				let mut context = treeldr_build::Context::new();
@@ -153,13 +157,9 @@ impl Test {
 					})
 					.collect();
 
-				let output = treeldr_json_ld_context::generate(
-					&vocabulary,
-					&model,
-					treeldr_json_ld_context::Options::default(),
-					&layouts,
-				)
-				.expect("unable to generate LD context");
+				let output =
+					treeldr_json_ld_context::generate(&vocabulary, &model, options, &layouts)
+						.expect("unable to generate LD context");
 
 				eprintln!("output:\n{}", output.pretty_print());
 			}
@@ -168,14 +168,20 @@ impl Test {
 }
 
 macro_rules! positive {
-	{ $($id:ident : [$($iri:literal),*]),* } => {
+	{ $($id:ident : [$($iri:literal),*] $({ $($option:ident: $value:expr),* })?),* } => {
 		$(
 			#[test]
 			fn $id () {
 				Test::Positive {
 					input: include_str!(concat!("generate/", stringify!($id), "-in.tldr")),
 					layouts: &[$($iri,)*],
-					expected_output: include_str!(concat!("generate/", stringify!($id), "-out.json"))
+					expected_output: include_str!(concat!("generate/", stringify!($id), "-out.json")),
+					options: Options {
+						$($(
+							$option: $value,
+						)*)?
+						..Default::default()
+					}
 				}.run()
 			}
 		)*
@@ -183,14 +189,20 @@ macro_rules! positive {
 }
 
 macro_rules! negative {
-	{ $($id:ident : [$($iri:literal),*]),* } => {
+	{ $($id:ident : [$($iri:literal),*] $({ $($option:ident: $value:expr),* })?),* } => {
 		$(
 			#[test]
 			#[should_panic]
 			fn $id () {
 				Test::Negative {
 					input: include_str!(concat!("generate/", stringify!($id), ".tldr")),
-					layouts: &[$($iri,)*]
+					layouts: &[$($iri,)*],
+					options: Options {
+						$($(
+							$option: $value,
+						)*)?
+						..Default::default()
+					}
 				}.run()
 			}
 		)*
@@ -201,7 +213,8 @@ positive! {
 	t01: ["http://www.example.com/Foo"],
 	t02: ["http://www.example.com/Foo"],
 	t03: ["http://www.example.com/Foo"],
-	t04: ["http://www.example.com/Foo", "http://www.example.com/Bar"]
+	t04: ["http://www.example.com/Foo", "http://www.example.com/Bar"],
+	t05: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true }
 }
 
 negative! {
