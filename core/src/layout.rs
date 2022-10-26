@@ -4,6 +4,7 @@ use rdf_types::Subject;
 use shelves::Ref;
 
 pub mod array;
+pub mod container;
 pub mod enumeration;
 mod optional;
 pub mod primitive;
@@ -18,7 +19,7 @@ mod usages;
 pub use array::Array;
 pub use enumeration::{Enum, Variant};
 pub use optional::Optional;
-pub use primitive::{restricted::Restricted as RestrictedPrimitive, Primitive};
+pub use primitive::{restriction::Restricted as RestrictedPrimitive, Primitive};
 pub use reference::Reference;
 pub use required::Required;
 pub use set::Set;
@@ -65,7 +66,7 @@ pub enum Description<M> {
 	Never(MetaOption<Name, M>),
 
 	/// Primitive layout, such as a number, a string, etc.
-	Primitive(RestrictedPrimitive, MetaOption<Name, M>),
+	Primitive(RestrictedPrimitive<M>, MetaOption<Name, M>),
 
 	/// Reference.
 	Reference(Reference<M>),
@@ -110,10 +111,15 @@ impl<M> Description<M> {
 
 	/// Checks if this layout is required.
 	///
-	/// This means either the `required` container or a non-empty `set`
+	/// This means either the `required` container or a non-empty `set`/`array`
 	/// container.
 	pub fn is_required(&self) -> bool {
-		matches!(self, Self::Required(_)) // TODO checks for non-empty sets
+		match self {
+			Self::Required(_) => true,
+			Self::Set(s) => s.is_required(),
+			Self::Array(a) => a.is_required(),
+			_ => false,
+		}
 	}
 
 	/// Sets the new name of the layout.

@@ -60,7 +60,7 @@ impl<M: Clone> IntersectedStruct<M> {
 				}
 
 				for other_field in &self.fields {
-					if !other_field.property.is_set()
+					if !other_field.property.is_some()
 						&& other_field.name.value() == field.name.value()
 					{
 						return Some(other_field);

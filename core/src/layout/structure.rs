@@ -157,7 +157,7 @@ impl<M> Field<M> {
 	}
 
 	pub fn preferred_documentation<'a>(&'a self, model: &'a crate::Model<M>) -> &'a Documentation {
-		if self.doc.is_empty() && self.prop.is_set() {
+		if self.doc.is_empty() && self.prop.is_some() {
 			let prop_id = model
 				.properties()
 				.get(*self.prop.value().unwrap())

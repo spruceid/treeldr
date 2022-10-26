@@ -1,6 +1,8 @@
+use super::container::Restrictions;
 use crate::{MetaOption, Name, Ref};
 use locspan::Meta;
 
+/// Set layout.
 #[derive(Clone)]
 pub struct Set<M> {
 	/// Layout name, if any.
@@ -8,11 +10,22 @@ pub struct Set<M> {
 
 	/// Item layout.
 	item: Ref<super::Definition<M>>,
+
+	/// Restrictions.
+	restrictions: Restrictions<M>,
 }
 
 impl<M> Set<M> {
-	pub fn new(name: MetaOption<Name, M>, item: Ref<super::Definition<M>>) -> Self {
-		Self { name, item }
+	pub fn new(
+		name: MetaOption<Name, M>,
+		item: Ref<super::Definition<M>>,
+		restrictions: Restrictions<M>,
+	) -> Self {
+		Self {
+			name,
+			item,
+			restrictions,
+		}
 	}
 
 	pub fn name(&self) -> Option<&Meta<Name, M>> {
@@ -33,5 +46,13 @@ impl<M> Set<M> {
 
 	pub fn set_item_layout(&mut self, item: Ref<super::Definition<M>>) {
 		self.item = item
+	}
+
+	pub fn restrictions(&self) -> &Restrictions<M> {
+		&self.restrictions
+	}
+
+	pub fn is_required(&self) -> bool {
+		self.restrictions.is_required()
 	}
 }

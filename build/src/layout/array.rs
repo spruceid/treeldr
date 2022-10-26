@@ -2,7 +2,9 @@ use crate::{error, Error};
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::StrippedPartialEq;
-use treeldr::{metadata::Merge, vocab, Id, IriIndex, MetaOption, Name};
+use treeldr::{
+	layout::container::Restrictions, metadata::Merge, vocab, Id, IriIndex, MetaOption, Name,
+};
 use vocab::{Rdf, Term};
 
 #[derive(Clone, Debug, Derivative)]
@@ -90,6 +92,7 @@ impl<M> Array<M> {
 	pub fn build(
 		self,
 		name: MetaOption<Name, M>,
+		restrictions: Restrictions<M>,
 		nodes: &mut crate::context::allocated::Nodes<M>,
 		metadata: &M,
 	) -> Result<treeldr::layout::Array<M>, Error<M>>
@@ -102,6 +105,7 @@ impl<M> Array<M> {
 		Ok(treeldr::layout::Array::new(
 			name,
 			item_layout_ref,
+			restrictions,
 			semantics,
 		))
 	}

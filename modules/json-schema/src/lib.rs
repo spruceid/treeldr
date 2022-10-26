@@ -12,6 +12,7 @@ pub use embedding::Embedding;
 pub use import::import_schema;
 pub use schema::Schema;
 
+#[derive(Debug)]
 pub enum Error<F> {
 	NoLayoutName(Ref<layout::Definition<F>>),
 	InfiniteSchema(Ref<layout::Definition<F>>),
@@ -25,7 +26,7 @@ pub fn generate<F>(
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
 	layout_ref: Ref<layout::Definition<F>>,
-) -> Result<(), Error<F>> {
+) -> Result<serde_json::Value, Error<F>> {
 	// Check there are no cycles induced by the embedded layouts.
 	let strongly_connected_layouts = treeldr::layout::StronglyConnectedLayouts::with_filter(
 		model.layouts(),
@@ -93,12 +94,7 @@ pub fn generate<F>(
 		}
 	}
 
-	println!(
-		"{}",
-		serde_json::to_string_pretty(&json_schema).map_err(Error::Serialization)?
-	);
-
-	Ok(())
+	Ok(json_schema)
 }
 
 fn remove_newlines(s: &str) -> String {
@@ -199,12 +195,22 @@ fn generate_layout_schema<F>(
 				generate_option_type(vocabulary, model, embedding, type_property, o.item_layout())
 			}
 		},
-		Description::Set(s) => {
-			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
-		}
-		Description::Array(a) => {
-			generate_list_type(vocabulary, model, embedding, type_property, a.item_layout())
-		}
+		Description::Set(s) => generate_set_type(
+			vocabulary,
+			model,
+			embedding,
+			type_property,
+			s.item_layout(),
+			s.restrictions(),
+		),
+		Description::Array(a) => generate_list_type(
+			vocabulary,
+			model,
+			embedding,
+			type_property,
+			a.item_layout(),
+			a.restrictions(),
+		),
 		Description::Alias(_, alias_ref) => {
 			let mut json = serde_json::Map::new();
 			let alias = model.layouts().get(*alias_ref).unwrap();
@@ -380,12 +386,22 @@ fn generate_layout_ref<F>(
 				generate_option_type(vocabulary, model, embedding, type_property, o.item_layout())
 			}
 		},
-		Description::Set(s) => {
-			generate_set_type(vocabulary, model, embedding, type_property, s.item_layout())
-		}
-		Description::Array(a) => {
-			generate_list_type(vocabulary, model, embedding, type_property, a.item_layout())
-		}
+		Description::Set(s) => generate_set_type(
+			vocabulary,
+			model,
+			embedding,
+			type_property,
+			s.item_layout(),
+			s.restrictions(),
+		),
+		Description::Array(a) => generate_list_type(
+			vocabulary,
+			model,
+			embedding,
+			type_property,
+			a.item_layout(),
+			a.restrictions(),
+		),
 		Description::Struct(_) | Description::Alias(_, _) => {
 			let mut json = serde_json::Map::new();
 			let layout = model.layouts().get(layout_ref).unwrap();
@@ -429,6 +445,7 @@ fn generate_set_type<F>(
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
 	item_layout_ref: Ref<layout::Definition<F>>,
+	restrictions: &treeldr::layout::container::Restrictions<F>,
 ) -> Result<serde_json::Value, Error<F>> {
 	let mut def = serde_json::Map::new();
 	let item_schema = generate_layout_ref(
@@ -442,6 +459,15 @@ fn generate_set_type<F>(
 	def.insert("type".into(), "array".into());
 	def.insert("items".into(), item_schema);
 	def.insert("uniqueItems".into(), true.into());
+
+	if restrictions.cardinal().min() > 0 {
+		def.insert("minItems".into(), restrictions.cardinal().min().into());
+	}
+
+	if restrictions.cardinal().max() < u64::MAX {
+		def.insert("maxItems".into(), restrictions.cardinal().max().into());
+	}
+
 	Ok(def.into())
 }
 
@@ -451,6 +477,7 @@ fn generate_list_type<F>(
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
 	item_layout_ref: Ref<layout::Definition<F>>,
+	restrictions: &treeldr::layout::container::Restrictions<F>,
 ) -> Result<serde_json::Value, Error<F>> {
 	let mut def = serde_json::Map::new();
 	let item_schema = generate_layout_ref(
@@ -463,6 +490,15 @@ fn generate_list_type<F>(
 	)?;
 	def.insert("type".into(), "array".into());
 	def.insert("items".into(), item_schema);
+
+	if restrictions.cardinal().min() > 0 {
+		def.insert("minItems".into(), restrictions.cardinal().min().into());
+	}
+
+	if restrictions.cardinal().max() < u64::MAX {
+		def.insert("maxItems".into(), restrictions.cardinal().max().into());
+	}
+
 	Ok(def.into())
 }
 
@@ -493,7 +529,7 @@ fn generate_enum_type<F>(
 	Ok(def.into())
 }
 
-fn generate_primitive_type(n: &treeldr::layout::RestrictedPrimitive) -> serde_json::Value {
+fn generate_primitive_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> serde_json::Value {
 	use treeldr::layout::RestrictedPrimitive;
 	let mut def = serde_json::Map::new();
 

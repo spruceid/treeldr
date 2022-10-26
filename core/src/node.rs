@@ -184,15 +184,15 @@ impl<M> Node<M> {
 	}
 
 	pub fn is_type(&self) -> bool {
-		self.ty.is_set()
+		self.ty.is_some()
 	}
 
 	pub fn is_property(&self) -> bool {
-		self.property.is_set()
+		self.property.is_some()
 	}
 
 	pub fn is_layout(&self) -> bool {
-		self.layout.is_set()
+		self.layout.is_some()
 	}
 
 	pub fn as_type(&self) -> Option<Ref<ty::Definition<M>>> {

@@ -6,16 +6,20 @@ use treeldr::{metadata::Merge, Id, IriIndex, MetaOption, Name};
 pub mod array;
 pub mod field;
 pub mod primitive;
+pub mod restriction;
 pub mod variant;
 
 pub use array::Array;
-pub use primitive::{Primitive, Restricted as RestrictedPrimitive};
+pub use primitive::Primitive;
+pub use restriction::Restrictions;
+
+use primitive::BuildPrimitive;
 
 /// Layout description.
 #[derive(Clone, Debug)]
 pub enum Description<M> {
 	Never,
-	Primitive(RestrictedPrimitive<M>),
+	Primitive(Primitive),
 	Struct(Id),
 	Reference(Id),
 	Enum(Id),
@@ -30,7 +34,7 @@ pub enum Description<M> {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Kind {
 	Never,
-	Primitive(Option<Primitive>),
+	Primitive(Primitive),
 	Reference,
 	Literal,
 	Struct,
@@ -48,7 +52,7 @@ impl<M> Description<M> {
 			Self::Never => Kind::Never,
 			Self::Reference(_) => Kind::Reference,
 			Self::Struct(_) => Kind::Struct,
-			Self::Primitive(n) => Kind::Primitive(n.primitive().value().cloned()),
+			Self::Primitive(n) => Kind::Primitive(*n),
 			Self::Enum(_) => Kind::Enum,
 			Self::Required(_) => Kind::Required,
 			Self::Option(_) => Kind::Option,
@@ -134,11 +138,12 @@ impl<M> Description<M> {
 		self,
 		id: Id,
 		name: MetaOption<Name, M>,
+		restrictions: Restrictions<M>,
 		nodes: &mut super::context::allocated::Nodes<M>,
 		metadata: &M,
 	) -> Result<treeldr::layout::Description<M>, Error<M>>
 	where
-		M: Clone,
+		M: Clone + Merge,
 	{
 		use field::Build as BuildField;
 		use variant::Build as BuildVariant;
@@ -157,7 +162,7 @@ impl<M> Description<M> {
 		match self {
 			Description::Never => Ok(treeldr::layout::Description::Never(name)),
 			Description::Primitive(n) => Ok(treeldr::layout::Description::Primitive(
-				n.build(id, metadata)?,
+				n.build(id, restrictions.into_primitive(), metadata)?,
 				name,
 			)),
 			Description::Reference(layout_id) => {
@@ -221,12 +226,15 @@ impl<M> Description<M> {
 			Description::Set(item_layout_id) => {
 				let item_layout_ref = **nodes.require_layout(item_layout_id, metadata)?;
 				Ok(treeldr::layout::Description::Set(
-					treeldr::layout::Set::new(name, item_layout_ref),
+					treeldr::layout::Set::new(name, item_layout_ref, restrictions.into_container()),
 				))
 			}
-			Description::Array(array) => Ok(treeldr::layout::Description::Array(
-				array.build(name, nodes, metadata)?,
-			)),
+			Description::Array(array) => Ok(treeldr::layout::Description::Array(array.build(
+				name,
+				restrictions.into_container(),
+				nodes,
+				metadata,
+			)?)),
 			Description::Alias(alias_layout_id) => {
 				let name = require_name(id, name, metadata)?;
 
@@ -274,10 +282,10 @@ impl<M: Clone> PseudoDescription<M> for Description<M> {
 	{
 		match (self, other) {
 			(Self::Never, Self::Never) => Ok(Meta(Self::Never, meta.merged_with(other_meta))),
-			(Self::Primitive(a), Self::Primitive(b)) => Ok(Meta(
-				Self::Primitive(a.try_unify(id, b)?),
-				meta.merged_with(other_meta),
-			)),
+			(Self::Primitive(a), Self::Primitive(b)) => {
+				let Meta(c, meta) = a.try_unify(id, Meta(b, other_meta), meta)?;
+				Ok(Meta(Self::Primitive(c), meta))
+			}
 			(Self::Struct(a), Self::Struct(b)) if a == b => {
 				Ok(Meta(Self::Struct(a), meta.merged_with(other_meta)))
 			}
@@ -323,6 +331,9 @@ pub struct Definition<M, D = Description<M>> {
 
 	/// Layout description.
 	desc: MetaOption<D, M>,
+
+	/// Restrictions.
+	restrictions: Restrictions<M>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -350,6 +361,7 @@ impl<M, D> Definition<M, D> {
 			name: MetaOption::default(),
 			ty: MetaOption::default(),
 			desc: MetaOption::default(),
+			restrictions: Restrictions::default(),
 		}
 	}
 
@@ -387,6 +399,14 @@ impl<M, D> Definition<M, D> {
 
 	pub fn description_mut(&mut self) -> Option<&mut Meta<D, M>> {
 		self.desc.as_mut()
+	}
+
+	pub fn restrictions(&self) -> &Restrictions<M> {
+		&self.restrictions
+	}
+
+	pub fn restrictions_mut(&mut self) -> &mut Restrictions<M> {
+		&mut self.restrictions
 	}
 
 	/// Declare the type for which this layout is defined.
@@ -436,16 +456,13 @@ impl<M, D> Definition<M, D> {
 			name: self.name,
 			ty: self.ty,
 			desc: self.desc.try_map(f)?,
+			restrictions: self.restrictions,
 		})
 	}
 }
 
 impl<M: Merge, D: PseudoDescription<M>> Definition<M, D> {
-	pub fn set_primitive(
-		&mut self,
-		primitive: RestrictedPrimitive<M>,
-		metadata: M,
-	) -> Result<(), Error<M>> {
+	pub fn set_primitive(&mut self, primitive: Primitive, metadata: M) -> Result<(), Error<M>> {
 		self.set_description(Description::Primitive(primitive).into(), metadata)
 	}
 
@@ -620,7 +637,7 @@ impl<M: Clone> Definition<M> {
 	}
 }
 
-impl<M: Clone> crate::Build<M> for Definition<M> {
+impl<M: Clone + Merge> crate::Build<M> for Definition<M> {
 	type Target = treeldr::layout::Definition<M>;
 
 	fn build(
@@ -641,7 +658,7 @@ impl<M: Clone> crate::Build<M> for Definition<M> {
 		})?;
 
 		let desc = Meta(
-			desc.build(self.id, self.name, nodes, &desc_metadata)?,
+			desc.build(self.id, self.name, self.restrictions, nodes, &desc_metadata)?,
 			desc_metadata,
 		);
 

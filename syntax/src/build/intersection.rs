@@ -5,7 +5,7 @@ use rdf_types::{Generator, VocabularyMut};
 use std::collections::BTreeMap;
 use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, MetaOption};
 use treeldr_build::{
-	layout::{Array, RestrictedPrimitive},
+	layout::{Array, Primitive, Restrictions},
 	Context, ObjectToId,
 };
 
@@ -19,6 +19,7 @@ pub use structure::*;
 pub struct IntersectedLayout<M> {
 	ids: BTreeMap<Id, M>,
 	desc: Meta<IntersectedLayoutDescription<M>, M>,
+	restrictions: Restrictions<M>,
 }
 
 impl<M> PartialEq for IntersectedLayout<M> {
@@ -34,7 +35,7 @@ impl<M> PartialEq for IntersectedLayout<M> {
 #[derivative(PartialEq(bound = ""))]
 pub enum IntersectedLayoutDescription<M> {
 	Never,
-	Primitive(RestrictedPrimitive<M>),
+	Primitive(Primitive),
 	Struct(IntersectedStruct<M>),
 	Reference(Id),
 	Enum(IntersectedEnum<M>),
@@ -74,20 +75,27 @@ impl<M: Clone> IntersectedLayout<M> {
 		Ok(Self {
 			ids: BTreeMap::new(),
 			desc: Meta::new(IntersectedLayoutDescription::Alias(id), meta),
+			restrictions: Restrictions::default(),
 		})
 	}
 
 	pub fn from_parts(
 		ids: BTreeMap<Id, M>,
 		desc: Meta<IntersectedLayoutDescription<M>, M>,
+		restrictions: Restrictions<M>,
 	) -> Self {
-		Self { ids, desc }
+		Self {
+			ids,
+			desc,
+			restrictions,
+		}
 	}
 
 	pub fn never(causes: M) -> Self {
 		Self {
 			ids: BTreeMap::new(),
 			desc: Meta::new(IntersectedLayoutDescription::Never, causes),
+			restrictions: Restrictions::default(),
 		}
 	}
 
@@ -173,6 +181,7 @@ impl<M: Clone> IntersectedLayout<M> {
 				Ok(Self {
 					ids,
 					desc: Meta::new(IntersectedLayoutDescription::Alias(id), causes),
+					restrictions: Restrictions::default(),
 				})
 			}
 			None => {
@@ -199,6 +208,7 @@ impl<M: Clone> IntersectedLayout<M> {
 						)?,
 						causes.merged_with(other_causes),
 					),
+					restrictions: self.restrictions.intersected_with(other.restrictions)?,
 				})
 			}
 		}
@@ -219,6 +229,7 @@ impl<M: Clone> IntersectedLayout<M> {
 				desc: self
 					.desc
 					.try_map(|desc| desc.apply_restrictions(restricted_fields))?,
+				restrictions: self.restrictions,
 			})
 		}
 	}
@@ -295,9 +306,7 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 			Some(desc) => match desc.value() {
 				LayoutDescription::Standard(standard_desc) => match standard_desc {
 					treeldr_build::layout::Description::Never => Ok(Self::Never),
-					treeldr_build::layout::Description::Primitive(n) => {
-						Ok(Self::Primitive(n.clone()))
-					}
+					treeldr_build::layout::Description::Primitive(n) => Ok(Self::Primitive(*n)),
 					treeldr_build::layout::Description::Reference(r) => Ok(Self::Reference(*r)),
 					treeldr_build::layout::Description::Struct(fields_id) => Ok(Self::Struct(
 						IntersectedStruct::new(*fields_id, context, desc.metadata())?,
@@ -371,7 +380,7 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 	pub fn is_included_in(&self, other: &Self) -> bool {
 		match (self, other) {
 			(Self::Never, Self::Never) => true,
-			(Self::Primitive(a), Self::Primitive(b)) => a.is_included_in(b),
+			(Self::Primitive(a), Self::Primitive(b)) => a == b,
 			(Self::Reference(a), Self::Reference(b)) => a == b,
 			(Self::Enum(a), Self::Enum(b)) => a.is_included_in(b),
 			(Self::Struct(a), Self::Struct(b)) => a.is_included_in(b),
@@ -401,7 +410,11 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 			Self::Enum(b) => match self {
 				Self::Enum(a) => a.intersected_with(b, context),
 				non_enum => b.intersected_with_non_enum(
-					IntersectedLayout::from_parts(ids, Meta::new(non_enum, causes)),
+					IntersectedLayout::from_parts(
+						ids,
+						Meta::new(non_enum, causes),
+						Restrictions::default(),
+					),
 					context,
 				),
 			},
@@ -420,7 +433,11 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 					_ => Ok(Self::Never),
 				},
 				Self::Enum(a) => a.intersected_with_non_enum(
-					IntersectedLayout::from_parts(other_ids, Meta::new(other, other_causes)),
+					IntersectedLayout::from_parts(
+						other_ids,
+						Meta::new(other, other_causes),
+						Restrictions::default(),
+					),
 					context,
 				),
 				Self::Required(a) => match other {
