@@ -1,11 +1,11 @@
 use iref::{IriBuf, IriRef, IriRefBuf};
-use locspan::{BorrowStripped, MaybeLocated, Meta, Span};
+use locspan::{BorrowStripped, MapLocErr, MaybeLocated, Meta, Span};
 use locspan_derive::{StrippedEq, StrippedPartialEq};
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
 use std::collections::{BTreeMap, HashMap};
 use thiserror::Error;
 use treeldr::{metadata::Merge, reporting, vocab::*, Id, Name};
-use treeldr_build::{Context, ObjectToId};
+use treeldr_build::{error, Context, ObjectToId};
 
 mod intersection;
 
@@ -434,23 +434,15 @@ impl<M: Clone> LocalContext<M> {
 			}
 		};
 
-		let mut restricted = treeldr_build::layout::RestrictedPrimitive::unrestricted(
-			treeldr::layout::Primitive::String,
-			loc.clone(),
-		);
-		restricted.restrictions_mut().insert(
+		let layout = context.get_mut(*id).unwrap().as_layout_mut().unwrap();
+
+		layout.set_primitive(treeldr::layout::Primitive::String, loc.clone())?;
+		layout.restrictions_mut().primitive.insert(
 			treeldr_build::layout::primitive::Restriction::String(
 				treeldr_build::layout::primitive::restriction::String::Pattern(regexp),
 			),
 			loc.clone(),
 		);
-
-		context
-			.get_mut(*id)
-			.unwrap()
-			.as_layout_mut()
-			.unwrap()
-			.set_primitive(restricted, loc.clone())?;
 
 		Ok(())
 	}
@@ -1571,10 +1563,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 				}
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
-				layout.set_primitive(
-					treeldr_build::layout::primitive::Restricted::unrestricted(p, loc.clone()),
-					loc.clone(),
-				)?;
+				layout.set_primitive(p, loc.clone())?;
 
 				Ok(Meta(id, loc))
 			}
@@ -1703,6 +1692,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 					Some(required_loc) => {
 						match multiple_loc {
 							Some(multiple_loc) => {
+								use treeldr::layout::container::restriction::Conflict;
 								// Wrap inside non-empty set.
 								let container_id = generator.next(vocabulary);
 								context.declare_layout(container_id, multiple_loc.clone());
@@ -1713,6 +1703,16 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 									.unwrap();
 								let Meta(item_layout_id, item_layout_loc) = layout_id;
 								container_layout.set_set(item_layout_id, multiple_loc)?;
+								container_layout
+									.restrictions_mut()
+									.container
+									.cardinal_mut()
+									.insert_min(Meta(1, required_loc))
+									.map_loc_err(|e| {
+										error::Description::LayoutContainerRestrictionConflict(
+											Conflict::Cardinal(e),
+										)
+									})?;
 								Meta(container_id, item_layout_loc)
 							}
 							None => {

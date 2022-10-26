@@ -1,8 +1,12 @@
 use locspan::Meta;
-use locspan_derive::StrippedPartialEq;
+use locspan_derive::{
+	StrippedEq, StrippedHash, StrippedOrd, StrippedPartialEq, StrippedPartialOrd,
+};
 
 /// Optional value with metadata.
-#[derive(Clone, Debug, StrippedPartialEq)]
+#[derive(
+	Clone, Debug, StrippedPartialEq, StrippedEq, StrippedPartialOrd, StrippedOrd, StrippedHash,
+)]
 #[stripped_ignore(M)]
 pub struct MetaOption<T, M> {
 	value: Option<Meta<T, M>>,
@@ -27,7 +31,7 @@ impl<T, M> MetaOption<T, M> {
 		}
 	}
 
-	pub fn is_set(&self) -> bool {
+	pub fn is_some(&self) -> bool {
 		self.value.is_some()
 	}
 
@@ -180,7 +184,7 @@ impl<T, M> MetaOption<T, M> {
 	}
 
 	pub fn or(self, other: Self) -> Self {
-		if self.is_set() {
+		if self.is_some() {
 			self
 		} else {
 			other
@@ -188,7 +192,7 @@ impl<T, M> MetaOption<T, M> {
 	}
 
 	pub fn or_else(self, other: impl FnOnce() -> Self) -> Self {
-		if self.is_set() {
+		if self.is_some() {
 			self
 		} else {
 			other()

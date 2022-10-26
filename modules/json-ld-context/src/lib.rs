@@ -368,7 +368,9 @@ pub fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
 	builder.build()
 }
 
-fn generate_primitive_type(n: &treeldr::layout::RestrictedPrimitive) -> term_definition::Type {
+fn generate_primitive_type<M>(
+	n: &treeldr::layout::primitive::Restricted<M>,
+) -> term_definition::Type {
 	use treeldr::layout::Primitive;
 
 	let iri: String = match n.primitive() {

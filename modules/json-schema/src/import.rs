@@ -4,7 +4,7 @@ use iref::{Iri, IriBuf};
 use locspan::{Located, Meta, Span};
 use rdf_types::{Generator, Quad, Vocabulary, VocabularyMut};
 use treeldr::{metadata::Merge, vocab, BlankIdIndex, Id, IriIndex, Name};
-use treeldr_build::{Context, Descriptions};
+use treeldr_build::{layout::Restrictions, Context, Descriptions};
 use vocab::{LocQuad, Object, Term};
 
 /// Import error.
@@ -166,7 +166,7 @@ pub fn import_regular_schema<
 		None => base_iri.map(IriBuf::from),
 	};
 
-	let desc = import_layout_description(
+	let (desc, restrictions) = import_layout_description(
 		schema,
 		base_iri.as_ref().map(Iri::from),
 		context,
@@ -182,7 +182,7 @@ pub fn import_regular_schema<
 			&& schema.anchor.is_none()
 			&& schema.dynamic_anchor.is_none()
 		{
-			return Ok(primitive.primitive().value().unwrap().id());
+			return Ok(primitive.id());
 		}
 	}
 
@@ -228,6 +228,7 @@ pub fn import_regular_schema<
 	}
 
 	layout.set_description(desc.into(), M::default())?;
+	*layout.restrictions_mut() = restrictions;
 
 	Ok(id)
 }
@@ -290,7 +291,7 @@ fn import_layout_description<
 	context: &mut Context<M, D>,
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
-) -> Result<treeldr_build::layout::Description<M>, Error<M>> {
+) -> Result<(treeldr_build::layout::Description<M>, Restrictions<M>), Error<M>> {
 	let mut kind = LayoutKind::Unknown;
 	if let Some(types) = &schema.validation.any.ty {
 		for ty in types {
@@ -323,7 +324,10 @@ fn import_layout_description<
 
 	if let Some(layout) = primitive_layout {
 		if schema.is_primitive() {
-			return Ok(treeldr_build::layout::Description::Primitive(layout.into()));
+			return Ok((
+				treeldr_build::layout::Description::Primitive(layout),
+				Restrictions::default(),
+			));
 		}
 	}
 
@@ -352,22 +356,20 @@ fn import_layout_description<
 				}
 				LayoutKind::Number | LayoutKind::Integer => {
 					if schema.validation.numeric.is_empty() {
-						Ok(treeldr_build::layout::Description::Primitive(
-							primitive_layout.unwrap().into(),
+						Ok((
+							treeldr_build::layout::Description::Primitive(
+								primitive_layout.unwrap(),
+							),
+							Restrictions::default(),
 						))
 					} else {
 						use treeldr_build::layout::primitive::{restriction::Numeric, Restriction};
 
 						let primitive = primitive_layout.unwrap();
-						let mut restricted =
-							treeldr_build::layout::primitive::Restricted::unrestricted(
-								primitive,
-								M::default(),
-							);
-						let restrictions = restricted.restrictions_mut();
+						let mut restrictions = treeldr_build::layout::Restrictions::default();
 
 						if let Some(min) = &schema.validation.numeric.minimum {
-							restrictions.insert(
+							restrictions.primitive.insert(
 								Restriction::Numeric(Numeric::InclusiveMinimum(into_numeric(
 									primitive, min,
 								))),
@@ -376,7 +378,7 @@ fn import_layout_description<
 						}
 
 						if let Some(min) = &schema.validation.numeric.exclusive_minimum {
-							restrictions.insert(
+							restrictions.primitive.insert(
 								Restriction::Numeric(Numeric::ExclusiveMinimum(into_numeric(
 									primitive, min,
 								))),
@@ -385,7 +387,7 @@ fn import_layout_description<
 						}
 
 						if let Some(max) = &schema.validation.numeric.maximum {
-							restrictions.insert(
+							restrictions.primitive.insert(
 								Restriction::Numeric(Numeric::InclusiveMaximum(into_numeric(
 									primitive, max,
 								))),
@@ -394,7 +396,7 @@ fn import_layout_description<
 						}
 
 						if let Some(max) = &schema.validation.numeric.exclusive_maximum {
-							restrictions.insert(
+							restrictions.primitive.insert(
 								Restriction::Numeric(Numeric::ExclusiveMaximum(into_numeric(
 									primitive, max,
 								))),
@@ -402,34 +404,38 @@ fn import_layout_description<
 							)
 						}
 
-						Ok(treeldr_build::layout::Description::Primitive(restricted))
+						Ok((
+							treeldr_build::layout::Description::Primitive(primitive),
+							restrictions,
+						))
 					}
 				}
 				LayoutKind::String => {
 					use treeldr_build::layout::primitive::{restriction::String, Restriction};
 
-					let mut restricted = treeldr_build::layout::RestrictedPrimitive::unrestricted(
-						treeldr::layout::Primitive::String,
-						M::default(),
-					);
-					let restrictions = restricted.restrictions_mut();
+					let mut restrictions = treeldr_build::layout::Restrictions::default();
 
 					if let Some(cnst) = &schema.validation.any.cnst {
-						restrictions.insert(
+						restrictions.primitive.insert(
 							Restriction::String(String::Pattern(cnst.to_string().into())),
 							M::default(),
 						);
 					}
 
 					if let Some(pattern) = &schema.validation.string.pattern {
-						restrictions.insert(
+						restrictions.primitive.insert(
 							Restriction::String(String::Pattern(pattern.to_string().into())),
 							M::default(),
 						);
 					}
 
 					// TODO: for now, most string constraints are ignored.
-					Ok(treeldr_build::layout::Description::Primitive(restricted))
+					Ok((
+						treeldr_build::layout::Description::Primitive(
+							treeldr::layout::Primitive::String,
+						),
+						restrictions,
+					))
 				}
 				LayoutKind::ArrayOrSet | LayoutKind::Array | LayoutKind::Set => {
 					import_array_schema(
@@ -459,7 +465,7 @@ fn import_array_schema<
 	context: &mut Context<M, D>,
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
-) -> Result<treeldr_build::layout::Description<M>, Error<M>> {
+) -> Result<(treeldr_build::layout::Description<M>, Restrictions<M>), Error<M>> {
 	let item_type = match &array.items {
 		Some(items) => import_sub_schema(items, base_iri, context, vocabulary, generator)?,
 		None => todo!(),
@@ -467,11 +473,17 @@ fn import_array_schema<
 
 	if matches!(schema.validation.array.unique_items, Some(true)) {
 		kind.refine(LayoutKind::Set)?;
-		Ok(treeldr_build::layout::Description::Set(item_type))
+		Ok((
+			treeldr_build::layout::Description::Set(item_type),
+			Restrictions::default(),
+		))
 	} else {
 		kind.refine(LayoutKind::Array)?;
-		Ok(treeldr_build::layout::Description::Array(
-			treeldr_build::layout::Array::new(item_type, None),
+		Ok((
+			treeldr_build::layout::Description::Array(treeldr_build::layout::Array::new(
+				item_type, None,
+			)),
+			Restrictions::default(),
 		))
 	}
 }
@@ -488,7 +500,7 @@ fn import_object_schema<
 	context: &mut Context<M, D>,
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
-) -> Result<treeldr_build::layout::Description<M>, Error<M>> {
+) -> Result<(treeldr_build::layout::Description<M>, Restrictions<M>), Error<M>> {
 	let mut fields: Vec<Meta<Object<M>, M>> = Vec::new();
 
 	if let Some(properties) = &object.properties {
@@ -540,7 +552,10 @@ fn import_object_schema<
 	}
 
 	let fields_id = context.create_list(vocabulary, generator, fields)?;
-	Ok(treeldr_build::layout::Description::Struct(fields_id))
+	Ok((
+		treeldr_build::layout::Description::Struct(fields_id),
+		Restrictions::default(),
+	))
 }
 
 fn format_layout<M>(format: schema::Format) -> Result<treeldr::layout::Primitive, Error<M>> {

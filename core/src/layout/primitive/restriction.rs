@@ -1,4 +1,5 @@
 use super::Primitive;
+use locspan::Meta;
 
 pub mod double;
 pub mod float;
@@ -8,13 +9,13 @@ pub mod unsigned;
 
 /// Restricted primitive layout.
 #[derive(Clone, Debug)]
-pub enum Restricted {
+pub enum Restricted<M> {
 	Boolean,
-	Integer(integer::Restrictions),
-	UnsignedInteger(unsigned::Restrictions),
-	Float(float::Restrictions),
-	Double(double::Restrictions),
-	String(string::Restrictions),
+	Integer(integer::Restrictions<M>),
+	UnsignedInteger(unsigned::Restrictions<M>),
+	Float(float::Restrictions<M>),
+	Double(double::Restrictions<M>),
+	String(string::Restrictions<M>),
 	Time,
 	Date,
 	DateTime,
@@ -23,7 +24,7 @@ pub enum Restricted {
 	Url,
 }
 
-impl Restricted {
+impl<M> Restricted<M> {
 	pub fn primitive(&self) -> Primitive {
 		match self {
 			Self::Boolean => Primitive::Boolean,
@@ -52,7 +53,7 @@ impl Restricted {
 		}
 	}
 
-	pub fn restrictions(&self) -> Restrictions {
+	pub fn restrictions(&self) -> Restrictions<M> {
 		match self {
 			Self::Integer(r) => Restrictions::Integer(r.iter()),
 			Self::UnsignedInteger(r) => Restrictions::UnsignedInteger(r.iter()),
@@ -64,7 +65,7 @@ impl Restricted {
 	}
 }
 
-impl From<Primitive> for Restricted {
+impl<M> From<Primitive> for Restricted<M> {
 	fn from(p: Primitive) -> Self {
 		match p {
 			Primitive::Boolean => Self::Boolean,
@@ -83,34 +84,34 @@ impl From<Primitive> for Restricted {
 	}
 }
 
-pub enum Restriction<'a> {
+pub enum RestrictionRef<'a> {
 	Integer(integer::Restriction),
 	UnsignedInteger(unsigned::Restriction),
 	Float(float::Restriction),
 	Double(double::Restriction),
-	String(string::Restriction<'a>),
+	String(string::RestrictionRef<'a>),
 }
 
-pub enum Restrictions<'a> {
+pub enum Restrictions<'a, M> {
 	None,
-	Integer(integer::Iter),
-	UnsignedInteger(unsigned::Iter),
-	Float(float::Iter),
-	Double(double::Iter),
-	String(string::Iter<'a>),
+	Integer(integer::Iter<'a, M>),
+	UnsignedInteger(unsigned::Iter<'a, M>),
+	Float(float::Iter<'a, M>),
+	Double(double::Iter<'a, M>),
+	String(string::Iter<'a, M>),
 }
 
-impl<'a> Iterator for Restrictions<'a> {
-	type Item = Restriction<'a>;
+impl<'a, M> Iterator for Restrictions<'a, M> {
+	type Item = Meta<RestrictionRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
 			Self::None => None,
-			Self::Integer(r) => r.next().map(Restriction::Integer),
-			Self::UnsignedInteger(r) => r.next().map(Restriction::UnsignedInteger),
-			Self::Float(r) => r.next().map(Restriction::Float),
-			Self::Double(r) => r.next().map(Restriction::Double),
-			Self::String(r) => r.next().map(Restriction::String),
+			Self::Integer(r) => r.next().map(|r| r.map(RestrictionRef::Integer)),
+			Self::UnsignedInteger(r) => r.next().map(|r| r.map(RestrictionRef::UnsignedInteger)),
+			Self::Float(r) => r.next().map(|r| r.map(RestrictionRef::Float)),
+			Self::Double(r) => r.next().map(|r| r.map(RestrictionRef::Double)),
+			Self::String(r) => r.next().map(|r| r.map(RestrictionRef::String)),
 		}
 	}
 }

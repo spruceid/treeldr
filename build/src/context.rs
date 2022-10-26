@@ -64,7 +64,7 @@ impl<M, D: Descriptions<M>> Context<M, D> {
 		)));
 		self.declare_layout(id, metadata.clone());
 		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
-		layout.set_primitive(Meta(primitive_layout, metadata.clone()).into(), metadata)?;
+		layout.set_primitive(primitive_layout, metadata)?;
 		Ok(id)
 	}
 

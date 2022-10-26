@@ -1,3 +1,4 @@
+use super::container::Restrictions;
 use crate::{prop, Id, MetaOption, Name, Ref};
 use locspan::Meta;
 
@@ -9,6 +10,9 @@ pub struct Array<M> {
 	/// Item layout.
 	item: Ref<super::Definition<M>>,
 
+	/// Restrictions.
+	restrictions: Restrictions<M>,
+
 	/// Semantics of the list layout.
 	///
 	/// Is `None` if and only if the layout is an orphan layout.
@@ -19,11 +23,13 @@ impl<M> Array<M> {
 	pub fn new(
 		name: MetaOption<Name, M>,
 		item: Ref<super::Definition<M>>,
+		restrictions: Restrictions<M>,
 		semantics: Option<Semantics<M>>,
 	) -> Self {
 		Self {
 			name,
 			item,
+			restrictions,
 			semantics,
 		}
 	}
@@ -46,6 +52,14 @@ impl<M> Array<M> {
 
 	pub fn set_item_layout(&mut self, item: Ref<super::Definition<M>>) {
 		self.item = item
+	}
+
+	pub fn restrictions(&self) -> &Restrictions<M> {
+		&self.restrictions
+	}
+
+	pub fn is_required(&self) -> bool {
+		self.restrictions.is_required()
 	}
 
 	pub fn semantics(&self) -> Option<&Semantics<M>> {

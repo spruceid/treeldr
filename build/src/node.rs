@@ -248,12 +248,12 @@ impl<M, D: Descriptions<M>> Node<Components<M, D>> {
 
 	pub fn types(&self) -> Types {
 		Types {
-			ty: self.value.ty.is_set(),
-			property: self.value.property.is_set(),
-			layout: self.value.layout.is_set(),
-			layout_field: self.value.layout_field.is_set(),
-			layout_variant: self.value.layout_variant.is_set(),
-			list: self.value.list.is_set(),
+			ty: self.value.ty.is_some(),
+			property: self.value.property.is_some(),
+			layout: self.value.layout.is_some(),
+			layout_field: self.value.layout_field.is_some(),
+			layout_variant: self.value.layout_variant.is_some(),
+			list: self.value.list.is_some(),
 		}
 	}
 
@@ -272,27 +272,27 @@ impl<M, D: Descriptions<M>> Node<Components<M, D>> {
 	}
 
 	pub fn is_type(&self) -> bool {
-		self.value.ty.is_set()
+		self.value.ty.is_some()
 	}
 
 	pub fn is_property(&self) -> bool {
-		self.value.property.is_set()
+		self.value.property.is_some()
 	}
 
 	pub fn is_layout(&self) -> bool {
-		self.value.layout.is_set()
+		self.value.layout.is_some()
 	}
 
 	pub fn is_layout_field(&self) -> bool {
-		self.value.layout_field.is_set()
+		self.value.layout_field.is_some()
 	}
 
 	pub fn is_layout_variant(&self) -> bool {
-		self.value.layout_variant.is_set()
+		self.value.layout_variant.is_some()
 	}
 
 	pub fn is_list(&self) -> bool {
-		self.value.list.is_set()
+		self.value.list.is_some()
 	}
 
 	pub fn as_type(&self) -> Option<&Meta<ty::Definition<M, D::Type>, M>> {

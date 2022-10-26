@@ -112,7 +112,14 @@ impl Command {
 			self.type_property.as_deref(),
 			main_layout_ref,
 		) {
-			Ok(()) => Ok(()),
+			Ok(json_schema) => {
+				println!(
+					"{}",
+					serde_json::to_string_pretty(&json_schema).map_err(Error::Serialization)?
+				);
+
+				Ok(())
+			}
 			Err(crate::Error::NoLayoutName(r)) => Err(Box::new(Error::NoLayoutName(
 				model
 					.layouts()

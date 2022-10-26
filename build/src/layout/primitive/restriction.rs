@@ -1,8 +1,9 @@
 use crate::{error, Error};
+use locspan::{MapLocErr, Meta};
 use std::collections::BTreeMap;
 use treeldr::metadata::Merge;
 pub use treeldr::{
-	layout::{primitive::restricted, primitive::RegExp, Primitive},
+	layout::{primitive::restriction, primitive::RegExp, Primitive},
 	value, Id, MetaOption,
 };
 
@@ -89,36 +90,47 @@ impl<M: Clone> Restrictions<M> {
 		}
 	}
 
-	pub fn build_integer(self, id: Id) -> Result<restricted::integer::Restrictions, Error<M>> {
-		let mut r = restricted::integer::Restrictions::default();
+	pub fn build_integer(self, id: Id) -> Result<restriction::integer::Restrictions<M>, Error<M>>
+	where
+		M: Merge,
+	{
+		let mut r = restriction::integer::Restrictions::default();
 
 		for (restriction, causes) in self.map {
 			match restriction {
 				Restriction::Numeric(restriction) => match restriction {
 					Numeric::InclusiveMinimum(min) => match min.into_integer() {
 						Ok(min) => match min.into_i64() {
-							Ok(min) => r.add_min(min),
+							Ok(min) => r.insert_min(Meta(min, causes)).map_loc_err(
+								error::Description::LayoutDatatypeRestrictionIntegerConflict,
+							)?,
 							Err(_) => todo!(),
 						},
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMinimum(min) => match min.into_integer() {
 						Ok(min) => match min.into_i64() {
-							Ok(min) => r.add_min(min + 1),
+							Ok(min) => r.insert_min(Meta(min + 1, causes)).map_loc_err(
+								error::Description::LayoutDatatypeRestrictionIntegerConflict,
+							)?,
 							Err(_) => todo!(),
 						},
 						Err(_) => todo!(),
 					},
 					Numeric::InclusiveMaximum(max) => match max.into_integer() {
 						Ok(max) => match max.into_i64() {
-							Ok(max) => r.add_max(max),
+							Ok(max) => r.insert_max(Meta(max, causes)).map_loc_err(
+								error::Description::LayoutDatatypeRestrictionIntegerConflict,
+							)?,
 							Err(_) => todo!(),
 						},
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMaximum(max) => match max.into_integer() {
 						Ok(max) => match max.into_i64() {
-							Ok(max) => r.add_max(max - 1),
+							Ok(max) => r.insert_max(Meta(max - 1, causes)).map_loc_err(
+								error::Description::LayoutDatatypeRestrictionIntegerConflict,
+							)?,
 							Err(_) => todo!(),
 						},
 						Err(_) => todo!(),
@@ -144,36 +156,47 @@ impl<M: Clone> Restrictions<M> {
 	pub fn build_unsigned_integer(
 		self,
 		id: Id,
-	) -> Result<restricted::unsigned::Restrictions, Error<M>> {
-		let mut r = restricted::unsigned::Restrictions::default();
+	) -> Result<restriction::unsigned::Restrictions<M>, Error<M>>
+	where
+		M: Merge,
+	{
+		let mut r = restriction::unsigned::Restrictions::default();
 
 		for (restriction, causes) in self.map {
 			match restriction {
 				Restriction::Numeric(restriction) => match restriction {
 					Numeric::InclusiveMinimum(min) => match min.into_non_negative_integer() {
 						Ok(min) => match min.into_u64() {
-							Ok(min) => r.add_min(min),
+							Ok(min) => r.insert_min(Meta(min, causes)).map_loc_err(
+								error::Description::LayoutDatatypeRestrictionUnsignedConflict,
+							)?,
 							Err(_) => todo!(),
 						},
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMinimum(min) => match min.into_non_negative_integer() {
 						Ok(min) => match min.into_u64() {
-							Ok(min) => r.add_min(min + 1),
+							Ok(min) => r.insert_min(Meta(min + 1, causes)).map_loc_err(
+								error::Description::LayoutDatatypeRestrictionUnsignedConflict,
+							)?,
 							Err(_) => todo!(),
 						},
 						Err(_) => todo!(),
 					},
 					Numeric::InclusiveMaximum(max) => match max.into_non_negative_integer() {
 						Ok(max) => match max.into_u64() {
-							Ok(max) => r.add_max(max),
+							Ok(max) => r.insert_max(Meta(max, causes)).map_loc_err(
+								error::Description::LayoutDatatypeRestrictionUnsignedConflict,
+							)?,
 							Err(_) => todo!(),
 						},
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMaximum(max) => match max.into_non_negative_integer() {
 						Ok(max) => match max.into_u64() {
-							Ok(max) => r.add_max(max - 1),
+							Ok(max) => r.insert_max(Meta(max - 1, causes)).map_loc_err(
+								error::Description::LayoutDatatypeRestrictionUnsignedConflict,
+							)?,
 							Err(_) => todo!(),
 						},
 						Err(_) => todo!(),
@@ -196,27 +219,38 @@ impl<M: Clone> Restrictions<M> {
 		Ok(r)
 	}
 
-	pub fn build_float(self, id: Id) -> Result<restricted::float::Restrictions, Error<M>> {
-		use restricted::float::{Max, Min};
-		let mut r = restricted::float::Restrictions::default();
+	pub fn build_float(self, id: Id) -> Result<restriction::float::Restrictions<M>, Error<M>>
+	where
+		M: Merge,
+	{
+		use restriction::float::{Max, Min};
+		let mut r = restriction::float::Restrictions::default();
 
 		for (restriction, causes) in self.map {
 			match restriction {
 				Restriction::Numeric(restriction) => match restriction {
 					Numeric::InclusiveMinimum(min) => match min.into_float() {
-						Ok(min) => r.add_min(Min::Included(min)),
+						Ok(min) => r.insert_min(Meta(Min::Included(min), causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionFloatConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMinimum(min) => match min.into_float() {
-						Ok(min) => r.add_min(Min::Excluded(min)),
+						Ok(min) => r.insert_min(Meta(Min::Excluded(min), causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionFloatConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::InclusiveMaximum(max) => match max.into_float() {
-						Ok(max) => r.add_max(Max::Included(max)),
+						Ok(max) => r.insert_max(Meta(Max::Included(max), causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionFloatConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMaximum(max) => match max.into_float() {
-						Ok(max) => r.add_max(Max::Excluded(max)),
+						Ok(max) => r.insert_max(Meta(Max::Excluded(max), causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionFloatConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 				},
@@ -237,27 +271,38 @@ impl<M: Clone> Restrictions<M> {
 		Ok(r)
 	}
 
-	pub fn build_double(self, id: Id) -> Result<restricted::double::Restrictions, Error<M>> {
-		use restricted::double::{Max, Min};
-		let mut r = restricted::double::Restrictions::default();
+	pub fn build_double(self, id: Id) -> Result<restriction::double::Restrictions<M>, Error<M>>
+	where
+		M: Merge,
+	{
+		use restriction::double::{Max, Min};
+		let mut r = restriction::double::Restrictions::default();
 
 		for (restriction, causes) in self.map {
 			match restriction {
 				Restriction::Numeric(restriction) => match restriction {
 					Numeric::InclusiveMinimum(min) => match min.into_double() {
-						Ok(min) => r.add_min(Min::Included(min)),
+						Ok(min) => r.insert_min(Meta(Min::Included(min), causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionDoubleConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMinimum(min) => match min.into_double() {
-						Ok(min) => r.add_min(Min::Excluded(min)),
+						Ok(min) => r.insert_min(Meta(Min::Excluded(min), causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionDoubleConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::InclusiveMaximum(max) => match max.into_double() {
-						Ok(max) => r.add_max(Max::Included(max)),
+						Ok(max) => r.insert_max(Meta(Max::Included(max), causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionDoubleConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMaximum(max) => match max.into_double() {
-						Ok(max) => r.add_max(Max::Excluded(max)),
+						Ok(max) => r.insert_max(Meta(Max::Excluded(max), causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionDoubleConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 				},
@@ -278,13 +323,16 @@ impl<M: Clone> Restrictions<M> {
 		Ok(r)
 	}
 
-	pub fn build_string(self, id: Id) -> Result<restricted::string::Restrictions, Error<M>> {
-		let mut p = restricted::string::Restrictions::default();
+	pub fn build_string(self, id: Id) -> Result<restriction::string::Restrictions<M>, Error<M>>
+	where
+		M: Merge,
+	{
+		let mut p = restriction::string::Restrictions::default();
 
 		for (restriction, causes) in self.map.into_iter() {
 			match restriction {
 				Restriction::String(restriction) => match restriction {
-					String::Pattern(regexp) => p.add_pattern(regexp),
+					String::Pattern(regexp) => p.insert_pattern(Meta(regexp, causes)),
 				},
 				other => {
 					return Err(Error::new(

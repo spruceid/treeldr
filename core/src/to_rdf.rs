@@ -767,7 +767,7 @@ impl<F> layout::Set<F> {
 	}
 }
 
-impl layout::RestrictedPrimitive {
+impl<M> layout::RestrictedPrimitive<M> {
 	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		vocabulary: &mut V,
@@ -806,7 +806,7 @@ impl layout::RestrictedPrimitive {
 	}
 }
 
-impl<'a> layout::primitive::Restrictions<'a> {
+impl<'a, M> layout::primitive::Restrictions<'a, M> {
 	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		vocabulary: &mut V,
@@ -825,7 +825,7 @@ impl<'a> layout::primitive::Restrictions<'a> {
 	}
 }
 
-impl<'a> layout::primitive::Restriction<'a> {
+impl<'a> layout::primitive::RestrictionRef<'a> {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
 		match self {
 			Self::Integer(r) => r.to_rdf(id, quads),
@@ -837,7 +837,7 @@ impl<'a> layout::primitive::Restriction<'a> {
 	}
 }
 
-impl layout::primitive::restricted::integer::Restriction {
+impl layout::primitive::restriction::integer::Restriction {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
 		match self {
 			Self::MinInclusive(min) => {
@@ -866,7 +866,7 @@ impl layout::primitive::restricted::integer::Restriction {
 	}
 }
 
-impl layout::primitive::restricted::unsigned::Restriction {
+impl layout::primitive::restriction::unsigned::Restriction {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
 		match self {
 			Self::MinInclusive(min) => {
@@ -895,9 +895,9 @@ impl layout::primitive::restricted::unsigned::Restriction {
 	}
 }
 
-impl layout::primitive::restricted::float::Restriction {
+impl layout::primitive::restriction::float::Restriction {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		use layout::primitive::restricted::float::{Max, Min};
+		use layout::primitive::restriction::float::{Max, Min};
 		match self {
 			Self::Min(Min::Included(min)) => {
 				quads.push(Quad(
@@ -935,9 +935,9 @@ impl layout::primitive::restricted::float::Restriction {
 	}
 }
 
-impl layout::primitive::restricted::double::Restriction {
+impl layout::primitive::restriction::double::Restriction {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		use layout::primitive::restricted::double::{Max, Min};
+		use layout::primitive::restriction::double::{Max, Min};
 		match self {
 			Self::Min(Min::Included(min)) => {
 				quads.push(Quad(
@@ -975,7 +975,7 @@ impl layout::primitive::restricted::double::Restriction {
 	}
 }
 
-impl<'a> layout::primitive::restricted::string::Restriction<'a> {
+impl<'a> layout::primitive::restriction::string::RestrictionRef<'a> {
 	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
 		match self {
 			Self::MinLength(min) => {
