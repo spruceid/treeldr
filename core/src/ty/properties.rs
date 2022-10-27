@@ -1,4 +1,6 @@
+use crate::utils::replace_with;
 use crate::{metadata, prop, prop::restriction::Contradiction, Ref};
+use crate::{Id, SubstituteReferences};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
@@ -11,6 +13,18 @@ struct PropertyData<M> {
 impl<M> PropertyData<M> {
 	pub fn restrict(&mut self, restriction: prop::Restriction<M>) -> Result<(), Contradiction> {
 		self.restrictions.restrict(restriction)
+	}
+}
+
+impl<M> SubstituteReferences<M> for PropertyData<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		self.restrictions.substitute_references(sub)
 	}
 }
 
@@ -57,6 +71,29 @@ impl<M> Properties<M> {
 				inner: excluded.iter(),
 			}),
 		}
+	}
+}
+
+impl<M> SubstituteReferences<M> for Properties<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		replace_with(&mut self.included, |v| {
+			v.into_iter()
+				.map(|(r, mut d)| {
+					d.substitute_references(sub);
+					(sub.property(r), d)
+				})
+				.collect()
+		});
+
+		replace_with(&mut self.excluded, |v| {
+			v.map(|e| e.into_iter().map(|(r, m)| (sub.property(r), m)).collect())
+		})
 	}
 }
 

@@ -1,4 +1,5 @@
-use crate::{BlankIdIndex, Documentation, Id, IriIndex, Model};
+use crate::{BlankIdIndex, Documentation, Id, IriIndex, Model, SubstituteReferences};
+use shelves::Ref;
 
 pub mod data;
 mod intersection;
@@ -59,6 +60,24 @@ impl<M> Description<M> {
 	}
 }
 
+impl<M> SubstituteReferences<M> for Description<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<self::Definition<M>>) -> Ref<self::Definition<M>>,
+		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		match self {
+			Self::Normal(n) => n.substitute_references(sub),
+			Self::Union(u) => u.substitute_references(sub),
+			Self::Intersection(i) => i.substitute_references(sub),
+			Self::Restriction(r) => r.substitute_references(sub),
+			_ => (),
+		}
+	}
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Kind {
 	Empty,
@@ -112,5 +131,18 @@ impl<M> Definition<M> {
 
 	pub fn is_datatype(&self, model: &Model<M>) -> bool {
 		self.desc.is_datatype(model)
+	}
+}
+
+impl<M> SubstituteReferences<M> for Definition<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<self::Definition<M>>) -> Ref<self::Definition<M>>,
+		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		self.id = sub.id(self.id);
+		self.desc.substitute_references(sub)
 	}
 }

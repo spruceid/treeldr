@@ -1,6 +1,6 @@
 use derivative::Derivative;
 use shelves::Shelf;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 
 pub use shelves::Ref;
@@ -15,6 +15,7 @@ pub mod name;
 pub mod node;
 pub mod prop;
 pub mod reporting;
+mod simplify;
 pub mod to_rdf;
 pub mod ty;
 pub mod utils;
@@ -36,7 +37,7 @@ pub use vocab::{BlankIdIndex, Id, IriIndex};
 #[derivative(Default(bound = ""))]
 pub struct Model<M> {
 	/// Nodes.
-	nodes: HashMap<Id, Node<M>>,
+	nodes: BTreeMap<Id, Node<M>>,
 
 	/// Type definitions.
 	types: Shelf<Vec<ty::Definition<M>>>,
@@ -55,7 +56,7 @@ impl<M> Model<M> {
 	}
 
 	pub fn from_parts(
-		nodes: HashMap<Id, Node<M>>,
+		nodes: BTreeMap<Id, Node<M>>,
 		types: Shelf<Vec<ty::Definition<M>>>,
 		properties: Shelf<Vec<prop::Definition<M>>>,
 		layouts: Shelf<Vec<layout::Definition<M>>>,
@@ -133,6 +134,83 @@ impl<M> Model<M> {
 		M: Clone,
 	{
 		self.require(id, Some(node::Type::Layout))?.require_layout()
+	}
+}
+
+pub(crate) trait SubstituteReferences<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+		L: Fn(Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>;
+}
+
+impl<M> SubstituteReferences<M> for Model<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+		L: Fn(Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>,
+	{
+		for (_, ty) in self.types.iter_mut() {
+			ty.substitute_references(sub);
+		}
+
+		for (_, prop) in self.properties.iter_mut() {
+			prop.substitute_references(sub);
+		}
+
+		for (_, layout) in self.layouts.iter_mut() {
+			layout.substitute_references(sub);
+		}
+	}
+}
+
+pub struct ReferenceSubstitution<I, T, P, L> {
+	ids: I,
+	types: T,
+	properties: P,
+	layouts: L,
+}
+
+impl<I, T, P, L> ReferenceSubstitution<I, T, P, L> {
+	pub fn new(ids: I, types: T, properties: P, layouts: L) -> Self {
+		Self {
+			ids,
+			types,
+			properties,
+			layouts,
+		}
+	}
+
+	pub fn id(&self, id: Id) -> Id
+	where
+		I: Fn(Id) -> Id,
+	{
+		(self.ids)(id)
+	}
+
+	pub fn ty<M>(&self, r: Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>
+	where
+		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
+	{
+		(self.types)(r)
+	}
+
+	pub fn property<M>(&self, r: Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>
+	where
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+	{
+		(self.properties)(r)
+	}
+
+	pub fn layout<M>(&self, r: Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>
+	where
+		L: Fn(Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>,
+	{
+		(self.layouts)(r)
 	}
 }
 

@@ -1,4 +1,4 @@
-use crate::{Documentation, MetaOption, Name, Ref};
+use crate::{utils::replace_with, Documentation, Id, MetaOption, Name, Ref, SubstituteReferences};
 use locspan::Meta;
 
 /// Enum layout.
@@ -43,6 +43,20 @@ impl<M> Enum<M> {
 
 	pub fn composing_layouts(&self) -> ComposingLayouts<M> {
 		ComposingLayouts(self.variants.iter())
+	}
+}
+
+impl<M> SubstituteReferences<M> for Enum<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
+		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
+		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+	{
+		for v in &mut self.variants {
+			v.substitute_references(sub)
+		}
 	}
 }
 
@@ -102,6 +116,18 @@ impl<M> Variant<M> {
 	}
 }
 
+impl<M> SubstituteReferences<M> for Variant<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
+		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
+		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+	{
+		replace_with(&mut self.layout, |v| v.map(|r| sub.layout(r)))
+	}
+}
+
 pub struct ComposingLayouts<'a, M>(std::slice::Iter<'a, Meta<Variant<M>, M>>);
 
 impl<'a, M> Iterator for ComposingLayouts<'a, M> {
@@ -117,25 +143,3 @@ impl<'a, M> Iterator for ComposingLayouts<'a, M> {
 		None
 	}
 }
-
-// pub struct Fields<'a, M> {
-// 	variants: std::slice::Iter<'a, Meta<Ref<super::Definition<M>>, M>>,
-// 	current_fields: Option<std::slice::Iter<'a, Field<M>>>,
-// }
-
-// impl<'a, M> Iterator for Fields<'a, M> {
-// 	type Item = &'a Field<M>;
-
-// 	fn next(&mut self) -> Option<Self::Item> {
-// 		loop {
-// 			match self.current_fields.as_mut().map(Iterator::next) {
-// 				Some(Some(item)) => break Some(item),
-// 				Some(None) => self.current_fields = None,
-// 				None => match self.variants.next() {
-// 					Some(variant) => self.current_fields = Some(variant.fields().iter()),
-// 					None => break None,
-// 				},
-// 			}
-// 		}
-// 	}
-// }

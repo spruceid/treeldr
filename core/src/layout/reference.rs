@@ -1,4 +1,4 @@
-use crate::{MetaOption, Name, Ref};
+use crate::{Id, MetaOption, Name, Ref, SubstituteReferences};
 use locspan::Meta;
 
 /// Reference layout.
@@ -34,5 +34,17 @@ impl<M> Reference<M> {
 
 	pub fn set_id_layout(&mut self, id_layout: Ref<super::Definition<M>>) {
 		self.id_layout = id_layout
+	}
+}
+
+impl<M> SubstituteReferences<M> for Reference<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
+		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
+		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+	{
+		self.id_layout = sub.layout(self.id_layout)
 	}
 }

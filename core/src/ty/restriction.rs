@@ -1,5 +1,5 @@
 use super::Properties;
-use crate::{metadata, prop, Ref};
+use crate::{metadata, prop, Id, Ref, SubstituteReferences};
 use locspan::Meta;
 
 /// Type restricted on a property.
@@ -36,5 +36,17 @@ impl<M> Restriction<M> {
 
 	pub fn restrictions(&self) -> &prop::Restrictions<M> {
 		self.properties.included().next().unwrap().restrictions()
+	}
+}
+
+impl<M> SubstituteReferences<M> for Restriction<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		self.properties.substitute_references(sub)
 	}
 }

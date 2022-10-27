@@ -1,5 +1,5 @@
 use super::container::Restrictions;
-use crate::{prop, Id, MetaOption, Name, Ref};
+use crate::{prop, utils::replace_with, Id, MetaOption, Name, Ref, SubstituteReferences};
 use locspan::Meta;
 
 #[derive(Clone)]
@@ -67,6 +67,21 @@ impl<M> Array<M> {
 	}
 }
 
+impl<M> SubstituteReferences<M> for Array<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+	{
+		self.item = sub.layout(self.item);
+		if let Some(s) = &mut self.semantics {
+			s.substitute_references(sub)
+		}
+	}
+}
+
 /// Layout semantics.
 #[derive(Clone)]
 pub struct Semantics<M> {
@@ -99,5 +114,19 @@ impl<M> Semantics<M> {
 
 	pub fn nil(&self) -> Option<Id> {
 		self.nil.value().cloned()
+	}
+}
+
+impl<M> SubstituteReferences<M> for Semantics<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+	{
+		replace_with(&mut self.first, |v| v.map(|r| sub.property(r)));
+		replace_with(&mut self.rest, |v| v.map(|r| sub.property(r)));
+		replace_with(&mut self.nil, |v| v.map(|i| sub.id(i)))
 	}
 }

@@ -1,4 +1,4 @@
-use crate::{ty, BlankIdIndex, Documentation, Id, IriIndex};
+use crate::{ty, BlankIdIndex, Documentation, Id, IriIndex, SubstituteReferences};
 use locspan::Meta;
 use rdf_types::Subject;
 use shelves::Ref;
@@ -73,5 +73,21 @@ impl<M> Definition<M> {
 
 	pub fn documentation<'m>(&self, model: &'m crate::Model<M>) -> &'m Documentation {
 		model.get(self.id).unwrap().documentation()
+	}
+}
+
+impl<M> SubstituteReferences<M> for Definition<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
+		P: Fn(Ref<self::Definition<M>>) -> Ref<self::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		self.id = sub.id(self.id);
+		crate::utils::replace_with(&mut self.domain, |d| {
+			d.into_iter().map(|(r, m)| (sub.ty(r), m)).collect()
+		});
+		crate::utils::replace_with(&mut self.range, |r| r.map(|r| sub.ty(r)))
 	}
 }
