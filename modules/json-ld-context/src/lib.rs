@@ -9,7 +9,9 @@ use std::collections::HashMap;
 use std::fmt;
 use treeldr::{
 	layout::{self, Field},
-	prop, ty, BlankIdIndex, IriIndex, Ref,
+	prop, ty,
+	vocab::{Term, TreeLdr},
+	BlankIdIndex, IriIndex, Ref,
 };
 
 mod command;
@@ -48,6 +50,8 @@ impl<M> TermDefinition<M> {
 			} => {
 				let id = if builder.is_type_property(property_ref) {
 					term_definition::Id::Keyword(Keyword::Type)
+				} else if builder.is_id_property(property_ref) {
+					term_definition::Id::Keyword(Keyword::Id)
 				} else {
 					let property = builder.model.properties().get(property_ref).unwrap();
 					term_definition::Id::Term(property.id().with(builder.vocabulary).to_string())
@@ -229,9 +233,24 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		}
 	}
 
+	pub fn is_id_property(&self, property_ref: Ref<prop::Definition<M>>) -> bool {
+		let property = self.model.properties().get(property_ref).unwrap();
+		match property.id().as_iri() {
+			Some(iri) => *iri == IriIndex::Iri(Term::TreeLdr(TreeLdr::Self_)),
+			None => false,
+		}
+	}
+
 	pub fn is_type_field(&self, field: &Field<M>) -> bool {
 		match field.property() {
 			Some(property_ref) => self.is_type_property(property_ref),
+			None => false,
+		}
+	}
+
+	pub fn is_id_field(&self, field: &Field<M>) -> bool {
+		match field.property() {
+			Some(property_ref) => self.is_id_property(property_ref),
 			None => false,
 		}
 	}
@@ -325,7 +344,7 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		let mut definition = json_ld::syntax::context::Definition::new();
 
 		for (term, term_definition) in &self.terms {
-			if term != "@type" {
+			if !matches!(term.as_str(), "@type" | "@id") {
 				definition.bindings.insert(
 					Meta(term.clone().into(), ()),
 					Meta(term_definition.build(self)?, ()),
