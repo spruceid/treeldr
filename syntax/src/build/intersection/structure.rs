@@ -256,6 +256,7 @@ pub enum FieldLayoutDescription<M> {
 	Option,
 	Array(Option<treeldr_build::layout::array::Semantics<M>>),
 	Set,
+	OneOrMany,
 }
 
 impl<M> FieldLayout<M> {
@@ -281,6 +282,9 @@ impl<M> FieldLayout<M> {
 					LayoutDescription::Standard(treeldr_build::layout::Description::Set(r)) => {
 						(FieldLayoutDescription::Set, *r)
 					}
+					LayoutDescription::Standard(treeldr_build::layout::Description::OneOrMany(
+						r,
+					)) => (FieldLayoutDescription::OneOrMany, *r),
 					LayoutDescription::Standard(treeldr_build::layout::Description::Array(a)) => (
 						FieldLayoutDescription::Array(a.semantics().cloned()),
 						a.item_layout(),
@@ -385,6 +389,7 @@ impl<M> FieldLayoutDescription<M> {
 			(Self::Required, Self::Required | Self::Option) => true,
 			(Self::Option, Self::Option) => true,
 			(Self::Set, Self::Set) => true,
+			(Self::OneOrMany, Self::OneOrMany) => true,
 			(Self::Array(a), Self::Array(b)) => a.stripped() == b.stripped(),
 			_ => false,
 		}
@@ -397,6 +402,7 @@ impl<M> FieldLayoutDescription<M> {
 			| (Self::Option, Self::Required) => Some(Self::Required),
 			(Self::Option, Self::Option) => Some(Self::Option),
 			(Self::Set, Self::Set) => Some(Self::Set),
+			(Self::OneOrMany, Self::OneOrMany) => Some(Self::OneOrMany),
 			(Self::Array(a), Self::Array(b)) if a.stripped() == b.stripped() => {
 				Some(Self::Array(a))
 			}
@@ -429,6 +435,9 @@ impl<M> FieldLayoutDescription<M> {
 			}
 			Self::Set => {
 				layout.set_set(item_layout, item_causes).ok();
+			}
+			Self::OneOrMany => {
+				layout.set_one_or_many(item_layout, item_causes).ok();
 			}
 			Self::Array(semantics) => {
 				layout.set_array(item_layout, semantics, item_causes).ok();

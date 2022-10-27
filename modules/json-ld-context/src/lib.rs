@@ -246,6 +246,7 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		use treeldr::layout::Description;
 		match layout.description().value() {
 			Description::Set(s) => self.insert_layout_terms(s.item_layout(), typed),
+			Description::OneOrMany(s) => self.insert_layout_terms(s.item_layout(), typed),
 			Description::Required(o) => self.insert_layout_terms(o.item_layout(), typed),
 			Description::Option(o) => self.insert_layout_terms(o.item_layout(), typed),
 			Description::Struct(s) => {

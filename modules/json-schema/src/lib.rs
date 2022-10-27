@@ -151,9 +151,13 @@ fn generate_layout_schema<F>(
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
-	required: Option<&mut bool>,
+	mut required: Option<&mut bool>,
 	layout: &layout::Definition<F>,
 ) -> Result<serde_json::Value, Error<F>> {
+	if let Some(required) = required.as_mut() {
+		**required = layout.description().value().is_required()
+	}
+
 	use treeldr::layout::Description;
 	match layout.description().value() {
 		Description::Never(_) => Ok(serde_json::Value::Bool(false)),
@@ -178,9 +182,8 @@ fn generate_layout_schema<F>(
 				item_layout,
 			)
 		}
-		Description::Option(o) => match required {
-			Some(required) => {
-				*required = false;
+		Description::Option(o) => {
+			if required.is_some() {
 				let item_layout = model.layouts().get(o.item_layout()).unwrap();
 				generate_layout_schema(
 					vocabulary,
@@ -190,12 +193,19 @@ fn generate_layout_schema<F>(
 					None,
 					item_layout,
 				)
-			}
-			None => {
+			} else {
 				generate_option_type(vocabulary, model, embedding, type_property, o.item_layout())
 			}
-		},
+		}
 		Description::Set(s) => generate_set_type(
+			vocabulary,
+			model,
+			embedding,
+			type_property,
+			s.item_layout(),
+			s.restrictions(),
+		),
+		Description::OneOrMany(s) => generate_one_or_many_type(
 			vocabulary,
 			model,
 			embedding,
@@ -345,10 +355,14 @@ fn generate_layout_ref<F>(
 	model: &treeldr::Model<F>,
 	embedding: &embedding::Configuration<F>,
 	type_property: Option<&str>,
-	required: Option<&mut bool>,
+	mut required: Option<&mut bool>,
 	layout_ref: Ref<layout::Definition<F>>,
 ) -> Result<serde_json::Value, Error<F>> {
 	let layout = model.layouts().get(layout_ref).unwrap();
+
+	if let Some(required) = required.as_mut() {
+		**required = layout.description().value().is_required()
+	}
 
 	use treeldr::layout::Description;
 	match layout.description().value() {
@@ -370,9 +384,8 @@ fn generate_layout_ref<F>(
 			None,
 			r.item_layout(),
 		),
-		Description::Option(o) => match required {
-			Some(required) => {
-				*required = false;
+		Description::Option(o) => {
+			if required.is_some() {
 				generate_layout_ref(
 					vocabulary,
 					model,
@@ -381,12 +394,19 @@ fn generate_layout_ref<F>(
 					None,
 					o.item_layout(),
 				)
-			}
-			None => {
+			} else {
 				generate_option_type(vocabulary, model, embedding, type_property, o.item_layout())
 			}
-		},
+		}
 		Description::Set(s) => generate_set_type(
+			vocabulary,
+			model,
+			embedding,
+			type_property,
+			s.item_layout(),
+			s.restrictions(),
+		),
+		Description::OneOrMany(s) => generate_one_or_many_type(
 			vocabulary,
 			model,
 			embedding,
@@ -467,6 +487,44 @@ fn generate_set_type<F>(
 	if restrictions.cardinal().max() < u64::MAX {
 		def.insert("maxItems".into(), restrictions.cardinal().max().into());
 	}
+
+	Ok(def.into())
+}
+
+fn generate_one_or_many_type<F>(
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	model: &treeldr::Model<F>,
+	embedding: &embedding::Configuration<F>,
+	type_property: Option<&str>,
+	item_layout_ref: Ref<layout::Definition<F>>,
+	restrictions: &treeldr::layout::container::Restrictions<F>,
+) -> Result<serde_json::Value, Error<F>> {
+	let mut def = serde_json::Map::new();
+
+	let item_schema = generate_layout_ref(
+		vocabulary,
+		model,
+		embedding,
+		type_property,
+		None,
+		item_layout_ref,
+	)?;
+
+	def.insert(
+		"oneOf".into(),
+		vec![
+			item_schema,
+			generate_set_type(
+				vocabulary,
+				model,
+				embedding,
+				type_property,
+				item_layout_ref,
+				restrictions,
+			)?,
+		]
+		.into(),
+	);
 
 	Ok(def.into())
 }

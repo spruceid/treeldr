@@ -9,6 +9,7 @@ use shelves::Ref;
 pub mod array;
 pub mod container;
 pub mod enumeration;
+mod one_or_many;
 mod optional;
 pub mod primitive;
 mod reference;
@@ -21,6 +22,7 @@ mod usages;
 
 pub use array::Array;
 pub use enumeration::{Enum, Variant};
+pub use one_or_many::OneOrMany;
 pub use optional::Optional;
 pub use primitive::{restriction::Restricted as RestrictedPrimitive, Primitive};
 pub use reference::Reference;
@@ -44,6 +46,7 @@ pub enum Kind {
 	Option,
 	Array,
 	Set,
+	OneOrMany,
 	Alias,
 }
 
@@ -92,6 +95,9 @@ pub enum Description<M> {
 	/// Set.
 	Set(Set<M>),
 
+	/// One or many.
+	OneOrMany(OneOrMany<M>),
+
 	/// Alias.
 	Alias(Meta<Name, M>, Ref<Definition<M>>),
 }
@@ -108,6 +114,7 @@ impl<M> Description<M> {
 			Self::Option(_) => Kind::Option,
 			Self::Array(_) => Kind::Array,
 			Self::Set(_) => Kind::Set,
+			Self::OneOrMany(_) => Kind::OneOrMany,
 			Self::Alias(_, _) => Kind::Alias,
 		}
 	}
@@ -120,6 +127,7 @@ impl<M> Description<M> {
 		match self {
 			Self::Required(_) => true,
 			Self::Set(s) => s.is_required(),
+			Self::OneOrMany(s) => s.is_required(),
 			Self::Array(a) => a.is_required(),
 			_ => false,
 		}
@@ -137,6 +145,7 @@ impl<M> Description<M> {
 			Self::Option(o) => o.set_name(new_name, metadata),
 			Self::Array(a) => a.set_name(new_name, metadata),
 			Self::Set(s) => s.set_name(new_name, metadata),
+			Self::OneOrMany(s) => s.set_name(new_name, metadata),
 			Self::Alias(n, _) => Some(std::mem::replace(n, Meta(new_name, metadata))),
 		}
 	}
@@ -152,6 +161,7 @@ impl<M> Description<M> {
 			Description::Option(o) => o.into_name(),
 			Description::Array(a) => a.into_name(),
 			Description::Set(s) => s.into_name(),
+			Description::OneOrMany(s) => s.into_name(),
 			Description::Alias(n, _) => n.into(),
 		}
 	}
@@ -175,6 +185,7 @@ impl<M> SubstituteReferences<M> for Description<M> {
 			Self::Option(o) => o.substitute_references(sub),
 			Self::Array(a) => a.substitute_references(sub),
 			Self::Set(s) => s.substitute_references(sub),
+			Self::OneOrMany(s) => s.substitute_references(sub),
 			Self::Alias(_, r) => *r = sub.layout(*r),
 		}
 	}
@@ -217,6 +228,7 @@ impl<M> Definition<M> {
 			Description::Option(o) => o.name(),
 			Description::Array(a) => a.name(),
 			Description::Set(s) => s.name(),
+			Description::OneOrMany(s) => s.name(),
 			Description::Alias(n, _) => Some(n),
 		}
 	}
@@ -284,6 +296,7 @@ impl<M> Definition<M> {
 			Description::Required(r) => ComposingLayouts::One(Some(r.item_layout())),
 			Description::Array(a) => ComposingLayouts::One(Some(a.item_layout())),
 			Description::Set(s) => ComposingLayouts::One(Some(s.item_layout())),
+			Description::OneOrMany(s) => ComposingLayouts::One(Some(s.item_layout())),
 			Description::Alias(_, _) => ComposingLayouts::None,
 		}
 	}

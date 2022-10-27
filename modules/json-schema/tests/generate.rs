@@ -174,5 +174,8 @@ macro_rules! positive {
 }
 
 positive! {
-	t01: "http://www.example.com/Foo"
+	t01: "http://www.example.com/Foo",
+	t02: "http://www.example.com/Foo",
+	t03: "http://www.example.com/Foo",
+	t04: "http://www.example.com/Foo"
 }

@@ -1,0 +1,12 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "http://www.example.com/Foo",
+	"properties": {
+		"prop": {
+			"$ref": "http://www.example.com/Integer"
+		}
+	},
+	"title": "Foo",
+	"type": "object",
+	"required": ["prop"]
+}

@@ -42,6 +42,7 @@ pub enum IntersectedLayoutDescription<M> {
 	Required(Id),
 	Option(Id),
 	Set(Id),
+	OneOrMany(Id),
 	Array(Array<M>),
 	Alias(Id),
 }
@@ -317,6 +318,7 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 					treeldr_build::layout::Description::Required(r) => Ok(Self::Required(*r)),
 					treeldr_build::layout::Description::Option(s) => Ok(Self::Option(*s)),
 					treeldr_build::layout::Description::Set(s) => Ok(Self::Set(*s)),
+					treeldr_build::layout::Description::OneOrMany(s) => Ok(Self::OneOrMany(*s)),
 					treeldr_build::layout::Description::Array(a) => Ok(Self::Array(a.clone())),
 					treeldr_build::layout::Description::Alias(a) => Ok(Self::Alias(*a)),
 				},
@@ -385,6 +387,7 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 			(Self::Enum(a), Self::Enum(b)) => a.is_included_in(b),
 			(Self::Struct(a), Self::Struct(b)) => a.is_included_in(b),
 			(Self::Set(a), Self::Set(b)) => a == b,
+			(Self::OneOrMany(a), Self::OneOrMany(b)) => a == b,
 			(Self::Array(a), Self::Array(b)) => a == b,
 			(Self::Alias(a), Self::Alias(b)) => a == b,
 			_ => false,
@@ -442,7 +445,6 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 				),
 				Self::Required(a) => match other {
 					Self::Required(b) => {
-						eprintln!("case B");
 						let c = IntersectedLayout::try_from_iter(
 							[Meta::new(a, causes.clone()), Meta::new(b, other_causes)],
 							context,
@@ -469,6 +471,10 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 				},
 				Self::Set(a) => match other {
 					Self::Set(b) if a == b => Ok(Self::Set(a)),
+					_ => Ok(Self::Never),
+				},
+				Self::OneOrMany(a) => match other {
+					Self::OneOrMany(b) if a == b => Ok(Self::OneOrMany(a)),
 					_ => Ok(Self::Never),
 				},
 				Self::Array(a) => match other {
@@ -527,6 +533,7 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 			Self::Required(r) => Ok(treeldr_build::layout::Description::Required(r)),
 			Self::Option(o) => Ok(treeldr_build::layout::Description::Option(o)),
 			Self::Set(s) => Ok(treeldr_build::layout::Description::Set(s)),
+			Self::OneOrMany(s) => Ok(treeldr_build::layout::Description::OneOrMany(s)),
 			Self::Array(a) => Ok(treeldr_build::layout::Description::Array(a)),
 			Self::Alias(a) => Ok(treeldr_build::layout::Description::Alias(a)),
 		}

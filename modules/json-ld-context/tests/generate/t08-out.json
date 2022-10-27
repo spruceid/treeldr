@@ -1,0 +1,6 @@
+{
+	"prop": {
+		"@id": "http://www.example.com/Foo/prop",
+		"@container": "@set"
+	}
+}
