@@ -113,6 +113,10 @@ pub enum TreeLdr {
 	/// Set layout.
 	#[iri("tldr:set")]
 	Set,
+
+	/// "One or many" layout.
+	#[iri("tldr:oneOrMany")]
+	OneOrMany,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

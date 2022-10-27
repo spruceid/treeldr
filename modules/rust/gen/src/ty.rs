@@ -174,6 +174,9 @@ impl<M> Description<M> {
 			treeldr::layout::Description::Set(s) => {
 				Self::BuiltIn(BuiltIn::BTreeSet(s.item_layout()))
 			}
+			treeldr::layout::Description::OneOrMany(s) => {
+				Self::BuiltIn(BuiltIn::OneOrMany(s.item_layout()))
+			}
 		}
 	}
 }

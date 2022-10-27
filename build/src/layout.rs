@@ -26,6 +26,7 @@ pub enum Description<M> {
 	Required(Id),
 	Option(Id),
 	Set(Id),
+	OneOrMany(Id),
 	Array(Array<M>),
 	Alias(Id),
 }
@@ -42,6 +43,7 @@ pub enum Kind {
 	Required,
 	Option,
 	Set,
+	OneOrMany,
 	Array,
 	Alias,
 }
@@ -57,6 +59,7 @@ impl<M> Description<M> {
 			Self::Required(_) => Kind::Required,
 			Self::Option(_) => Kind::Option,
 			Self::Set(_) => Kind::Set,
+			Self::OneOrMany(_) => Kind::OneOrMany,
 			Self::Array(_) => Kind::Array,
 			Self::Alias(_) => Kind::Alias,
 		}
@@ -95,6 +98,7 @@ impl<M> Description<M> {
 									Description::Required(id) => *id,
 									Description::Option(id) => *id,
 									Description::Set(id) => *id,
+									Description::OneOrMany(id) => *id,
 									Description::Array(a) => a.item_layout(),
 									_ => panic!("invalid field layout: not a container"),
 								};
@@ -112,6 +116,10 @@ impl<M> Description<M> {
 				}
 			}
 			Description::Set(item_layout_id) => sub_layouts.push(SubLayout {
+				layout: Meta(*item_layout_id, metadata.clone()),
+				connection: LayoutConnection::Item,
+			}),
+			Description::OneOrMany(item_layout_id) => sub_layouts.push(SubLayout {
 				layout: Meta(*item_layout_id, metadata.clone()),
 				connection: LayoutConnection::Item,
 			}),
@@ -229,6 +237,16 @@ impl<M> Description<M> {
 					treeldr::layout::Set::new(name, item_layout_ref, restrictions.into_container()),
 				))
 			}
+			Description::OneOrMany(item_layout_id) => {
+				let item_layout_ref = **nodes.require_layout(item_layout_id, metadata)?;
+				Ok(treeldr::layout::Description::OneOrMany(
+					treeldr::layout::OneOrMany::new(
+						name,
+						item_layout_ref,
+						restrictions.into_container(),
+					),
+				))
+			}
 			Description::Array(array) => Ok(treeldr::layout::Description::Array(array.build(
 				name,
 				restrictions.into_container(),
@@ -297,6 +315,9 @@ impl<M: Clone> PseudoDescription<M> for Description<M> {
 			}
 			(Self::Set(a), Self::Set(b)) if a == b => {
 				Ok(Meta(Self::Set(a), meta.merged_with(other_meta)))
+			}
+			(Self::OneOrMany(a), Self::OneOrMany(b)) if a == b => {
+				Ok(Meta(Self::OneOrMany(a), meta.merged_with(other_meta)))
 			}
 			(Self::Array(a), Self::Array(b)) => {
 				let Meta(result, meta) = a.try_unify(b, id, meta, other_meta)?;
@@ -492,6 +513,10 @@ impl<M: Merge, D: PseudoDescription<M>> Definition<M, D> {
 
 	pub fn set_set(&mut self, item: Id, metadata: M) -> Result<(), Error<M>> {
 		self.set_description(Description::Set(item).into(), metadata)
+	}
+
+	pub fn set_one_or_many(&mut self, item: Id, metadata: M) -> Result<(), Error<M>> {
+		self.set_description(Description::OneOrMany(item).into(), metadata)
 	}
 
 	pub fn set_array(

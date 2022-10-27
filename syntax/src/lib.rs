@@ -132,6 +132,12 @@ pub enum Annotation {
 
 	/// Field with multiple values.
 	Multiple,
+
+	/// Field with a single value.
+	///
+	/// In can be combined with `multiple` to use the `one or many` container
+	/// layout.
+	Single,
 }
 
 impl Annotation {
@@ -139,6 +145,7 @@ impl Annotation {
 		match name {
 			"required" => Some(Self::Required),
 			"multiple" => Some(Self::Multiple),
+			"single" => Some(Self::Single),
 			_ => None,
 		}
 	}
@@ -147,6 +154,7 @@ impl Annotation {
 		match self {
 			Self::Required => "required",
 			Self::Multiple => "multiple",
+			Self::Single => "single",
 		}
 	}
 }

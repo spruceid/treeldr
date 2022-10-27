@@ -1129,6 +1129,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 							required = true;
 							required_loc = Some(ann_loc);
 						}
+						crate::Annotation::Single => (),
 					}
 				}
 
@@ -1672,6 +1673,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 
 		let mut required_loc = None;
 		let mut multiple_loc = None;
+		let mut single_loc = None;
 
 		let layout = match def.layout {
 			Some(Meta(layout, _)) => {
@@ -1685,6 +1687,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 					match ann {
 						crate::Annotation::Multiple => multiple_loc = Some(ann_loc),
 						crate::Annotation::Required => required_loc = Some(ann_loc),
+						crate::Annotation::Single => single_loc = Some(ann_loc),
 					}
 				}
 
@@ -1702,7 +1705,19 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 									.as_layout_mut()
 									.unwrap();
 								let Meta(item_layout_id, item_layout_loc) = layout_id;
-								container_layout.set_set(item_layout_id, multiple_loc)?;
+
+								match single_loc {
+									Some(single_loc) => {
+										container_layout.set_one_or_many(
+											item_layout_id,
+											multiple_loc.merged_with(single_loc),
+										)?;
+									}
+									None => {
+										container_layout.set_set(item_layout_id, multiple_loc)?;
+									}
+								}
+
 								container_layout
 									.restrictions_mut()
 									.container
@@ -1742,7 +1757,19 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 									.as_layout_mut()
 									.unwrap();
 								let Meta(item_layout_id, item_layout_loc) = layout_id;
-								container_layout.set_set(item_layout_id, multiple_loc)?;
+
+								match single_loc {
+									Some(single_loc) => {
+										container_layout.set_one_or_many(
+											item_layout_id,
+											multiple_loc.merged_with(single_loc),
+										)?;
+									}
+									None => {
+										container_layout.set_set(item_layout_id, multiple_loc)?;
+									}
+								}
+
 								Meta(container_id, item_layout_loc)
 							}
 							None => {
