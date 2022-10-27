@@ -1,0 +1,8 @@
+use <https://treeldr.org/> as tldr;
+use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
+
+type Integer with tldr:Integer;
+
+type Foo {
+	tldr:self as id: &rdfs:Resource
+}

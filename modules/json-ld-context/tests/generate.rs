@@ -218,7 +218,9 @@ positive! {
 	t06: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
 	t07: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
 	t08: ["http://www.example.com/Foo"],
-	t09: ["http://www.example.com/Foo"]
+	t09: ["http://www.example.com/Foo"],
+	t10: ["http://www.example.com/Foo"],
+	t11: ["http://www.example.com/Foo"]
 }
 
 negative! {
