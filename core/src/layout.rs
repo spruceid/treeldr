@@ -1,4 +1,7 @@
-use crate::{ty, BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name};
+use crate::{
+	ty, utils::replace_with, BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name,
+	SubstituteReferences,
+};
 use locspan::Meta;
 use rdf_types::Subject;
 use shelves::Ref;
@@ -154,6 +157,29 @@ impl<M> Description<M> {
 	}
 }
 
+impl<M> SubstituteReferences<M> for Description<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
+		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
+		L: Fn(Ref<self::Definition<M>>) -> Ref<self::Definition<M>>,
+	{
+		match self {
+			Self::Never(_) => (),
+			Self::Struct(s) => s.substitute_references(sub),
+			Self::Enum(e) => e.substitute_references(sub),
+			Self::Reference(r) => r.substitute_references(sub),
+			Self::Primitive(_, _) => (),
+			Self::Required(r) => r.substitute_references(sub),
+			Self::Option(o) => o.substitute_references(sub),
+			Self::Array(a) => a.substitute_references(sub),
+			Self::Set(s) => s.substitute_references(sub),
+			Self::Alias(_, r) => *r = sub.layout(*r),
+		}
+	}
+}
+
 impl<M> Definition<M> {
 	/// Creates a new layout definition.
 	pub fn new(
@@ -260,6 +286,20 @@ impl<M> Definition<M> {
 			Description::Set(s) => ComposingLayouts::One(Some(s.item_layout())),
 			Description::Alias(_, _) => ComposingLayouts::None,
 		}
+	}
+}
+
+impl<M> SubstituteReferences<M> for Definition<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
+		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
+		L: Fn(Ref<self::Definition<M>>) -> Ref<self::Definition<M>>,
+	{
+		self.id = sub.id(self.id);
+		replace_with(&mut self.ty, |v| v.map(|r| sub.ty(r)));
+		self.desc.substitute_references(sub)
 	}
 }
 

@@ -1126,11 +1126,15 @@ impl<M: Clone> Context<M> {
 			}
 		}
 
-		Ok(Model::from_parts(
+		let mut model = Model::from_parts(
 			allocated_nodes.into_model_nodes(),
 			Shelf::new(built_types.into_iter().map(Option::unwrap).collect()),
 			Shelf::new(built_properties.into_iter().map(Option::unwrap).collect()),
 			Shelf::new(built_layouts.into_iter().map(Option::unwrap).collect()),
-		))
+		);
+
+		model.simplify(vocabulary, generator);
+
+		Ok(model)
 	}
 }

@@ -2,7 +2,7 @@ use crate::{error, layout, list, node, prop, ty, utils::SccGraph, Error, ListRef
 use derivative::Derivative;
 use locspan::Meta;
 use shelves::{Ref, Shelf};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use treeldr::{vocab, Id, IriIndex, MetaOption};
 
 #[derive(Clone, Derivative)]
@@ -159,7 +159,14 @@ impl<M> From<Node<Components<M>>> for treeldr::Node<M> {
 	fn from(n: Node<Components<M>>) -> treeldr::Node<M> {
 		let (id, label, doc, value) = n.into_parts();
 
-		treeldr::Node::from_parts(id, label, value.ty, value.property, value.layout, doc)
+		treeldr::Node::from_parts(treeldr::node::Parts {
+			id,
+			label,
+			ty: value.ty,
+			property: value.property,
+			layout: value.layout,
+			doc,
+		})
 	}
 }
 
@@ -286,7 +293,7 @@ impl<M: Clone> Nodes<M> {
 		}
 	}
 
-	pub fn into_model_nodes(self) -> HashMap<Id, treeldr::Node<M>> {
+	pub fn into_model_nodes(self) -> BTreeMap<Id, treeldr::Node<M>> {
 		self.nodes
 			.into_iter()
 			.map(|(id, node)| (id, node.into()))

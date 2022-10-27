@@ -1,6 +1,13 @@
+pub mod permutation;
 pub mod scc;
+pub mod union_find;
 
 pub use scc::SccGraph;
+pub use union_find::UnionFind;
+
+pub fn replace_with<T>(value: &mut T, f: impl FnOnce(T) -> T) {
+	unsafe { std::ptr::write(value, f(std::ptr::read(value))) }
+}
 
 pub trait TryFromIterator<T>: Sized {
 	fn try_from_iterator<E, I: IntoIterator<Item = Result<T, E>>>(iter: I) -> Result<Self, E>;

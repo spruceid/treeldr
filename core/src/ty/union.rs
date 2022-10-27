@@ -1,5 +1,5 @@
 use super::Properties;
-use crate::{metadata, Model, Ref};
+use crate::{metadata, utils::replace_with, Id, Model, Ref, SubstituteReferences};
 use std::collections::BTreeMap;
 
 pub struct Union<M> {
@@ -40,5 +40,20 @@ impl<M> Union<M> {
 		self.options
 			.iter()
 			.all(|(ty_ref, _)| model.types().get(*ty_ref).unwrap().is_datatype(model))
+	}
+}
+
+impl<M> SubstituteReferences<M> for Union<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		replace_with(&mut self.options, |v| {
+			v.into_iter().map(|(r, m)| (sub.ty(r), m)).collect()
+		});
+		self.properties.substitute_references(sub)
 	}
 }

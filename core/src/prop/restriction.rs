@@ -1,4 +1,4 @@
-use crate::{ty, Ref};
+use crate::{ty, utils::replace_with, Id, Ref, SubstituteReferences};
 use derivative::Derivative;
 use std::collections::HashSet;
 
@@ -7,12 +7,12 @@ pub struct Contradiction;
 
 #[derive(Derivative)]
 #[derivative(Default(bound = ""), Clone(bound = ""))]
-pub struct Restrictions<F> {
-	range: RangeRestrictions<F>,
+pub struct Restrictions<M> {
+	range: RangeRestrictions<M>,
 	cardinality: CardinalityRestrictions,
 }
 
-impl<F> Restrictions<F> {
+impl<M> Restrictions<M> {
 	pub fn new() -> Self {
 		Self::default()
 	}
@@ -25,14 +25,14 @@ impl<F> Restrictions<F> {
 		self.range.is_empty() && self.cardinality.is_empty()
 	}
 
-	pub fn iter(&self) -> Iter<F> {
+	pub fn iter(&self) -> Iter<M> {
 		Iter {
 			range: self.range.iter(),
 			cardinality: self.cardinality.iter(),
 		}
 	}
 
-	pub fn restrict(&mut self, restriction: Restriction<F>) -> Result<(), Contradiction> {
+	pub fn restrict(&mut self, restriction: Restriction<M>) -> Result<(), Contradiction> {
 		match restriction {
 			Restriction::Range(r) => {
 				self.range.restrict(r);
@@ -62,13 +62,25 @@ impl<F> Restrictions<F> {
 	}
 }
 
-pub struct Iter<'a, F> {
-	range: RangeRestrictionsIter<'a, F>,
+impl<M> SubstituteReferences<M> for Restrictions<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
+		P: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		self.range.substitute_references(sub)
+	}
+}
+
+pub struct Iter<'a, M> {
+	range: RangeRestrictionsIter<'a, M>,
 	cardinality: CardinalityRestrictionsIter,
 }
 
-impl<'a, F> Iterator for Iter<'a, F> {
-	type Item = Restriction<F>;
+impl<'a, M> Iterator for Iter<'a, M> {
+	type Item = Restriction<M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.range
@@ -78,9 +90,9 @@ impl<'a, F> Iterator for Iter<'a, F> {
 	}
 }
 
-impl<'a, F> IntoIterator for &'a Restrictions<F> {
-	type Item = Restriction<F>;
-	type IntoIter = Iter<'a, F>;
+impl<'a, M> IntoIterator for &'a Restrictions<M> {
+	type Item = Restriction<M>;
+	type IntoIter = Iter<'a, M>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.iter()
@@ -89,12 +101,12 @@ impl<'a, F> IntoIterator for &'a Restrictions<F> {
 
 #[derive(Derivative)]
 #[derivative(Default(bound = ""), Clone(bound = ""))]
-pub struct RangeRestrictions<F> {
-	all: HashSet<Ref<ty::Definition<F>>>,
-	any: HashSet<Ref<ty::Definition<F>>>,
+pub struct RangeRestrictions<M> {
+	all: HashSet<Ref<ty::Definition<M>>>,
+	any: HashSet<Ref<ty::Definition<M>>>,
 }
 
-impl<F> RangeRestrictions<F> {
+impl<M> RangeRestrictions<M> {
 	pub fn len(&self) -> usize {
 		self.all.len() + self.any.len()
 	}
@@ -103,14 +115,14 @@ impl<F> RangeRestrictions<F> {
 		self.all.is_empty() && self.any.is_empty()
 	}
 
-	pub fn iter(&self) -> RangeRestrictionsIter<F> {
+	pub fn iter(&self) -> RangeRestrictionsIter<M> {
 		RangeRestrictionsIter {
 			all: self.all.iter().cloned(),
 			any: self.any.iter().cloned(),
 		}
 	}
 
-	pub fn restrict(&mut self, restriction: Range<F>) {
+	pub fn restrict(&mut self, restriction: Range<M>) {
 		match restriction {
 			Range::All(r) => {
 				self.all.insert(r);
@@ -141,13 +153,30 @@ impl<F> RangeRestrictions<F> {
 	}
 }
 
-pub struct RangeRestrictionsIter<'a, F> {
-	all: std::iter::Cloned<std::collections::hash_set::Iter<'a, Ref<ty::Definition<F>>>>,
-	any: std::iter::Cloned<std::collections::hash_set::Iter<'a, Ref<ty::Definition<F>>>>,
+impl<M> SubstituteReferences<M> for RangeRestrictions<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
+		P: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		replace_with(&mut self.all, |v| {
+			v.into_iter().map(|r| sub.ty(r)).collect()
+		});
+		replace_with(&mut self.any, |v| {
+			v.into_iter().map(|r| sub.ty(r)).collect()
+		});
+	}
 }
 
-impl<'a, F> Iterator for RangeRestrictionsIter<'a, F> {
-	type Item = Range<F>;
+pub struct RangeRestrictionsIter<'a, M> {
+	all: std::iter::Cloned<std::collections::hash_set::Iter<'a, Ref<ty::Definition<M>>>>,
+	any: std::iter::Cloned<std::collections::hash_set::Iter<'a, Ref<ty::Definition<M>>>>,
+}
+
+impl<'a, M> Iterator for RangeRestrictionsIter<'a, M> {
+	type Item = Range<M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self.any.next() {
@@ -299,9 +328,9 @@ impl Iterator for CardinalityRestrictionsIter {
 	PartialEq(bound = ""),
 	Eq(bound = "")
 )]
-pub enum Restriction<F> {
+pub enum Restriction<M> {
 	/// Range restriction.
-	Range(Range<F>),
+	Range(Range<M>),
 
 	/// Cardinality restriction.
 	Cardinality(Cardinality),
@@ -315,12 +344,12 @@ pub enum Restriction<F> {
 	PartialEq(bound = ""),
 	Eq(bound = "")
 )]
-pub enum Range<F> {
+pub enum Range<M> {
 	/// At least one value must be an instance of the given type.
-	Any(Ref<ty::Definition<F>>),
+	Any(Ref<ty::Definition<M>>),
 
 	/// All the values must be instances of the given type.
-	All(Ref<ty::Definition<F>>),
+	All(Ref<ty::Definition<M>>),
 }
 
 /// Property cardinality restriction.

@@ -1,4 +1,6 @@
-use crate::{layout, prop, Documentation, MetaOption, Name};
+use crate::{
+	layout, prop, utils::replace_with, Documentation, Id, MetaOption, Name, SubstituteReferences,
+};
 use locspan::Meta;
 use shelves::Ref;
 
@@ -53,6 +55,20 @@ impl<M> Struct<M> {
 			Some(self.fields[0].layout())
 		} else {
 			None
+		}
+	}
+}
+
+impl<M> SubstituteReferences<M> for Struct<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+		L: Fn(Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>,
+	{
+		for f in &mut self.fields {
+			f.substitute_references(sub)
 		}
 	}
 }
@@ -167,5 +183,18 @@ impl<M> Field<M> {
 		} else {
 			&self.doc
 		}
+	}
+}
+
+impl<M> SubstituteReferences<M> for Field<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+		L: Fn(Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>,
+	{
+		replace_with(&mut self.prop, |v| v.map(|r| sub.property(r)));
+		replace_with(&mut self.layout, |v| v.map(|r| sub.layout(r)))
 	}
 }

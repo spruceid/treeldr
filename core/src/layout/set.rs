@@ -1,5 +1,5 @@
 use super::container::Restrictions;
-use crate::{MetaOption, Name, Ref};
+use crate::{Id, MetaOption, Name, Ref, SubstituteReferences};
 use locspan::Meta;
 
 /// Set layout.
@@ -54,5 +54,17 @@ impl<M> Set<M> {
 
 	pub fn is_required(&self) -> bool {
 		self.restrictions.is_required()
+	}
+}
+
+impl<M> SubstituteReferences<M> for Set<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
+		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
+		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+	{
+		self.item = sub.layout(self.item)
 	}
 }

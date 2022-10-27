@@ -127,6 +127,15 @@ impl<'a, M> Iterator for TypesMetadataIter<'a, M> {
 	}
 }
 
+pub struct Parts<M> {
+	pub id: Id,
+	pub label: Option<String>,
+	pub ty: MetaOption<Ref<ty::Definition<M>>, M>,
+	pub property: MetaOption<Ref<prop::Definition<M>>, M>,
+	pub layout: MetaOption<Ref<layout::Definition<M>>, M>,
+	pub doc: Documentation,
+}
+
 #[derive(Debug)]
 pub struct Node<M> {
 	id: Id,
@@ -149,21 +158,25 @@ impl<M> Node<M> {
 		}
 	}
 
-	pub fn from_parts(
-		id: Id,
-		label: Option<String>,
-		ty: MetaOption<Ref<ty::Definition<M>>, M>,
-		property: MetaOption<Ref<prop::Definition<M>>, M>,
-		layout: MetaOption<Ref<layout::Definition<M>>, M>,
-		doc: Documentation,
-	) -> Self {
+	pub fn from_parts(parts: Parts<M>) -> Self {
 		Self {
-			id,
-			label,
-			ty,
-			property,
-			layout,
-			doc,
+			id: parts.id,
+			label: parts.label,
+			ty: parts.ty,
+			property: parts.property,
+			layout: parts.layout,
+			doc: parts.doc,
+		}
+	}
+
+	pub fn into_parts(self) -> Parts<M> {
+		Parts {
+			id: self.id,
+			label: self.label,
+			ty: self.ty,
+			property: self.property,
+			layout: self.layout,
+			doc: self.doc,
 		}
 	}
 

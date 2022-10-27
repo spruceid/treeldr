@@ -1,5 +1,7 @@
 use super::Properties;
-use crate::{metadata, prop::restriction, Model, Ref};
+use crate::{
+	metadata, prop::restriction, utils::replace_with, Id, Model, Ref, SubstituteReferences,
+};
 use std::collections::BTreeMap;
 
 /// Intersection type.
@@ -41,5 +43,20 @@ impl<M> Intersection<M> {
 		self.types
 			.iter()
 			.any(|(ty_ref, _)| model.types().get(*ty_ref).unwrap().is_datatype(model))
+	}
+}
+
+impl<M> SubstituteReferences<M> for Intersection<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		replace_with(&mut self.types, |v| {
+			v.into_iter().map(|(r, m)| (sub.ty(r), m)).collect()
+		});
+		self.properties.substitute_references(sub)
 	}
 }

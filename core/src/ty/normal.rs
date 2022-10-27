@@ -1,5 +1,5 @@
 use super::Properties;
-use crate::{metadata, prop};
+use crate::{metadata, prop, Id, SubstituteReferences};
 use derivative::Derivative;
 use shelves::Ref;
 
@@ -26,5 +26,17 @@ impl<M> Normal<M> {
 		M: metadata::Merge,
 	{
 		self.properties.insert(prop_ref, None, metadata);
+	}
+}
+
+impl<M> SubstituteReferences<M> for Normal<M> {
+	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
+	where
+		I: Fn(Id) -> Id,
+		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
+		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
+		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
+	{
+		self.properties.substitute_references(sub)
 	}
 }
