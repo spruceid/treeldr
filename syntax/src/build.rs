@@ -653,8 +653,6 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::Documentation<M>, M> {
 		let mut description_loc = loc;
 
 		for Meta(line, line_loc) in doc.items {
-			let line = line.trim();
-
 			if description.is_empty() {
 				description_loc = line_loc;
 			} else {
@@ -665,7 +663,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::Documentation<M>, M> {
 				description.push('\n');
 			}
 
-			description.push_str(line);
+			description.push_str(&line);
 		}
 
 		let description = if description.is_empty() {

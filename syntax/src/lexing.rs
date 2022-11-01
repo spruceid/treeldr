@@ -540,9 +540,17 @@ impl<E, C: Iterator<Item = Result<DecodedChar, E>>> Lexer<E, C> {
 		match self.expect_char()? {
 			'/' => {
 				// doc
-				self.next_char()?;
+				self.next_char()?; // we already know it is a third '/'.
 
 				let mut doc = String::new();
+
+				// we ignore the first space, if there is one.
+				if let Some(c) = self.next_char()? {
+					if !matches!(c, ' ' | '\n') {
+						doc.push(c)
+					}
+				}
+
 				while let Some(c) = self.next_char()? {
 					if c == '\n' {
 						break;
