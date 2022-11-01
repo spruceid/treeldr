@@ -639,7 +639,7 @@ pub trait Build<M: Clone + Merge> {
 }
 
 impl<M: Clone + Merge> Build<M> for Meta<crate::Documentation<M>, M> {
-	type Target = (Option<String>, Option<String>);
+	type Target = Option<String>;
 
 	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
@@ -649,43 +649,24 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::Documentation<M>, M> {
 		_generator: &mut impl Generator<V>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(doc, loc) = self;
-		let mut label = String::new();
-		let mut label_loc = loc.clone();
-
 		let mut description = String::new();
 		let mut description_loc = loc;
-
-		let mut separated = false;
 
 		for Meta(line, line_loc) in doc.items {
 			let line = line.trim();
 
-			if separated {
-				if description.is_empty() {
-					description_loc = line_loc;
-				} else {
-					description_loc.merge_with(line_loc);
-				}
-
-				if !description.is_empty() {
-					description.push('\n');
-				}
-
-				description.push_str(line);
-			} else if line.trim().is_empty() {
-				separated = true
+			if description.is_empty() {
+				description_loc = line_loc;
 			} else {
-				if label.is_empty() {
-					label_loc = line_loc;
-				} else {
-					label_loc.merge_with(line_loc);
-				}
-
-				label.push_str(line);
+				description_loc.merge_with(line_loc);
 			}
-		}
 
-		let label = if label.is_empty() { None } else { Some(label) };
+			if !description.is_empty() {
+				description.push('\n');
+			}
+
+			description.push_str(line);
+		}
 
 		let description = if description.is_empty() {
 			None
@@ -693,7 +674,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::Documentation<M>, M> {
 			Some(description)
 		};
 
-		Ok((label, description))
+		Ok(description)
 	}
 }
 
@@ -809,12 +790,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 		}
 
 		if let Some(doc) = def.doc {
-			let (label, doc) = doc.build(local_context, context, vocabulary, generator)?;
+			let doc = doc.build(local_context, context, vocabulary, generator)?;
 			let node = context.get_mut(id).unwrap();
-
-			if let Some(label) = label {
-				node.add_label(label);
-			}
 
 			if let Some(doc) = doc {
 				node.documentation_mut().add(doc);
@@ -1102,7 +1079,10 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 
 		let doc = def
 			.doc
-			.map(|doc| doc.build(local_context, context, vocabulary, generator))
+			.and_then(|doc| {
+				doc.build(local_context, context, vocabulary, generator)
+					.transpose()
+			})
 			.transpose()?;
 
 		let mut functional = true;
@@ -1139,14 +1119,9 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 
 		context.declare_property(id, loc);
 		let node = context.get_mut(id).unwrap();
-		if let Some((label, doc)) = doc {
-			if let Some(label) = label {
-				node.add_label(label);
-			}
 
-			if let Some(doc) = doc {
-				node.documentation_mut().add(doc);
-			}
+		if let Some(doc) = doc {
+			node.documentation_mut().add(doc);
 		}
 
 		let prop = node.as_property_mut().unwrap();
@@ -1199,12 +1174,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 			.build(local_context, context, vocabulary, generator)?;
 
 		if let Some(doc) = def.doc {
-			let (label, doc) = doc.build(local_context, context, vocabulary, generator)?;
+			let doc = doc.build(local_context, context, vocabulary, generator)?;
 			let node = context.get_mut(id).unwrap();
-
-			if let Some(label) = label {
-				node.add_label(label);
-			}
 
 			if let Some(doc) = doc {
 				node.documentation_mut().add(doc);
@@ -1797,19 +1768,17 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 
 		let doc = def
 			.doc
-			.map(|doc| doc.build(local_context, context, vocabulary, generator))
+			.and_then(|doc| {
+				doc.build(local_context, context, vocabulary, generator)
+					.transpose()
+			})
 			.transpose()?;
 
 		context.declare_layout_field(id, loc.clone());
 		let node = context.get_mut(id).unwrap();
-		if let Some((label, doc)) = doc {
-			if let Some(label) = label {
-				node.add_label(label);
-			}
 
-			if let Some(doc) = doc {
-				node.documentation_mut().add(doc);
-			}
+		if let Some(doc) = doc {
+			node.documentation_mut().add(doc);
 		}
 
 		let field = node.as_layout_field_mut().unwrap();

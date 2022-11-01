@@ -20,7 +20,7 @@ _:8 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02
 <http://www.example.com/URI> <https://treeldr.org/name> "URI" .
 <http://www.example.com/Foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
 <http://www.example.com/Foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
-<http://www.example.com/Foo> <http://www.w3.org/2000/01/rdf-schema#label> "Foo." .
+<http://www.example.com/Foo> <http://www.w3.org/2000/01/rdf-schema#comment> "Foo." .
 <http://www.example.com/Foo> <https://treeldr.org/layoutFor> <http://www.example.com/Foo> .
 <http://www.example.com/Foo> <https://treeldr.org/fields> _:8 .
 <http://www.example.com/Foo> <https://treeldr.org/name> "Foo" .
