@@ -69,7 +69,7 @@ _:34 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/0
 <http://www.example.com/URL> <https://treeldr.org/name> "URL" .
 <http://www.example.com/Diploma> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
 <http://www.example.com/Diploma> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
-<http://www.example.com/Diploma> <http://www.w3.org/2000/01/rdf-schema#label> "Certificate or deed issued by an educational institution." .
+<http://www.example.com/Diploma> <http://www.w3.org/2000/01/rdf-schema#comment> "Certificate or deed issued by an educational institution." .
 <http://www.example.com/Diploma> <https://treeldr.org/layoutFor> <http://www.example.com/Diploma> .
 <http://www.example.com/Diploma> <https://treeldr.org/fields> _:32 .
 <http://www.example.com/Diploma> <https://treeldr.org/name> "Diploma" .
@@ -90,7 +90,7 @@ _:34 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/0
 <http://www.example.com/Diploma/url> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.example.com/URL> .
 <http://www.example.com/Department> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
 <http://www.example.com/Department> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
-<http://www.example.com/Department> <http://www.w3.org/2000/01/rdf-schema#label> "Department" .
+<http://www.example.com/Department> <http://www.w3.org/2000/01/rdf-schema#comment> "Department" .
 <http://www.example.com/Department> <https://treeldr.org/layoutFor> <http://www.example.com/Department> .
 <http://www.example.com/Department> <https://treeldr.org/fields> _:34 .
 <http://www.example.com/Department> <https://treeldr.org/name> "Department" .
