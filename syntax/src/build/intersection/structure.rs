@@ -240,7 +240,7 @@ impl<M> PartialEq for IntersectedStruct<M> {
 }
 
 #[derive(Clone, StrippedPartialEq)]
-#[stripped_ignore(M)]
+#[locspan(ignore(M))]
 pub struct FieldLayout<M> {
 	/// Layout description.
 	desc: Meta<FieldLayoutDescription<M>, M>,
@@ -250,7 +250,7 @@ pub struct FieldLayout<M> {
 }
 
 #[derive(Clone, StrippedPartialEq)]
-#[stripped_ignore(M)]
+#[locspan(ignore(M))]
 pub enum FieldLayoutDescription<M> {
 	Required,
 	Option,
@@ -543,11 +543,11 @@ impl<M> PartialEq for IntersectedField<M> {
 }
 
 #[derive(Clone, StrippedPartialEq)]
-#[stripped_ignore(M)]
+#[locspan(ignore(M))]
 pub struct FieldRestrictions<M> {
 	range: RangeRestrictions<M>,
 
-	#[stripped]
+	#[locspan(stripped)]
 	cardinality: CardinalityRestrictions,
 }
 
@@ -731,8 +731,8 @@ impl<M> RangeRestrictions<M> {
 	}
 }
 
-impl<M> locspan::StrippedPartialEq for RangeRestrictions<M> {
-	fn stripped_eq(&self, other: &Self) -> bool {
+impl<M, N> locspan::StrippedPartialEq<RangeRestrictions<N>> for RangeRestrictions<M> {
+	fn stripped_eq(&self, other: &RangeRestrictions<N>) -> bool {
 		self.any.len() == other.any.len()
 			&& self.all.len() == other.all.len()
 			&& self.any.keys().zip(other.any.keys()).all(|(a, b)| a == b)

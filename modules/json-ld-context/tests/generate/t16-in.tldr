@@ -1,0 +1,20 @@
+use <http://www.w3.org/1999/02/22-rdf-syntax-ns#> as rdf;
+use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
+use <https://treeldr.org/> as tldr;
+
+property <http://www.example.com/credentialSubject>: required single multiple rdfs:Resource;
+
+type VerifiableCredential {
+	rdf:type as "@type": required &rdfs:Class,
+	<http://www.example.com/credentialSubject> as credentialSubject: required single multiple rdfs:Resource
+}
+
+property <http://www.example.com/sameAs>: rdfs:Resource;
+
+layout SameAsResource for rdfs:Resource {
+	tldr:self as id: &rdfs:Resource,
+	<http://www.example.com/sameAs>: rdfs:Resource
+}
+
+type CustomCredential = VerifiableCredential
+	& all <http://www.example.com/credentialSubject> : (rdfs:Resource with SameAsResource);

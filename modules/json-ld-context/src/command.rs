@@ -1,8 +1,26 @@
 use crate::Options;
 use iref::{Iri, IriBuf};
-use rdf_types::Vocabulary;
-use std::fmt;
+use json_ld::{Context, ContextLoader, Process};
+use locspan::Span;
+use rdf_types::{Vocabulary, VocabularyMut};
+use std::{
+	fmt, io,
+	path::{Path, PathBuf},
+	str::FromStr,
+};
 use treeldr::{layout, BlankIdIndex, IriIndex, Ref};
+
+mod loader;
+pub use loader::FsLoader;
+
+pub trait Files: Send + Sync {
+	type Id: Clone;
+	type Metadata: Clone + Send + Sync;
+
+	fn load(&mut self, path: &Path, base_iri: IriBuf) -> Result<(Self::Id, &str), io::Error>;
+
+	fn build_metadata(&self, id: Self::Id, span: Span) -> Self::Metadata;
+}
 
 #[derive(clap::Args)]
 /// Generate a JSON-LD Context from a TreeLDR model.
@@ -10,32 +28,84 @@ pub struct Command {
 	/// Layout schemas to generate.
 	layouts: Vec<IriBuf>,
 
+	/// File system mount points.
+	#[clap(short = 'm', long = "mount")]
+	mount_points: Vec<MountPoint>,
+
+	/// Extern contexts to import.
+	#[clap(short = 'c', long = "context")]
+	contexts: Vec<IriBuf>,
+
 	/// Use layout name as `rdf:type` value.
 	#[clap(long = "rdf-type-to-layout-name")]
 	rdf_type_to_layout_name: bool,
 }
 
-pub enum Error<F> {
-	UndefinedLayout(IriBuf),
-	NotALayout(IriBuf, treeldr::node::TypesMetadata<F>),
-	Generation(crate::Error),
+#[derive(Debug)]
+pub enum InvalidMountPointSyntax {
+	MissingSeparator(String),
+	InvalidIri(String, iref::Error),
 }
 
-impl<F> fmt::Display for Error<F> {
+impl std::error::Error for InvalidMountPointSyntax {}
+
+impl fmt::Display for InvalidMountPointSyntax {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::MissingSeparator(s) => write!(f, "missing separator `=` in `{s}`"),
+			Self::InvalidIri(i, e) => write!(f, "invalid IRI `{i}`: {e}"),
+		}
+	}
+}
+
+pub struct MountPoint {
+	pub iri: IriBuf,
+	pub path: PathBuf,
+}
+
+impl FromStr for MountPoint {
+	type Err = InvalidMountPointSyntax;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s.split_once('=') {
+			Some((iri, path)) => {
+				let iri = IriBuf::new(iri)
+					.map_err(|e| InvalidMountPointSyntax::InvalidIri(iri.to_string(), e))?;
+				Ok(Self {
+					path: path.into(),
+					iri,
+				})
+			}
+			None => Err(InvalidMountPointSyntax::MissingSeparator(s.to_string())),
+		}
+	}
+}
+
+pub enum Error<E, M> {
+	UndefinedLayout(IriBuf),
+	NotALayout(IriBuf, treeldr::node::TypesMetadata<M>),
+	Generation(crate::GenerateError<E, M>),
+	ExternContextLoadFailed(IriBuf),
+}
+
+impl<E, M> fmt::Display for Error<E, M> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{}`", iri),
 			Self::NotALayout(iri, _) => write!(f, "node `{}` is not a layout", iri),
 			Self::Generation(e) => e.fmt(f),
+			Self::ExternContextLoadFailed(iri) => {
+				write!(f, "unable to load extern context `{iri}`")
+			}
 		}
 	}
 }
 
-fn find_layout<M: Clone>(
+fn find_layout<E, M: Clone>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<M>,
 	iri: Iri,
-) -> Result<Ref<layout::Definition<M>>, Box<Error<M>>> {
+) -> Result<Ref<layout::Definition<M>>, Box<Error<E, M>>> {
 	let name = vocabulary
 		.get(iri)
 		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
@@ -48,13 +118,17 @@ fn find_layout<M: Clone>(
 }
 
 impl Command {
-	pub fn execute<F: Clone>(
+	pub async fn execute<V, M>(
 		self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		model: &treeldr::Model<F>,
-	) {
+		vocabulary: &mut V,
+		files: &mut impl Files<Metadata = M>,
+		model: &treeldr::Model<M>,
+	) where
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
+		M: Clone + Send + Sync,
+	{
 		log::info!("generating JSON Schema.");
-		match self.try_execute(vocabulary, model) {
+		match self.try_execute(vocabulary, files, model).await {
 			Ok(()) => (),
 			Err(e) => {
 				log::error!("{}", e);
@@ -63,21 +137,57 @@ impl Command {
 		}
 	}
 
-	fn try_execute<F: Clone>(
+	async fn try_execute<V, M>(
 		self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		model: &treeldr::Model<F>,
-	) -> Result<(), Box<Error<F>>> {
+		vocabulary: &mut V,
+		files: &mut impl Files<Metadata = M>,
+		model: &treeldr::Model<M>,
+	) -> Result<(), Box<Error<loader::ContextError<M>, M>>>
+	where
+		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
+		M: Clone + Send + Sync,
+	{
 		let mut layouts = Vec::with_capacity(self.layouts.len());
 		for layout_iri in self.layouts {
 			layouts.push(find_layout(vocabulary, model, layout_iri.as_iri())?);
 		}
 
-		let options = Options {
+		let mut loader = FsLoader::new(files);
+
+		for m in self.mount_points {
+			loader.mount(vocabulary.insert(m.iri.as_iri()), m.path);
+		}
+
+		let mut options = Options {
 			rdf_type_to_layout_name: self.rdf_type_to_layout_name,
+			context: Context::new(None),
 		};
 
-		match crate::generate(vocabulary, model, options, &layouts) {
+		for iri in self.contexts {
+			let i = vocabulary.insert(iri.as_iri());
+			match loader.load_context_with(vocabulary, i).await {
+				Ok(local_context) => {
+					let local_context = local_context.into_document();
+					let processed = local_context
+						.process_with(
+							vocabulary,
+							&options.context,
+							&mut loader,
+							None,
+							json_ld::context_processing::Options::default(),
+						)
+						.await;
+
+					match processed {
+						Ok(processed) => options.context = processed.into_processed(),
+						Err(_) => return Err(Box::new(Error::ExternContextLoadFailed(iri))),
+					}
+				}
+				Err(_) => return Err(Box::new(Error::ExternContextLoadFailed(iri))),
+			}
+		}
+
+		match crate::generate(vocabulary, &mut loader, model, options, &layouts).await {
 			Ok(definition) => {
 				use json_ld::syntax::Print;
 				println!("{}", definition.pretty_print());

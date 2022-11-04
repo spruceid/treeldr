@@ -1,0 +1,13 @@
+use <http://www.w3.org/1999/02/22-rdf-syntax-ns#> as rdf;
+use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
+use <https://treeldr.org/> as tldr;
+
+type Integer with tldr:Integer;
+
+property sameAs: rdfs:Resource;
+
+type Foo {
+	rdf:type as "@type": required &rdfs:Class,
+	prop: Integer,
+	sameAs: rdfs:Resource
+}

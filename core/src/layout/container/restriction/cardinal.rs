@@ -15,7 +15,7 @@ pub struct Conflict<M>(pub Restriction, pub Meta<Restriction, M>);
 
 /// Cardinal restrictions.
 #[derive(Clone, Debug, StrippedPartialEq, StrippedEq)]
-#[stripped_ignore(M)]
+#[locspan(ignore(M))]
 pub struct Restrictions<M> {
 	min: MetaOption<u64, M>,
 	max: MetaOption<u64, M>,

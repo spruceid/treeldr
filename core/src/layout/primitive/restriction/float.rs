@@ -161,12 +161,12 @@ pub struct Conflict<M>(pub Restriction, pub Meta<Restriction, M>);
 #[derive(
 	Clone, StrippedPartialEq, StrippedEq, StrippedHash, StrippedPartialOrd, StrippedOrd, Debug,
 )]
-#[stripped_ignore(M)]
+#[locspan(ignore(M))]
 pub struct Restrictions<M> {
-	#[stripped_option_deref]
+	#[locspan(unwrap_deref_stripped)]
 	min: MetaOption<Min, M>,
 
-	#[stripped_option_deref]
+	#[locspan(unwrap_deref_stripped)]
 	max: MetaOption<Max, M>,
 }
 

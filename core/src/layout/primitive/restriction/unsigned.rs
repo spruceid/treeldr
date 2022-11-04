@@ -13,7 +13,7 @@ pub enum Restriction {
 #[derive(
 	Clone, StrippedPartialEq, StrippedEq, StrippedHash, StrippedPartialOrd, StrippedOrd, Debug,
 )]
-#[stripped_ignore(M)]
+#[locspan(ignore(M))]
 pub struct Restrictions<M> {
 	min: MetaOption<u64, M>,
 	max: MetaOption<u64, M>,

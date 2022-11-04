@@ -5,12 +5,16 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+json-schema = ["treeldr-json-schema", "serde_json"]
+json-ld-context = ["treeldr-json-ld-context"]
+
 [dependencies]
 treeldr = { path = "../core" }
 treeldr-build = { path = "../build" }
 treeldr-syntax = { path = "../syntax" }
 iref = "2.2"
-rdf-types = "0.12.2"
+rdf-types = "0.12.3"
 grdf = { version = "0.14", features = ["meta"] }
 log = "0.4"
 locspan = "0.7.11"

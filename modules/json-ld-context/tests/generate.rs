@@ -1,15 +1,54 @@
+use std::fmt::Debug;
+
 use iref::Iri;
 use json_ld::{
 	syntax::{Parse as ParseJson, TryFromJson},
-	Print,
+	ContextLoader, Print, Process,
 };
-use locspan::BorrowStripped;
-use rdf_types::IriVocabulary;
+use locspan::{BorrowStripped, Span};
+use rdf_types::{IndexVocabulary, IriVocabulary, VocabularyMut};
 use static_iref::iri;
-use treeldr::Id;
+use treeldr::{BlankIdIndex, Id, IriIndex};
 use treeldr_build::Document;
-use treeldr_json_ld_context::Options;
 use treeldr_syntax::Parse;
+
+#[derive(Debug, Default)]
+pub struct Options {
+	rdf_type_to_layout_name: bool,
+	context: Option<&'static str>,
+}
+
+impl Options {
+	pub async fn load<V, L>(
+		self,
+		vocabulary: &mut V,
+		loader: &mut L,
+	) -> treeldr_json_ld_context::Options<V, Span>
+	where
+		V: Send + Sync + VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+		L: Send + Sync + ContextLoader<IriIndex, Span>,
+		L::Context: Into<json_ld::syntax::context::Value<Span>>,
+		L::ContextError: Debug,
+	{
+		let context = match self.context {
+			Some(content) => {
+				let json = json_ld::syntax::Value::parse_str(content, |span| span).unwrap();
+				let json_context = json_ld::syntax::context::Value::try_from_json(json).unwrap();
+				json_context
+					.process(vocabulary, loader, None)
+					.await
+					.unwrap()
+					.into_processed()
+			}
+			None => json_ld::Context::default(),
+		};
+
+		treeldr_json_ld_context::Options {
+			rdf_type_to_layout_name: self.rdf_type_to_layout_name,
+			context,
+		}
+	}
+}
 
 pub enum Test {
 	Positive {
@@ -26,7 +65,7 @@ pub enum Test {
 }
 
 impl Test {
-	fn run(self) {
+	async fn run(self) {
 		match self {
 			Self::Positive {
 				input,
@@ -37,7 +76,7 @@ impl Test {
 				let ast =
 					treeldr_syntax::Document::parse_str(&input, |span| span).expect("parse error");
 				let mut context = treeldr_build::Context::new();
-				let mut vocabulary = rdf_types::IndexVocabulary::new();
+				let mut vocabulary = IndexVocabulary::new();
 				let mut generator = rdf_types::generator::Blank::new();
 
 				context
@@ -82,9 +121,18 @@ impl Test {
 					})
 					.collect();
 
-				let output =
-					treeldr_json_ld_context::generate(&vocabulary, &model, options, &layouts)
-						.expect("unable to generate LD context");
+				let mut loader = json_ld::NoLoader::<IriIndex, Span>::new();
+				let options = options.load(&mut vocabulary, &mut loader).await;
+
+				let output = treeldr_json_ld_context::generate(
+					&mut vocabulary,
+					&mut loader,
+					&model,
+					options,
+					&layouts,
+				)
+				.await
+				.expect("unable to generate LD context");
 
 				let expected = json_ld::syntax::Value::parse_str(expected_output, |_| ())
 					.expect("invalid JSON");
@@ -157,9 +205,18 @@ impl Test {
 					})
 					.collect();
 
-				let output =
-					treeldr_json_ld_context::generate(&vocabulary, &model, options, &layouts)
-						.expect("unable to generate LD context");
+				let mut loader = json_ld::NoLoader::<IriIndex, Span>::new();
+				let options = options.load(&mut vocabulary, &mut loader).await;
+
+				let output = treeldr_json_ld_context::generate(
+					&mut vocabulary,
+					&mut loader,
+					&model,
+					options,
+					&layouts,
+				)
+				.await
+				.expect("unable to generate LD context");
 
 				eprintln!("output:\n{}", output.pretty_print());
 			}
@@ -170,8 +227,8 @@ impl Test {
 macro_rules! positive {
 	{ $($id:ident : [$($iri:literal),*] $({ $($option:ident: $value:expr),* })?),* } => {
 		$(
-			#[test]
-			fn $id () {
+			#[async_std::test]
+			async fn $id () {
 				Test::Positive {
 					input: include_str!(concat!("generate/", stringify!($id), "-in.tldr")),
 					layouts: &[$($iri,)*],
@@ -182,7 +239,7 @@ macro_rules! positive {
 						)*)?
 						..Default::default()
 					}
-				}.run()
+				}.run().await
 			}
 		)*
 	};
@@ -191,9 +248,9 @@ macro_rules! positive {
 macro_rules! negative {
 	{ $($id:ident : [$($iri:literal),*] $({ $($option:ident: $value:expr),* })?),* } => {
 		$(
-			#[test]
+			#[async_std::test]
 			#[should_panic]
-			fn $id () {
+			async fn $id () {
 				Test::Negative {
 					input: include_str!(concat!("generate/", stringify!($id), ".tldr")),
 					layouts: &[$($iri,)*],
@@ -203,7 +260,7 @@ macro_rules! negative {
 						)*)?
 						..Default::default()
 					}
-				}.run()
+				}.run().await
 			}
 		)*
 	};
@@ -220,7 +277,12 @@ positive! {
 	t08: ["http://www.example.com/Foo"],
 	t09: ["http://www.example.com/Foo"],
 	t10: ["http://www.example.com/Foo"],
-	t11: ["http://www.example.com/Foo"]
+	t11: ["http://www.example.com/Foo"],
+	t12: ["http://www.example.com/Foo"] { context: Some(include_str!("generate/t12-context.json")) },
+	t13: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t13-context.json")) },
+	t14: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t14-context.json")) },
+	t15: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t15-context.json")) },
+	t16: ["http://www.example.com/CustomCredential"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t16-context.json")) }
 }
 
 negative! {

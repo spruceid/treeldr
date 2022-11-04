@@ -119,7 +119,7 @@ impl<P> Files<P> {
 
 	pub fn load(
 		&mut self,
-		source: &impl AsRef<Path>,
+		source: &(impl ?Sized + AsRef<Path>),
 		base_iri: Option<IriBuf>,
 		mime_type: Option<MimeType>,
 	) -> std::io::Result<FileId>
@@ -294,5 +294,24 @@ impl<'a, P: DisplayPath<'a>> codespan_reporting::files::Files<'a> for Files<P> {
 			})
 			.transpose()?
 			.ok_or(codespan_reporting::files::Error::FileMissing)
+	}
+}
+
+#[cfg(feature = "json-ld-context")]
+impl<P: Send + Sync + Clone + Eq + Hash + for<'a> From<&'a Path>> treeldr_json_ld_context::Files
+	for Files<P>
+{
+	type Id = FileId;
+
+	type Metadata = Metadata;
+
+	fn load(&mut self, path: &Path, base_iri: IriBuf) -> Result<(Self::Id, &str), std::io::Error> {
+		let id = self.load(path, Some(base_iri), None)?;
+		let content = self.get(id).unwrap().buffer().as_str();
+		Ok((id, content))
+	}
+
+	fn build_metadata(&self, id: Self::Id, span: locspan::Span) -> Self::Metadata {
+		Metadata::Extern(Location::new(id, span))
 	}
 }

@@ -218,7 +218,7 @@ impl Document {
 					}
 					#[cfg(feature = "json-schema")]
 					Some(source::MimeType::JsonSchema) => {
-						Document::JsonSchema(Box::new(import_json_schema(&files, file_id)))
+						Document::JsonSchema(Box::new(import_json_schema(files, file_id)))
 					}
 					#[allow(unreachable_patterns)]
 					Some(mime_type) => return Err(LoadError::UnsupportedMimeType(mime_type)),
@@ -302,9 +302,9 @@ where
 }
 
 #[cfg(feature = "json-schema")]
-pub fn import_json_schema(
-	files: &source::Files,
-	source_id: source::Metadata,
+pub fn import_json_schema<P>(
+	files: &source::Files<P>,
+	source_id: source::FileId,
 ) -> treeldr_json_schema::Schema {
 	let file = files.get(source_id).unwrap();
 	let json: serde_json::Value = serde_json::from_str(file.buffer()).expect("invalid JSON");

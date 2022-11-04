@@ -1,7 +1,7 @@
 //! JSON Schema import functions.
 use crate::schema::{self, RegularSchema, Schema};
 use iref::{Iri, IriBuf};
-use locspan::{Located, Meta, Span};
+use locspan::{MaybeLocated, Meta, Span};
 use rdf_types::{Generator, Quad, Vocabulary, VocabularyMut};
 use treeldr::{metadata::Merge, vocab, BlankIdIndex, Id, IriIndex, Name};
 use treeldr_build::{layout::Restrictions, Context, Descriptions};
@@ -21,7 +21,7 @@ impl<M> From<treeldr_build::Error<M>> for Error<M> {
 	}
 }
 
-impl<M: Located<Span = Span>> treeldr::reporting::DiagnoseWithVocabulary<M> for Error<M>
+impl<M: MaybeLocated<Span = Span>> treeldr::reporting::DiagnoseWithVocabulary<M> for Error<M>
 where
 	M::File: Clone,
 {
