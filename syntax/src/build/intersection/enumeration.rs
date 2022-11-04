@@ -46,8 +46,11 @@ impl<M: Clone> IntersectedEnum<M> {
 		'next_variant: for variant in &self.variants {
 			while i < other.variants.len() {
 				let other_variant = &other.variants[i];
-				if other_variant.name.value() == variant.name.value()
-					&& other_variant.layout == variant.layout
+				if variant.name.value() == other_variant.name.value()
+					&& variant
+						.layout
+						.desc
+						.is_included_in(&other_variant.layout.desc)
 				{
 					continue 'next_variant;
 				}

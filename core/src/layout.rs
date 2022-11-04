@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
 	ty, utils::replace_with, BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name,
 	SubstituteReferences,
@@ -298,6 +300,32 @@ impl<M> Definition<M> {
 			Description::Set(s) => ComposingLayouts::One(Some(s.item_layout())),
 			Description::OneOrMany(s) => ComposingLayouts::One(Some(s.item_layout())),
 			Description::Alias(_, _) => ComposingLayouts::None,
+		}
+	}
+
+	/// Checks if this layout is either:
+	///   - a reference,
+	///   - an enum with a reference variant,
+	///   - an option layout with a reference item,
+	///   - a required layout with a reference item,
+	///   - a OneOrMany layout with a reference item,
+	///   - an alias to a layout satisfying one of these conditions.
+	///
+	/// The map stores the result of this method for other layouts and is
+	/// updated to avoid loops.
+	pub fn can_be_reference(
+		&self,
+		map: &mut HashMap<Ref<Definition<M>>, bool>,
+		model: &crate::Model<M>,
+	) -> bool {
+		match self.description().value() {
+			Description::Reference(_) => true,
+			Description::Enum(e) => e.can_be_reference(map, model),
+			Description::Option(o) => model.can_be_reference_layout(map, o.item_layout()),
+			Description::Required(r) => model.can_be_reference_layout(map, r.item_layout()),
+			Description::OneOrMany(o) => model.can_be_reference_layout(map, o.item_layout()),
+			Description::Alias(_, r) => model.can_be_reference_layout(map, *r),
+			_ => false,
 		}
 	}
 }

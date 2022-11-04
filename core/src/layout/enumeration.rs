@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{utils::replace_with, Documentation, Id, MetaOption, Name, Ref, SubstituteReferences};
 use locspan::Meta;
 
@@ -43,6 +45,22 @@ impl<M> Enum<M> {
 
 	pub fn composing_layouts(&self) -> ComposingLayouts<M> {
 		ComposingLayouts(self.variants.iter())
+	}
+
+	pub fn can_be_reference(
+		&self,
+		map: &mut HashMap<Ref<super::Definition<M>>, bool>,
+		model: &crate::Model<M>,
+	) -> bool {
+		for v in &self.variants {
+			if let Some(r) = v.layout() {
+				if model.can_be_reference_layout(map, r) {
+					return true;
+				}
+			}
+		}
+
+		false
 	}
 }
 

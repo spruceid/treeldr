@@ -1,0 +1,7 @@
+use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
+
+type Foo {
+	prop: required single multiple rdfs:Resource with Prop
+}
+
+layout Prop = (&rdfs:Resource as Ref) | rdfs:Resource;
