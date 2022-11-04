@@ -1,0 +1,9 @@
+{
+	"prop": {
+		"@id": "http://www.example.com/Foo/prop",
+		"@type": "@id",
+		"@context": {
+			"id": "@id"
+		}
+	}
+}

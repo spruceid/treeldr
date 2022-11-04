@@ -282,7 +282,11 @@ positive! {
 	t13: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t13-context.json")) },
 	t14: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t14-context.json")) },
 	t15: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t15-context.json")) },
-	t16: ["http://www.example.com/CustomCredential"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t16-context.json")) }
+	t16: ["http://www.example.com/CustomCredential"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t16-context.json")) },
+	t17: ["http://www.example.com/Foo"],
+	t18: ["http://www.example.com/Foo"],
+	t19: ["http://www.example.com/Foo"],
+	t20: ["http://www.example.com/Bar"]
 }
 
 negative! {

@@ -1,6 +1,7 @@
 use derivative::Derivative;
 use shelves::Shelf;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fmt;
 
 pub use shelves::Ref;
@@ -66,6 +67,21 @@ impl<M> Model<M> {
 			types,
 			properties,
 			layouts,
+		}
+	}
+
+	pub fn can_be_reference_layout(
+		&self,
+		map: &mut HashMap<Ref<layout::Definition<M>>, bool>,
+		r: Ref<layout::Definition<M>>,
+	) -> bool {
+		match map.get(&r).cloned() {
+			Some(b) => b,
+			None => {
+				let b = self.layouts.get(r).unwrap().can_be_reference(map, self);
+				map.insert(r, b);
+				b
+			}
 		}
 	}
 

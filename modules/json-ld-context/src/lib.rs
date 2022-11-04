@@ -429,6 +429,7 @@ pub struct ContextBuilder<'a, V: Vocabulary, M> {
 	model: &'a treeldr::Model<M>,
 	options: &'a Options<V, M>,
 	contexts: Shelf<Vec<LocalContext>>,
+	reference_layouts: HashMap<Ref<treeldr::layout::Definition<M>>, bool>,
 }
 
 impl<'a, V: Vocabulary, M> ContextBuilder<'a, V, M> {
@@ -437,6 +438,7 @@ impl<'a, V: Vocabulary, M> ContextBuilder<'a, V, M> {
 			model,
 			options,
 			contexts: Shelf::default(),
+			reference_layouts: HashMap::new(),
 		}
 	}
 
@@ -598,9 +600,12 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 				let term = field.name().to_string();
 				let layout_ref = field.layout();
 
-				let id = if self.is_type_property(vocabulary, property_ref) {
+				let is_type = self.is_type_property(vocabulary, property_ref);
+				let is_id = self.is_id_property(property_ref);
+
+				let id = if is_type {
 					json_ld::Term::Keyword(Keyword::Type)
-				} else if self.is_id_property(property_ref) {
+				} else if is_id {
 					json_ld::Term::Keyword(Keyword::Id)
 				} else {
 					let property = self.model.properties().get(property_ref).unwrap();
@@ -609,7 +614,7 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 
 				let definition = TermDefinition {
 					id,
-					type_: self.generate_property_definition_type(layout_ref),
+					type_: self.generate_property_definition_type(layout_ref, !is_id && !is_type),
 					container: self.generate_property_definition_container(layout_ref),
 					context: self.generate_property_definition_context(
 						vocabulary,
@@ -657,17 +662,32 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 
 	/// Generate the `@type` entry of a term definition.
 	fn generate_property_definition_type(
-		&self,
+		&mut self,
 		layout_ref: Ref<layout::Definition<M>>,
+		generate_id_type: bool,
 	) -> Option<json_ld::Type<IriIndex>> {
 		let layout = self.model.layouts().get(layout_ref).unwrap();
 
 		use treeldr::layout::Description;
 		match layout.description().value() {
-			Description::Required(r) => self.generate_property_definition_type(r.item_layout()),
-			Description::Option(o) => self.generate_property_definition_type(o.item_layout()),
+			Description::Required(r) => {
+				self.generate_property_definition_type(r.item_layout(), generate_id_type)
+			}
+			Description::Option(o) => {
+				self.generate_property_definition_type(o.item_layout(), generate_id_type)
+			}
 			Description::Primitive(n, _) => Some(generate_primitive_type(n)),
-			_ => None,
+			_ => {
+				if generate_id_type
+					&& self
+						.model
+						.can_be_reference_layout(&mut self.reference_layouts, layout_ref)
+				{
+					Some(json_ld::Type::Id)
+				} else {
+					None
+				}
+			}
 		}
 	}
 
@@ -721,6 +741,20 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 				o.item_layout(),
 				type_scoped_context,
 			),
+			Description::Enum(e) => {
+				for v in e.variants() {
+					if let Some(layout_ref) = v.layout() {
+						self.insert_layout_terms(
+							vocabulary,
+							context_ref,
+							layout_ref,
+							type_scoped_context,
+						)?
+					}
+				}
+
+				Ok(())
+			}
 			Description::Struct(s) => {
 				if !type_scoped_context && self.options.rdf_type_to_layout_name {
 					// check if there is a required `rdf:type` property field.
