@@ -185,12 +185,12 @@ pub struct LocalContext<M> {
 }
 
 #[derive(Clone, PartialEq, Eq, StrippedPartialEq, StrippedEq)]
-#[stripped_ignore(M)]
+#[locspan(ignore(M))]
 pub struct LayoutRestrictedField<M> {
-	#[stripped_option_deref]
+	#[locspan(unwrap_deref_stripped)]
 	field_prop: Option<Meta<Id, M>>,
 
-	#[stripped_option_deref]
+	#[locspan(unwrap_deref_stripped)]
 	field_name: Option<Meta<Name, M>>,
 
 	restriction: Meta<LayoutFieldRestriction, M>,

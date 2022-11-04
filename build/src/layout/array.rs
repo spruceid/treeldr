@@ -113,7 +113,7 @@ impl<M> Array<M> {
 
 #[derive(Clone, Debug, Derivative, StrippedPartialEq)]
 #[derivative(Default(bound = ""))]
-#[stripped_ignore(M)]
+#[locspan(ignore(M))]
 pub struct Semantics<M> {
 	first: MetaOption<Id, M>,
 

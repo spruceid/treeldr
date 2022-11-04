@@ -16,7 +16,7 @@ pub enum Conflict<M> {
 
 /// Container layout restrictions.
 #[derive(Clone, Debug, StrippedPartialEq, StrippedEq)]
-#[stripped_ignore(M)]
+#[locspan(ignore(M))]
 pub struct Restrictions<M> {
 	cardinal: cardinal::Restrictions<M>,
 }

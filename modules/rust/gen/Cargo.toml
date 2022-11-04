@@ -12,7 +12,7 @@ shelves = "0.2.7"
 derivative = "2.2.0"
 thiserror = "1.0.31"
 contextual = "0.1.3"
-rdf-types = "0.12"
+rdf-types = "0.12.3"
 
 [dev-dependencies]
 treeldr-rust-macros = { path = "../macros" }
@@ -20,7 +20,7 @@ treeldr-rust-prelude = { path = "../prelude" }
 chrono = "0.4.19"
 iref = "2.2"
 grdf = "0.14"
-json-ld = "0.9.0-beta"
+json-ld = "0.9.1-beta"
 json-syntax = "0.8.11"
 decoded-char = "0.1"
 locspan = "0.7.11"

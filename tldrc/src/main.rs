@@ -43,7 +43,8 @@ pub enum Command {
 	JsonLdContext(treeldr_json_ld_context::Command),
 }
 
-fn main() {
+#[async_std::main]
+async fn main() {
 	// Parse options.
 	let args = Args::parse();
 
@@ -103,7 +104,9 @@ fn main() {
 				#[cfg(feature = "json-schema")]
 				Some(Command::JsonSchema(command)) => command.execute(&vocabulary, &model),
 				#[cfg(feature = "json-ld-context")]
-				Some(Command::JsonLdContext(command)) => command.execute(&vocabulary, &model),
+				Some(Command::JsonLdContext(command)) => {
+					command.execute(&mut vocabulary, &mut files, &model).await
+				}
 				_ => (),
 			}
 		}

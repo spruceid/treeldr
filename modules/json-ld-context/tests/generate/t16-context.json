@@ -1,0 +1,9 @@
+{
+	"VerifiableCredential": {
+		"@id": "http://www.example.com/VerifiableCredential",
+		"@context": {
+			"@protected": true,
+			"credentialSubject": "http://www.example.com/credentialSubject"
+		}
+	}
+}

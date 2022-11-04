@@ -1,0 +1,11 @@
+{
+	"Foo": {
+		"@id": "http://www.example.com/Foo",
+		"@context": {
+			"sameAs": {
+				"@id": "http://www.example.com/Foo/sameAs",
+				"@context": { "id": "@id" }
+			}
+		}
+	}
+}

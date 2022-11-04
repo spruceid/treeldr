@@ -7,7 +7,7 @@ use locspan_derive::{
 #[derive(
 	Clone, Debug, StrippedPartialEq, StrippedEq, StrippedPartialOrd, StrippedOrd, StrippedHash,
 )]
-#[stripped_ignore(M)]
+#[locspan(ignore(M))]
 pub struct MetaOption<T, M> {
 	value: Option<Meta<T, M>>,
 }

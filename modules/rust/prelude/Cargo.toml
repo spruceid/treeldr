@@ -9,9 +9,9 @@ default = [ "json-ld" ]
 
 [dependencies]
 grdf = "0.14"
-rdf-types = "0.12"
+rdf-types = "0.12.3"
 xsd-types = "0.3"
 chrono = "0.4.19"
 iref = "2.2"
 static-iref = "2.0"
-json-ld = { version = "0.9.0-beta", optional = true }
+json-ld = { version = "0.9.1-beta", optional = true }

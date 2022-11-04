@@ -1,0 +1,9 @@
+{
+	"Foo": {
+		"@id": "http://www.example.com/Foo",
+		"@protected": true,
+		"@context": {
+			"prop": "http://www.example.com/Foo/prop"
+		}
+	}
+}
