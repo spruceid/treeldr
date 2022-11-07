@@ -8,7 +8,7 @@ treeldr = { path = "../core" }
 log = "0.4"
 rdf-types = { version = "0.12.3", features = ["meta"] }
 iref = "2.2"
-shelves = "0.2.6"
+shelves = "1"
 derivative = "2.2.0"
 locspan = { version = "0.7.11", features = ["reporting"] }
 locspan-derive = "0.6"

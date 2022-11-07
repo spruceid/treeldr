@@ -8,7 +8,7 @@ treeldr = { path = "../../../core" }
 proc-macro2 = "1.0.40"
 quote = "1.0.20"
 iref = "2.2"
-shelves = "0.2.7"
+shelves = "1"
 derivative = "2.2.0"
 thiserror = "1.0.31"
 contextual = "0.1.3"
