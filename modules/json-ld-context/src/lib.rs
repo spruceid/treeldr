@@ -808,7 +808,7 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 	) -> Result<Ref<LocalContext>, Error> {
 		let context_ref = self.contexts.insert(LocalContext::new(
 			self.propagate_context(current_context_ref),
-			true,
+			false,
 		));
 		self.insert_layout_terms(vocabulary, context_ref, layout_ref, true)?;
 		Ok(context_ref)
@@ -823,13 +823,20 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
 		L: ContextLoader<IriIndex, M> + Send + Sync,
 		L::Context: Into<json_ld::syntax::context::Value<M>>,
+		L::ContextError: Send,
 		M: Clone + Send + Sync,
 	{
 		let genealogy = Genealogy::new(&self.contexts);
 
-		for &root in &genealogy.roots {
-			self.simplify_context(vocabulary, loader, &genealogy, root)
-				.await?
+		let mut continue_simplifying = true;
+
+		while continue_simplifying {
+			continue_simplifying = false;
+			for &root in &genealogy.roots {
+				continue_simplifying |= self
+					.simplify_context(vocabulary, loader, &genealogy, root)
+					.await?;
+			}
 		}
 
 		Ok(())
@@ -841,16 +848,19 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		loader: &'f mut L,
 		genealogy: &'f Genealogy,
 		context_ref: Ref<LocalContext>,
-	) -> BoxFuture<'f, Result<(), SimplifyError<L::ContextError, M>>>
+	) -> BoxFuture<'f, Result<bool, SimplifyError<L::ContextError, M>>>
 	where
 		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
 		L: ContextLoader<IriIndex, M> + Send + Sync,
 		L::Context: Into<json_ld::syntax::context::Value<M>>,
+		L::ContextError: Send,
 		M: Clone + Send + Sync,
 	{
 		async move {
+			let mut continue_simplification = false;
 			for &child in genealogy.children.get(context_ref).unwrap() {
-				self.simplify_context(vocabulary, loader, genealogy, child)
+				continue_simplification |= self
+					.simplify_context(vocabulary, loader, genealogy, child)
 					.await?;
 			}
 
@@ -949,6 +959,7 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 			let context = self.contexts.get_mut(context_ref).unwrap();
 			context.terms = preserved_terms;
 
+			continue_simplification |= !moved_terms.is_empty();
 			for (term, definition) in moved_terms {
 				let context = self.contexts.get_mut(context_ref).unwrap();
 				if let Some(pa) = context
@@ -959,7 +970,7 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 				}
 			}
 
-			Ok(())
+			Ok(continue_simplification)
 		}
 		.boxed()
 	}
@@ -1078,6 +1089,7 @@ where
 	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
 	L: ContextLoader<IriIndex, M> + Send + Sync,
 	L::Context: Into<json_ld::syntax::context::Value<M>>,
+	L::ContextError: Send,
 	M: Clone + Send + Sync,
 {
 	let mut builder = ContextBuilder::new(model, &options);
