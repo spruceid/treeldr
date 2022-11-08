@@ -7,7 +7,7 @@ use json_ld::{
 use locspan::{BorrowStripped, Meta};
 use rdf_types::{Vocabulary, VocabularyMut};
 use shelves::Shelf;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use treeldr::{
 	layout::{self, Field},
@@ -120,7 +120,7 @@ impl<V: Vocabulary, M> Default for Options<V, M> {
 }
 
 pub struct LocalContext {
-	terms: HashMap<String, TermDefinition>,
+	terms: BTreeMap<String, TermDefinition>,
 	parent: ParentContext,
 	do_propagate: bool,
 }
@@ -128,7 +128,7 @@ pub struct LocalContext {
 impl LocalContext {
 	pub fn new(parent: ParentContext, do_propagate: bool) -> Self {
 		Self {
-			terms: HashMap::new(),
+			terms: BTreeMap::new(),
 			parent,
 			do_propagate,
 		}
@@ -139,7 +139,7 @@ impl LocalContext {
 		term: String,
 		definition: TermDefinition,
 	) -> Result<Option<PotentialAmbiguity>, Error> {
-		use std::collections::hash_map::Entry;
+		use std::collections::btree_map::Entry;
 		match self.terms.entry(term) {
 			Entry::Vacant(entry) => {
 				entry.insert(definition);
@@ -860,7 +860,7 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 			};
 
 			let context = self.contexts.get(context_ref).unwrap();
-			let mut preserved_terms = HashMap::new();
+			let mut preserved_terms = BTreeMap::new();
 			let mut moved_terms = Vec::new();
 
 			for (term, definition) in terms {
