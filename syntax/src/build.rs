@@ -386,8 +386,8 @@ impl<M: Clone> LocalContext<M> {
 		dt.set_derivation_base(Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::String))), loc.clone())?;
 		let derived = dt.as_derived_mut().unwrap();
 		derived.restrictions_mut().insert(
-			treeldr_build::ty::data::Restriction::String(
-				treeldr_build::ty::data::restriction::String::Pattern(regexp),
+			treeldr_build::ty::datatype::Restriction::String(
+				treeldr_build::ty::datatype::restriction::String::Pattern(regexp),
 			),
 			loc.clone(),
 		);
@@ -1852,7 +1852,7 @@ impl<M: Clone> LayoutDescription<M> {
 				for obj in layout_list.iter(source) {
 					let obj = obj?;
 					layouts.push(Meta::new(
-						obj.as_id(obj.metadata())?,
+						obj.as_required_id(obj.metadata())?,
 						obj.metadata().clone(),
 					))
 				}

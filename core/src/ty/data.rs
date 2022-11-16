@@ -6,7 +6,7 @@ pub mod restriction;
 pub use regexp::RegExp;
 pub use restriction::{Restriction, Restrictions};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum DataType {
 	Primitive(Primitive),
 	Derived(Derived),
@@ -21,7 +21,7 @@ impl DataType {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Primitive {
 	/// `xsd:boolean`.
 	Boolean,
@@ -66,9 +66,32 @@ impl Primitive {
 			Self::Duration => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::Duration))),
 		}
 	}
+
+	pub fn from_iri(iri: IriIndex) -> Option<Self> {
+		use vocab::{Owl, Term, Xsd};
+		match iri {
+			IriIndex::Iri(Term::Xsd(Xsd::Boolean)) => Some(Self::Boolean),
+			IriIndex::Iri(Term::Owl(Owl::Real)) => Some(Self::Real),
+			IriIndex::Iri(Term::Xsd(Xsd::Float)) => Some(Self::Float),
+			IriIndex::Iri(Term::Xsd(Xsd::Double)) => Some(Self::Double),
+			IriIndex::Iri(Term::Xsd(Xsd::String)) => Some(Self::String),
+			IriIndex::Iri(Term::Xsd(Xsd::Date)) => Some(Self::Date),
+			IriIndex::Iri(Term::Xsd(Xsd::Time)) => Some(Self::Time),
+			IriIndex::Iri(Term::Xsd(Xsd::DateTime)) => Some(Self::DateTime),
+			IriIndex::Iri(Term::Xsd(Xsd::Duration)) => Some(Self::Duration),
+			_ => None
+		}
+	}
+
+	pub fn from_id(id: Id) -> Option<Self> {
+		match id {
+			Id::Iri(iri) => Self::from_iri(iri),
+			Id::Blank(_) => None
+		}
+	}
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Derived {
 	Boolean(Id),
 	Real(Id, restriction::real::Restrictions),
@@ -117,6 +140,29 @@ impl Derived {
 			Self::Double(_, r) => Restrictions::Double(r.iter()),
 			Self::String(_, r) => Restrictions::String(r.iter()),
 			_ => Restrictions::None,
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Property {
+	OnDatatype,
+	WithRestrictions
+}
+
+impl Property {
+	pub fn term(&self) -> vocab::Term {
+		use vocab::{Term, Owl};
+		match self {
+			Self::OnDatatype => Term::Owl(Owl::OnDatatype),
+			Self::WithRestrictions => Term::Owl(Owl::WithRestrictions)
+		}
+	}
+
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::OnDatatype => "restricted datatype",
+			Self::WithRestrictions => "datatype restrictions"
 		}
 	}
 }

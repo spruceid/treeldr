@@ -23,7 +23,7 @@ impl<M: Clone> IntersectedEnum<M> {
 
 		for variant_obj in context.require_list(variants_id, causes)?.iter(context) {
 			let variant_obj = variant_obj?;
-			let variant_id = variant_obj.as_id(variant_obj.metadata())?;
+			let variant_id = variant_obj.as_required_id(variant_obj.metadata())?;
 			let variant = context.require_layout_variant(variant_id, variant_obj.metadata())?;
 			variants.push(Meta::new(
 				IntersectedVariant {

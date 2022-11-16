@@ -1,7 +1,7 @@
-use crate::{error, utils::TryCollect, Context, Descriptions, Error, ObjectToId};
+use crate::{error::{self, NodeBindingMissing}, utils::TryCollect, Context, Error, ObjectToId, Single, node, single::Conflict, Node, resource, component};
 use locspan::Meta;
 use rdf_types::IriVocabulary;
-use treeldr::{metadata::Merge, Id, IriIndex, MetaOption, Name};
+use treeldr::{metadata::Merge, Id, IriIndex, Name};
 
 pub mod array;
 pub mod field;
@@ -9,15 +9,14 @@ pub mod primitive;
 pub mod restriction;
 pub mod variant;
 
-pub use array::Array;
 pub use primitive::Primitive;
-pub use restriction::Restrictions;
+pub use restriction::{Restriction, Restrictions};
 
 use primitive::BuildPrimitive;
 
-/// Layout description.
-#[derive(Clone, Debug)]
-pub enum Description<M> {
+/// Simple layout description.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SimpleDescription {
 	Never,
 	Primitive(Primitive),
 	Struct(Id),
@@ -27,13 +26,102 @@ pub enum Description<M> {
 	Option(Id),
 	Set(Id),
 	OneOrMany(Id),
-	Array(Array<M>),
+	Array(Id),
 	Alias(Id),
 }
 
-/// Layout kind.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Kind {
+impl SimpleDescription {
+	pub fn kind(&self) -> SimpleKind {
+		match self {
+			Self::Never => SimpleKind::Never,
+			Self::Reference(_) => SimpleKind::Reference,
+			Self::Struct(_) => SimpleKind::Struct,
+			Self::Primitive(n) => SimpleKind::Primitive(*n),
+			Self::Enum(_) => SimpleKind::Enum,
+			Self::Required(_) => SimpleKind::Required,
+			Self::Option(_) => SimpleKind::Option,
+			Self::Set(_) => SimpleKind::Set,
+			Self::OneOrMany(_) => SimpleKind::OneOrMany,
+			Self::Array(_) => SimpleKind::Array,
+			Self::Alias(_) => SimpleKind::Alias,
+		}
+	}
+}
+
+impl SimpleDescription {
+	pub fn sub_layouts<M>(
+		&self,
+		context: &Context<M>,
+		metadata: &M,
+	) -> Vec<SubLayout<M>>
+	where
+		M: Clone,
+	{
+		let mut sub_layouts = Vec::new();
+
+		match self {
+			Self::Struct(fields_id) => {
+				if let Some(fields) = context.get_list(*fields_id) {
+					for Meta(object, metadata) in fields.lenient_iter(context) {
+						if let Some(field_id) = object.as_id() {
+							if let Some(field) = context.get(field_id).and_then(Node::as_layout_field) {
+								for field_layout_id in field.layout() {
+									if let Some(field_layout) = context.get(**field_layout_id).and_then(Node::as_layout) {
+										sub_layouts.push(SubLayout {
+											layout: field_layout_id.cloned(),
+											connection: LayoutConnection::FieldContainer(field_id),
+										});
+					
+										for Meta(container_desc, meta) in field_layout.description() {
+											let item_layout_id = match container_desc {
+												Description::Simple(SimpleDescription::Required(id)) => *id,
+												Description::Simple(SimpleDescription::Option(id)) => *id,
+												Description::Simple(SimpleDescription::Set(id)) => *id,
+												Description::Simple(SimpleDescription::OneOrMany(id)) => *id,
+												Description::Simple(SimpleDescription::Array(id)) => *id,
+												_ => panic!("invalid field layout: not a container"),
+											};
+					
+											sub_layouts.push(SubLayout {
+												layout: Meta(item_layout_id, meta.clone()),
+												connection: LayoutConnection::FieldItem(field_id),
+											});
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			Self::Set(item_layout_id) => sub_layouts.push(SubLayout {
+				layout: Meta(*item_layout_id, metadata.clone()),
+				connection: LayoutConnection::Item,
+			}),
+			Self::OneOrMany(item_layout_id) => sub_layouts.push(SubLayout {
+				layout: Meta(*item_layout_id, metadata.clone()),
+				connection: LayoutConnection::Item,
+			}),
+			Self::Array(item_layout_id) => sub_layouts.push(SubLayout {
+				layout: Meta(*item_layout_id, metadata.clone()),
+				connection: LayoutConnection::Item,
+			}),
+			_ => (),
+		}
+
+		sub_layouts
+	}
+}
+
+/// Layout description.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Description {
+	Simple(SimpleDescription),
+	Intersection(Id)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SimpleKind {
 	Never,
 	Primitive(Primitive),
 	Reference,
@@ -48,313 +136,45 @@ pub enum Kind {
 	Alias,
 }
 
-impl<M> Description<M> {
+/// Layout kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Kind {
+	Simple(SimpleKind),
+	Intersection
+}
+
+impl Description {
 	pub fn kind(&self) -> Kind {
 		match self {
-			Self::Never => Kind::Never,
-			Self::Reference(_) => Kind::Reference,
-			Self::Struct(_) => Kind::Struct,
-			Self::Primitive(n) => Kind::Primitive(*n),
-			Self::Enum(_) => Kind::Enum,
-			Self::Required(_) => Kind::Required,
-			Self::Option(_) => Kind::Option,
-			Self::Set(_) => Kind::Set,
-			Self::OneOrMany(_) => Kind::OneOrMany,
-			Self::Array(_) => Kind::Array,
-			Self::Alias(_) => Kind::Alias,
+			Self::Simple(s) => Kind::Simple(s.kind()),
+			Self::Intersection(_) => Kind::Intersection
 		}
 	}
 
-	pub fn sub_layouts<D: Descriptions<M>>(
+	pub fn dependencies<M>(
 		&self,
-		context: &Context<M, D>,
-		metadata: &M,
-	) -> Result<Vec<SubLayout<M>>, Error<M>>
-	where
-		M: Clone,
-	{
-		let mut sub_layouts = Vec::new();
-
-		match self {
-			Description::Struct(fields_id) => {
-				let fields = context.require_list(*fields_id, metadata)?.iter(context);
-				for item in fields {
-					let Meta(object, metadata) = item?.clone();
-					let field_id = object.into_id(&metadata)?;
-					let field = context.require_layout_field(field_id, &metadata)?;
-					let field_layout_id = field.require_layout(field.metadata())?;
-
-					sub_layouts.push(SubLayout {
-						layout: field_layout_id.clone(),
-						connection: LayoutConnection::FieldContainer(field_id),
-					});
-
-					let field_layout =
-						context.require_layout(**field_layout_id, field_layout_id.metadata())?;
-					if let Some(container_desc) = field_layout.description() {
-						match container_desc.as_standard() {
-							Some(standard_desc) => {
-								let item_layout_id = match standard_desc {
-									Description::Required(id) => *id,
-									Description::Option(id) => *id,
-									Description::Set(id) => *id,
-									Description::OneOrMany(id) => *id,
-									Description::Array(a) => a.item_layout(),
-									_ => panic!("invalid field layout: not a container"),
-								};
-
-								sub_layouts.push(SubLayout {
-									layout: Meta(item_layout_id, container_desc.metadata().clone()),
-									connection: LayoutConnection::FieldItem(field_id),
-								});
-							}
-							None => {
-								panic!("invalid field layout: not a container")
-							}
-						}
-					}
-				}
-			}
-			Description::Set(item_layout_id) => sub_layouts.push(SubLayout {
-				layout: Meta(*item_layout_id, metadata.clone()),
-				connection: LayoutConnection::Item,
-			}),
-			Description::OneOrMany(item_layout_id) => sub_layouts.push(SubLayout {
-				layout: Meta(*item_layout_id, metadata.clone()),
-				connection: LayoutConnection::Item,
-			}),
-			Description::Array(array) => sub_layouts.push(SubLayout {
-				layout: Meta(array.item_layout(), metadata.clone()),
-				connection: LayoutConnection::Item,
-			}),
-			_ => (),
-		}
-
-		Ok(sub_layouts)
-	}
-
-	pub fn dependencies(
-		&self,
-		_id: Id,
-		_nodes: &super::context::allocated::Nodes<M>,
-		_causes: &M,
-	) -> Result<Vec<crate::Item<M>>, Error<M>> {
-		Ok(Vec::new())
-	}
-
-	pub fn build(
-		self,
-		id: Id,
-		name: MetaOption<Name, M>,
-		restrictions: Restrictions<M>,
-		nodes: &mut super::context::allocated::Nodes<M>,
-		metadata: &M,
-	) -> Result<treeldr::layout::Description<M>, Error<M>>
-	where
-		M: Clone + Merge,
-	{
-		use field::Build as BuildField;
-		use variant::Build as BuildVariant;
-
-		fn require_name<M>(
-			id: Id,
-			name: MetaOption<Name, M>,
-			metadata: &M,
-		) -> Result<Meta<Name, M>, Error<M>>
-		where
-			M: Clone,
-		{
-			name.ok_or_else(|| Meta(error::LayoutMissingName(id).into(), metadata.clone()))
-		}
-
-		match self {
-			Description::Never => Ok(treeldr::layout::Description::Never(name)),
-			Description::Primitive(n) => Ok(treeldr::layout::Description::Primitive(
-				n.build(id, restrictions.into_primitive(), metadata)?,
-				name,
-			)),
-			Description::Reference(layout_id) => {
-				let layout_ref = **nodes.require_layout(layout_id, metadata)?;
-				let r = treeldr::layout::Reference::new(name, layout_ref);
-				Ok(treeldr::layout::Description::Reference(r))
-			}
-			Description::Struct(fields_id) => {
-				let name = require_name(id, name, metadata)?;
-				let fields = nodes
-					.require_list(fields_id, metadata)?
-					.iter(nodes)
-					.map(|item| {
-						let Meta(object, metadata) = item?.clone();
-						let field_id = object.into_id(&metadata)?;
-
-						let field = nodes.require_layout_field(field_id, &metadata)?;
-						let node = nodes.get(field_id).unwrap();
-						let label = node.label().map(String::from);
-						let doc = node.documentation().clone();
-						field.build(label, doc, nodes)
-					})
-					.try_collect()?;
-
-				let strct = treeldr::layout::Struct::new(name, fields);
-				Ok(treeldr::layout::Description::Struct(strct))
-			}
-			Description::Enum(options_id) => {
-				let name = require_name(id, name, metadata)?;
-
-				let variants: Vec<_> = nodes
-					.require_list(options_id, metadata)?
-					.iter(nodes)
-					.map(|item| {
-						let Meta(object, variant_causes) = item?.clone();
-						let variant_id = object.into_id(&variant_causes)?;
-
-						let variant = nodes.require_layout_variant(variant_id, &variant_causes)?;
-						let node = nodes.get(variant_id).unwrap();
-						let label = node.label().map(String::from);
-						let doc = node.documentation().clone();
-						Ok(Meta(variant.build(label, doc, nodes)?, variant_causes))
-					})
-					.try_collect()?;
-
-				let enm = treeldr::layout::Enum::new(name, variants);
-				Ok(treeldr::layout::Description::Enum(enm))
-			}
-			Description::Required(item_layout_id) => {
-				let item_layout_ref = **nodes.require_layout(item_layout_id, metadata)?;
-				Ok(treeldr::layout::Description::Required(
-					treeldr::layout::Required::new(name, item_layout_ref),
-				))
-			}
-			Description::Option(item_layout_id) => {
-				let item_layout_ref = **nodes.require_layout(item_layout_id, metadata)?;
-				Ok(treeldr::layout::Description::Option(
-					treeldr::layout::Optional::new(name, item_layout_ref),
-				))
-			}
-			Description::Set(item_layout_id) => {
-				let item_layout_ref = **nodes.require_layout(item_layout_id, metadata)?;
-				Ok(treeldr::layout::Description::Set(
-					treeldr::layout::Set::new(name, item_layout_ref, restrictions.into_container()),
-				))
-			}
-			Description::OneOrMany(item_layout_id) => {
-				let item_layout_ref = **nodes.require_layout(item_layout_id, metadata)?;
-				Ok(treeldr::layout::Description::OneOrMany(
-					treeldr::layout::OneOrMany::new(
-						name,
-						item_layout_ref,
-						restrictions.into_container(),
-					),
-				))
-			}
-			Description::Array(array) => Ok(treeldr::layout::Description::Array(array.build(
-				name,
-				restrictions.into_container(),
-				nodes,
-				metadata,
-			)?)),
-			Description::Alias(alias_layout_id) => {
-				let name = require_name(id, name, metadata)?;
-
-				let alias_layout_ref = **nodes.require_layout(alias_layout_id, metadata)?;
-				Ok(treeldr::layout::Description::Alias(name, alias_layout_ref))
-			}
-		}
-	}
-}
-
-pub trait PseudoDescription<M>: Clone + From<Description<M>> {
-	fn as_standard(&self) -> Option<&Description<M>>;
-
-	fn as_standard_mut(&mut self) -> Option<&mut Description<M>>;
-
-	fn try_unify(
-		self,
-		other: Self,
-		id: Id,
-		metadata: M,
-		other_causes: M,
-	) -> Result<Meta<Self, M>, Error<M>>
-	where
-		M: Merge;
-}
-
-impl<M: Clone> PseudoDescription<M> for Description<M> {
-	fn as_standard(&self) -> Option<&Description<M>> {
-		Some(self)
-	}
-
-	fn as_standard_mut(&mut self) -> Option<&mut Description<M>> {
-		Some(self)
-	}
-
-	fn try_unify(
-		self,
-		other: Self,
-		id: Id,
-		meta: M,
-		other_meta: M,
-	) -> Result<Meta<Self, M>, Error<M>>
-	where
-		M: Merge,
-	{
-		match (self, other) {
-			(Self::Never, Self::Never) => Ok(Meta(Self::Never, meta.merged_with(other_meta))),
-			(Self::Primitive(a), Self::Primitive(b)) => {
-				let Meta(c, meta) = a.try_unify(id, Meta(b, other_meta), meta)?;
-				Ok(Meta(Self::Primitive(c), meta))
-			}
-			(Self::Struct(a), Self::Struct(b)) if a == b => {
-				Ok(Meta(Self::Struct(a), meta.merged_with(other_meta)))
-			}
-			(Self::Reference(a), Self::Reference(b)) if a == b => {
-				Ok(Meta(Self::Reference(a), meta.merged_with(other_meta)))
-			}
-			(Self::Enum(a), Self::Enum(b)) if a == b => {
-				Ok(Meta(Self::Enum(a), meta.merged_with(other_meta)))
-			}
-			(Self::Set(a), Self::Set(b)) if a == b => {
-				Ok(Meta(Self::Set(a), meta.merged_with(other_meta)))
-			}
-			(Self::OneOrMany(a), Self::OneOrMany(b)) if a == b => {
-				Ok(Meta(Self::OneOrMany(a), meta.merged_with(other_meta)))
-			}
-			(Self::Array(a), Self::Array(b)) => {
-				let Meta(result, meta) = a.try_unify(b, id, meta, other_meta)?;
-				Ok(Meta(Self::Array(result), meta))
-			}
-			(Self::Alias(a), Self::Alias(b)) if a == b => {
-				Ok(Meta(Self::Alias(a), meta.merged_with(other_meta)))
-			}
-			_ => Err(Error::new(
-				error::LayoutMismatchDescription { id, because: meta }.into(),
-				other_meta,
-			)),
-		}
+	) -> Vec<Id> {
+		Vec::new()
 	}
 }
 
 /// Layout definition.
 #[derive(Clone)]
-pub struct Definition<M, D = Description<M>> {
-	/// Identifier of the layout.
-	id: Id,
-
-	/// Optional name.
-	///
-	/// If not provided, the name is generated using the `default_name`
-	/// method. If it conflicts with another name or failed to be generated,
-	/// then a name must be explicitly defined by the user.
-	name: MetaOption<Name, M>,
-
+pub struct Definition<M> {
 	/// Type for which this layout is defined.
-	ty: MetaOption<Id, M>,
+	ty: Single<Id, M>,
 
 	/// Layout description.
-	desc: MetaOption<D, M>,
+	desc: Single<Description, M>,
 
-	/// Restrictions.
-	restrictions: Restrictions<M>,
+	/// List of restrictions.
+	restrictions: Single<Id, M>,
+
+	/// List semantics.
+	array_semantics: array::Semantics<M>,
+
+	/// Simple description.
+	simple_desc: Option<Meta<SimpleDescription, M>>
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -375,249 +195,127 @@ pub struct ParentLayout {
 	pub layout: Id,
 }
 
-impl<M, D> Definition<M, D> {
-	pub fn new(id: Id) -> Self {
+impl<M> Definition<M> {
+	pub fn new() -> Self {
 		Self {
-			id,
-			name: MetaOption::default(),
-			ty: MetaOption::default(),
-			desc: MetaOption::default(),
-			restrictions: Restrictions::default(),
+			ty: Single::default(),
+			desc: Single::default(),
+			restrictions: Single::default(),
+			array_semantics: array::Semantics::default(),
+			simple_desc: None
 		}
 	}
 
 	/// Type for which the layout is defined.
-	pub fn ty(&self) -> Option<&Meta<Id, M>> {
-		self.ty.as_ref()
+	pub fn ty(&self) -> &Single<Id, M> {
+		&self.ty
 	}
 
-	pub fn name(&self) -> Option<&Meta<Name, M>> {
-		self.name.as_ref()
+	pub fn ty_mut(&mut self) -> &mut Single<Id, M> {
+		&mut self.ty
 	}
 
-	pub fn set_name(&mut self, name: Name, metadata: M) -> Result<(), Error<M>> {
-		self.name.try_set(
-			name,
-			metadata,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::LayoutMismatchName {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
+	pub fn description(&self) -> &Single<Description, M> {
+		&self.desc
 	}
 
-	pub fn description(&self) -> Option<&Meta<D, M>> {
-		self.desc.as_ref()
+	pub fn description_mut(&mut self) -> &mut Single<Description, M> {
+		&mut self.desc
 	}
 
-	pub fn description_mut(&mut self) -> Option<&mut Meta<D, M>> {
-		self.desc.as_mut()
-	}
-
-	pub fn restrictions(&self) -> &Restrictions<M> {
+	pub fn restrictions(&self) -> &Single<Id, M> {
 		&self.restrictions
 	}
 
-	pub fn restrictions_mut(&mut self) -> &mut Restrictions<M> {
+	pub fn restrictions_mut(&mut self) -> &mut Single<Id, M> {
 		&mut self.restrictions
 	}
-
-	/// Declare the type for which this layout is defined.
-	pub fn set_type(&mut self, ty_ref: Id, metadata: M) -> Result<(), Error<M>>
-	where
-		M: Clone,
-	{
-		self.ty.try_set(
-			ty_ref,
-			metadata,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::LayoutMismatchType {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
-	}
-
-	pub fn set_description(&mut self, desc: D, metadata: M) -> Result<(), Error<M>>
-	where
-		M: Merge,
-		D: PseudoDescription<M>,
-	{
-		self.desc.try_unify(
-			desc,
-			metadata,
-			|Meta(current_desc, current_meta), Meta(desc, meta)| {
-				current_desc.try_unify(desc, self.id, current_meta, meta)
-			},
-		)
-	}
-
-	pub fn replace_description(&mut self, desc: MetaOption<D, M>) {
-		self.desc = desc
-	}
-
-	pub fn try_map<U, E>(self, f: impl FnOnce(D) -> Result<U, E>) -> Result<Definition<M, U>, E> {
-		Ok(Definition {
-			id: self.id,
-			name: self.name,
-			ty: self.ty,
-			desc: self.desc.try_map(f)?,
-			restrictions: self.restrictions,
-		})
-	}
 }
 
-impl<M: Merge, D: PseudoDescription<M>> Definition<M, D> {
-	pub fn set_primitive(&mut self, primitive: Primitive, metadata: M) -> Result<(), Error<M>> {
-		self.set_description(Description::Primitive(primitive).into(), metadata)
+impl<M: Merge> Definition<M> {
+	pub fn set_primitive(&mut self, primitive: Meta<Primitive, M>) {
+		self.desc.insert(primitive.map(|d| Description::Simple(SimpleDescription::Primitive(d))))
 	}
 
-	pub fn set_alias(&mut self, alias: Id, metadata: M) -> Result<(), Error<M>> {
-		self.set_description(Description::Alias(alias).into(), metadata)
+	pub fn set_alias(&mut self, alias: Meta<Id, M>) {
+		self.desc.insert(alias.map(|d| Description::Simple(SimpleDescription::Alias(d))))
 	}
 
-	pub fn set_fields(&mut self, fields: Id, metadata: M) -> Result<(), Error<M>> {
-		self.set_description(Description::Struct(fields).into(), metadata)
+	pub fn set_fields(&mut self, fields: Meta<Id, M>) {
+		self.desc.insert(fields.map(|d| Description::Simple(SimpleDescription::Struct(d))))
 	}
 
-	pub fn set_reference(&mut self, id_layout: Id, metadata: M) -> Result<(), Error<M>> {
-		self.set_description(Description::Reference(id_layout).into(), metadata)
+	pub fn set_reference(&mut self, ty: Meta<Id, M>) {
+		self.desc.insert(ty.map(|d| Description::Simple(SimpleDescription::Reference(d))))
 	}
 
-	pub fn set_enum(&mut self, items: Id, metadata: M) -> Result<(), Error<M>> {
-		self.set_description(Description::Enum(items).into(), metadata)
+	pub fn set_enum(&mut self, variants: Meta<Id, M>) {
+		self.desc.insert(variants.map(|d| Description::Simple(SimpleDescription::Enum(d))))
 	}
 
-	pub fn set_required(&mut self, item: Id, metadata: M) -> Result<(), Error<M>> {
-		self.set_description(Description::Required(item).into(), metadata)
+	pub fn set_required(&mut self, item: Meta<Id, M>) {
+		self.desc.insert(item.map(|d| Description::Simple(SimpleDescription::Required(d))))
 	}
 
-	pub fn set_option(&mut self, item: Id, metadata: M) -> Result<(), Error<M>> {
-		self.set_description(Description::Option(item).into(), metadata)
+	pub fn set_option(&mut self, item: Meta<Id, M>) {
+		self.desc.insert(item.map(|d| Description::Simple(SimpleDescription::Option(d))))
 	}
 
-	pub fn set_set(&mut self, item: Id, metadata: M) -> Result<(), Error<M>> {
-		self.set_description(Description::Set(item).into(), metadata)
+	pub fn set_set(&mut self, item: Meta<Id, M>) {
+		self.desc.insert(item.map(|d| Description::Simple(SimpleDescription::Set(d))))
 	}
 
-	pub fn set_one_or_many(&mut self, item: Id, metadata: M) -> Result<(), Error<M>> {
-		self.set_description(Description::OneOrMany(item).into(), metadata)
+	pub fn set_one_or_many(&mut self, item: Meta<Id, M>) {
+		self.desc.insert(item.map(|d| Description::Simple(SimpleDescription::OneOrMany(d))))
 	}
 
-	pub fn set_array(
-		&mut self,
-		item: Id,
-		semantics: Option<array::Semantics<M>>,
-		metadata: M,
-	) -> Result<(), Error<M>> {
-		self.set_description(
-			Description::Array(Array::new(item, semantics)).into(),
-			metadata,
-		)
-	}
-}
-
-impl<M: Clone, D: PseudoDescription<M>> Definition<M, D> {
-	pub fn set_array_list_first(&mut self, first_prop: Id, metadata: M) -> Result<(), Error<M>> {
-		let id = self.id;
-		match self.description_mut() {
-			Some(desc) => match desc.0.as_standard_mut() {
-				Some(Description::Array(array)) => array.set_list_first(id, first_prop, metadata),
-				_ => Err(Error::new(
-					error::LayoutMismatchDescription {
-						id,
-						because: desc.1.clone(),
-					}
-					.into(),
-					metadata,
-				)),
-			},
-			None => todo!("error: not a list"),
-		}
+	pub fn set_array(&mut self, item: Meta<Id, M>) {
+		self.desc.insert(item.map(|d| Description::Simple(SimpleDescription::Array(d))))
 	}
 
-	pub fn set_array_list_rest(&mut self, value: Id, metadata: M) -> Result<(), Error<M>> {
-		let id = self.id;
-		match self.description_mut() {
-			Some(desc) => match desc.0.as_standard_mut() {
-				Some(Description::Array(array)) => array.set_list_rest(id, value, metadata),
-				_ => Err(Error::new(
-					error::LayoutMismatchDescription {
-						id,
-						because: desc.1.clone(),
-					}
-					.into(),
-					metadata,
-				)),
-			},
-			None => todo!("error: not a list"),
-		}
+	pub fn set_array_list_first(&mut self, first_prop: Meta<Id, M>) {
+		self.array_semantics.set_first(first_prop)
 	}
 
-	pub fn set_array_list_nil(&mut self, value: Id, metadata: M) -> Result<(), Error<M>> {
-		let id = self.id;
-		match self.description_mut() {
-			Some(desc) => match desc.0.as_standard_mut() {
-				Some(Description::Array(array)) => array.set_list_nil(id, value, metadata),
-				_ => Err(Error::new(
-					error::LayoutMismatchDescription {
-						id,
-						because: desc.1.clone(),
-					}
-					.into(),
-					metadata,
-				)),
-			},
-			None => todo!("error: not a list"),
-		}
+	pub fn set_array_list_rest(&mut self, value: Meta<Id, M>) {
+		self.array_semantics.set_rest(value)
+	}
+
+	pub fn set_array_list_nil(&mut self, value: Meta<Id, M>) {
+		self.array_semantics.set_nil(value)
 	}
 }
 
 impl<M: Clone> Definition<M> {
-	pub fn sub_layouts(&self, context: &Context<M>) -> Result<Vec<SubLayout<M>>, Error<M>> {
-		match self.desc.as_ref() {
-			Some(desc) => desc.sub_layouts(context, desc.metadata()),
-			None => Ok(Vec::new()),
-		}
+	pub fn sub_layouts(&self, context: &Context<M>) -> Vec<SubLayout<M>> {
+		let desc = self.simple_desc.as_ref().unwrap();
+		desc.sub_layouts(context, desc.metadata())
 	}
 
 	pub fn dependencies(
-		&self,
-		nodes: &super::context::allocated::Nodes<M>,
-		_causes: &M,
-	) -> Result<Vec<crate::Item<M>>, Error<M>> {
-		match self.desc.as_ref() {
-			Some(desc) => desc.dependencies(self.id, nodes, desc.metadata()),
-			None => Ok(Vec::new()),
+		&self
+	) -> Result<Vec<Id>, Error<M>> {
+		let mut dependencies = Vec::new();
+
+		for desc in &self.desc {
+			dependencies.extend(desc.dependencies())
 		}
+
+		Ok(dependencies)
 	}
 
 	/// Build a default name for this layout.
-	pub fn default_name<C: Descriptions<M>>(
+	pub fn default_name(
 		&self,
-		context: &Context<M, C>,
+		context: &Context<M>,
 		vocabulary: &impl IriVocabulary<Iri = IriIndex>,
+		id: Id,
 		parent_layouts: &[Meta<ParentLayout, M>],
 		metadata: M,
-	) -> Result<Option<Meta<Name, M>>, Error<M>> {
-		if let Id::Iri(term) = self.id {
+	) -> Option<Meta<Name, M>> {
+		if let Id::Iri(term) = id {
 			if let Ok(Some(name)) = Name::from_iri(vocabulary.iri(&term).unwrap()) {
-				return Ok(Some(Meta(name, metadata)));
+				return Some(Meta(name, metadata));
 			}
 		}
 
@@ -633,62 +331,264 @@ impl<M: Clone> Definition<M> {
 
 		if parent_layouts.len() == 1 {
 			let parent = &parent_layouts[0];
-			let parent_layout = context.require_layout(parent.layout, &metadata)?.value();
+			let parent_layout = context.get(parent.layout).unwrap().as_resource();
 
-			if let Some(parent_layout_name) = parent_layout.name() {
+			if let Some(parent_layout_name) = parent_layout.name().first() {
 				match parent.connection {
 					LayoutConnection::FieldItem(field_id) => {
-						let field = context.require_layout_field(field_id, &metadata)?.value();
+						let field = context.get(field_id).unwrap().as_layout_field().unwrap();
 
-						if let Some(field_name) = field.name() {
-							let mut name = parent_layout_name.value().clone();
-							name.push_name(field_name);
+						if let Some(field_name) = field.name().first() {
+							let mut name = parent_layout_name.into_value().clone();
+							name.push_name(*field_name);
 
-							return Ok(Some(Meta(name, metadata)));
+							return Some(Meta(name, metadata));
 						}
 					}
 					LayoutConnection::Item => {
-						let mut name = parent_layout_name.value().clone();
+						let mut name = parent_layout_name.into_value().clone();
 						name.push_name(&Name::new("item").unwrap());
 
-						return Ok(Some(Meta(name, metadata)));
+						return Some(Meta(name, metadata));
 					}
 					_ => (),
 				}
 			}
 		}
 
-		Ok(None)
+		None
 	}
-}
 
-impl<M: Clone + Merge> crate::Build<M> for Definition<M> {
-	type Target = treeldr::layout::Definition<M>;
+	fn simplify(
+		&mut self,
+		id: Id,
+		metadata: M,
+	) -> Result<(), Error<M>> {
+		let Meta(desc, desc_metadata) = self.desc.clone()
+			.try_unwrap()
+			.map_err(|Conflict(Meta(desc1, meta), desc2)| {
+				Meta(
+					error::LayoutDescriptionMismatch {
+						id,
+						desc1,
+						desc2
+					}.into(),
+					meta
+				)
+			})?
+			.ok_or_else(|| {
+				Meta(
+					error::LayoutDescriptionMissing(id).into(),
+					metadata.clone(),
+				)
+			})?;
+
+		let simple_desc = match desc {
+			Description::Simple(s) => s,
+			Description::Intersection(_) => {
+				todo!()
+			}
+		};
+
+		self.simple_desc = Some(Meta(simple_desc, desc_metadata));
+		Ok(())
+	}
 
 	fn build(
-		self,
-		nodes: &mut super::context::allocated::Nodes<M>,
-		_dependencies: crate::Dependencies<M>,
+		&self,
+		context: &Context<M>,
+		as_resource: &resource::Data<M>,
+		as_component: &component::Data<M>,
 		metadata: M,
-	) -> Result<Self::Target, Error<M>> {
-		let ty = self.ty.try_map_with_causes(|Meta(ty_id, metadata)| {
-			Ok(Meta(**nodes.require_type(ty_id, &metadata)?, metadata))
-		})?;
+	) -> Result<treeldr::layout::Definition<M>, Error<M>> {
+		let ty = self.ty.into_type_at_node_binding(context, as_resource.id, node::property::Layout::For)?;
 
-		let Meta(desc, desc_metadata) = self.desc.ok_or_else(|| {
-			Meta(
-				error::LayoutMissingDescription(self.id).into(),
-				metadata.clone(),
-			)
-		})?;
+		let name = as_component.name.try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, node::property::Resource::Name))?;
 
-		let desc = Meta(
-			desc.build(self.id, self.name, self.restrictions, nodes, &desc_metadata)?,
-			desc_metadata,
-		);
+		let restrictions_id = self.restrictions.try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, node::property::Layout::WithRestrictions))?;
+
+		let restrictions = restrictions_id.as_ref().map(|Meta(list_id, meta)| {
+			let mut restrictions = Restrictions::default();
+			let list = context.require_list(*list_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::WithRestrictions, meta.clone()))?;
+			for restriction_value in list.iter(context) {
+				let Meta(restriction_value, meta) = restriction_value?;
+				let restriction_id = restriction_value.as_required_id(meta)?;
+				let restriction_definition = context.require_layout_restriction(restriction_id).map_err(|e| e.at(meta.clone()))?;
+				let restriction = restriction_definition.build()?;
+				restrictions.insert(restriction)?
+			}
+
+			Ok(restrictions)
+		}).transpose()?.unwrap_or_default();
+
+		let Meta(desc, desc_metadata) = self.simple_desc.unwrap();
+		let desc = match desc {
+			SimpleDescription::Never => treeldr::layout::Description::Never(name),
+			SimpleDescription::Primitive(n) => treeldr::layout::Description::Primitive(
+				n.build(as_resource.id, restrictions.into_primitive(), &desc_metadata)?,
+				name,
+			),
+			SimpleDescription::Reference(layout_id) => {
+				let layout_ref = **context.require_layout(layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Reference, desc_metadata.clone()))?;
+				let r = treeldr::layout::Reference::new(name, layout_ref);
+				treeldr::layout::Description::Reference(r)
+			}
+			SimpleDescription::Struct(fields_id) => {
+				let name = name.ok_or_else(|| Meta(
+					NodeBindingMissing {
+						id: as_resource.id,
+						property: node::property::Resource::Name.into()
+					}.into(),
+					metadata.clone()
+				))?;
+
+				let fields = context
+					.require_list(fields_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Fields, desc_metadata.clone()))?
+					.iter(context)
+					.map(|item| {
+						let Meta(object, metadata) = item?.cloned();
+						let field_id = object.into_required_id(&metadata)?;
+
+						let field = context.require_layout_field(field_id).map_err(|e| e.at(metadata))?;
+						let node = context.get(field_id).unwrap();
+						let label = node.label().map(String::from);
+						let doc = node.documentation().clone();
+						field.build(field_id, label, doc, context)
+					})
+					.try_collect()?;
+
+				let strct = treeldr::layout::Struct::new(name, fields);
+				treeldr::layout::Description::Struct(strct)
+			}
+			SimpleDescription::Enum(options_id) => {
+				let name = name.ok_or_else(|| Meta(
+					NodeBindingMissing {
+						id: as_resource.id,
+						property: node::property::Resource::Name.into()
+					}.into(),
+					metadata.clone()
+				))?;
+
+				let variants: Vec<_> = context
+					.require_list(options_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Variants, desc_metadata.clone()))?
+					.iter(context)
+					.map(|item| {
+						let Meta(object, variant_causes) = item?.cloned();
+						let variant_id = object.into_required_id(&variant_causes)?;
+
+						let variant = context.require_layout_variant(variant_id).map_err(|e| e.at(variant_causes.clone()))?;
+						let node = context.get(variant_id).unwrap();
+						let label = node.label().map(String::from);
+						let doc = node.documentation().clone();
+						Ok(Meta(variant.build(variant_id, label, doc, context)?, variant_causes))
+					})
+					.try_collect()?;
+
+				let enm = treeldr::layout::Enum::new(name, variants);
+				treeldr::layout::Description::Enum(enm)
+			}
+			SimpleDescription::Required(item_layout_id) => {
+				let item_layout_ref = **context.require_layout(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Required, desc_metadata.clone()))?;
+				treeldr::layout::Description::Required(
+					treeldr::layout::Required::new(name, item_layout_ref),
+				)
+			}
+			SimpleDescription::Option(item_layout_id) => {
+				let item_layout_ref = **context.require_layout(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Option, desc_metadata.clone()))?;
+				treeldr::layout::Description::Option(
+					treeldr::layout::Optional::new(name, item_layout_ref),
+				)
+			}
+			SimpleDescription::Set(item_layout_id) => {
+				let item_layout_ref = **context.require_layout(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Set, desc_metadata.clone()))?;
+				treeldr::layout::Description::Set(
+					treeldr::layout::Set::new(name, item_layout_ref, restrictions.into_container()),
+				)
+			}
+			SimpleDescription::OneOrMany(item_layout_id) => {
+				let item_layout_ref = **context.require_layout(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::OneOrMany, desc_metadata.clone()))?;
+				treeldr::layout::Description::OneOrMany(
+					treeldr::layout::OneOrMany::new(
+						name,
+						item_layout_ref,
+						restrictions.into_container(),
+					),
+				)
+			}
+			SimpleDescription::Array(item_layout_id) => {
+				let item_layout_ref = **context.require_layout(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Array, desc_metadata.clone()))?;
+				let semantics = self.array_semantics.build(context, as_resource.id)?;
+				treeldr::layout::Description::Array(
+					treeldr::layout::Array::new(
+						name,
+						item_layout_ref,
+						restrictions.into_container(),
+						semantics
+					)
+				)
+			},
+			SimpleDescription::Alias(alias_layout_id) => {
+				let name = name.ok_or_else(|| Meta(
+					NodeBindingMissing {
+						id: as_resource.id,
+						property: node::property::Resource::Name.into()
+					}.into(),
+					metadata.clone()
+				))?;
+
+				let alias_layout_ref = **context.require_layout(alias_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Alias, desc_metadata.clone()))?;
+				treeldr::layout::Description::Alias(name, alias_layout_ref)
+			}
+		};
 
 		Ok(treeldr::layout::Definition::new(
-			self.id, ty, desc, metadata,
+			as_resource.id, ty, Meta(desc, desc_metadata)
 		))
 	}
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Property {
+	For,
+	Name,
+	Description(DescriptionProperty),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DescriptionProperty {
+	Never,
+	Primitive,
+	Struct,
+	Reference,
+	Enum,
+	Required,
+	Option,
+	Set,
+	OneOrMany,
+	Array,
+	Alias,
+}
+
+pub enum BindingRef<'a> {
+	For(Id),
+	Name(&'a Name),
+	Description(Description),
+}
+
+// pub struct Bindings<'a> {
+// 	name: Option<&'a Name>,
+// 	ty: Option<Id>,
+// 	desc: Option<Description>,
+// 	restrictions: bool,
+// }
+
+// impl<'a> Iterator for Bindings<'a> {
+// 	type Item = BindingRef<'a>;
+
+// 	fn next(&mut self) -> Option<Self::Item> {
+// 		self.name
+// 			.take()
+// 			.map(BindingRef::Name)
+// 			.or_else(|| self.format.take().map(BindingRef::Format))
+// 	}
+// }

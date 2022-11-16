@@ -5,8 +5,17 @@ use locspan_derive::{StrippedEq, StrippedPartialEq};
 pub mod cardinal;
 
 /// Container restriction.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Restriction {
 	Cardinal(cardinal::Restriction),
+}
+
+impl Restriction {
+	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> BindingRef<'a, M> {
+		match self {
+			Self::Cardinal(r) => BindingRef::Cardinal(r.as_binding(meta))
+		}
+	}
 }
 
 #[derive(Debug)]
@@ -75,4 +84,8 @@ impl<M> Restrictions<M> {
 			.unify(other.cardinal)
 			.map_loc_err(Conflict::Cardinal)
 	}
+}
+
+pub enum BindingRef<'a, M> {
+	Cardinal(cardinal::BindingRef<'a, M>)
 }

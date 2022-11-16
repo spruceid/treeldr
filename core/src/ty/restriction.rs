@@ -1,5 +1,5 @@
 use super::Properties;
-use crate::{metadata, prop, Id, Ref, SubstituteReferences};
+use crate::{prop, TId, metadata::Merge, vocab};
 use locspan::Meta;
 
 /// Type restricted on a property.
@@ -8,20 +8,22 @@ use locspan::Meta;
 /// A restricted type is a subset of the domain of the property which
 /// includes every instance for which the given property satisfies the
 /// given restriction.
+#[derive(Debug)]
 pub struct Restriction<M> {
 	properties: Properties<M>,
 }
 
 impl<M> Restriction<M> {
 	pub fn new(
-		Meta(prop, causes): Meta<Ref<prop::Definition<M>>, M>,
-		restriction: prop::Restrictions<M>,
+		Meta(prop, causes): Meta<TId<crate::Property>, M>,
+		restriction: Meta<prop::Restriction, M>
 	) -> Self
 	where
-		M: metadata::Merge,
+		M: Clone + Merge,
 	{
 		let mut properties = Properties::none();
-		properties.insert(prop, Some(restriction), causes);
+
+		properties.insert(prop, Some(prop::Restrictions::singleton(restriction)), causes);
 
 		Self { properties }
 	}
@@ -30,7 +32,7 @@ impl<M> Restriction<M> {
 		&self.properties
 	}
 
-	pub fn property(&self) -> Ref<prop::Definition<M>> {
+	pub fn property(&self) -> TId<crate::Property> {
 		self.properties.included().next().unwrap().property()
 	}
 
@@ -39,14 +41,28 @@ impl<M> Restriction<M> {
 	}
 }
 
-impl<M> SubstituteReferences<M> for Restriction<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
-	{
-		self.properties.substitute_references(sub)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Property {
+	OnProperty,
+	AllValuesFrom,
+	SomeValuesFrom
+}
+
+impl Property {
+	pub fn term(&self) -> vocab::Term {
+		use vocab::{Term, Owl};
+		match self {
+			Self::OnProperty => Term::Owl(Owl::OnProperty),
+			Self::AllValuesFrom => Term::Owl(Owl::AllValuesFrom),
+			Self::SomeValuesFrom => Term::Owl(Owl::SomeValuesFrom),
+		}
+	}
+
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::OnProperty => "restricted property",
+			Self::AllValuesFrom => "all values from range",
+			Self::SomeValuesFrom => "some values from range"
+		}
 	}
 }

@@ -2,7 +2,7 @@ use treeldr::{Id, IriIndex, BlankIdIndex, layout::Primitive};
 use locspan::{Span, MaybeLocated};
 use rdf_types::Vocabulary;
 use contextual::WithContext;
-use crate::layout::primitive::Restriction;
+use crate::layout::restriction::primitive::Restriction;
 
 #[derive(Debug)]
 pub struct LayoutDatatypeRestrictionInvalid {

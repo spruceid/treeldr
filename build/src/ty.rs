@@ -1,466 +1,98 @@
-use crate::{error, utils::TryCollect, Error, ObjectToId};
+use crate::{Error, ObjectToId, node, Single, single};
 use locspan::Meta;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, btree_map::Entry};
 use treeldr::{metadata::Merge, Id, MetaOption};
 
-pub mod data;
-mod normal;
+pub mod datatype;
 mod restriction;
 
-pub use data::DataType;
-pub use normal::*;
-pub use restriction::*;
+pub use datatype::DataType;
+pub use restriction::{Restriction, RangeRestriction, CardinalityRestriction};
 pub use treeldr::ty::Kind;
 
-/// Type definition.
-#[derive(Clone)]
-pub enum Description<M> {
-	Data(DataType<M>),
+pub struct Data<M> {
+	/// Union.
+	union_of: Single<Id, M>,
 
-	/// Normal type.
-	Normal(Normal<M>),
+	/// Intersection.
+	intersection_of: Single<Id, M>,
 
-	/// Union/sum type.
-	Union(Id),
-
-	/// Intersection type.
-	Intersection(Id),
-
-	/// Property restriction.
-	Restriction(Restriction<M>),
+	/// Properties.
+	properties: HashMap<Id, M>,
 }
 
-impl<M: Clone> Description<M> {
-	pub fn kind(&self) -> Kind {
-		match self {
-			Self::Data(_) => Kind::Data,
-			Self::Normal(_) => Kind::Normal,
-			Self::Union(_) => Kind::Union,
-			Self::Intersection(_) => Kind::Intersection,
-			Self::Restriction(_) => Kind::Restriction,
+impl<M> Default for Data<M> {
+	fn default() -> Self {
+		Self {
+			union_of: Single::default(),
+			intersection_of: Single::default(),
+			properties: HashMap::new()
 		}
-	}
-
-	fn dependencies(
-		&self,
-		_id: Id,
-		nodes: &super::context::allocated::Nodes<M>,
-		causes: &M,
-	) -> Result<Vec<crate::Item<M>>, Error<M>> {
-		let list_id = match self {
-			Description::Union(list_id) => Some(*list_id),
-			Description::Intersection(list_id) => Some(*list_id),
-			Description::Data(dt) => return dt.dependencies(nodes),
-			_ => None,
-		};
-
-		match list_id {
-			Some(list_id) => {
-				let dependencies = nodes
-					.require_list(list_id, causes)?
-					.iter(nodes)
-					.map(|item| {
-						let Meta(object, ty_causes) = item?.clone();
-						let ty_id = object.into_id(causes)?;
-
-						let ty_ref = **nodes.require_type(ty_id, &ty_causes)?;
-
-						Ok(crate::Item::Type(ty_ref))
-					})
-					.try_collect()?;
-				Ok(dependencies)
-			}
-			None => Ok(Vec::new()),
-		}
-	}
-
-	fn build(
-		self,
-		id: Id,
-		nodes: &super::context::allocated::Nodes<M>,
-		dependencies: crate::Dependencies<M>,
-		causes: M,
-	) -> Result<treeldr::ty::Description<M>, Error<M>>
-	where
-		M: Clone + Merge,
-	{
-		let desc = match self {
-			Self::Data(d) => d.build(id, nodes, dependencies)?,
-			Self::Normal(n) => n.build(nodes)?,
-			Self::Union(options_id) => {
-				use std::collections::btree_map::Entry;
-				let mut options = BTreeMap::new();
-
-				let items = nodes.require_list(options_id, &causes)?.iter(nodes);
-				for item in items {
-					let Meta(object, causes) = item?.clone();
-					let option_id = object.into_id(&causes)?;
-
-					let Meta(option_ty, option_causes) =
-						nodes.require_type(option_id, &causes)?.clone();
-
-					match options.entry(option_ty) {
-						Entry::Vacant(entry) => {
-							entry.insert(option_causes);
-						}
-						Entry::Occupied(mut entry) => {
-							entry.get_mut().merge_with(option_causes);
-						}
-					}
-				}
-
-				treeldr::ty::Description::Union(treeldr::ty::Union::new(options, |ty_ref| {
-					dependencies.ty(ty_ref)
-				}))
-			}
-			Description::Intersection(types_id) => {
-				use std::collections::btree_map::Entry;
-				let mut types = BTreeMap::new();
-
-				let items = nodes.require_list(types_id, &causes)?.iter(nodes);
-				for item in items {
-					let Meta(object, causes) = item?.clone();
-					let option_id = object.into_id(&causes)?;
-
-					let Meta(ty, ty_causes) = nodes.require_type(option_id, &causes)?.clone();
-
-					match types.entry(ty) {
-						Entry::Vacant(entry) => {
-							entry.insert(ty_causes);
-						}
-						Entry::Occupied(mut entry) => {
-							entry.get_mut().merge_with(ty_causes);
-						}
-					}
-				}
-
-				match treeldr::ty::Intersection::new(types, |ty_ref| dependencies.ty(ty_ref)) {
-					Ok(intersection) => treeldr::ty::Description::Intersection(intersection),
-					Err(_) => treeldr::ty::Description::Empty,
-				}
-			}
-			Description::Restriction(r) => r.build(nodes)?,
-		};
-
-		Ok(desc)
-	}
-}
-
-pub trait PseudoDescription<M>: Clone + From<Description<M>> {
-	fn as_standard(&self) -> Option<&Description<M>>;
-
-	fn as_standard_mut(&mut self) -> Option<&mut Description<M>>;
-}
-
-impl<M: Clone> PseudoDescription<M> for Description<M> {
-	fn as_standard(&self) -> Option<&Description<M>> {
-		Some(self)
-	}
-
-	fn as_standard_mut(&mut self) -> Option<&mut Description<M>> {
-		Some(self)
 	}
 }
 
 #[derive(Clone)]
-pub struct Definition<M, D = Description<M>> {
-	/// Identifier of the type.
-	id: Id,
+pub struct Definition<M> {
+	data: Data<M>,
 
-	/// Type description.
-	desc: MetaOption<D, M>,
+	/// Datatype.
+	datatype: DataType<M>,
+
+	/// Restriction.
+	restriction: Restriction<M>
 }
 
-impl<M, D> Definition<M, D> {
+impl<M> Definition<M> {
 	/// Create a new type.
 	///
 	/// By default, a normal type is created.
 	/// It can later be changed into a non-normal type as long as no properties
 	/// have been defined on it.
-	pub fn new(id: Id) -> Self {
+	pub fn new() -> Self {
 		Self {
-			id,
-			desc: MetaOption::default(),
+			data: Data::default(),
+			datatype: MetaOption::default(),
+			restriction: MetaOption::default()
 		}
-	}
-
-	pub fn description(&self) -> &MetaOption<D, M> {
-		&self.desc
-	}
-
-	pub fn try_map<U, E>(self, f: impl FnOnce(D) -> Result<U, E>) -> Result<Definition<M, U>, E> {
-		Ok(Definition {
-			id: self.id,
-			desc: self.desc.try_map(f)?,
-		})
 	}
 }
 
-impl<M, D: PseudoDescription<M>> Definition<M, D> {
-	pub fn require_datatype(&self, cause: &M) -> Result<&DataType<M>, Error<M>>
-	where
-		M: Clone,
-	{
-		let because = self.desc.metadata().unwrap().clone();
-		match self.desc.value().and_then(|d| d.as_standard()) {
-			Some(Description::Data(d)) => Ok(d),
-			Some(other) => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: Some(other.kind()),
-					found: Some(Kind::Normal),
-					because,
-				}
-				.into(),
-				cause.clone(),
-			)),
-			None => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: None,
-					found: Some(Kind::Normal),
-					because,
-				}
-				.into(),
-				cause.clone(),
-			)),
-		}
-	}
-
-	pub fn require_datatype_mut(&mut self, cause: &M) -> Result<&mut DataType<M>, Error<M>>
-	where
-		M: Clone,
-	{
-		self.desc.set_once(cause.clone(), || {
-			Description::Data(DataType::default()).into()
-		});
-		let because = self.desc.metadata().unwrap().clone();
-		match self.desc.value_mut().unwrap().as_standard_mut() {
-			Some(Description::Data(d)) => Ok(d),
-			Some(other) => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: Some(other.kind()),
-					found: Some(Kind::Normal),
-					because,
-				}
-				.into(),
-				cause.clone(),
-			)),
-			None => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: None,
-					found: Some(Kind::Normal),
-					because,
-				}
-				.into(),
-				cause.clone(),
-			)),
-		}
-	}
-
-	pub fn require_normal_mut(&mut self, cause: &M) -> Result<&mut Normal<M>, Error<M>>
-	where
-		M: Clone,
-	{
-		self.desc
-			.set_once(cause.clone(), || Description::Normal(Normal::new()).into());
-		let because = self.desc.metadata().unwrap().clone();
-		match self.desc.value_mut().unwrap().as_standard_mut() {
-			Some(Description::Normal(n)) => Ok(n),
-			Some(other) => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: Some(other.kind()),
-					found: Some(Kind::Data),
-					because,
-				}
-				.into(),
-				cause.clone(),
-			)),
-			None => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: None,
-					found: Some(Kind::Data),
-					because,
-				}
-				.into(),
-				cause.clone(),
-			)),
-		}
-	}
-
+impl<M> Definition<M> {
 	/// Declare that this type is a datatype.
-	pub fn declare_datatype(&mut self, cause: M) -> Result<(), Error<M>>
+	pub fn declare_datatype(&mut self, metadata: M)
 	where
-		M: Clone,
+		M: Merge,
 	{
-		self.desc.set_once(cause.clone(), || {
-			Description::Data(DataType::default()).into()
-		});
-		let because = self.desc.metadata().unwrap().clone();
-		match self.desc.value_mut().unwrap().as_standard() {
-			Some(Description::Data(_)) => Ok(()),
-			Some(other) => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: Some(other.kind()),
-					found: Some(Kind::Data),
-					because,
-				}
-				.into(),
-				cause,
-			)),
-			None => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: None,
-					found: Some(Kind::Data),
-					because,
-				}
-				.into(),
-				cause,
-			)),
-		}
+		self.datatype.set_once(metadata, || DataType::default())
 	}
 
-	/// Declare a property of type.
-	///
-	/// The type must be normal.
-	pub fn declare_property(&mut self, prop_ref: Id, cause: M) -> Result<(), Error<M>>
+	/// Declare that this type is a restriction.
+	pub fn declare_restriction(&mut self, metadata: M)
 	where
-		M: Clone + Merge,
+		M: Merge,
 	{
-		let n = self.require_normal_mut(&cause)?;
-		n.declare_property(prop_ref, cause);
-		Ok(())
+		self.restriction.set_once(metadata, || Restriction::default())
 	}
 
-	pub fn declare_union(&mut self, options_ref: Id, cause: M) -> Result<(), Error<M>>
+	pub fn declare_union(&mut self, list_id: Meta<Id, M>) where M: Merge {
+		self.union_of.insert(list_id)
+	}
+
+	pub fn declare_intersection(&mut self, list_id: Meta<Id, M>) where M: Merge {
+		self.intersection_of.insert(list_id)
+	}
+
+	/// Declare a property of the type.
+	pub fn declare_property(&mut self, prop_ref: Id, cause: M)
 	where
-		M: Clone,
+		M: Merge,
 	{
-		self.desc
-			.set_once(cause.clone(), || Description::Union(options_ref).into());
-		let because = self.desc.metadata().unwrap().clone();
-		match self.desc.value_mut().unwrap().as_standard() {
-			Some(Description::Union(r)) => {
-				if *r == options_ref {
-					Ok(())
-				} else {
-					todo!()
-				}
+		use std::collections::hash_map::Entry;
+		match self.properties.entry(prop_ref) {
+			Entry::Vacant(entry) => {
+				entry.insert(cause);
 			}
-			Some(other) => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: Some(other.kind()),
-					found: Some(Kind::Union),
-					because,
-				}
-				.into(),
-				cause,
-			)),
-			None => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: None,
-					found: Some(Kind::Union),
-					because,
-				}
-				.into(),
-				cause,
-			)),
-		}
-	}
-
-	pub fn declare_intersection(&mut self, types_ref: Id, cause: M) -> Result<(), Error<M>>
-	where
-		M: Clone,
-	{
-		self.desc.set_once(cause.clone(), || {
-			Description::Intersection(types_ref).into()
-		});
-		let because = self.desc.metadata().unwrap().clone();
-		match self.desc.value_mut().unwrap().as_standard() {
-			Some(Description::Intersection(r)) => {
-				if *r == types_ref {
-					Ok(())
-				} else {
-					todo!()
-				}
-			}
-			Some(other) => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: Some(other.kind()),
-					found: Some(Kind::Intersection),
-					because,
-				}
-				.into(),
-				cause,
-			)),
-			None => Err(Error::new(
-				error::TypeMismatchKind {
-					id: self.id,
-					expected: None,
-					found: Some(Kind::Intersection),
-					because,
-				}
-				.into(),
-				cause,
-			)),
-		}
-	}
-
-	pub fn declare_restriction(
-		&mut self,
-		restriction: Restriction<M>,
-		cause: M,
-	) -> Result<(), Error<M>>
-	where
-		M: Clone,
-	{
-		let mut restriction = Some(restriction);
-		self.desc.set_once(cause.clone(), || {
-			Description::Restriction(restriction.take().unwrap()).into()
-		});
-		match restriction {
-			Some(restriction) => {
-				let because = self.desc.metadata().unwrap().clone();
-				match self.desc.value_mut().unwrap().as_standard() {
-					Some(Description::Restriction(r)) => {
-						if *r == restriction {
-							Ok(())
-						} else {
-							todo!()
-						}
-					}
-					Some(other) => Err(Error::new(
-						error::TypeMismatchKind {
-							id: self.id,
-							expected: Some(other.kind()),
-							found: Some(Kind::Restriction),
-							because,
-						}
-						.into(),
-						cause,
-					)),
-					None => Err(Error::new(
-						error::TypeMismatchKind {
-							id: self.id,
-							expected: None,
-							found: Some(Kind::Restriction),
-							because,
-						}
-						.into(),
-						cause,
-					)),
-				}
-			}
-			None => Ok(()),
+			Entry::Occupied(mut entry) => entry.get_mut().merge_with(cause),
 		}
 	}
 }
@@ -469,12 +101,39 @@ impl<M: Clone> Definition<M> {
 	pub fn dependencies(
 		&self,
 		nodes: &super::context::allocated::Nodes<M>,
+		id: Id,
 		_causes: &M,
 	) -> Result<Vec<crate::Item<M>>, Error<M>> {
-		match self.desc.as_ref() {
-			Some(desc) => desc.dependencies(self.id, nodes, desc.metadata()),
-			None => Ok(Vec::new()),
+		let mut dependencies = Vec::new();
+		
+		let union_of = self.union_of.clone().into_list_at_node_binding(nodes, id, node::property::Class::UnionOf)?;
+		let intersection_of = self.intersection_of.clone().into_list_at_node_binding(nodes, id, node::property::Class::IntersectionOf)?;
+
+		if let Some(union_of) = union_of.as_ref() {
+			for item in union_of.iter(nodes) {
+				let Meta(object, causes) = item?.cloned();
+				let option_id = object.into_required_id(&causes)?;
+
+				let Meta(option_ty, _) =
+					nodes.require_type(option_id).map_err(|e| e.at(causes.clone()))?.clone();
+
+				dependencies.push(crate::Item::Type(option_ty))
+			}
 		}
+		
+		if let Some(intersection_of) = intersection_of.as_ref() {
+			for item in intersection_of.iter(nodes) {
+				let Meta(object, causes) = item?.cloned();
+				let factor_id = object.into_required_id(&causes)?;
+
+				let Meta(factor_ty, _) =
+					nodes.require_type(factor_id).map_err(|e| e.at(causes.clone()))?.clone();
+
+				dependencies.push(crate::Item::Type(factor_ty))
+			}
+		}
+
+		Ok(dependencies)
 	}
 }
 
@@ -485,15 +144,115 @@ impl<M: Clone + Merge> crate::Build<M> for Definition<M> {
 		self,
 		nodes: &mut super::context::allocated::Nodes<M>,
 		dependencies: crate::Dependencies<M>,
-		causes: M,
+		id: Id,
+		meta: M,
 	) -> Result<Self::Target, Error<M>> {
-		let desc = match self.desc.unwrap() {
-			Some(Meta(desc, desc_causes)) => {
-				desc.build(self.id, nodes, dependencies, desc_causes)?
+		let union_of = self.union_of.into_list_at_node_binding(nodes, id, node::property::Class::UnionOf)?;
+		let intersection_of = self.intersection_of.into_list_at_node_binding(nodes, id, node::property::Class::IntersectionOf)?;
+
+		let desc = if let Some(Meta(datatype, _)) = self.datatype.unwrap() {
+			datatype.build(nodes, dependencies, id, &meta)?
+		} else if let Some(Meta(restriction, _)) = self.restriction.unwrap() {
+			restriction.build(nodes, id, &meta)?
+		} else if let Some(union_of) = union_of.as_ref() {
+			let mut options = BTreeMap::new();
+
+			for item in union_of.iter(nodes) {
+				let Meta(object, causes) = item?.cloned();
+				let option_id = object.into_required_id(&causes)?;
+
+				let Meta(option_ty, option_causes) =
+					nodes.require_type(option_id).map_err(|e| e.at(causes.clone()))?.clone();
+
+				match options.entry(option_ty) {
+					Entry::Vacant(entry) => {
+						entry.insert(option_causes);
+					}
+					Entry::Occupied(mut entry) => {
+						entry.get_mut().merge_with(option_causes);
+					}
+				}
 			}
-			None => treeldr::ty::Description::Normal(treeldr::ty::Normal::new()),
+
+			treeldr::ty::Description::Union(treeldr::ty::Union::new(options, |ty_ref| {
+				dependencies.ty(ty_ref)
+			}))
+		} else if let Some(intersection_of) = intersection_of.as_ref() {
+			let mut factors = BTreeMap::new();
+
+			for item in intersection_of.iter(nodes) {
+				let Meta(object, causes) = item?.cloned();
+				let factor_id = object.into_required_id(&causes)?;
+
+				let Meta(factor_ty, option_causes) =
+					nodes.require_type(factor_id).map_err(|e| e.at(causes.clone()))?.clone();
+
+				match factors.entry(factor_ty) {
+					Entry::Vacant(entry) => {
+						entry.insert(option_causes);
+					}
+					Entry::Occupied(mut entry) => {
+						entry.get_mut().merge_with(option_causes);
+					}
+				}
+			}
+
+			match treeldr::ty::Intersection::new(factors, |ty_ref| dependencies.ty(ty_ref)) {
+				Ok(intersection) => treeldr::ty::Description::Intersection(intersection),
+				Err(_) => treeldr::ty::Description::Empty,
+			}
+		} else {
+			let mut result = treeldr::ty::Normal::new();
+
+			for (prop_id, prop_causes) in self.properties {
+				let prop_ref = nodes.require_property(prop_id).map_err(|e| e.at(prop_causes.clone()))?;
+				result.insert_property(**prop_ref, prop_causes)
+			}
+
+			treeldr::ty::Description::Normal(result)
 		};
 
-		Ok(treeldr::ty::Definition::new(self.id, desc, causes))
+		Ok(treeldr::ty::Definition::new(id, desc, meta))
+	}
+}
+
+pub enum BindingRef<'a, M> {
+	Datatype(datatype::BindingRef<'a, M>),
+	Restriction(restriction::BindingRef<'a, M>),
+	UnionOf(Meta<Id, &'a M>),
+	IntersectionOf(Meta<Id, &'a M>),
+}
+
+pub struct Bindings<'a, M> {
+	datatype: datatype::Bindings<'a, M>,
+	restriction: restriction::Bindings<'a, M>,
+	union_of: single::Iter<'a, Id, M>,
+	intersection_of: single::Iter<'a, Id, M>
+}
+
+impl<'a, M> Iterator for Bindings<'a, M> {
+	type Item = BindingRef<'a, M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.datatype
+			.next()
+			.map(BindingRef::Datatype)
+			.or_else(|| {
+				self.restriction
+					.next()
+					.map(BindingRef::Restriction)
+					.or_else(|| {
+						self.union_of
+							.next()
+							.map(Meta::into_cloned_value)
+							.map(BindingRef::UnionOf)
+							.or_else(|| {
+								self.intersection_of
+									.next()
+									.map(Meta::into_cloned_value)
+									.map(BindingRef::IntersectionOf)
+							})
+					})
+			})
 	}
 }

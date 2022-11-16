@@ -1,16 +1,63 @@
-use crate::{error, Error};
+use crate::{error, Error, single};
 use locspan::{MapLocErr, Meta};
 use std::collections::BTreeMap;
-use treeldr::metadata::Merge;
 pub use treeldr::{
 	layout::{primitive::restriction, primitive::RegExp, Primitive},
 	value, Id, MetaOption,
 };
+use treeldr::{
+	metadata::Merge,
+	vocab::{Term, Xsd},
+	IriIndex,
+};
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum Property {
+	Numeric(NumericProperty),
+	String(StringProperty),
+}
+
+impl Property {
+	pub fn id(&self) -> Id {
+		match self {
+			Self::Numeric(p) => p.id(),
+			Self::String(p) => p.id(),
+		}
+	}
+}
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Restriction {
 	Numeric(Numeric),
 	String(String),
+}
+
+impl Restriction {
+	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> BindingRef<'a, M> {
+		match self {
+			Self::Numeric(r) => BindingRef::Numeric(r.as_binding(meta)),
+			Self::String(r) => BindingRef::String(r.as_binding(meta))
+		}
+	}
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum NumericProperty {
+	InclusiveMinimum,
+	ExclusiveMinimum,
+	InclusiveMaximum,
+	ExclusiveMaximum,
+}
+
+impl NumericProperty {
+	pub fn id(&self) -> Id {
+		match self {
+			Self::InclusiveMinimum => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::MinInclusive))),
+			Self::ExclusiveMinimum => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::MinExclusive))),
+			Self::InclusiveMaximum => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::MaxInclusive))),
+			Self::ExclusiveMaximum => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::MaxExclusive))),
+		}
+	}
 }
 
 /// Numeric restriction.
@@ -22,10 +69,56 @@ pub enum Numeric {
 	ExclusiveMaximum(value::Numeric),
 }
 
+impl Numeric {
+	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> NumericBindingRef<'a, M> {
+		match self {
+			Self::InclusiveMinimum(v) => NumericBindingRef::InclusiveMinimum(Meta(v, meta)),
+			Self::ExclusiveMinimum(v) => NumericBindingRef::ExclusiveMinimum(Meta(v, meta)),
+			Self::InclusiveMaximum(v) => NumericBindingRef::InclusiveMaximum(Meta(v, meta)),
+			Self::ExclusiveMaximum(v) => NumericBindingRef::ExclusiveMaximum(Meta(v, meta))
+		}
+	}
+}
+
+/// Numeric restriction reference.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum NumericRef<'a> {
+	InclusiveMinimum(&'a value::Numeric),
+	ExclusiveMinimum(&'a value::Numeric),
+	InclusiveMaximum(&'a value::Numeric),
+	ExclusiveMaximum(&'a value::Numeric),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum StringProperty {
+	Pattern,
+}
+
+impl StringProperty {
+	pub fn id(&self) -> Id {
+		match self {
+			Self::Pattern => Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::Pattern))),
+		}
+	}
+}
+
 /// String restriction.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum String {
 	Pattern(RegExp),
+}
+
+impl String {
+	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> StringBindingRef<'a, M> {
+		match self {
+			Self::Pattern(v) => StringBindingRef::Pattern(Meta(v, meta))
+		}
+	}
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum StringRef<'a> {
+	Pattern(&'a RegExp),
 }
 
 #[derive(Clone, Debug)]
@@ -57,19 +150,13 @@ impl<M> Restrictions<M> {
 }
 
 impl<M: Merge> Restrictions<M> {
-	pub fn insert(&mut self, restriction: Restriction, metadata: M) {
+	pub fn insert(&mut self, Meta(restriction, metadata): Meta<Restriction, M>) {
 		use std::collections::btree_map::Entry;
 		match self.map.entry(restriction) {
 			Entry::Vacant(entry) => {
 				entry.insert(metadata);
 			}
 			Entry::Occupied(mut entry) => entry.get_mut().merge_with(metadata),
-		}
-	}
-
-	pub fn unify(&mut self, other: Self) {
-		for (r, causes) in other.map {
-			self.insert(r, causes)
 		}
 	}
 }
@@ -440,4 +527,20 @@ impl<M: Clone> Restrictions<M> {
 			None => Ok(()),
 		}
 	}
+}
+
+pub enum BindingRef<'a, M> {
+	Numeric(NumericBindingRef<'a, M>),
+	String(StringBindingRef<'a, M>)
+}
+
+pub enum NumericBindingRef<'a, M> {
+	InclusiveMinimum(Meta<&'a value::Numeric, &'a M>),
+	ExclusiveMinimum(Meta<&'a value::Numeric, &'a M>),
+	InclusiveMaximum(Meta<&'a value::Numeric, &'a M>),
+	ExclusiveMaximum(Meta<&'a value::Numeric, &'a M>),
+}
+
+pub enum StringBindingRef<'a, M> {
+	Pattern(Meta<&'a RegExp, &'a M>),
 }

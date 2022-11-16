@@ -1,10 +1,9 @@
 use super::Properties;
-use crate::{metadata, prop, Id, SubstituteReferences};
+use crate::{metadata::Merge, Property, TId};
 use derivative::Derivative;
-use shelves::Ref;
 
 /// Normal type.
-#[derive(Derivative)]
+#[derive(Debug, Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Normal<M> {
 	/// Properties.
@@ -21,22 +20,10 @@ impl<M> Normal<M> {
 	}
 
 	/// Insert a property.
-	pub fn insert_property(&mut self, prop_ref: Ref<prop::Definition<M>>, metadata: M)
+	pub fn insert_property(&mut self, prop_ref: TId<Property>, metadata: M)
 	where
-		M: metadata::Merge,
+		M: Clone + Merge,
 	{
 		self.properties.insert(prop_ref, None, metadata);
-	}
-}
-
-impl<M> SubstituteReferences<M> for Normal<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
-	{
-		self.properties.substitute_references(sub)
 	}
 }

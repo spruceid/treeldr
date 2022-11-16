@@ -1,5 +1,4 @@
-use crate::{BlankIdIndex, Documentation, Id, IriIndex, Model, SubstituteReferences};
-use shelves::Ref;
+use crate::{BlankIdIndex, Id, IriIndex, Model, component, ResourceType, Ref, vocab};
 
 pub mod data;
 mod intersection;
@@ -16,7 +15,33 @@ use rdf_types::Subject;
 pub use restriction::Restriction;
 pub use union::Union;
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum Type {
+	Resource,
+	Type,
+	DatatypeRestriction,
+	Property,
+	Component(component::Type),
+	LayoutRestriction,
+	List,
+}
+
+impl ResourceType for Type {
+	const TYPE: Type = Type::Type;
+
+	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
+		resource.is_type()
+	}
+}
+
+impl<'a, M> Ref<'a, Type, M> {
+	pub fn as_type(&self) -> &'a Definition<M> {
+		self.as_resource().as_type().unwrap()
+	}
+}
+
 /// Type definition.
+#[derive(Debug)]
 pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
 	/// Identifier.
 	id: Subject<I, B>,
@@ -29,6 +54,7 @@ pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
 }
 
 /// Type definition.
+#[derive(Debug)]
 pub enum Description<M> {
 	Empty,
 	Data(DataType),
@@ -56,24 +82,6 @@ impl<M> Description<M> {
 			Self::Union(u) => u.is_datatype(model),
 			Self::Intersection(i) => i.is_datatype(model),
 			_ => false,
-		}
-	}
-}
-
-impl<M> SubstituteReferences<M> for Description<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<self::Definition<M>>) -> Ref<self::Definition<M>>,
-		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
-		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
-	{
-		match self {
-			Self::Normal(n) => n.substitute_references(sub),
-			Self::Union(u) => u.substitute_references(sub),
-			Self::Intersection(i) => i.substitute_references(sub),
-			Self::Restriction(r) => r.substitute_references(sub),
-			_ => (),
 		}
 	}
 }
@@ -110,14 +118,6 @@ impl<M> Definition<M> {
 		&self.desc
 	}
 
-	pub fn label<'m>(&self, model: &'m crate::Model<M>) -> Option<&'m str> {
-		model.get(self.id).unwrap().label()
-	}
-
-	pub fn documentation<'m>(&self, model: &'m crate::Model<M>) -> &'m Documentation {
-		model.get(self.id).unwrap().documentation()
-	}
-
 	pub fn properties(&self) -> Option<&Properties<M>> {
 		match &self.desc {
 			Description::Empty => None,
@@ -134,15 +134,31 @@ impl<M> Definition<M> {
 	}
 }
 
-impl<M> SubstituteReferences<M> for Definition<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<self::Definition<M>>) -> Ref<self::Definition<M>>,
-		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
-		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
-	{
-		self.id = sub.id(self.id);
-		self.desc.substitute_references(sub)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Property {
+	Datatype(data::Property),
+	Restriction(restriction::Property),
+	UnionOf,
+	IntersectionOf
+}
+
+impl Property {
+	pub fn term(&self) -> vocab::Term {
+		use vocab::{Term, Owl};
+		match self {
+			Self::Datatype(p) => p.term(),
+			Self::Restriction(p) => p.term(),
+			Self::UnionOf => Term::Owl(Owl::UnionOf),
+			Self::IntersectionOf => Term::Owl(Owl::IntersectionOf)
+		}
+	}
+
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::Datatype(p) => p.name(),
+			Self::Restriction(p) => p.name(),
+			Self::UnionOf => "type union",
+			Self::IntersectionOf => "type intersection"
+		}
 	}
 }

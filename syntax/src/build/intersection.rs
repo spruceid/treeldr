@@ -328,7 +328,7 @@ impl<M: Clone> IntersectedLayoutDescription<M> {
 					for obj in layout_list.iter(context) {
 						let obj = obj?;
 						layouts.push(Meta::new(
-							obj.as_id(obj.metadata())?,
+							obj.as_required_id(obj.metadata())?,
 							obj.metadata().clone(),
 						))
 					}

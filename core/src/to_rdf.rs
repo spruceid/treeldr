@@ -1,4 +1,4 @@
-use crate::{layout, prop, ty, vocab, BlankIdIndex, Documentation, Id, IriIndex, Model, Ref};
+use crate::{layout, prop, ty, vocab, BlankIdIndex, Documentation, Id, IriIndex, Model, Property, TId};
 use rdf_types::{Generator, Literal, Object, Quad, Vocabulary};
 use vocab::{StrippedObject, StrippedQuad, Term};
 
@@ -469,12 +469,12 @@ impl<F> ty::Restriction<F> {
 	}
 }
 
-impl<F> prop::Restriction<F> {
-	pub fn to_rdf(
+impl prop::Restriction {
+	pub fn to_rdf<M>(
 		&self,
-		model: &Model<F>,
+		model: &Model<M>,
 		id: Id,
-		prop_ref: Ref<prop::Definition<F>>,
+		prop_ref: TId<Property>,
 		quads: &mut Vec<StrippedQuad>,
 	) {
 		quads.push(Quad(
@@ -498,8 +498,8 @@ impl<F> prop::Restriction<F> {
 	}
 }
 
-impl<F> prop::restriction::Range<F> {
-	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
+impl prop::restriction::Range {
+	pub fn to_rdf<M>(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
 		match self {
 			Self::Any(ty_ref) => {
 				quads.push(Quad(

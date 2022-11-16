@@ -1,22 +1,22 @@
-use super::Definition;
-use shelves::{Ref, Shelf};
 use std::collections::{HashMap, HashSet};
 
-pub struct Usages<F> {
-	map: HashMap<Ref<Definition<F>>, HashSet<Ref<Definition<F>>>>,
+use crate::{Layout, TId, Model};
+
+pub struct Usages {
+	map: HashMap<TId<Layout>, HashSet<TId<Layout>>>,
 }
 
-impl<F> Usages<F> {
-	pub fn new(layouts: &Shelf<Vec<Definition<F>>>) -> Self {
+impl Usages {
+	pub fn new<M>(model: &Model<M>) -> Self {
 		use std::collections::hash_map::Entry;
-		let mut map: HashMap<Ref<Definition<F>>, HashSet<Ref<Definition<F>>>> = HashMap::new();
+		let mut map: HashMap<TId<Layout>, HashSet<TId<Layout>>> = HashMap::new();
 
-		for (layout_ref, layout) in layouts.iter() {
+		for (layout_ref, layout) in model.layouts() {
 			if let Entry::Vacant(entry) = map.entry(layout_ref) {
 				entry.insert(HashSet::new());
 			}
 
-			for sub_layout_ref in layout.composing_layouts() {
+			for sub_layout_ref in layout.as_layout().composing_layouts() {
 				match map.entry(sub_layout_ref) {
 					Entry::Occupied(mut entry) => {
 						entry.get_mut().insert(layout_ref);
@@ -31,7 +31,7 @@ impl<F> Usages<F> {
 		Self { map }
 	}
 
-	pub fn get(&self, layout_ref: Ref<Definition<F>>) -> Option<&HashSet<Ref<Definition<F>>>> {
+	pub fn get(&self, layout_ref: TId<Layout>) -> Option<&HashSet<TId<Layout>>> {
 		self.map.get(&layout_ref)
 	}
 }

@@ -28,7 +28,7 @@ impl<M: Clone> IntersectedStruct<M> {
 
 		for field_obj in context.require_list(fields_id, causes)?.iter(context) {
 			let field_obj = field_obj?;
-			let field_id = field_obj.as_id(field_obj.metadata())?;
+			let field_id = field_obj.as_required_id(field_obj.metadata())?;
 			let field = context.require_layout_field(field_id, field_obj.metadata())?;
 
 			let layout = match field.layout() {

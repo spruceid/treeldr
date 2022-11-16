@@ -1,19 +1,20 @@
 use super::Properties;
-use crate::{metadata, utils::replace_with, Id, Model, Ref, SubstituteReferences};
+use crate::{metadata, Model, Type, TId};
 use std::collections::BTreeMap;
 
+#[derive(Debug)]
 pub struct Union<M> {
-	options: BTreeMap<Ref<super::Definition<M>>, M>,
+	options: BTreeMap<TId<Type>, M>,
 
 	/// Properties in the union.
 	properties: Properties<M>,
 }
 
 impl<M> Union<M> {
-	pub fn new<'a, G>(options: BTreeMap<Ref<super::Definition<M>>, M>, get: G) -> Self
+	pub fn new<'a, G>(options: BTreeMap<TId<Type>, M>, get: G) -> Self
 	where
 		M: 'a + Clone + metadata::Merge,
-		G: 'a + Fn(Ref<super::Definition<M>>) -> &'a super::Definition<M>,
+		G: 'a + Fn(TId<Type>) -> &'a super::Definition<M>,
 	{
 		let mut properties = Properties::none();
 		for &ty_ref in options.keys() {
@@ -28,7 +29,7 @@ impl<M> Union<M> {
 		}
 	}
 
-	pub fn options(&self) -> impl '_ + DoubleEndedIterator<Item = Ref<super::Definition<M>>> {
+	pub fn options(&self) -> impl '_ + DoubleEndedIterator<Item = TId<Type>> {
 		self.options.keys().cloned()
 	}
 
@@ -39,21 +40,6 @@ impl<M> Union<M> {
 	pub fn is_datatype(&self, model: &Model<M>) -> bool {
 		self.options
 			.iter()
-			.all(|(ty_ref, _)| model.types().get(*ty_ref).unwrap().is_datatype(model))
-	}
-}
-
-impl<M> SubstituteReferences<M> for Union<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
-		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
-	{
-		replace_with(&mut self.options, |v| {
-			v.into_iter().map(|(r, m)| (sub.ty(r), m)).collect()
-		});
-		self.properties.substitute_references(sub)
+			.all(|(ty_ref, _)| model.get(*ty_ref).unwrap().as_type().is_datatype(model))
 	}
 }

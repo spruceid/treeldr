@@ -3,10 +3,19 @@ use locspan::Meta;
 use locspan_derive::{StrippedEq, StrippedPartialEq};
 
 /// Cardinal restriction.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Restriction {
 	Min(u64),
 	Max(u64),
+}
+
+impl Restriction {
+	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> BindingRef<'a, M> {
+		match self {
+			Self::Min(v) => BindingRef::Min(Meta(*v, meta)),
+			Self::Max(v) => BindingRef::Max(Meta(*v, meta))
+		}
+	}
 }
 
 /// Conflicting cardinal restrictions.
@@ -146,4 +155,9 @@ impl<M> Restrictions<M> {
 	pub fn is_required(&self) -> bool {
 		self.min() != 0
 	}
+}
+
+pub enum BindingRef<'a, M> {
+	Min(Meta<u64, &'a M>),
+	Max(Meta<u64, &'a M>),
 }

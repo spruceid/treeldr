@@ -1,4 +1,4 @@
-use crate::{Id, node, IriIndex, BlankIdIndex};
+use crate::{Id, node, IriIndex, BlankIdIndex, component, Type};
 use locspan::{Meta, MaybeLocated, Span};
 use rdf_types::Vocabulary;
 use contextual::WithContext;
@@ -6,7 +6,7 @@ use contextual::WithContext;
 #[derive(Debug)]
 pub struct NodeInvalidType<M> {
 	pub id: Id,
-	pub expected: node::Type,
+	pub expected: Type,
 	pub found: node::TypesMetadata<M>,
 }
 
@@ -14,15 +14,34 @@ trait NodeTypeName {
 	fn name(&self) -> &str;
 }
 
-impl NodeTypeName for node::Type {
+impl NodeTypeName for Type {
 	fn name(&self) -> &str {
 		match self {
-			node::Type::Type => "type",
-			node::Type::Property => "property",
-			node::Type::Layout => "layout",
-			node::Type::LayoutField => "structure layout field",
-			node::Type::LayoutVariant => "enum layout variant",
-			node::Type::List => "list"
+			Self::Resource => "resource",
+			Self::Type => "type",
+			Self::DatatypeRestriction => "datatype restriction",
+			Self::Property => "property",
+			Self::Component(ty) => ty.name(),
+			Self::LayoutRestriction => "layout restriction",
+			Self::List => "list"
+		}
+	}
+}
+
+impl NodeTypeName for component::Type {
+	fn name(&self) -> &str {
+		match self {
+			Self::Layout => "layout",
+			Self::Formatted(ty) => ty.name()
+		}
+	}
+}
+
+impl NodeTypeName for component::formatted::Type {
+	fn name(&self) -> &str {
+		match self {
+			Self::LayoutField => "structure layout field",
+			Self::LayoutVariant => "enum layout variant",
 		}
 	}
 }

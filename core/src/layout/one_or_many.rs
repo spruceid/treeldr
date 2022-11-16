@@ -1,15 +1,15 @@
-use super::container::Restrictions;
-use crate::{Id, MetaOption, Name, Ref, SubstituteReferences};
+use super::Restrictions;
+use crate::{MetaOption, Name, TId, Layout};
 use locspan::Meta;
 
 /// "One or many" layout.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct OneOrMany<M> {
 	/// Layout name, if any.
 	name: MetaOption<Name, M>,
 
 	/// Item layout.
-	item: Ref<super::Definition<M>>,
+	item: TId<Layout>,
 
 	/// Restrictions.
 	restrictions: Restrictions<M>,
@@ -18,7 +18,7 @@ pub struct OneOrMany<M> {
 impl<M> OneOrMany<M> {
 	pub fn new(
 		name: MetaOption<Name, M>,
-		item: Ref<super::Definition<M>>,
+		item: TId<Layout>,
 		restrictions: Restrictions<M>,
 	) -> Self {
 		Self {
@@ -40,11 +40,11 @@ impl<M> OneOrMany<M> {
 		self.name
 	}
 
-	pub fn item_layout(&self) -> Ref<super::Definition<M>> {
+	pub fn item_layout(&self) -> TId<Layout> {
 		self.item
 	}
 
-	pub fn set_item_layout(&mut self, item: Ref<super::Definition<M>>) {
+	pub fn set_item_layout(&mut self, item: TId<Layout>) {
 		self.item = item
 	}
 
@@ -54,17 +54,5 @@ impl<M> OneOrMany<M> {
 
 	pub fn is_required(&self) -> bool {
 		self.restrictions.is_required()
-	}
-}
-
-impl<M> SubstituteReferences<M> for OneOrMany<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
-		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
-		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-	{
-		self.item = sub.layout(self.item)
 	}
 }

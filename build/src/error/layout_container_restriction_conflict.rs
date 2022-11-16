@@ -2,7 +2,7 @@ use locspan::{Span, MaybeLocated};
 use rdf_types::Vocabulary;
 use treeldr::{IriIndex, BlankIdIndex};
 
-pub type LayoutContainerRestrictionConflict<M> = treeldr::layout::container::restriction::Conflict<M>;
+pub type LayoutContainerRestrictionConflict<M> = treeldr::layout::restriction::Conflict<M>;
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutContainerRestrictionConflict<M> where M::File: Clone {
 	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
@@ -30,7 +30,7 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutContainerRestricti
 	}
 }
 
-impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for treeldr::layout::container::restriction::cardinal::Conflict<M> where M::File: Clone {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for treeldr::layout::restriction::cardinal::Conflict<M> where M::File: Clone {
 	fn message(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
 		"conflicting restrictions".to_string()
 	}

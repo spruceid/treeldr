@@ -160,6 +160,9 @@ pub enum Owl {
 
 	#[iri("owl:withRestrictions")]
 	WithRestrictions,
+
+	#[iri("owl:FunctionalProperty")]
+	FunctionalProperty
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

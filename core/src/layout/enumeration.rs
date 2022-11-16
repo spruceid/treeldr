@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::{utils::replace_with, Documentation, Id, MetaOption, Name, Ref, SubstituteReferences};
+use crate::{MetaOption, Name, Layout, TId};
 use locspan::Meta;
 
 /// Enum layout.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Enum<M> {
 	name: Meta<Name, M>,
 	variants: Vec<Meta<Variant<M>, M>>,
@@ -49,7 +49,7 @@ impl<M> Enum<M> {
 
 	pub fn can_be_reference(
 		&self,
-		map: &mut HashMap<Ref<super::Definition<M>>, bool>,
+		map: &mut HashMap<TId<Layout>, bool>,
 		model: &crate::Model<M>,
 	) -> bool {
 		for v in &self.variants {
@@ -64,56 +64,32 @@ impl<M> Enum<M> {
 	}
 }
 
-impl<M> SubstituteReferences<M> for Enum<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
-		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
-		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-	{
-		for v in &mut self.variants {
-			v.substitute_references(sub)
-		}
-	}
-}
-
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Variant<M> {
 	name: Meta<Name, M>,
-	layout: MetaOption<Ref<super::Definition<M>>, M>,
-	label: Option<String>,
-	doc: Documentation,
+	layout: MetaOption<TId<Layout>, M>
 }
 
 pub struct VariantParts<M> {
 	pub name: Meta<Name, M>,
-	pub layout: MetaOption<Ref<super::Definition<M>>, M>,
-	pub label: Option<String>,
-	pub doc: Documentation,
+	pub layout: MetaOption<TId<Layout>, M>
 }
 
 impl<M> Variant<M> {
 	pub fn new(
 		name: Meta<Name, M>,
-		layout: MetaOption<Ref<super::Definition<M>>, M>,
-		label: Option<String>,
-		doc: Documentation,
+		layout: MetaOption<TId<Layout>, M>
 	) -> Self {
 		Self {
 			name,
-			layout,
-			label,
-			doc,
+			layout
 		}
 	}
 
 	pub fn into_parts(self) -> VariantParts<M> {
 		VariantParts {
 			name: self.name,
-			layout: self.layout,
-			label: self.label,
-			doc: self.doc,
+			layout: self.layout
 		}
 	}
 
@@ -121,35 +97,15 @@ impl<M> Variant<M> {
 		&self.name
 	}
 
-	pub fn label(&self) -> Option<&str> {
-		self.label.as_deref()
-	}
-
-	pub fn layout(&self) -> Option<Ref<super::Definition<M>>> {
+	pub fn layout(&self) -> Option<TId<Layout>> {
 		self.layout.value().cloned()
-	}
-
-	pub fn documentation(&self) -> &Documentation {
-		&self.doc
-	}
-}
-
-impl<M> SubstituteReferences<M> for Variant<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
-		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
-		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-	{
-		replace_with(&mut self.layout, |v| v.map(|r| sub.layout(r)))
 	}
 }
 
 pub struct ComposingLayouts<'a, M>(std::slice::Iter<'a, Meta<Variant<M>, M>>);
 
 impl<'a, M> Iterator for ComposingLayouts<'a, M> {
-	type Item = Ref<super::Definition<M>>;
+	type Item = TId<Layout>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		for variant in self.0.by_ref() {

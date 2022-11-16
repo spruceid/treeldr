@@ -1,11 +1,10 @@
 use crate::{
-	layout, prop, utils::replace_with, Documentation, Id, MetaOption, Name, SubstituteReferences,
+	MetaOption, Name, TId, Layout
 };
 use locspan::Meta;
-use shelves::Ref;
 
 /// Structure layout.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Struct<M> {
 	name: Meta<Name, M>,
 	fields: Vec<Field<M>>,
@@ -50,7 +49,7 @@ impl<M> Struct<M> {
 		&mut self.fields
 	}
 
-	pub fn as_sum_option(&self) -> Option<Ref<super::Definition<M>>> {
+	pub fn as_sum_option(&self) -> Option<TId<Layout>> {
 		if self.fields.len() == 1 {
 			Some(self.fields[0].layout())
 		} else {
@@ -59,142 +58,60 @@ impl<M> Struct<M> {
 	}
 }
 
-impl<M> SubstituteReferences<M> for Struct<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-		L: Fn(Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>,
-	{
-		for f in &mut self.fields {
-			f.substitute_references(sub)
-		}
-	}
-}
-
 /// Layout field.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Field<M> {
-	prop: MetaOption<Ref<prop::Definition<M>>, M>,
-	name: Meta<Name, M>,
-	label: Option<String>,
-	layout: Meta<Ref<super::Definition<M>>, M>,
-	doc: Documentation,
+	prop: MetaOption<TId<crate::Property>, M>,
+	layout: Meta<TId<Layout>, M>
 }
 
 /// Layout field parts.
 #[derive(Clone)]
 pub struct FieldsParts<M> {
-	pub prop: MetaOption<Ref<prop::Definition<M>>, M>,
-	pub name: Meta<Name, M>,
-	pub label: Option<String>,
-	pub layout: Meta<Ref<super::Definition<M>>, M>,
-	pub doc: Documentation,
+	pub prop: MetaOption<TId<crate::Property>, M>,
+	pub layout: Meta<TId<Layout>, M>
 }
 
 impl<M> Field<M> {
 	pub fn new(
-		prop: MetaOption<Ref<prop::Definition<M>>, M>,
-		name: Meta<Name, M>,
-		label: Option<String>,
-		layout: Meta<Ref<super::Definition<M>>, M>,
-		doc: Documentation,
+		prop: MetaOption<TId<crate::Property>, M>,
+		layout: Meta<TId<Layout>, M>
 	) -> Self {
 		Self {
 			prop,
-			name,
-			label,
 			layout,
-			doc,
 		}
 	}
 
 	pub fn into_parts(self) -> FieldsParts<M> {
 		FieldsParts {
 			prop: self.prop,
-			name: self.name,
-			label: self.label,
-			layout: self.layout,
-			doc: self.doc,
+			layout: self.layout
 		}
 	}
 
-	pub fn property(&self) -> Option<Ref<prop::Definition<M>>> {
+	pub fn property(&self) -> Option<TId<crate::Property>> {
 		self.prop.value().cloned()
 	}
 
-	pub fn property_with_causes(&self) -> &MetaOption<Ref<prop::Definition<M>>, M> {
+	pub fn property_with_causes(&self) -> &MetaOption<TId<crate::Property>, M> {
 		&self.prop
 	}
 
-	pub fn name(&self) -> &Name {
-		&self.name
-	}
-
-	pub fn name_with_causes(&self) -> &Meta<Name, M> {
-		&self.name
-	}
-
-	pub fn label(&self) -> Option<&str> {
-		self.label.as_deref()
-	}
-
-	pub fn preferred_label<'a>(&'a self, model: &'a crate::Model<M>) -> Option<&'a str> {
-		if self.label.is_none() {
-			self.property().and_then(|prop_ref| {
-				let prop_id = model.properties().get(prop_ref).unwrap().id();
-				model.get(prop_id).unwrap().label()
-			})
-		} else {
-			self.label.as_deref()
-		}
-	}
-
-	pub fn layout(&self) -> Ref<layout::Definition<M>> {
+	pub fn layout(&self) -> TId<Layout> {
 		*self.layout
 	}
 
-	pub fn layout_with_causes(&self) -> &Meta<Ref<super::Definition<M>>, M> {
+	pub fn layout_with_causes(&self) -> &Meta<TId<Layout>, M> {
 		&self.layout
 	}
 
 	pub fn is_required(&self, model: &crate::Model<M>) -> bool {
-		let layout = model.layouts().get(self.layout()).unwrap();
+		let layout = model.get(self.layout()).unwrap().as_layout();
 		layout.is_required()
 	}
 
-	pub fn set_layout(&mut self, layout: Ref<layout::Definition<M>>, metadata: M) {
+	pub fn set_layout(&mut self, layout: TId<Layout>, metadata: M) {
 		self.layout = Meta::new(layout, metadata)
-	}
-
-	pub fn documentation(&self) -> &Documentation {
-		&self.doc
-	}
-
-	pub fn preferred_documentation<'a>(&'a self, model: &'a crate::Model<M>) -> &'a Documentation {
-		if self.doc.is_empty() && self.prop.is_some() {
-			let prop_id = model
-				.properties()
-				.get(*self.prop.value().unwrap())
-				.unwrap()
-				.id();
-			model.get(prop_id).unwrap().documentation()
-		} else {
-			&self.doc
-		}
-	}
-}
-
-impl<M> SubstituteReferences<M> for Field<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-		L: Fn(Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>,
-	{
-		replace_with(&mut self.prop, |v| v.map(|r| sub.property(r)));
-		replace_with(&mut self.layout, |v| v.map(|r| sub.layout(r)))
 	}
 }

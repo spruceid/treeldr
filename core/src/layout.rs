@@ -1,15 +1,13 @@
 use std::collections::HashMap;
 
 use crate::{
-	ty, utils::replace_with, BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name,
-	SubstituteReferences,
+	BlankIdIndex, Id, IriIndex, MetaOption, Name, TId, ResourceType, component, Type, vocab
 };
 use locspan::Meta;
 use rdf_types::Subject;
-use shelves::Ref;
 
+pub mod restriction;
 pub mod array;
-pub mod container;
 pub mod enumeration;
 mod one_or_many;
 mod optional;
@@ -17,11 +15,13 @@ pub mod primitive;
 mod reference;
 mod required;
 mod set;
+pub mod field;
 mod structure;
 
 mod strongly_connected;
 mod usages;
 
+pub use restriction::{Restriction, Restrictions};
 pub use array::Array;
 pub use enumeration::{Enum, Variant};
 pub use one_or_many::OneOrMany;
@@ -34,6 +34,22 @@ pub use structure::{Field, Struct};
 
 pub use strongly_connected::StronglyConnectedLayouts;
 pub use usages::Usages;
+
+pub struct Layout;
+
+impl ResourceType for Layout {
+	const TYPE: crate::Type = crate::Type::Component(component::Type::Layout);
+
+	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
+		resource.is_layout()
+	}
+}
+
+impl<'a, M> crate::Ref<'a, Layout, M> {
+	pub fn as_layout(&self) -> &'a Definition<M> {
+		self.as_resource().as_layout().unwrap()
+	}
+}
 
 /// Layout kind.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -53,22 +69,20 @@ pub enum Kind {
 }
 
 /// Layout definition.
+#[derive(Debug)]
 pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
 	/// Identifier of the layout.
 	id: Subject<I, B>,
 
 	/// Type represented by this layout.
-	ty: MetaOption<Ref<ty::Definition<M>>, M>,
+	ty: MetaOption<TId<Type>, M>,
 
 	/// Layout description.
-	desc: Meta<Description<M>, M>,
-
-	// Metadata associated to the definition.
-	metadata: M,
+	desc: Meta<Description<M>, M>
 }
 
 /// Layout description.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Description<M> {
 	/// Never layout.
 	Never(MetaOption<Name, M>),
@@ -101,7 +115,7 @@ pub enum Description<M> {
 	OneOrMany(OneOrMany<M>),
 
 	/// Alias.
-	Alias(Meta<Name, M>, Ref<Definition<M>>),
+	Alias(Meta<Name, M>, TId<Layout>),
 }
 
 impl<M> Description<M> {
@@ -169,48 +183,22 @@ impl<M> Description<M> {
 	}
 }
 
-impl<M> SubstituteReferences<M> for Description<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
-		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
-		L: Fn(Ref<self::Definition<M>>) -> Ref<self::Definition<M>>,
-	{
-		match self {
-			Self::Never(_) => (),
-			Self::Struct(s) => s.substitute_references(sub),
-			Self::Enum(e) => e.substitute_references(sub),
-			Self::Reference(r) => r.substitute_references(sub),
-			Self::Primitive(_, _) => (),
-			Self::Required(r) => r.substitute_references(sub),
-			Self::Option(o) => o.substitute_references(sub),
-			Self::Array(a) => a.substitute_references(sub),
-			Self::Set(s) => s.substitute_references(sub),
-			Self::OneOrMany(s) => s.substitute_references(sub),
-			Self::Alias(_, r) => *r = sub.layout(*r),
-		}
-	}
-}
-
 impl<M> Definition<M> {
 	/// Creates a new layout definition.
 	pub fn new(
 		id: Id,
-		ty: MetaOption<Ref<ty::Definition<M>>, M>,
-		desc: Meta<Description<M>, M>,
-		metadata: M,
+		ty: MetaOption<TId<Type>, M>,
+		desc: Meta<Description<M>, M>
 	) -> Self {
 		Self {
 			id,
 			ty,
-			desc,
-			metadata,
+			desc
 		}
 	}
 
 	/// Type for which the layout is defined.
-	pub fn ty(&self) -> Option<Ref<ty::Definition<M>>> {
+	pub fn ty(&self) -> Option<TId<Type>> {
 		self.ty.value().cloned()
 	}
 
@@ -235,11 +223,6 @@ impl<M> Definition<M> {
 		}
 	}
 
-	/// Returns a reference to the metadata associated to this definition.
-	pub fn metadata(&self) -> &M {
-		&self.metadata
-	}
-
 	/// Returns the layout description.
 	pub fn description(&self) -> &Meta<Description<M>, M> {
 		&self.desc
@@ -251,40 +234,6 @@ impl<M> Definition<M> {
 	/// container.
 	pub fn is_required(&self) -> bool {
 		self.desc.is_required()
-	}
-
-	/// Returns the defined label for this layout.
-	pub fn label<'m>(&self, model: &'m crate::Model<M>) -> Option<&'m str> {
-		model.get(self.id).unwrap().label()
-	}
-
-	/// Returns the preferred layout for this layout.
-	///
-	/// Either the defined label if any, or the type label otherwise (if any).
-	pub fn preferred_label<'a>(&'a self, model: &'a crate::Model<M>) -> Option<&'a str> {
-		let label = self.label(model);
-		if label.is_none() {
-			self.ty().and_then(|ty_ref| {
-				let ty_id = model.types().get(ty_ref).unwrap().id();
-				model.get(ty_id).unwrap().label()
-			})
-		} else {
-			label
-		}
-	}
-
-	pub fn documentation<'m>(&self, model: &'m crate::Model<M>) -> &'m Documentation {
-		model.get(self.id).unwrap().documentation()
-	}
-
-	pub fn preferred_documentation<'m>(&self, model: &'m crate::Model<M>) -> &'m Documentation {
-		let doc = self.documentation(model);
-		if doc.is_empty() && self.ty().is_some() {
-			let ty_id = model.types().get(self.ty().unwrap()).unwrap().id();
-			model.get(ty_id).unwrap().documentation()
-		} else {
-			doc
-		}
 	}
 
 	pub fn composing_layouts(&self) -> ComposingLayouts<M> {
@@ -315,7 +264,7 @@ impl<M> Definition<M> {
 	/// updated to avoid loops.
 	pub fn can_be_reference(
 		&self,
-		map: &mut HashMap<Ref<Definition<M>>, bool>,
+		map: &mut HashMap<TId<Layout>, bool>,
 		model: &crate::Model<M>,
 	) -> bool {
 		match self.description().value() {
@@ -330,29 +279,15 @@ impl<M> Definition<M> {
 	}
 }
 
-impl<M> SubstituteReferences<M> for Definition<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
-		P: Fn(Ref<crate::prop::Definition<M>>) -> Ref<crate::prop::Definition<M>>,
-		L: Fn(Ref<self::Definition<M>>) -> Ref<self::Definition<M>>,
-	{
-		self.id = sub.id(self.id);
-		replace_with(&mut self.ty, |v| v.map(|r| sub.ty(r)));
-		self.desc.substitute_references(sub)
-	}
-}
-
 pub enum ComposingLayouts<'a, M> {
 	Struct(std::slice::Iter<'a, Field<M>>),
 	Enum(enumeration::ComposingLayouts<'a, M>),
-	One(Option<Ref<Definition<M>>>),
+	One(Option<TId<Layout>>),
 	None,
 }
 
 impl<'a, M> Iterator for ComposingLayouts<'a, M> {
-	type Item = Ref<Definition<M>>;
+	type Item = TId<Layout>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
@@ -360,6 +295,65 @@ impl<'a, M> Iterator for ComposingLayouts<'a, M> {
 			Self::Enum(layouts) => layouts.next(),
 			Self::One(r) => r.take(),
 			Self::None => None,
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Property {
+	For,
+	Reference,
+	Fields,
+	Variants,
+	Required,
+	Option,
+	Set,
+	OneOrMany,
+	Array,
+	Alias,
+	WithRestrictions,
+	ArrayListFirst,
+	ArrayListRest,
+	ArrayListNil,
+}
+
+impl Property {
+	pub fn term(&self) -> vocab::Term {
+		use vocab::{Term, TreeLdr};
+		match self {
+			Self::For => Term::TreeLdr(TreeLdr::LayoutFor),
+			Self::Reference => Term::TreeLdr(TreeLdr::Reference),
+			Self::Fields => Term::TreeLdr(TreeLdr::Fields),
+			Self::Variants => Term::TreeLdr(TreeLdr::Enumeration),
+			Self::Required => Term::TreeLdr(TreeLdr::Required),
+			Self::Option => Term::TreeLdr(TreeLdr::Option),
+			Self::Set => Term::TreeLdr(TreeLdr::Set),
+			Self::OneOrMany => Term::TreeLdr(TreeLdr::OneOrMany),
+			Self::Array => Term::TreeLdr(TreeLdr::Array),
+			Self::Alias => Term::TreeLdr(TreeLdr::Alias),
+			Self::WithRestrictions => Term::TreeLdr(TreeLdr::WithRestrictions),
+			Self::ArrayListFirst => Term::TreeLdr(TreeLdr::ArrayListFirst),
+			Self::ArrayListRest => Term::TreeLdr(TreeLdr::ArrayListRest),
+			Self::ArrayListNil => Term::TreeLdr(TreeLdr::ArrayListNil),
+		}
+	}
+
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::For => "layout type",
+			Self::Reference => "referenced type",
+			Self::Fields => "structure fields",
+			Self::Variants => "enum variants",
+			Self::Required => "required item layout",
+			Self::Option => "optional item layout",
+			Self::Set => "set item layout",
+			Self::OneOrMany => "one or many item layout",
+			Self::Array => "array item layout",
+			Self::Alias => "alias layout",
+			Self::WithRestrictions => "layout restrictions",
+			Self::ArrayListFirst => "\"array as list\" `first` property",
+			Self::ArrayListRest => "\"array as list\" `rest` property",
+			Self::ArrayListNil => "\"array as list\" empty list value",
 		}
 	}
 }

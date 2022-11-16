@@ -1,20 +1,26 @@
-use crate::{ty, utils::replace_with, Id, Ref, SubstituteReferences};
+use crate::{TId, Type, Multiple, multiple, MetaOption, metadata::Merge};
 use derivative::Derivative;
-use std::collections::HashSet;
+use locspan::Meta;
 
 #[derive(Clone, Copy)]
 pub struct Contradiction;
 
-#[derive(Derivative)]
-#[derivative(Default(bound = ""), Clone(bound = ""))]
+#[derive(Debug, Derivative, Clone)]
+#[derivative(Default(bound = ""))]
 pub struct Restrictions<M> {
 	range: RangeRestrictions<M>,
-	cardinality: CardinalityRestrictions,
+	cardinality: CardinalityRestrictions<M>,
 }
 
 impl<M> Restrictions<M> {
 	pub fn new() -> Self {
 		Self::default()
+	}
+
+	pub fn singleton(restriction: Meta<Restriction, M>) -> Self where M: Clone + Merge {
+		let mut result = Self::new();
+		result.restrict(restriction).ok().unwrap();
+		result
 	}
 
 	pub fn len(&self) -> usize {
@@ -32,13 +38,13 @@ impl<M> Restrictions<M> {
 		}
 	}
 
-	pub fn restrict(&mut self, restriction: Restriction<M>) -> Result<(), Contradiction> {
+	pub fn restrict(&mut self, Meta(restriction, meta): Meta<Restriction, M>) -> Result<(), Contradiction> where M: Clone + Merge {
 		match restriction {
 			Restriction::Range(r) => {
-				self.range.restrict(r);
+				self.range.restrict(Meta(r, meta));
 				Ok(())
 			}
-			Restriction::Cardinality(c) => self.cardinality.restrict(c),
+			Restriction::Cardinality(c) => self.cardinality.restrict(Meta(c, meta)),
 		}
 	}
 
@@ -47,14 +53,14 @@ impl<M> Restrictions<M> {
 		self.cardinality.clear()
 	}
 
-	pub fn union_with(&self, other: &Self) -> Self {
+	pub fn union_with(&self, other: &Self) -> Self where M: Clone + Merge {
 		Self {
 			range: self.range.union_with(&other.range),
 			cardinality: self.cardinality.union_with(&other.cardinality),
 		}
 	}
 
-	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction> {
+	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction> where M: Clone + Merge {
 		Ok(Self {
 			range: self.range.intersection_with(&other.range),
 			cardinality: self.cardinality.intersection_with(&other.cardinality)?,
@@ -62,36 +68,28 @@ impl<M> Restrictions<M> {
 	}
 }
 
-impl<M> SubstituteReferences<M> for Restrictions<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
-		P: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
-	{
-		self.range.substitute_references(sub)
-	}
-}
-
 pub struct Iter<'a, M> {
 	range: RangeRestrictionsIter<'a, M>,
-	cardinality: CardinalityRestrictionsIter,
+	cardinality: CardinalityRestrictionsIter<'a, M>,
 }
 
 impl<'a, M> Iterator for Iter<'a, M> {
-	type Item = Restriction<M>;
+	type Item = Meta<Restriction, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.range
 			.next()
-			.map(Restriction::Range)
-			.or_else(|| self.cardinality.next().map(Restriction::Cardinality))
+			.map(|r| r.map(Restriction::Range))
+			.or_else(|| {
+				self.cardinality
+					.next()
+					.map(|r| r.map(Restriction::Cardinality))
+			})
 	}
 }
 
 impl<'a, M> IntoIterator for &'a Restrictions<M> {
-	type Item = Restriction<M>;
+	type Item = Meta<Restriction, &'a M>;
 	type IntoIter = Iter<'a, M>;
 
 	fn into_iter(self) -> Self::IntoIter {
@@ -99,11 +97,11 @@ impl<'a, M> IntoIterator for &'a Restrictions<M> {
 	}
 }
 
-#[derive(Derivative)]
-#[derivative(Default(bound = ""), Clone(bound = ""))]
+#[derive(Debug, Derivative, Clone)]
+#[derivative(Default(bound = ""))]
 pub struct RangeRestrictions<M> {
-	all: HashSet<Ref<ty::Definition<M>>>,
-	any: HashSet<Ref<ty::Definition<M>>>,
+	all: Multiple<TId<Type>, M>,
+	any: Multiple<TId<Type>, M>,
 }
 
 impl<M> RangeRestrictions<M> {
@@ -117,18 +115,18 @@ impl<M> RangeRestrictions<M> {
 
 	pub fn iter(&self) -> RangeRestrictionsIter<M> {
 		RangeRestrictionsIter {
-			all: self.all.iter().cloned(),
-			any: self.any.iter().cloned(),
+			all: self.all.iter(),
+			any: self.any.iter(),
 		}
 	}
 
-	pub fn restrict(&mut self, restriction: Range<M>) {
+	pub fn restrict(&mut self, Meta(restriction, meta): Meta<Range, M>) where M: Merge {
 		match restriction {
 			Range::All(r) => {
-				self.all.insert(r);
+				self.all.insert(Meta(r, meta));
 			}
 			Range::Any(r) => {
-				self.any.insert(r);
+				self.any.insert(Meta(r, meta));
 			}
 		}
 	}
@@ -138,63 +136,51 @@ impl<M> RangeRestrictions<M> {
 		self.any.clear();
 	}
 
-	pub fn union_with(&self, other: &Self) -> Self {
+	pub fn union_with(&self, other: &Self) -> Self where M: Clone + Merge {
 		Self {
-			all: self.all.intersection(&other.all).cloned().collect(),
-			any: self.any.intersection(&other.any).cloned().collect(),
+			all: self.all.clone().intersected_with(other.all.iter().map(|m| m.cloned())),
+			any: self.any.clone().intersected_with(other.any.iter().map(|m| m.cloned())),
 		}
 	}
 
-	pub fn intersection_with(&self, other: &Self) -> Self {
+	pub fn intersection_with(&self, other: &Self) -> Self where M: Clone + Merge {
 		Self {
-			all: self.all.union(&other.all).cloned().collect(),
-			any: self.any.union(&other.any).cloned().collect(),
+			all: self.all.clone().extended_with(other.all.iter().map(|m| m.cloned())),
+			any: self.any.clone().extended_with(other.any.iter().map(|m| m.cloned())),
 		}
-	}
-}
-
-impl<M> SubstituteReferences<M> for RangeRestrictions<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
-		P: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
-	{
-		replace_with(&mut self.all, |v| {
-			v.into_iter().map(|r| sub.ty(r)).collect()
-		});
-		replace_with(&mut self.any, |v| {
-			v.into_iter().map(|r| sub.ty(r)).collect()
-		});
 	}
 }
 
 pub struct RangeRestrictionsIter<'a, M> {
-	all: std::iter::Cloned<std::collections::hash_set::Iter<'a, Ref<ty::Definition<M>>>>,
-	any: std::iter::Cloned<std::collections::hash_set::Iter<'a, Ref<ty::Definition<M>>>>,
+	all: multiple::Iter<'a, TId<Type>, M>,
+	any: multiple::Iter<'a, TId<Type>, M>,
 }
 
 impl<'a, M> Iterator for RangeRestrictionsIter<'a, M> {
-	type Item = Range<M>;
+	type Item = Meta<Range, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		match self.any.next() {
-			Some(ty_ref) => Some(Range::Any(ty_ref)),
-			None => self.all.next().map(Range::All),
-		}
+		self.any
+			.next()
+			.map(|Meta(r, m)| Meta(Range::Any(*r), m))
+			.or_else(|| {
+				self.all
+					.next()
+					.map(|Meta(r, m)| Meta(Range::All(*r), m))
+			})
 	}
 }
 
-#[derive(Default, Clone)]
-pub struct CardinalityRestrictions {
-	min: Option<u32>,
-	max: Option<u32>,
+#[derive(Debug, Derivative, Clone)]
+#[derivative(Default(bound = ""))]
+pub struct CardinalityRestrictions<M> {
+	min: MetaOption<u32, M>,
+	max: MetaOption<u32, M>,
 }
 
-impl CardinalityRestrictions {
+impl<M> CardinalityRestrictions<M> {
 	pub fn len(&self) -> usize {
-		match (self.min, self.max) {
+		match (self.min.value(), self.max.value()) {
 			(Some(min), Some(max)) if min == max => 1,
 			(Some(_), Some(_)) => 2,
 			(Some(_), None) => 1,
@@ -207,48 +193,48 @@ impl CardinalityRestrictions {
 		self.min.is_none() && self.max.is_none()
 	}
 
-	pub fn iter(&self) -> CardinalityRestrictionsIter {
+	pub fn iter(&self) -> CardinalityRestrictionsIter<M> {
 		CardinalityRestrictionsIter {
-			min: self.min,
-			max: self.max,
+			min: self.min.as_ref().map(Meta::borrow_metadata),
+			max: self.max.as_ref().map(Meta::borrow_metadata),
 		}
 	}
 
-	pub fn restrict(&mut self, restriction: Cardinality) -> Result<(), Contradiction> {
+	pub fn restrict(&mut self, Meta(restriction, meta): Meta<Cardinality, M>) -> Result<(), Contradiction> where M: Clone {
 		match restriction {
 			Cardinality::AtLeast(min) => {
-				if let Some(max) = self.max {
-					if min > max {
+				if let Some(max) = self.max.value() {
+					if min > *max {
 						return Err(Contradiction);
 					}
 				}
 
-				self.min = Some(min)
+				self.min = MetaOption::new(min, meta)
 			}
 			Cardinality::AtMost(max) => {
-				if let Some(min) = self.min {
-					if min > max {
+				if let Some(min) = self.min.value() {
+					if *min > max {
 						return Err(Contradiction);
 					}
 				}
 
-				self.max = Some(max)
+				self.max = MetaOption::new(max, meta)
 			}
 			Cardinality::Exactly(n) => {
-				if let Some(min) = self.min {
-					if min > n {
+				if let Some(min) = self.min.value() {
+					if *min > n {
 						return Err(Contradiction);
 					}
 				}
 
-				if let Some(max) = self.max {
-					if n > max {
+				if let Some(max) = self.max.value() {
+					if n > *max {
 						return Err(Contradiction);
 					}
 				}
 
-				self.min = Some(n);
-				self.max = Some(n);
+				self.min = MetaOption::new(n, meta.clone());
+				self.max = MetaOption::new(n, meta);
 			}
 		}
 
@@ -256,40 +242,64 @@ impl CardinalityRestrictions {
 	}
 
 	pub fn clear(&mut self) {
-		self.min = None;
-		self.max = None;
+		self.min.clear();
+		self.max.clear();
 	}
 
-	pub fn union_with(&self, other: &Self) -> Self {
-		let min = match (self.min, other.min) {
-			(Some(a), Some(b)) => Some(std::cmp::min(a, b)),
+	pub fn union_with(&self, other: &Self) -> Self where M: Clone {
+		let min = match (self.min.as_ref(), other.min.as_ref()) {
+			(Some(a), Some(b)) => {
+				if **a <= **b {
+					Some(a.clone())
+				} else {
+					Some(b.clone())
+				}
+			},
 			_ => None,
-		};
+		}.into();
 
-		let max = match (self.max, other.max) {
-			(Some(a), Some(b)) => Some(std::cmp::max(a, b)),
+		let max = match (self.max.as_ref(), other.max.as_ref()) {
+			(Some(a), Some(b)) => {
+				if **a >= **b {
+					Some(a.clone())
+				} else {
+					Some(b.clone())
+				}
+			},
 			_ => None,
-		};
+		}.into();
 
 		Self { min, max }
 	}
 
-	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction> {
-		let min = match (self.min, other.min) {
-			(Some(a), Some(b)) => Some(std::cmp::max(a, b)),
-			(Some(min), None) => Some(min),
-			(None, Some(min)) => Some(min),
+	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction> where M: Clone {
+		let min: MetaOption<u32, M> = match (self.min.as_ref(), other.min.as_ref()) {
+			(Some(a), Some(b)) => {
+				if **a >= **b {
+					Some(a.clone())
+				} else {
+					Some(b.clone())
+				}
+			},
+			(Some(min), None) => Some(min.clone()),
+			(None, Some(min)) => Some(min.clone()),
 			(None, None) => None,
-		};
+		}.into();
 
-		let max = match (self.max, other.max) {
-			(Some(a), Some(b)) => Some(std::cmp::min(a, b)),
-			(Some(max), None) => Some(max),
-			(None, Some(max)) => Some(max),
+		let max: MetaOption<u32, M> = match (self.max.as_ref(), other.max.as_ref()) {
+			(Some(a), Some(b)) => {
+				if **a <= **b {
+					Some(a.clone())
+				} else {
+					Some(b.clone())
+				}
+			},
+			(Some(max), None) => Some(max.clone()),
+			(None, Some(max)) => Some(max.clone()),
 			_ => None,
-		};
+		}.into();
 
-		if let (Some(min), Some(max)) = (min, max) {
+		if let (Some(min), Some(max)) = (min.value(), max.value()) {
 			if min > max {
 				return Err(Contradiction);
 			}
@@ -299,23 +309,25 @@ impl CardinalityRestrictions {
 	}
 }
 
-pub struct CardinalityRestrictionsIter {
-	min: Option<u32>,
-	max: Option<u32>,
+pub struct CardinalityRestrictionsIter<'a, M> {
+	min: Option<Meta<u32, &'a M>>,
+	max: Option<Meta<u32, &'a M>>,
 }
 
-impl Iterator for CardinalityRestrictionsIter {
-	type Item = Cardinality;
+impl<'a, M> Iterator for CardinalityRestrictionsIter<'a, M> {
+	type Item = Meta<Cardinality, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		if self.min == self.max {
+		if self.min.as_deref() == self.max.as_deref() {
 			self.min.take();
-			self.max.take().map(Cardinality::Exactly)
+			self.max.take().map(|m| m.map(Cardinality::Exactly))
 		} else {
-			match self.min.take() {
-				Some(min) => Some(Cardinality::AtLeast(min)),
-				None => self.max.take().map(Cardinality::AtMost),
-			}
+			self.min
+				.take()
+				.map(|m| m.map(Cardinality::AtLeast))
+				.or_else(|| {
+					self.max.take().map(|m| m.map(Cardinality::AtMost))
+				})
 		}
 	}
 }
@@ -328,9 +340,9 @@ impl Iterator for CardinalityRestrictionsIter {
 	PartialEq(bound = ""),
 	Eq(bound = "")
 )]
-pub enum Restriction<M> {
+pub enum Restriction {
 	/// Range restriction.
-	Range(Range<M>),
+	Range(Range),
 
 	/// Cardinality restriction.
 	Cardinality(Cardinality),
@@ -344,12 +356,12 @@ pub enum Restriction<M> {
 	PartialEq(bound = ""),
 	Eq(bound = "")
 )]
-pub enum Range<M> {
+pub enum Range {
 	/// At least one value must be an instance of the given type.
-	Any(Ref<ty::Definition<M>>),
+	Any(TId<Type>),
 
 	/// All the values must be instances of the given type.
-	All(Ref<ty::Definition<M>>),
+	All(TId<Type>),
 }
 
 /// Property cardinality restriction.

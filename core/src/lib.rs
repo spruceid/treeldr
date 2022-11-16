@@ -1,14 +1,15 @@
 use derivative::Derivative;
-use shelves::Shelf;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
-
-pub use shelves::Ref;
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 mod doc;
 pub mod error;
 mod feature;
+pub mod list;
+pub mod component;
 pub mod layout;
 mod meta_option;
 pub mod metadata;
@@ -16,12 +17,12 @@ pub mod name;
 pub mod node;
 pub mod prop;
 pub mod reporting;
-mod simplify;
-pub mod to_rdf;
+// pub mod to_rdf;
 pub mod ty;
 pub mod utils;
 pub mod value;
 pub mod vocab;
+pub mod multiple;
 
 pub use doc::Documentation;
 pub use error::Error;
@@ -29,25 +30,19 @@ pub use feature::Feature;
 pub use meta_option::MetaOption;
 pub use metadata::Metadata;
 pub use name::Name;
-pub use node::Node;
 pub use value::Value;
 pub use vocab::{BlankIdIndex, Id, IriIndex};
+pub use ty::Type;
+pub use prop::Property;
+pub use layout::Layout;
+pub use multiple::Multiple;
 
 /// TreeLDR model.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Model<M> {
 	/// Nodes.
-	nodes: BTreeMap<Id, Node<M>>,
-
-	/// Type definitions.
-	types: Shelf<Vec<ty::Definition<M>>>,
-
-	/// Property definitions.
-	properties: Shelf<Vec<prop::Definition<M>>>,
-
-	/// Layout definitions.
-	layouts: Shelf<Vec<layout::Definition<M>>>,
+	nodes: BTreeMap<Id, node::Definition<M>>
 }
 
 impl<M> Model<M> {
@@ -57,28 +52,22 @@ impl<M> Model<M> {
 	}
 
 	pub fn from_parts(
-		nodes: BTreeMap<Id, Node<M>>,
-		types: Shelf<Vec<ty::Definition<M>>>,
-		properties: Shelf<Vec<prop::Definition<M>>>,
-		layouts: Shelf<Vec<layout::Definition<M>>>,
+		nodes: BTreeMap<Id, node::Definition<M>>
 	) -> Self {
 		Self {
-			nodes,
-			types,
-			properties,
-			layouts,
+			nodes
 		}
 	}
 
 	pub fn can_be_reference_layout(
 		&self,
-		map: &mut HashMap<Ref<layout::Definition<M>>, bool>,
-		r: Ref<layout::Definition<M>>,
+		map: &mut HashMap<TId<Layout>, bool>,
+		r: TId<Layout>,
 	) -> bool {
 		match map.get(&r).cloned() {
 			Some(b) => b,
 			None => {
-				let b = self.layouts.get(r).unwrap().can_be_reference(map, self);
+				let b = self.get(r).unwrap().as_layout().can_be_reference(map, self);
 				map.insert(r, b);
 				b
 			}
@@ -86,147 +75,56 @@ impl<M> Model<M> {
 	}
 
 	/// Returns the node associated to the given `id`, if any.
-	pub fn get(&self, id: Id) -> Option<&Node<M>> {
-		self.nodes.get(&id)
+	pub fn get<T: ResourceType>(&self, id: TId<T>) -> Option<Ref<T, M>> {
+		self.nodes.get(&id.0).and_then(|n| if T::check(n) { Some(Ref(n, PhantomData)) } else { None })
 	}
 
 	/// Returns a mutable reference to the node associated to the given `id`, if any.
-	pub fn get_mut(&mut self, id: Id) -> Option<&mut Node<M>> {
-		self.nodes.get_mut(&id)
+	pub fn get_mut<T: ResourceType>(&mut self, id: TId<T>) -> Option<RefMut<T, M>> {
+		self.nodes.get_mut(&id.0).and_then(|n| if T::check(n) { Some(RefMut(n, PhantomData)) } else { None })
 	}
 
-	pub fn nodes(&self) -> impl Iterator<Item = (Id, &Node<M>)> {
+	pub fn nodes(&self) -> impl Iterator<Item = (Id, &node::Definition<M>)> {
 		self.nodes.iter().map(|(i, n)| (*i, n))
 	}
 
-	pub fn nodes_mut(&mut self) -> impl Iterator<Item = (Id, &mut Node<M>)> {
+	pub fn nodes_mut(&mut self) -> impl Iterator<Item = (Id, &mut node::Definition<M>)> {
 		self.nodes.iter_mut().map(|(i, n)| (*i, n))
+	}
+
+	pub fn layouts(&self) -> impl Iterator<Item = (TId<Layout>, Ref<Layout, M>)> {
+		self.nodes.iter().filter_map(|(i, n)| {
+			if n.is_layout() {
+				Some((TId(*i, PhantomData), Ref(n, PhantomData)))
+			} else {
+				None
+			}
+		})
 	}
 
 	/// Inserts the given node to the context.
 	///
-	/// Replaces any previous node with the same [`Node::id`].
-	pub fn insert(&mut self, node: Node<M>) -> Option<Node<M>> {
+	/// Replaces any previous node with the same [`node::Definition::id`].
+	pub fn insert(&mut self, node: node::Definition<M>) -> Option<node::Definition<M>> {
 		self.nodes.insert(node.id(), node)
 	}
 
-	/// Returns a reference to the collection of type definitions.
-	pub fn types(&self) -> &Shelf<Vec<ty::Definition<M>>> {
-		&self.types
-	}
-
-	/// Returns a mutable reference to the collection of type definitions.
-	pub fn types_mut(&mut self) -> &mut Shelf<Vec<ty::Definition<M>>> {
-		&mut self.types
-	}
-
-	/// Returns a reference to the collection of property definitions.
-	pub fn properties(&self) -> &Shelf<Vec<prop::Definition<M>>> {
-		&self.properties
-	}
-
-	/// Returns a mutable reference to the collection of property definitions.
-	pub fn properties_mut(&mut self) -> &mut Shelf<Vec<prop::Definition<M>>> {
-		&mut self.properties
-	}
-
-	/// Returns a reference to the collection of layout definitions.
-	pub fn layouts(&self) -> &Shelf<Vec<layout::Definition<M>>> {
-		&self.layouts
-	}
-
-	/// Returns a mutable reference to the collection of layout definitions.
-	pub fn layouts_mut(&mut self) -> &mut Shelf<Vec<layout::Definition<M>>> {
-		&mut self.layouts
-	}
-
-	pub fn require(&self, id: Id, expected_ty: Option<node::Type>) -> Result<&Node<M>, Error<M>> {
-		self.get(id)
-			.ok_or_else(|| error::NodeUnknown { id, expected_ty }.into())
-	}
-
-	pub fn require_layout(&self, id: Id) -> Result<Ref<layout::Definition<M>>, Error<M>>
-	where
-		M: Clone,
-	{
-		self.require(id, Some(node::Type::Layout))?.require_layout()
-	}
-}
-
-pub(crate) trait SubstituteReferences<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-		L: Fn(Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>;
-}
-
-impl<M> SubstituteReferences<M> for Model<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-		L: Fn(Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>,
-	{
-		for (_, ty) in self.types.iter_mut() {
-			ty.substitute_references(sub);
+	pub fn require<T: ResourceType>(&self, id: TId<T>) -> Result<Ref<T, M>, Error<M>> where M: Clone {
+		match self.nodes.get(&id.0) {
+			Some(r) => if T::check(r) {
+				Ok(Ref(r, PhantomData))
+			} else {
+				Err(error::NodeInvalidType {
+					id: id.id(),
+					expected: T::TYPE,
+					found: r.types_metadata().cloned()
+				}.into())
+			}
+			None => Err(error::NodeUnknown {
+				id: id.id(),
+				expected_ty: T::TYPE
+			}.into())
 		}
-
-		for (_, prop) in self.properties.iter_mut() {
-			prop.substitute_references(sub);
-		}
-
-		for (_, layout) in self.layouts.iter_mut() {
-			layout.substitute_references(sub);
-		}
-	}
-}
-
-pub struct ReferenceSubstitution<I, T, P, L> {
-	ids: I,
-	types: T,
-	properties: P,
-	layouts: L,
-}
-
-impl<I, T, P, L> ReferenceSubstitution<I, T, P, L> {
-	pub fn new(ids: I, types: T, properties: P, layouts: L) -> Self {
-		Self {
-			ids,
-			types,
-			properties,
-			layouts,
-		}
-	}
-
-	pub fn id(&self, id: Id) -> Id
-	where
-		I: Fn(Id) -> Id,
-	{
-		(self.ids)(id)
-	}
-
-	pub fn ty<M>(&self, r: Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>
-	where
-		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
-	{
-		(self.types)(r)
-	}
-
-	pub fn property<M>(&self, r: Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>
-	where
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-	{
-		(self.properties)(r)
-	}
-
-	pub fn layout<M>(&self, r: Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>
-	where
-		L: Fn(Ref<layout::Definition<M>>) -> Ref<layout::Definition<M>>,
-	{
-		(self.layouts)(r)
 	}
 }
 
@@ -246,5 +144,99 @@ pub trait DisplayWithModel<F> {
 impl<'m, 't, T: DisplayWithModel<F>, F> fmt::Display for WithModel<'m, 't, T, F> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.value.fmt(self.model, f)
+	}
+}
+
+pub trait ResourceType {
+	const TYPE: Type;
+
+	fn check<M>(resource: &node::Definition<M>) -> bool;
+}
+
+/// Typed identifier.
+#[derive(Derivative)]
+#[derivative(
+	Debug(bound = ""),
+	Clone(bound = ""),
+	Copy(bound = ""),
+	PartialEq(bound = ""),
+	Eq(bound = ""),
+	PartialOrd(bound = ""),
+	Ord(bound = ""),
+	Hash(bound = ""),
+)]
+pub struct TId<T>(Id, PhantomData<T>);
+
+impl<T> TId<T> {
+	pub fn new(id: Id) -> Self {
+		Self(id, PhantomData)
+	}
+
+	pub fn id(&self) -> Id {
+		self.0
+	}
+
+	pub fn into_id(self) -> Id {
+		self.0
+	}
+}
+
+#[derive(Derivative)]
+#[derivative(
+	Clone(bound = ""),
+	Copy(bound = "")
+)]
+/// Typed Resource reference.
+pub struct Ref<'a, T, M>(&'a node::Definition<M>, PhantomData<T>);
+
+impl<'a, T, M> Ref<'a, T, M> {
+	pub fn as_resource(&self) -> &'a node::Definition<M> {
+		self.0
+	}
+
+	pub fn into_resource(self) -> &'a node::Definition<M> {
+		self.0
+	}
+}
+
+impl<'a, T, M> Deref for Ref<'a, T, M> {
+	type Target = node::Definition<M>;
+
+	fn deref(&self) -> &Self::Target {
+		self.0
+	}
+}
+
+pub struct RefMut<'a, T, M>(&'a mut node::Definition<M>, PhantomData<T>);
+
+impl<'a, T, M> RefMut<'a, T, M> {
+	pub fn as_resource(&self) -> &node::Definition<M> {
+		self.0
+	}
+
+	pub fn into_resource(self) -> &'a node::Definition<M> {
+		self.0
+	}
+
+	pub fn as_resource_mut(&mut self) -> &mut node::Definition<M> {
+		self.0
+	}
+
+	pub fn into_resource_mut(self) -> &'a mut node::Definition<M> {
+		self.0
+	}
+}
+
+impl<'a, T, M> Deref for RefMut<'a, T, M> {
+	type Target = node::Definition<M>;
+
+	fn deref(&self) -> &Self::Target {
+		self.0
+	}
+}
+
+impl<'a, T, M> DerefMut for RefMut<'a, T, M> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		self.0
 	}
 }
