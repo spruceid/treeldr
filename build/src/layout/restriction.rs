@@ -1,5 +1,5 @@
 use locspan::Meta;
-use treeldr::{metadata::Merge, Id};
+use treeldr::metadata::Merge;
 
 use crate::{Error, Single, single};
 

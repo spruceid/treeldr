@@ -1,9 +1,10 @@
-use crate::{node, Error, Single, Context};
+use crate::{Error, Single, Context};
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::StrippedPartialEq;
 use treeldr::{metadata::Merge, vocab, Id, IriIndex};
 use vocab::{Rdf, Term};
+use super::Property;
 
 #[derive(Clone, Debug, Derivative, StrippedPartialEq)]
 #[derivative(Default(bound = ""))]
@@ -88,28 +89,28 @@ impl<M> Semantics<M> {
 		M: Clone,
 	{
 		let first = self.first.try_unwrap().map_err(|c| {
-			c.at_functional_node_property(id, node::property::Layout::ArrayListFirst)
+			c.at_functional_node_property(id, Property::ArrayListFirst)
 		})?;
 		let rest = self.rest.try_unwrap().map_err(|c| {
-			c.at_functional_node_property(id, node::property::Layout::ArrayListRest)
+			c.at_functional_node_property(id, Property::ArrayListRest)
 		})?;
 		let nil = self
 			.nil
 			.try_unwrap()
-			.map_err(|c| c.at_functional_node_property(id, node::property::Layout::ArrayListNil))?;
+			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListNil))?;
 
 		let first = first.try_map_with_causes(|Meta(id, meta)| {
 			Ok(Meta(
-				**model.require_property(id).map_err(|e| {
-					e.at_node_property(id, node::property::Layout::ArrayListFirst, meta.clone())
+				model.require_property_id(id).map_err(|e| {
+					e.at_node_property(id, Property::ArrayListFirst, meta.clone())
 				})?,
 				meta,
 			))
 		})?;
 		let rest = rest.try_map_with_causes(|Meta(id, meta)| {
 			Ok(Meta(
-				**model.require_property(id).map_err(|e| {
-					e.at_node_property(id, node::property::Layout::ArrayListRest, meta.clone())
+				model.require_property_id(id).map_err(|e| {
+					e.at_node_property(id, Property::ArrayListRest, meta.clone())
 				})?,
 				meta,
 			))

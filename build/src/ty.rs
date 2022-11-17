@@ -1,15 +1,15 @@
-use crate::{Error, ObjectToId, node, Single, single};
+use crate::{Error, ObjectAsRequiredId, Single, single, resource, ObjectAsId, context::HasType};
 use locspan::Meta;
-use std::collections::{BTreeMap, HashMap, btree_map::Entry};
-use treeldr::{metadata::Merge, Id, MetaOption};
+use std::collections::{HashMap, HashSet};
+use treeldr::{metadata::Merge, Id, Multiple};
 
 pub mod datatype;
-mod restriction;
+pub mod restriction;
 
-pub use datatype::DataType;
-pub use restriction::{Restriction, RangeRestriction, CardinalityRestriction};
-pub use treeldr::ty::Kind;
+pub use restriction::{Restriction, Range, Cardinality};
+pub use treeldr::ty::{Kind, Type, SubClass, Property};
 
+#[derive(Clone)]
 pub struct Data<M> {
 	/// Union.
 	union_of: Single<Id, M>,
@@ -36,10 +36,10 @@ pub struct Definition<M> {
 	data: Data<M>,
 
 	/// Datatype.
-	datatype: DataType<M>,
+	datatype: datatype::Definition<M>,
 
 	/// Restriction.
-	restriction: Restriction<M>
+	restriction: restriction::Definition<M>
 }
 
 impl<M> Definition<M> {
@@ -51,168 +51,123 @@ impl<M> Definition<M> {
 	pub fn new() -> Self {
 		Self {
 			data: Data::default(),
-			datatype: MetaOption::default(),
-			restriction: MetaOption::default()
+			datatype: datatype::Definition::default(),
+			restriction: restriction::Definition::default()
 		}
 	}
 }
 
 impl<M> Definition<M> {
-	/// Declare that this type is a datatype.
-	pub fn declare_datatype(&mut self, metadata: M)
-	where
-		M: Merge,
-	{
-		self.datatype.set_once(metadata, || DataType::default())
+	pub fn union_of(&self) -> &Single<Id, M> {
+		&self.data.union_of
 	}
 
-	/// Declare that this type is a restriction.
-	pub fn declare_restriction(&mut self, metadata: M)
-	where
-		M: Merge,
-	{
-		self.restriction.set_once(metadata, || Restriction::default())
+	pub fn union_of_mut(&mut self) -> &mut Single<Id, M> {
+		&mut self.data.union_of
 	}
 
-	pub fn declare_union(&mut self, list_id: Meta<Id, M>) where M: Merge {
-		self.union_of.insert(list_id)
+	pub fn intersection_of(&self) -> &Single<Id, M> {
+		&self.data.intersection_of
 	}
 
-	pub fn declare_intersection(&mut self, list_id: Meta<Id, M>) where M: Merge {
-		self.intersection_of.insert(list_id)
+	pub fn intersection_of_mut(&mut self) -> &mut Single<Id, M> {
+		&mut self.data.intersection_of
 	}
 
-	/// Declare a property of the type.
-	pub fn declare_property(&mut self, prop_ref: Id, cause: M)
-	where
-		M: Merge,
-	{
-		use std::collections::hash_map::Entry;
-		match self.properties.entry(prop_ref) {
-			Entry::Vacant(entry) => {
-				entry.insert(cause);
-			}
-			Entry::Occupied(mut entry) => entry.get_mut().merge_with(cause),
-		}
+	pub fn as_datatype(&self) -> &datatype::Definition<M> {
+		&self.datatype
 	}
-}
 
-impl<M: Clone> Definition<M> {
-	pub fn dependencies(
+	pub fn as_datatype_mut(&mut self) -> &mut datatype::Definition<M> {
+		&mut self.datatype
+	}
+
+	pub fn as_restriction(&self) -> &restriction::Definition<M> {
+		&self.restriction
+	}
+
+	pub fn as_restriction_mut(&mut self) -> &mut restriction::Definition<M> {
+		&mut self.restriction
+	}
+
+	pub fn collect_dependencies(
 		&self,
-		nodes: &super::context::allocated::Nodes<M>,
-		id: Id,
-		_causes: &M,
-	) -> Result<Vec<crate::Item<M>>, Error<M>> {
-		let mut dependencies = Vec::new();
-		
-		let union_of = self.union_of.clone().into_list_at_node_binding(nodes, id, node::property::Class::UnionOf)?;
-		let intersection_of = self.intersection_of.clone().into_list_at_node_binding(nodes, id, node::property::Class::IntersectionOf)?;
-
-		if let Some(union_of) = union_of.as_ref() {
-			for item in union_of.iter(nodes) {
-				let Meta(object, causes) = item?.cloned();
-				let option_id = object.into_required_id(&causes)?;
-
-				let Meta(option_ty, _) =
-					nodes.require_type(option_id).map_err(|e| e.at(causes.clone()))?.clone();
-
-				dependencies.push(crate::Item::Type(option_ty))
-			}
-		}
-		
-		if let Some(intersection_of) = intersection_of.as_ref() {
-			for item in intersection_of.iter(nodes) {
-				let Meta(object, causes) = item?.cloned();
-				let factor_id = object.into_required_id(&causes)?;
-
-				let Meta(factor_ty, _) =
-					nodes.require_type(factor_id).map_err(|e| e.at(causes.clone()))?.clone();
-
-				dependencies.push(crate::Item::Type(factor_ty))
+		context: &crate::Context<M>,
+		dependencies: &mut HashSet<Id>,
+		as_resource: &resource::Data<M>
+	) {
+		for Meta(list_id, _) in &self.data.union_of {
+			if let Some(list) = context.get_list(*list_id) {
+				for Meta(item, _) in list.lenient_iter(context) {
+					if let Some(item_id) = item.as_id() {
+						dependencies.insert(item_id);
+					}
+				}
 			}
 		}
 
-		Ok(dependencies)
+		for Meta(list_id, _) in &self.data.intersection_of {
+			if let Some(list) = context.get_list(*list_id) {
+				for Meta(item, _) in list.lenient_iter(context) {
+					if let Some(item_id) = item.as_id() {
+						dependencies.insert(item_id);
+					}
+				}
+			}
+		}
 	}
-}
-
-impl<M: Clone + Merge> crate::Build<M> for Definition<M> {
-	type Target = treeldr::ty::Definition<M>;
 
 	fn build(
-		self,
-		nodes: &mut super::context::allocated::Nodes<M>,
-		dependencies: crate::Dependencies<M>,
-		id: Id,
+		&self,
+		context: &crate::Context<M>,
+		as_resource: &treeldr::node::Data<M>,
 		meta: M,
-	) -> Result<Self::Target, Error<M>> {
-		let union_of = self.union_of.into_list_at_node_binding(nodes, id, node::property::Class::UnionOf)?;
-		let intersection_of = self.intersection_of.into_list_at_node_binding(nodes, id, node::property::Class::IntersectionOf)?;
+	) -> Result<Meta<treeldr::ty::Definition<M>, M>, Error<M>> where M: Clone + Merge {
+		let union_of = self.data.union_of.into_list_at_node_binding(context, as_resource.id, Property::UnionOf)?;
+		let intersection_of = self.data.intersection_of.into_list_at_node_binding(context, as_resource.id, Property::IntersectionOf)?;
 
-		let desc = if let Some(Meta(datatype, _)) = self.datatype.unwrap() {
-			datatype.build(nodes, dependencies, id, &meta)?
-		} else if let Some(Meta(restriction, _)) = self.restriction.unwrap() {
-			restriction.build(nodes, id, &meta)?
+		let desc = if as_resource.has_type(context, SubClass::DataType) {
+			treeldr::ty::Description::Data(self.datatype.build(context, as_resource, &meta)?)
+		} else if as_resource.has_type(context, SubClass::Restriction) {
+			treeldr::ty::Description::Restriction(self.restriction.build(context, as_resource, &meta)?)
 		} else if let Some(union_of) = union_of.as_ref() {
-			let mut options = BTreeMap::new();
+			let mut options = Multiple::default();
 
-			for item in union_of.iter(nodes) {
-				let Meta(object, causes) = item?.cloned();
-				let option_id = object.into_required_id(&causes)?;
+			for item in union_of.iter(context) {
+				let Meta(object, option_causes) = item?.cloned();
+				let option_id = object.into_required_id(&option_causes)?;
+				let option_ty = context.require_type_id(option_id).map_err(|e| e.at(option_causes.clone()))?;
 
-				let Meta(option_ty, option_causes) =
-					nodes.require_type(option_id).map_err(|e| e.at(causes.clone()))?.clone();
-
-				match options.entry(option_ty) {
-					Entry::Vacant(entry) => {
-						entry.insert(option_causes);
-					}
-					Entry::Occupied(mut entry) => {
-						entry.get_mut().merge_with(option_causes);
-					}
-				}
+				options.insert(Meta(option_ty, option_causes))
 			}
 
-			treeldr::ty::Description::Union(treeldr::ty::Union::new(options, |ty_ref| {
-				dependencies.ty(ty_ref)
-			}))
+			treeldr::ty::Description::Union(treeldr::ty::Union::new(options))
 		} else if let Some(intersection_of) = intersection_of.as_ref() {
-			let mut factors = BTreeMap::new();
+			let mut factors = Multiple::default();
 
-			for item in intersection_of.iter(nodes) {
-				let Meta(object, causes) = item?.cloned();
-				let factor_id = object.into_required_id(&causes)?;
-
-				let Meta(factor_ty, option_causes) =
-					nodes.require_type(factor_id).map_err(|e| e.at(causes.clone()))?.clone();
-
-				match factors.entry(factor_ty) {
-					Entry::Vacant(entry) => {
-						entry.insert(option_causes);
-					}
-					Entry::Occupied(mut entry) => {
-						entry.get_mut().merge_with(option_causes);
-					}
-				}
+			for item in intersection_of.iter(context) {
+				let Meta(object, factor_causes) = item?.cloned();
+				let factor_id = object.into_required_id(&factor_causes)?;
+				let factor_ty = context.require_type_id(factor_id).map_err(|e| e.at(factor_causes.clone()))?;
+				factors.insert(Meta(factor_ty, factor_causes))
 			}
 
-			match treeldr::ty::Intersection::new(factors, |ty_ref| dependencies.ty(ty_ref)) {
+			match treeldr::ty::Intersection::new(factors) {
 				Ok(intersection) => treeldr::ty::Description::Intersection(intersection),
 				Err(_) => treeldr::ty::Description::Empty,
 			}
 		} else {
 			let mut result = treeldr::ty::Normal::new();
 
-			for (prop_id, prop_causes) in self.properties {
-				let prop_ref = nodes.require_property(prop_id).map_err(|e| e.at(prop_causes.clone()))?;
-				result.insert_property(**prop_ref, prop_causes)
+			for (prop_id, prop_causes) in &self.data.properties {
+				let prop_ref = context.require_property_id(*prop_id).map_err(|e| e.at(prop_causes.clone()))?;
+				result.insert_property(prop_ref, prop_causes.clone())
 			}
 
 			treeldr::ty::Description::Normal(result)
 		};
 
-		Ok(treeldr::ty::Definition::new(id, desc, meta))
+		Ok(Meta(treeldr::ty::Definition::new(desc), meta))
 	}
 }
 

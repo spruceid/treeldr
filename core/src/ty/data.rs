@@ -21,6 +21,21 @@ impl DataType {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub struct Definition {
+	desc: DataType
+}
+
+impl Definition {
+	pub fn new(desc: DataType) -> Self {
+		Self { desc }
+	}
+
+	pub fn description(&self) -> &DataType {
+		&self.desc
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Primitive {
 	/// `xsd:boolean`.

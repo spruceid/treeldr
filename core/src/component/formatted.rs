@@ -1,9 +1,45 @@
 use locspan::Meta;
 
-use crate::{TId, Layout, layout, vocab};
+use crate::{TId, Layout, layout, vocab, MetaOption};
 
+pub struct Formatted;
+
+#[derive(Debug)]
 pub struct Data<M> {
-	pub format: Meta<TId<Layout>, M>
+	pub format: MetaOption<TId<Layout>, M>
+}
+
+#[derive(Debug)]
+pub struct Definition<M> {
+	data: Data<M>,
+	layout_field: MetaOption<layout::field::Definition<M>, M>,
+	layout_variant: MetaOption<layout::variant::Definition, M>
+}
+
+impl<M> Definition<M> {
+	pub fn new(
+		data: Data<M>,
+		layout_field: MetaOption<layout::field::Definition<M>, M>,
+		layout_variant: MetaOption<layout::variant::Definition, M>
+	) -> Self {
+		Self {
+			data,
+			layout_field,
+			layout_variant
+		}
+	}
+
+	pub fn format(&self) -> &MetaOption<TId<Layout>, M> {
+		&self.data.format
+	}
+
+	pub fn as_layout_field(&self) -> Option<&Meta<layout::field::Definition<M>, M>> {
+		self.layout_field.as_ref()
+	}
+
+	pub fn as_layout_variant(&self) -> Option<&Meta<layout::variant::Definition, M>> {
+		self.layout_variant.as_ref()
+	}
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]

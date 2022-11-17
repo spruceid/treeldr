@@ -1,4 +1,4 @@
-use crate::{BlankIdIndex, Id, IriIndex, Model, component, ResourceType, Ref, vocab};
+use crate::{Model, component, ResourceType, Ref, vocab};
 
 pub mod data;
 mod intersection;
@@ -9,25 +9,49 @@ mod r#union;
 
 pub use data::DataType;
 pub use intersection::Intersection;
+use locspan::Meta;
 pub use normal::Normal;
 pub use properties::{Properties, PseudoProperty};
-use rdf_types::Subject;
-pub use restriction::Restriction;
+pub use restriction::{Restriction, Restrictions};
 pub use union::Union;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Type {
 	Resource,
-	Type,
+	Class(Option<SubClass>),
 	DatatypeRestriction,
 	Property,
-	Component(component::Type),
+	Component(Option<component::Type>),
 	LayoutRestriction,
 	List,
 }
 
+impl From<SubClass> for Type {
+	fn from(ty: SubClass) -> Self {
+		Self::Class(Some(ty))
+	}
+}
+
+impl From<component::Type> for Type {
+	fn from(ty: component::Type) -> Self {
+		Self::Component(Some(ty))
+	}
+}
+
+impl From<component::formatted::Type> for Type {
+	fn from(ty: component::formatted::Type) -> Self {
+		Self::Component(Some(component::Type::Formatted(Some(ty))))
+	}
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum SubClass {
+	DataType,
+	Restriction
+}
+
 impl ResourceType for Type {
-	const TYPE: Type = Type::Type;
+	const TYPE: Type = Type::Class(None);
 
 	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
 		resource.is_type()
@@ -35,20 +59,14 @@ impl ResourceType for Type {
 }
 
 impl<'a, M> Ref<'a, Type, M> {
-	pub fn as_type(&self) -> &'a Definition<M> {
+	pub fn as_type(&self) -> &'a Meta<Definition<M>, M> {
 		self.as_resource().as_type().unwrap()
 	}
 }
 
 /// Type definition.
 #[derive(Debug)]
-pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
-	/// Identifier.
-	id: Subject<I, B>,
-
-	/// Metadata of the definition.
-	metadata: M,
-
+pub struct Definition<M> {
 	/// Type description.
 	desc: Description<M>,
 }
@@ -57,11 +75,11 @@ pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
 #[derive(Debug)]
 pub enum Description<M> {
 	Empty,
-	Data(DataType),
+	Data(data::Definition),
 	Normal(Normal<M>),
 	Union(Union<M>),
 	Intersection(Intersection<M>),
-	Restriction(Restriction<M>),
+	Restriction(restriction::Definition<M>),
 }
 
 impl<M> Description<M> {
@@ -97,36 +115,14 @@ pub enum Kind {
 }
 
 impl<M> Definition<M> {
-	pub fn new(id: Id, desc: Description<M>, causes: impl Into<M>) -> Self {
+	pub fn new(desc: Description<M>) -> Self {
 		Self {
-			id,
-			metadata: causes.into(),
 			desc,
 		}
 	}
 
-	/// Returns the identifier of the defined type.
-	pub fn id(&self) -> Id {
-		self.id
-	}
-
-	pub fn causes(&self) -> &M {
-		&self.metadata
-	}
-
 	pub fn description(&self) -> &Description<M> {
 		&self.desc
-	}
-
-	pub fn properties(&self) -> Option<&Properties<M>> {
-		match &self.desc {
-			Description::Empty => None,
-			Description::Data(_) => None,
-			Description::Normal(n) => Some(n.properties()),
-			Description::Union(u) => Some(u.properties()),
-			Description::Intersection(i) => Some(i.properties()),
-			Description::Restriction(r) => Some(r.properties()),
-		}
 	}
 
 	pub fn is_datatype(&self, model: &Model<M>) -> bool {

@@ -1,4 +1,4 @@
-use crate::{error, Error, single};
+use crate::{error, Error};
 use locspan::{MapLocErr, Meta};
 use std::collections::BTreeMap;
 pub use treeldr::{

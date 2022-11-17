@@ -959,12 +959,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 							crate::TypePropertyRangeRestriction::Any(id) => {
 								let Meta(id, _) =
 									id.build(local_context, context, vocabulary, generator)?;
-								treeldr_build::ty::RangeRestriction::Any(id)
+								treeldr_build::ty::Range::Any(id)
 							}
 							crate::TypePropertyRangeRestriction::All(id) => {
 								let Meta(id, _) =
 									id.build(local_context, context, vocabulary, generator)?;
-								treeldr_build::ty::RangeRestriction::All(id)
+								treeldr_build::ty::Range::All(id)
 							}
 						};
 
@@ -1013,7 +1013,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 				));
 				first_restriction.add_restriction(
 					treeldr_build::ty::PropertyRestriction::Range(
-						treeldr_build::ty::RangeRestriction::All(item_id),
+						treeldr_build::ty::Range::All(item_id),
 					),
 					loc.clone(),
 				);
@@ -1034,7 +1034,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 				));
 				rest_restriction.add_restriction(
 					treeldr_build::ty::PropertyRestriction::Range(
-						treeldr_build::ty::RangeRestriction::All(id),
+						treeldr_build::ty::Range::All(id),
 					),
 					loc.clone(),
 				);

@@ -1,10 +1,10 @@
 use crate::{
-	error::{NodeUnknown, NodeTypeInvalid}, layout, node, prop, ty, Error, IriIndex, ListMut, ListRef, Node
+	error::{NodeUnknown, NodeTypeInvalid}, node, Error, IriIndex, ListRef, Node, component
 };
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
 use rdf_types::{Generator, VocabularyMut};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, btree_map::Entry};
 use treeldr::{metadata::Merge, vocab, BlankIdIndex, Id, Type};
 
 mod initialize;
@@ -23,6 +23,23 @@ pub struct Context<M> {
 impl<M> Context<M> {
 	pub fn new() -> Self {
 		Self::default()
+	}
+
+	pub fn declare(&mut self, id: Id, metadata: M) -> &mut Node<M> where M: Merge {
+		match self.nodes.entry(id) {
+			Entry::Occupied(entry) => {
+				let node = entry.get_mut();
+				node.metadata_mut().merge_with(metadata);
+				node
+			},
+			Entry::Vacant(entry) => entry.insert(Node::new(id, metadata))
+		}
+	}
+
+	pub fn declare_with(&mut self, id: Id, type_: impl Into<Type>, metadata: M) -> &mut Node<M> where M: Clone + Merge {
+		let node = self.declare(id, metadata.clone());
+		node.type_mut().insert(Meta(type_.into(), metadata));
+		node
 	}
 
 	/// Returns the node associated to the given `Id`, if any.
@@ -85,34 +102,29 @@ impl<M: Clone> Context<M> {
 	pub fn require_type_id(&self, id: Id) -> Result<treeldr::TId<Type>, RequireError<M>> {
 		Ok(self.require(id)?.require_type_id()?)
 	}
+
+	pub fn require_property_id(&self, id: Id) -> Result<treeldr::TId<treeldr::Property>, RequireError<M>> {
+		Ok(self.require(id)?.require_property_id()?)
+	}
+
+	pub fn require_layout_id(&self, id: Id) -> Result<treeldr::TId<treeldr::Layout>, RequireError<M>> {
+		Ok(self.require(id)?.require_layout_id()?)
+	}
+
+	pub fn require_layout_field_id(&self, id: Id) -> Result<treeldr::TId<treeldr::layout::Field>, RequireError<M>> {
+		Ok(self.require(id)?.require_layout_field_id()?)
+	}
+
+	pub fn require_layout_variant_id(&self, id: Id) -> Result<treeldr::TId<treeldr::layout::Variant>, RequireError<M>> {
+		Ok(self.require(id)?.require_layout_variant_id()?)
+	}
+
+	pub fn require_layout_restriction_id(&self, id: Id) -> Result<treeldr::TId<treeldr::layout::Restriction>, RequireError<M>> {
+		Ok(self.require(id)?.require_layout_restriction_id()?)
+	}
 }
 
 impl<M: Clone + Merge> Context<M> {
-	pub fn define_primitive_datatype(
-		&mut self,
-		id: Id,
-		metadata: M,
-	) -> Id {
-		self.declare_type(id, metadata.clone());
-		let ty = self.get_mut(id).unwrap().as_type_mut().unwrap();
-		ty.declare_datatype(metadata);
-		id
-	}
-
-	pub fn define_primitive_layout(
-		&mut self,
-		primitive_layout: layout::Primitive,
-		metadata: M,
-	) -> Id {
-		let id = Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
-			vocab::TreeLdr::Primitive(primitive_layout),
-		)));
-		self.declare_layout(id, metadata.clone());
-		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
-		layout.set_primitive(Meta(primitive_layout, metadata));
-		id
-	}
-
 	pub fn create_option_layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
 		vocabulary: &mut V,
@@ -130,8 +142,7 @@ impl<M: Clone + Merge> Context<M> {
 		item_layout: Id,
 		cause: M,
 	) -> Id {
-		self.declare_layout(id, cause.clone());
-		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
+		let layout = self.declare_with(id, component::Type::Layout, cause.clone()).as_layout_mut();
 		layout.set_option(Meta(item_layout, cause));
 		id
 	}
@@ -174,8 +185,7 @@ impl<M: Clone + Merge> Context<M> {
 		cause: M,
 		deref_cause: M,
 	) -> Id {
-		self.declare_layout(id, cause.clone());
-		let layout = self.get_mut(id).unwrap().as_layout_mut().unwrap();
+		let layout = self.declare_with(id, component::Type::Layout, cause).as_layout_mut();
 		layout.ty_mut().insert(Meta(target_ty, deref_cause));
 		layout.set_reference(Meta(
 			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
@@ -203,8 +213,7 @@ impl<M: Clone + Merge> Context<M> {
 		for Meta(item, cause) in list.into_iter().rev() {
 			let id = generator.next(vocabulary);
 
-			self.declare_list(id, cause.clone());
-			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
+			let node = self.declare_with(id, Type::List, cause).as_list_mut();
 			node.first_mut().insert(Meta(Stripped(item), cause.clone()));
 			node.rest_mut().insert(Meta(head, cause));
 			head = id;
@@ -231,8 +240,7 @@ impl<M: Clone + Merge> Context<M> {
 			let id = generator.next(vocabulary);
 			let Meta(item, cause) = f(item, self, vocabulary);
 
-			self.declare_list(id, cause.clone());
-			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
+			let node = self.declare_with(id, Type::List, cause).as_list_mut();
 			node.first_mut().insert(Meta(Stripped(item), cause.clone()));
 			node.rest_mut().insert(Meta(head, cause));
 			head = id;
@@ -261,8 +269,7 @@ impl<M: Clone + Merge> Context<M> {
 			let id = generator.next(vocabulary);
 			let Meta(item, cause) = f(item, self, vocabulary, generator)?;
 
-			self.declare_list(id, cause.clone());
-			let node = self.get_mut(id).unwrap().as_list_mut().unwrap();
+			let node = self.declare_with(id, Type::List, cause).as_list_mut();
 			node.first_mut().insert(Meta(Stripped(item), cause.clone()));
 			node.rest_mut().insert(Meta(head, cause));
 			head = id;
@@ -310,5 +317,15 @@ impl<M> RequireError<M> {
 			Self::InvalidNodeType(e) => Meta(e.into(), meta),
 			Self::UnknownNode(e) => Meta(e.into(), meta),
 		}
+	}
+}
+
+pub trait HasType<M> {
+	fn has_type(&self, context: &Context<M>, type_: impl Into<Type>) -> bool;
+}
+
+impl<M> HasType<M> for treeldr::node::Data<M> {
+	fn has_type(&self, context: &Context<M>, type_: impl Into<Type>) -> bool {
+		self.type_.contains(&type_.into())
 	}
 }

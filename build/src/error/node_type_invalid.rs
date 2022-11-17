@@ -1,9 +1,9 @@
-use locspan::{MaybeLocated, Span};
+use locspan::{MaybeLocated, Span, Meta};
 use rdf_types::Vocabulary;
 use treeldr::{Id, IriIndex, BlankIdIndex, Multiple, Type};
 use contextual::WithContext;
 
-use crate::node;
+use crate::{node, Error};
 
 use super::NodeBindingTypeInvalid;
 
@@ -15,6 +15,10 @@ pub struct NodeTypeInvalid<M> {
 }
 
 impl<M> NodeTypeInvalid<M> {
+	pub fn at(self, meta: M) -> Error<M> {
+		Meta(self.into(), meta)
+	}
+
 	pub fn for_node_binding(self, subject: Id, property: impl Into<node::Property>) -> NodeBindingTypeInvalid<M> {
 		NodeBindingTypeInvalid {
 			subject,

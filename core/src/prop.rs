@@ -5,10 +5,6 @@ use rdf_types::Vocabulary;
 use std::collections::HashMap;
 use std::fmt;
 
-pub mod restriction;
-
-pub use restriction::{Restriction, Restrictions};
-
 /// Node property.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
@@ -69,9 +65,27 @@ impl From<RdfProperty> for Property {
 	}
 }
 
+impl From<component::Property> for Property {
+	fn from(p: component::Property) -> Self {
+		Self::BuiltIn(BuiltIn::Component(p))
+	}
+}
+
 impl From<layout::Property> for Property {
 	fn from(p: layout::Property) -> Self {
 		Self::BuiltIn(BuiltIn::Component(component::Property::Layout(p)))
+	}
+}
+
+impl From<layout::DescriptionProperty> for Property {
+	fn from(p: layout::DescriptionProperty) -> Self {
+		Self::BuiltIn(BuiltIn::Component(component::Property::Layout(layout::Property::Description(p))))
+	}
+}
+
+impl From<component::formatted::Property> for Property {
+	fn from(p: component::formatted::Property) -> Self {
+		Self::BuiltIn(BuiltIn::Component(component::Property::Formatted(p)))
 	}
 }
 

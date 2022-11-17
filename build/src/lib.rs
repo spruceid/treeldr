@@ -1,5 +1,5 @@
 use rdf_types::{Generator, VocabularyMut};
-use treeldr::{vocab, BlankIdIndex, IriIndex, Id};
+use treeldr::{vocab, BlankIdIndex, IriIndex};
 pub use treeldr::multiple;
 
 pub mod context;
@@ -23,16 +23,6 @@ pub use node::Node;
 pub use single::Single;
 pub use multiple::Multiple;
 
-pub trait Build<M> {
-	type Target;
-
-	fn build(
-		self,
-		id: Id,
-		metadata: M,
-	) -> Result<Self::Target, Error<M>>;
-}
-
 pub trait Document<M> {
 	type LocalContext;
 	type Error;
@@ -46,15 +36,11 @@ pub trait Document<M> {
 	) -> Result<(), Self::Error>;
 }
 
-pub trait ObjectToId<M> {
+pub trait ObjectAsId<M> {
 	fn as_id(&self) -> Option<vocab::Id>;
-	
-	fn as_required_id(&self, cause: &M) -> Result<vocab::Id, Error<M>>;
-
-	fn into_required_id(self, cause: &M) -> Result<vocab::Id, Error<M>>;
 }
 
-impl<M: Clone> ObjectToId<M> for vocab::Object<M> {
+impl<M> ObjectAsId<M> for vocab::Object<M> {
 	fn as_id(&self) -> Option<vocab::Id> {
 		match self {
 			vocab::Object::Literal(_) => None,
@@ -62,7 +48,15 @@ impl<M: Clone> ObjectToId<M> for vocab::Object<M> {
 			vocab::Object::Blank(id) => Some(vocab::Id::Blank(*id)),
 		}
 	}
+}
 
+pub trait ObjectAsRequiredId<M> {
+	fn as_required_id(&self, cause: &M) -> Result<vocab::Id, Error<M>>;
+
+	fn into_required_id(self, cause: &M) -> Result<vocab::Id, Error<M>>;
+}
+
+impl<M: Clone> ObjectAsRequiredId<M> for vocab::Object<M> {
 	fn as_required_id(&self, cause: &M) -> Result<vocab::Id, Error<M>> {
 		match self {
 			vocab::Object::Literal(lit) => Err(Error::new(

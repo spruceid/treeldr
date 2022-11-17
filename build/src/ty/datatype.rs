@@ -1,13 +1,15 @@
-use crate::{Error, node, Single, error::NodeBindingMissing, ObjectToId, single, resource, Context};
+use crate::{Error, Single, error::NodeBindingMissing, ObjectAsRequiredId, single, Context};
 use locspan::Meta;
 use treeldr::{metadata::Merge, Id, ty::data::Primitive};
+
+pub use treeldr::ty::data::Property;
 
 pub mod restriction;
 
 pub use restriction::{Restriction, Restrictions};
 
 #[derive(Clone)]
-pub struct DataType<M> {
+pub struct Definition<M> {
 	/// Derived Datatype.
 	base: Single<Id, M>,
 
@@ -15,13 +17,13 @@ pub struct DataType<M> {
 	restrictions: Single<Id, M>
 }
 
-impl<M> Default for DataType<M> {
+impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self { base: Single::default(), restrictions: Single::default() }
 	}
 }
 
-impl<M> DataType<M> {
+impl<M> Definition<M> {
 	pub fn base(&self) -> &Single<Id, M> {
 		&self.base
 	}
@@ -56,14 +58,13 @@ impl<M> DataType<M> {
 	pub fn build(
 		self,
 		context: &Context<M>,
-		as_resource: &resource::Data<M>,
-		as_class: &super::Data<M>,
+		as_resource: &treeldr::node::Data<M>,
 		meta: &M
-	) -> Result<treeldr::ty::Description<M>, Error<M>>
+	) -> Result<treeldr::ty::data::Definition, Error<M>>
 	where
 		M: Clone + Merge,
 	{
-		let restrictions = self.restrictions.try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, node::property::Datatype::WithRestrictions))?;
+		let restrictions = self.restrictions.try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, Property::WithRestrictions))?;
 		let dt = match Primitive::from_id(as_resource.id) {
 			Some(primitive) => {
 				match restrictions.unwrap() {
@@ -78,19 +79,23 @@ impl<M> DataType<M> {
 			None => {
 				match restrictions.unwrap() {
 					Some(list_id) => {
-						let Meta(base, _) = self.base.into_required_at_node_binding(as_resource.id, node::property::Datatype::OnDatatype, meta)?;
+						let Meta(base, _) = self.base.into_required_at_node_binding(as_resource.id, Property::OnDatatype, meta)?;
 						let primitive = Primitive::from_id(base).ok_or_else(|| todo!())?;
 
 						let list = context
 							.require_list(*list_id)
-							.map_err(|e| e.at_node_property(as_resource.id, node::property::Datatype::WithRestrictions, list_id.metadata().clone()))?;
+							.map_err(|e| e.at_node_property(as_resource.id, Property::WithRestrictions, list_id.metadata().clone()))?;
 
 						let mut restrictions = Restrictions::new();
 
 						for item in list.iter(context) {
 							let Meta(object, restriction_meta) = item?.cloned();
 							let restriction_id = object.into_required_id(&restriction_meta)?;
-							let restriction = context.require_datatype_restriction(restriction_id).map_err(|e| e.at(restriction_meta.clone()))?;
+							let restriction = context
+								.require(restriction_id)
+								.map_err(|e| e.at(restriction_meta.clone()))?
+								.require_datatype_restriction()
+								.map_err(|e| e.at(restriction_meta.clone()))?;
 							restrictions.insert(restriction.build()?.into_value(), restriction_meta)
 						}
 
@@ -112,7 +117,7 @@ impl<M> DataType<M> {
 						return Err(Meta(
 							NodeBindingMissing {
 								id: as_resource.id,
-								property: node::property::Datatype::WithRestrictions.into()
+								property: Property::WithRestrictions.into()
 							}.into(),
 							meta.clone()
 						))
@@ -121,7 +126,7 @@ impl<M> DataType<M> {
 			}
 		};
 
-		Ok(treeldr::ty::Description::Data(dt))
+		Ok(treeldr::ty::data::Definition::new(dt))
 	}
 }
 

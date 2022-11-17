@@ -1,7 +1,7 @@
-use crate::{Context, Error, Single, node, Node, component, resource};
+use crate::{Context, Error, Node, component::{self, AssertNamed}, resource};
 use locspan::Meta;
 use rdf_types::Vocabulary;
-use treeldr::{BlankIdIndex, Documentation, Id, IriIndex, Name};
+use treeldr::{BlankIdIndex, Id, IriIndex, Name};
 
 /// Layout variant definition.
 #[derive(Clone)]
@@ -19,19 +19,20 @@ impl Definition {
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 		as_resource: &resource::Data<M>,
 		as_component: &component::Data<M>,
+		as_formatted: &component::formatted::Data<M>,
 		metadata: M,
 	) -> Option<Meta<Name, M>>
 	where
 		M: Clone,
 	{
-		if let Id::Iri(term) = self.id {
+		if let Id::Iri(term) = as_resource.id {
 			if let Ok(Some(name)) = Name::from_iri(vocabulary.iri(&term).unwrap()) {
 				return Some(Meta::new(name, metadata));
 			}
 		}
 
-		if let Some(layout_id) = self.format.first() {
-			if let Some(layout) = context.get(**layout_id).and_then(Node::as_layout_component) {
+		if let Some(layout_id) = as_formatted.format.first() {
+			if let Some(layout) = context.get(**layout_id).map(Node::as_component) {
 				if let Some(name) = layout.name().first() {
 					return Some(Meta::new(name.into_value().clone(), metadata))
 				}
@@ -44,23 +45,14 @@ impl Definition {
 	fn build<M>(
 		&self,
 		context: &Context<M>,
-		as_resource: &resource::Data<M>,
-		as_component: &component::Data<M>,
-		as_formatted: &component::formatted::Data<M>
-	) -> Result<treeldr::layout::Variant<M>, Error<M>> {
-		let format = as_formatted.format.clone().into_layout_at_node_binding(
-			context,
-			as_resource.id,
-			node::property::Resource::Format
-		)?;
+		as_resource: &treeldr::node::Data<M>,
+		as_component: &treeldr::component::Data<M>,
+		as_formatted: &treeldr::component::formatted::Data<M>,
+		meta: &M
+	) -> Result<treeldr::layout::variant::Definition, Error<M>> where M: Clone {
+		as_component.assert_named(as_resource, meta)?;
 
-		let name = as_component.name.clone().into_required_at_node_binding(
-			as_resource.id,
-			node::property::Resource::Name,
-			self.metadata(),
-		)?;
-
-		Ok(treeldr::layout::Variant::new(name, format))
+		Ok(treeldr::layout::variant::Definition)
 	}
 }
 

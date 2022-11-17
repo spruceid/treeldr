@@ -1,6 +1,8 @@
-use crate::{Error, Single, node, Multiple, single, multiple};
+use crate::{Error, Single, Multiple, single, multiple};
 use locspan::Meta;
-use treeldr::{metadata::Merge, Id};
+use treeldr::{metadata::Merge, Id, prop::RdfProperty};
+
+pub use treeldr::prop::Property;
 
 /// Property definition.
 #[derive(Clone)]
@@ -68,34 +70,18 @@ impl<M> Definition<M> {
 		&mut self.required
 	}
 
-	pub fn dependencies(
-		&self,
-		_nodes: &super::context::allocated::Nodes<M>,
-		_causes: &M,
-	) -> Result<Vec<crate::Item<M>>, Error<M>>
-	where
-		M: Clone,
-	{
-		Ok(Vec::new())
-	}
-}
-
-impl<M: Clone> crate::Build<M> for Definition<M> {
-	type Target = treeldr::prop::Definition<M>;
-
 	fn build(
 		self,
-		nodes: &mut super::context::allocated::Nodes<M>,
-		_dependencies: crate::Dependencies<M>,
-		id: Id,
+		context: &crate::Context<M>,
+		as_resource: &treeldr::node::Data<M>,
 		causes: M,
-	) -> Result<Self::Target, Error<M>> {
+	) -> Result<treeldr::prop::Definition<M>, Error<M>> where M: Clone {
 		let range = self
-			.range.into_required_type_at_node_binding(nodes, id, node::property::RdfProperty::Range, &causes)?;
+			.range.into_required_type_at_node_binding(context, as_resource.id, RdfProperty::Range, &causes)?;
 
 		let required = self.required
 			.try_unwrap()
-			.map_err(|e| e.at_functional_node_property(id, node::property::RdfProperty::Required))?
+			.map_err(|e| e.at_functional_node_property(as_resource.id, RdfProperty::Required))?
 			.unwrap()
 			.unwrap_or_else(|| Meta(false, causes.clone()));
 			
@@ -105,11 +91,11 @@ impl<M: Clone> crate::Build<M> for Definition<M> {
 		};
 
 		let mut result =
-			treeldr::prop::Definition::new(id, range, required, functional, causes);
+			treeldr::prop::Definition::new(range, required, functional);
 
 		for Meta(domain_id, domain_causes) in self.domain {
-			let domain_ref = nodes.require_type(domain_id).map_err(|e| e.at_node_property(id, node::property::RdfProperty::Domain, domain_causes.clone()))?;
-			result.insert_domain(**domain_ref, domain_causes)
+			let domain_ref = context.require_type_id(domain_id).map_err(|e| e.at_node_property(as_resource.id, RdfProperty::Domain, domain_causes.clone()))?;
+			result.insert_domain(domain_ref, domain_causes)
 		}
 
 		Ok(result)

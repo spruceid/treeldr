@@ -1,6 +1,8 @@
-use crate::{Context, Error, Single, node};
+use crate::{Context, Error, Single};
 use locspan::{Meta, Stripped};
 use treeldr::{vocab::Object, Id};
+
+pub use treeldr::list::Property;
 
 #[derive(Clone)]
 pub struct Definition<M> {
@@ -66,14 +68,14 @@ impl<'l, M: Clone> Iterator for Iter<'l, M> {
 		match self {
 			Self::Nil => None,
 			Self::Cons(nodes, id, d, meta) => {
-				match d.first.as_required_at_node_binding(*id, node::property::List::First, meta) {
+				match d.first.as_required_at_node_binding(*id, Property::First, meta) {
 					Ok(item) => {
-						match d.rest.as_required_at_node_binding(*id, node::property::List::Rest, meta) {
+						match d.rest.as_required_at_node_binding(*id, Property::Rest, meta) {
 							Ok(Meta(rest_id, _)) => {
 								match nodes.require_list(*rest_id) {
 									Ok(ListRef::Cons(rest_id, rest, rest_meta)) => *self = Self::Cons(*nodes, rest_id, rest, rest_meta),
 									Ok(ListRef::Nil) => *self = Self::Nil,
-									Err(e) => return Some(Err(e.at_node_property(*id, node::property::List::Rest, meta.clone())))
+									Err(e) => return Some(Err(e.at_node_property(*id, Property::Rest, meta.clone())))
 								}
 
 								Some(Ok(item.map(Stripped::as_ref)))
@@ -93,7 +95,7 @@ pub enum LenientIter<'l, M> {
 	Cons(&'l Context<M>, &'l Definition<M>),
 }
 
-impl<'l, M: Clone> Iterator for LenientIter<'l, M> {
+impl<'l, M> Iterator for LenientIter<'l, M> {
 	type Item = Meta<&'l Object<M>, &'l M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
@@ -120,12 +122,6 @@ impl<'l, M: Clone> Iterator for LenientIter<'l, M> {
 pub enum ListMut<'l, M> {
 	Nil,
 	Cons(&'l mut Definition<M>),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Property {
-	First,
-	Rest,
 }
 
 pub enum BindingRef<'a, M> {

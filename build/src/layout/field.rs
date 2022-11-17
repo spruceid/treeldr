@@ -1,9 +1,10 @@
-use crate::{node, Single, component, Context, resource};
+use crate::{Single, Context, resource, component::{AssertNamed, formatted::AssertFormatted}};
 
 use super::Error;
 use locspan::Meta;
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
 use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, Name};
+pub use treeldr::layout::field::Property;
 
 /// Layout field definition.
 #[derive(Clone)]
@@ -30,8 +31,7 @@ impl<M> DefaultLayout<M> {
 			Self::Functional(layout) => layout,
 			Self::NonFunctional(Meta(item, meta)) => {
 				let id = generator.next(vocabulary);
-				context.declare_layout(id, meta.clone());
-				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
+				let layout = context.declare(id, meta.clone()).as_layout_mut();
 				layout.set_array(Meta(item, meta.clone()));
 				Meta(id, meta)
 			}
@@ -76,54 +76,33 @@ impl<M> Definition<M> {
 	where
 		M: Clone,
 	{
-		self.property().first().and_then(|Meta(prop_id, _)| {
-			let prop = context.get(*prop_id)?.as_property()?;
-			let range_id = prop.range().first()?;
-
-			let range_node = context.get(**range_id)?;
-			if range_node.as_layout().is_some() {
-				if prop.is_functional() {
-					Some(DefaultLayout::Functional(range_id.cloned()))
-				} else {
-					Some(DefaultLayout::NonFunctional(range_id.cloned()))
-				}
-			} else {
-				None
-			}
-		})
+		let Meta(prop_id, _) = self.property().first()?;
+		let prop = context.get(*prop_id)?.as_property();
+		let range_id = prop.range().first()?;
+		if prop.is_functional() {
+			Some(DefaultLayout::Functional(range_id.cloned()))
+		} else {
+			Some(DefaultLayout::NonFunctional(range_id.cloned()))
+		}
 	}
 
 	fn build(
 		&self,
 		context: &Context<M>,
-		as_resource: &resource::Data<M>,
-		as_component: &component::Data<M>,
-		as_formatted: &component::formatted::Data<M>
-	) -> Result<treeldr::layout::Field<M>, Error<M>> {
+		as_resource: &treeldr::node::Data<M>,
+		as_component: &treeldr::component::Data<M>,
+		as_formatted: &treeldr::component::formatted::Data<M>,
+		meta: &M
+	) -> Result<treeldr::layout::field::Definition<M>, Error<M>> where M: Clone {
+		as_component.assert_named(as_resource, meta)?;
+		as_formatted.assert_formatted(as_resource, meta)?;
+
 		let prop =
 			self.prop.clone()
-				.into_property_at_node_binding(context, as_resource.id, node::property::LayoutField::For)?;
-		let layout = self.layout.clone().into_required_layout_at_node_binding(
-			context,
-			as_resource.id,
-			node::property::Resource::Format,
-			self.metadata(),
-		)?;
-		let name = self.name.clone().into_required_at_node_binding(
-			as_resource.id,
-			node::property::Resource::Name,
-			self.metadata(),
-		)?;
+				.into_property_at_node_binding(context, as_resource.id, Property::For)?;
 
-		Ok(treeldr::layout::Field::new(prop, layout))
+		Ok(treeldr::layout::field::Definition::new(prop))
 	}
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Property {
-	For,
-	Name,
-	Format,
 }
 
 pub enum BindingRef<'a> {

@@ -117,7 +117,7 @@ impl<M> Model<M> {
 				Err(error::NodeInvalidType {
 					id: id.id(),
 					expected: T::TYPE,
-					found: r.types_metadata().cloned()
+					found: r.type_().clone()
 				}.into())
 			}
 			None => Err(error::NodeUnknown {

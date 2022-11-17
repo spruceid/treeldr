@@ -1,7 +1,8 @@
-use crate::{error::{self, NodeBindingMissing}, utils::TryCollect, Context, Error, ObjectToId, Single, node, single::Conflict, Node, resource, component};
+use crate::{error, utils::TryCollect, Context, Error, Single, single::Conflict, Node, component::AssertNamed, ObjectAsId, ObjectAsRequiredId};
 use locspan::Meta;
 use rdf_types::IriVocabulary;
 use treeldr::{metadata::Merge, Id, IriIndex, Name};
+pub use treeldr::layout::{Property, DescriptionProperty};
 
 pub mod array;
 pub mod field;
@@ -64,9 +65,9 @@ impl SimpleDescription {
 				if let Some(fields) = context.get_list(*fields_id) {
 					for Meta(object, metadata) in fields.lenient_iter(context) {
 						if let Some(field_id) = object.as_id() {
-							if let Some(field) = context.get(field_id).and_then(Node::as_layout_field) {
-								for field_layout_id in field.layout() {
-									if let Some(field_layout) = context.get(**field_layout_id).and_then(Node::as_layout) {
+							if let Some(field) = context.get(field_id).map(Node::as_formatted) {
+								for field_layout_id in field.format() {
+									if let Some(field_layout) = context.get(**field_layout_id).map(Node::as_layout) {
 										sub_layouts.push(SubLayout {
 											layout: field_layout_id.cloned(),
 											connection: LayoutConnection::FieldContainer(field_id),
@@ -151,7 +152,7 @@ impl Description {
 		}
 	}
 
-	pub fn dependencies<M>(
+	pub fn dependencies(
 		&self,
 	) -> Vec<Id> {
 		Vec::new()
@@ -331,12 +332,12 @@ impl<M: Clone> Definition<M> {
 
 		if parent_layouts.len() == 1 {
 			let parent = &parent_layouts[0];
-			let parent_layout = context.get(parent.layout).unwrap().as_resource();
+			let parent_layout = context.get(parent.layout).unwrap().as_component();
 
 			if let Some(parent_layout_name) = parent_layout.name().first() {
 				match parent.connection {
 					LayoutConnection::FieldItem(field_id) => {
-						let field = context.get(field_id).unwrap().as_layout_field().unwrap();
+						let field = context.get(field_id).unwrap().as_component();
 
 						if let Some(field_name) = field.name().first() {
 							let mut name = parent_layout_name.into_value().clone();
@@ -397,23 +398,24 @@ impl<M: Clone> Definition<M> {
 	fn build(
 		&self,
 		context: &Context<M>,
-		as_resource: &resource::Data<M>,
-		as_component: &component::Data<M>,
+		as_resource: &treeldr::node::Data<M>,
+		as_component: &treeldr::component::Data<M>,
 		metadata: M,
-	) -> Result<treeldr::layout::Definition<M>, Error<M>> {
-		let ty = self.ty.into_type_at_node_binding(context, as_resource.id, node::property::Layout::For)?;
+	) -> Result<Meta<treeldr::layout::Definition<M>, M>, Error<M>> where M: Merge {
+		let ty = self.ty.into_type_at_node_binding(context, as_resource.id, Property::For)?;
 
-		let name = as_component.name.try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, node::property::Resource::Name))?;
-
-		let restrictions_id = self.restrictions.try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, node::property::Layout::WithRestrictions))?;
+		let restrictions_id = self.restrictions.try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, Property::WithRestrictions))?;
 
 		let restrictions = restrictions_id.as_ref().map(|Meta(list_id, meta)| {
 			let mut restrictions = Restrictions::default();
-			let list = context.require_list(*list_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::WithRestrictions, meta.clone()))?;
+			let list = context.require_list(*list_id).map_err(|e| e.at_node_property(as_resource.id, Property::WithRestrictions, meta.clone()))?;
 			for restriction_value in list.iter(context) {
 				let Meta(restriction_value, meta) = restriction_value?;
 				let restriction_id = restriction_value.as_required_id(meta)?;
-				let restriction_definition = context.require_layout_restriction(restriction_id).map_err(|e| e.at(meta.clone()))?;
+				let restriction_definition = context.require(restriction_id)
+					.map_err(|e| e.at(meta.clone()))?
+					.require_layout_restriction()
+					.map_err(|e| e.at(meta.clone()))?;
 				let restriction = restriction_definition.build()?;
 				restrictions.insert(restriction)?
 			}
@@ -423,150 +425,99 @@ impl<M: Clone> Definition<M> {
 
 		let Meta(desc, desc_metadata) = self.simple_desc.unwrap();
 		let desc = match desc {
-			SimpleDescription::Never => treeldr::layout::Description::Never(name),
+			SimpleDescription::Never => treeldr::layout::Description::Never,
 			SimpleDescription::Primitive(n) => treeldr::layout::Description::Primitive(
-				n.build(as_resource.id, restrictions.into_primitive(), &desc_metadata)?,
-				name,
+				n.build(as_resource.id, restrictions.into_primitive(), &desc_metadata)?
 			),
 			SimpleDescription::Reference(layout_id) => {
-				let layout_ref = **context.require_layout(layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Reference, desc_metadata.clone()))?;
-				let r = treeldr::layout::Reference::new(name, layout_ref);
+				let layout_ref = context.require_layout_id(layout_id).map_err(|e| e.at_node_property(as_resource.id, DescriptionProperty::Reference, desc_metadata.clone()))?;
+				let r = treeldr::layout::Reference::new(Meta(layout_ref, desc_metadata.clone()));
 				treeldr::layout::Description::Reference(r)
 			}
 			SimpleDescription::Struct(fields_id) => {
-				let name = name.ok_or_else(|| Meta(
-					NodeBindingMissing {
-						id: as_resource.id,
-						property: node::property::Resource::Name.into()
-					}.into(),
-					metadata.clone()
-				))?;
+				as_component.assert_named(as_resource, &metadata)?;
 
 				let fields = context
-					.require_list(fields_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Fields, desc_metadata.clone()))?
+					.require_list(fields_id).map_err(|e| e.at_node_property(as_resource.id, DescriptionProperty::Fields, desc_metadata.clone()))?
 					.iter(context)
 					.map(|item| {
 						let Meta(object, metadata) = item?.cloned();
 						let field_id = object.into_required_id(&metadata)?;
-
-						let field = context.require_layout_field(field_id).map_err(|e| e.at(metadata))?;
-						let node = context.get(field_id).unwrap();
-						let label = node.label().map(String::from);
-						let doc = node.documentation().clone();
-						field.build(field_id, label, doc, context)
+						Ok(Meta(context.require_layout_field_id(field_id).map_err(|e| e.at(metadata))?, metadata))
 					})
 					.try_collect()?;
 
-				let strct = treeldr::layout::Struct::new(name, fields);
+				let strct = treeldr::layout::Struct::new(fields);
 				treeldr::layout::Description::Struct(strct)
 			}
 			SimpleDescription::Enum(options_id) => {
-				let name = name.ok_or_else(|| Meta(
-					NodeBindingMissing {
-						id: as_resource.id,
-						property: node::property::Resource::Name.into()
-					}.into(),
-					metadata.clone()
-				))?;
+				as_component.assert_named(as_resource, &metadata)?;
 
 				let variants: Vec<_> = context
-					.require_list(options_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Variants, desc_metadata.clone()))?
+					.require_list(options_id).map_err(|e| e.at_node_property(as_resource.id, DescriptionProperty::Variants, desc_metadata.clone()))?
 					.iter(context)
 					.map(|item| {
 						let Meta(object, variant_causes) = item?.cloned();
 						let variant_id = object.into_required_id(&variant_causes)?;
-
-						let variant = context.require_layout_variant(variant_id).map_err(|e| e.at(variant_causes.clone()))?;
-						let node = context.get(variant_id).unwrap();
-						let label = node.label().map(String::from);
-						let doc = node.documentation().clone();
-						Ok(Meta(variant.build(variant_id, label, doc, context)?, variant_causes))
+						Ok(Meta(context.require_layout_variant_id(variant_id).map_err(|e| e.at(metadata))?, metadata))
 					})
 					.try_collect()?;
 
-				let enm = treeldr::layout::Enum::new(name, variants);
+				let enm = treeldr::layout::Enum::new(variants);
 				treeldr::layout::Description::Enum(enm)
 			}
 			SimpleDescription::Required(item_layout_id) => {
-				let item_layout_ref = **context.require_layout(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Required, desc_metadata.clone()))?;
+				let item_layout_ref = context.require_layout_id(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, DescriptionProperty::Required, desc_metadata.clone()))?;
 				treeldr::layout::Description::Required(
-					treeldr::layout::Required::new(name, item_layout_ref),
+					treeldr::layout::Required::new(Meta(item_layout_ref, desc_metadata.clone())),
 				)
 			}
 			SimpleDescription::Option(item_layout_id) => {
-				let item_layout_ref = **context.require_layout(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Option, desc_metadata.clone()))?;
+				let item_layout_ref = context.require_layout_id(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, DescriptionProperty::Option, desc_metadata.clone()))?;
 				treeldr::layout::Description::Option(
-					treeldr::layout::Optional::new(name, item_layout_ref),
+					treeldr::layout::Optional::new(Meta(item_layout_ref, desc_metadata.clone())),
 				)
 			}
 			SimpleDescription::Set(item_layout_id) => {
-				let item_layout_ref = **context.require_layout(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Set, desc_metadata.clone()))?;
+				let item_layout_ref = context.require_layout_id(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, DescriptionProperty::Set, desc_metadata.clone()))?;
 				treeldr::layout::Description::Set(
-					treeldr::layout::Set::new(name, item_layout_ref, restrictions.into_container()),
+					treeldr::layout::Set::new(Meta(item_layout_ref, desc_metadata.clone()), restrictions.into_container()),
 				)
 			}
 			SimpleDescription::OneOrMany(item_layout_id) => {
-				let item_layout_ref = **context.require_layout(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::OneOrMany, desc_metadata.clone()))?;
+				let item_layout_ref = context.require_layout_id(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, DescriptionProperty::OneOrMany, desc_metadata.clone()))?;
 				treeldr::layout::Description::OneOrMany(
 					treeldr::layout::OneOrMany::new(
-						name,
-						item_layout_ref,
+						Meta(item_layout_ref, desc_metadata.clone()),
 						restrictions.into_container(),
 					),
 				)
 			}
 			SimpleDescription::Array(item_layout_id) => {
-				let item_layout_ref = **context.require_layout(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Array, desc_metadata.clone()))?;
+				let item_layout_ref = context.require_layout_id(item_layout_id).map_err(|e| e.at_node_property(as_resource.id, DescriptionProperty::Array, desc_metadata.clone()))?;
 				let semantics = self.array_semantics.build(context, as_resource.id)?;
 				treeldr::layout::Description::Array(
 					treeldr::layout::Array::new(
-						name,
-						item_layout_ref,
+						Meta(item_layout_ref, desc_metadata.clone()),
 						restrictions.into_container(),
 						semantics
 					)
 				)
 			},
 			SimpleDescription::Alias(alias_layout_id) => {
-				let name = name.ok_or_else(|| Meta(
-					NodeBindingMissing {
-						id: as_resource.id,
-						property: node::property::Resource::Name.into()
-					}.into(),
-					metadata.clone()
-				))?;
-
-				let alias_layout_ref = **context.require_layout(alias_layout_id).map_err(|e| e.at_node_property(as_resource.id, node::property::Layout::Alias, desc_metadata.clone()))?;
-				treeldr::layout::Description::Alias(name, alias_layout_ref)
+				as_component.assert_named(as_resource, &metadata)?;
+				let alias_layout_ref = context.require_layout_id(alias_layout_id).map_err(|e| e.at_node_property(as_resource.id, DescriptionProperty::Alias, desc_metadata.clone()))?;
+				treeldr::layout::Description::Alias(alias_layout_ref)
 			}
 		};
 
-		Ok(treeldr::layout::Definition::new(
-			as_resource.id, ty, Meta(desc, desc_metadata)
+		Ok(Meta(
+			treeldr::layout::Definition::new(
+				ty, Meta(desc, desc_metadata)
+			),
+			metadata
 		))
 	}
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Property {
-	For,
-	Name,
-	Description(DescriptionProperty),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum DescriptionProperty {
-	Never,
-	Primitive,
-	Struct,
-	Reference,
-	Enum,
-	Required,
-	Option,
-	Set,
-	OneOrMany,
-	Array,
-	Alias,
 }
 
 pub enum BindingRef<'a> {

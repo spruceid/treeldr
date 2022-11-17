@@ -161,8 +161,8 @@ impl<M: Clone> Single<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				Ok(**context
-					.require_type(p)
+				Ok(context
+					.require_type_id(p)
 					.map_err(|e| e.at_node_property(id, prop, meta.clone()))?)
 			})
 	}
@@ -188,8 +188,8 @@ impl<M: Clone> Single<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				Ok(**context
-					.require_property(p)
+				Ok(context
+					.require_property_id(p)
 					.map_err(|e| e.at_node_property(id, prop, meta.clone()))?)
 			})
 	}
@@ -215,8 +215,8 @@ impl<M: Clone> Single<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				Ok(**context
-					.require_layout(p)
+				Ok(context
+					.require_layout_id(p)
 					.map_err(|e| e.at_node_property(id, prop, meta.clone()))?)
 			})
 	}

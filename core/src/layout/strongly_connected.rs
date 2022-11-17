@@ -51,6 +51,7 @@ impl<'l, M> StronglyConnectedLayouts<'l, M> {
 		for layout_ref in entry_points {
 			if !map.contains_key(&layout_ref) {
 				strong_connect(
+					model,
 					&mut components,
 					&mut map,
 					&mut stack,
@@ -78,20 +79,21 @@ impl<'l, M> StronglyConnectedLayouts<'l, M> {
 	}
 
 	#[inline(always)]
-	pub fn is_recursive(&self, layout_ref: TId<Layout>) -> Option<bool> {
-		self.is_recursive_with_filter(layout_ref, |_| true)
+	pub fn is_recursive(&self, model: &Model<M>, layout_ref: TId<Layout>) -> Option<bool> {
+		self.is_recursive_with_filter(model, layout_ref, |_| true)
 	}
 
 	pub fn is_recursive_with_filter(
 		&self,
+		model: &Model<M>,
 		layout_ref: TId<Layout>,
 		filter: impl Fn(TId<Layout>) -> bool,
 	) -> Option<bool> {
 		let layout = self.model.get(layout_ref)?;
 		let component = self.component(layout_ref)?;
 
-		for sub_layout_ref in layout.as_layout().composing_layouts() {
-			if filter(sub_layout_ref) && self.component(sub_layout_ref)? == component {
+		for sub_layout_ref in layout.as_layout().composing_layouts(model) {
+			if filter(**sub_layout_ref) && self.component(**sub_layout_ref)? == component {
 				return Some(true);
 			}
 		}
@@ -107,6 +109,7 @@ struct Data {
 }
 
 fn strong_connect<'l, F>(
+	model: &Model<F>,
 	components: &mut StronglyConnectedLayouts<'l, F>,
 	map: &mut HashMap<TId<Layout>, Data>,
 	stack: &mut Vec<TId<Layout>>,
@@ -125,12 +128,12 @@ fn strong_connect<'l, F>(
 	);
 
 	let layout = components.model.get(layout_ref).unwrap().as_layout();
-	for sub_layout_ref in layout.composing_layouts() {
-		if filter(layout_ref, sub_layout_ref) {
+	for sub_layout_ref in layout.composing_layouts(model) {
+		if filter(layout_ref, **sub_layout_ref) {
 			let new_layout_low_link = match map.get(&sub_layout_ref) {
 				None => {
 					let sub_layout_low_link =
-						strong_connect(components, map, stack, sub_layout_ref, filter.clone());
+						strong_connect(model, components, map, stack, **sub_layout_ref, filter.clone());
 					Some(std::cmp::min(
 						map[&layout_ref].low_link,
 						sub_layout_low_link,

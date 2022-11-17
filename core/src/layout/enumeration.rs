@@ -1,50 +1,31 @@
 use std::collections::HashMap;
 
-use crate::{MetaOption, Name, Layout, TId};
+use crate::{Layout, TId};
 use locspan::Meta;
+
+use super::Variant;
 
 /// Enum layout.
 #[derive(Debug, Clone)]
 pub struct Enum<M> {
-	name: Meta<Name, M>,
-	variants: Vec<Meta<Variant<M>, M>>,
+	variants: Vec<Meta<TId<Variant>, M>>,
 }
 
 pub struct Parts<M> {
-	pub name: Meta<Name, M>,
-	pub variants: Vec<Meta<Variant<M>, M>>,
+	pub variants: Vec<Meta<TId<Variant>, M>>,
 }
 
 impl<M> Enum<M> {
-	pub fn new(name: Meta<Name, M>, variants: Vec<Meta<Variant<M>, M>>) -> Self {
-		Self { name, variants }
+	pub fn new(variants: Vec<Meta<TId<Variant>, M>>) -> Self {
+		Self { variants }
 	}
 
-	pub fn into_parts(self) -> Parts<M> {
-		Parts {
-			name: self.name,
-			variants: self.variants,
-		}
-	}
-
-	pub fn name(&self) -> &Meta<Name, M> {
-		&self.name
-	}
-
-	pub fn into_name(self) -> Meta<Name, M> {
-		self.name
-	}
-
-	pub fn set_name(&mut self, new_name: Name, metadata: M) -> Meta<Name, M> {
-		std::mem::replace(&mut self.name, Meta::new(new_name, metadata))
-	}
-
-	pub fn variants(&self) -> &[Meta<Variant<M>, M>] {
+	pub fn variants(&self) -> &[Meta<TId<Variant>, M>] {
 		&self.variants
 	}
 
-	pub fn composing_layouts(&self) -> ComposingLayouts<M> {
-		ComposingLayouts(self.variants.iter())
+	pub fn composing_layouts<'a>(&'a self, model: &'a crate::Model<M>) -> ComposingLayouts<'a, M> {
+		ComposingLayouts(model, self.variants.iter())
 	}
 
 	pub fn can_be_reference(
@@ -53,8 +34,8 @@ impl<M> Enum<M> {
 		model: &crate::Model<M>,
 	) -> bool {
 		for v in &self.variants {
-			if let Some(r) = v.layout() {
-				if model.can_be_reference_layout(map, r) {
+			if let Some(r) = model.get(**v).unwrap().as_formatted().format().value() {
+				if model.can_be_reference_layout(map, *r) {
 					return true;
 				}
 			}
@@ -64,52 +45,14 @@ impl<M> Enum<M> {
 	}
 }
 
-#[derive(Debug, Clone)]
-pub struct Variant<M> {
-	name: Meta<Name, M>,
-	layout: MetaOption<TId<Layout>, M>
-}
-
-pub struct VariantParts<M> {
-	pub name: Meta<Name, M>,
-	pub layout: MetaOption<TId<Layout>, M>
-}
-
-impl<M> Variant<M> {
-	pub fn new(
-		name: Meta<Name, M>,
-		layout: MetaOption<TId<Layout>, M>
-	) -> Self {
-		Self {
-			name,
-			layout
-		}
-	}
-
-	pub fn into_parts(self) -> VariantParts<M> {
-		VariantParts {
-			name: self.name,
-			layout: self.layout
-		}
-	}
-
-	pub fn name(&self) -> &Name {
-		&self.name
-	}
-
-	pub fn layout(&self) -> Option<TId<Layout>> {
-		self.layout.value().cloned()
-	}
-}
-
-pub struct ComposingLayouts<'a, M>(std::slice::Iter<'a, Meta<Variant<M>, M>>);
+pub struct ComposingLayouts<'a, M>(&'a crate::Model<M>, std::slice::Iter<'a, Meta<TId<Variant>, M>>);
 
 impl<'a, M> Iterator for ComposingLayouts<'a, M> {
-	type Item = TId<Layout>;
+	type Item = &'a Meta<TId<Layout>, M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		for variant in self.0.by_ref() {
-			if let Some(layout_ref) = variant.layout() {
+		for variant in self.1.by_ref() {
+			if let Some(layout_ref) = self.0.get(**variant).unwrap().as_formatted().format().as_ref() {
 				return Some(layout_ref);
 			}
 		}

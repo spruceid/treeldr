@@ -2,18 +2,19 @@ use locspan::Meta;
 
 use crate::metadata::Merge;
 use crate::{Property, TId};
-use crate::{prop, prop::restriction::Contradiction};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+
+use super::{Restriction, Restrictions, restriction::Contradiction};
 
 #[derive(Debug, Clone)]
 struct PropertyData<M> {
 	metadata: M,
-	restrictions: prop::Restrictions<M>,
+	restrictions: Restrictions<M>,
 }
 
 impl<M> PropertyData<M> {
-	pub fn restrict(&mut self, restriction: Meta<prop::Restriction, M>) -> Result<(), Contradiction> where M: Clone + Merge {
+	pub fn restrict(&mut self, restriction: Meta<Restriction, M>) -> Result<(), Contradiction> where M: Clone + Merge {
 		self.restrictions.restrict(restriction)
 	}
 }
@@ -74,7 +75,7 @@ impl<M> Properties<M> {
 	pub fn insert(
 		&mut self,
 		prop: TId<Property>,
-		restrictions: Option<prop::Restrictions<M>>,
+		restrictions: Option<Restrictions<M>>,
 		metadata: M,
 	) where
 		M: Clone + Merge,
@@ -115,7 +116,7 @@ impl<M> Properties<M> {
 	pub fn restrict(
 		&mut self,
 		prop: TId<Property>,
-		Meta(restriction, metadata): Meta<prop::Restriction, M>
+		Meta(restriction, metadata): Meta<Restriction, M>
 	) -> Result<(), Contradiction>
 	where
 		M: Clone + Merge,
@@ -239,7 +240,7 @@ impl<'a, M> Iterator for ExcludedProperties<'a, M> {
 
 pub struct RestrictedProperty<'a, M> {
 	prop: TId<Property>,
-	restrictions: &'a prop::Restrictions<M>,
+	restrictions: &'a Restrictions<M>,
 	causes: &'a M,
 }
 
@@ -248,7 +249,7 @@ impl<'a, M> RestrictedProperty<'a, M> {
 		self.prop
 	}
 
-	pub fn restrictions(&self) -> &'a prop::Restrictions<M> {
+	pub fn restrictions(&self) -> &'a Restrictions<M> {
 		self.restrictions
 	}
 

@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
 use crate::{
-	BlankIdIndex, Id, IriIndex, MetaOption, Name, TId, ResourceType, component, Type, vocab
+	MetaOption, TId, ResourceType, component, Type, vocab
 };
 use locspan::Meta;
-use rdf_types::Subject;
 
 pub mod restriction;
 pub mod array;
+pub mod variant;
 pub mod enumeration;
 mod one_or_many;
 mod optional;
@@ -23,14 +23,16 @@ mod usages;
 
 pub use restriction::{Restriction, Restrictions};
 pub use array::Array;
-pub use enumeration::{Enum, Variant};
+pub use variant::Variant;
+pub use enumeration::Enum;
 pub use one_or_many::OneOrMany;
 pub use optional::Optional;
 pub use primitive::{restriction::Restricted as RestrictedPrimitive, Primitive};
 pub use reference::Reference;
 pub use required::Required;
 pub use set::Set;
-pub use structure::{Field, Struct};
+pub use field::Field;
+pub use structure::Struct;
 
 pub use strongly_connected::StronglyConnectedLayouts;
 pub use usages::Usages;
@@ -38,7 +40,7 @@ pub use usages::Usages;
 pub struct Layout;
 
 impl ResourceType for Layout {
-	const TYPE: crate::Type = crate::Type::Component(component::Type::Layout);
+	const TYPE: crate::Type = crate::Type::Component(Some(component::Type::Layout));
 
 	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
 		resource.is_layout()
@@ -46,7 +48,11 @@ impl ResourceType for Layout {
 }
 
 impl<'a, M> crate::Ref<'a, Layout, M> {
-	pub fn as_layout(&self) -> &'a Definition<M> {
+	pub fn as_component(&self) -> &'a Meta<component::Definition<M>, M> {
+		self.as_resource().as_component().unwrap()
+	}
+	
+	pub fn as_layout(&self) -> &'a Meta<Definition<M>, M> {
 		self.as_resource().as_layout().unwrap()
 	}
 }
@@ -70,10 +76,7 @@ pub enum Kind {
 
 /// Layout definition.
 #[derive(Debug)]
-pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
-	/// Identifier of the layout.
-	id: Subject<I, B>,
-
+pub struct Definition<M> {
 	/// Type represented by this layout.
 	ty: MetaOption<TId<Type>, M>,
 
@@ -85,10 +88,10 @@ pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
 #[derive(Debug, Clone)]
 pub enum Description<M> {
 	/// Never layout.
-	Never(MetaOption<Name, M>),
+	Never,
 
 	/// Primitive layout, such as a number, a string, etc.
-	Primitive(RestrictedPrimitive<M>, MetaOption<Name, M>),
+	Primitive(RestrictedPrimitive<M>),
 
 	/// Reference.
 	Reference(Reference<M>),
@@ -115,14 +118,14 @@ pub enum Description<M> {
 	OneOrMany(OneOrMany<M>),
 
 	/// Alias.
-	Alias(Meta<Name, M>, TId<Layout>),
+	Alias(TId<Layout>),
 }
 
 impl<M> Description<M> {
 	pub fn kind(&self) -> Kind {
 		match self {
-			Self::Never(_) => Kind::Never,
-			Self::Primitive(n, _) => Kind::Primitive(n.primitive()),
+			Self::Never => Kind::Never,
+			Self::Primitive(n) => Kind::Primitive(n.primitive()),
 			Self::Reference(_) => Kind::Reference,
 			Self::Struct(_) => Kind::Struct,
 			Self::Enum(_) => Kind::Enum,
@@ -131,7 +134,7 @@ impl<M> Description<M> {
 			Self::Array(_) => Kind::Array,
 			Self::Set(_) => Kind::Set,
 			Self::OneOrMany(_) => Kind::OneOrMany,
-			Self::Alias(_, _) => Kind::Alias,
+			Self::Alias(_) => Kind::Alias,
 		}
 	}
 
@@ -148,50 +151,15 @@ impl<M> Description<M> {
 			_ => false,
 		}
 	}
-
-	/// Sets the new name of the layout.
-	pub fn set_name(&mut self, new_name: Name, metadata: M) -> Option<Meta<Name, M>> {
-		match self {
-			Self::Never(name) => name.replace(new_name, metadata),
-			Self::Primitive(_, name) => name.replace(new_name, metadata),
-			Self::Reference(r) => r.set_name(new_name, metadata),
-			Self::Struct(s) => Some(s.set_name(new_name, metadata)),
-			Self::Enum(e) => Some(e.set_name(new_name, metadata)),
-			Self::Required(r) => r.set_name(new_name, metadata),
-			Self::Option(o) => o.set_name(new_name, metadata),
-			Self::Array(a) => a.set_name(new_name, metadata),
-			Self::Set(s) => s.set_name(new_name, metadata),
-			Self::OneOrMany(s) => s.set_name(new_name, metadata),
-			Self::Alias(n, _) => Some(std::mem::replace(n, Meta(new_name, metadata))),
-		}
-	}
-
-	pub fn into_name(self) -> MetaOption<Name, M> {
-		match self {
-			Description::Never(n) => n,
-			Description::Struct(s) => s.into_name().into(),
-			Description::Enum(e) => e.into_name().into(),
-			Description::Reference(r) => r.into_name(),
-			Description::Primitive(_, n) => n,
-			Description::Required(r) => r.into_name(),
-			Description::Option(o) => o.into_name(),
-			Description::Array(a) => a.into_name(),
-			Description::Set(s) => s.into_name(),
-			Description::OneOrMany(s) => s.into_name(),
-			Description::Alias(n, _) => n.into(),
-		}
-	}
 }
 
 impl<M> Definition<M> {
 	/// Creates a new layout definition.
 	pub fn new(
-		id: Id,
 		ty: MetaOption<TId<Type>, M>,
 		desc: Meta<Description<M>, M>
 	) -> Self {
 		Self {
-			id,
 			ty,
 			desc
 		}
@@ -200,27 +168,6 @@ impl<M> Definition<M> {
 	/// Type for which the layout is defined.
 	pub fn ty(&self) -> Option<TId<Type>> {
 		self.ty.value().cloned()
-	}
-
-	/// Returns the identifier of the defined layout.
-	pub fn id(&self) -> Id {
-		self.id
-	}
-
-	pub fn name(&self) -> Option<&Meta<Name, M>> {
-		match self.desc.value() {
-			Description::Never(n) => n.as_ref(),
-			Description::Struct(s) => Some(s.name()),
-			Description::Enum(e) => Some(e.name()),
-			Description::Reference(r) => r.name(),
-			Description::Primitive(_, n) => n.as_ref(),
-			Description::Required(r) => r.name(),
-			Description::Option(o) => o.name(),
-			Description::Array(a) => a.name(),
-			Description::Set(s) => s.name(),
-			Description::OneOrMany(s) => s.name(),
-			Description::Alias(n, _) => Some(n),
-		}
 	}
 
 	/// Returns the layout description.
@@ -236,19 +183,19 @@ impl<M> Definition<M> {
 		self.desc.is_required()
 	}
 
-	pub fn composing_layouts(&self) -> ComposingLayouts<M> {
+	pub fn composing_layouts<'a>(&'a self, model: &'a crate::Model<M>) -> ComposingLayouts<'a, M> {
 		match self.description().value() {
-			Description::Never(_) => ComposingLayouts::None,
-			Description::Struct(s) => ComposingLayouts::Struct(s.fields().iter()),
-			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts()),
+			Description::Never => ComposingLayouts::None,
+			Description::Struct(s) => ComposingLayouts::Fields(model, s.fields().iter()),
+			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts(model)),
 			Description::Reference(r) => ComposingLayouts::One(Some(r.id_layout())),
-			Description::Primitive(_, _) => ComposingLayouts::None,
+			Description::Primitive(_) => ComposingLayouts::None,
 			Description::Option(o) => ComposingLayouts::One(Some(o.item_layout())),
 			Description::Required(r) => ComposingLayouts::One(Some(r.item_layout())),
 			Description::Array(a) => ComposingLayouts::One(Some(a.item_layout())),
 			Description::Set(s) => ComposingLayouts::One(Some(s.item_layout())),
 			Description::OneOrMany(s) => ComposingLayouts::One(Some(s.item_layout())),
-			Description::Alias(_, _) => ComposingLayouts::None,
+			Description::Alias(_) => ComposingLayouts::None,
 		}
 	}
 
@@ -270,29 +217,29 @@ impl<M> Definition<M> {
 		match self.description().value() {
 			Description::Reference(_) => true,
 			Description::Enum(e) => e.can_be_reference(map, model),
-			Description::Option(o) => model.can_be_reference_layout(map, o.item_layout()),
-			Description::Required(r) => model.can_be_reference_layout(map, r.item_layout()),
-			Description::OneOrMany(o) => model.can_be_reference_layout(map, o.item_layout()),
-			Description::Alias(_, r) => model.can_be_reference_layout(map, *r),
+			Description::Option(o) => model.can_be_reference_layout(map, **o.item_layout()),
+			Description::Required(r) => model.can_be_reference_layout(map, **r.item_layout()),
+			Description::OneOrMany(o) => model.can_be_reference_layout(map, **o.item_layout()),
+			Description::Alias(r) => model.can_be_reference_layout(map, *r),
 			_ => false,
 		}
 	}
 }
 
 pub enum ComposingLayouts<'a, M> {
-	Struct(std::slice::Iter<'a, Field<M>>),
+	Fields(&'a crate::Model<M>, std::slice::Iter<'a, Meta<TId<Field>, M>>),
 	Enum(enumeration::ComposingLayouts<'a, M>),
-	One(Option<TId<Layout>>),
+	One(Option<&'a Meta<TId<Layout>, M>>),
 	None,
 }
 
 impl<'a, M> Iterator for ComposingLayouts<'a, M> {
-	type Item = TId<Layout>;
+	type Item = &'a Meta<TId<Layout>, M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
-			Self::Struct(fields) => Some(fields.next()?.layout()),
-			Self::Enum(layouts) => layouts.next(),
+			Self::Fields(model, fields) => fields.next().map(|f| model.get(**f).unwrap().format()),
+			Self::Enum(e) => e.next(),
 			Self::One(r) => r.take(),
 			Self::None => None,
 		}
@@ -302,19 +249,24 @@ impl<'a, M> Iterator for ComposingLayouts<'a, M> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
 	For,
-	Reference,
+	Description(DescriptionProperty),
+	WithRestrictions,
+	ArrayListFirst,
+	ArrayListRest,
+	ArrayListNil,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DescriptionProperty {
 	Fields,
 	Variants,
+	Reference,
 	Required,
 	Option,
 	Set,
 	OneOrMany,
 	Array,
 	Alias,
-	WithRestrictions,
-	ArrayListFirst,
-	ArrayListRest,
-	ArrayListNil,
 }
 
 impl Property {
@@ -322,15 +274,7 @@ impl Property {
 		use vocab::{Term, TreeLdr};
 		match self {
 			Self::For => Term::TreeLdr(TreeLdr::LayoutFor),
-			Self::Reference => Term::TreeLdr(TreeLdr::Reference),
-			Self::Fields => Term::TreeLdr(TreeLdr::Fields),
-			Self::Variants => Term::TreeLdr(TreeLdr::Enumeration),
-			Self::Required => Term::TreeLdr(TreeLdr::Required),
-			Self::Option => Term::TreeLdr(TreeLdr::Option),
-			Self::Set => Term::TreeLdr(TreeLdr::Set),
-			Self::OneOrMany => Term::TreeLdr(TreeLdr::OneOrMany),
-			Self::Array => Term::TreeLdr(TreeLdr::Array),
-			Self::Alias => Term::TreeLdr(TreeLdr::Alias),
+			Self::Description(p) => p.term(),
 			Self::WithRestrictions => Term::TreeLdr(TreeLdr::WithRestrictions),
 			Self::ArrayListFirst => Term::TreeLdr(TreeLdr::ArrayListFirst),
 			Self::ArrayListRest => Term::TreeLdr(TreeLdr::ArrayListRest),
@@ -341,6 +285,33 @@ impl Property {
 	pub fn name(&self) -> &'static str {
 		match self {
 			Self::For => "layout type",
+			Self::Description(p) => p.name(),
+			Self::WithRestrictions => "layout restrictions",
+			Self::ArrayListFirst => "\"array as list\" `first` property",
+			Self::ArrayListRest => "\"array as list\" `rest` property",
+			Self::ArrayListNil => "\"array as list\" empty list value",
+		}
+	}
+}
+
+impl DescriptionProperty {
+	pub fn term(&self) -> vocab::Term {
+		use vocab::{Term, TreeLdr};
+		match self {
+			Self::Reference => Term::TreeLdr(TreeLdr::Reference),
+			Self::Fields => Term::TreeLdr(TreeLdr::Fields),
+			Self::Variants => Term::TreeLdr(TreeLdr::Enumeration),
+			Self::Required => Term::TreeLdr(TreeLdr::Required),
+			Self::Option => Term::TreeLdr(TreeLdr::Option),
+			Self::Set => Term::TreeLdr(TreeLdr::Set),
+			Self::OneOrMany => Term::TreeLdr(TreeLdr::OneOrMany),
+			Self::Array => Term::TreeLdr(TreeLdr::Array),
+			Self::Alias => Term::TreeLdr(TreeLdr::Alias),
+		}
+	}
+
+	pub fn name(&self) -> &'static str {
+		match self {
 			Self::Reference => "referenced type",
 			Self::Fields => "structure fields",
 			Self::Variants => "enum variants",
@@ -349,11 +320,7 @@ impl Property {
 			Self::Set => "set item layout",
 			Self::OneOrMany => "one or many item layout",
 			Self::Array => "array item layout",
-			Self::Alias => "alias layout",
-			Self::WithRestrictions => "layout restrictions",
-			Self::ArrayListFirst => "\"array as list\" `first` property",
-			Self::ArrayListRest => "\"array as list\" `rest` property",
-			Self::ArrayListNil => "\"array as list\" empty list value",
+			Self::Alias => "alias layout"
 		}
 	}
 }

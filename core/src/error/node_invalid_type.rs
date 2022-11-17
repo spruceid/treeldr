@@ -1,4 +1,4 @@
-use crate::{Id, node, IriIndex, BlankIdIndex, component, Type};
+use crate::{Id, IriIndex, BlankIdIndex, component, Type, Multiple, ty::SubClass};
 use locspan::{Meta, MaybeLocated, Span};
 use rdf_types::Vocabulary;
 use contextual::WithContext;
@@ -7,7 +7,7 @@ use contextual::WithContext;
 pub struct NodeInvalidType<M> {
 	pub id: Id,
 	pub expected: Type,
-	pub found: node::TypesMetadata<M>,
+	pub found: Multiple<Type, M>
 }
 
 trait NodeTypeName {
@@ -18,12 +18,23 @@ impl NodeTypeName for Type {
 	fn name(&self) -> &str {
 		match self {
 			Self::Resource => "resource",
-			Self::Type => "type",
+			Self::Class(None) => "class",
+			Self::Class(Some(ty)) => ty.name(),
 			Self::DatatypeRestriction => "datatype restriction",
 			Self::Property => "property",
-			Self::Component(ty) => ty.name(),
+			Self::Component(None) => "component",
+			Self::Component(Some(ty)) => ty.name(),
 			Self::LayoutRestriction => "layout restriction",
 			Self::List => "list"
+		}
+	}
+}
+
+impl NodeTypeName for SubClass {
+	fn name(&self) -> &str {
+		match self {
+			Self::DataType => "datatype",
+			Self::Restriction => "property restriction"
 		}
 	}
 }
@@ -32,7 +43,8 @@ impl NodeTypeName for component::Type {
 	fn name(&self) -> &str {
 		match self {
 			Self::Layout => "layout",
-			Self::Formatted(ty) => ty.name()
+			Self::Formatted(None) => "formatted component",
+			Self::Formatted(Some(ty)) => ty.name()
 		}
 	}
 }

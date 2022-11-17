@@ -1,48 +1,4 @@
-use std::fmt;
-
-use contextual::DisplayWithContext;
-use locspan::Meta;
-use rdf_types::Vocabulary;
-use treeldr::{BlankIdIndex, Id, IriIndex};
-
-use crate::{multiple, single};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum List {
-	First,
-	Rest
-}
-
-impl List {
-	fn term(&self) -> treeldr::vocab::Term {
-		use treeldr::vocab::{Term, Rdf};
-		match self {
-			Self::First => Term::Rdf(Rdf::First),
-			Self::Rest => Term::Rdf(Rdf::Rest),
-		}
-	}
-
-	fn name(&self) -> &'static str {
-		match self {
-			Self::First => "first item",
-			Self::Rest => "rest"
-		}
-	}
-}
-
-pub enum Name {
-	BuiltIn(&'static str),
-	Other(Id),
-}
-
-impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V> for Name {
-	fn fmt_with(&self, context: &V, f: &mut fmt::Formatter) -> fmt::Result {
-		match self {
-			Self::BuiltIn(name) => fmt::Display::fmt(name, f),
-			Self::Other(id) => id.fmt_with(context, f),
-		}
-	}
-}
+pub use treeldr::Property;
 
 pub enum BindingRef<'a, M> {
 	Resource(crate::resource::BindingRef<'a, M>),
