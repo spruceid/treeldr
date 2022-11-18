@@ -4,7 +4,7 @@ use derivative::Derivative;
 use locspan::Meta;
 use treeldr::Id;
 
-use crate::{Context, SubLayout, ParentLayout};
+use crate::{Context, SubLayout, ParentLayout, component};
 
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
@@ -27,8 +27,8 @@ impl<M> Context<M> {
 		let mut result: HashMap<Id, LayoutRelations<M>> = HashMap::new();
 
 		for (id, node) in &self.nodes {
-			if let Some(layout) = node.value().layout.as_ref() {
-				let sub_layouts = layout.sub_layouts(self);
+			if node.has_type(self, component::Type::Layout) {
+				let sub_layouts = node.as_layout().sub_layouts(self);
 
 				for sub_layout in &sub_layouts {
 					result

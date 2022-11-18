@@ -15,9 +15,13 @@ pub trait SccGraph {
 	/// Vertex reference.
 	type Vertex: Copy + Eq + Hash;
 
-	fn vertices(&self) -> &[Self::Vertex];
+	type Vertices<'a>: 'a + IntoIterator<Item = Self::Vertex> where Self: 'a;
 
-	fn successors(&self, v: Self::Vertex) -> &[Self::Vertex];
+	type Successors<'a>: 'a + IntoIterator<Item = Self::Vertex> where Self: 'a;
+
+	fn vertices(&self) -> Self::Vertices<'_>;
+
+	fn successors(&self, v: Self::Vertex) -> Self::Successors<'_>;
 
 	fn strongly_connected_components(&self) -> Components<Self::Vertex> {
 		let mut map: HashMap<Self::Vertex, Data> = HashMap::new();
@@ -25,8 +29,8 @@ pub trait SccGraph {
 		let mut components = Vec::new();
 
 		for v in self.vertices() {
-			if !map.contains_key(v) {
-				strong_connect(self, *v, &mut stack, &mut map, &mut components);
+			if !map.contains_key(&v) {
+				strong_connect(self, v, &mut stack, &mut map, &mut components);
 			}
 		}
 
@@ -42,8 +46,8 @@ pub trait SccGraph {
 					.iter()
 					.flat_map(|v| {
 						self.successors(*v)
-							.iter()
-							.map(|sc| *vertex_to_component.get(sc).unwrap())
+							.into_iter()
+							.map(|sc| *vertex_to_component.get(&sc).unwrap())
 					})
 					.collect()
 			})
@@ -137,7 +141,7 @@ fn strong_connect<G: ?Sized + SccGraph>(
 	);
 
 	// Consider successors of v
-	for &w in graph.successors(v) {
+	for w in graph.successors(v) {
 		let new_v_lowlink = match map.get(&w) {
 			None => {
 				// Successor w has not yet been visited; recurse on it

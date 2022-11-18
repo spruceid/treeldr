@@ -1,8 +1,7 @@
-use crate::{TId, Type, ResourceType, Id, node, vocab, BlankIdIndex, IriIndex, ty, layout, list, component};
+use crate::{TId, ResourceType, Id, node, vocab, BlankIdIndex, IriIndex, ty, layout, list, component, Multiple};
 use contextual::DisplayWithContext;
 use locspan::Meta;
 use rdf_types::Vocabulary;
-use std::collections::HashMap;
 use std::fmt;
 
 /// Node property.
@@ -22,7 +21,7 @@ impl Property {
 }
 
 impl ResourceType for Property {
-	const TYPE: Type = Type::Property;
+	const TYPE: crate::Type = crate::Type::Property(None);
 
 	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
 		resource.is_property()
@@ -165,39 +164,48 @@ impl RdfProperty {
 	}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Type {
+	FunctionalProperty
+}
+
+impl Type {
+	/// Checks if this is a subclass of `other`.
+	pub fn is_subclass_of(&self, _other: Self) -> bool {
+		false
+	}
+}
+
 /// Property definition.
 #[derive(Debug)]
 pub struct Definition<M> {
-	domain: HashMap<TId<Type>, M>,
-	range: Meta<TId<Type>, M>,
+	domain: Multiple<TId<crate::Type>, M>,
+	range: Meta<TId<crate::Type>, M>,
 	required: Meta<bool, M>,
 	functional: Meta<bool, M>
 }
 
 impl<M> Definition<M> {
 	pub fn new(
-		range: Meta<TId<Type>, M>,
+		domain: Multiple<TId<crate::Type>, M>,
+		range: Meta<TId<crate::Type>, M>,
 		required: Meta<bool, M>,
 		functional: Meta<bool, M>
 	) -> Self {
 		Self {
-			domain: HashMap::new(),
+			domain,
 			range,
 			required,
 			functional,
 		}
 	}
 
-	pub fn insert_domain(&mut self, ty_ref: TId<Type>, metadata: M) {
-		self.domain.insert(ty_ref, metadata);
-	}
-
-	pub fn range(&self) -> &Meta<TId<Type>, M> {
+	pub fn range(&self) -> &Meta<TId<crate::Type>, M> {
 		&self.range
 	}
 
-	pub fn domain(&self) -> impl '_ + Iterator<Item = TId<Type>> {
-		self.domain.keys().cloned()
+	pub fn domain(&self) -> &Multiple<TId<crate::Type>, M> {
+		&self.domain
 	}
 
 	pub fn is_required(&self) -> bool {

@@ -117,6 +117,9 @@ pub enum TreeLdr {
 	/// "One or many" layout.
 	#[iri("tldr:oneOrMany")]
 	OneOrMany,
+
+	#[iri("tldr:intersectionOf")]
+	IntersectionOf
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

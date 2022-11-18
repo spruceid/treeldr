@@ -56,7 +56,7 @@ impl<M> Definition<M> {
 	// }
 
 	pub fn build(
-		self,
+		&self,
 		context: &Context<M>,
 		as_resource: &treeldr::node::Data<M>,
 		meta: &M
@@ -64,7 +64,7 @@ impl<M> Definition<M> {
 	where
 		M: Clone + Merge,
 	{
-		let restrictions = self.restrictions.try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, Property::WithRestrictions))?;
+		let restrictions = self.restrictions.clone().try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, Property::WithRestrictions))?;
 		let dt = match Primitive::from_id(as_resource.id) {
 			Some(primitive) => {
 				match restrictions.unwrap() {
@@ -79,7 +79,7 @@ impl<M> Definition<M> {
 			None => {
 				match restrictions.unwrap() {
 					Some(list_id) => {
-						let Meta(base, _) = self.base.into_required_at_node_binding(as_resource.id, Property::OnDatatype, meta)?;
+						let Meta(base, _) = self.base.clone().into_required_at_node_binding(as_resource.id, Property::OnDatatype, meta)?;
 						let primitive = Primitive::from_id(base).ok_or_else(|| todo!())?;
 
 						let list = context
@@ -94,7 +94,7 @@ impl<M> Definition<M> {
 							let restriction = context
 								.require(restriction_id)
 								.map_err(|e| e.at(restriction_meta.clone()))?
-								.require_datatype_restriction()
+								.require_datatype_restriction(context)
 								.map_err(|e| e.at(restriction_meta.clone()))?;
 							restrictions.insert(restriction.build()?.into_value(), restriction_meta)
 						}

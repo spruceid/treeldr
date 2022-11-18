@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use rdf_types::Vocabulary;
 use treeldr::{IriIndex, BlankIdIndex, Id, metadata::Merge};
 
-use crate::Context;
+use crate::{Context, component};
 use super::LayoutRelations;
 
 impl<M: Clone + Merge> Context<M> {
@@ -16,14 +16,15 @@ impl<M: Clone + Merge> Context<M> {
 		// Start with the fields.
 		let mut default_field_names = BTreeMap::new();
 		for (id, node) in &self.nodes {
-			if let Some(field) = node.as_layout_field() {
-				if let Some(name) = field.default_name(vocabulary, field.metadata().clone()) {
+			if node.has_type(self, component::formatted::Type::LayoutField) {
+				let field = node.as_layout_field();
+				if let Some(name) = field.default_name(vocabulary, node.as_resource()) {
 					default_field_names.insert(*id, name);
 				}
 			}
 		}
 		for (id, name) in default_field_names {
-			let field = self.get_mut(id).unwrap().as_layout_field_mut().unwrap();
+			let field = self.get_mut(id).unwrap().as_component_mut();
 			if field.name().is_empty() {
 				field.name_mut().insert(name);
 			}
@@ -38,13 +39,15 @@ impl<M: Clone + Merge> Context<M> {
 
 		impl SccGraph for LayoutGraph {
 			type Vertex = Id;
+			type Vertices<'a> = std::iter::Copied<std::slice::Iter<'a, Self::Vertex>>;
+			type Successors<'a> = std::iter::Copied<std::slice::Iter<'a, Self::Vertex>>;
 
-			fn vertices(&self) -> &[Self::Vertex] {
-				&self.layouts
+			fn vertices(&self) -> Self::Vertices<'_> {
+				self.layouts.iter().copied()
 			}
 
-			fn successors(&self, v: Self::Vertex) -> &[Self::Vertex] {
-				self.dependencies.get(&v).unwrap()
+			fn successors(&self, v: Self::Vertex) -> Self::Successors<'_> {
+				self.dependencies.get(&v).unwrap().iter().copied()
 			}
 		}
 
@@ -55,7 +58,7 @@ impl<M: Clone + Merge> Context<M> {
 		};
 
 		for (id, node) in &self.nodes {
-			if node.is_layout() {
+			if node.has_type(self, component::Type::Layout) {
 				let parent_layouts = &layout_relations.get(id).unwrap().parent;
 				let dependencies: Vec<_> = parent_layouts.iter().map(|p| p.layout).collect();
 				graph.layouts.push(*id);
@@ -68,15 +71,16 @@ impl<M: Clone + Merge> Context<M> {
 		for i in ordered_components.into_iter().rev() {
 			let component = components.get(i).unwrap();
 			for id in component {
-				let layout = self.nodes.get(id).unwrap().as_layout().unwrap();
+				let node = self.nodes.get(id).unwrap();
+				let layout = node.as_layout();
 				let parent_layouts = &layout_relations.get(id).unwrap().parent;
 				if let Some(name) = layout.default_name(
 					self,
 					vocabulary,
 					parent_layouts,
-					layout.metadata().clone(),
+					node.as_resource()
 				) {
-					let layout = self.get_mut(*id).unwrap().as_layout_mut().unwrap();
+					let layout = self.get_mut(*id).unwrap().as_component_mut();
 					if layout.name().is_empty() {
 						layout.name_mut().insert(name);
 					}
@@ -87,16 +91,16 @@ impl<M: Clone + Merge> Context<M> {
 		// Now the layouts variants.
 		let mut default_variant_names = BTreeMap::new();
 		for (id, node) in &self.nodes {
-			if let Some(layout) = node.as_layout_variant() {
+			if node.has_type(self, component::formatted::Type::LayoutVariant) {
 				if let Some(name) =
-					layout.default_name(self, vocabulary, layout.metadata().clone())
+					node.as_layout_variant().default_name(self, vocabulary, node.as_resource(), node.as_formatted().data())
 				{
 					default_variant_names.insert(*id, name);
 				}
 			}
 		}
 		for (id, name) in default_variant_names {
-			let variant = self.get_mut(id).unwrap().as_layout_variant_mut().unwrap();
+			let variant = self.get_mut(id).unwrap().as_component_mut();
 			if variant.name().is_empty() {
 				variant.name_mut().insert(name);
 			}

@@ -4,7 +4,7 @@ use crate::{Name, MetaOption, layout, vocab};
 
 pub mod formatted;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Data<M> {
 	pub name: MetaOption<Name, M>
 }
@@ -17,6 +17,14 @@ pub struct Definition<M> {
 }
 
 impl<M> Definition<M> {
+	pub fn new(
+		data: Data<M>,
+		layout: MetaOption<layout::Definition<M>, M>,
+		formatted: MetaOption<formatted::Definition<M>, M>
+	) -> Self {
+		Self { data, layout, formatted }
+	}
+
 	pub fn is_layout(&self) -> bool {
 		self.layout.is_some()
 	}
@@ -46,6 +54,17 @@ impl<M> Definition<M> {
 pub enum Type {
 	Layout,
 	Formatted(Option<formatted::Type>)
+}
+
+impl Type {
+	/// Checks if this is a subclass of `other`.
+	pub fn is_subclass_of(&self, other: Self) -> bool {
+		match (self, other) {
+			(Self::Formatted(Some(_)), Self::Formatted(None)) => true,
+			(Self::Formatted(Some(a)), Self::Formatted(Some(b))) => a.is_subclass_of(b),
+			_ => false
+		}
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

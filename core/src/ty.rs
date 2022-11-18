@@ -1,4 +1,4 @@
-use crate::{Model, component, ResourceType, Ref, vocab};
+use crate::{Model, component, ResourceType, Ref, vocab, prop};
 
 pub mod data;
 mod intersection;
@@ -20,15 +20,52 @@ pub enum Type {
 	Resource,
 	Class(Option<SubClass>),
 	DatatypeRestriction,
-	Property,
+	Property(Option<prop::Type>),
 	Component(Option<component::Type>),
 	LayoutRestriction,
 	List,
 }
 
+impl Type {
+	/// Checks if this is a subclass of `other`.
+	pub fn is_subclass_of(&self, other: Self) -> bool {
+		match (self, other) {
+			(Self::Resource, Self::Resource) => false,
+			(_, Self::Resource) => true,
+			(Self::Class(Some(_)), Self::Class(None)) => true,
+			(Self::Class(Some(a)), Self::Class(Some(b))) => a.is_subclass_of(b),
+			(Self::Property(Some(_)), Self::Property(None)) => true,
+			(Self::Property(Some(a)), Self::Property(Some(b))) => a.is_subclass_of(b),
+			(Self::Component(Some(_)), Self::Component(None)) => true,
+			(Self::Component(Some(a)), Self::Component(Some(b))) => a.is_subclass_of(b),
+			_ => false
+		}
+	}
+}
+
+impl ResourceType for Type {
+	const TYPE: Type = Type::Class(None);
+
+	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
+		resource.is_type()
+	}
+}
+
+impl<'a, M> Ref<'a, Type, M> {
+	pub fn as_type(&self) -> &'a Meta<Definition<M>, M> {
+		self.as_resource().as_type().unwrap()
+	}
+}
+
 impl From<SubClass> for Type {
 	fn from(ty: SubClass) -> Self {
 		Self::Class(Some(ty))
+	}
+}
+
+impl From<prop::Type> for Type {
+	fn from(ty: prop::Type) -> Self {
+		Self::Property(Some(ty))
 	}
 }
 
@@ -50,17 +87,10 @@ pub enum SubClass {
 	Restriction
 }
 
-impl ResourceType for Type {
-	const TYPE: Type = Type::Class(None);
-
-	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
-		resource.is_type()
-	}
-}
-
-impl<'a, M> Ref<'a, Type, M> {
-	pub fn as_type(&self) -> &'a Meta<Definition<M>, M> {
-		self.as_resource().as_type().unwrap()
+impl SubClass {
+	/// Checks if this is a subclass of `other`.
+	pub fn is_subclass_of(&self, _other: Self) -> bool {
+		false
 	}
 }
 

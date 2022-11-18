@@ -38,6 +38,10 @@ impl<T: Ord, M> Multiple<T, M> {
 	pub fn contains(&self, item: &T) -> bool {
 		self.0.contains_key(item)
 	}
+
+	pub fn get_metadata(&self, item: &T) -> Option<&M> {
+		self.0.get(item)
+	}
 	
 	pub fn insert(&mut self, Meta(value, meta): Meta<T, M>)
 	where

@@ -1,15 +1,12 @@
-use crate::{Error, Single, Multiple, single, multiple};
+use crate::{Error, Single, Multiple, single, multiple, context::HasType};
 use locspan::Meta;
 use treeldr::{metadata::Merge, Id, prop::RdfProperty};
 
-pub use treeldr::prop::Property;
+pub use treeldr::prop::{Property, Type};
 
 /// Property definition.
 #[derive(Clone)]
 pub struct Definition<M> {
-	/// `owl:FunctionalProperty` as a superclass.
-	functional: Option<M>,
-
 	/// Domain.
 	domain: Multiple<Id, M>,
 
@@ -25,24 +22,7 @@ impl<M> Definition<M> {
 		Self {
 			domain: Multiple::default(),
 			range: Single::default(),
-			required: Single::default(),
-			functional: None,
-		}
-	}
-
-	/// Checks if this property is functional,
-	/// meaning that it is associated to at most one value.
-	pub fn is_functional(&self) -> bool {
-		self.functional.is_some()
-	}
-
-	pub fn declare_functional(&mut self, meta: M)
-	where
-		M: Merge,
-	{
-		match &mut self.functional {
-			Some(m) => m.merge_with(meta),
-			None => self.functional = Some(meta)
+			required: Single::default()
 		}
 	}
 
@@ -70,35 +50,33 @@ impl<M> Definition<M> {
 		&mut self.required
 	}
 
-	fn build(
-		self,
+	pub(crate) fn build(
+		&self,
 		context: &crate::Context<M>,
 		as_resource: &treeldr::node::Data<M>,
-		causes: M,
-	) -> Result<treeldr::prop::Definition<M>, Error<M>> where M: Clone {
+		meta: M,
+	) -> Result<Meta<treeldr::prop::Definition<M>, M>, Error<M>> where M: Clone + Merge {
 		let range = self
-			.range.into_required_type_at_node_binding(context, as_resource.id, RdfProperty::Range, &causes)?;
+			.range.clone().into_required_type_at_node_binding(context, as_resource.id, RdfProperty::Range, &meta)?;
 
-		let required = self.required
+		let required = self.required.clone()
 			.try_unwrap()
 			.map_err(|e| e.at_functional_node_property(as_resource.id, RdfProperty::Required))?
 			.unwrap()
-			.unwrap_or_else(|| Meta(false, causes.clone()));
+			.unwrap_or_else(|| Meta(false, meta.clone()));
 			
-		let functional = match self.functional {
-			Some(meta) => Meta(true, meta),
-			None => Meta(false, causes.clone())
+		let functional = match as_resource.type_metadata(context, Type::FunctionalProperty) {
+			Some(meta) => Meta(true, meta.clone()),
+			None => Meta(false, meta.clone())
 		};
 
-		let mut result =
-			treeldr::prop::Definition::new(range, required, functional);
-
-		for Meta(domain_id, domain_causes) in self.domain {
-			let domain_ref = context.require_type_id(domain_id).map_err(|e| e.at_node_property(as_resource.id, RdfProperty::Domain, domain_causes.clone()))?;
-			result.insert_domain(domain_ref, domain_causes)
+		let mut domain = Multiple::default();
+		for Meta(domain_id, domain_causes) in &self.domain {
+			let domain_ref = context.require_type_id(*domain_id).map_err(|e| e.at_node_property(as_resource.id, RdfProperty::Domain, domain_causes.clone()))?;
+			domain.insert(Meta(domain_ref, domain_causes.clone()))
 		}
 
-		Ok(result)
+		Ok(Meta(treeldr::prop::Definition::new(domain, range, required, functional), meta))
 	}
 }
 

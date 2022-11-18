@@ -48,82 +48,10 @@ pub enum Type {
 	LayoutVariant,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub struct Types {
-	pub layout_field: bool,
-	pub layout_variant: bool,
-}
-
-impl Types {
-	pub fn includes(&self, ty: Type) -> bool {
-		match ty {
-			Type::LayoutField => self.layout_field,
-			Type::LayoutVariant => self.layout_variant,
-		}
-	}
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub struct TypesMetadata<M> {
-	pub layout_field: Option<M>,
-	pub layout_variant: Option<M>,
-}
-
-impl<M> Default for TypesMetadata<M> {
-	fn default() -> Self {
-		Self {
-			layout_field: None,
-			layout_variant: None
-		}
-	}
-}
-
-impl<M> TypesMetadata<M> {
-	pub fn is_empty(&self) -> bool {
-		self.layout_field.is_none() && self.layout_variant.is_none()
-	}
-
-	pub fn includes(&self, ty: Type) -> Option<&M> {
-		match ty {
-			Type::LayoutField => self.layout_field.as_ref(),
-			Type::LayoutVariant => self.layout_variant.as_ref()
-		}
-	}
-
-	pub fn iter(&self) -> TypesMetadataIter<M> {
-		TypesMetadataIter {
-			layout_field: self.layout_field.as_ref(),
-			layout_variant: self.layout_variant.as_ref()
-		}
-	}
-}
-
-impl<'a, M: Clone> TypesMetadata<&'a M> {
-	pub fn cloned(&self) -> TypesMetadata<M> {
-		TypesMetadata {
-			layout_field: self.layout_field.cloned(),
-			layout_variant: self.layout_variant.cloned()
-		}
-	}
-}
-
-pub struct TypesMetadataIter<'a, M> {
-	layout_field: Option<&'a M>,
-	layout_variant: Option<&'a M>
-}
-
-impl<'a, M> Iterator for TypesMetadataIter<'a, M> {
-	type Item = Meta<Type, &'a M>;
-
-	fn next(&mut self) -> Option<Self::Item> {
-		self.layout_field
-			.take()
-			.map(|m| Meta(Type::LayoutField, m))
-			.or_else(|| {
-				self.layout_variant
-					.take()
-					.map(|m| Meta(Type::LayoutVariant, m))
-			})
+impl Type {
+	/// Checks if this is a subclass of `other`.
+	pub fn is_subclass_of(&self, _other: Self) -> bool {
+		false
 	}
 }
 

@@ -62,6 +62,10 @@ impl<T, M> Single<T, M> {
 		self.0.is_empty()
 	}
 
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
 	pub fn iter(&self) -> Iter<T, M> {
 		Iter(self.0.iter())
 	}

@@ -1,4 +1,4 @@
-use crate::{Id, IriIndex, BlankIdIndex, component, Type, Multiple, ty::SubClass};
+use crate::{Id, IriIndex, BlankIdIndex, component, Type, Multiple, ty::SubClass, prop};
 use locspan::{Meta, MaybeLocated, Span};
 use rdf_types::Vocabulary;
 use contextual::WithContext;
@@ -21,7 +21,8 @@ impl NodeTypeName for Type {
 			Self::Class(None) => "class",
 			Self::Class(Some(ty)) => ty.name(),
 			Self::DatatypeRestriction => "datatype restriction",
-			Self::Property => "property",
+			Self::Property(None) => "property",
+			Self::Property(Some(ty)) => ty.name(),
 			Self::Component(None) => "component",
 			Self::Component(Some(ty)) => ty.name(),
 			Self::LayoutRestriction => "layout restriction",
@@ -35,6 +36,14 @@ impl NodeTypeName for SubClass {
 		match self {
 			Self::DataType => "datatype",
 			Self::Restriction => "property restriction"
+		}
+	}
+}
+
+impl NodeTypeName for prop::Type {
+	fn name(&self) -> &str {
+		match self {
+			Self::FunctionalProperty => "functional property"
 		}
 	}
 }

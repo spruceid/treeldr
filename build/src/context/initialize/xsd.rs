@@ -8,7 +8,7 @@ impl<M> Context<M> {
 		M: Clone + Merge,
 	{
 		use vocab::{Term, Xsd};
-		self.define_primitive_datatype(
+		self.declare_datatype(
 			Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::String))),
 			metadata,
 		);

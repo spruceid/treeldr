@@ -1,5 +1,5 @@
-use crate::{error::NodeTypeInvalid, layout, list, prop, ty, resource, component, Single};
-use treeldr::{Id, Multiple, Name};
+use crate::{error::NodeTypeInvalid, layout, list, prop, ty, resource, component, Error, context::HasType};
+use treeldr::{Id, Multiple, metadata::Merge};
 
 pub use treeldr::Type;
 
@@ -51,8 +51,8 @@ impl<M> Node<M> {
 		&mut self.data.type_
 	}
 
-	pub fn has_type(&self, id: impl Into<Type>) -> bool {
-		self.data.type_.contains(&id.into())
+	pub fn has_type(&self, context: &crate::Context<M>, type_: impl Into<Type>) -> bool {
+		self.data.has_type(context, type_)
 	}
 
 	pub fn label(&self) -> &Multiple<String, M> {
@@ -69,22 +69,6 @@ impl<M> Node<M> {
 
 	pub fn comment_mut(&mut self) -> &mut Multiple<String, M> {
 		&mut self.data.comment
-	}
-
-	pub fn name(&self) -> &Single<Name, M> {
-		&self.data.name
-	}
-
-	pub fn name_mut(&mut self) -> &mut Single<Name, M> {
-		&mut self.data.name
-	}
-
-	pub fn format(&self) -> &Single<Id, M> {
-		&self.data.format
-	}
-
-	pub fn format_mut(&mut self) -> &mut Single<Id, M> {
-		&mut self.data.format
 	}
 	
 	pub fn as_resource(&self) -> &resource::Data<M> {
@@ -175,155 +159,182 @@ impl<M> Node<M> {
 }
 
 impl<M: Clone> Node<M> {
-	pub fn require_type(&self) -> Result<&ty::Definition<M>, NodeTypeInvalid<M>> {
-		if self.has_type(Type::Class(None)) {
+	pub fn require_type(&self, context: &crate::Context<M>) -> Result<&ty::Definition<M>, NodeTypeInvalid<M>> {
+		if self.has_type(context, Type::Class(None)) {
 			Ok(self.as_type())
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Class(None), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_type_id(&self) -> Result<treeldr::TId<Type>, NodeTypeInvalid<M>> {
-		if self.has_type(Type::Class(None)) {
+	pub fn require_type_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<Type>, NodeTypeInvalid<M>> {
+		if self.has_type(context, Type::Class(None)) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Class(None), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_datatype(&self) -> Result<&ty::datatype::Definition<M>, NodeTypeInvalid<M>> {
-		if self.has_type(ty::SubClass::DataType) {
+	pub fn require_datatype(&self, context: &crate::Context<M>) -> Result<&ty::datatype::Definition<M>, NodeTypeInvalid<M>> {
+		if self.has_type(context, ty::SubClass::DataType) {
 			Ok(self.as_datatype())
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: ty::SubClass::DataType.into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_datatype_id(&self) -> Result<treeldr::TId<treeldr::ty::DataType>, NodeTypeInvalid<M>> {
-		if self.has_type(ty::SubClass::DataType) {
+	pub fn require_datatype_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<treeldr::ty::DataType>, NodeTypeInvalid<M>> {
+		if self.has_type(context, ty::SubClass::DataType) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: ty::SubClass::DataType.into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_restriction(&self) -> Result<&ty::restriction::Definition<M>, NodeTypeInvalid<M>> {
-		if self.has_type(ty::SubClass::Restriction) {
+	pub fn require_restriction(&self, context: &crate::Context<M>) -> Result<&ty::restriction::Definition<M>, NodeTypeInvalid<M>> {
+		if self.has_type(context, ty::SubClass::Restriction) {
 			Ok(self.as_restriction())
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: ty::SubClass::Restriction.into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_restriction_id(&self) -> Result<treeldr::TId<treeldr::ty::Restriction>, NodeTypeInvalid<M>> {
-		if self.has_type(Type::LayoutRestriction) {
+	pub fn require_restriction_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<treeldr::ty::Restriction>, NodeTypeInvalid<M>> {
+		if self.has_type(context, Type::LayoutRestriction) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: Type::LayoutRestriction, found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_datatype_restriction(&self) -> Result<&ty::datatype::restriction::Definition<M>, NodeTypeInvalid<M>> {
-		if self.has_type(Type::DatatypeRestriction) {
+	pub fn require_datatype_restriction(&self, context: &crate::Context<M>) -> Result<&ty::datatype::restriction::Definition<M>, NodeTypeInvalid<M>> {
+		if self.has_type(context, Type::DatatypeRestriction) {
 			Ok(self.as_datatype_restriction())
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: Type::DatatypeRestriction, found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_datatype_restriction_id(&self) -> Result<treeldr::TId<treeldr::ty::data::Restriction>, NodeTypeInvalid<M>> {
-		if self.has_type(Type::DatatypeRestriction) {
+	pub fn require_datatype_restriction_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<treeldr::ty::data::Restriction>, NodeTypeInvalid<M>> {
+		if self.has_type(context, Type::DatatypeRestriction) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: Type::DatatypeRestriction, found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_property(&self) -> Result<&prop::Definition<M>, NodeTypeInvalid<M>> {
-		if self.has_type(Type::Property) {
+	pub fn require_property(&self, context: &crate::Context<M>) -> Result<&prop::Definition<M>, NodeTypeInvalid<M>> {
+		if self.has_type(context, Type::Property(None)) {
 			Ok(self.as_property())
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Property, found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Property(None), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_property_id(&self) -> Result<treeldr::TId<Property>, NodeTypeInvalid<M>> {
-		if self.has_type(Type::Property) {
+	pub fn require_property_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<Property>, NodeTypeInvalid<M>> {
+		if self.has_type(context, Type::Property(None)) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Property, found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Property(None), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_layout(&self) -> Result<&layout::Definition<M>, NodeTypeInvalid<M>> {
-		if self.has_type(component::Type::Layout) {
+	pub fn require_layout(&self, context: &crate::Context<M>) -> Result<&layout::Definition<M>, NodeTypeInvalid<M>> {
+		if self.has_type(context, component::Type::Layout) {
 			Ok(self.as_layout())
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: component::Type::Layout.into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_layout_id(&self) -> Result<treeldr::TId<treeldr::Layout>, NodeTypeInvalid<M>> {
-		if self.has_type(component::Type::Layout) {
+	pub fn require_layout_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<treeldr::Layout>, NodeTypeInvalid<M>> {
+		if self.has_type(context, component::Type::Layout) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: component::Type::Layout.into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_layout_field(&self) -> Result<&layout::field::Definition<M>, NodeTypeInvalid<M>> {
-		if self.has_type(component::formatted::Type::LayoutField) {
+	pub fn require_layout_field(&self, context: &crate::Context<M>) -> Result<&layout::field::Definition<M>, NodeTypeInvalid<M>> {
+		if self.has_type(context, component::formatted::Type::LayoutField) {
 			Ok(self.as_layout_field())
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: component::formatted::Type::LayoutField.into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_layout_field_id(&self) -> Result<treeldr::TId<treeldr::layout::Field>, NodeTypeInvalid<M>> {
-		if self.has_type(component::formatted::Type::LayoutField) {
+	pub fn require_layout_field_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<treeldr::layout::Field>, NodeTypeInvalid<M>> {
+		if self.has_type(context, component::formatted::Type::LayoutField) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: component::formatted::Type::LayoutField.into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_layout_variant(&self) -> Result<&layout::variant::Definition, NodeTypeInvalid<M>> {
-		if self.has_type(component::formatted::Type::LayoutVariant) {
+	pub fn require_layout_variant(&self, context: &crate::Context<M>) -> Result<&layout::variant::Definition, NodeTypeInvalid<M>> {
+		if self.has_type(context, component::formatted::Type::LayoutVariant) {
 			Ok(self.as_layout_variant())
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: component::formatted::Type::LayoutVariant.into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_layout_variant_id(&self) -> Result<treeldr::TId<treeldr::layout::Variant>, NodeTypeInvalid<M>> {
-		if self.has_type(component::formatted::Type::LayoutVariant) {
+	pub fn require_layout_variant_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<treeldr::layout::Variant>, NodeTypeInvalid<M>> {
+		if self.has_type(context, component::formatted::Type::LayoutVariant) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: component::formatted::Type::LayoutVariant.into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_layout_restriction(&self) -> Result<&layout::restriction::Definition<M>, NodeTypeInvalid<M>> {
-		if self.has_type(Type::LayoutRestriction) {
+	pub fn require_layout_restriction(&self, context: &crate::Context<M>) -> Result<&layout::restriction::Definition<M>, NodeTypeInvalid<M>> {
+		if self.has_type(context, Type::LayoutRestriction) {
 			Ok(self.as_layout_restriction())
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: Type::LayoutRestriction, found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_layout_restriction_id(&self) -> Result<treeldr::TId<treeldr::layout::Restriction>, NodeTypeInvalid<M>> {
-		if self.has_type(Type::LayoutRestriction) {
+	pub fn require_layout_restriction_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<treeldr::layout::Restriction>, NodeTypeInvalid<M>> {
+		if self.has_type(context, Type::LayoutRestriction) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: Type::LayoutRestriction, found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_list(&self) -> Result<&list::Definition<M>, NodeTypeInvalid<M>> {
-		if self.has_type(Type::List) {
+	pub fn require_list(&self, context: &crate::Context<M>) -> Result<&list::Definition<M>, NodeTypeInvalid<M>> {
+		if self.has_type(context, Type::List) {
 			Ok(self.as_list())
 		} else {
 			Err(NodeTypeInvalid { id: self.data.id, expected: Type::List, found: self.data.type_.clone() })
 		}
+	}
+
+	pub(crate) fn build(
+		&self,
+		context: &crate::Context<M>
+	) -> Result<treeldr::node::Definition<M>, Error<M>> where M: Merge {
+		let data = treeldr::node::Data {
+			id: self.data.id,
+			metadata: self.data.metadata.clone(),
+			type_: self.data.type_.clone(),
+			label: self.data.label.clone(),
+			comment: self.data.comment.clone()
+		};
+
+		let ty = self.data.type_metadata(context, Type::Class(None)).map(|meta| {
+			self.ty.build(context, &data, meta.clone())
+		}).transpose()?.into();
+
+		let property = self.data.type_metadata(context, Type::Property(None)).map(|meta| {
+			self.property.build(context, &data, meta.clone())
+		}).transpose()?.into();
+
+		let component = self.data.type_metadata(context, Type::Component(None)).map(|meta| {
+			self.component.build(context, &data, meta.clone())
+		}).transpose()?.into();
+
+		Ok(treeldr::node::Definition::new(data, ty, property, component))
 	}
 }

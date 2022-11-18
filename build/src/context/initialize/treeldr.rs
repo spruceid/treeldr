@@ -19,25 +19,24 @@ impl<M> Context<M> {
 				vocab::TreeLdr::Self_,
 			))))
 			.unwrap()
-			.as_property_mut()
-			.unwrap();
+			.as_property_mut();
 
 		prop.range_mut().insert(Meta(
 			Id::Iri(IriIndex::Iri(vocab::Term::Rdfs(vocab::Rdfs::Resource))),
 			metadata.clone()
 		));
 
-		self.define_primitive_layout(Primitive::Boolean, metadata.clone());
-		self.define_primitive_layout(Primitive::Integer, metadata.clone());
-		self.define_primitive_layout(Primitive::UnsignedInteger, metadata.clone());
-		self.define_primitive_layout(Primitive::Float, metadata.clone());
-		self.define_primitive_layout(Primitive::Double, metadata.clone());
-		self.define_primitive_layout(Primitive::String, metadata.clone());
-		self.define_primitive_layout(Primitive::Time, metadata.clone());
-		self.define_primitive_layout(Primitive::Date, metadata.clone());
-		self.define_primitive_layout(Primitive::DateTime, metadata.clone());
-		self.define_primitive_layout(Primitive::Iri, metadata.clone());
-		self.define_primitive_layout(Primitive::Uri, metadata.clone());
-		self.define_primitive_layout(Primitive::Url, metadata);
+		self.declare_primitive_layout(Primitive::Boolean, metadata.clone());
+		self.declare_primitive_layout(Primitive::Integer, metadata.clone());
+		self.declare_primitive_layout(Primitive::UnsignedInteger, metadata.clone());
+		self.declare_primitive_layout(Primitive::Float, metadata.clone());
+		self.declare_primitive_layout(Primitive::Double, metadata.clone());
+		self.declare_primitive_layout(Primitive::String, metadata.clone());
+		self.declare_primitive_layout(Primitive::Time, metadata.clone());
+		self.declare_primitive_layout(Primitive::Date, metadata.clone());
+		self.declare_primitive_layout(Primitive::DateTime, metadata.clone());
+		self.declare_primitive_layout(Primitive::Iri, metadata.clone());
+		self.declare_primitive_layout(Primitive::Uri, metadata.clone());
+		self.declare_primitive_layout(Primitive::Url, metadata);
 	}
 }

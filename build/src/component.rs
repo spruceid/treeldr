@@ -1,8 +1,8 @@
 use locspan::Meta;
-use treeldr::Name;
+use treeldr::{Name, metadata::Merge};
 
 pub use treeldr::component::{Type, Property};
-use crate::{Single, layout, resource, Context, Error, error};
+use crate::{Single, layout, Context, Error, error, context::HasType};
 
 pub mod formatted;
 
@@ -21,6 +21,10 @@ impl<M> Definition<M> {
 			layout: layout::Definition::new(),
 			formatted: formatted::Definition::new()
 		}
+	}
+
+	pub fn data(&self) -> &Data<M> {
+		&self.data
 	}
 
 	pub fn name(&self) -> &Single<Name, M> {
@@ -63,19 +67,29 @@ impl<M> Definition<M> {
 		self.formatted.as_layout_variant_mut()
 	}
 
-	fn build(
+	pub(crate) fn build(
 		&self,
 		context: &Context<M>,
-		as_resource: &resource::Data<M>,
+		as_resource: &treeldr::node::Data<M>,
 		metadata: M,
-	) -> Result<treeldr::component::Definition<M>, Error<M>> {
-		let name = self.data.name.try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, Property::Name))?;
+	) -> Result<Meta<treeldr::component::Definition<M>, M>, Error<M>> where M: Clone + Merge {
+		let data = treeldr::component::Data {
+			name: self.data.name.clone().try_unwrap().map_err(|e| e.at_functional_node_property(as_resource.id, Property::Name))?
+		};
 
-		todo!()
+		let layout = as_resource.type_metadata(context, Type::Layout).map(|meta| {
+			self.layout.build(context, as_resource, &data, meta.clone())
+		}).transpose()?.into();
+
+		let formatted = as_resource.type_metadata(context, Type::Formatted(None)).map(|meta| {
+			self.formatted.build(context, as_resource, &data, meta.clone())
+		}).transpose()?.into();
+
+		Ok(Meta(treeldr::component::Definition::new(data, layout, formatted), metadata))
 	}
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Data<M> {
 	pub name: Single<Name, M>
 }
@@ -94,7 +108,7 @@ pub trait AssertNamed<M> {
 
 impl<M: Clone> AssertNamed<M> for treeldr::component::Data<M> {
 	fn assert_named(&self, as_resource: &treeldr::node::Data<M>, metadata: &M) -> Result<(), Error<M>> {
-		self.name.ok_or_else(|| Meta(
+		self.name.as_ref().ok_or_else(|| Meta(
 			error::NodeBindingMissing {
 				id: as_resource.id,
 				property: Property::Name.into()

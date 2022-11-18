@@ -4,7 +4,7 @@ use rdf_types::Vocabulary;
 use treeldr::{BlankIdIndex, Id, IriIndex, Name};
 
 /// Layout variant definition.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Definition;
 
 impl Definition {
@@ -18,23 +18,21 @@ impl Definition {
 		context: &Context<M>,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 		as_resource: &resource::Data<M>,
-		as_component: &component::Data<M>,
-		as_formatted: &component::formatted::Data<M>,
-		metadata: M,
+		as_formatted: &component::formatted::Data<M>
 	) -> Option<Meta<Name, M>>
 	where
 		M: Clone,
 	{
 		if let Id::Iri(term) = as_resource.id {
 			if let Ok(Some(name)) = Name::from_iri(vocabulary.iri(&term).unwrap()) {
-				return Some(Meta::new(name, metadata));
+				return Some(Meta::new(name, as_resource.metadata.clone()));
 			}
 		}
 
 		if let Some(layout_id) = as_formatted.format.first() {
 			if let Some(layout) = context.get(**layout_id).map(Node::as_component) {
 				if let Some(name) = layout.name().first() {
-					return Some(Meta::new(name.into_value().clone(), metadata))
+					return Some(Meta::new(name.into_value().clone(), as_resource.metadata.clone()))
 				}
 			}
 		}
@@ -42,17 +40,17 @@ impl Definition {
 		None
 	}
 
-	fn build<M>(
+	pub(crate) fn build<M>(
 		&self,
-		context: &Context<M>,
+		_context: &Context<M>,
 		as_resource: &treeldr::node::Data<M>,
 		as_component: &treeldr::component::Data<M>,
-		as_formatted: &treeldr::component::formatted::Data<M>,
-		meta: &M
-	) -> Result<treeldr::layout::variant::Definition, Error<M>> where M: Clone {
-		as_component.assert_named(as_resource, meta)?;
+		_as_formatted: &treeldr::component::formatted::Data<M>,
+		meta: M
+	) -> Result<Meta<treeldr::layout::variant::Definition, M>, Error<M>> where M: Clone {
+		as_component.assert_named(as_resource, &meta)?;
 
-		Ok(treeldr::layout::variant::Definition)
+		Ok(Meta(treeldr::layout::variant::Definition, meta))
 	}
 }
 

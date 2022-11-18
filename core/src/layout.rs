@@ -51,7 +51,7 @@ impl<'a, M> crate::Ref<'a, Layout, M> {
 	pub fn as_component(&self) -> &'a Meta<component::Definition<M>, M> {
 		self.as_resource().as_component().unwrap()
 	}
-	
+
 	pub fn as_layout(&self) -> &'a Meta<Definition<M>, M> {
 		self.as_resource().as_layout().unwrap()
 	}
@@ -250,6 +250,7 @@ impl<'a, M> Iterator for ComposingLayouts<'a, M> {
 pub enum Property {
 	For,
 	Description(DescriptionProperty),
+	IntersectionOf,
 	WithRestrictions,
 	ArrayListFirst,
 	ArrayListRest,
@@ -266,7 +267,7 @@ pub enum DescriptionProperty {
 	Set,
 	OneOrMany,
 	Array,
-	Alias,
+	Alias
 }
 
 impl Property {
@@ -275,6 +276,7 @@ impl Property {
 		match self {
 			Self::For => Term::TreeLdr(TreeLdr::LayoutFor),
 			Self::Description(p) => p.term(),
+			Self::IntersectionOf => Term::TreeLdr(TreeLdr::IntersectionOf),
 			Self::WithRestrictions => Term::TreeLdr(TreeLdr::WithRestrictions),
 			Self::ArrayListFirst => Term::TreeLdr(TreeLdr::ArrayListFirst),
 			Self::ArrayListRest => Term::TreeLdr(TreeLdr::ArrayListRest),
@@ -286,6 +288,7 @@ impl Property {
 		match self {
 			Self::For => "layout type",
 			Self::Description(p) => p.name(),
+			Self::IntersectionOf => "intersection", 
 			Self::WithRestrictions => "layout restrictions",
 			Self::ArrayListFirst => "\"array as list\" `first` property",
 			Self::ArrayListRest => "\"array as list\" `rest` property",
@@ -306,7 +309,8 @@ impl DescriptionProperty {
 			Self::Set => Term::TreeLdr(TreeLdr::Set),
 			Self::OneOrMany => Term::TreeLdr(TreeLdr::OneOrMany),
 			Self::Array => Term::TreeLdr(TreeLdr::Array),
-			Self::Alias => Term::TreeLdr(TreeLdr::Alias),
+			Self::Alias => Term::TreeLdr(TreeLdr::Alias)
+			
 		}
 	}
 

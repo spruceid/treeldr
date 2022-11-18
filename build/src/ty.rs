@@ -1,6 +1,6 @@
-use crate::{Error, ObjectAsRequiredId, Single, single, resource, ObjectAsId, context::HasType};
+use crate::{Error, ObjectAsRequiredId, Single, single, context::HasType};
 use locspan::Meta;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use treeldr::{metadata::Merge, Id, Multiple};
 
 pub mod datatype;
@@ -90,41 +90,14 @@ impl<M> Definition<M> {
 		&mut self.restriction
 	}
 
-	pub fn collect_dependencies(
-		&self,
-		context: &crate::Context<M>,
-		dependencies: &mut HashSet<Id>,
-		as_resource: &resource::Data<M>
-	) {
-		for Meta(list_id, _) in &self.data.union_of {
-			if let Some(list) = context.get_list(*list_id) {
-				for Meta(item, _) in list.lenient_iter(context) {
-					if let Some(item_id) = item.as_id() {
-						dependencies.insert(item_id);
-					}
-				}
-			}
-		}
-
-		for Meta(list_id, _) in &self.data.intersection_of {
-			if let Some(list) = context.get_list(*list_id) {
-				for Meta(item, _) in list.lenient_iter(context) {
-					if let Some(item_id) = item.as_id() {
-						dependencies.insert(item_id);
-					}
-				}
-			}
-		}
-	}
-
-	fn build(
+	pub(crate) fn build(
 		&self,
 		context: &crate::Context<M>,
 		as_resource: &treeldr::node::Data<M>,
 		meta: M,
 	) -> Result<Meta<treeldr::ty::Definition<M>, M>, Error<M>> where M: Clone + Merge {
-		let union_of = self.data.union_of.into_list_at_node_binding(context, as_resource.id, Property::UnionOf)?;
-		let intersection_of = self.data.intersection_of.into_list_at_node_binding(context, as_resource.id, Property::IntersectionOf)?;
+		let union_of = self.data.union_of.clone().into_list_at_node_binding(context, as_resource.id, Property::UnionOf)?;
+		let intersection_of = self.data.intersection_of.clone().into_list_at_node_binding(context, as_resource.id, Property::IntersectionOf)?;
 
 		let desc = if as_resource.has_type(context, SubClass::DataType) {
 			treeldr::ty::Description::Data(self.datatype.build(context, as_resource, &meta)?)

@@ -15,11 +15,9 @@ impl<M> Context<M> {
 	{
 		let mut default_layouts = BTreeMap::new();
 		for (id, node) in &self.nodes {
-			if let Some(field) = node.as_layout_field() {
-				if field.layout().is_empty() {
-					if let Some(default_layout) = field.default_layout(self) {
-						default_layouts.insert(*id, default_layout);
-					}
+			if node.as_formatted().format().is_empty() {
+				if let Some(default_layout) = node.as_layout_field().default_layout(self) {
+					default_layouts.insert(*id, default_layout);
 				}
 			}
 		}
@@ -28,9 +26,8 @@ impl<M> Context<M> {
 			let default_layout = default_layout.build(self, vocabulary, generator);
 			self.get_mut(id)
 				.unwrap()
-				.as_layout_field_mut()
-				.unwrap()
-				.layout_mut().insert(default_layout.into())
+				.as_formatted_mut()
+				.format_mut().insert(default_layout.into())
 		}
 	}
 }

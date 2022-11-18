@@ -1,4 +1,5 @@
-use crate::{Context, Error, Single};
+use crate::{Context, Error, Single, error};
+use derivative::Derivative;
 use locspan::{Meta, Stripped};
 use treeldr::{vocab::Object, Id};
 
@@ -35,12 +36,18 @@ impl<M> Definition<M> {
 	}
 }
 
+#[derive(Derivative)]
+#[derivative(Clone(bound=""), Copy(bound=""))]
 pub enum ListRef<'l, M> {
 	Nil,
 	Cons(Id, &'l Definition<M>, &'l M),
 }
 
 impl<'l, M> ListRef<'l, M> {
+	pub fn try_fold<T, F>(&self, context: &'l Context<M>, first: T, f: F) -> TryFold<'l, T, M, F> where F: Fn(T, &Single<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>> {
+		TryFold { context, stack: vec![Ok((*self, first))], f }
+	}
+
 	pub fn iter(&self, context: &'l Context<M>) -> Iter<'l, M> {
 		match self {
 			Self::Nil => Iter::Nil,
@@ -51,7 +58,70 @@ impl<'l, M> ListRef<'l, M> {
 	pub fn lenient_iter(&self, context: &'l Context<M>) -> LenientIter<'l, M> {
 		match self {
 			Self::Nil => LenientIter::Nil,
-			Self::Cons(id, l, meta) => LenientIter::Cons(context, *l),
+			Self::Cons(_, l, _) => LenientIter::Cons(context, *l),
+		}
+	}
+}
+
+pub struct TryFold<'l, T, M, F> {
+	context: &'l Context<M>,
+	stack: Vec<Result<(ListRef<'l, M>, T), Error<M>>>,
+	f: F
+}
+
+impl<'l, T, M, F> Iterator for TryFold<'l, T, M, F> where T: Clone, M: Clone, F: Fn(T, &Single<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>> {
+	type Item = Result<T, Error<M>>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		loop {
+			match self.stack.pop() {
+				Some(Err(e)) => break Some(Err(e)),
+				Some(Ok((list, t))) => {
+					match list {
+						ListRef::Nil => break Some(Ok(t)),
+						ListRef::Cons(id, d, meta) => {
+							if d.rest.is_empty() {
+								break Some(Err(Meta(
+									error::NodeBindingMissing {
+										id,
+										property: Property::Rest.into()
+									}.into(),
+									meta.clone()
+								)))
+							} else {
+								match (self.f)(t, &d.first) {
+									Ok(new_states) => {
+										'next_state: for u in new_states {
+											let len = d.rest.len();
+		
+											for (i, Meta(rest_id, rest_meta)) in d.rest.iter().enumerate() {
+												if i + 1 == len {
+													let item = match self.context.require_list(*rest_id).map_err(|e| e.at(rest_meta.clone())) {
+														Ok(rest) => Ok((rest, u)),
+														Err(e) => Err(e)
+													};
+													
+													self.stack.push(item);
+													continue 'next_state;
+												} else {
+													let item = match self.context.require_list(*rest_id).map_err(|e| e.at(rest_meta.clone())) {
+														Ok(rest) => Ok((rest, u.clone())),
+														Err(e) => Err(e)
+													};
+													
+													self.stack.push(item)
+												}
+											}
+										}
+									}
+									Err(e) => break Some(Err(e))
+								}
+							}
+						}
+					}
+				}
+				None => break None
+			}
 		}
 	}
 }

@@ -49,7 +49,7 @@ impl<M> Definition<M> {
 	}
 
 	pub fn build(
-		self,
+		&self,
 		context: &Context<M>,
 		as_resource: &treeldr::node::Data<M>,
 		meta: &M
@@ -57,8 +57,8 @@ impl<M> Definition<M> {
 	where
 		M: Clone + Merge,
 	{
-		let prop_ref = self.property.into_required_property_at_node_binding(context, as_resource.id, Property::OnProperty, &meta)?;
-		let restriction = self.restriction.try_unwrap().map_err(|_| todo!())?.ok_or_else(|| todo!())?;
+		let prop_ref = self.property.clone().into_required_property_at_node_binding(context, as_resource.id, Property::OnProperty, &meta)?;
+		let restriction = self.restriction.clone().try_unwrap().map_err(|_| todo!())?.ok_or_else(|| todo!())?;
 
 		Ok(treeldr::ty::restriction::Definition::new(prop_ref, restriction.build(context, as_resource.id, meta.clone())?))
 	}

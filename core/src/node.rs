@@ -1,14 +1,14 @@
 use crate::{error, layout, prop, ty, Error, Id, MetaOption, component, Multiple, Type, ResourceType, vocab};
 use locspan::Meta;
 
-pub struct Parts<M> {
-	pub data: Data<M>,
-	pub ty: MetaOption<ty::Definition<M>, M>,
-	pub property: MetaOption<prop::Definition<M>, M>,
-	pub component: MetaOption<component::Definition<M>, M>
+#[derive(Debug, Clone)]
+pub struct AnonymousData<M> {
+	pub type_: Multiple<Type, M>,
+	pub label: Multiple<String, M>,
+	pub comment: Multiple<String, M>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Data<M> {
 	pub id: Id,
 	pub metadata: M,
@@ -20,6 +20,14 @@ pub struct Data<M> {
 impl<M> Data<M> {
 	pub fn new(id: Id, metadata: M) -> Self {
 		Self { id, metadata, type_: Multiple::default(), label: Multiple::default(), comment: Multiple::default() }
+	}
+
+	pub fn clone_anonymous(&self) -> AnonymousData<M> where M: Clone {
+		AnonymousData {
+			type_: self.type_.clone(),
+			label: self.label.clone(),
+			comment: self.comment.clone()
+		}
 	}
 }
 
@@ -55,24 +63,6 @@ impl<M> Definition<M> {
 			ty,
 			property,
 			component
-		}
-	}
-
-	pub fn from_parts(parts: Parts<M>) -> Self {
-		Self {
-			data: parts.data,
-			ty: parts.ty,
-			property: parts.property,
-			component: parts.component
-		}
-	}
-
-	pub fn into_parts(self) -> Parts<M> {
-		Parts {
-			data: self.data,
-			ty: self.ty,
-			property: self.property,
-			component: self.component
 		}
 	}
 

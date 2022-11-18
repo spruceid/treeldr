@@ -1,17 +1,22 @@
 use locspan::Meta;
-use treeldr::{Name, Id, Type};
+use treeldr::{Id, Type};
 
-use crate::{Multiple, Single, multiple, single};
+use crate::{Multiple, multiple};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+pub struct AnonymousData<M> {
+	pub type_: Multiple<Type, M>,
+	pub label: Multiple<String, M>,
+	pub comment: Multiple<String, M>
+}
+
+#[derive(Debug, Clone)]
 pub struct Data<M> {
 	pub id: Id,
 	pub metadata: M,
 	pub type_: Multiple<Type, M>,
 	pub label: Multiple<String, M>,
-	pub comment: Multiple<String, M>,
-	pub name: Single<Name, M>,
-	pub format: Single<Id, M>
+	pub comment: Multiple<String, M>
 }
 
 impl<M> Data<M> {
@@ -21,9 +26,15 @@ impl<M> Data<M> {
 			metadata,
 			type_: Multiple::default(),
 			label: Multiple::default(),
-			comment: Multiple::default(),
-			name: Single::default(),
-			format: Single::default()
+			comment: Multiple::default()
+		}
+	}
+
+	pub fn clone_anonymous(&self) -> AnonymousData<M> where M: Clone {
+		AnonymousData {
+			type_: self.type_.clone(),
+			label: self.label.clone(),
+			comment: self.comment.clone()
 		}
 	}
 }
@@ -31,17 +42,13 @@ impl<M> Data<M> {
 pub enum BindingRef<'a, M> {
 	Type(Meta<Id, &'a M>),
 	Label(Meta<&'a str, &'a M>),
-	Comment(Meta<&'a str, &'a M>),
-	Name(Meta<&'a Name, &'a M>),
-	Format(Meta<Id, &'a M>)
+	Comment(Meta<&'a str, &'a M>)
 }
 
 pub struct Bindings<'a, M> {
 	type_: multiple::Iter<'a, Id, M>,
 	label: multiple::Iter<'a, String, M>,
-	comment: multiple::Iter<'a, String, M>,
-	name: single::Iter<'a, Name, M>,
-	format: single::Iter<'a, Id, M>
+	comment: multiple::Iter<'a, String, M>
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {
@@ -62,17 +69,6 @@ impl<'a, M> Iterator for Bindings<'a, M> {
 							.next()
 							.map(|v| v.map(String::as_str))
 							.map(BindingRef::Comment)
-							.or_else(|| {
-								self.name
-									.next()
-									.map(BindingRef::Name)
-									.or_else(|| {
-										self.format
-											.next()
-											.map(Meta::into_cloned_value)
-											.map(BindingRef::Format)
-									})
-							})
 					})
 			})
 	}
