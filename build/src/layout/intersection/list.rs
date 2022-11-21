@@ -23,13 +23,10 @@ pub trait IntersectionListItem<M>: Clone {
 	) -> Result<Id, Error<M>>;
 }
 
-pub fn list_intersection<T: IntersectionListItem<M>, V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>, M: Clone + Merge>(
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+pub fn list_intersection<T: IntersectionListItem<M>, M: Clone + Merge>(
 	context: &mut Context<M>,
-	stack: &mut VecDeque<Id>,
 	lists: &IdIntersection<M>,
-) -> Result<Vec<Option<Id>>, Error<M>> {
+) -> Result<Vec<Option<Vec<Meta<T, M>>>>, Error<M>> {
 	let mut result: Vec<Option<Vec<Meta<T, M>>>> = Vec::new();
 
 	for (i, Meta(list_id, meta)) in lists.iter().enumerate() {
@@ -64,6 +61,16 @@ pub fn list_intersection<T: IntersectionListItem<M>, V: VocabularyMut<Iri=IriInd
 		}
 	}
 
+	Ok(result)
+}
+
+pub fn build_lists<T: IntersectionListItem<M>, V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>, M: Clone + Merge>(
+	vocabulary: &mut V,
+	generator: &mut impl Generator<V>,
+	context: &mut Context<M>,
+	stack: &mut VecDeque<Id>,
+	result: Vec<Option<Vec<Meta<T, M>>>>
+) -> Result<Vec<Option<Id>>, Error<M>> {
 	result.into_iter().map(|fields| {
 		fields.map(|fields| {
 			let built_fields: Vec<_> = fields

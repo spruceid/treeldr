@@ -1,20 +1,69 @@
 use std::collections::VecDeque;
 
-use locspan::Meta;
+use locspan::{Meta, StrippedPartialEq, StrippedPartialOrd, StrippedOrd};
+use locspan_derive::{StrippedPartialEq, StrippedEq, StrippedPartialOrd, StrippedOrd};
 use rdf_types::{VocabularyMut, Generator};
 use treeldr::{metadata::Merge, IriIndex, BlankIdIndex, Id, Name};
 
 use crate::{Error, Context, Single};
-use super::{IdIntersection, list::IntersectionListItem, list_intersection};
+use super::{IdIntersection, list::IntersectionListItem, list_intersection, build_lists};
+
+#[derive(Debug, Clone, StrippedPartialEq, StrippedEq, StrippedPartialOrd, StrippedOrd)]
+#[locspan(ignore(M))]
+pub struct EnumIntersection<M> {
+	#[locspan(stripped)]
+	enums: IdIntersection<M>,
+
+	#[locspan(stripped)]
+	non_enums: IdIntersection<M>
+}
+
+impl<M> EnumIntersection<M> {
+	pub fn intersect_with(&mut self, other: Self) where M: Clone + Merge {
+		self.enums.intersect_with(other.enums)
+	}
+}
+
+impl<M> EnumIntersection<M> {
+	pub fn new(id: Meta<Id, M>) -> Self {
+		Self { enums: IdIntersection::new(id), non_enums: IdIntersection::empty() }
+	}
+}
+
+impl<M, N> PartialEq<EnumIntersection<N>> for EnumIntersection<M> {
+	fn eq(&self, other: &EnumIntersection<N>) -> bool {
+		self.stripped_eq(other)
+	}
+}
+
+impl<M> Eq for EnumIntersection<M> {}
+
+impl<M, N> PartialOrd<EnumIntersection<N>> for EnumIntersection<M> {
+	fn partial_cmp(&self, other: &EnumIntersection<N>) -> Option<std::cmp::Ordering> {
+		self.stripped_partial_cmp(other)
+	}
+}
+
+impl<M> Ord for EnumIntersection<M> {
+	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+		self.stripped_cmp(other)
+	}
+}
 
 pub fn enum_intersection<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>, M: Clone + Merge>(
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
 	context: &mut Context<M>,
 	stack: &mut VecDeque<Id>,
-	lists: &IdIntersection<M>
+	inter: &EnumIntersection<M>
 ) -> Result<Vec<Option<Id>>, Error<M>> {
-	list_intersection::<Variant<M>, _, _>(vocabulary, generator, context, stack, lists)
+	let mut lists = list_intersection::<Variant<M>, _>(context, &inter.enums)?;
+
+	for list in &mut lists {
+		non_enum_intersection(list.as_mut(), &inter.non_enums)
+	}
+
+	build_lists(vocabulary, generator, context, stack, lists)
 }
 
 /// Variant intersection.
@@ -154,6 +203,22 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Variant<M> {
 				*node.as_formatted_mut().format_mut() = layout;
 
 				Ok(id)
+			}
+		}
+	}
+}
+
+fn non_enum_intersection<M>(
+	variants: Option<&mut Vec<Meta<Variant<M>, M>>>,
+	other: &IdIntersection<M>
+) where M: Clone + Merge {
+	if let Some(variants) = variants {
+		for v in variants {
+			let layout = std::mem::take(&mut v.layout);
+
+			for Meta(mut ids, m) in layout {
+				ids.intersect_with(other.clone());
+				v.layout.insert(Meta(ids, m))
 			}
 		}
 	}

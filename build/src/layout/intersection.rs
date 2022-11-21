@@ -13,9 +13,11 @@ mod structure;
 mod enumeration;
 
 pub use id::IdIntersection;
-pub(crate) use list::list_intersection;
+pub(crate) use list::{list_intersection, build_lists};
 use structure::struct_intersection;
 use enumeration::enum_intersection;
+
+use self::enumeration::EnumIntersection;
 
 use super::Primitive;
 
@@ -109,7 +111,7 @@ pub enum Description<M> {
 	Primitive(#[locspan(stripped)] Primitive),
 	Struct(#[locspan(stripped)] IdIntersection<M>),
 	Reference(#[locspan(stripped)] IdIntersection<M>),
-	Enum(#[locspan(stripped)] IdIntersection<M>),
+	Enum(#[locspan(stripped)] EnumIntersection<M>),
 	Required(#[locspan(stripped)] IdIntersection<M>),
 	Option(#[locspan(stripped)] IdIntersection<M>),
 	Set(#[locspan(stripped)] IdIntersection<M>),
@@ -143,7 +145,7 @@ impl<M> Description<M> {
 		let desc = match desc {
 			super::Description::Alias(id) => Self::Alias(IdIntersection::new(Meta(*id, meta.clone()))),
 			super::Description::Array(id) => Self::Array(IdIntersection::new(Meta(*id, meta.clone()))),
-			super::Description::Enum(id) => Self::Enum(IdIntersection::new(Meta(*id, meta.clone()))),
+			super::Description::Enum(id) => Self::Enum(EnumIntersection::new(Meta(*id, meta.clone()))),
 			super::Description::Never => Self::Never,
 			super::Description::OneOrMany(id) => Self::OneOrMany(IdIntersection::new(Meta(*id, meta.clone()))),
 			super::Description::Option(id) => Self::Option(IdIntersection::new(Meta(*id, meta.clone()))),

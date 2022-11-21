@@ -17,6 +17,10 @@ impl<M> IdIntersection<M> {
 		Self(map)
 	}
 
+	pub fn empty() -> Self {
+		Self(BTreeMap::new())
+	}
+
 	pub fn iter(&self) -> impl '_ + Iterator<Item = Meta<Id, &M>> {
 		self.0.iter().map(|(id, m)| Meta(*id, m))
 	}

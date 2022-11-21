@@ -5,7 +5,7 @@ use rdf_types::{VocabularyMut, Generator};
 use treeldr::{metadata::Merge, IriIndex, BlankIdIndex, Id, Name};
 
 use crate::{Error, Context, Single};
-use super::{IdIntersection, list::IntersectionListItem, list_intersection};
+use super::{IdIntersection, list::IntersectionListItem, list_intersection, build_lists};
 
 pub fn struct_intersection<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>, M: Clone + Merge>(
 	vocabulary: &mut V,
@@ -14,7 +14,8 @@ pub fn struct_intersection<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>,
 	stack: &mut VecDeque<Id>,
 	lists: &IdIntersection<M>
 ) -> Result<Vec<Option<Id>>, Error<M>> {
-	list_intersection::<Field<M>, _, _>(vocabulary, generator, context, stack, lists)
+	let list = list_intersection::<Field<M>, _>(context, lists)?;
+	build_lists(vocabulary, generator, context, stack, list)
 }
 
 /// Field intersection.
