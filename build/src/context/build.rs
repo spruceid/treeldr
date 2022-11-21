@@ -5,6 +5,7 @@ use treeldr::{IriIndex, BlankIdIndex, Model, metadata::Merge};
 
 use crate::{Context, Error};
 
+mod compute_layout_intersections;
 mod unify;
 mod compute_layouts_relations;
 mod assign_default_layouts;
@@ -21,6 +22,7 @@ impl<M: Clone> Context<M> {
 	where
 		M: Clone + Merge,
 	{
+		self.compute_layout_intersections(vocabulary, generator)?;
 		self.unify();
 		self.assign_default_layouts(vocabulary, generator);
 		let layouts_relations = self.compute_layouts_relations();

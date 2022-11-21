@@ -332,7 +332,7 @@ impl<M: Clone> Definition<M> {
 	pub fn intersection_definition(
 		&self,
 		context: &crate::Context<M>,
-		as_resource: &treeldr::node::Data<M>,
+		as_resource: &resource::Data<M>,
 	) -> Result<Option<intersection::Definition<M>>, Error<M>> where M: Merge {
 		let mut result = intersection::Definition::default();
 
@@ -385,6 +385,10 @@ impl<M: Clone> Definition<M> {
 		}
 
 		Ok(Some(result))
+	}
+
+	pub fn add(&mut self, def: intersection::BuiltDefinition<M>) where M: Merge {
+		self.desc.extend(def.desc)
 	}
 
 	pub fn build_description(
