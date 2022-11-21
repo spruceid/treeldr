@@ -1,7 +1,7 @@
 use crate::{error, utils::TryCollect, Context, Error, Single, single::Conflict, Node, ObjectAsId, ObjectAsRequiredId, resource};
 use locspan::Meta;
 use rdf_types::IriVocabulary;
-use treeldr::{metadata::Merge, Id, IriIndex, Name, Multiple};
+use treeldr::{metadata::Merge, Id, IriIndex, Name};
 pub use treeldr::layout::{Property, DescriptionProperty};
 
 pub mod array;
@@ -9,6 +9,7 @@ pub mod field;
 pub mod primitive;
 pub mod restriction;
 pub mod variant;
+pub mod intersection;
 
 pub use primitive::Primitive;
 pub use restriction::{Restriction, Restrictions};
@@ -188,6 +189,14 @@ impl<M> Definition<M> {
 		&mut self.desc
 	}
 
+	pub fn intersection_of(&self) -> &Single<Id, M> {
+		&self.intersection_of
+	}
+
+	pub fn intersection_of_mut(&mut self) -> &mut Single<Id, M> {
+		&mut self.intersection_of
+	}
+
 	pub fn restrictions(&self) -> &Single<Id, M> {
 		&self.restrictions
 	}
@@ -316,45 +325,66 @@ impl<M: Clone> Definition<M> {
 		None
 	}
 
-	pub fn implicit_description(
+	/// Generates the intersection definition for this layout.
+	/// 
+	/// If `None` is returned, this means the intersection cannot be defined yet,
+	/// because it depends on the not-yet-computed intersection of other layouts.
+	pub fn intersection_definition(
 		&self,
 		context: &crate::Context<M>,
 		as_resource: &treeldr::node::Data<M>,
-	) -> Result<Multiple<Description, M>, Error<M>> where M: Merge {
-		let mut result = Multiple::default();
+	) -> Result<Option<intersection::Definition<M>>, Error<M>> where M: Merge {
+		let mut result = intersection::Definition::default();
+
+		#[derive(Debug, Clone, Copy)]
+		struct Incomplete;
 
 		for Meta(list_id, meta) in &self.intersection_of {
 			let list = context.require_list(*list_id).map_err(|e| e.at_node_property(as_resource.id, Property::IntersectionOf, meta.clone()))?;
 		
-			let intersections = list.try_fold(context, None, |intersection: Option<Description>, items| {
-				let mut result = Vec::new();
+			let intersections = list.try_fold(context, Ok(None), |intersection: Result<Option<intersection::Definition<M>>, Incomplete>, items| {
+				match intersection {
+					Ok(intersection) => {
+						let mut result = Vec::new();
 
-				for Meta(object, layout_metadata) in items {
-					let layout_id = object.as_required_id(&layout_metadata)?;
-					let layout = context
-						.require(layout_id)
-						.map_err(|e| e.at(layout_metadata.clone()))?
-						.require_layout(context).map_err(|e| e.at(layout_metadata.clone()))?;
+						for Meta(object, layout_metadata) in items {
+							let layout_id = object.as_required_id(&layout_metadata)?;
 
-					for desc in layout.description() {
-						let new_intersection = match intersection {
-							Some(d) => d.intersected_with(desc),
-							None => desc
-						};
+							let new_intersection = match intersection::Definition::from_id(context, layout_id, layout_metadata)? {
+								Some(desc) => {
+									Some(match &intersection {
+										Some(intersection) => {
+											let mut new_intersection = intersection.clone();
+											new_intersection.intersect_with(desc);
+											new_intersection
+										}
+										None => desc
+									})
+								}
+								None => {
+									return Ok(vec![Err(Incomplete)])
+								}
+							};
 
-						result.push(new_intersection)
+							result.push(Ok(new_intersection))
+						}
+
+						Ok(result)
 					}
+					Err(Incomplete) => Ok(vec![Err(Incomplete)])
 				}
-
-				Ok(result)
 			});
 
 			for intersection in intersections {
-				result.insert(Meta(intersection?.unwrap_or(Description::Never), meta.clone()));
+				match intersection? {
+					Err(Incomplete) => return Ok(None),
+					Ok(Some(def)) => result.add(def),
+					Ok(None) => result.add_never(meta.clone())
+				}
 			}
 		}
 
-		Ok(result)
+		Ok(Some(result))
 	}
 
 	pub fn build_description(

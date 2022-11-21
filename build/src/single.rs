@@ -291,6 +291,14 @@ impl<T: Ord, M: Merge> Extend<Meta<T, M>> for Single<T, M> {
 	}
 }
 
+impl<T: Ord, M: Merge> FromIterator<Meta<T, M>> for Single<T, M> {
+	fn from_iter<I: IntoIterator<Item = Meta<T, M>>>(iter: I) -> Self {
+		let mut result = Self::default();
+		result.extend(iter);
+		result
+	}
+}
+
 impl<T, M> IntoIterator for Single<T, M> {
 	type Item = Meta<T, M>;
 	type IntoIter = IntoIter<T, M>;
