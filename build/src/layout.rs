@@ -334,7 +334,7 @@ impl<M: Clone> Definition<M> {
 		context: &crate::Context<M>,
 		as_resource: &resource::Data<M>,
 	) -> Result<Option<intersection::Definition<M>>, Error<M>> where M: Merge {
-		let mut result = intersection::Definition::default();
+		let mut result = intersection::Definition::new(Meta(as_resource.id, as_resource.metadata.clone()));
 
 		#[derive(Debug, Clone, Copy)]
 		struct Incomplete;
@@ -350,7 +350,7 @@ impl<M: Clone> Definition<M> {
 						for Meta(object, layout_metadata) in items {
 							let layout_id = object.as_required_id(&layout_metadata)?;
 
-							let new_intersection = match intersection::Definition::from_id(context, layout_id, layout_metadata)? {
+							let new_intersection = match intersection::Definition::from_id(context, Meta(layout_id, layout_metadata.clone()))? {
 								Some(desc) => {
 									Some(match &intersection {
 										Some(intersection) => {

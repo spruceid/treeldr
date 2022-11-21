@@ -23,18 +23,23 @@ use super::Primitive;
 
 #[derive(Debug, Clone)]
 pub struct Definition<M> {
+	id: Meta<Id, M>,
+
 	/// Layout description.
 	desc: Single<Description<M>, M>
 }
 
 impl<M> Definition<M> {
+	pub fn new(id: Meta<Id, M>) -> Self {
+		Self { id, desc: Single::default() }
+	}
+
 	pub fn from_id(
 		context: &Context<M>,
-		id: Id,
-		meta: &M
+		id: Meta<Id, M>
 	) -> Result<Option<Self>, Error<M>> where M: Clone + Merge {
-		let node = context.require(id).map_err(|e| e.at(meta.clone()))?;
-		let layout = node.require_layout(context).map_err(|e| e.at(meta.clone()))?;
+		let node = context.require(*id).map_err(|e| e.at(id.metadata().clone()))?;
+		let layout = node.require_layout(context).map_err(|e| e.at(id.metadata().clone()))?;
 
 		if layout.description().is_empty() {
 			Ok(None)
@@ -42,6 +47,7 @@ impl<M> Definition<M> {
 			let desc = layout.description().iter().map(Description::new).collect();
 
 			Ok(Some(Self {
+				id,
 				desc
 			}))
 		}
@@ -61,8 +67,20 @@ impl<M> Definition<M> {
 		let desc = std::mem::take(&mut self.desc);
 		for Meta(a, a_meta) in desc {
 			for Meta(b, b_meta) in &other.desc {
-				let mut c = a.clone();
-				c.intersect_with(Meta(b.clone(), b_meta.clone()));
+				let c = if a.is_enum() && !b.is_enum() {
+					let mut c = a.clone();
+					c.intersect_enum_with_non_enum(other.id.clone());
+					c
+				} else if !a.is_enum() && b.is_enum() {
+					let mut c = b.clone();
+					c.intersect_enum_with_non_enum(self.id.clone());
+					c
+				} else {
+					let mut c = a.clone();
+					c.intersect_with(Meta(b.clone(), b_meta.clone()));
+					c
+				};
+
 				self.desc.insert(Meta(c, a_meta.clone().merged_with(b_meta.clone())));
 			}
 		}
@@ -87,14 +105,6 @@ impl<M> Definition<M> {
 		}
 
 		Ok(BuiltDefinition { desc })
-	}
-}
-
-impl<M> Default for Definition<M> {
-	fn default() -> Self {
-		Self {
-			desc: Single::default()
-		}
 	}
 }
 
@@ -159,6 +169,10 @@ impl<M> Description<M> {
 		Meta(desc, meta.clone())
 	}
 
+	pub fn is_enum(&self) -> bool {
+		matches!(self, Self::Enum(_))
+	}
+
 	pub fn intersect_with(&mut self, Meta(other, _): Meta<Description<M>, M>) where M: Clone + Merge {
 		match (self, other) {
 			(Self::Never, Self::Never) => (),
@@ -190,6 +204,13 @@ impl<M> Description<M> {
 			(this, _) => {
 				*this = Self::Never
 			}
+		}
+	}
+
+	pub fn intersect_enum_with_non_enum(&mut self, id: Meta<Id, M>) where M: Clone + Merge {
+		match self {
+			Self::Enum(e) => e.intersect_with_non_enum(id),
+			_ => panic!("not an enum")
 		}
 	}
 

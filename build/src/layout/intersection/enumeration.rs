@@ -22,6 +22,10 @@ impl<M> EnumIntersection<M> {
 	pub fn intersect_with(&mut self, other: Self) where M: Clone + Merge {
 		self.enums.intersect_with(other.enums)
 	}
+
+	pub fn intersect_with_non_enum(&mut self, other: Meta<Id, M>) where M: Clone + Merge {
+		self.non_enums.insert(other)
+	}
 }
 
 impl<M> EnumIntersection<M> {
