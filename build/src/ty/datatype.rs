@@ -130,9 +130,9 @@ impl<M> Definition<M> {
 	}
 }
 
-pub enum BindingRef<'a, M> {
-	OnDatatype(Meta<Id, &'a M>),
-	WithRestrictions(Meta<Id, &'a M>)
+pub enum Binding {
+	OnDatatype(Id),
+	WithRestrictions(Id)
 }
 
 pub struct Bindings<'a, M> {
@@ -141,18 +141,18 @@ pub struct Bindings<'a, M> {
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {
-	type Item = BindingRef<'a, M>;
+	type Item = Meta<Binding, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.on_datatype
 			.next()
 			.map(Meta::into_cloned_value)
-			.map(BindingRef::OnDatatype)
+			.map(|m| m.map(Binding::OnDatatype))
 			.or_else(|| {
 				self.with_restrictions
 					.next()
 					.map(Meta::into_cloned_value)
-					.map(BindingRef::WithRestrictions)
+					.map(|m| m.map(Binding::WithRestrictions))
 			})
 	}
 }

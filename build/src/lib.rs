@@ -7,7 +7,6 @@ pub mod error;
 pub mod component;
 pub mod layout;
 pub mod list;
-pub mod node;
 pub mod resource;
 pub mod prop;
 // pub mod rdf;
@@ -15,11 +14,11 @@ mod single;
 pub mod ty;
 pub mod utils;
 
+pub use prop::Property;
 pub use context::Context;
 pub use error::Error;
 pub use layout::{ParentLayout, SubLayout};
 pub use list::{ListMut, ListRef};
-pub use node::Node;
 pub use single::Single;
 pub use multiple::Multiple;
 

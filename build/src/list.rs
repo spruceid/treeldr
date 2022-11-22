@@ -1,4 +1,4 @@
-use crate::{Context, Error, Single, error};
+use crate::{Context, Error, Single, error, single};
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
 use treeldr::{vocab::Object, Id};
@@ -194,12 +194,14 @@ pub enum ListMut<'l, M> {
 	Cons(&'l mut Definition<M>),
 }
 
-pub enum BindingRef<'a, M> {
+pub enum ClassBindingRef<'a, M> {
 	First(&'a Object<M>),
 	Rest(Id),
 }
 
-impl<'a, M> BindingRef<'a, M> {
+pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
+
+impl<'a, M> ClassBindingRef<'a, M> {
 	pub fn property(&self) -> Property {
 		match self {
 			Self::First(_) => Property::First,
@@ -209,18 +211,25 @@ impl<'a, M> BindingRef<'a, M> {
 }
 
 /// Iterator over the bindings of a given list.
-pub struct Bindings<'a, M> {
-	first: Option<&'a Object<M>>,
-	rest: Option<Id>,
+pub struct ClassBindings<'a, M> {
+	first: single::Iter<'a, Stripped<Object<M>>, M>,
+	rest: single::Iter<'a, Id, M>,
 }
 
-impl<'a, M> Iterator for Bindings<'a, M> {
-	type Item = BindingRef<'a, M>;
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBindingRef<'a, M>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.first
-			.take()
-			.map(BindingRef::First)
-			.or_else(|| self.rest.take().map(BindingRef::Rest))
+			.next()
+			.map(|m| m.map(|o| ClassBindingRef::First(&o.0)))
+			.or_else(|| {
+				self.rest
+					.next()
+					.map(Meta::into_cloned_value)
+					.map(|m| m.map(ClassBindingRef::Rest))
+			})
 	}
 }

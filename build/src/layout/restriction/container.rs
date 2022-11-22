@@ -1,1 +1,1 @@
-pub use treeldr::layout::restriction::{Restriction, Restrictions, BindingRef};
+pub use treeldr::layout::restriction::{Restriction, Restrictions, Binding};

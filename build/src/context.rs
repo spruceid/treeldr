@@ -1,5 +1,5 @@
 use crate::{
-	error::{NodeUnknown, NodeTypeInvalid}, node, Error, IriIndex, ListRef, Node, component, layout, resource, prop
+	error::{NodeUnknown, NodeTypeInvalid}, Error, Property, IriIndex, ListRef, component, layout, resource, prop
 };
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
@@ -10,14 +10,14 @@ use treeldr::{metadata::Merge, vocab, BlankIdIndex, Id, Type, ty::SubClass, Mult
 mod initialize;
 pub mod build;
 
-pub type Ids<'a, M> = std::iter::Copied<std::collections::btree_map::Keys<'a, Id, Node<M>>>;
+pub type Ids<'a, M> = std::iter::Copied<std::collections::btree_map::Keys<'a, Id, resource::Definition<M>>>;
 
 /// TreeLDR build context.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Context<M> {
 	/// Nodes.
-	nodes: BTreeMap<Id, Node<M>>,
+	nodes: BTreeMap<Id, resource::Definition<M>>,
 
 	standard_references: HashMap<Id, Id>,
 }
@@ -27,52 +27,52 @@ impl<M> Context<M> {
 		Self::default()
 	}
 
-	pub fn declare(&mut self, id: Id, metadata: M) -> &mut Node<M> where M: Merge {
+	pub fn declare(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Merge {
 		match self.nodes.entry(id) {
 			Entry::Occupied(entry) => {
 				let node = entry.into_mut();
 				node.metadata_mut().merge_with(metadata);
 				node
 			},
-			Entry::Vacant(entry) => entry.insert(Node::new(id, metadata))
+			Entry::Vacant(entry) => entry.insert(resource::Definition::new(id, metadata))
 		}
 	}
 
-	pub fn declare_with(&mut self, id: Id, type_: impl Into<Type>, metadata: M) -> &mut Node<M> where M: Clone + Merge {
+	pub fn declare_with(&mut self, id: Id, type_: impl Into<Type>, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		let node = self.declare(id, metadata.clone());
 		node.type_mut().insert(Meta(type_.into(), metadata));
 		node
 	}
 
-	pub fn declare_type(&mut self, id: Id, metadata: M) -> &mut Node<M> where M: Clone + Merge {
+	pub fn declare_type(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		self.declare_with(id, Type::Class(None), metadata)
 	}
 
-	pub fn declare_datatype(&mut self, id: Id, metadata: M) -> &mut Node<M> where M: Clone + Merge {
+	pub fn declare_datatype(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		self.declare_with(id, SubClass::DataType, metadata)
 	}
 
-	pub fn declare_property(&mut self, id: Id, metadata: M) -> &mut Node<M> where M: Clone + Merge {
+	pub fn declare_property(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		self.declare_with(id, Type::Property(None), metadata)
 	}
 
-	pub fn declare_functional_property(&mut self, id: Id, metadata: M) -> &mut Node<M> where M: Clone + Merge {
+	pub fn declare_functional_property(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		self.declare_with(id, prop::Type::FunctionalProperty, metadata)
 	}
 
-	pub fn declare_layout(&mut self, id: Id, metadata: M) -> &mut Node<M> where M: Clone + Merge {
+	pub fn declare_layout(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		self.declare_with(id, component::Type::Layout, metadata)
 	}
 
-	pub fn declare_primitive_layout(&mut self, primitive: layout::Primitive, metadata: M) -> &mut Node<M> where M: Clone + Merge {
+	pub fn declare_primitive_layout(&mut self, primitive: layout::Primitive, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		self.declare_layout(primitive.id(), metadata)
 	}
 
-	pub fn declare_layout_field(&mut self, id: Id, metadata: M) -> &mut Node<M> where M: Clone + Merge {
+	pub fn declare_layout_field(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		self.declare_with(id, component::formatted::Type::LayoutField, metadata)
 	}
 
-	pub fn declare_layout_variant(&mut self, id: Id, metadata: M) -> &mut Node<M> where M: Clone + Merge {
+	pub fn declare_layout_variant(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		self.declare_with(id, component::formatted::Type::LayoutVariant, metadata)
 	}
 
@@ -87,12 +87,12 @@ impl<M> Context<M> {
 	}
 
 	/// Returns the node associated to the given `Id`, if any.
-	pub fn get(&self, id: Id) -> Option<&Node<M>> {
+	pub fn get(&self, id: Id) -> Option<&resource::Definition<M>> {
 		self.nodes.get(&id)
 	}
 
 	/// Returns a mutable reference to the node associated to the given `Id`, if any.
-	pub fn get_mut(&mut self, id: Id) -> Option<&mut Node<M>> {
+	pub fn get_mut(&mut self, id: Id) -> Option<&mut resource::Definition<M>> {
 		self.nodes.get_mut(&id)
 	}
 
@@ -103,11 +103,11 @@ impl<M> Context<M> {
 		}
 	}
 
-	pub fn nodes(&self) -> impl Iterator<Item = (Id, &Node<M>)> {
+	pub fn nodes(&self) -> impl Iterator<Item = (Id, &resource::Definition<M>)> {
 		self.nodes.iter().map(|(id, node)| (*id, node))
 	}
 
-	pub fn nodes_mut(&mut self) -> impl Iterator<Item = (Id, &mut Node<M>)> {
+	pub fn nodes_mut(&mut self) -> impl Iterator<Item = (Id, &mut resource::Definition<M>)> {
 		self.nodes.iter_mut().map(|(id, node)| (*id, node))
 	}
 
@@ -118,7 +118,7 @@ impl<M> Context<M> {
 	/// Inserts the given node to the context.
 	///
 	/// Replaces any previous node with the same [`Node::id`].
-	pub fn insert(&mut self, node: Node<M>) -> Option<Node<M>> {
+	pub fn insert(&mut self, node: resource::Definition<M>) -> Option<resource::Definition<M>> {
 		self.nodes.insert(node.id(), node)
 	}
 }
@@ -127,7 +127,7 @@ impl<M: Clone> Context<M> {
 	pub fn require(
 		&self,
 		id: Id
-	) -> Result<&Node<M>, NodeUnknown> {
+	) -> Result<&resource::Definition<M>, NodeUnknown> {
 		match self.get(id) {
 			Some(node) => Ok(node),
 			None => Err(NodeUnknown {
@@ -348,7 +348,7 @@ impl<M> RequireError<M> {
 	pub fn at_node_property(
 		self,
 		id: Id,
-		property: impl Into<node::Property>,
+		property: impl Into<Property>,
 		meta: M,
 	) -> Error<M> {
 		match self {

@@ -3,7 +3,7 @@ use rdf_types::Vocabulary;
 use treeldr::{Id, IriIndex, BlankIdIndex, Multiple, Type};
 use contextual::WithContext;
 
-use crate::{node, Error};
+use crate::{Property, Error};
 
 use super::NodeBindingTypeInvalid;
 
@@ -19,7 +19,7 @@ impl<M> NodeTypeInvalid<M> {
 		Meta(self.into(), meta)
 	}
 
-	pub fn for_node_binding(self, subject: Id, property: impl Into<node::Property>) -> NodeBindingTypeInvalid<M> {
+	pub fn for_node_binding(self, subject: Id, property: impl Into<Property>) -> NodeBindingTypeInvalid<M> {
 		NodeBindingTypeInvalid {
 			subject,
 			property: property.into(),

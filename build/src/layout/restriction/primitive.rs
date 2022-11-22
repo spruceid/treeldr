@@ -33,10 +33,10 @@ pub enum Restriction {
 }
 
 impl Restriction {
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> BindingRef<'a, M> {
+	pub fn as_binding(&self) -> BindingRef {
 		match self {
-			Self::Numeric(r) => BindingRef::Numeric(r.as_binding(meta)),
-			Self::String(r) => BindingRef::String(r.as_binding(meta))
+			Self::Numeric(r) => BindingRef::Numeric(r.as_binding()),
+			Self::String(r) => BindingRef::String(r.as_binding())
 		}
 	}
 }
@@ -70,12 +70,12 @@ pub enum Numeric {
 }
 
 impl Numeric {
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> NumericBindingRef<'a, M> {
+	pub fn as_binding(&self) -> NumericBindingRef {
 		match self {
-			Self::InclusiveMinimum(v) => NumericBindingRef::InclusiveMinimum(Meta(v, meta)),
-			Self::ExclusiveMinimum(v) => NumericBindingRef::ExclusiveMinimum(Meta(v, meta)),
-			Self::InclusiveMaximum(v) => NumericBindingRef::InclusiveMaximum(Meta(v, meta)),
-			Self::ExclusiveMaximum(v) => NumericBindingRef::ExclusiveMaximum(Meta(v, meta))
+			Self::InclusiveMinimum(v) => NumericBindingRef::InclusiveMinimum(v),
+			Self::ExclusiveMinimum(v) => NumericBindingRef::ExclusiveMinimum(v),
+			Self::InclusiveMaximum(v) => NumericBindingRef::InclusiveMaximum(v),
+			Self::ExclusiveMaximum(v) => NumericBindingRef::ExclusiveMaximum(v)
 		}
 	}
 }
@@ -109,9 +109,9 @@ pub enum String {
 }
 
 impl String {
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> StringBindingRef<'a, M> {
+	pub fn as_binding(&self) -> StringBindingRef {
 		match self {
-			Self::Pattern(v) => StringBindingRef::Pattern(Meta(v, meta))
+			Self::Pattern(v) => StringBindingRef::Pattern(v)
 		}
 	}
 }
@@ -529,18 +529,18 @@ impl<M: Clone> Restrictions<M> {
 	}
 }
 
-pub enum BindingRef<'a, M> {
-	Numeric(NumericBindingRef<'a, M>),
-	String(StringBindingRef<'a, M>)
+pub enum BindingRef<'a> {
+	Numeric(NumericBindingRef<'a>),
+	String(StringBindingRef<'a>)
 }
 
-pub enum NumericBindingRef<'a, M> {
-	InclusiveMinimum(Meta<&'a value::Numeric, &'a M>),
-	ExclusiveMinimum(Meta<&'a value::Numeric, &'a M>),
-	InclusiveMaximum(Meta<&'a value::Numeric, &'a M>),
-	ExclusiveMaximum(Meta<&'a value::Numeric, &'a M>),
+pub enum NumericBindingRef<'a> {
+	InclusiveMinimum(&'a value::Numeric),
+	ExclusiveMinimum(&'a value::Numeric),
+	InclusiveMaximum(&'a value::Numeric),
+	ExclusiveMaximum(&'a value::Numeric),
 }
 
-pub enum StringBindingRef<'a, M> {
-	Pattern(Meta<&'a RegExp, &'a M>),
+pub enum StringBindingRef<'a> {
+	Pattern(&'a RegExp),
 }

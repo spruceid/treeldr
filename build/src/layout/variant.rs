@@ -1,4 +1,4 @@
-use crate::{Context, Error, Node, component::{self, AssertNamed}, resource};
+use crate::{Context, Error, component::{self, AssertNamed}, resource};
 use locspan::Meta;
 use rdf_types::Vocabulary;
 use treeldr::{BlankIdIndex, Id, IriIndex, Name};
@@ -30,7 +30,7 @@ impl Definition {
 		}
 
 		if let Some(layout_id) = as_formatted.format.first() {
-			if let Some(layout) = context.get(**layout_id).map(Node::as_component) {
+			if let Some(layout) = context.get(**layout_id).map(resource::Definition::as_component) {
 				if let Some(name) = layout.name().first() {
 					return Some(Meta::new(name.into_value().clone(), as_resource.metadata.clone()))
 				}
@@ -51,32 +51,5 @@ impl Definition {
 		as_component.assert_named(as_resource, &meta)?;
 
 		Ok(Meta(treeldr::layout::variant::Definition, meta))
-	}
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Property {
-	Name,
-	Format,
-}
-
-pub enum BindingRef<'a> {
-	Name(&'a Name),
-	Format(Id),
-}
-
-pub struct Bindings<'a> {
-	name: Option<&'a Name>,
-	format: Option<Id>,
-}
-
-impl<'a> Iterator for Bindings<'a> {
-	type Item = BindingRef<'a>;
-
-	fn next(&mut self) -> Option<Self::Item> {
-		self.name
-			.take()
-			.map(BindingRef::Name)
-			.or_else(|| self.format.take().map(BindingRef::Format))
 	}
 }

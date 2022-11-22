@@ -1,4 +1,4 @@
-use crate::{error, utils::TryCollect, Context, Error, Single, single::Conflict, Node, ObjectAsId, ObjectAsRequiredId, resource};
+use crate::{error, utils::TryCollect, Context, Error, Single, single::{Conflict, self}, ObjectAsId, ObjectAsRequiredId, resource};
 use locspan::Meta;
 use rdf_types::IriVocabulary;
 use treeldr::{metadata::Merge, Id, IriIndex, Name};
@@ -62,9 +62,9 @@ impl Description {
 				if let Some(fields) = context.get_list(*fields_id) {
 					for Meta(object, _) in fields.lenient_iter(context) {
 						if let Some(field_id) = object.as_id() {
-							if let Some(field) = context.get(field_id).map(Node::as_formatted) {
+							if let Some(field) = context.get(field_id).map(resource::Definition::as_formatted) {
 								for field_layout_id in field.format() {
-									if let Some(field_layout) = context.get(**field_layout_id).map(Node::as_layout) {
+									if let Some(field_layout) = context.get(**field_layout_id).map(resource::Definition::as_layout) {
 										sub_layouts.push(SubLayout {
 											layout: field_layout_id.cloned(),
 											connection: LayoutConnection::FieldContainer(field_id),
@@ -540,26 +540,52 @@ impl<M: Clone> Definition<M> {
 	}
 }
 
-pub enum BindingRef<'a> {
+pub enum ClassBinding {
 	For(Id),
-	Name(&'a Name),
 	Description(Description),
+	IntersectionOf(Id),
+	WithRestrictions(Id),
+	ArraySemantics(array::Binding)
 }
 
-// pub struct Bindings<'a> {
-// 	name: Option<&'a Name>,
-// 	ty: Option<Id>,
-// 	desc: Option<Description>,
-// 	restrictions: bool,
-// }
+pub type Binding = ClassBinding;
 
-// impl<'a> Iterator for Bindings<'a> {
-// 	type Item = BindingRef<'a>;
+pub struct ClassBindings<'a, M> {
+	ty: single::Iter<'a, Id, M>,
+	desc: single::Iter<'a, Description, M>,
+	intersection_of: single::Iter<'a, Id, M>,
+	restrictions: single::Iter<'a, Id, M>,
+	array_semantics: array::Bindings<'a, M>
+}
 
-// 	fn next(&mut self) -> Option<Self::Item> {
-// 		self.name
-// 			.take()
-// 			.map(BindingRef::Name)
-// 			.or_else(|| self.format.take().map(BindingRef::Format))
-// 	}
-// }
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.ty
+			.next()
+			.map(|v| v.into_cloned_value().map(ClassBinding::For))
+			.or_else(|| {
+				self.desc
+					.next()
+					.map(|v| v.into_cloned_value().map(ClassBinding::Description))
+					.or_else(|| {
+						self.intersection_of
+							.next()
+							.map(|v| v.into_cloned_value().map(ClassBinding::IntersectionOf))
+							.or_else(|| {
+								self.restrictions
+									.next()
+									.map(|v| v.into_cloned_value().map(ClassBinding::WithRestrictions))
+									.or_else(|| {
+										self.array_semantics
+											.next()
+											.map(|v| v.map(ClassBinding::ArraySemantics))
+									})
+							})
+					})
+			})
+	}
+}

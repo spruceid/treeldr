@@ -11,9 +11,9 @@ pub enum Restriction {
 }
 
 impl Restriction {
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> BindingRef<'a, M> {
+	pub fn as_binding(&self) -> Binding {
 		match self {
-			Self::Cardinal(r) => BindingRef::Cardinal(r.as_binding(meta))
+			Self::Cardinal(r) => Binding::Cardinal(r.as_binding())
 		}
 	}
 }
@@ -86,6 +86,6 @@ impl<M> Restrictions<M> {
 	}
 }
 
-pub enum BindingRef<'a, M> {
-	Cardinal(cardinal::BindingRef<'a, M>)
+pub enum Binding {
+	Cardinal(cardinal::Binding)
 }

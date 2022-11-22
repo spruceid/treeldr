@@ -10,10 +10,10 @@ pub enum Restriction {
 }
 
 impl Restriction {
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> BindingRef<'a, M> {
+	pub fn as_binding(&self) -> Binding {
 		match self {
-			Self::Min(v) => BindingRef::Min(Meta(*v, meta)),
-			Self::Max(v) => BindingRef::Max(Meta(*v, meta))
+			Self::Min(v) => Binding::Min(*v),
+			Self::Max(v) => Binding::Max(*v)
 		}
 	}
 }
@@ -157,7 +157,7 @@ impl<M> Restrictions<M> {
 	}
 }
 
-pub enum BindingRef<'a, M> {
-	Min(Meta<u64, &'a M>),
-	Max(Meta<u64, &'a M>),
+pub enum Binding {
+	Min(u64),
+	Max(u64),
 }

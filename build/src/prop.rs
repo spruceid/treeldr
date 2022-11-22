@@ -80,36 +80,40 @@ impl<M> Definition<M> {
 	}
 }
 
-pub enum BindingRef<'a, M> {
-	Domain(Meta<Id, &'a M>),
-	Range(Meta<Id, &'a M>),
-	Required(Meta<bool, &'a M>)
+pub enum ClassBinding {
+	Domain(Id),
+	Range(Id),
+	Required(bool)
 }
 
-pub struct Bindings<'a, M> {
+pub type Binding = ClassBinding;
+
+pub struct ClassBindings<'a, M> {
 	domain: multiple::Iter<'a, Id, M>,
 	range: single::Iter<'a, Id, M>,
 	required: single::Iter<'a, bool, M>
 }
 
-impl<'a, M> Iterator for Bindings<'a, M> {
-	type Item = BindingRef<'a, M>;
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.domain
 			.next()
 			.map(Meta::into_cloned_value)
-			.map(BindingRef::Domain)
+			.map(|m| m.map(ClassBinding::Domain))
 			.or_else(|| {
 				self.range
 					.next()
 					.map(Meta::into_cloned_value)
-					.map(BindingRef::Range)
+					.map(|m| m.map(ClassBinding::Range))
 					.or_else(|| {
 						self.required
 							.next()
 							.map(Meta::into_cloned_value)
-							.map(BindingRef::Required)
+							.map(|m| m.map(ClassBinding::Required))
 					})
 			})
 	}

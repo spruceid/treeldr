@@ -2,7 +2,7 @@ use locspan::Meta;
 use treeldr::{Name, metadata::Merge};
 
 pub use treeldr::component::{Type, Property};
-use crate::{Single, layout, Context, Error, error, context::HasType};
+use crate::{Single, layout, Context, Error, error, context::HasType, single};
 
 pub mod formatted;
 
@@ -116,5 +116,61 @@ impl<M: Clone> AssertNamed<M> for treeldr::component::Data<M> {
 			metadata.clone()
 		))?;
 		Ok(())
+	}
+}
+
+pub enum ClassBindingRef<'a> {
+	Name(&'a Name)
+}
+
+impl<'a> ClassBindingRef<'a> {
+	pub fn into_binding_ref(self) -> BindingRef<'a> {
+		match self {
+			Self::Name(n) => BindingRef::Name(n)
+		}
+	}
+}
+
+pub enum BindingRef<'a> {
+	Name(&'a Name),
+	Layout(layout::Binding),
+	Formatted(formatted::Binding)
+}
+
+pub struct ClassBindings<'a, M> {
+	name: single::Iter<'a, Name, M>
+}
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBindingRef<'a>, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.name.next().map(|m| m.map(ClassBindingRef::Name))
+	}
+}
+
+pub struct Bindings<'a, M> {
+	data: ClassBindings<'a, M>,
+	layout: layout::Bindings<'a, M>,
+	formatted: formatted::Bindings<'a, M>
+}
+
+impl<'a, M> Iterator for Bindings<'a, M> {
+	type Item = Meta<BindingRef<'a>, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.data
+			.next()
+			.map(|m| m.map(ClassBindingRef::into_binding_ref))
+			.or_else(|| {
+				self.layout
+					.next()
+					.map(|m| m.map(BindingRef::Layout))
+					.or_else(|| {
+						self.formatted
+							.next()
+							.map(|m| m.map(BindingRef::Formatted))
+					})
+			})
 	}
 }

@@ -1,4 +1,4 @@
-use crate::{Single, Context, resource, component::{AssertNamed, formatted::AssertFormatted}, prop};
+use crate::{Single, Context, resource, component::{AssertNamed, formatted::AssertFormatted}, prop, single};
 
 use super::Error;
 use locspan::Meta;
@@ -104,27 +104,18 @@ impl<M> Definition<M> {
 	}
 }
 
-pub enum BindingRef<'a> {
-	For(Id),
-	Name(&'a Name),
-	Format(Id),
+pub enum Binding {
+	For(Id)
 }
 
-pub struct Bindings<'a> {
-	prop: Option<Id>,
-	name: Option<&'a Name>,
-	format: Option<Id>,
+pub struct Bindings<'a, M> {
+	prop: single::Iter<'a, Id, M>
 }
 
-impl<'a> Iterator for Bindings<'a> {
-	type Item = BindingRef<'a>;
+impl<'a, M> Iterator for Bindings<'a, M> {
+	type Item = Meta<Binding, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.prop.take().map(BindingRef::For).or_else(|| {
-			self.name
-				.take()
-				.map(BindingRef::Name)
-				.or_else(|| self.format.take().map(BindingRef::Format))
-		})
+		self.prop.next().map(|m| m.into_cloned_value().map(Binding::For))
 	}
 }

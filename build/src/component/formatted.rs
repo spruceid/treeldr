@@ -1,7 +1,7 @@
 use locspan::Meta;
 use treeldr::Id;
 
-use crate::{Single, layout, Error, error, Context, context::HasType};
+use crate::{Single, layout, Error, error, Context, context::HasType, single};
 
 pub use treeldr::component::formatted::{Type, Property};
 
@@ -100,5 +100,54 @@ impl<M: Clone> AssertFormatted<M> for treeldr::component::formatted::Data<M> {
 			metadata.clone()
 		))?;
 		Ok(())
+	}
+}
+
+pub enum ClassBinding {
+	Format(Id)
+}
+
+impl ClassBinding {
+	pub fn into_binding(self) -> Binding {
+		match self {
+			Self::Format(id) => Binding::Format(id)
+		}
+	}
+}
+
+pub enum Binding {
+	Format(Id),
+	LayoutField(layout::field::Binding)
+}
+
+pub struct ClassBindings<'a, M> {
+	format: single::Iter<'a, Id, M>
+}
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.format.next().map(|m| m.into_cloned_value().map(ClassBinding::Format))
+	}
+}
+
+pub struct Bindings<'a, M> {
+	data: ClassBindings<'a, M>,
+	layout_field: crate::layout::field::Bindings<'a, M>
+}
+
+impl<'a, M> Iterator for Bindings<'a, M> {
+	type Item = Meta<Binding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.data
+			.next()
+			.map(|m| m.map(ClassBinding::into_binding))
+			.or_else(|| {
+				self.layout_field
+					.next()
+					.map(|m| m.map(Binding::LayoutField))
+			})
 	}
 }

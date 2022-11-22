@@ -33,14 +33,14 @@ pub enum Restriction {
 }
 
 impl Restriction {
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> BindingRef<'a, M> {
+	pub fn as_binding(&self) -> ClassBindingRef {
 		match self {
-			Self::Real(r) => BindingRef::Real(r.as_binding(meta)),
-			Self::Rational(r) => BindingRef::Rational(r.as_binding(meta)),
-			Self::Integer(r) => BindingRef::Integer(r.as_binding(meta)),
-			Self::Float(r) => BindingRef::Float(r.as_binding(meta)),
-			Self::Double(r) => BindingRef::Double(r.as_binding(meta)),
-			Self::String(r) => BindingRef::String(r.as_binding(meta)),
+			Self::Real(r) => ClassBindingRef::Real(r.as_binding()),
+			Self::Rational(r) => ClassBindingRef::Rational(r.as_binding()),
+			Self::Integer(r) => ClassBindingRef::Integer(r.as_binding()),
+			Self::Float(r) => ClassBindingRef::Float(r.as_binding()),
+			Self::Double(r) => ClassBindingRef::Double(r.as_binding()),
+			Self::String(r) => ClassBindingRef::String(r.as_binding()),
 		}
 	}
 }
@@ -54,12 +54,12 @@ pub enum Numeric<T> {
 }
 
 impl<T> Numeric<T> {
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> NumericBindingRef<'a, T, M> {
+	pub fn as_binding(&self) -> NumericBindingRef<T> {
 		match self {
-			Self::MinInclusive(v) => NumericBindingRef::MinInclusive(Meta(v, meta)),
-			Self::MinExclusive(v) => NumericBindingRef::MinExclusive(Meta(v, meta)),
-			Self::MaxInclusive(v) => NumericBindingRef::MaxInclusive(Meta(v, meta)),
-			Self::MaxExclusive(v) => NumericBindingRef::MaxExclusive(Meta(v, meta))
+			Self::MinInclusive(v) => NumericBindingRef::MinInclusive(v),
+			Self::MinExclusive(v) => NumericBindingRef::MinExclusive(v),
+			Self::MaxInclusive(v) => NumericBindingRef::MaxInclusive(v),
+			Self::MaxExclusive(v) => NumericBindingRef::MaxExclusive(v)
 		}
 	}
 }
@@ -72,11 +72,11 @@ pub enum String {
 }
 
 impl String {
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> StringBindingRef<'a, M> {
+	pub fn as_binding(&self) -> StringBindingRef {
 		match self {
-			Self::MinLength(v) => StringBindingRef::MinLength(Meta(v, meta)),
-			Self::MaxLength(v) => StringBindingRef::MaxLength(Meta(v, meta)),
-			Self::Pattern(v) => StringBindingRef::Pattern(Meta(v, meta))
+			Self::MinLength(v) => StringBindingRef::MinLength(v),
+			Self::MaxLength(v) => StringBindingRef::MaxLength(v),
+			Self::Pattern(v) => StringBindingRef::Pattern(v)
 		}
 	}
 }
@@ -235,36 +235,40 @@ impl<M> Restrictions<M> {
 	}
 }
 
-pub enum NumericBindingRef<'a, T, M> {
-	MinInclusive(Meta<&'a T, &'a M>),
-	MinExclusive(Meta<&'a T, &'a M>),
-	MaxInclusive(Meta<&'a T, &'a M>),
-	MaxExclusive(Meta<&'a T, &'a M>)
+pub enum NumericBindingRef<'a, T> {
+	MinInclusive(&'a T),
+	MinExclusive(&'a T),
+	MaxInclusive(&'a T),
+	MaxExclusive(&'a T)
 }
 
-pub enum StringBindingRef<'a, M> {
-	MinLength(Meta<&'a value::Integer, &'a M>),
-	MaxLength(Meta<&'a value::Integer, &'a M>),
-	Pattern(Meta<&'a RegExp, &'a M>),
+pub enum StringBindingRef<'a> {
+	MinLength(&'a value::Integer),
+	MaxLength(&'a value::Integer),
+	Pattern(&'a RegExp),
 }
 
-pub enum BindingRef<'a, M> {
-	Real(NumericBindingRef<'a, value::Real, M>),
-	Rational(NumericBindingRef<'a, value::Rational, M>),
-	Integer(NumericBindingRef<'a, value::Integer, M>),
-	Float(NumericBindingRef<'a, value::Float, M>),
-	Double(NumericBindingRef<'a, value::Double, M>),
-	String(StringBindingRef<'a, M>),
+pub enum ClassBindingRef<'a> {
+	Real(NumericBindingRef<'a, value::Real>),
+	Rational(NumericBindingRef<'a, value::Rational>),
+	Integer(NumericBindingRef<'a, value::Integer>),
+	Float(NumericBindingRef<'a, value::Float>),
+	Double(NumericBindingRef<'a, value::Double>),
+	String(StringBindingRef<'a>),
 }
 
-pub struct Bindings<'a, M> {
+pub type BindingRef<'a> = ClassBindingRef<'a>;
+
+pub struct ClassBindings<'a, M> {
 	restriction: single::Iter<'a, Restriction, M>
 }
 
-impl<'a, M> Iterator for Bindings<'a, M> {
-	type Item = BindingRef<'a, M>;
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.restriction.next().map(|Meta(r, m)| r.as_binding(m))
+		self.restriction.next().map(|m| m.map(Restriction::as_binding))
 	}
 }

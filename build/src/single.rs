@@ -4,7 +4,7 @@ use treeldr::{metadata::Merge, Id, MetaOption};
 
 use crate::{
 	error::{self, NodeBindingFunctionalConflict},
-	node, Error, ListRef, Context,
+	Error, ListRef, Context, Property
 };
 
 #[derive(Debug, Clone)]
@@ -14,7 +14,7 @@ impl<T, M> Conflict<T, M> {
 	pub fn at_functional_node_property(
 		self,
 		id: Id,
-		property: impl Into<node::Property>,
+		property: impl Into<Property>,
 	) -> Error<M>
 	where
 		(T, Meta<T, M>): Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
@@ -124,7 +124,7 @@ impl<T, M> Single<T, M> {
 	pub fn as_required_at_node_binding(
 		&self,
 		id: Id,
-		prop: impl Copy + Into<node::Property>,
+		prop: impl Copy + Into<Property>,
 		meta: &M,
 	) -> Result<Meta<&T, &M>, Error<M>>
 	where
@@ -141,7 +141,7 @@ impl<T, M> Single<T, M> {
 	pub fn into_required_at_node_binding(
 		self,
 		id: Id,
-		prop: impl Copy + Into<node::Property>,
+		prop: impl Copy + Into<Property>,
 		meta: &M,
 	) -> Result<Meta<T, M>, Error<M>>
 	where
@@ -160,7 +160,7 @@ impl<M: Clone> Single<Id, M> {
 		self,
 		context: &Context<M>,
 		id: Id,
-		prop: impl Copy + Into<node::Property>,
+		prop: impl Copy + Into<Property>,
 	) -> Result<MetaOption<treeldr::TId<treeldr::Type>, M>, Error<M>> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
@@ -175,7 +175,7 @@ impl<M: Clone> Single<Id, M> {
 		self,
 		context: &Context<M>,
 		id: Id,
-		prop: impl Copy + Into<node::Property>,
+		prop: impl Copy + Into<Property>,
 		meta: &M,
 	) -> Result<Meta<treeldr::TId<treeldr::Type>, M>, Error<M>> {
 		self.into_type_at_node_binding(context, id, prop)?
@@ -187,7 +187,7 @@ impl<M: Clone> Single<Id, M> {
 		self,
 		context: &Context<M>,
 		id: Id,
-		prop: impl Copy + Into<node::Property>,
+		prop: impl Copy + Into<Property>,
 	) -> Result<MetaOption<treeldr::TId<treeldr::Property>, M>, Error<M>> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
@@ -202,7 +202,7 @@ impl<M: Clone> Single<Id, M> {
 		self,
 		context: &Context<M>,
 		id: Id,
-		prop: impl Copy + Into<node::Property>,
+		prop: impl Copy + Into<Property>,
 		meta: &M,
 	) -> Result<Meta<treeldr::TId<treeldr::Property>, M>, Error<M>> {
 		self.into_property_at_node_binding(context, id, prop)?
@@ -214,7 +214,7 @@ impl<M: Clone> Single<Id, M> {
 		self,
 		context: &Context<M>,
 		id: Id,
-		prop: impl Copy + Into<node::Property>,
+		prop: impl Copy + Into<Property>,
 	) -> Result<MetaOption<treeldr::TId<treeldr::Layout>, M>, Error<M>> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
@@ -229,7 +229,7 @@ impl<M: Clone> Single<Id, M> {
 		self,
 		context: &Context<M>,
 		id: Id,
-		prop: impl Copy + Into<node::Property>,
+		prop: impl Copy + Into<Property>,
 		meta: &M,
 	) -> Result<Meta<treeldr::TId<treeldr::Layout>, M>, Error<M>> {
 		self.into_layout_at_node_binding(context, id, prop)?
@@ -241,7 +241,7 @@ impl<M: Clone> Single<Id, M> {
 		self,
 		context: &Context<M>,
 		id: Id,
-		prop: impl Copy + Into<node::Property>,
+		prop: impl Copy + Into<Property>,
 	) -> Result<MetaOption<ListRef<M>, M>, Error<M>> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
@@ -256,7 +256,7 @@ impl<M: Clone> Single<Id, M> {
 		self,
 		context: &'l Context<M>,
 		id: Id,
-		prop: impl Copy + Into<node::Property>,
+		prop: impl Copy + Into<Property>,
 		meta: &M,
 	) -> Result<Meta<ListRef<'l, M>, M>, Error<M>> {
 		self.into_list_at_node_binding(context, id, prop)?

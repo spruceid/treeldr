@@ -82,14 +82,14 @@ impl Restriction {
 		Ok(Meta(r, meta))
 	}
 
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> BindingRef<'a, M> {
+	pub fn as_binding(&self) -> Binding {
 		match self {
-			Self::Range(r) => r.as_binding(meta),
+			Self::Range(r) => r.as_binding(),
 			Self::Cardinality(r) => {
 				match r {
-					Cardinality::AtLeast(v) => BindingRef::MinCardinality(Meta(*v, meta)),
-					Cardinality::AtMost(v) => BindingRef::MaxCardinality(Meta(*v, meta)),
-					Cardinality::Exactly(v) => BindingRef::Cardinality(Meta(*v, meta))
+					Cardinality::AtLeast(v) => Binding::MinCardinality(*v),
+					Cardinality::AtMost(v) => Binding::MaxCardinality(*v),
+					Cardinality::Exactly(v) => Binding::Cardinality(*v)
 				}
 			}
 		}
@@ -118,21 +118,21 @@ impl Range {
 		}
 	}
 
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> BindingRef<'a, M> {
+	pub fn as_binding(&self) -> Binding {
 		match self {
-			Self::Any(v) => BindingRef::SomeValuesFrom(Meta(*v, meta)),
-			Self::All(v) => BindingRef::AllValuesFrom(Meta(*v, meta))
+			Self::Any(v) => Binding::SomeValuesFrom(*v),
+			Self::All(v) => Binding::AllValuesFrom(*v)
 		}
 	}
 }
 
-pub enum BindingRef<'a, M> {
-	OnProperty(Meta<Id, &'a M>),
-	SomeValuesFrom(Meta<Id, &'a M>),
-	AllValuesFrom(Meta<Id, &'a M>),
-	MinCardinality(Meta<u32, &'a M>),
-	MaxCardinality(Meta<u32, &'a M>),
-	Cardinality(Meta<u32, &'a M>)
+pub enum Binding {
+	OnProperty(Id),
+	SomeValuesFrom(Id),
+	AllValuesFrom(Id),
+	MinCardinality(u32),
+	MaxCardinality(u32),
+	Cardinality(u32)
 }
 
 pub struct Bindings<'a, M> {
@@ -141,17 +141,17 @@ pub struct Bindings<'a, M> {
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {
-	type Item = BindingRef<'a, M>;
+	type Item = Meta<Binding, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.on_property
 			.next()
 			.map(Meta::into_cloned_value)
-			.map(BindingRef::OnProperty)
+			.map(|m| m.map(Binding::OnProperty))
 			.or_else(|| {
 				self.restriction
 					.next()
-					.map(|Meta(r, meta)| r.as_binding(meta))
+					.map(|m| m.map(Restriction::as_binding))
 			})
 	}
 }

@@ -33,10 +33,10 @@ pub enum Restriction {
 }
 
 impl Restriction {
-	pub fn as_binding<'a, M>(&'a self, meta: &'a M) -> BindingRef<'a, M> {
+	pub fn as_binding(&self) -> ClassBindingRef {
 		match self {
-			Self::Primitive(r) => BindingRef::Primitive(r.as_binding(meta)),
-			Self::Container(r) => BindingRef::Container(r.as_binding(meta))
+			Self::Primitive(r) => ClassBindingRef::Primitive(r.as_binding()),
+			Self::Container(r) => ClassBindingRef::Container(r.as_binding())
 		}
 	}
 }
@@ -78,19 +78,23 @@ impl<M> Restrictions<M> {
 	}
 }
 
-pub enum BindingRef<'a, M> {
-	Primitive(primitive::BindingRef<'a, M>),
-	Container(container::BindingRef<'a, M>)
+pub enum ClassBindingRef<'a> {
+	Primitive(primitive::BindingRef<'a>),
+	Container(container::Binding)
 }
 
-pub struct Bindings<'a, M> {
+pub type BindingRef<'a> = ClassBindingRef<'a>;
+
+pub struct ClassBindings<'a, M> {
 	restriction: single::Iter<'a, Restriction, M>
 }
 
-impl<'a, M> Iterator for Bindings<'a, M> {
-	type Item = BindingRef<'a, M>;
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.restriction.next().map(|Meta(r, m)| r.as_binding(m))
+		self.restriction.next().map(|m| m.map(Restriction::as_binding))
 	}
 }

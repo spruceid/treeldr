@@ -1,4 +1,4 @@
-use crate::{Error, Single, Context};
+use crate::{Error, Single, Context, single};
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::StrippedPartialEq;
@@ -127,5 +127,37 @@ impl<M> Semantics<M> {
 impl<M> PartialEq for Semantics<M> {
 	fn eq(&self, other: &Self) -> bool {
 		self.first == other.first && self.rest == other.rest && self.nil == other.nil
+	}
+}
+
+pub enum Binding {
+	ArrayListFirst(Id),
+	ArrayListRest(Id),
+	ArrayListNil(Id)
+}
+
+pub struct Bindings<'a, M> {
+	first: single::Iter<'a, Id, M>,
+	rest: single::Iter<'a, Id, M>,
+	nil: single::Iter<'a, Id, M>
+}
+
+impl<'a, M> Iterator for Bindings<'a, M> {
+	type Item = Meta<Binding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.first
+			.next()
+			.map(|m| m.into_cloned_value().map(Binding::ArrayListFirst))
+			.or_else(|| {
+				self.rest
+					.next()
+					.map(|m| m.into_cloned_value().map(Binding::ArrayListRest))
+					.or_else(|| {
+						self.nil
+							.next()
+							.map(|m| m.into_cloned_value().map(Binding::ArrayListNil))
+					})
+			})
 	}
 }

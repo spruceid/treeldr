@@ -2,13 +2,12 @@ use locspan::{MaybeLocated, Span};
 use rdf_types::Vocabulary;
 use treeldr::{Id, IriIndex, BlankIdIndex, Multiple, Type};
 use contextual::WithContext;
-
-use crate::node;
+use crate::Property;
 
 #[derive(Debug)]
 pub struct NodeBindingTypeInvalid<M> {
 	pub subject: Id,
-	pub property: node::Property,
+	pub property: Property,
 	pub object: Id,
 	pub expected: Type,
 	pub found: Multiple<Type, M>

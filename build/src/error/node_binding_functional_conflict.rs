@@ -2,8 +2,7 @@ use locspan::{Meta, MaybeLocated, Span, Stripped};
 use rdf_types::Vocabulary;
 use treeldr::{Id, IriIndex, BlankIdIndex, Name, vocab::Object};
 use contextual::WithContext;
-
-use crate::node;
+use crate::Property;
 
 /// Functional property conflict error.
 /// 
@@ -12,7 +11,7 @@ use crate::node;
 #[derive(Debug)]
 pub struct NodeBindingFunctionalConflict<M> {
 	pub id: Id,
-	pub property: node::Property,
+	pub property: Property,
 	pub values: ConflictValues<M>
 }
 

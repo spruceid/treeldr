@@ -2,19 +2,18 @@ use locspan::{MaybeLocated, Span};
 use rdf_types::Vocabulary;
 use treeldr::{Id, IriIndex, BlankIdIndex};
 use contextual::WithContext;
-
-use crate::node;
+use crate::Property;
 
 #[derive(Debug)]
 pub struct NodeBindingMissing {
 	pub id: Id,
-	pub property: node::Property
+	pub property: Property
 }
 
 impl NodeBindingMissing {
 	pub fn new(
 		id: Id,
-		property: impl Into<node::Property>
+		property: impl Into<Property>
 	) -> Self {
 		Self {
 			id, property: property.into()

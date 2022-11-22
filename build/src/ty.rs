@@ -144,11 +144,47 @@ impl<M> Definition<M> {
 	}
 }
 
-pub enum BindingRef<'a, M> {
-	Datatype(datatype::BindingRef<'a, M>),
-	Restriction(restriction::BindingRef<'a, M>),
-	UnionOf(Meta<Id, &'a M>),
-	IntersectionOf(Meta<Id, &'a M>),
+pub enum ClassBinding {
+	UnionOf(Id),
+	IntersectionOf(Id),
+}
+
+impl ClassBinding {
+	pub fn into_binding(self) -> Binding {
+		match self {
+			Self::UnionOf(i) => Binding::UnionOf(i),
+			Self::IntersectionOf(i) => Binding::IntersectionOf(i)
+		}
+	}
+}
+
+pub struct ClassBindings<'a, M> {
+	union_of: single::Iter<'a, Id, M>,
+	intersection_of: single::Iter<'a, Id, M>
+}
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.union_of
+			.next()
+			.map(Meta::into_cloned_value)
+			.map(|m| m.map(ClassBinding::UnionOf))
+			.or_else(|| {
+				self.intersection_of
+					.next()
+					.map(Meta::into_cloned_value)
+					.map(|m| m.map(ClassBinding::IntersectionOf))
+			})
+	}
+}
+
+pub enum Binding {
+	UnionOf(Id),
+	IntersectionOf(Id),
+	Datatype(datatype::Binding),
+	Restriction(restriction::Binding),
 }
 
 pub struct Bindings<'a, M> {
@@ -159,26 +195,26 @@ pub struct Bindings<'a, M> {
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {
-	type Item = BindingRef<'a, M>;
+	type Item = Meta<Binding, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.datatype
 			.next()
-			.map(BindingRef::Datatype)
+			.map(|m| m.map(Binding::Datatype))
 			.or_else(|| {
 				self.restriction
 					.next()
-					.map(BindingRef::Restriction)
+					.map(|m| m.map(Binding::Restriction))
 					.or_else(|| {
 						self.union_of
 							.next()
 							.map(Meta::into_cloned_value)
-							.map(BindingRef::UnionOf)
+							.map(|m| m.map(Binding::UnionOf))
 							.or_else(|| {
 								self.intersection_of
 									.next()
 									.map(Meta::into_cloned_value)
-									.map(BindingRef::IntersectionOf)
+									.map(|m| m.map(Binding::IntersectionOf))
 							})
 					})
 			})
