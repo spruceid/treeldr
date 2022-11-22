@@ -1,4 +1,4 @@
-use crate::{Id, IriIndex, BlankIdIndex, component, Type, Multiple, ty::SubClass, prop};
+use crate::{Id, IriIndex, BlankIdIndex, component, Type, Multiple, ty::SubClass, prop, node};
 use locspan::{Meta, MaybeLocated, Span};
 use rdf_types::Vocabulary;
 use contextual::WithContext;
@@ -17,7 +17,16 @@ trait NodeTypeName {
 impl NodeTypeName for Type {
 	fn name(&self) -> &str {
 		match self {
-			Self::Resource => "resource",
+			Self::Resource(None) => "resource",
+			Self::Resource(Some(ty)) => ty.name(),
+			Self::Other(_) => "unknown"
+		}
+	}
+}
+
+impl NodeTypeName for node::Type {
+	fn name(&self) -> &str {
+		match self {
 			Self::Class(None) => "class",
 			Self::Class(Some(ty)) => ty.name(),
 			Self::DatatypeRestriction => "datatype restriction",

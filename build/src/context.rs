@@ -1,11 +1,11 @@
 use crate::{
-	error::{NodeUnknown, NodeTypeInvalid}, Error, Property, IriIndex, ListRef, component, layout, resource, prop
+	error::{NodeUnknown, NodeTypeInvalid}, Error, Property, IriIndex, ListRef, component, layout, resource, prop, Single
 };
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
 use rdf_types::{Generator, VocabularyMut};
 use std::collections::{BTreeMap, HashMap, btree_map::Entry};
-use treeldr::{metadata::Merge, vocab, BlankIdIndex, Id, Type, ty::SubClass, Multiple};
+use treeldr::{metadata::Merge, vocab::{self, Object}, BlankIdIndex, Id, ty::SubClass, Multiple, node::Type};
 
 mod initialize;
 pub mod build;
@@ -38,7 +38,7 @@ impl<M> Context<M> {
 		}
 	}
 
-	pub fn declare_with(&mut self, id: Id, type_: impl Into<Type>, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_with(&mut self, id: Id, type_: impl Into<crate::Type>, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		let node = self.declare(id, metadata.clone());
 		node.type_mut().insert(Meta(type_.into(), metadata));
 		node
@@ -77,12 +77,12 @@ impl<M> Context<M> {
 	}
 
 	/// Checks if `b` is a subclass of `a`.
-	pub fn is_subclass_of(&self, a: Type, b: Type) -> bool {
+	pub fn is_subclass_of(&self, a: crate::Type, b: crate::Type) -> bool {
 		b.is_subclass_of(a)
 	}
 
 	/// Checks if `b` is a subclass or equals `a`.
-	pub fn is_subclass_of_or_eq(&self, a: Type, b: Type) -> bool {
+	pub fn is_subclass_of_or_eq(&self, a: crate::Type, b: crate::Type) -> bool {
 		a == b || b.is_subclass_of(a)
 	}
 
@@ -123,6 +123,84 @@ impl<M> Context<M> {
 	}
 }
 
+pub trait MapIds {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id);
+}
+
+impl<M: Merge> MapIds for Context<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		for (id, mut node) in std::mem::take(&mut self.nodes) {
+			node.map_ids(&f);
+			self.nodes.insert(f(id), node);
+		}
+	}
+}
+
+impl MapIds for Id {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		*self = f(*self)
+	}
+}
+
+impl<M> MapIds for Object<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		match self {
+			Self::Blank(b) => {
+				match f(Id::Blank(*b)) {
+					Id::Blank(b) => *self = Self::Blank(b),
+					Id::Iri(i) => *self = Self::Iri(i)
+				}
+			}
+			Self::Iri(i) => {
+				match f(Id::Iri(*i)) {
+					Id::Blank(b) => *self = Self::Blank(b),
+					Id::Iri(i) => *self = Self::Iri(i)
+				}
+			}
+			Self::Literal(_) => ()
+		}
+	}
+}
+
+impl<T: MapIds> MapIds for Stripped<T> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.0.map_ids(f)
+	}
+}
+
+impl<T: MapIds + Ord, M: Merge> MapIds for Single<T, M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		for Meta(mut t, m) in std::mem::take(self) {
+			t.map_ids(&f);
+			self.insert(Meta(t, m))
+		}
+	}
+}
+
+impl<T: MapIds + Ord, M: Merge> MapIds for Multiple<T, M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		for Meta(mut t, m) in std::mem::take(self) {
+			t.map_ids(&f);
+			self.insert(Meta(t, m))
+		}
+	}
+}
+
+impl<M: Merge> MapIds for HashMap<Id, M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		for (id, m) in std::mem::take(self) {
+			match self.entry(f(id)) {
+				std::collections::hash_map::Entry::Occupied(mut e) => {
+					e.get_mut().merge_with(m);
+				},
+				std::collections::hash_map::Entry::Vacant(e) => {
+					e.insert(m);
+				}
+			}
+		}
+	}
+}
+
 impl<M: Clone> Context<M> {
 	pub fn require(
 		&self,
@@ -147,7 +225,7 @@ impl<M: Clone> Context<M> {
 		}
 	}
 
-	pub fn require_type_id(&self, id: Id) -> Result<treeldr::TId<Type>, RequireError<M>> {
+	pub fn require_type_id(&self, id: Id) -> Result<treeldr::TId<crate::Type>, RequireError<M>> {
 		Ok(self.require(id)?.require_type_id(self)?)
 	}
 
@@ -369,9 +447,9 @@ impl<M> RequireError<M> {
 }
 
 pub trait HasType<M> {
-	fn types(&self) -> &Multiple<Type, M>;
+	fn types(&self) -> &Multiple<crate::Type, M>;
 
-	fn type_metadata(&self, context: &Context<M>, type_: impl Into<Type>) -> Option<&M> {
+	fn type_metadata(&self, context: &Context<M>, type_: impl Into<crate::Type>) -> Option<&M> {
 		let a = type_.into();
 		self.types().iter().find_map(|Meta(b, meta)| {
 			if context.is_subclass_of_or_eq(a, *b) {
@@ -382,20 +460,20 @@ pub trait HasType<M> {
 		})
 	}
 
-	fn has_type(&self, context: &Context<M>, type_: impl Into<Type>) -> bool {
+	fn has_type(&self, context: &Context<M>, type_: impl Into<crate::Type>) -> bool {
 		let a = type_.into();
 		self.types().iter().any(|Meta(b, _)| context.is_subclass_of_or_eq(a, *b))
 	}
 }
 
 impl<M> HasType<M> for treeldr::node::Data<M> {
-	fn types(&self) -> &Multiple<Type, M> {
+	fn types(&self) -> &Multiple<crate::Type, M> {
 		&self.type_
 	}
 }
 
 impl<M> HasType<M> for resource::Data<M> {
-	fn types(&self) -> &Multiple<Type, M> {
+	fn types(&self) -> &Multiple<crate::Type, M> {
 		&self.type_
 	}
 }

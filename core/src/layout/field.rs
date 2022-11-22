@@ -1,11 +1,11 @@
 use locspan::Meta;
 
-use crate::{vocab, MetaOption, TId, ResourceType, component, Layout, Name};
+use crate::{vocab, MetaOption, TId, ResourceType, component, Layout, Name, node};
 
 pub struct Field;
 
 impl ResourceType for Field {
-	const TYPE: crate::Type = crate::Type::Component(Some(component::Type::Formatted(Some(component::formatted::Type::LayoutField))));
+	const TYPE: crate::Type = crate::Type::Resource(Some(node::Type::Component(Some(component::Type::Formatted(Some(component::formatted::Type::LayoutField))))));
 
 	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
 		resource.is_layout()

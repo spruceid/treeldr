@@ -1,20 +1,14 @@
 use locspan::Meta;
-use treeldr::{Id, Type, metadata::Merge};
+use treeldr::{Id, metadata::Merge, Name, vocab::Object, value, ty::data::RegExp};
 
-use crate::{Property, Multiple, multiple, ty, prop, component, layout, list, error::NodeTypeInvalid, Error, context::HasType};
-
-#[derive(Debug, Clone)]
-pub struct AnonymousData<M> {
-	pub type_: Multiple<Type, M>,
-	pub label: Multiple<String, M>,
-	pub comment: Multiple<String, M>
-}
+use crate::{Multiple, multiple, ty, prop, component, layout, list, error::NodeTypeInvalid, Error, context::{HasType, MapIds}};
+pub use treeldr::node::{Property, Type};
 
 #[derive(Debug, Clone)]
 pub struct Data<M> {
 	pub id: Id,
 	pub metadata: M,
-	pub type_: Multiple<Type, M>,
+	pub type_: Multiple<crate::Type, M>,
 	pub label: Multiple<String, M>,
 	pub comment: Multiple<String, M>
 }
@@ -30,12 +24,14 @@ impl<M> Data<M> {
 		}
 	}
 
-	pub fn clone_anonymous(&self) -> AnonymousData<M> where M: Clone {
-		AnonymousData {
-			type_: self.type_.clone(),
-			label: self.label.clone(),
-			comment: self.comment.clone()
-		}
+	pub fn bindings(&self) -> ClassBindings<M> {
+		ClassBindings { type_: self.type_.iter(), label: self.label.iter(), comment: self.comment.iter() }
+	}
+}
+
+impl<M> MapIds for Data<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.id = f(self.id)
 	}
 }
 
@@ -75,15 +71,15 @@ impl<M> Definition<M> {
 		&mut self.data.metadata
 	}
 
-	pub fn type_(&self) -> &Multiple<Type, M> {
+	pub fn type_(&self) -> &Multiple<crate::Type, M> {
 		&self.data.type_
 	}
 
-	pub fn type_mut(&mut self) -> &mut Multiple<Type, M> {
+	pub fn type_mut(&mut self) -> &mut Multiple<crate::Type, M> {
 		&mut self.data.type_
 	}
 
-	pub fn has_type(&self, context: &crate::Context<M>, type_: impl Into<Type>) -> bool {
+	pub fn has_type(&self, context: &crate::Context<M>, type_: impl Into<crate::Type>) -> bool {
 		self.data.has_type(context, type_)
 	}
 
@@ -188,6 +184,30 @@ impl<M> Definition<M> {
 	pub fn as_list_mut(&mut self) -> &mut list::Definition<M> {
 		&mut self.list
 	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		Bindings {
+			data: self.data.bindings(),
+			class: self.ty.bindings(),
+			datatype_restriction: self.datatype_restriction.bindings(),
+			property: self.property.bindings(),
+			component: self.component.bindings(),
+			layout_restriction: self.layout_restriction.bindings(),
+			list: self.list.bindings()
+		}
+	}
+}
+
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.data.map_ids(&f);
+		self.ty.map_ids(&f);
+		self.datatype_restriction.map_ids(&f);
+		self.property.map_ids(&f);
+		self.component.map_ids(&f);
+		self.layout_restriction.map_ids(&f);
+		self.list.map_ids(f)
+	}
 }
 
 impl<M: Clone> Definition<M> {
@@ -195,15 +215,15 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::Class(None)) {
 			Ok(self.as_type())
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Class(None), found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Class(None).into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_type_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<Type>, NodeTypeInvalid<M>> {
+	pub fn require_type_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<crate::Type>, NodeTypeInvalid<M>> {
 		if self.has_type(context, Type::Class(None)) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Class(None), found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Class(None).into(), found: self.data.type_.clone() })
 		}
 	}
 
@@ -235,7 +255,7 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::LayoutRestriction) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::LayoutRestriction, found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::LayoutRestriction.into(), found: self.data.type_.clone() })
 		}
 	}
 
@@ -243,7 +263,7 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::DatatypeRestriction) {
 			Ok(self.as_datatype_restriction())
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::DatatypeRestriction, found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::DatatypeRestriction.into(), found: self.data.type_.clone() })
 		}
 	}
 
@@ -251,7 +271,7 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::DatatypeRestriction) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::DatatypeRestriction, found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::DatatypeRestriction.into(), found: self.data.type_.clone() })
 		}
 	}
 
@@ -259,15 +279,15 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::Property(None)) {
 			Ok(self.as_property())
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Property(None), found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Property(None).into(), found: self.data.type_.clone() })
 		}
 	}
 
-	pub fn require_property_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<Property>, NodeTypeInvalid<M>> {
+	pub fn require_property_id(&self, context: &crate::Context<M>) -> Result<treeldr::TId<treeldr::Property>, NodeTypeInvalid<M>> {
 		if self.has_type(context, Type::Property(None)) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Property(None), found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::Property(None).into(), found: self.data.type_.clone() })
 		}
 	}
 
@@ -323,7 +343,7 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::LayoutRestriction) {
 			Ok(self.as_layout_restriction())
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::LayoutRestriction, found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::LayoutRestriction.into(), found: self.data.type_.clone() })
 		}
 	}
 
@@ -331,7 +351,7 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::LayoutRestriction) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::LayoutRestriction, found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::LayoutRestriction.into(), found: self.data.type_.clone() })
 		}
 	}
 
@@ -339,7 +359,7 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::List) {
 			Ok(self.as_list())
 		} else {
-			Err(NodeTypeInvalid { id: self.data.id, expected: Type::List, found: self.data.type_.clone() })
+			Err(NodeTypeInvalid { id: self.data.id, expected: Type::List.into(), found: self.data.type_.clone() })
 		}
 	}
 
@@ -372,7 +392,7 @@ impl<M: Clone> Definition<M> {
 }
 
 pub enum ClassBindingRef<'a> {
-	Type(Id),
+	Type(crate::Type),
 	Label(&'a str),
 	Comment(&'a str)
 }
@@ -388,7 +408,7 @@ impl<'a> ClassBindingRef<'a> {
 }
 
 pub struct ClassBindings<'a, M> {
-	type_: multiple::Iter<'a, Id, M>,
+	type_: multiple::Iter<'a, crate::Type, M>,
 	label: multiple::Iter<'a, String, M>,
 	comment: multiple::Iter<'a, String, M>
 }
@@ -416,8 +436,21 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	}
 }
 
+pub enum BindingValueRef<'a, M> {
+	Type(crate::Type),
+	Id(Id),
+	Boolean(bool),
+	String(&'a str),
+	Name(&'a Name),
+	Object(&'a Object<M>),
+	U64(u64),
+	Numeric(&'a value::Numeric),
+	Integer(&'a value::Integer),
+	RegExp(&'a RegExp)
+}
+
 pub enum BindingRef<'a, M> {
-	Type(Id),
+	Type(crate::Type),
 	Label(&'a str),
 	Comment(&'a str),
 	Class(crate::ty::Binding),
@@ -426,6 +459,40 @@ pub enum BindingRef<'a, M> {
 	Component(crate::component::BindingRef<'a>),
 	LayoutRestriction(crate::layout::restriction::BindingRef<'a>),
 	List(crate::list::BindingRef<'a, M>)
+}
+
+impl<'a, M> BindingRef<'a, M> {
+	pub fn resource_property(&self) -> Property {
+		match self {
+			Self::Type(_) => Property::Type,
+			Self::Label(_) => Property::Label,
+			Self::Comment(_) => Property::Comment,
+			Self::Class(b) => Property::Class(b.property()),
+			Self::DatatypeRestriction(b) => Property::DatatypeRestriction(b.property()),
+			Self::Property(b) => Property::Property(b.property()),
+			Self::Component(b) => Property::Component(b.property()),
+			Self::LayoutRestriction(b) => Property::LayoutRestriction(b.property()),
+			Self::List(b) => Property::List(b.property())
+		}
+	}
+
+	pub fn property(&self) -> crate::Property {
+		crate::Property::Resource(self.resource_property())
+	}
+
+	pub fn value(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::Type(v) => BindingValueRef::Type(*v),
+			Self::Label(v) => BindingValueRef::String(v),
+			Self::Comment(v) => BindingValueRef::String(v),
+			Self::Class(b) => b.value(),
+			Self::DatatypeRestriction(b) => b.value(),
+			Self::Property(b) => b.value(),
+			Self::Component(b) => b.value(),
+			Self::LayoutRestriction(b) => b.value(),
+			Self::List(b) => b.value()
+		}
+	}
 }
 
 /// Iterator over the bindings of a given node.

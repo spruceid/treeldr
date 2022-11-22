@@ -1,4 +1,4 @@
-use crate::{error, utils::TryCollect, Context, Error, Single, single::{Conflict, self}, ObjectAsId, ObjectAsRequiredId, resource};
+use crate::{error, utils::TryCollect, Context, Error, Single, single::{Conflict, self}, ObjectAsId, ObjectAsRequiredId, resource::{self, BindingValueRef}, context::MapIds};
 use locspan::Meta;
 use rdf_types::IriVocabulary;
 use treeldr::{metadata::Merge, Id, IriIndex, Name};
@@ -48,9 +48,22 @@ impl Description {
 			Self::Alias(_) => Kind::Alias,
 		}
 	}
-}
 
-impl Description {
+	pub fn into_binding(self) -> Option<DescriptionBinding> {
+		match self {
+			Self::Never | Self::Primitive(_) => None,
+			Self::Struct(id) => Some(DescriptionBinding::Struct(id)),
+			Self::Reference(id) => Some(DescriptionBinding::Reference(id)),
+			Self::Enum(id) => Some(DescriptionBinding::Enum(id)),
+			Self::Required(id) => Some(DescriptionBinding::Required(id)),
+			Self::Option(id) => Some(DescriptionBinding::Option(id)),
+			Self::Set(id) => Some(DescriptionBinding::Set(id)),
+			Self::OneOrMany(id) => Some(DescriptionBinding::OneOrMany(id)),
+			Self::Array(id) => Some(DescriptionBinding::Array(id)),
+			Self::Alias(id) => Some(DescriptionBinding::Alias(id)),
+		}
+	}
+
 	pub fn collect_sub_layouts<M>(
 		&self,
 		context: &Context<M>,
@@ -105,6 +118,65 @@ impl Description {
 				connection: LayoutConnection::Item,
 			}),
 			_ => (),
+		}
+	}
+}
+
+impl MapIds for Description {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		match self {
+			Self::Never | Self::Primitive(_) => (),
+			Self::Struct(id) => id.map_ids(f),
+			Self::Reference(id) => id.map_ids(f),
+			Self::Enum(id) => id.map_ids(f),
+			Self::Required(id) => id.map_ids(f),
+			Self::Option(id) => id.map_ids(f),
+			Self::Set(id) => id.map_ids(f),
+			Self::OneOrMany(id) => id.map_ids(f),
+			Self::Array(id) => id.map_ids(f),
+			Self::Alias(id) => id.map_ids(f)
+		}
+	}
+}
+
+pub enum DescriptionBinding {
+	Struct(Id),
+	Reference(Id),
+	Enum(Id),
+	Required(Id),
+	Option(Id),
+	Set(Id),
+	OneOrMany(Id),
+	Array(Id),
+	Alias(Id),
+}
+
+impl DescriptionBinding {
+	pub fn property(&self) -> DescriptionProperty {
+		match self {
+			Self::Reference(_) => DescriptionProperty::Reference,
+			Self::Struct(_) => DescriptionProperty::Fields,
+			Self::Enum(_) => DescriptionProperty::Variants,
+			Self::Required(_) => DescriptionProperty::Required,
+			Self::Option(_) => DescriptionProperty::Option,
+			Self::Set(_) => DescriptionProperty::Set,
+			Self::OneOrMany(_) => DescriptionProperty::OneOrMany,
+			Self::Array(_) => DescriptionProperty::Array,
+			Self::Alias(_) => DescriptionProperty::Alias,
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::Reference(v) => BindingValueRef::Id(*v),
+			Self::Struct(v) => BindingValueRef::Id(*v),
+			Self::Enum(v) => BindingValueRef::Id(*v),
+			Self::Required(v) => BindingValueRef::Id(*v),
+			Self::Option(v) => BindingValueRef::Id(*v),
+			Self::Set(v) => BindingValueRef::Id(*v),
+			Self::OneOrMany(v) => BindingValueRef::Id(*v),
+			Self::Array(v) => BindingValueRef::Id(*v),
+			Self::Alias(v) => BindingValueRef::Id(*v),
 		}
 	}
 }
@@ -203,6 +275,10 @@ impl<M> Definition<M> {
 
 	pub fn restrictions_mut(&mut self) -> &mut Single<Id, M> {
 		&mut self.restrictions
+	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings { ty: self.ty.iter(), desc: self.desc.iter(), intersection_of: self.intersection_of.iter(), restrictions: self.restrictions.iter(), array_semantics: self.array_semantics.bindings() }
 	}
 }
 
@@ -540,15 +616,47 @@ impl<M: Clone> Definition<M> {
 	}
 }
 
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.ty.map_ids(&f);
+		self.desc.map_ids(&f);
+		self.intersection_of.map_ids(&f);
+		self.restrictions.map_ids(&f);
+		self.array_semantics.map_ids(f)
+	}
+}
+
 pub enum ClassBinding {
 	For(Id),
-	Description(Description),
+	Description(DescriptionBinding),
 	IntersectionOf(Id),
 	WithRestrictions(Id),
 	ArraySemantics(array::Binding)
 }
 
 pub type Binding = ClassBinding;
+
+impl ClassBinding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::For(_) => Property::For,
+			Self::Description(d) => Property::Description(d.property()),
+			Self::IntersectionOf(_) => Property::IntersectionOf,
+			Self::WithRestrictions(_) => Property::WithRestrictions,
+			Self::ArraySemantics(b) => b.property()
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::For(v) => BindingValueRef::Id(*v),
+			Self::Description(d) => d.value(),
+			Self::IntersectionOf(v) => BindingValueRef::Id(*v),
+			Self::WithRestrictions(v) => BindingValueRef::Id(*v),
+			Self::ArraySemantics(b) => b.value()
+		}
+	}
+}
 
 pub struct ClassBindings<'a, M> {
 	ty: single::Iter<'a, Id, M>,
@@ -570,7 +678,9 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 			.or_else(|| {
 				self.desc
 					.next()
-					.map(|v| v.into_cloned_value().map(ClassBinding::Description))
+					.and_then(|Meta(v, meta)| {
+						v.into_binding().map(|b| Meta(ClassBinding::Description(b), meta))
+					})
 					.or_else(|| {
 						self.intersection_of
 							.next()

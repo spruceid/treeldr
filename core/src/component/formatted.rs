@@ -1,6 +1,6 @@
 use locspan::Meta;
 
-use crate::{TId, Layout, layout, vocab, MetaOption};
+use crate::{TId, Layout, layout, vocab::{self, Term}, MetaOption};
 
 pub struct Formatted;
 
@@ -53,6 +53,13 @@ impl Type {
 	pub fn is_subclass_of(&self, _other: Self) -> bool {
 		false
 	}
+
+	pub fn term(&self) -> Term {
+		match self {
+			Self::LayoutField => Term::TreeLdr(vocab::TreeLdr::Field),
+			Self::LayoutVariant => Term::TreeLdr(vocab::TreeLdr::Variant)
+		}
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -63,7 +70,7 @@ pub enum Property {
 
 impl Property {
 	pub fn term(&self) -> vocab::Term {
-		use vocab::{Term, TreeLdr};
+		use vocab::TreeLdr;
 		match self {
 			Self::Format => Term::TreeLdr(TreeLdr::Format),
 			Self::LayoutField(p) => p.term()

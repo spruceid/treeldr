@@ -1,11 +1,11 @@
 use locspan::Meta;
 
-use crate::{component, ResourceType};
+use crate::{component, ResourceType, node};
 
 pub struct Variant;
 
 impl ResourceType for Variant {
-	const TYPE: crate::Type = crate::Type::Component(Some(component::Type::Formatted(Some(component::formatted::Type::LayoutVariant))));
+	const TYPE: crate::Type = crate::Type::Resource(Some(node::Type::Component(Some(component::Type::Formatted(Some(component::formatted::Type::LayoutVariant))))));
 
 	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
 		resource.is_layout()

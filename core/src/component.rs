@@ -1,6 +1,6 @@
 use locspan::Meta;
 
-use crate::{Name, MetaOption, layout, vocab};
+use crate::{Name, MetaOption, layout, vocab::{self, Term}};
 
 pub mod formatted;
 
@@ -65,6 +65,14 @@ impl Type {
 			_ => false
 		}
 	}
+
+	pub fn term(&self) -> Term {
+		match self {
+			Self::Layout => Term::TreeLdr(vocab::TreeLdr::Layout),
+			Self::Formatted(None) => Term::TreeLdr(vocab::TreeLdr::Formatted),
+			Self::Formatted(Some(ty)) => ty.term()
+		}
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -77,7 +85,7 @@ pub enum Property {
 
 impl Property {
 	pub fn term(&self) -> vocab::Term {
-		use vocab::{Term, TreeLdr};
+		use vocab::TreeLdr;
 		match self {
 			Self::Name => Term::TreeLdr(TreeLdr::Name),
 			Self::Layout(p) => p.term(),

@@ -9,11 +9,12 @@ pub mod layout;
 pub mod list;
 pub mod resource;
 pub mod prop;
-// pub mod rdf;
+pub mod rdf;
 mod single;
 pub mod ty;
 pub mod utils;
 
+pub use ty::Type;
 pub use prop::Property;
 pub use context::Context;
 pub use error::Error;

@@ -1,4 +1,4 @@
-use crate::{Error, Single, Multiple, single, multiple, context::HasType};
+use crate::{Error, Single, Multiple, single, multiple, context::{HasType, MapIds}, resource::BindingValueRef};
 use locspan::Meta;
 use treeldr::{metadata::Merge, Id, prop::RdfProperty};
 
@@ -50,6 +50,10 @@ impl<M> Definition<M> {
 		&mut self.required
 	}
 
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings { domain: self.domain.iter(), range: self.range.iter(), required: self.required.iter() }
+	}
+
 	pub(crate) fn build(
 		&self,
 		context: &crate::Context<M>,
@@ -80,6 +84,13 @@ impl<M> Definition<M> {
 	}
 }
 
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.domain.map_ids(&f);
+		self.range.map_ids(f);
+	}
+}
+
 pub enum ClassBinding {
 	Domain(Id),
 	Range(Id),
@@ -87,6 +98,24 @@ pub enum ClassBinding {
 }
 
 pub type Binding = ClassBinding;
+
+impl ClassBinding {
+	pub fn property(&self) -> RdfProperty {
+		match self {
+			Self::Domain(_) => RdfProperty::Domain,
+			Self::Range(_) => RdfProperty::Range,
+			Self::Required(_) => RdfProperty::Required
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::Domain(v) => BindingValueRef::Id(*v),
+			Self::Range(v) => BindingValueRef::Id(*v),
+			Self::Required(v) => BindingValueRef::Boolean(*v)
+		}
+	}
+}
 
 pub struct ClassBindings<'a, M> {
 	domain: multiple::Iter<'a, Id, M>,

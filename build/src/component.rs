@@ -2,7 +2,7 @@ use locspan::Meta;
 use treeldr::{Name, metadata::Merge};
 
 pub use treeldr::component::{Type, Property};
-use crate::{Single, layout, Context, Error, error, context::HasType, single};
+use crate::{Single, layout, Context, Error, error, context::{HasType, MapIds}, single, resource::BindingValueRef};
 
 pub mod formatted;
 
@@ -67,6 +67,10 @@ impl<M> Definition<M> {
 		self.formatted.as_layout_variant_mut()
 	}
 
+	pub fn bindings(&self) -> Bindings<M> {
+		Bindings { data: self.data.bindings(), layout: self.layout.bindings(), formatted: self.formatted.bindings() }
+	}
+
 	pub(crate) fn build(
 		&self,
 		context: &Context<M>,
@@ -89,9 +93,22 @@ impl<M> Definition<M> {
 	}
 }
 
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(treeldr::Id) -> treeldr::Id) {
+		self.layout.map_ids(&f);
+		self.formatted.map_ids(f)
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct Data<M> {
 	pub name: Single<Name, M>
+}
+
+impl<M> Data<M> {
+	pub fn bindings(&self) -> ClassBindings<M> {
+		ClassBindings { name: self.name.iter() }
+	}
 }
 
 impl<M> Default for Data<M> {
@@ -135,6 +152,24 @@ pub enum BindingRef<'a> {
 	Name(&'a Name),
 	Layout(layout::Binding),
 	Formatted(formatted::Binding)
+}
+
+impl<'a> BindingRef<'a> {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::Name(_) => Property::Name,
+			Self::Layout(b) => Property::Layout(b.property()),
+			Self::Formatted(b) => Property::Formatted(b.property())
+		}
+	}
+
+	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::Name(v) => BindingValueRef::Name(v),
+			Self::Layout(b) => b.value(),
+			Self::Formatted(b) => b.value()
+		}
+	}
 }
 
 pub struct ClassBindings<'a, M> {

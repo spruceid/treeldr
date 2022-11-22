@@ -1,7 +1,7 @@
 use locspan::Meta;
-use treeldr::Id;
+use treeldr::{Id, metadata::Merge};
 
-use crate::{Single, layout, Error, error, Context, context::HasType, single};
+use crate::{Single, layout, Error, error, Context, context::{HasType, MapIds}, single, resource::BindingValueRef};
 
 pub use treeldr::component::formatted::{Type, Property};
 
@@ -50,6 +50,10 @@ impl<M> Definition<M> {
 		&mut self.layout_variant
 	}
 
+	pub fn bindings(&self) -> Bindings<M> {
+		Bindings { data: self.data.bindings(), layout_field: self.layout_field.bindings() }
+	}
+
 	pub(crate) fn build(
 		&self,
 		context: &Context<M>,
@@ -73,9 +77,29 @@ impl<M> Definition<M> {
 	}
 }
 
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.data.map_ids(&f);
+		self.layout_field.map_ids(&f);
+		self.layout_variant.map_ids(f)
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct Data<M> {
 	pub format: Single<Id, M>
+}
+
+impl<M> Data<M> {
+	pub fn bindings(&self) -> ClassBindings<M> {
+		ClassBindings { format: self.format.iter() }
+	}
+}
+
+impl<M: Merge> MapIds for Data<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.format.map_ids(f)
+	}
 }
 
 impl<M> Default for Data<M> {
@@ -117,7 +141,23 @@ impl ClassBinding {
 
 pub enum Binding {
 	Format(Id),
-	LayoutField(layout::field::Binding)
+	LayoutField(layout::field::ClassBinding)
+}
+
+impl Binding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::Format(_) => Property::Format,
+			Self::LayoutField(b) => Property::LayoutField(b.property())
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::Format(v) => BindingValueRef::Id(*v),
+			Self::LayoutField(b) => b.value()
+		}
+	}
 }
 
 pub struct ClassBindings<'a, M> {
@@ -134,7 +174,7 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 
 pub struct Bindings<'a, M> {
 	data: ClassBindings<'a, M>,
-	layout_field: crate::layout::field::Bindings<'a, M>
+	layout_field: crate::layout::field::ClassBindings<'a, M>
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {

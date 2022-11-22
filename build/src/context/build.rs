@@ -23,7 +23,7 @@ impl<M: Clone> Context<M> {
 		M: Clone + Merge,
 	{
 		self.compute_layout_intersections(vocabulary, generator)?;
-		self.unify();
+		self.unify(vocabulary, generator);
 		self.assign_default_layouts(vocabulary, generator);
 		let layouts_relations = self.compute_layouts_relations();
 		self.assign_default_names(vocabulary, &layouts_relations);

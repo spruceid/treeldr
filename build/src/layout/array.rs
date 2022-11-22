@@ -1,4 +1,4 @@
-use crate::{Error, Single, Context, single};
+use crate::{Error, Single, Context, single, resource::BindingValueRef, context::MapIds};
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::StrippedPartialEq;
@@ -80,6 +80,10 @@ impl<M> Semantics<M> {
 		self
 	}
 
+	pub fn bindings(&self) -> Bindings<M> {
+		Bindings { first: self.first.iter(), rest: self.rest.iter(), nil: self.nil.iter() }
+	}
+
 	pub fn build(
 		self,
 		model: &Context<M>,
@@ -124,6 +128,14 @@ impl<M> Semantics<M> {
 	}
 }
 
+impl<M: Merge> MapIds for Semantics<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.first.map_ids(&f);
+		self.rest.map_ids(&f);
+		self.nil.map_ids(f)
+	}
+}
+
 impl<M> PartialEq for Semantics<M> {
 	fn eq(&self, other: &Self) -> bool {
 		self.first == other.first && self.rest == other.rest && self.nil == other.nil
@@ -134,6 +146,24 @@ pub enum Binding {
 	ArrayListFirst(Id),
 	ArrayListRest(Id),
 	ArrayListNil(Id)
+}
+
+impl Binding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::ArrayListFirst(_) => Property::ArrayListFirst,
+			Self::ArrayListRest(_) => Property::ArrayListRest,
+			Self::ArrayListNil(_) => Property::ArrayListNil
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::ArrayListFirst(v) => BindingValueRef::Id(*v),
+			Self::ArrayListRest(v) => BindingValueRef::Id(*v),
+			Self::ArrayListNil(v) => BindingValueRef::Id(*v)
+		}
+	}
 }
 
 pub struct Bindings<'a, M> {

@@ -1,4 +1,4 @@
-use crate::{Error, ObjectAsRequiredId, Single, single, context::HasType};
+use crate::{Error, ObjectAsRequiredId, Single, single, context::{HasType, MapIds}, resource::BindingValueRef};
 use locspan::Meta;
 use std::collections::HashMap;
 use treeldr::{metadata::Merge, Id, Multiple};
@@ -19,6 +19,20 @@ pub struct Data<M> {
 
 	/// Properties.
 	properties: HashMap<Id, M>,
+}
+
+impl<M> Data<M> {
+	pub fn bindings(&self) -> ClassBindings<M> {
+		ClassBindings { union_of: self.union_of.iter(), intersection_of: self.intersection_of.iter() }
+	}
+}
+
+impl<M: Merge> MapIds for Data<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.union_of.map_ids(&f);
+		self.intersection_of.map_ids(&f);
+		self.properties.map_ids(f)
+	}
 }
 
 impl<M> Default for Data<M> {
@@ -54,6 +68,22 @@ impl<M> Definition<M> {
 			datatype: datatype::Definition::default(),
 			restriction: restriction::Definition::default()
 		}
+	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		Bindings {
+			data: self.data.bindings(),
+			datatype: self.datatype.bindings(),
+			restriction: self.restriction.bindings()
+		}
+	}
+}
+
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.data.map_ids(&f);
+		self.datatype.map_ids(&f);
+		self.restriction.map_ids(f)
 	}
 }
 
@@ -187,35 +217,47 @@ pub enum Binding {
 	Restriction(restriction::Binding),
 }
 
+impl Binding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::UnionOf(_) => Property::UnionOf,
+			Self::IntersectionOf(_) => Property::IntersectionOf,
+			Self::Datatype(b) => Property::Datatype(b.property()),
+			Self::Restriction(b) => Property::Restriction(b.property())
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::UnionOf(v) => BindingValueRef::Id(*v),
+			Self::IntersectionOf(v) => BindingValueRef::Id(*v),
+			Self::Datatype(b) => b.value(),
+			Self::Restriction(b) => b.value()
+		}
+	}
+}
+
 pub struct Bindings<'a, M> {
+	data: ClassBindings<'a, M>,
 	datatype: datatype::Bindings<'a, M>,
 	restriction: restriction::Bindings<'a, M>,
-	union_of: single::Iter<'a, Id, M>,
-	intersection_of: single::Iter<'a, Id, M>
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {
 	type Item = Meta<Binding, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.datatype
+		self.data
 			.next()
-			.map(|m| m.map(Binding::Datatype))
+			.map(|m| m.map(ClassBinding::into_binding))
 			.or_else(|| {
-				self.restriction
+				self.datatype
 					.next()
-					.map(|m| m.map(Binding::Restriction))
+					.map(|m| m.map(Binding::Datatype))
 					.or_else(|| {
-						self.union_of
+						self.restriction
 							.next()
-							.map(Meta::into_cloned_value)
-							.map(|m| m.map(Binding::UnionOf))
-							.or_else(|| {
-								self.intersection_of
-									.next()
-									.map(Meta::into_cloned_value)
-									.map(|m| m.map(Binding::IntersectionOf))
-							})
+							.map(|m| m.map(Binding::Restriction))
 					})
 			})
 	}

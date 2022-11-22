@@ -1,4 +1,4 @@
-use crate::{Context, Error, component::{self, AssertNamed}, resource};
+use crate::{Context, Error, component::{self, AssertNamed}, resource, context::MapIds};
 use locspan::Meta;
 use rdf_types::Vocabulary;
 use treeldr::{BlankIdIndex, Id, IriIndex, Name};
@@ -51,5 +51,11 @@ impl Definition {
 		as_component.assert_named(as_resource, &meta)?;
 
 		Ok(Meta(treeldr::layout::variant::Definition, meta))
+	}
+}
+
+impl MapIds for Definition {
+	fn map_ids(&mut self, _f: impl Fn(Id) -> Id) {
+		// nothing.
 	}
 }

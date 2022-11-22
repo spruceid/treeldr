@@ -1,4 +1,4 @@
-use crate::{Error, Single, error::NodeBindingMissing, ObjectAsRequiredId, single, Context};
+use crate::{Error, Single, error::NodeBindingMissing, ObjectAsRequiredId, single, Context, resource::BindingValueRef, context::MapIds};
 use locspan::Meta;
 use treeldr::{metadata::Merge, Id, ty::data::Primitive};
 
@@ -38,6 +38,10 @@ impl<M> Definition<M> {
 
 	pub fn restrictions_mut(&mut self) -> &mut Single<Id, M> {
 		&mut self.restrictions
+	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings { on_datatype: self.base.iter(), with_restrictions: self.restrictions.iter() }
 	}
 
 	// pub fn dependencies(
@@ -130,29 +134,56 @@ impl<M> Definition<M> {
 	}
 }
 
-pub enum Binding {
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.base.map_ids(&f);
+		self.restrictions.map_ids(f)
+	}
+}
+
+pub enum ClassBinding {
 	OnDatatype(Id),
 	WithRestrictions(Id)
 }
 
-pub struct Bindings<'a, M> {
+pub type Binding = ClassBinding;
+
+impl ClassBinding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::OnDatatype(_) => Property::OnDatatype,
+			Self::WithRestrictions(_) => Property::WithRestrictions
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::OnDatatype(v) => BindingValueRef::Id(*v),
+			Self::WithRestrictions(v) => BindingValueRef::Id(*v)
+		}
+	}
+}
+
+pub struct ClassBindings<'a, M> {
 	on_datatype: single::Iter<'a, Id, M>,
 	with_restrictions: single::Iter<'a, Id, M>
 }
 
-impl<'a, M> Iterator for Bindings<'a, M> {
-	type Item = Meta<Binding, &'a M>;
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.on_datatype
 			.next()
 			.map(Meta::into_cloned_value)
-			.map(|m| m.map(Binding::OnDatatype))
+			.map(|m| m.map(ClassBinding::OnDatatype))
 			.or_else(|| {
 				self.with_restrictions
 					.next()
 					.map(Meta::into_cloned_value)
-					.map(|m| m.map(Binding::WithRestrictions))
+					.map(|m| m.map(ClassBinding::WithRestrictions))
 			})
 	}
 }

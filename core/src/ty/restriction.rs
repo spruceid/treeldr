@@ -39,13 +39,13 @@ pub enum Range {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Cardinality {
 	/// The property must have at least the given number of values.
-	AtLeast(u32),
+	AtLeast(u64),
 
 	/// The property must have at most the given number of values.
-	AtMost(u32),
+	AtMost(u64),
 
 	/// The property must have exactly the given number of values.
-	Exactly(u32),
+	Exactly(u64),
 }
 
 /// Type restricted on a property.
@@ -259,8 +259,8 @@ impl<'a, M> Iterator for RangeRestrictionsIter<'a, M> {
 #[derive(Debug, Derivative, Clone)]
 #[derivative(Default(bound = ""))]
 pub struct CardinalityRestrictions<M> {
-	min: MetaOption<u32, M>,
-	max: MetaOption<u32, M>,
+	min: MetaOption<u64, M>,
+	max: MetaOption<u64, M>,
 }
 
 impl<M> CardinalityRestrictions<M> {
@@ -358,7 +358,7 @@ impl<M> CardinalityRestrictions<M> {
 	}
 
 	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction> where M: Clone {
-		let min: MetaOption<u32, M> = match (self.min.as_ref(), other.min.as_ref()) {
+		let min: MetaOption<u64, M> = match (self.min.as_ref(), other.min.as_ref()) {
 			(Some(a), Some(b)) => {
 				if **a >= **b {
 					Some(a.clone())
@@ -371,7 +371,7 @@ impl<M> CardinalityRestrictions<M> {
 			(None, None) => None,
 		}.into();
 
-		let max: MetaOption<u32, M> = match (self.max.as_ref(), other.max.as_ref()) {
+		let max: MetaOption<u64, M> = match (self.max.as_ref(), other.max.as_ref()) {
 			(Some(a), Some(b)) => {
 				if **a <= **b {
 					Some(a.clone())
@@ -395,8 +395,8 @@ impl<M> CardinalityRestrictions<M> {
 }
 
 pub struct CardinalityRestrictionsIter<'a, M> {
-	min: Option<Meta<u32, &'a M>>,
-	max: Option<Meta<u32, &'a M>>,
+	min: Option<Meta<u64, &'a M>>,
+	max: Option<Meta<u64, &'a M>>,
 }
 
 impl<'a, M> Iterator for CardinalityRestrictionsIter<'a, M> {
@@ -421,7 +421,10 @@ impl<'a, M> Iterator for CardinalityRestrictionsIter<'a, M> {
 pub enum Property {
 	OnProperty,
 	AllValuesFrom,
-	SomeValuesFrom
+	SomeValuesFrom,
+	MinCardinality,
+	MaxCardinality,
+	Cardinality
 }
 
 impl Property {
@@ -431,6 +434,9 @@ impl Property {
 			Self::OnProperty => Term::Owl(Owl::OnProperty),
 			Self::AllValuesFrom => Term::Owl(Owl::AllValuesFrom),
 			Self::SomeValuesFrom => Term::Owl(Owl::SomeValuesFrom),
+			Self::MinCardinality => Term::Owl(Owl::MinCardinality),
+			Self::MaxCardinality => Term::Owl(Owl::MaxCardinality),
+			Self::Cardinality => Term::Owl(Owl::Cardinality)
 		}
 	}
 
@@ -438,7 +444,10 @@ impl Property {
 		match self {
 			Self::OnProperty => "restricted property",
 			Self::AllValuesFrom => "all values from range",
-			Self::SomeValuesFrom => "some values from range"
+			Self::SomeValuesFrom => "some values from range",
+			Self::MinCardinality => "minimum cardinality",
+			Self::MaxCardinality => "maximum cardinality",
+			Self::Cardinality => "cardinality"
 		}
 	}
 }

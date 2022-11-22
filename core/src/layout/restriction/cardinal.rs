@@ -1,6 +1,7 @@
 use crate::{metadata::Merge, MetaOption};
 use locspan::Meta;
 use locspan_derive::{StrippedEq, StrippedPartialEq};
+use super::Property;
 
 /// Cardinal restriction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -160,4 +161,13 @@ impl<M> Restrictions<M> {
 pub enum Binding {
 	Min(u64),
 	Max(u64),
+}
+
+impl Binding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::Min(_) => Property::MinCardinality,
+			Self::Max(_) => Property::MaxCardinality
+		}
+	}
 }

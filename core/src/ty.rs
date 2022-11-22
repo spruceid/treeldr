@@ -1,4 +1,4 @@
-use crate::{Model, component, ResourceType, Ref, vocab, prop};
+use crate::{Model, component, ResourceType, Ref, vocab::{self, Term}, prop, Id, node, IriIndex};
 
 pub mod data;
 mod intersection;
@@ -16,35 +16,42 @@ pub use restriction::{Restriction, Restrictions};
 pub use union::Union;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct OtherTypeId(Id);
+
+impl OtherTypeId {
+	fn id(&self) -> Id {
+		self.0
+	}
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Type {
-	Resource,
-	Class(Option<SubClass>),
-	DatatypeRestriction,
-	Property(Option<prop::Type>),
-	Component(Option<component::Type>),
-	LayoutRestriction,
-	List,
+	Resource(Option<node::Type>),
+	Other(OtherTypeId)
 }
 
 impl Type {
 	/// Checks if this is a subclass of `other`.
 	pub fn is_subclass_of(&self, other: Self) -> bool {
 		match (self, other) {
-			(Self::Resource, Self::Resource) => false,
-			(_, Self::Resource) => true,
-			(Self::Class(Some(_)), Self::Class(None)) => true,
-			(Self::Class(Some(a)), Self::Class(Some(b))) => a.is_subclass_of(b),
-			(Self::Property(Some(_)), Self::Property(None)) => true,
-			(Self::Property(Some(a)), Self::Property(Some(b))) => a.is_subclass_of(b),
-			(Self::Component(Some(_)), Self::Component(None)) => true,
-			(Self::Component(Some(a)), Self::Component(Some(b))) => a.is_subclass_of(b),
+			(Self::Resource(None), Self::Resource(None)) => false,
+			(_, Self::Resource(None)) => true,
+			(Self::Resource(Some(a)), Self::Resource(Some(b))) => a.is_subclass_of(b),
 			_ => false
+		}
+	}
+
+	pub fn id(&self) -> Id {
+		match self {
+			Self::Resource(None) => Id::Iri(IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Resource))),
+			Self::Resource(Some(ty)) => Id::Iri(IriIndex::Iri(ty.term())),
+			Self::Other(ty) => ty.id()
 		}
 	}
 }
 
 impl ResourceType for Type {
-	const TYPE: Type = Type::Class(None);
+	const TYPE: Type = Type::Resource(Some(node::Type::Class(None)));
 
 	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
 		resource.is_type()
@@ -57,27 +64,33 @@ impl<'a, M> Ref<'a, Type, M> {
 	}
 }
 
+impl From<node::Type> for Type {
+	fn from(ty: node::Type) -> Self {
+		Self::Resource(Some(ty))
+	}
+}
+
 impl From<SubClass> for Type {
 	fn from(ty: SubClass) -> Self {
-		Self::Class(Some(ty))
+		Self::Resource(Some(node::Type::Class(Some(ty))))
 	}
 }
 
 impl From<prop::Type> for Type {
 	fn from(ty: prop::Type) -> Self {
-		Self::Property(Some(ty))
+		Self::Resource(Some(node::Type::Property(Some(ty))))
 	}
 }
 
 impl From<component::Type> for Type {
 	fn from(ty: component::Type) -> Self {
-		Self::Component(Some(ty))
+		Self::Resource(Some(node::Type::Component(Some(ty))))
 	}
 }
 
 impl From<component::formatted::Type> for Type {
 	fn from(ty: component::formatted::Type) -> Self {
-		Self::Component(Some(component::Type::Formatted(Some(ty))))
+		Self::Resource(Some(node::Type::Component(Some(component::Type::Formatted(Some(ty))))))
 	}
 }
 
@@ -91,6 +104,13 @@ impl SubClass {
 	/// Checks if this is a subclass of `other`.
 	pub fn is_subclass_of(&self, _other: Self) -> bool {
 		false
+	}
+
+	pub fn term(&self) -> Term {
+		match self {
+			Self::DataType => Term::Rdfs(vocab::Rdfs::Datatype),
+			Self::Restriction => Term::Owl(vocab::Owl::Restriction)
+		}
 	}
 }
 
@@ -170,7 +190,7 @@ pub enum Property {
 
 impl Property {
 	pub fn term(&self) -> vocab::Term {
-		use vocab::{Term, Owl};
+		use vocab::Owl;
 		match self {
 			Self::Datatype(p) => p.term(),
 			Self::Restriction(p) => p.term(),

@@ -1,7 +1,7 @@
-use crate::{Context, Error, Single, error, single};
+use crate::{Context, Error, Single, error, single, resource::BindingValueRef, context::MapIds};
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
-use treeldr::{vocab::Object, Id};
+use treeldr::{vocab::Object, Id, metadata::Merge};
 
 pub use treeldr::list::Property;
 
@@ -33,6 +33,17 @@ impl<M> Definition<M> {
 
 	pub fn rest_mut(&mut self) -> &mut Single<Id, M> {
 		&mut self.rest
+	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings { first: self.first.iter(), rest: self.rest.iter() }
+	}
+}
+
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+		self.first.map_ids(&f);
+		self.rest.map_ids(f)
 	}
 }
 
@@ -206,6 +217,13 @@ impl<'a, M> ClassBindingRef<'a, M> {
 		match self {
 			Self::First(_) => Property::First,
 			Self::Rest(_) => Property::Rest,
+		}
+	}
+
+	pub fn value(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::First(v) => BindingValueRef::Object(v),
+			Self::Rest(v) => BindingValueRef::Id(*v)
 		}
 	}
 }

@@ -1,7 +1,9 @@
 use locspan::Meta;
 use treeldr::metadata::Merge;
 
-use crate::{Error, Single, single};
+use crate::{Error, Single, single, resource::BindingValueRef, context::MapIds};
+
+pub use treeldr::layout::restriction::Property;
 
 pub mod primitive;
 pub mod container;
@@ -17,12 +19,22 @@ impl<M> Definition<M> {
 		Self { restriction: Single::default() }
 	}
 
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings { restriction: self.restriction.iter() }
+	}
+
 	pub fn build(&self) -> Result<Meta<Restriction, M>, Error<M>> where M: Clone {
 		self.restriction.clone().try_unwrap().map_err(|_| {
 			todo!() // conflicting restriction
 		})?.ok_or_else(|| {
 			todo!() // missing restriction
 		})
+	}
+}
+
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(treeldr::Id) -> treeldr::Id) {
+		self.restriction.map_ids(f)
 	}
 }
 
@@ -38,6 +50,12 @@ impl Restriction {
 			Self::Primitive(r) => ClassBindingRef::Primitive(r.as_binding()),
 			Self::Container(r) => ClassBindingRef::Container(r.as_binding())
 		}
+	}
+}
+
+impl MapIds for Restriction {
+	fn map_ids(&mut self, _f: impl Fn(treeldr::Id) -> treeldr::Id) {
+		// nothing.
 	}
 }
 
@@ -84,6 +102,23 @@ pub enum ClassBindingRef<'a> {
 }
 
 pub type BindingRef<'a> = ClassBindingRef<'a>;
+
+impl<'a> ClassBindingRef<'a> {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::Primitive(b) => b.property(),
+			Self::Container(b) => b.property()
+		}
+	}
+
+	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::Primitive(b) => b.value(),
+			Self::Container(container::Binding::Cardinal(treeldr::layout::restriction::cardinal::Binding::Min(v))) => BindingValueRef::U64(*v),
+			Self::Container(container::Binding::Cardinal(treeldr::layout::restriction::cardinal::Binding::Max(v))) => BindingValueRef::U64(*v)
+		}
+	}
+}
 
 pub struct ClassBindings<'a, M> {
 	restriction: single::Iter<'a, Restriction, M>

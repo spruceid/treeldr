@@ -1,4 +1,4 @@
-use crate::metadata::Merge;
+use crate::{metadata::Merge, vocab};
 use locspan::{MapLocErr, Meta};
 use locspan_derive::{StrippedEq, StrippedPartialEq};
 
@@ -88,4 +88,56 @@ impl<M> Restrictions<M> {
 
 pub enum Binding {
 	Cardinal(cardinal::Binding)
+}
+
+impl Binding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::Cardinal(b) => b.property()
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Property {
+	MinCardinality,
+	MaxCardinality,
+	InclusiveMinimum,
+	ExclusiveMinimum,
+	InclusiveMaximum,
+	ExclusiveMaximum,
+	MinLength,
+	MaxLength,
+	Pattern
+}
+
+impl Property {
+	pub fn term(&self) -> vocab::Term {
+		use vocab::{Term, TreeLdr};
+		match self {
+			Self::MinCardinality => Term::TreeLdr(TreeLdr::MinCardinality),
+			Self::MaxCardinality => Term::TreeLdr(TreeLdr::MaxCardinality),
+			Self::InclusiveMinimum => Term::TreeLdr(TreeLdr::InclusiveMinimum),
+			Self::ExclusiveMinimum => Term::TreeLdr(TreeLdr::ExclusiveMinimum),
+			Self::InclusiveMaximum => Term::TreeLdr(TreeLdr::InclusiveMaximum),
+			Self::ExclusiveMaximum => Term::TreeLdr(TreeLdr::ExclusiveMaximum),
+			Self::MinLength => Term::TreeLdr(TreeLdr::MinLength),
+			Self::MaxLength => Term::TreeLdr(TreeLdr::MaxLength),
+			Self::Pattern => Term::TreeLdr(TreeLdr::Pattern),
+		}
+	}
+
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::MinCardinality => "minimum cardinality",
+			Self::MaxCardinality => "maximum cardinality",
+			Self::InclusiveMinimum => "inclusive minimum",
+			Self::ExclusiveMinimum => "exclusive minimum",
+			Self::InclusiveMaximum => "inclusive maximum",
+			Self::ExclusiveMaximum => "exclusive maximum",
+			Self::MinLength => "minimum length",
+			Self::MaxLength => "maximum length",
+			Self::Pattern => "pattern",
+		}
+	}
 }

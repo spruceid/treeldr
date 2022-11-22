@@ -1,9 +1,9 @@
-use crate::{error, layout, prop, ty, Error, Id, MetaOption, component, Multiple, Type, ResourceType, vocab};
+use crate::{error, layout, prop, ty, Error, Id, MetaOption, component, Multiple, ResourceType, vocab::{self, Term}, list};
 use locspan::Meta;
 
 #[derive(Debug, Clone)]
 pub struct AnonymousData<M> {
-	pub type_: Multiple<Type, M>,
+	pub type_: Multiple<crate::Type, M>,
 	pub label: Multiple<String, M>,
 	pub comment: Multiple<String, M>
 }
@@ -12,7 +12,7 @@ pub struct AnonymousData<M> {
 pub struct Data<M> {
 	pub id: Id,
 	pub metadata: M,
-	pub type_: Multiple<Type, M>,
+	pub type_: Multiple<crate::Type, M>,
 	pub label: Multiple<String, M>,
 	pub comment: Multiple<String, M>
 }
@@ -35,7 +35,7 @@ impl<M> Data<M> {
 pub struct Resource;
 
 impl ResourceType for Resource {
-	const TYPE: Type = Type::Resource;
+	const TYPE: crate::Type = crate::Type::Resource(None);
 
 	fn check<M>(_resource: &self::Definition<M>) -> bool {
 		true
@@ -70,7 +70,7 @@ impl<M> Definition<M> {
 		self.data.id
 	}
 
-	pub fn type_(&self) -> &Multiple<Type, M> {
+	pub fn type_(&self) -> &Multiple<crate::Type, M> {
 		&self.data.type_
 	}
 
@@ -129,7 +129,7 @@ impl<M> Definition<M> {
 		self.as_layout().ok_or_else(|| {
 			error::NodeInvalidType {
 				id: self.data.id,
-				expected: Type::Component(Some(component::Type::Layout)),
+				expected: crate::Type::Resource(Some(Type::Component(Some(component::Type::Layout)))),
 				found: self.type_().clone()
 			}
 			.into()
@@ -137,20 +137,71 @@ impl<M> Definition<M> {
 	}
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum Type {
+	Class(Option<ty::SubClass>),
+	DatatypeRestriction,
+	Property(Option<prop::Type>),
+	Component(Option<component::Type>),
+	LayoutRestriction,
+	List,
+}
+
+impl Type {
+	/// Checks if this is a subclass of `other`.
+	pub fn is_subclass_of(&self, other: Self) -> bool {
+		match (self, other) {
+			(Self::Class(Some(_)), Self::Class(None)) => true,
+			(Self::Class(Some(a)), Self::Class(Some(b))) => a.is_subclass_of(b),
+			(Self::Property(Some(_)), Self::Property(None)) => true,
+			(Self::Property(Some(a)), Self::Property(Some(b))) => a.is_subclass_of(b),
+			(Self::Component(Some(_)), Self::Component(None)) => true,
+			(Self::Component(Some(a)), Self::Component(Some(b))) => a.is_subclass_of(b),
+			_ => false
+		}
+	}
+
+	pub fn term(&self) -> Term {
+		match self {
+			Self::Class(None) => Term::Rdfs(vocab::Rdfs::Class),
+			Self::Class(Some(ty)) => ty.term(),
+			Self::DatatypeRestriction => Term::Rdfs(vocab::Rdfs::Resource),
+			Self::Property(None) => Term::Rdf(vocab::Rdf::Property),
+			Self::Property(Some(ty)) => ty.term(),
+			Self::Component(None) => Term::TreeLdr(vocab::TreeLdr::Component),
+			Self::Component(Some(ty)) => ty.term(),
+			Self::LayoutRestriction => Term::TreeLdr(vocab::TreeLdr::LayoutRestriction),
+			Self::List => Term::Rdf(vocab::Rdf::List)
+		}
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
 	Type,
 	Label,
-	Comment
+	Comment,
+	Class(ty::Property),
+	DatatypeRestriction(ty::data::restriction::Property),
+	Property(prop::RdfProperty),
+	Component(component::Property),
+	LayoutRestriction(layout::restriction::Property),
+	List(list::Property)
 }
 
 impl Property {
 	pub fn term(&self) -> vocab::Term {
-		use vocab::{Rdfs, Rdf, Term};
+		use vocab::{Rdfs, Rdf};
 		match self {
 			Self::Type => Term::Rdf(Rdf::Type),
 			Self::Label => Term::Rdfs(Rdfs::Label),
-			Self::Comment => Term::Rdfs(Rdfs::Comment)
+			Self::Comment => Term::Rdfs(Rdfs::Comment),
+			Self::Class(p) => p.term(),
+			Self::DatatypeRestriction(p) => p.term(),
+			Self::Property(p) => p.term(),
+			Self::Component(p) => p.term(),
+			Self::LayoutRestriction(p) => p.term(),
+			Self::List(p) => p.term()
 		}
 	}
 
@@ -158,7 +209,13 @@ impl Property {
 		match self {
 			Self::Type => "type",
 			Self::Label => "label",
-			Self::Comment => "comment"
+			Self::Comment => "comment",
+			Self::Class(p) => p.name(),
+			Self::DatatypeRestriction(p) => p.name(),
+			Self::Property(p) => p.name(),
+			Self::Component(p) => p.name(),
+			Self::LayoutRestriction(p) => p.name(),
+			Self::List(p) => p.name()
 		}
 	}
 }

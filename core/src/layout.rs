@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-	MetaOption, TId, ResourceType, component, Type, vocab
+	MetaOption, TId, ResourceType, component, Type, vocab, node
 };
 use locspan::Meta;
 
@@ -40,7 +40,7 @@ pub use usages::Usages;
 pub struct Layout;
 
 impl ResourceType for Layout {
-	const TYPE: crate::Type = crate::Type::Component(Some(component::Type::Layout));
+	const TYPE: crate::Type = crate::Type::Resource(Some(node::Type::Component(Some(component::Type::Layout))));
 
 	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
 		resource.is_layout()
