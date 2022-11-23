@@ -1,7 +1,7 @@
 use locspan::Meta;
 use treeldr::{Id, metadata::Merge, Name, vocab::Object, value, ty::data::RegExp};
 
-use crate::{Multiple, multiple, ty, prop, component, layout, list, error::NodeTypeInvalid, Error, context::{HasType, MapIds}};
+use crate::{Multiple, multiple, ty, prop, component, layout, list, error::NodeTypeInvalid, Error, context::{HasType, MapIds}, ObjectAsId};
 pub use treeldr::node::{Property, Type};
 
 #[derive(Debug, Clone)]
@@ -447,6 +447,17 @@ pub enum BindingValueRef<'a, M> {
 	Numeric(&'a value::Numeric),
 	Integer(&'a value::Integer),
 	RegExp(&'a RegExp)
+}
+
+impl<'a, M> BindingValueRef<'a, M> {
+	pub fn into_id(self) -> Option<Id> {
+		match self {
+			Self::Type(ty) => Some(ty.id()),
+			Self::Id(id) => Some(id),
+			Self::Object(obj) => obj.as_id(),
+			_ => None
+		}
+	}
 }
 
 pub enum BindingRef<'a, M> {
