@@ -70,14 +70,13 @@ impl<M> Semantics<M> {
 		self.nil.insert(id)
 	}
 
-	pub fn unify(mut self, other: Self) -> Self
+	pub fn unify_with(&mut self, other: Self) 
 	where
 		M: Merge,
 	{
 		self.first.extend(other.first);
 		self.rest.extend(other.rest);
 		self.nil.extend(other.nil);
-		self
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {

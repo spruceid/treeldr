@@ -155,6 +155,18 @@ impl<M> Definition<M> {
 		&mut self.ty
 	}
 
+	pub fn as_datatype_mut(&mut self) -> &mut ty::datatype::Definition<M> {
+		self.ty.as_datatype_mut()
+	}
+
+	pub fn as_restriction_mut(&mut self) -> &mut ty::restriction::Definition<M> {
+		self.ty.as_restriction_mut()
+	}
+
+	pub fn as_datatype_restriction_mut(&mut self) -> &mut ty::datatype::restriction::Definition<M> {
+		&mut self.datatype_restriction
+	}
+
 	pub fn as_property_mut(&mut self) -> &mut prop::Definition<M> {
 		&mut self.property
 	}
@@ -179,6 +191,10 @@ impl<M> Definition<M> {
 		&mut self,
 	) -> &mut layout::variant::Definition {
 		self.component.as_layout_variant_mut()
+	}
+
+	pub fn as_layout_restriction_mut(&mut self) -> &mut layout::restriction::Definition<M> {
+		&mut self.layout_restriction
 	}
 
 	pub fn as_list_mut(&mut self) -> &mut list::Definition<M> {

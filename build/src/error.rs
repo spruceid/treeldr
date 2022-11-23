@@ -135,7 +135,7 @@ errors! {
 	// list_mismatch_rest::ListMismatchRest<M>,
 	// list_missing_item::ListMissingItem,
 	// list_missing_rest::ListMissingRest,
-	// regexp_invalid::RegExpInvalid,
-	// name_invalid::NameInvalid,
+	regexp_invalid::RegExpInvalid,
+	name_invalid::NameInvalid,
 	literal_unexpected::LiteralUnexpected<M>
 }

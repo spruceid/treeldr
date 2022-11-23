@@ -334,6 +334,10 @@ impl<M: Merge> Definition<M> {
 	pub fn set_array_list_nil(&mut self, value: Meta<Id, M>) {
 		self.array_semantics.set_nil(value)
 	}
+
+	pub fn set_array_semantics(&mut self, value: array::Semantics<M>) {
+		self.array_semantics.unify_with(value)
+	}
 }
 
 impl<M: Clone> Definition<M> {

@@ -26,7 +26,7 @@ impl<M> Context<M> {
 		);
 		let id_field = generator.next(vocabulary);
 		self.declare_layout_field(id_field, metadata.clone());
-		let resource_ref_layout = self.standard_reference(
+		let resource_ref_layout = self.create_reference(
 			vocabulary,
 			generator,
 			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Resource))),

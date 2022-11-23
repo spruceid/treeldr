@@ -17,9 +17,7 @@ pub type Ids<'a, M> = std::iter::Copied<std::collections::btree_map::Keys<'a, Id
 #[derivative(Default(bound = ""))]
 pub struct Context<M> {
 	/// Nodes.
-	nodes: BTreeMap<Id, resource::Definition<M>>,
-
-	standard_references: HashMap<Id, Id>,
+	nodes: BTreeMap<Id, resource::Definition<M>>
 }
 
 impl<M> Context<M> {
@@ -52,6 +50,14 @@ impl<M> Context<M> {
 		self.declare_with(id, SubClass::DataType, metadata)
 	}
 
+	pub fn declare_restriction(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+		self.declare_with(id, SubClass::Restriction, metadata)
+	}
+
+	pub fn declare_datatype_restriction(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+		self.declare_with(id, Type::DatatypeRestriction, metadata)
+	}
+
 	pub fn declare_property(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		self.declare_with(id, Type::Property(None), metadata)
 	}
@@ -74,6 +80,10 @@ impl<M> Context<M> {
 
 	pub fn declare_layout_variant(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
 		self.declare_with(id, component::formatted::Type::LayoutVariant, metadata)
+	}
+
+	pub fn declare_layout_restriction(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+		self.declare_with(id, Type::LayoutRestriction, metadata)
 	}
 
 	/// Checks if `b` is a subclass of `a`.
@@ -273,24 +283,24 @@ impl<M: Clone + Merge> Context<M> {
 		id
 	}
 
-	pub fn standard_reference<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&mut self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
-		deref_ty: Id,
-		cause: M,
-		deref_cause: M,
-	) -> Id {
-		match self.standard_references.get(&deref_ty).cloned() {
-			Some(id) => id,
-			None => {
-				let id =
-					self.create_reference(vocabulary, generator, deref_ty, cause, deref_cause);
-				self.standard_references.insert(deref_ty, id);
-				id
-			}
-		}
-	}
+	// pub fn standard_reference<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	// 	&mut self,
+	// 	vocabulary: &mut V,
+	// 	generator: &mut impl Generator<V>,
+	// 	deref_ty: Id,
+	// 	cause: M,
+	// 	deref_cause: M,
+	// ) -> Id {
+	// 	match self.standard_references.get(&deref_ty).cloned() {
+	// 		Some(id) => id,
+	// 		None => {
+	// 			let id =
+	// 				self.create_reference(vocabulary, generator, deref_ty, cause, deref_cause);
+	// 			self.standard_references.insert(deref_ty, id);
+	// 			id
+	// 		}
+	// 	}
+	// }
 
 	pub fn create_reference<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,

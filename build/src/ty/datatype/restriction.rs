@@ -19,6 +19,14 @@ impl<M> Definition<M> {
 		Self { restriction: Single::default() }
 	}
 
+	pub fn restriction(&self) -> &Single<Restriction, M> {
+		&self.restriction
+	}
+
+	pub fn restriction_mut(&mut self) -> &mut Single<Restriction, M> {
+		&mut self.restriction
+	}
+
 	pub fn bindings(&self) -> Bindings<M> {
 		ClassBindings { restriction: self.restriction.iter() }
 	}

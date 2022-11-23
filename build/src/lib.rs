@@ -27,8 +27,18 @@ pub trait Document<M> {
 	type LocalContext;
 	type Error;
 
+	/// Declare in `context` all the node declared in the document.
 	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
+		local_context: &mut Self::LocalContext,
+		context: &mut Context<M>,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+	) -> Result<(), Self::Error>;
+
+	/// Define in `context` all the statements of the document.
+	fn define<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M>,
 		vocabulary: &mut V,

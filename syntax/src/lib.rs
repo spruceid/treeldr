@@ -318,9 +318,9 @@ impl<M: Clone> TypePropertyRangeRestriction<M> {
 
 #[derive(Clone)]
 pub enum TypePropertyCardinalityRestriction {
-	AtLeast(u32),
-	AtMost(u32),
-	Exactly(u32),
+	AtLeast(u64),
+	AtMost(u64),
+	Exactly(u64),
 }
 
 impl TypePropertyCardinalityRestriction {
@@ -488,9 +488,9 @@ pub enum LayoutFieldRangeRestriction<M> {
 
 #[derive(Clone, PartialEq, Eq, StrippedPartialEq, StrippedEq)]
 pub enum LayoutFieldCardinalityRestriction {
-	AtLeast(u32),
-	AtMost(u32),
-	Exactly(u32),
+	AtLeast(u64),
+	AtMost(u64),
+	Exactly(u64),
 }
 
 #[derive(Clone)]
