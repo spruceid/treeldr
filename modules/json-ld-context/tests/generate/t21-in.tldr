@@ -1,0 +1,5 @@
+use <http://www.example.com/> as ex;
+
+type Foo {
+	ex:prop: Foo
+}
