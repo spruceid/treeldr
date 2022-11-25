@@ -7,6 +7,7 @@ edition = "2021"
 treeldr = { path = "../core" }
 log = "0.4"
 rdf-types = { version = "0.12.3", features = ["meta"] }
+langtag = "0.3.2"
 iref = "2.2"
 shelves = "1"
 derivative = "2.2.0"

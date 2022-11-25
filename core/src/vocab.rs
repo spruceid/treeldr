@@ -15,11 +15,17 @@ pub enum TreeLdr {
 	#[iri("tldr:self")]
 	Self_,
 
+	#[iri("tldr:Component")]
+	Component,
+
 	#[iri("tldr:Layout")]
 	Layout,
 
 	#[iri("tldr:layoutFor")]
 	LayoutFor,
+
+	#[iri("tldr:Formatted")]
+	Formatted,
 
 	/// Gives the layout of a field or enumeration variant.
 	#[iri("tldr:format")]
@@ -117,6 +123,39 @@ pub enum TreeLdr {
 	/// "One or many" layout.
 	#[iri("tldr:oneOrMany")]
 	OneOrMany,
+
+	#[iri("tldr:intersectionOf")]
+	IntersectionOf,
+
+	#[iri("tldr:LayoutRestriction")]
+	LayoutRestriction,
+
+	#[iri("tldr:minCardinality")]
+	MinCardinality,
+
+	#[iri("tldr:maxCardinality")]
+	MaxCardinality,
+
+	#[iri("tldr:inclusiveMinimum")]
+	InclusiveMinimum,
+
+	#[iri("tldr:exclusiveMinimum")]
+	ExclusiveMinimum,
+
+	#[iri("tldr:inclusiveMaximum")]
+	InclusiveMaximum,
+
+	#[iri("tldr:exclusiveMaximum")]
+	ExclusiveMaximum,
+
+	#[iri("tldr:minLength")]
+	MinLength,
+
+	#[iri("tldr:maxLength")]
+	MaxLength,
+
+	#[iri("tldr:pattern")]
+	Pattern,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -160,6 +199,9 @@ pub enum Owl {
 
 	#[iri("owl:withRestrictions")]
 	WithRestrictions,
+
+	#[iri("owl:FunctionalProperty")]
+	FunctionalProperty,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

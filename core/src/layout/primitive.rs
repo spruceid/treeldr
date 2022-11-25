@@ -1,4 +1,4 @@
-use crate::{vocab, Id, IriIndex};
+use crate::{vocab, Id, IriIndex, TId};
 use iref_enum::IriEnum;
 use std::fmt;
 
@@ -60,6 +60,14 @@ pub enum Primitive {
 }
 
 impl Primitive {
+	pub fn from_id(id: Id) -> Option<Self> {
+		use vocab::{Term, TreeLdr};
+		match id {
+			Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Primitive(p)))) => Some(p),
+			_ => None,
+		}
+	}
+
 	pub fn from_name(name: &str) -> Option<Self> {
 		match name {
 			"boolean" => Some(Self::Boolean),
@@ -98,6 +106,10 @@ impl Primitive {
 	pub fn id(&self) -> Id {
 		use vocab::{Term, TreeLdr};
 		Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Primitive(*self))))
+	}
+
+	pub fn ty(&self) -> TId<crate::Type> {
+		TId::new(self.id())
 	}
 }
 

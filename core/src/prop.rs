@@ -1,60 +1,213 @@
-use crate::{ty, BlankIdIndex, Documentation, Id, IriIndex, SubstituteReferences};
+use crate::{
+	component, layout, list, multiple,
+	node::{self, BindingValueRef},
+	ty,
+	vocab::{self, Term},
+	BlankIdIndex, Id, IriIndex, Multiple, ResourceType, TId,
+};
+use contextual::DisplayWithContext;
+use derivative::Derivative;
 use locspan::Meta;
-use rdf_types::Subject;
-use shelves::Ref;
-use std::collections::HashMap;
+use rdf_types::Vocabulary;
+use std::fmt;
 
-pub mod restriction;
+/// Node property.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Property {
+	Resource(node::Property),
+	Other(Id),
+}
 
-pub use restriction::{Restriction, Restrictions};
+impl Property {
+	pub fn id(&self) -> Id {
+		match self {
+			Self::Resource(p) => Id::Iri(IriIndex::Iri(p.term())),
+			Self::Other(id) => *id,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::Resource(b) => PropertyName::Resource(b.name()),
+			Self::Other(id) => PropertyName::Other(*id),
+		}
+	}
+
+	pub fn expect_type(&self) -> bool {
+		match self {
+			Self::Resource(p) => p.expect_type(),
+			Self::Other(_) => false,
+		}
+	}
+
+	pub fn expect_layout(&self) -> bool {
+		match self {
+			Self::Resource(p) => p.expect_layout(),
+			Self::Other(_) => false,
+		}
+	}
+}
+
+impl ResourceType for Property {
+	const TYPE: crate::Type = crate::Type::Resource(Some(node::Type::Property(None)));
+
+	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
+		resource.is_property()
+	}
+}
+
+impl From<node::Property> for Property {
+	fn from(p: node::Property) -> Self {
+		Self::Resource(p)
+	}
+}
+
+impl From<ty::Property> for Property {
+	fn from(p: ty::Property) -> Self {
+		Self::Resource(node::Property::Class(p))
+	}
+}
+
+impl From<ty::data::Property> for Property {
+	fn from(p: ty::data::Property) -> Self {
+		Self::Resource(node::Property::Class(ty::Property::Datatype(p)))
+	}
+}
+
+impl From<ty::restriction::Property> for Property {
+	fn from(p: ty::restriction::Property) -> Self {
+		Self::Resource(node::Property::Class(ty::Property::Restriction(p)))
+	}
+}
+
+impl From<RdfProperty> for Property {
+	fn from(p: RdfProperty) -> Self {
+		Self::Resource(node::Property::Property(p))
+	}
+}
+
+impl From<component::Property> for Property {
+	fn from(p: component::Property) -> Self {
+		Self::Resource(node::Property::Component(p))
+	}
+}
+
+impl From<layout::Property> for Property {
+	fn from(p: layout::Property) -> Self {
+		Self::Resource(node::Property::Component(component::Property::Layout(p)))
+	}
+}
+
+impl From<layout::DescriptionProperty> for Property {
+	fn from(p: layout::DescriptionProperty) -> Self {
+		Self::Resource(node::Property::Component(component::Property::Layout(
+			layout::Property::Description(p),
+		)))
+	}
+}
+
+impl From<component::formatted::Property> for Property {
+	fn from(p: component::formatted::Property) -> Self {
+		Self::Resource(node::Property::Component(component::Property::Formatted(p)))
+	}
+}
+
+impl From<layout::field::Property> for Property {
+	fn from(p: layout::field::Property) -> Self {
+		Self::Resource(node::Property::Component(component::Property::Formatted(
+			component::formatted::Property::LayoutField(p),
+		)))
+	}
+}
+
+impl From<list::Property> for Property {
+	fn from(p: list::Property) -> Self {
+		Self::Resource(node::Property::List(p))
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RdfProperty {
+	Domain,
+	Range,
+	Required,
+}
+
+impl RdfProperty {
+	pub fn term(&self) -> vocab::Term {
+		use vocab::{Rdfs, Schema};
+		match self {
+			Self::Domain => Term::Rdfs(Rdfs::Domain),
+			Self::Range => Term::Rdfs(Rdfs::Range),
+			Self::Required => Term::Schema(Schema::ValueRequired),
+		}
+	}
+
+	pub fn name(&self) -> &'static str {
+		match self {
+			Self::Domain => "domain",
+			Self::Range => "range",
+			Self::Required => "value requirement",
+		}
+	}
+
+	pub fn expect_type(&self) -> bool {
+		matches!(self, Self::Domain | Self::Range)
+	}
+
+	pub fn expect_layout(&self) -> bool {
+		false
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Type {
+	FunctionalProperty,
+}
+
+impl Type {
+	/// Checks if this is a subclass of `other`.
+	pub fn is_subclass_of(&self, _other: Self) -> bool {
+		false
+	}
+
+	pub fn term(&self) -> Term {
+		match self {
+			Self::FunctionalProperty => Term::Owl(vocab::Owl::FunctionalProperty),
+		}
+	}
+}
 
 /// Property definition.
-pub struct Definition<M, I = IriIndex, B = BlankIdIndex> {
-	id: Subject<I, B>,
-	domain: HashMap<Ref<ty::Definition<M>>, M>,
-	range: Meta<Ref<ty::Definition<M>>, M>,
+#[derive(Debug)]
+pub struct Definition<M> {
+	domain: Multiple<TId<crate::Type>, M>,
+	range: Meta<TId<crate::Type>, M>,
 	required: Meta<bool, M>,
 	functional: Meta<bool, M>,
-	causes: M,
 }
 
 impl<M> Definition<M> {
 	pub fn new(
-		id: Id,
-		range: Meta<Ref<ty::Definition<M>>, M>,
+		domain: Multiple<TId<crate::Type>, M>,
+		range: Meta<TId<crate::Type>, M>,
 		required: Meta<bool, M>,
 		functional: Meta<bool, M>,
-		causes: impl Into<M>,
 	) -> Self {
 		Self {
-			id,
-			causes: causes.into(),
-			domain: HashMap::new(),
+			domain,
 			range,
 			required,
 			functional,
 		}
 	}
 
-	/// Returns the identifier of the defined property.
-	pub fn id(&self) -> Id {
-		self.id
-	}
-
-	pub fn causes(&self) -> &M {
-		&self.causes
-	}
-
-	pub fn insert_domain(&mut self, ty_ref: Ref<ty::Definition<M>>, metadata: M) {
-		self.domain.insert(ty_ref, metadata);
-	}
-
-	pub fn range(&self) -> &Meta<Ref<ty::Definition<M>>, M> {
+	pub fn range(&self) -> &Meta<TId<crate::Type>, M> {
 		&self.range
 	}
 
-	pub fn domain(&self) -> impl '_ + Iterator<Item = Ref<ty::Definition<M>>> {
-		self.domain.keys().cloned()
+	pub fn domain(&self) -> &Multiple<TId<crate::Type>, M> {
+		&self.domain
 	}
 
 	pub fn is_required(&self) -> bool {
@@ -67,27 +220,86 @@ impl<M> Definition<M> {
 		*self.functional
 	}
 
-	pub fn label<'m>(&self, model: &'m crate::Model<M>) -> Option<&'m str> {
-		model.get(self.id).unwrap().label()
-	}
-
-	pub fn documentation<'m>(&self, model: &'m crate::Model<M>) -> &'m Documentation {
-		model.get(self.id).unwrap().documentation()
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings {
+			domain: self.domain.iter(),
+			range: Some(&self.range),
+			required: if self.is_required() {
+				Some(&self.required)
+			} else {
+				None
+			},
+		}
 	}
 }
 
-impl<M> SubstituteReferences<M> for Definition<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<ty::Definition<M>>) -> Ref<ty::Definition<M>>,
-		P: Fn(Ref<self::Definition<M>>) -> Ref<self::Definition<M>>,
-		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
-	{
-		self.id = sub.id(self.id);
-		crate::utils::replace_with(&mut self.domain, |d| {
-			d.into_iter().map(|(r, m)| (sub.ty(r), m)).collect()
-		});
-		crate::utils::replace_with(&mut self.range, |r| r.map(|r| sub.ty(r)))
+pub enum PropertyName {
+	Resource(&'static str),
+	Other(Id),
+}
+
+impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V> for PropertyName {
+	fn fmt_with(&self, context: &V, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::Resource(name) => fmt::Display::fmt(name, f),
+			Self::Other(id) => id.fmt_with(context, f),
+		}
+	}
+}
+
+pub enum ClassBinding {
+	Domain(TId<crate::Type>),
+	Range(TId<crate::Type>),
+	Required(bool),
+}
+
+pub type Binding = ClassBinding;
+
+impl ClassBinding {
+	pub fn property(&self) -> RdfProperty {
+		match self {
+			Self::Domain(_) => RdfProperty::Domain,
+			Self::Range(_) => RdfProperty::Range,
+			Self::Required(_) => RdfProperty::Required,
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::Domain(v) => BindingValueRef::Type(*v),
+			Self::Range(v) => BindingValueRef::Type(*v),
+			Self::Required(v) => BindingValueRef::Boolean(*v),
+		}
+	}
+}
+
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct ClassBindings<'a, M> {
+	domain: multiple::Iter<'a, TId<crate::Type>, M>,
+	range: Option<&'a Meta<TId<crate::Type>, M>>,
+	required: Option<&'a Meta<bool, M>>,
+}
+
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.domain
+			.next()
+			.map(Meta::into_cloned_value)
+			.map(|m| m.map(ClassBinding::Domain))
+			.or_else(|| {
+				self.range
+					.take()
+					.map(|m| m.borrow().into_cloned_value().map(ClassBinding::Range))
+					.or_else(|| {
+						self.required
+							.take()
+							.map(|m| m.borrow().into_cloned_value().map(ClassBinding::Required))
+					})
+			})
 	}
 }

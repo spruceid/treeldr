@@ -170,6 +170,7 @@ impl<M> Restrictions<M> {
 	}
 }
 
+#[derive(Clone, Copy)]
 pub enum RestrictionRef<'a> {
 	MinLength(u64),
 	MaxLength(u64),
@@ -198,6 +199,24 @@ impl<'a, M> Iterator for Iter<'a, M> {
 				self.pattern
 					.take()
 					.map(|m| m.borrow().map(RestrictionRef::Pattern))
+			})
+	}
+}
+
+impl<'a, M> DoubleEndedIterator for Iter<'a, M> {
+	fn next_back(&mut self) -> Option<Self::Item> {
+		self.pattern
+			.take()
+			.map(|m| m.borrow().map(RestrictionRef::Pattern))
+			.or_else(|| {
+				self.len_max
+					.take()
+					.map(|m| m.map(RestrictionRef::MaxLength))
+			})
+			.or_else(|| {
+				self.len_min
+					.take()
+					.map(|m| m.map(RestrictionRef::MinLength))
 			})
 	}
 }

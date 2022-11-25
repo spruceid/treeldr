@@ -1,136 +1,24 @@
-use crate::{error, Error};
+use super::Property;
+use crate::{
+	context::{MapIds, MapIdsIn},
+	resource::BindingValueRef,
+	single, Context, Error, Single,
+};
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::StrippedPartialEq;
-use treeldr::{
-	layout::container::Restrictions, metadata::Merge, vocab, Id, IriIndex, MetaOption, Name,
-};
+use treeldr::{metadata::Merge, vocab, Id, IriIndex};
 use vocab::{Rdf, Term};
-
-#[derive(Clone, Debug, Derivative)]
-#[derivative(PartialEq(bound = ""))]
-pub struct Array<M> {
-	item: Id,
-
-	semantics: Option<Semantics<M>>,
-}
-
-impl<M> Array<M> {
-	pub fn new(item: Id, semantics: Option<Semantics<M>>) -> Self {
-		Self { item, semantics }
-	}
-
-	pub fn item_layout(&self) -> Id {
-		self.item
-	}
-
-	pub fn semantics(&self) -> Option<&Semantics<M>> {
-		self.semantics.as_ref()
-	}
-
-	pub fn set_list_first(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>> {
-		self.semantics
-			.get_or_insert_with(Semantics::default)
-			.set_first(id, value, metadata)
-	}
-
-	pub fn set_list_rest(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>>
-	where
-		M: Clone,
-	{
-		self.semantics
-			.get_or_insert_with(Semantics::default)
-			.set_rest(id, value, metadata)
-	}
-
-	pub fn set_list_nil(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>>
-	where
-		M: Clone,
-	{
-		self.semantics
-			.get_or_insert_with(Semantics::default)
-			.set_nil(id, value, metadata)
-	}
-
-	pub fn try_unify(
-		self,
-		other: Self,
-		id: Id,
-		metadata: M,
-		other_metadata: M,
-	) -> Result<Meta<Self, M>, Error<M>>
-	where
-		M: Merge,
-	{
-		if self.item == other.item {
-			let semantics = match (self.semantics, other.semantics) {
-				(Some(a), Some(b)) => Some(a.try_unify(b, id)?),
-				(Some(a), None) => Some(a),
-				(None, Some(b)) => Some(b),
-				(None, None) => None,
-			};
-
-			Ok(Meta(
-				Self {
-					item: self.item,
-					semantics,
-				},
-				metadata.merged_with(other_metadata),
-			))
-		} else {
-			Err(Error::new(
-				error::LayoutMismatchDescription {
-					id,
-					because: metadata,
-				}
-				.into(),
-				other_metadata,
-			))
-		}
-	}
-
-	pub fn build(
-		self,
-		name: MetaOption<Name, M>,
-		restrictions: Restrictions<M>,
-		nodes: &mut crate::context::allocated::Nodes<M>,
-		metadata: &M,
-	) -> Result<treeldr::layout::Array<M>, Error<M>>
-	where
-		M: Clone,
-	{
-		let item_layout_ref = **nodes.require_layout(self.item, metadata)?;
-		let semantics = self.semantics.map(|s| s.build(nodes)).transpose()?;
-
-		Ok(treeldr::layout::Array::new(
-			name,
-			item_layout_ref,
-			restrictions,
-			semantics,
-		))
-	}
-}
 
 #[derive(Clone, Debug, Derivative, StrippedPartialEq)]
 #[derivative(Default(bound = ""))]
 #[locspan(ignore(M))]
 pub struct Semantics<M> {
-	first: MetaOption<Id, M>,
+	first: Single<Id, M>,
 
-	rest: MetaOption<Id, M>,
+	rest: Single<Id, M>,
 
-	nil: MetaOption<Id, M>,
-}
-
-fn on_err<M>(id: Id, a_meta: M, b_meta: M) -> Error<M> {
-	Error::new(
-		error::LayoutMismatchDescription {
-			id,
-			because: a_meta,
-		}
-		.into(),
-		b_meta,
-	)
+	nil: Single<Id, M>,
 }
 
 impl<M> Semantics<M> {
@@ -139,98 +27,180 @@ impl<M> Semantics<M> {
 		M: Clone,
 	{
 		Self {
-			first: MetaOption::new(
+			first: Meta(
 				Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::First))),
 				metadata.clone(),
-			),
-			rest: MetaOption::new(
+			)
+			.into(),
+			rest: Meta(
 				Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Rest))),
 				metadata.clone(),
-			),
-			nil: MetaOption::new(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Nil))), metadata),
+			)
+			.into(),
+			nil: Meta(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Nil))), metadata).into(),
 		}
 	}
 
-	pub fn first(&self) -> &MetaOption<Id, M> {
+	pub fn first(&self) -> &Single<Id, M> {
 		&self.first
 	}
 
-	pub fn rest(&self) -> &MetaOption<Id, M> {
+	pub fn rest(&self) -> &Single<Id, M> {
 		&self.rest
 	}
 
-	pub fn nil(&self) -> &MetaOption<Id, M> {
+	pub fn nil(&self) -> &Single<Id, M> {
 		&self.nil
 	}
 
-	pub fn set_first(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>> {
-		self.first
-			.try_set(value, metadata, |Meta(_, a_meta), Meta(_, b_meta)| {
-				on_err(id, a_meta, b_meta)
-			})
-	}
-
-	pub fn set_rest(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>>
+	pub fn set_first(&mut self, id: Meta<Id, M>)
 	where
-		M: Clone,
+		M: Merge,
 	{
-		self.rest
-			.try_set(value, metadata, |Meta(_, a_meta), Meta(_, b_meta)| {
-				on_err(id, a_meta, b_meta)
-			})
+		self.first.insert(id)
 	}
 
-	pub fn set_nil(&mut self, id: Id, value: Id, metadata: M) -> Result<(), Error<M>>
+	pub fn set_rest(&mut self, id: Meta<Id, M>)
 	where
-		M: Clone,
+		M: Merge,
 	{
-		self.nil
-			.try_set(value, metadata, |Meta(_, a_meta), Meta(_, b_meta)| {
-				on_err(id, a_meta, b_meta)
-			})
+		self.rest.insert(id)
 	}
 
-	pub fn try_unify(mut self, other: Self, id: Id) -> Result<Self, Error<M>> {
-		self.first
-			.try_set_opt(other.first, |Meta(_, a_meta), Meta(_, b_meta)| {
-				on_err(id, a_meta, b_meta)
-			})?;
-		self.rest
-			.try_set_opt(other.rest, |Meta(_, a_meta), Meta(_, b_meta)| {
-				on_err(id, a_meta, b_meta)
-			})?;
-		self.nil
-			.try_set_opt(other.nil, |Meta(_, a_meta), Meta(_, b_meta)| {
-				on_err(id, a_meta, b_meta)
-			})?;
+	pub fn set_nil(&mut self, id: Meta<Id, M>)
+	where
+		M: Merge,
+	{
+		self.nil.insert(id)
+	}
 
-		Ok(self)
+	pub fn unify_with(&mut self, other: Self)
+	where
+		M: Merge,
+	{
+		self.first.extend(other.first);
+		self.rest.extend(other.rest);
+		self.nil.extend(other.nil);
+	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		Bindings {
+			first: self.first.iter(),
+			rest: self.rest.iter(),
+			nil: self.nil.iter(),
+		}
 	}
 
 	pub fn build(
 		self,
-		nodes: &mut crate::context::allocated::Nodes<M>,
-	) -> Result<treeldr::layout::array::Semantics<M>, Error<M>>
+		model: &Context<M>,
+		id: Id,
+	) -> Result<Option<treeldr::layout::array::Semantics<M>>, Error<M>>
 	where
 		M: Clone,
 	{
-		let first = self.first.try_map_with_causes(|Meta(id, metadata)| {
-			Ok(Meta(**nodes.require_property(id, &metadata)?, metadata))
+		let first = self
+			.first
+			.try_unwrap()
+			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListFirst))?;
+		let rest = self
+			.rest
+			.try_unwrap()
+			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListRest))?;
+		let nil = self
+			.nil
+			.try_unwrap()
+			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListNil))?;
+
+		let first = first.try_map_with_causes(|Meta(id, meta)| {
+			Ok(Meta(
+				model
+					.require_property_id(id)
+					.map_err(|e| e.at_node_property(id, Property::ArrayListFirst, meta.clone()))?,
+				meta,
+			))
 		})?;
-		let rest = self.rest.try_map_with_causes(|Meta(id, metadata)| {
-			Ok(Meta(**nodes.require_property(id, &metadata)?, metadata))
+		let rest = rest.try_map_with_causes(|Meta(id, meta)| {
+			Ok(Meta(
+				model
+					.require_property_id(id)
+					.map_err(|e| e.at_node_property(id, Property::ArrayListRest, meta.clone()))?,
+				meta,
+			))
 		})?;
 
-		Ok(treeldr::layout::array::Semantics::new(
-			first, rest, self.nil,
-		))
+		if first.is_some() || rest.is_some() || nil.is_some() {
+			Ok(Some(treeldr::layout::array::Semantics::new(
+				first, rest, nil,
+			)))
+		} else {
+			Ok(None)
+		}
+	}
+}
+
+impl<M: Merge> MapIds for Semantics<M> {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		self.first
+			.map_ids_in(Some(Property::ArrayListFirst.into()), &f);
+		self.rest
+			.map_ids_in(Some(Property::ArrayListRest.into()), &f);
+		self.nil.map_ids_in(Some(Property::ArrayListNil.into()), f)
 	}
 }
 
 impl<M> PartialEq for Semantics<M> {
 	fn eq(&self, other: &Self) -> bool {
-		self.first.value() == other.first.value()
-			&& self.rest.value() == other.rest.value()
-			&& self.nil.value() == other.nil.value()
+		self.first == other.first && self.rest == other.rest && self.nil == other.nil
+	}
+}
+
+pub enum Binding {
+	ArrayListFirst(Id),
+	ArrayListRest(Id),
+	ArrayListNil(Id),
+}
+
+impl Binding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::ArrayListFirst(_) => Property::ArrayListFirst,
+			Self::ArrayListRest(_) => Property::ArrayListRest,
+			Self::ArrayListNil(_) => Property::ArrayListNil,
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::ArrayListFirst(v) => BindingValueRef::Id(*v),
+			Self::ArrayListRest(v) => BindingValueRef::Id(*v),
+			Self::ArrayListNil(v) => BindingValueRef::Id(*v),
+		}
+	}
+}
+
+pub struct Bindings<'a, M> {
+	first: single::Iter<'a, Id, M>,
+	rest: single::Iter<'a, Id, M>,
+	nil: single::Iter<'a, Id, M>,
+}
+
+impl<'a, M> Iterator for Bindings<'a, M> {
+	type Item = Meta<Binding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.first
+			.next()
+			.map(|m| m.into_cloned_value().map(Binding::ArrayListFirst))
+			.or_else(|| {
+				self.rest
+					.next()
+					.map(|m| m.into_cloned_value().map(Binding::ArrayListRest))
+					.or_else(|| {
+						self.nil
+							.next()
+							.map(|m| m.into_cloned_value().map(Binding::ArrayListNil))
+					})
+			})
 	}
 }

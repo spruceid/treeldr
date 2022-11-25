@@ -5,13 +5,13 @@ use codespan_reporting::term::{
 };
 use contextual::WithContext;
 use std::path::PathBuf;
+use treeldr::to_rdf::ToRdf;
 use treeldr_load as load;
-use treeldr_syntax as syntax;
 
 mod source;
 use source::Source;
 
-type BuildContext = treeldr_build::Context<load::Metadata, syntax::build::Descriptions>;
+type BuildContext = treeldr_build::Context<load::Metadata>;
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -97,6 +97,9 @@ async fn main() {
 							ignore_standard_vocabulary: !include_standard_vocabulary,
 						},
 					);
+
+					quads.sort();
+
 					for quad in quads {
 						println!("{} .", quad.with(&vocabulary))
 					}

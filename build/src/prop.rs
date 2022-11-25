@@ -1,164 +1,178 @@
-use crate::{error, Error};
+use crate::{
+	context::{HasType, MapIds, MapIdsIn},
+	multiple,
+	resource::BindingValueRef,
+	single, Error, Multiple, Single,
+};
 use locspan::Meta;
-use std::collections::HashMap;
-use treeldr::{metadata::Merge, Id, MetaOption};
+use treeldr::{metadata::Merge, prop::RdfProperty, Id};
+
+pub use treeldr::prop::{Property, Type};
 
 /// Property definition.
 #[derive(Clone)]
 pub struct Definition<M> {
-	id: Id,
-	domain: HashMap<Id, M>,
-	range: MetaOption<Id, M>,
-	required: MetaOption<bool, M>,
-	functional: MetaOption<bool, M>,
+	/// Domain.
+	domain: Multiple<Id, M>,
+
+	/// Range.
+	range: Single<Id, M>,
+
+	/// Is the property required.
+	required: Single<bool, M>,
+}
+
+impl<M> Default for Definition<M> {
+	fn default() -> Self {
+		Self {
+			domain: Multiple::default(),
+			range: Single::default(),
+			required: Single::default(),
+		}
+	}
 }
 
 impl<M> Definition<M> {
-	pub fn new(id: Id) -> Self {
-		Self {
-			id,
-			domain: HashMap::new(),
-			range: MetaOption::default(),
-			required: MetaOption::default(),
-			functional: MetaOption::default(),
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	pub fn range(&self) -> &Single<Id, M> {
+		&self.range
+	}
+
+	pub fn range_mut(&mut self) -> &mut Single<Id, M> {
+		&mut self.range
+	}
+
+	pub fn domain(&self) -> &Multiple<Id, M> {
+		&self.domain
+	}
+
+	pub fn domain_mut(&mut self) -> &mut Multiple<Id, M> {
+		&mut self.domain
+	}
+
+	pub fn required(&self) -> &Single<bool, M> {
+		&self.required
+	}
+
+	pub fn required_mut(&mut self) -> &mut Single<bool, M> {
+		&mut self.required
+	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings {
+			domain: self.domain.iter(),
+			range: self.range.iter(),
+			required: self.required.iter(),
 		}
 	}
 
-	pub fn range(&self) -> Option<&Meta<Id, M>> {
-		self.range.as_ref()
-	}
-
-	pub fn is_required(&self) -> bool {
-		self.required.value().cloned().unwrap_or(false)
-	}
-
-	pub fn set_required(&mut self, value: bool, cause: M) -> Result<(), Error<M>>
-	where
-		M: Clone,
-	{
-		self.required.try_set(
-			value,
-			cause,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::PropertyMismatchRequired {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
-	}
-
-	/// Checks if this property is functional,
-	/// meaning that it is associated to at most one value.
-	pub fn is_functional(&self) -> bool {
-		self.functional.value().cloned().unwrap_or(true)
-	}
-
-	pub fn set_functional(&mut self, value: bool, cause: M) -> Result<(), Error<M>>
-	where
-		M: Clone,
-	{
-		self.functional.try_set(
-			value,
-			cause,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::PropertyMismatchFunctional {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
-	}
-
-	pub fn set_domain(&mut self, ty_ref: Id, cause: M)
-	where
-		M: Merge,
-	{
-		use std::collections::hash_map::Entry;
-		match self.domain.entry(ty_ref) {
-			Entry::Vacant(entry) => {
-				entry.insert(cause);
-			}
-			Entry::Occupied(mut entry) => entry.get_mut().merge_with(cause),
-		}
-	}
-
-	pub fn set_range(&mut self, ty: Id, cause: M) -> Result<(), Error<M>>
-	where
-		M: Clone,
-	{
-		self.range.try_set(
-			ty,
-			cause,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::PropertyMismatchType {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
-	}
-
-	pub fn dependencies(
+	pub(crate) fn build(
 		&self,
-		_nodes: &super::context::allocated::Nodes<M>,
-		_causes: &M,
-	) -> Result<Vec<crate::Item<M>>, Error<M>>
+		context: &crate::Context<M>,
+		as_resource: &treeldr::node::Data<M>,
+		meta: M,
+	) -> Result<Meta<treeldr::prop::Definition<M>, M>, Error<M>>
 	where
-		M: Clone,
+		M: Clone + Merge,
 	{
-		Ok(Vec::new())
+		let range = self.range.clone().into_required_type_at_node_binding(
+			context,
+			as_resource.id,
+			RdfProperty::Range,
+			&meta,
+		)?;
+
+		let required = self
+			.required
+			.clone()
+			.try_unwrap()
+			.map_err(|e| e.at_functional_node_property(as_resource.id, RdfProperty::Required))?
+			.unwrap()
+			.unwrap_or_else(|| Meta(false, meta.clone()));
+
+		let functional = match as_resource.type_metadata(context, Type::FunctionalProperty) {
+			Some(meta) => Meta(true, meta.clone()),
+			None => Meta(false, meta.clone()),
+		};
+
+		let mut domain = Multiple::default();
+		for Meta(domain_id, domain_causes) in &self.domain {
+			let domain_ref = context.require_type_id(*domain_id).map_err(|e| {
+				e.at_node_property(as_resource.id, RdfProperty::Domain, domain_causes.clone())
+			})?;
+			domain.insert(Meta(domain_ref, domain_causes.clone()))
+		}
+
+		Ok(Meta(
+			treeldr::prop::Definition::new(domain, range, required, functional),
+			meta,
+		))
 	}
 }
 
-impl<M: Clone> crate::Build<M> for Definition<M> {
-	type Target = treeldr::prop::Definition<M>;
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id) {
+		self.domain.map_ids_in(Some(RdfProperty::Domain.into()), &f);
+		self.range.map_ids_in(Some(RdfProperty::Range.into()), f);
+	}
+}
 
-	fn build(
-		self,
-		nodes: &mut super::context::allocated::Nodes<M>,
-		_dependencies: crate::Dependencies<M>,
-		causes: M,
-	) -> Result<Self::Target, Error<M>> {
-		let range_id = self
-			.range
-			.ok_or_else(|| Meta(error::PropertyMissingType(self.id).into(), causes.clone()))?;
-		let range = Meta(
-			*nodes.require_type(*range_id, range_id.metadata())?.value(),
-			range_id.into_metadata(),
-		);
+pub enum ClassBinding {
+	Domain(Id),
+	Range(Id),
+	Required(bool),
+}
 
-		let required = self.required.unwrap_or_else(|| Meta(false, causes.clone()));
-		let functional = self
-			.functional
-			.unwrap_or_else(|| Meta(true, causes.clone()));
+pub type Binding = ClassBinding;
 
-		let mut result =
-			treeldr::prop::Definition::new(self.id, range, required, functional, causes);
-
-		for (domain_id, domain_causes) in self.domain {
-			let domain_ref = nodes.require_type(domain_id, &domain_causes)?;
-			result.insert_domain(**domain_ref, domain_causes)
+impl ClassBinding {
+	pub fn property(&self) -> RdfProperty {
+		match self {
+			Self::Domain(_) => RdfProperty::Domain,
+			Self::Range(_) => RdfProperty::Range,
+			Self::Required(_) => RdfProperty::Required,
 		}
+	}
 
-		Ok(result)
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::Domain(v) => BindingValueRef::Id(*v),
+			Self::Range(v) => BindingValueRef::Id(*v),
+			Self::Required(v) => BindingValueRef::Boolean(*v),
+		}
+	}
+}
+
+pub struct ClassBindings<'a, M> {
+	domain: multiple::Iter<'a, Id, M>,
+	range: single::Iter<'a, Id, M>,
+	required: single::Iter<'a, bool, M>,
+}
+
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.domain
+			.next()
+			.map(Meta::into_cloned_value)
+			.map(|m| m.map(ClassBinding::Domain))
+			.or_else(|| {
+				self.range
+					.next()
+					.map(Meta::into_cloned_value)
+					.map(|m| m.map(ClassBinding::Range))
+					.or_else(|| {
+						self.required
+							.next()
+							.map(Meta::into_cloned_value)
+							.map(|m| m.map(ClassBinding::Required))
+					})
+			})
 	}
 }

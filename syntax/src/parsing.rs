@@ -1266,7 +1266,11 @@ impl<M: MaybeSpanned<Span = Span>> Parse<M> for InnerTypeExpr<M> {
 					))
 				}
 				Token::Literal(lit) => {
-					Ok(Meta::new(Self::Literal(lit), parser.build_metadata(loc)))
+					let label = parser.next_label();
+					Ok(Meta::new(
+						Self::Literal(label, lit),
+						parser.build_metadata(loc),
+					))
 				}
 				Token::Begin(Delimiter::Bracket) => {
 					let label = parser.next_label();
@@ -1379,10 +1383,7 @@ impl<M: MaybeSpanned<Span = Span>> Parse<M> for OuterLayoutExpr<M> {
 					options.push(item);
 				}
 
-				Ok(Meta(
-					Self::Union(parser.next_label(), options),
-					parser.build_metadata(loc),
-				))
+				Ok(Meta(Self::Union(None, options), parser.build_metadata(loc)))
 			}
 			Meta(Some(Token::Punct(Punct::Ampersand)), _) => {
 				let mut layouts = vec![Meta(first, first_loc)];
@@ -1394,7 +1395,7 @@ impl<M: MaybeSpanned<Span = Span>> Parse<M> for OuterLayoutExpr<M> {
 				}
 
 				Ok(Meta(
-					Self::Intersection(parser.next_label(), layouts),
+					Self::Intersection(None, layouts),
 					parser.build_metadata(loc),
 				))
 			}
@@ -1467,14 +1468,16 @@ impl<M: MaybeSpanned<Span = Span>> Parse<M> for InnerLayoutExpr<M> {
 					parser.build_metadata(loc),
 				))
 			}
-			Token::Literal(lit) => Ok(Meta::new(Self::Literal(lit), parser.build_metadata(loc))),
+			Token::Literal(lit) => Ok(Meta::new(
+				Self::Literal(None, lit),
+				parser.build_metadata(loc),
+			)),
 			Token::Begin(Delimiter::Bracket) => {
-				let label = parser.next_label();
 				let item = OuterLayoutExpr::parse_in(parser)?;
 				let end_loc = parser.parse_end(Delimiter::Bracket)?;
 				loc.append(end_loc);
 				Ok(Meta::new(
-					Self::Array(label, Box::new(item)),
+					Self::Array(None, Box::new(item)),
 					parser.build_metadata(loc),
 				))
 			}

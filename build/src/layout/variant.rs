@@ -1,145 +1,123 @@
-use crate::{error, Context, Descriptions, Error};
+use crate::{
+	component::{self, AssertNamed},
+	context::MapIds,
+	resource, Context, Error,
+};
 use locspan::Meta;
 use rdf_types::Vocabulary;
-use treeldr::{BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name};
+use treeldr::{BlankIdIndex, Id, IriIndex, Name};
 
-/// Layout field definition.
-#[derive(Clone)]
-pub struct Definition<M> {
-	id: Id,
-	name: MetaOption<Name, M>,
-	layout: MetaOption<Id, M>,
+/// Layout variant definition.
+#[derive(Debug, Clone)]
+pub struct Definition;
+
+impl Default for Definition {
+	fn default() -> Self {
+		Self
+	}
 }
 
-impl<M> Definition<M> {
-	pub fn new(id: Id) -> Self {
-		Self {
-			id,
-			name: MetaOption::default(),
-			layout: MetaOption::default(),
-		}
-	}
-
-	pub fn name(&self) -> Option<&Meta<Name, M>> {
-		self.name.as_ref()
-	}
-
-	pub fn set_name(&mut self, name: Name, metadata: M) -> Result<(), Error<M>> {
-		self.name.try_set(
-			name,
-			metadata,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::LayoutFieldMismatchName {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
-	}
-
-	pub fn replace_name(&mut self, name: MetaOption<Name, M>) {
-		self.name = name
+impl Definition {
+	pub fn new() -> Self {
+		Self::default()
 	}
 
 	/// Build a default name for this layout variant.
-	pub fn default_name<D: Descriptions<M>>(
+	pub fn default_name<M>(
 		&self,
-		context: &Context<M, D>,
+		context: &Context<M>,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		metadata: M,
-	) -> Result<Option<Meta<Name, M>>, Error<M>>
+		as_resource: &resource::Data<M>,
+		as_formatted: &component::formatted::Data<M>,
+	) -> Option<Meta<Name, M>>
 	where
 		M: Clone,
 	{
-		if let Id::Iri(term) = self.id {
+		if let Id::Iri(term) = as_resource.id {
 			if let Ok(Some(name)) = Name::from_iri(vocabulary.iri(&term).unwrap()) {
-				return Ok(Some(Meta::new(name, metadata)));
+				return Some(Meta::new(name, as_resource.metadata.clone()));
 			}
 		}
 
-		if let Some(layout_id) = self.layout.as_ref() {
-			let layout = context.require_layout(**layout_id, layout_id.metadata())?;
-			if let Some(name) = layout.name() {
-				return Ok(Some(Meta::new(name.value().clone(), metadata)));
+		if let Some(layout_id) = as_formatted.format.first() {
+			if let Some(layout) = context
+				.get(**layout_id)
+				.map(resource::Definition::as_component)
+			{
+				if let Some(name) = layout.name().first() {
+					return Some(Meta::new(
+						name.into_value().clone(),
+						as_resource.metadata.clone(),
+					));
+				}
 			}
 		}
 
-		Ok(None)
+		None
 	}
 
-	pub fn layout(&self) -> &MetaOption<Id, M> {
-		&self.layout
+	pub fn is_included_in<M>(
+		&self,
+		context: &Context<M>,
+		as_component: &crate::component::Data<M>,
+		as_formatted: &crate::component::formatted::Data<M>,
+		_other: &Self,
+		other_as_component: &crate::component::Data<M>,
+		other_as_formatted: &crate::component::formatted::Data<M>,
+	) -> bool {
+		let common_name = as_component
+			.name
+			.iter()
+			.any(|Meta(a, _)| other_as_component.name.iter().any(|Meta(b, _)| a == b));
+		let no_name = as_component.name.is_empty() && other_as_component.name.is_empty();
+
+		let included_layout = as_formatted.format.iter().all(|Meta(a, _)| {
+			other_as_formatted
+				.format
+				.iter()
+				.all(|Meta(b, _)| crate::layout::is_included_in(context, *a, *b))
+		});
+
+		(common_name || no_name) && included_layout
 	}
 
-	pub fn set_layout(&mut self, layout_ref: Id, metadata: M) -> Result<(), Error<M>>
+	pub(crate) fn build<M>(
+		&self,
+		_context: &Context<M>,
+		as_resource: &treeldr::node::Data<M>,
+		as_component: &treeldr::component::Data<M>,
+		_as_formatted: &treeldr::component::formatted::Data<M>,
+		meta: M,
+	) -> Result<Meta<treeldr::layout::variant::Definition, M>, Error<M>>
 	where
 		M: Clone,
 	{
-		self.layout.try_set(
-			layout_ref,
-			metadata,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::LayoutFieldMismatchLayout {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
+		as_component.assert_named(as_resource, &meta)?;
+
+		Ok(Meta(treeldr::layout::variant::Definition, meta))
+	}
+}
+
+pub fn is_included_in<M>(context: &Context<M>, a: Id, b: Id) -> bool {
+	if a == b {
+		true
+	} else {
+		let a = context.get(a).unwrap();
+		let b = context.get(b).unwrap();
+
+		a.as_layout_variant().is_included_in(
+			context,
+			a.as_component().data(),
+			a.as_formatted().data(),
+			b.as_layout_variant(),
+			b.as_component().data(),
+			b.as_formatted().data(),
 		)
 	}
-
-	pub fn replace_layout(&mut self, layout: MetaOption<Id, M>) {
-		self.layout = layout
-	}
 }
 
-pub trait Build<M> {
-	fn require_name(&self) -> Result<Meta<Name, M>, Error<M>>;
-
-	fn build(
-		&self,
-		label: Option<String>,
-		doc: Documentation,
-		nodes: &super::super::context::allocated::Nodes<M>,
-	) -> Result<treeldr::layout::Variant<M>, Error<M>>;
-}
-
-impl<M: Clone> Build<M> for Meta<Definition<M>, M> {
-	fn require_name(&self) -> Result<Meta<Name, M>, Error<M>> {
-		self.name.clone().ok_or_else(|| {
-			Meta::new(
-				error::LayoutVariantMissingName(self.id).into(),
-				self.metadata().clone(),
-			)
-		})
-	}
-
-	fn build(
-		&self,
-		label: Option<String>,
-		doc: Documentation,
-		nodes: &super::super::context::allocated::Nodes<M>,
-	) -> Result<treeldr::layout::Variant<M>, Error<M>> {
-		let name = self.require_name()?;
-
-		let layout = self
-			.layout
-			.clone()
-			.try_map_with_causes(|Meta(layout_id, causes)| {
-				Ok(Meta(**nodes.require_layout(layout_id, &causes)?, causes))
-			})?;
-
-		Ok(treeldr::layout::Variant::new(name, layout, label, doc))
+impl MapIds for Definition {
+	fn map_ids(&mut self, _f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		// nothing.
 	}
 }

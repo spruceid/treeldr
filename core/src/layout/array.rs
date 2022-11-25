@@ -1,17 +1,14 @@
-use super::container::Restrictions;
-use crate::{prop, utils::replace_with, Id, MetaOption, Name, Ref, SubstituteReferences};
+use super::{ContainerRestrictions, Layout};
+use crate::{node::BindingValueRef, Id, MetaOption, Property, TId};
 use locspan::Meta;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Array<M> {
-	/// Layout name, if any.
-	name: MetaOption<Name, M>,
-
 	/// Item layout.
-	item: Ref<super::Definition<M>>,
+	item: Meta<TId<Layout>, M>,
 
 	/// Restrictions.
-	restrictions: Restrictions<M>,
+	restrictions: ContainerRestrictions<M>,
 
 	/// Semantics of the list layout.
 	///
@@ -21,40 +18,26 @@ pub struct Array<M> {
 
 impl<M> Array<M> {
 	pub fn new(
-		name: MetaOption<Name, M>,
-		item: Ref<super::Definition<M>>,
-		restrictions: Restrictions<M>,
+		item: Meta<TId<Layout>, M>,
+		restrictions: ContainerRestrictions<M>,
 		semantics: Option<Semantics<M>>,
 	) -> Self {
 		Self {
-			name,
 			item,
 			restrictions,
 			semantics,
 		}
 	}
 
-	pub fn name(&self) -> Option<&Meta<Name, M>> {
-		self.name.as_ref()
+	pub fn item_layout(&self) -> &Meta<TId<Layout>, M> {
+		&self.item
 	}
 
-	pub fn set_name(&mut self, new_name: Name, metadata: M) -> Option<Meta<Name, M>> {
-		self.name.replace(new_name, metadata)
-	}
-
-	pub fn into_name(self) -> MetaOption<Name, M> {
-		self.name
-	}
-
-	pub fn item_layout(&self) -> Ref<super::Definition<M>> {
-		self.item
-	}
-
-	pub fn set_item_layout(&mut self, item: Ref<super::Definition<M>>) {
+	pub fn set_item_layout(&mut self, item: Meta<TId<Layout>, M>) {
 		self.item = item
 	}
 
-	pub fn restrictions(&self) -> &Restrictions<M> {
+	pub fn restrictions(&self) -> &ContainerRestrictions<M> {
 		&self.restrictions
 	}
 
@@ -67,29 +50,14 @@ impl<M> Array<M> {
 	}
 }
 
-impl<M> SubstituteReferences<M> for Array<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-	{
-		self.item = sub.layout(self.item);
-		if let Some(s) = &mut self.semantics {
-			s.substitute_references(sub)
-		}
-	}
-}
-
 /// Layout semantics.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Semantics<M> {
 	/// Property used to define the first item of a list node.
-	first: MetaOption<Ref<prop::Definition<M>>, M>,
+	first: MetaOption<TId<Property>, M>,
 
 	/// Property used to define the rest of the list.
-	rest: MetaOption<Ref<prop::Definition<M>>, M>,
+	rest: MetaOption<TId<Property>, M>,
 
 	/// Value used as the empty list.
 	nil: MetaOption<Id, M>,
@@ -97,36 +65,90 @@ pub struct Semantics<M> {
 
 impl<M> Semantics<M> {
 	pub fn new(
-		first: MetaOption<Ref<prop::Definition<M>>, M>,
-		rest: MetaOption<Ref<prop::Definition<M>>, M>,
+		first: MetaOption<TId<Property>, M>,
+		rest: MetaOption<TId<Property>, M>,
 		nil: MetaOption<Id, M>,
 	) -> Self {
 		Self { first, rest, nil }
 	}
 
-	pub fn first(&self) -> Option<Ref<prop::Definition<M>>> {
+	pub fn first(&self) -> Option<TId<Property>> {
 		self.first.value().cloned()
 	}
 
-	pub fn rest(&self) -> Option<Ref<prop::Definition<M>>> {
+	pub fn rest(&self) -> Option<TId<Property>> {
 		self.rest.value().cloned()
 	}
 
 	pub fn nil(&self) -> Option<Id> {
 		self.nil.value().cloned()
 	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		Bindings {
+			first: self.first.as_ref(),
+			rest: self.rest.as_ref(),
+			nil: self.nil.as_ref(),
+		}
+	}
 }
 
-impl<M> SubstituteReferences<M> for Semantics<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<crate::ty::Definition<M>>) -> Ref<crate::ty::Definition<M>>,
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-		L: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-	{
-		replace_with(&mut self.first, |v| v.map(|r| sub.property(r)));
-		replace_with(&mut self.rest, |v| v.map(|r| sub.property(r)));
-		replace_with(&mut self.nil, |v| v.map(|i| sub.id(i)))
+pub enum Binding {
+	ArrayListFirst(TId<Property>),
+	ArrayListRest(TId<Property>),
+	ArrayListNil(Id),
+}
+
+impl Binding {
+	pub fn property(&self) -> super::Property {
+		match self {
+			Self::ArrayListFirst(_) => super::Property::ArrayListFirst,
+			Self::ArrayListRest(_) => super::Property::ArrayListRest,
+			Self::ArrayListNil(_) => super::Property::ArrayListNil,
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::ArrayListFirst(v) => BindingValueRef::Property(*v),
+			Self::ArrayListRest(v) => BindingValueRef::Property(*v),
+			Self::ArrayListNil(v) => BindingValueRef::Id(*v),
+		}
+	}
+}
+
+pub struct Bindings<'a, M> {
+	first: Option<&'a Meta<TId<Property>, M>>,
+	rest: Option<&'a Meta<TId<Property>, M>>,
+	nil: Option<&'a Meta<Id, M>>,
+}
+
+impl<'a, M> Default for Bindings<'a, M> {
+	fn default() -> Self {
+		Self {
+			first: None,
+			rest: None,
+			nil: None,
+		}
+	}
+}
+
+impl<'a, M> Iterator for Bindings<'a, M> {
+	type Item = Meta<Binding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.first
+			.take()
+			.map(|m| m.borrow().into_cloned_value().map(Binding::ArrayListFirst))
+			.or_else(|| {
+				self.rest
+					.take()
+					.map(|m| m.borrow().into_cloned_value().map(Binding::ArrayListRest))
+					.or_else(|| {
+						self.nil
+							.take()
+							.map(|m| m.borrow().into_cloned_value().map(Binding::ArrayListNil))
+					})
+			})
 	}
 }

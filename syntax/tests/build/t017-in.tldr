@@ -1,0 +1,9 @@
+use <http://www.example.com/> as ex;
+
+type A {
+	ex:prop: A | &A as Ref
+}
+
+type B {
+	ex:prop: A | &A as Ref
+}

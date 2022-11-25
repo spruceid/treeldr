@@ -5,11 +5,12 @@ use rdf_types::VocabularyMut;
 use static_iref::iri;
 use std::path::Path;
 use treeldr::{
+	to_rdf::ToRdf,
 	vocab::{GraphLabel, Id, StrippedObject},
 	BlankIdIndex, IriIndex,
 };
 
-type BuildContext = treeldr_build::Context<Span, treeldr_syntax::build::Descriptions>;
+type BuildContext = treeldr_build::Context<Span>;
 
 fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
 	Ok(t)
@@ -49,21 +50,15 @@ fn parse_treeldr<P: AsRef<Path>>(
 	let ast = treeldr_syntax::Document::parse_str(&input, |span| span).expect("parse error");
 	let mut context = BuildContext::new();
 	let mut generator = rdf_types::generator::Blank::new_with_prefix("t".to_string());
-	context
-		.apply_built_in_definitions(vocabulary, &mut generator)
-		.unwrap();
+	context.apply_built_in_definitions(vocabulary, &mut generator);
 	let mut local_context =
 		treeldr_syntax::build::LocalContext::new(Some(iri!("http://www.example.com").into()));
 
 	ast.declare(&mut local_context, &mut context, vocabulary, &mut generator)
 		.expect("build error");
 	ast.into_value()
-		.relate(&mut local_context, &mut context, vocabulary, &mut generator)
+		.define(&mut local_context, &mut context, vocabulary, &mut generator)
 		.expect("build error");
-
-	let context = context
-		.simplify(vocabulary, &mut generator)
-		.expect("simplification failed");
 
 	let model = context
 		.build(vocabulary, &mut generator)
@@ -153,8 +148,11 @@ positive! {
 	t010,
 	t011,
 	t012,
+	t013,
+	t014,
 	t015,
-	t016
+	t016,
+	t017
 }
 
 negative! {

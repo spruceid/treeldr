@@ -3,6 +3,7 @@ use iref::Iri;
 use locspan::Meta;
 use rdf_types::{BlankIdBuf, IriVocabularyMut, VocabularyMut};
 use treeldr::{
+	to_rdf::ToRdf,
 	vocab::{GraphLabel, Id, StrippedObject},
 	BlankIdIndex, IriIndex,
 };
@@ -46,9 +47,7 @@ fn import_json_schema<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 
 	let mut context: Context<()> = Context::new();
 	let mut generator = rdf_types::generator::Blank::new_with_prefix("t".to_string());
-	context
-		.apply_built_in_definitions(vocabulary, &mut generator)
-		.unwrap();
+	context.apply_built_in_definitions(vocabulary, &mut generator);
 	let id =
 		treeldr_json_schema::import_schema(&input, None, &mut context, vocabulary, &mut generator)
 			.expect("import failed");

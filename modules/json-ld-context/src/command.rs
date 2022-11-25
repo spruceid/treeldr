@@ -8,7 +8,7 @@ use std::{
 	path::{Path, PathBuf},
 	str::FromStr,
 };
-use treeldr::{layout, BlankIdIndex, IriIndex, Ref};
+use treeldr::{BlankIdIndex, IriIndex, TId};
 
 mod loader;
 pub use loader::FsLoader;
@@ -83,7 +83,7 @@ impl FromStr for MountPoint {
 
 pub enum Error<E, M> {
 	UndefinedLayout(IriBuf),
-	NotALayout(IriBuf, treeldr::node::TypesMetadata<M>),
+	NotALayout(IriBuf, treeldr::Multiple<TId<treeldr::Type>, M>),
 	Generation(crate::GenerateError<E, M>),
 	ExternContextLoadFailed(IriBuf),
 }
@@ -105,16 +105,16 @@ fn find_layout<E, M: Clone>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<M>,
 	iri: Iri,
-) -> Result<Ref<layout::Definition<M>>, Box<Error<E, M>>> {
+) -> Result<TId<treeldr::Layout>, Box<Error<E, M>>> {
 	let name = vocabulary
 		.get(iri)
 		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
-	model
-		.require_layout(treeldr::Id::Iri(name))
-		.map_err(|e| match e {
-			treeldr::Error::NodeUnknown(_) => Box::new(Error::UndefinedLayout(iri.into())),
-			treeldr::Error::NodeInvalidType(e) => Box::new(Error::NotALayout(iri.into(), e.found)),
-		})
+	let id: TId<treeldr::Layout> = TId::new(treeldr::Id::Iri(name));
+	model.require(id).map_err(|e| match e {
+		treeldr::Error::NodeUnknown(_) => Box::new(Error::UndefinedLayout(iri.into())),
+		treeldr::Error::NodeInvalidType(e) => Box::new(Error::NotALayout(iri.into(), e.found)),
+	})?;
+	Ok(id)
 }
 
 impl Command {

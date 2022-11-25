@@ -5,16 +5,16 @@ use quote::quote;
 use rdf_types::Vocabulary;
 use shelves::Ref;
 use std::collections::HashSet;
-use treeldr::{BlankIdIndex, IriIndex};
+use treeldr::{BlankIdIndex, IriIndex, TId};
 
-pub struct Module<M> {
+pub struct Module {
 	parent: Option<Ref<Self>>,
 	ident: proc_macro2::Ident,
 	sub_modules: HashSet<Ref<Self>>,
-	layouts: HashSet<Ref<treeldr::layout::Definition<M>>>,
+	layouts: HashSet<TId<treeldr::Layout>>,
 }
 
-impl<M> Module<M> {
+impl Module {
 	pub fn new(parent: Option<Ref<Self>>, ident: proc_macro2::Ident) -> Self {
 		Self {
 			parent,
@@ -28,7 +28,7 @@ impl<M> Module<M> {
 		&self.ident
 	}
 
-	pub fn path<V>(&self, context: &Context<V, M>) -> Path {
+	pub fn path<V, M>(&self, context: &Context<V, M>) -> Path {
 		let mut path = context.module_path(self.parent);
 		path.push(Segment::Ident(self.ident.clone()));
 		path
@@ -42,22 +42,22 @@ impl<M> Module<M> {
 		&mut self.sub_modules
 	}
 
-	pub fn layouts(&self) -> &HashSet<Ref<treeldr::layout::Definition<M>>> {
+	pub fn layouts(&self) -> &HashSet<TId<treeldr::Layout>> {
 		&self.layouts
 	}
 
-	pub fn layouts_mut(&mut self) -> &mut HashSet<Ref<treeldr::layout::Definition<M>>> {
+	pub fn layouts_mut(&mut self) -> &mut HashSet<TId<treeldr::Layout>> {
 		&mut self.layouts
 	}
 }
 
-impl<M> Generate<M> for Module<M> {
+impl<M> Generate<M> for Module {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module<M>>>,
+		scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		for module_ref in &self.sub_modules {
 			module_ref.generate(context, scope, tokens)?;
 		}
@@ -71,13 +71,13 @@ impl<M> Generate<M> for Module<M> {
 	}
 }
 
-impl<M> Generate<M> for Ref<Module<M>> {
+impl<M> Generate<M> for Ref<Module> {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		_scope: Option<Ref<Module<M>>>,
+		_scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		let module = context.module(*self).expect("undefined module");
 		let ident = module.ident();
 		let content = module.with(context, Some(*self)).into_tokens()?;
@@ -94,8 +94,8 @@ impl<M> Generate<M> for Ref<Module<M>> {
 
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Copy(bound = ""))]
-pub enum Parent<M> {
+pub enum Parent {
 	/// The parent module is unreachable.
 	Extern,
-	Ref(Ref<Module<M>>),
+	Ref(Ref<Module>),
 }

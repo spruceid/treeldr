@@ -13,7 +13,7 @@ pub enum Error {
 /// Creates a JSON-LD node object from a structure.
 pub fn structure_builder<V, M>(
 	context: &Context<V, M>,
-	ty: &Struct<M>,
+	ty: &Struct,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	let mut insert_field = Vec::new();
@@ -23,9 +23,9 @@ pub fn structure_builder<V, M>(
 		let id = field.ident();
 
 		let layout_ref = field.layout();
-		let layout = context.model().layouts().get(layout_ref).unwrap();
+		let layout = context.model().get(layout_ref).unwrap();
 
-		insert_field.push(match layout.description().value() {
+		insert_field.push(match layout.as_layout().description().value() {
 			treeldr::layout::Description::Required(_) => {
 				quote! {
 					result.insert(
@@ -76,7 +76,7 @@ pub fn structure_builder<V, M>(
 /// Creates a JSON-LD node object from an enumeration.
 pub fn enum_builder<V, M>(
 	_context: &Context<V, M>,
-	_ty: &Enum<M>,
+	_ty: &Enum,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	Ok(quote! {

@@ -1,134 +1,250 @@
-use crate::{error, Context, Descriptions, Error};
-use locspan::Meta;
-use treeldr::{vocab::Object, Id, MetaOption};
+use crate::{
+	context::{MapIds, MapIdsIn},
+	error,
+	resource::BindingValueRef,
+	single, Context, Error, Single,
+};
+use derivative::Derivative;
+use locspan::{Meta, Stripped};
+use treeldr::{metadata::Merge, vocab::Object, Id};
+
+pub use treeldr::list::Property;
 
 #[derive(Clone)]
 pub struct Definition<M> {
-	id: Id,
-	first: MetaOption<Object<M>, M>,
-	rest: MetaOption<Id, M>,
+	first: Single<Stripped<Object<M>>, M>,
+	rest: Single<Id, M>,
+}
+
+impl<M> Default for Definition<M> {
+	fn default() -> Self {
+		Self {
+			first: Single::default(),
+			rest: Single::default(),
+		}
+	}
 }
 
 impl<M> Definition<M> {
-	pub fn new(id: Id) -> Self {
-		Self {
-			id,
-			first: MetaOption::default(),
-			rest: MetaOption::default(),
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	pub fn first(&self) -> &Single<Stripped<Object<M>>, M> {
+		&self.first
+	}
+
+	pub fn first_mut(&mut self) -> &mut Single<Stripped<Object<M>>, M> {
+		&mut self.first
+	}
+
+	pub fn rest(&self) -> &Single<Id, M> {
+		&self.rest
+	}
+
+	pub fn rest_mut(&mut self) -> &mut Single<Id, M> {
+		&mut self.rest
+	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings {
+			first: self.first.iter(),
+			rest: self.rest.iter(),
 		}
-	}
-
-	pub fn set_first(&mut self, object: Object<M>, cause: M) -> Result<(), Error<M>>
-	where
-		M: Clone,
-	{
-		self.first.try_set_stripped(
-			object,
-			cause,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Meta(
-					error::ListMismatchItem {
-						id: self.id,
-						expected: expected.clone(),
-						found,
-						because: expected_meta.clone(),
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
-	}
-
-	pub fn set_rest(&mut self, list: Id, cause: M) -> Result<(), Error<M>>
-	where
-		M: Clone,
-	{
-		self.rest.try_set(
-			list,
-			cause,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::ListMismatchRest {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
 	}
 }
 
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		self.first.map_ids_in(Some(Property::First.into()), &f);
+		self.rest.map_ids_in(Some(Property::Rest.into()), f)
+	}
+}
+
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub enum ListRef<'l, M> {
 	Nil,
-	Cons(&'l Meta<Definition<M>, M>),
+	Cons(Id, &'l Definition<M>, &'l M),
 }
 
 impl<'l, M> ListRef<'l, M> {
-	pub fn iter<C: RequireList<M>>(&self, nodes: &'l C) -> Iter<'l, M, C> {
+	pub fn try_fold<T, F>(&self, context: &'l Context<M>, first: T, f: F) -> TryFold<'l, T, M, F>
+	where
+		F: Fn(T, &Single<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>>,
+	{
+		TryFold {
+			context,
+			stack: vec![Ok((*self, first))],
+			f,
+		}
+	}
+
+	pub fn iter(&self, context: &'l Context<M>) -> Iter<'l, M> {
 		match self {
 			Self::Nil => Iter::Nil,
-			Self::Cons(l) => Iter::Cons(nodes, l),
+			Self::Cons(id, l, meta) => Iter::Cons(context, *id, *l, *meta),
+		}
+	}
+
+	pub fn lenient_iter(&self, context: &'l Context<M>) -> LenientIter<'l, M> {
+		match self {
+			Self::Nil => LenientIter::Nil,
+			Self::Cons(_, l, _) => LenientIter::Cons(context, *l),
 		}
 	}
 }
 
-pub trait RequireList<M> {
-	fn require_list(&self, id: Id, cause: &M) -> Result<ListRef<M>, Error<M>>
-	where
-		M: Clone;
+type TryFoldState<'l, T, M> = (ListRef<'l, M>, T);
+
+pub struct TryFold<'l, T, M, F> {
+	context: &'l Context<M>,
+	stack: Vec<Result<TryFoldState<'l, T, M>, Error<M>>>,
+	f: F,
 }
 
-impl<M, D: Descriptions<M>> RequireList<M> for Context<M, D> {
-	fn require_list(&self, id: Id, cause: &M) -> Result<ListRef<M>, Error<M>>
-	where
-		M: Clone,
-	{
-		self.require_list(id, cause)
+impl<'l, T, M, F> Iterator for TryFold<'l, T, M, F>
+where
+	T: Clone,
+	M: Clone,
+	F: Fn(T, &Single<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>>,
+{
+	type Item = Result<T, Error<M>>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		loop {
+			match self.stack.pop() {
+				Some(Err(e)) => break Some(Err(e)),
+				Some(Ok((list, t))) => match list {
+					ListRef::Nil => break Some(Ok(t)),
+					ListRef::Cons(id, d, meta) => {
+						if d.rest.is_empty() {
+							break Some(Err(Meta(
+								error::NodeBindingMissing {
+									id,
+									property: Property::Rest.into(),
+								}
+								.into(),
+								meta.clone(),
+							)));
+						} else {
+							match (self.f)(t, &d.first) {
+								Ok(new_states) => {
+									'next_state: for u in new_states {
+										let len = d.rest.len();
+
+										for (i, Meta(rest_id, rest_meta)) in
+											d.rest.iter().enumerate()
+										{
+											if i + 1 == len {
+												let item = match self
+													.context
+													.require_list(*rest_id)
+													.map_err(|e| e.at(rest_meta.clone()))
+												{
+													Ok(rest) => Ok((rest, u)),
+													Err(e) => Err(e),
+												};
+
+												self.stack.push(item);
+												continue 'next_state;
+											} else {
+												let item = match self
+													.context
+													.require_list(*rest_id)
+													.map_err(|e| e.at(rest_meta.clone()))
+												{
+													Ok(rest) => Ok((rest, u.clone())),
+													Err(e) => Err(e),
+												};
+
+												self.stack.push(item)
+											}
+										}
+									}
+								}
+								Err(e) => break Some(Err(e)),
+							}
+						}
+					}
+				},
+				None => break None,
+			}
+		}
 	}
 }
 
-impl<M: Clone> RequireList<M> for super::context::allocated::Nodes<M> {
-	fn require_list(&self, id: Id, cause: &M) -> Result<ListRef<M>, Error<M>> {
-		self.require_list(id, cause)
-	}
-}
-
-pub enum Iter<'l, M, C> {
+pub enum Iter<'l, M> {
 	Nil,
-	Cons(&'l C, &'l Meta<Definition<M>, M>),
+	Cons(&'l Context<M>, Id, &'l Definition<M>, &'l M),
 }
 
-impl<'l, M: Clone, C: RequireList<M>> Iterator for Iter<'l, M, C> {
-	type Item = Result<&'l Meta<Object<M>, M>, Error<M>>;
+impl<'l, M: Clone> Iterator for Iter<'l, M> {
+	type Item = Result<Meta<&'l Object<M>, &'l M>, Error<M>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
 			Self::Nil => None,
-			Self::Cons(nodes, d) => {
-				let item = d.first.value_or_else(|| {
-					Meta(error::ListMissingItem(d.id).into(), d.metadata().clone())
-				});
+			Self::Cons(nodes, id, d, meta) => {
+				match d
+					.first
+					.as_required_at_node_binding(*id, Property::First, meta)
+				{
+					Ok(item) => {
+						match d
+							.rest
+							.as_required_at_node_binding(*id, Property::Rest, meta)
+						{
+							Ok(Meta(rest_id, _)) => {
+								match nodes.require_list(*rest_id) {
+									Ok(ListRef::Cons(rest_id, rest, rest_meta)) => {
+										*self = Self::Cons(*nodes, rest_id, rest, rest_meta)
+									}
+									Ok(ListRef::Nil) => *self = Self::Nil,
+									Err(e) => {
+										return Some(Err(e.at_node_property(
+											*id,
+											Property::Rest,
+											meta.clone(),
+										)))
+									}
+								}
 
-				let rest_id = d.rest.value_or_else(|| {
-					Meta(error::ListMissingRest(d.id).into(), d.metadata().clone())
-				});
-
-				match rest_id {
-					Ok(Meta(rest_id, meta)) => {
-						match nodes.require_list(*rest_id, meta) {
-							Ok(ListRef::Cons(rest)) => *self = Self::Cons(*nodes, rest),
-							Ok(ListRef::Nil) => *self = Self::Nil,
-							Err(e) => return Some(Err(e)),
+								Some(Ok(item.map(Stripped::as_ref)))
+							}
+							Err(e) => Some(Err(e)),
 						}
-
-						Some(item)
 					}
 					Err(e) => Some(Err(e)),
+				}
+			}
+		}
+	}
+}
+
+pub enum LenientIter<'l, M> {
+	Nil,
+	Cons(&'l Context<M>, &'l Definition<M>),
+}
+
+impl<'l, M> Iterator for LenientIter<'l, M> {
+	type Item = Meta<&'l Object<M>, &'l M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		loop {
+			match self {
+				Self::Nil => break None,
+				Self::Cons(nodes, d) => {
+					let item = d.first.first();
+
+					match d.rest.first().and_then(|rest| nodes.get_list(**rest)) {
+						Some(ListRef::Cons(_, rest, _)) => *self = Self::Cons(*nodes, rest),
+						_ => *self = Self::Nil,
+					}
+
+					if let Some(item) = item {
+						break Some(item.map(Stripped::as_ref));
+					}
 				}
 			}
 		}
@@ -138,4 +254,51 @@ impl<'l, M: Clone, C: RequireList<M>> Iterator for Iter<'l, M, C> {
 pub enum ListMut<'l, M> {
 	Nil,
 	Cons(&'l mut Definition<M>),
+}
+
+pub enum ClassBindingRef<'a, M> {
+	First(&'a Object<M>),
+	Rest(Id),
+}
+
+pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
+
+impl<'a, M> ClassBindingRef<'a, M> {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::First(_) => Property::First,
+			Self::Rest(_) => Property::Rest,
+		}
+	}
+
+	pub fn value(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::First(v) => BindingValueRef::Object(v),
+			Self::Rest(v) => BindingValueRef::Id(*v),
+		}
+	}
+}
+
+/// Iterator over the bindings of a given list.
+pub struct ClassBindings<'a, M> {
+	first: single::Iter<'a, Stripped<Object<M>>, M>,
+	rest: single::Iter<'a, Id, M>,
+}
+
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBindingRef<'a, M>, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.first
+			.next()
+			.map(|m| m.map(|o| ClassBindingRef::First(&o.0)))
+			.or_else(|| {
+				self.rest
+					.next()
+					.map(Meta::into_cloned_value)
+					.map(|m| m.map(ClassBindingRef::Rest))
+			})
+	}
 }

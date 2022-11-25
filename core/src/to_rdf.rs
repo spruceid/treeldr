@@ -1,7 +1,16 @@
-use crate::{layout, prop, ty, vocab, BlankIdIndex, Documentation, Id, IriIndex, Model, Ref};
-use rdf_types::{Generator, Literal, Object, Quad, Vocabulary};
-use vocab::{StrippedObject, StrippedQuad, Term};
+use std::collections::BTreeSet;
 
+use crate::{
+	layout,
+	node::BindingValueRef,
+	ty,
+	vocab::{self, StrippedObject, StrippedQuad, Term, Xsd},
+	BlankIdIndex, Id, IriIndex, Model,
+};
+use locspan::Meta;
+use rdf_types::{Generator, Literal, Object, Quad, Vocabulary};
+
+#[derive(Debug, Clone, Copy)]
 pub struct Options {
 	/// Ignore standard definitions.
 	///
@@ -21,206 +30,294 @@ fn is_standard_vocabulary(id: Id) -> bool {
 	matches!(id, Id::Iri(IriIndex::Iri(_)))
 }
 
-impl<F> Model<F> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+pub trait ToRdf {
+	type Target;
+
+	fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
-	) {
+	) -> Self::Target {
 		self.to_rdf_with(vocabulary, generator, quads, Options::default())
 	}
 
-	pub fn to_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn to_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		options: Options,
+	) -> Self::Target;
+}
+
+pub trait IntoRdf: Sized {
+	type Target;
+
+	fn into_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+	) -> Self::Target {
+		self.into_rdf_with(vocabulary, generator, quads, Options::default())
+	}
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		options: Options,
+	) -> Self::Target;
+}
+
+pub trait MapIntoRdf: Sized + DoubleEndedIterator {
+	type Target;
+
+	fn map_into_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, G: Generator<V>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut G,
+		quads: &mut Vec<StrippedQuad>,
+		f: impl Fn(&mut V, &mut G, &mut Vec<StrippedQuad>, Options, Self::Item) -> StrippedObject,
+	) -> Self::Target {
+		self.map_into_rdf_with(vocabulary, generator, quads, Options::default(), f)
+	}
+
+	fn map_into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, G: Generator<V>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut G,
+		quads: &mut Vec<StrippedQuad>,
+		options: Options,
+		f: impl Fn(&mut V, &mut G, &mut Vec<StrippedQuad>, Options, Self::Item) -> StrippedObject,
+	) -> Self::Target;
+}
+
+impl<M> ToRdf for Model<M> {
+	type Target = ();
+
+	fn to_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) {
-		for (id, node) in self.nodes() {
-			if !options.ignore_standard_vocabulary || !is_standard_vocabulary(id) {
-				if let Some(ty_ref) = node.as_type() {
-					let ty = self.types().get(ty_ref).unwrap();
-					ty.to_rdf(self, vocabulary, generator, quads)
-				}
+		let mut used = BTreeSet::new();
+		let mut stack = Vec::new();
 
-				if let Some(prop_ref) = node.as_property() {
-					let prop = self.properties().get(prop_ref).unwrap();
-					prop.to_rdf(self, quads)
-				}
+		for (id, _) in self.nodes() {
+			if !id.is_blank()
+				&& (!options.ignore_standard_vocabulary || !is_standard_vocabulary(id))
+			{
+				stack.push(id)
+			}
+		}
 
-				if let Some(layout_ref) = node.as_layout() {
-					let layout = self.layouts().get(layout_ref).unwrap();
-					layout.to_rdf(vocabulary, self, generator, quads)
+		while let Some(id) = stack.pop() {
+			if used.insert(id) {
+				let node = self.get_resource(id).unwrap();
+				for Meta(b, _) in node.bindings() {
+					for id in b.value().ids() {
+						if !options.ignore_standard_vocabulary || !is_standard_vocabulary(id) {
+							stack.push(id)
+						}
+					}
 				}
+			}
+		}
 
-				if let Some(label) = node.label() {
-					quads.push(Quad(
-						id,
-						IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Label)),
-						Object::Literal(Literal::String(label.to_string().into())),
-						None,
-					))
-				}
+		for id in used {
+			let node = self.get_resource(id).unwrap();
+			for Meta(b, _) in node.bindings() {
+				let property = *b.property().id().as_iri().unwrap();
+				let object = b
+					.value()
+					.into_rdf_with(vocabulary, generator, quads, options);
 
-				node.documentation().to_rdf(id, quads)
+				quads.push(Quad(id, property, object, None))
 			}
 		}
 	}
 }
 
-impl Documentation {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		for block in self.blocks() {
-			quads.push(Quad(
-				id,
-				IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Comment)),
-				Object::Literal(Literal::String(block.as_str().to_string().into())),
-				None,
-			))
-		}
-	}
-}
+impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
+	type Target = StrippedObject;
 
-fn to_rdf_list<
-	V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	I: IntoIterator<Item = StrippedObject>,
->(
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
-	quads: &mut Vec<StrippedQuad>,
-	iter: I,
-) -> Id
-where
-	I::IntoIter: DoubleEndedIterator,
-{
-	let mut head = Id::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::Nil)));
-
-	for item in iter.into_iter().rev() {
-		let id = generator.next(vocabulary);
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
-			Object::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::List))),
-			None,
-		));
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::Rdf(vocab::Rdf::First)),
-			item,
-			None,
-		));
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::Rdf(vocab::Rdf::Rest)),
-			head.into_term(),
-			None,
-		));
-		head = id;
-	}
-
-	head
-}
-
-impl<F> ty::Definition<F> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		model: &Model<F>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
-		quads: &mut Vec<StrippedQuad>,
-	) {
-		let class = if self.is_datatype(model) {
-			vocab::Rdfs::Datatype
-		} else {
-			vocab::Rdfs::Class
-		};
-
-		quads.push(Quad(
-			self.id(),
-			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
-			Object::Iri(IriIndex::Iri(Term::Rdfs(class))),
-			None,
-		));
-
-		match self.description() {
-			ty::Description::Empty => (),
-			ty::Description::Data(d) => d.to_rdf(self.id(), vocabulary, generator, quads),
-			ty::Description::Normal(_) => (),
-			ty::Description::Union(u) => u.to_rdf(vocabulary, model, self.id(), generator, quads),
-			ty::Description::Intersection(i) => {
-				i.to_rdf(vocabulary, model, self.id(), generator, quads)
-			}
-			ty::Description::Restriction(r) => {
-				r.to_rdf(vocabulary, model, self.id(), generator, quads)
-			}
-		}
-	}
-}
-
-impl ty::DataType {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		id: Id,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
-		quads: &mut Vec<StrippedQuad>,
-	) {
-		match self {
-			Self::Primitive(_) => (),
-			Self::Derived(d) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Owl(vocab::Owl::OnDatatype)),
-					d.base().into_term(),
-					None,
-				));
-
-				let restrictions_id = d.restrictions().to_rdf(vocabulary, generator, quads);
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Owl(vocab::Owl::WithRestrictions)),
-					restrictions_id.into_term(),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl<'a> ty::data::Restrictions<'a> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
-	) -> Id {
-		let restrictions: Vec<_> = self
-			.map(|restriction| {
-				let id = generator.next(vocabulary);
-				restriction.to_rdf(id, quads);
-				id.into_term()
-			})
-			.collect();
-
-		to_rdf_list(vocabulary, generator, quads, restrictions)
-	}
-}
-
-impl<'a> ty::data::Restriction<'a> {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+		options: Options,
+	) -> StrippedObject {
 		match self {
-			Self::Real(r) => r.to_rdf(id, quads),
-			Self::Float(r) => r.to_rdf(id, quads),
-			Self::Double(r) => r.to_rdf(id, quads),
-			Self::String(r) => r.to_rdf(id, quads),
+			Self::Boolean(b) => {
+				let term = if b {
+					Term::Schema(crate::vocab::Schema::True)
+				} else {
+					Term::Schema(crate::vocab::Schema::False)
+				};
+
+				Object::Iri(IriIndex::Iri(term))
+			}
+			Self::U64(u) => Object::Literal(Literal::TypedString(
+				u.to_string().into(),
+				IriIndex::Iri(Term::Xsd(Xsd::Integer)),
+			)),
+			Self::String(s) => Object::Literal(Literal::String(s.to_string().into())),
+			Self::Name(n) => Object::Literal(Literal::String(n.to_string().into())),
+			Self::Id(id) => id.into_term(),
+			Self::Type(ty) => ty.id().into_term(),
+			Self::Types(types) => types
+				.iter()
+				.map(|ty| ty.id().into_term())
+				.into_rdf(vocabulary, generator, quads)
+				.into_term(),
+			Self::DataType(ty) => ty.id().into_term(),
+			Self::DatatypeRestrictions(r) => r
+				.iter()
+				.map_into_rdf_with(
+					vocabulary,
+					generator,
+					quads,
+					options,
+					|vocabulary, generator, quads, options, r| {
+						r.into_rdf_with(vocabulary, generator, quads, options)
+							.into_term()
+					},
+				)
+				.into_term(),
+			Self::Property(p) => p.id().into_term(),
+			Self::Layout(l) => l.id().into_term(),
+			Self::Layouts(layouts) => layouts
+				.iter()
+				.map(|l| l.id().into_term())
+				.into_rdf(vocabulary, generator, quads)
+				.into_term(),
+			Self::LayoutRestrictions(r) => r
+				.iter()
+				.map_into_rdf_with(
+					vocabulary,
+					generator,
+					quads,
+					options,
+					|vocabulary, generator, quads, options, r| {
+						r.into_rdf_with(vocabulary, generator, quads, options)
+							.into_term()
+					},
+				)
+				.into_term(),
+			Self::Fields(fields) => fields
+				.iter()
+				.map(|f| f.id().into_term())
+				.into_rdf_with(vocabulary, generator, quads, options)
+				.into_term(),
+			Self::Variants(variants) => variants
+				.iter()
+				.map(|v| v.id().into_term())
+				.into_rdf_with(vocabulary, generator, quads, options)
+				.into_term(),
 		}
 	}
 }
 
-impl<'a> ty::data::restriction::real::Restriction<'a> {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+impl<I> IntoRdf for I
+where
+	I: DoubleEndedIterator<Item = StrippedObject>,
+{
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		options: Options,
+	) -> Self::Target {
+		self.map_into_rdf_with(vocabulary, generator, quads, options, |_, _, _, _, t| t)
+	}
+}
+
+impl<I> MapIntoRdf for I
+where
+	I: DoubleEndedIterator,
+{
+	type Target = Id;
+
+	fn map_into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, G: Generator<V>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut G,
+		quads: &mut Vec<StrippedQuad>,
+		options: Options,
+		f: impl Fn(&mut V, &mut G, &mut Vec<StrippedQuad>, Options, Self::Item) -> StrippedObject,
+	) -> Self::Target {
+		let mut head = Id::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::Nil)));
+
+		for item in self.rev() {
+			let id = generator.next(vocabulary);
+			quads.push(Quad(
+				id,
+				IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
+				StrippedObject::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::List))),
+				None,
+			));
+
+			let object = f(vocabulary, generator, quads, options, item);
+
+			quads.push(Quad(
+				id,
+				IriIndex::Iri(Term::Rdf(vocab::Rdf::First)),
+				object,
+				None,
+			));
+			quads.push(Quad(
+				id,
+				IriIndex::Iri(Term::Rdf(vocab::Rdf::Rest)),
+				head.into_term(),
+				None,
+			));
+			head = id;
+		}
+
+		head
+	}
+}
+
+impl<'a> IntoRdf for ty::data::Restriction<'a> {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		options: Options,
+	) -> Self::Target {
+		match self {
+			Self::Real(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::Float(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::Double(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::String(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+		}
+	}
+}
+
+impl<'a> IntoRdf for ty::data::restriction::real::Restriction<'a> {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		_options: Options,
+	) -> Self::Target {
+		let id = generator.next(vocabulary);
+
 		use ty::data::restriction::real::{Max, Min};
 		match self {
 			Self::Min(Min::Included(min)) => {
@@ -256,11 +353,23 @@ impl<'a> ty::data::restriction::real::Restriction<'a> {
 				));
 			}
 		}
+
+		id
 	}
 }
 
-impl ty::data::restriction::float::Restriction {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+impl IntoRdf for ty::data::restriction::float::Restriction {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		_options: Options,
+	) -> Self::Target {
+		let id = generator.next(vocabulary);
+
 		use ty::data::restriction::float::{Max, Min};
 		match self {
 			Self::Min(Min::Included(min)) => {
@@ -296,11 +405,23 @@ impl ty::data::restriction::float::Restriction {
 				));
 			}
 		}
+
+		id
 	}
 }
 
-impl ty::data::restriction::double::Restriction {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
+impl IntoRdf for ty::data::restriction::double::Restriction {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		_options: Options,
+	) -> Self::Target {
+		let id = generator.next(vocabulary);
+
 		use ty::data::restriction::double::{Max, Min};
 		match self {
 			Self::Min(Min::Included(min)) => {
@@ -336,855 +457,384 @@ impl ty::data::restriction::double::Restriction {
 				));
 			}
 		}
-	}
-}
-
-impl<'a> ty::data::restriction::string::Restriction<'a> {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		match self {
-			Self::MinLength(min) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinLength)),
-					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
-					)),
-					None,
-				));
-			}
-			Self::MaxLength(max) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxLength)),
-					Object::Literal(Literal::TypedString(
-						max.to_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
-					)),
-					None,
-				));
-			}
-			Self::Pattern(regexp) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::Pattern)),
-					Object::Literal(Literal::String(regexp.to_string().into())),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl<F> ty::Union<F> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		vocabulary: &mut V,
-		model: &Model<F>,
-		id: Id,
-		generator: &mut impl Generator<V>,
-		quads: &mut Vec<StrippedQuad>,
-	) {
-		let list_id = to_rdf_list(
-			vocabulary,
-			generator,
-			quads,
-			self.options()
-				.map(|ty_ref| model.types().get(ty_ref).unwrap().id().into_term()),
-		);
-
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::Owl(vocab::Owl::UnionOf)),
-			list_id.into_term(),
-			None,
-		))
-	}
-}
-
-impl<F> ty::Intersection<F> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		vocabulary: &mut V,
-		model: &Model<F>,
-		id: Id,
-		generator: &mut impl Generator<V>,
-		quads: &mut Vec<StrippedQuad>,
-	) {
-		let list_id = to_rdf_list(
-			vocabulary,
-			generator,
-			quads,
-			self.types()
-				.map(|ty_ref| model.types().get(ty_ref).unwrap().id().into_term()),
-		);
-
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::Owl(vocab::Owl::IntersectionOf)),
-			list_id.into_term(),
-			None,
-		))
-	}
-}
-
-impl<F> ty::Restriction<F> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		vocabulary: &mut V,
-		model: &Model<F>,
-		id: Id,
-		generator: &mut impl Generator<V>,
-		quads: &mut Vec<StrippedQuad>,
-	) {
-		match self.restrictions().len() {
-			0 | 1 => {
-				self.restrictions()
-					.iter()
-					.next()
-					.unwrap()
-					.to_rdf(model, id, self.property(), quads)
-			}
-			_ => {
-				let restrictions: Vec<_> = self
-					.restrictions()
-					.iter()
-					.map(|restriction| {
-						let id = generator.next(vocabulary);
-						restriction.to_rdf(model, id, self.property(), quads);
-						id.into_term()
-					})
-					.collect();
-
-				let list_id = to_rdf_list(vocabulary, generator, quads, restrictions);
-
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Owl(vocab::Owl::IntersectionOf)),
-					list_id.into_term(),
-					None,
-				))
-			}
-		}
-	}
-}
-
-impl<F> prop::Restriction<F> {
-	pub fn to_rdf(
-		&self,
-		model: &Model<F>,
-		id: Id,
-		prop_ref: Ref<prop::Definition<F>>,
-		quads: &mut Vec<StrippedQuad>,
-	) {
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
-			Object::Iri(IriIndex::Iri(Term::Owl(vocab::Owl::Restriction))),
-			None,
-		));
-
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::Owl(vocab::Owl::OnProperty)),
-			model.properties().get(prop_ref).unwrap().id().into_term(),
-			None,
-		));
-
-		match self {
-			Self::Range(r) => r.to_rdf(model, id, quads),
-			Self::Cardinality(c) => c.to_rdf(id, quads),
-		}
-	}
-}
-
-impl<F> prop::restriction::Range<F> {
-	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
-		match self {
-			Self::Any(ty_ref) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Owl(vocab::Owl::SomeValuesFrom)),
-					model.types().get(*ty_ref).unwrap().id().into_term(),
-					None,
-				));
-			}
-			Self::All(ty_ref) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Owl(vocab::Owl::AllValuesFrom)),
-					model.types().get(*ty_ref).unwrap().id().into_term(),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl prop::restriction::Cardinality {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		match self {
-			Self::AtLeast(min) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Owl(vocab::Owl::MinCardinality)),
-					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::PositiveInteger)),
-					)),
-					None,
-				));
-			}
-			Self::AtMost(max) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Owl(vocab::Owl::MaxCardinality)),
-					Object::Literal(Literal::TypedString(
-						max.to_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::PositiveInteger)),
-					)),
-					None,
-				));
-			}
-			Self::Exactly(m) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Owl(vocab::Owl::Cardinality)),
-					Object::Literal(Literal::TypedString(
-						m.to_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::PositiveInteger)),
-					)),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl<F> prop::Definition<F> {
-	pub fn to_rdf(&self, model: &Model<F>, quads: &mut Vec<StrippedQuad>) {
-		quads.push(Quad(
-			self.id(),
-			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
-			Object::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::Property))),
-			None,
-		));
-
-		for ty_ref in self.domain() {
-			quads.push(Quad(
-				self.id(),
-				IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Domain)),
-				model.types().get(ty_ref).unwrap().id().into_term(),
-				None,
-			))
-		}
-
-		quads.push(Quad(
-			self.id(),
-			IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Range)),
-			model.types().get(**self.range()).unwrap().id().into_term(),
-			None,
-		));
-
-		if self.is_required() {
-			quads.push(Quad(
-				self.id(),
-				IriIndex::Iri(Term::Schema(vocab::Schema::ValueRequired)),
-				Object::Iri(IriIndex::Iri(Term::Schema(vocab::Schema::True))),
-				None,
-			));
-		}
-
-		if !self.is_functional() {
-			quads.push(Quad(
-				self.id(),
-				IriIndex::Iri(Term::Schema(vocab::Schema::MultipleValues)),
-				Object::Iri(IriIndex::Iri(Term::Schema(vocab::Schema::True))),
-				None,
-			));
-		}
-	}
-}
-
-impl<F> layout::Definition<F> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		vocabulary: &mut V,
-		model: &Model<F>,
-		generator: &mut impl Generator<V>,
-		quads: &mut Vec<StrippedQuad>,
-	) {
-		quads.push(Quad(
-			self.id(),
-			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
-			Object::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Layout))),
-			None,
-		));
-
-		if let Some(ty_ref) = self.ty() {
-			quads.push(Quad(
-				self.id(),
-				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::LayoutFor)),
-				model.types().get(ty_ref).unwrap().id().into_term(),
-				None,
-			));
-		}
-
-		if let Some(name) = self.name() {
-			quads.push(Quad(
-				self.id(),
-				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Name)),
-				Object::Literal(Literal::String(name.as_str().to_string().into())),
-				None,
-			));
-		}
-
-		match self.description().value() {
-			layout::Description::Never(_) => (),
-			layout::Description::Primitive(n, _) => {
-				n.to_rdf(vocabulary, self.id(), generator, quads)
-			}
-			layout::Description::Struct(s) => {
-				s.to_rdf(vocabulary, model, self.id(), generator, quads)
-			}
-			layout::Description::Enum(e) => {
-				e.to_rdf(vocabulary, model, self.id(), generator, quads)
-			}
-			layout::Description::Required(r) => r.to_rdf(model, self.id(), quads),
-			layout::Description::Option(o) => o.to_rdf(model, self.id(), quads),
-			layout::Description::Array(a) => a.to_rdf(model, self.id(), quads),
-			layout::Description::Set(s) => s.to_rdf(model, self.id(), quads),
-			layout::Description::OneOrMany(s) => s.to_rdf(model, self.id(), quads),
-			layout::Description::Reference(r) => {
-				quads.push(Quad(
-					self.id(),
-					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Reference)),
-					model.layouts().get(r.id_layout()).unwrap().id().into_term(),
-					None,
-				));
-			}
-			layout::Description::Alias(_, alias_ref) => {
-				quads.push(Quad(
-					self.id(),
-					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Alias)),
-					model.layouts().get(*alias_ref).unwrap().id().into_term(),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl<F> layout::Required<F> {
-	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Required)),
-			model
-				.layouts()
-				.get(self.item_layout())
-				.unwrap()
-				.id()
-				.into_term(),
-			None,
-		))
-	}
-}
-
-impl<F> layout::Optional<F> {
-	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Option)),
-			model
-				.layouts()
-				.get(self.item_layout())
-				.unwrap()
-				.id()
-				.into_term(),
-			None,
-		))
-	}
-}
-
-impl<F> layout::Array<F> {
-	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Array)),
-			model
-				.layouts()
-				.get(self.item_layout())
-				.unwrap()
-				.id()
-				.into_term(),
-			None,
-		));
-
-		if let Some(semantics) = self.semantics() {
-			if let Some(first_prop) = semantics.first() {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ArrayListFirst)),
-					model.properties().get(first_prop).unwrap().id().into_term(),
-					None,
-				));
-			}
-
-			if let Some(rest_prop) = semantics.rest() {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ArrayListRest)),
-					model.properties().get(rest_prop).unwrap().id().into_term(),
-					None,
-				));
-			}
-
-			if let Some(nil_value) = semantics.nil() {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ArrayListNil)),
-					nil_value.into_term(),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl<F> layout::Set<F> {
-	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Set)),
-			model
-				.layouts()
-				.get(self.item_layout())
-				.unwrap()
-				.id()
-				.into_term(),
-			None,
-		))
-	}
-}
-
-impl<F> layout::OneOrMany<F> {
-	pub fn to_rdf(&self, model: &Model<F>, id: Id, quads: &mut Vec<StrippedQuad>) {
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::OneOrMany)),
-			model
-				.layouts()
-				.get(self.item_layout())
-				.unwrap()
-				.id()
-				.into_term(),
-			None,
-		))
-	}
-}
-
-impl<M> layout::RestrictedPrimitive<M> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		vocabulary: &mut V,
-		id: Id,
-		generator: &mut impl Generator<V>,
-		quads: &mut Vec<StrippedQuad>,
-	) {
-		if self.is_restricted() {
-			quads.push(Quad(
-				id,
-				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::DerivedFrom)),
-				self.primitive().id().into_term(),
-				None,
-			));
-
-			let restrictions_id = self.restrictions().to_rdf(vocabulary, generator, quads);
-			quads.push(Quad(
-				id,
-				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::WithRestrictions)),
-				restrictions_id.into_term(),
-				None,
-			));
-		} else {
-			match id {
-				Id::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Primitive(_)))) => (),
-				_ => {
-					quads.push(Quad(
-						id,
-						IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Alias)),
-						self.primitive().id().into_term(),
-						None,
-					));
-				}
-			}
-		}
-	}
-}
-
-impl<'a, M> layout::primitive::Restrictions<'a, M> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
-		quads: &mut Vec<StrippedQuad>,
-	) -> Id {
-		let restrictions: Vec<_> = self
-			.map(|restriction| {
-				let id = generator.next(vocabulary);
-				restriction.to_rdf(id, quads);
-				id.into_term()
-			})
-			.collect();
-
-		to_rdf_list(vocabulary, generator, quads, restrictions)
-	}
-}
-
-impl<'a> layout::primitive::RestrictionRef<'a> {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		match self {
-			Self::Integer(r) => r.to_rdf(id, quads),
-			Self::UnsignedInteger(r) => r.to_rdf(id, quads),
-			Self::Float(r) => r.to_rdf(id, quads),
-			Self::Double(r) => r.to_rdf(id, quads),
-			Self::String(r) => r.to_rdf(id, quads),
-		}
-	}
-}
-
-impl layout::primitive::restriction::integer::Restriction {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		match self {
-			Self::MinInclusive(min) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
-					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
-					)),
-					None,
-				));
-			}
-			Self::MaxInclusive(min) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
-					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
-					)),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl layout::primitive::restriction::unsigned::Restriction {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		match self {
-			Self::MinInclusive(min) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
-					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
-					)),
-					None,
-				));
-			}
-			Self::MaxInclusive(min) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
-					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
-					)),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl layout::primitive::restriction::float::Restriction {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		use layout::primitive::restriction::float::{Max, Min};
-		match self {
-			Self::Min(Min::Included(min)) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
-					Object::Literal(min.literal()),
-					None,
-				));
-			}
-			Self::Min(Min::Excluded(min)) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
-					Object::Literal(min.literal()),
-					None,
-				));
-			}
-			Self::Max(Max::Included(max)) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
-					Object::Literal(max.literal()),
-					None,
-				));
-			}
-			Self::Max(Max::Excluded(max)) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
-					Object::Literal(max.literal()),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl layout::primitive::restriction::double::Restriction {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		use layout::primitive::restriction::double::{Max, Min};
-		match self {
-			Self::Min(Min::Included(min)) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
-					Object::Literal(min.literal()),
-					None,
-				));
-			}
-			Self::Min(Min::Excluded(min)) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
-					Object::Literal(min.literal()),
-					None,
-				));
-			}
-			Self::Max(Max::Included(max)) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
-					Object::Literal(max.literal()),
-					None,
-				));
-			}
-			Self::Max(Max::Excluded(max)) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
-					Object::Literal(max.literal()),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl<'a> layout::primitive::restriction::string::RestrictionRef<'a> {
-	pub fn to_rdf(&self, id: Id, quads: &mut Vec<StrippedQuad>) {
-		match self {
-			Self::MinLength(min) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinLength)),
-					Object::Literal(Literal::TypedString(
-						xsd_types::IntegerBuf::from(*min).into_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
-					)),
-					None,
-				));
-			}
-			Self::MaxLength(max) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxLength)),
-					Object::Literal(Literal::TypedString(
-						xsd_types::IntegerBuf::from(*max).into_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
-					)),
-					None,
-				));
-			}
-			Self::Pattern(regexp) => {
-				quads.push(Quad(
-					id,
-					IriIndex::Iri(Term::Xsd(vocab::Xsd::Pattern)),
-					Object::Literal(Literal::String(regexp.to_string().into())),
-					None,
-				));
-			}
-		}
-	}
-}
-
-impl<F> layout::Struct<F> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		vocabulary: &mut V,
-		model: &Model<F>,
-		id: Id,
-		generator: &mut impl Generator<V>,
-		quads: &mut Vec<StrippedQuad>,
-	) {
-		let mut fields = Vec::with_capacity(self.fields().len());
-		for field in self.fields() {
-			fields.push(
-				field
-					.to_rdf(vocabulary, model, generator, quads)
-					.into_term(),
-			);
-		}
-
-		let fields_list = to_rdf_list(vocabulary, generator, quads, fields);
-
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Fields)),
-			fields_list.into_term(),
-			None,
-		))
-	}
-}
-
-impl<F> layout::Field<F> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		vocabulary: &mut V,
-		model: &Model<F>,
-		generator: &mut impl Generator<V>,
-		quads: &mut Vec<StrippedQuad>,
-	) -> Id {
-		let id = generator.next(vocabulary);
-
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
-			Object::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Field))),
-			None,
-		));
-
-		if let Some(prop_ref) = self.property() {
-			quads.push(Quad(
-				id,
-				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::FieldFor)),
-				model.properties().get(prop_ref).unwrap().id().into_term(),
-				None,
-			))
-		}
-
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Format)),
-			model.layouts().get(self.layout()).unwrap().id().into_term(),
-			None,
-		));
-
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Name)),
-			Object::Literal(Literal::String(self.name().to_string().into())),
-			None,
-		));
-
-		if let Some(label) = self.label() {
-			quads.push(Quad(
-				id,
-				IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Label)),
-				Object::Literal(Literal::String(label.to_string().into())),
-				None,
-			));
-		}
-
-		self.documentation().to_rdf(id, quads);
 
 		id
 	}
 }
 
-impl<F> layout::Enum<F> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
+impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
 		vocabulary: &mut V,
-		model: &Model<F>,
-		id: Id,
 		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
-	) {
-		let mut variants = Vec::with_capacity(self.variants().len());
-		for variant in self.variants() {
-			variants.push(
-				variant
-					.to_rdf(vocabulary, model, generator, quads)
-					.into_term(),
-			);
+		_options: Options,
+	) -> Self::Target {
+		let id = generator.next(vocabulary);
+
+		match self {
+			Self::MinLength(min) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinLength)),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+					)),
+					None,
+				));
+			}
+			Self::MaxLength(max) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxLength)),
+					Object::Literal(Literal::TypedString(
+						max.to_string().into(),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+					)),
+					None,
+				));
+			}
+			Self::Pattern(regexp) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::Xsd(vocab::Xsd::Pattern)),
+					Object::Literal(Literal::String(regexp.to_string().into())),
+					None,
+				));
+			}
 		}
 
-		let variants_list = to_rdf_list(vocabulary, generator, quads, variants);
-
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Enumeration)),
-			variants_list.into_term(),
-			None,
-		))
+		id
 	}
 }
 
-impl<F> layout::Variant<F> {
-	pub fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
+impl<'a> IntoRdf for layout::restriction::RestrictionRef<'a> {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
 		vocabulary: &mut V,
-		model: &Model<F>,
 		generator: &mut impl Generator<V>,
 		quads: &mut Vec<StrippedQuad>,
-	) -> Id {
+		options: Options,
+	) -> Self::Target {
+		match self {
+			Self::Primitive(p) => p.into_rdf_with(vocabulary, generator, quads, options),
+			Self::Container(c) => c.into_rdf_with(vocabulary, generator, quads, options),
+		}
+	}
+}
+
+impl<'a> IntoRdf for layout::primitive::RestrictionRef<'a> {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		options: Options,
+	) -> Self::Target {
+		match self {
+			Self::Integer(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::UnsignedInteger(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::Float(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::Double(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::String(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+		}
+	}
+}
+
+impl IntoRdf for layout::restriction::ContainerRestriction {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		options: Options,
+	) -> Self::Target {
+		match self {
+			Self::Cardinal(c) => c.into_rdf_with(vocabulary, generator, quads, options),
+		}
+	}
+}
+
+impl IntoRdf for layout::restriction::cardinal::Restriction {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		_options: Options,
+	) -> Self::Target {
 		let id = generator.next(vocabulary);
 
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
-			Object::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Variant))),
-			None,
-		));
-
-		if let Some(layout) = self.layout() {
-			quads.push(Quad(
-				id,
-				IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Format)),
-				model.layouts().get(layout).unwrap().id().into_term(),
-				None,
-			))
+		match self {
+			Self::Min(min) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinCardinality)),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+					)),
+					None,
+				));
+			}
+			Self::Max(min) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxCardinality)),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+					)),
+					None,
+				));
+			}
 		}
 
-		quads.push(Quad(
-			id,
-			IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Name)),
-			Object::Literal(Literal::String(self.name().to_string().into())),
-			None,
-		));
+		id
+	}
+}
 
-		if let Some(label) = self.label() {
-			quads.push(Quad(
-				id,
-				IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Label)),
-				Object::Literal(Literal::String(label.to_string().into())),
-				None,
-			));
+impl IntoRdf for layout::primitive::restriction::integer::Restriction {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		_options: Options,
+	) -> Self::Target {
+		let id = generator.next(vocabulary);
+
+		match self {
+			Self::MinInclusive(min) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+					)),
+					None,
+				));
+			}
+			Self::MaxInclusive(min) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+					)),
+					None,
+				));
+			}
 		}
 
-		self.documentation().to_rdf(id, quads);
+		id
+	}
+}
+
+impl IntoRdf for layout::primitive::restriction::unsigned::Restriction {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		_options: Options,
+	) -> Self::Target {
+		let id = generator.next(vocabulary);
+
+		match self {
+			Self::MinInclusive(min) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+					)),
+					None,
+				));
+			}
+			Self::MaxInclusive(min) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
+					Object::Literal(Literal::TypedString(
+						min.to_string().into(),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+					)),
+					None,
+				));
+			}
+		}
+
+		id
+	}
+}
+
+impl IntoRdf for layout::primitive::restriction::float::Restriction {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		_options: Options,
+	) -> Self::Target {
+		let id = generator.next(vocabulary);
+
+		use layout::primitive::restriction::float::{Max, Min};
+		match self {
+			Self::Min(Min::Included(min)) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Min(Min::Excluded(min)) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ExclusiveMinimum)),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Included(max)) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Excluded(max)) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ExclusiveMaximum)),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+		}
+
+		id
+	}
+}
+
+impl IntoRdf for layout::primitive::restriction::double::Restriction {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		_options: Options,
+	) -> Self::Target {
+		let id = generator.next(vocabulary);
+
+		use layout::primitive::restriction::double::{Max, Min};
+		match self {
+			Self::Min(Min::Included(min)) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Min(Min::Excluded(min)) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ExclusiveMinimum)),
+					Object::Literal(min.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Included(max)) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+			Self::Max(Max::Excluded(max)) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ExclusiveMaximum)),
+					Object::Literal(max.literal()),
+					None,
+				));
+			}
+		}
+
+		id
+	}
+}
+
+impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		_options: Options,
+	) -> Self::Target {
+		let id = generator.next(vocabulary);
+
+		match self {
+			Self::MinLength(min) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinLength)),
+					Object::Literal(Literal::TypedString(
+						xsd_types::IntegerBuf::from(min).into_string().into(),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+					)),
+					None,
+				));
+			}
+			Self::MaxLength(max) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxLength)),
+					Object::Literal(Literal::TypedString(
+						xsd_types::IntegerBuf::from(max).into_string().into(),
+						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+					)),
+					None,
+				));
+			}
+			Self::Pattern(regexp) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Pattern)),
+					Object::Literal(Literal::String(regexp.to_string().into())),
+					None,
+				));
+			}
+		}
 
 		id
 	}

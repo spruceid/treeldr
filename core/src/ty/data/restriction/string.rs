@@ -106,3 +106,13 @@ impl<'a> Iterator for Iter<'a> {
 			.or_else(|| self.pattern.take().map(Restriction::Pattern))
 	}
 }
+
+impl<'a> DoubleEndedIterator for Iter<'a> {
+	fn next_back(&mut self) -> Option<Self::Item> {
+		self.pattern
+			.take()
+			.map(Restriction::Pattern)
+			.or_else(|| self.len_max.take().map(Restriction::MaxLength))
+			.or_else(|| self.len_min.take().map(Restriction::MinLength))
+	}
+}

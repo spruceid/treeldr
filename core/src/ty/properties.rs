@@ -1,44 +1,38 @@
-use crate::utils::replace_with;
-use crate::{metadata, prop, prop::restriction::Contradiction, Ref};
-use crate::{Id, SubstituteReferences};
+use locspan::Meta;
+
+use crate::metadata::Merge;
+use crate::{Property, TId};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-#[derive(Clone)]
+use super::{restriction::Contradiction, Restriction, Restrictions};
+
+#[derive(Debug, Clone)]
 struct PropertyData<M> {
 	metadata: M,
-	restrictions: prop::Restrictions<M>,
+	restrictions: Restrictions<M>,
 }
 
 impl<M> PropertyData<M> {
-	pub fn restrict(&mut self, restriction: prop::Restriction<M>) -> Result<(), Contradiction> {
+	pub fn restrict(&mut self, restriction: Meta<Restriction, M>) -> Result<(), Contradiction>
+	where
+		M: Clone + Merge,
+	{
 		self.restrictions.restrict(restriction)
 	}
 }
 
-impl<M> SubstituteReferences<M> for PropertyData<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
-	{
-		self.restrictions.substitute_references(sub)
-	}
-}
-
 /// Type properties.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Properties<M> {
 	/// Included properties.
-	included: HashMap<Ref<prop::Definition<M>>, PropertyData<M>>,
+	included: HashMap<TId<Property>, PropertyData<M>>,
 
 	/// Excluded properties.
 	///
 	/// If `None`, then all the properties not
 	/// in `included` are excluded.
-	excluded: Option<HashMap<Ref<prop::Definition<M>>, M>>,
+	excluded: Option<HashMap<TId<Property>, M>>,
 }
 
 impl<M> Properties<M> {
@@ -74,29 +68,6 @@ impl<M> Properties<M> {
 	}
 }
 
-impl<M> SubstituteReferences<M> for Properties<M> {
-	fn substitute_references<I, T, P, L>(&mut self, sub: &crate::ReferenceSubstitution<I, T, P, L>)
-	where
-		I: Fn(Id) -> Id,
-		T: Fn(Ref<super::Definition<M>>) -> Ref<super::Definition<M>>,
-		P: Fn(Ref<prop::Definition<M>>) -> Ref<prop::Definition<M>>,
-		L: Fn(Ref<crate::layout::Definition<M>>) -> Ref<crate::layout::Definition<M>>,
-	{
-		replace_with(&mut self.included, |v| {
-			v.into_iter()
-				.map(|(r, mut d)| {
-					d.substitute_references(sub);
-					(sub.property(r), d)
-				})
-				.collect()
-		});
-
-		replace_with(&mut self.excluded, |v| {
-			v.map(|e| e.into_iter().map(|(r, m)| (sub.property(r), m)).collect())
-		})
-	}
-}
-
 impl<M> Default for Properties<M> {
 	fn default() -> Self {
 		Self::none()
@@ -106,11 +77,11 @@ impl<M> Default for Properties<M> {
 impl<M> Properties<M> {
 	pub fn insert(
 		&mut self,
-		prop: Ref<prop::Definition<M>>,
-		restrictions: Option<prop::Restrictions<M>>,
+		prop: TId<Property>,
+		restrictions: Option<Restrictions<M>>,
 		metadata: M,
 	) where
-		M: metadata::Merge,
+		M: Clone + Merge,
 	{
 		match self.included.entry(prop) {
 			Entry::Occupied(mut entry) => {
@@ -136,7 +107,7 @@ impl<M> Properties<M> {
 		}
 	}
 
-	pub fn remove(&mut self, prop: Ref<prop::Definition<M>>, metadata: M) {
+	pub fn remove(&mut self, prop: TId<Property>, metadata: M) {
 		self.included.remove(&prop);
 
 		if let Some(excluded) = &mut self.excluded {
@@ -147,15 +118,14 @@ impl<M> Properties<M> {
 	/// Further restrict `prop` if it is included in this set of properties.
 	pub fn restrict(
 		&mut self,
-		prop: Ref<prop::Definition<M>>,
-		restriction: prop::Restriction<M>,
-		metadata: M,
+		prop: TId<Property>,
+		Meta(restriction, metadata): Meta<Restriction, M>,
 	) -> Result<(), Contradiction>
 	where
-		M: metadata::Merge,
+		M: Clone + Merge,
 	{
 		if let Some(data) = self.included.get_mut(&prop) {
-			data.restrict(restriction)?;
+			data.restrict(Meta(restriction, metadata.clone()))?;
 			data.metadata.merge_with(metadata);
 		}
 
@@ -164,7 +134,7 @@ impl<M> Properties<M> {
 
 	pub fn unite_with(&mut self, other: &Self)
 	where
-		M: Clone + metadata::Merge,
+		M: Clone + Merge,
 	{
 		for (&prop, data) in &other.included {
 			self.insert(prop, Some(data.restrictions.clone()), data.metadata.clone());
@@ -179,7 +149,7 @@ impl<M> Properties<M> {
 
 	pub fn union_with(&self, other: &Self) -> Self
 	where
-		M: Clone + metadata::Merge,
+		M: Clone + Merge,
 	{
 		let mut result = self.clone();
 		result.unite_with(other);
@@ -188,7 +158,7 @@ impl<M> Properties<M> {
 
 	pub fn intersect_with(&mut self, other: &Self) -> Result<(), Contradiction>
 	where
-		M: Clone + metadata::Merge,
+		M: Clone + Merge,
 	{
 		self.excluded = match (self.excluded.take(), &other.excluded) {
 			(Some(mut excluded), Some(other_excluded)) => {
@@ -242,7 +212,7 @@ impl<M> Properties<M> {
 
 	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction>
 	where
-		M: Clone + metadata::Merge,
+		M: Clone + Merge,
 	{
 		let mut result = self.clone();
 		result.intersect_with(other)?;
@@ -260,11 +230,11 @@ impl<'a, M> IntoIterator for &'a Properties<M> {
 }
 
 pub struct ExcludedProperties<'a, M> {
-	inner: std::collections::hash_map::Iter<'a, Ref<prop::Definition<M>>, M>,
+	inner: std::collections::hash_map::Iter<'a, TId<Property>, M>,
 }
 
 impl<'a, M> Iterator for ExcludedProperties<'a, M> {
-	type Item = (Ref<prop::Definition<M>>, &'a M);
+	type Item = (TId<Property>, &'a M);
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.inner.next().map(|(prop, causes)| (*prop, causes))
@@ -272,17 +242,17 @@ impl<'a, M> Iterator for ExcludedProperties<'a, M> {
 }
 
 pub struct RestrictedProperty<'a, M> {
-	prop: Ref<prop::Definition<M>>,
-	restrictions: &'a prop::Restrictions<M>,
+	prop: TId<Property>,
+	restrictions: &'a Restrictions<M>,
 	causes: &'a M,
 }
 
 impl<'a, M> RestrictedProperty<'a, M> {
-	pub fn property(&self) -> Ref<prop::Definition<M>> {
+	pub fn property(&self) -> TId<Property> {
 		self.prop
 	}
 
-	pub fn restrictions(&self) -> &'a prop::Restrictions<M> {
+	pub fn restrictions(&self) -> &'a Restrictions<M> {
 		self.restrictions
 	}
 
@@ -313,7 +283,7 @@ impl<'a, M> Iterator for Iter<'a, M> {
 }
 
 pub struct IncludedProperties<'a, M> {
-	inner: std::collections::hash_map::Iter<'a, Ref<prop::Definition<M>>, PropertyData<M>>,
+	inner: std::collections::hash_map::Iter<'a, TId<Property>, PropertyData<M>>,
 }
 
 impl<'a, M> Iterator for IncludedProperties<'a, M> {

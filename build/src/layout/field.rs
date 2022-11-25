@@ -1,15 +1,27 @@
-use super::{error, Error};
+use crate::{
+	component::formatted::AssertFormatted,
+	context::{MapIds, MapIdsIn},
+	prop,
+	resource::{self, BindingValueRef},
+	single, Context, Single,
+};
+
+use super::Error;
 use locspan::Meta;
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, Documentation, Id, IriIndex, MetaOption, Name};
+pub use treeldr::layout::field::Property;
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, Name};
 
 /// Layout field definition.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Definition<M> {
-	id: Id,
-	prop: MetaOption<Id, M>,
-	name: MetaOption<Name, M>,
-	layout: MetaOption<Id, M>,
+	prop: Single<Id, M>,
+}
+
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		self.prop.map_ids_in(Some(Property::For.into()), f)
+	}
 }
 
 pub enum DefaultLayout<M> {
@@ -18,12 +30,9 @@ pub enum DefaultLayout<M> {
 }
 
 impl<M> DefaultLayout<M> {
-	pub fn build<
-		D: crate::Descriptions<M>,
-		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
-	>(
+	pub fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
-		context: &mut crate::Context<M, D>,
+		context: &mut crate::Context<M>,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
 	) -> Meta<Id, M>
@@ -34,200 +43,174 @@ impl<M> DefaultLayout<M> {
 			Self::Functional(layout) => layout,
 			Self::NonFunctional(Meta(item, meta)) => {
 				let id = generator.next(vocabulary);
-				context.declare_layout(id, meta.clone());
-				let layout = context.get_mut(id).unwrap().as_layout_mut().unwrap();
-
-				layout.set_array(item, None, meta.clone()).ok();
-
+				let layout = context.declare(id, meta.clone()).as_layout_mut();
+				layout.set_array(Meta(item, meta.clone()));
 				Meta(id, meta)
 			}
 		}
 	}
 }
 
-impl<M> Definition<M> {
-	pub fn new(id: Id) -> Self {
+impl<M> Default for Definition<M> {
+	fn default() -> Self {
 		Self {
-			id,
-			prop: MetaOption::default(),
-			name: MetaOption::default(),
-			layout: MetaOption::default(),
+			prop: Single::default(),
 		}
 	}
+}
 
-	pub fn property(&self) -> Option<&Meta<Id, M>> {
-		self.prop.as_ref()
+impl<M> Definition<M> {
+	pub fn new() -> Self {
+		Self::default()
 	}
 
-	pub fn set_property(&mut self, prop_ref: Id, metadata: M) -> Result<(), Error<M>> {
-		self.prop.try_set(
-			prop_ref,
-			metadata,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::LayoutFieldMismatchProperty {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
+	pub fn property(&self) -> &Single<Id, M> {
+		&self.prop
 	}
 
-	pub fn replace_property(&mut self, prop: MetaOption<Id, M>) {
-		self.prop = prop
+	pub fn property_mut(&mut self) -> &mut Single<Id, M> {
+		&mut self.prop
+	}
+
+	pub fn is_included_in(
+		&self,
+		context: &Context<M>,
+		as_component: &crate::component::Data<M>,
+		as_formatted: &crate::component::formatted::Data<M>,
+		other: &Self,
+		other_as_component: &crate::component::Data<M>,
+		other_as_formatted: &crate::component::formatted::Data<M>,
+	) -> bool {
+		let common_prop = self
+			.prop
+			.iter()
+			.any(|Meta(a, _)| other.prop.iter().any(|Meta(b, _)| a == b));
+		let no_prop = self.prop.is_empty() && other.prop.is_empty();
+
+		let common_name = as_component
+			.name
+			.iter()
+			.any(|Meta(a, _)| other_as_component.name.iter().any(|Meta(b, _)| a == b));
+		let no_name = as_component.name.is_empty() && other_as_component.name.is_empty();
+
+		let included_layout = as_formatted.format.iter().all(|Meta(a, _)| {
+			other_as_formatted
+				.format
+				.iter()
+				.all(|Meta(b, _)| crate::layout::is_included_in(context, *a, *b))
+		});
+
+		(common_prop || no_prop) && (common_name || no_name) && included_layout
 	}
 
 	pub fn default_name(
 		&self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		metadata: M,
+		as_resource: &resource::Data<M>,
 	) -> Option<Meta<Name, M>>
 	where
 		M: Clone,
 	{
-		self.id
+		as_resource
+			.id
 			.as_iri()
 			.and_then(|term| vocabulary.iri(term))
 			.and_then(|iri| Name::from_iri(iri).ok().flatten())
-			.map(|name| Meta::new(name, metadata))
+			.map(|name| Meta::new(name, as_resource.metadata.clone()))
 	}
 
-	pub fn name(&self) -> Option<&Meta<Name, M>> {
-		self.name.as_ref()
-	}
-
-	pub fn set_name(&mut self, name: Name, metadata: M) -> Result<(), Error<M>> {
-		self.name.try_set(
-			name,
-			metadata,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::LayoutFieldMismatchName {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
-	}
-
-	pub fn replace_name(&mut self, name: MetaOption<Name, M>) {
-		self.name = name
-	}
-
-	pub fn layout(&self) -> Option<&Meta<Id, M>> {
-		self.layout.as_ref()
-	}
-
-	pub fn set_layout(&mut self, layout_ref: Id, metadata: M) -> Result<(), Error<M>> {
-		self.layout.try_set(
-			layout_ref,
-			metadata,
-			|Meta(expected, expected_meta), Meta(found, found_meta)| {
-				Error::new(
-					error::LayoutFieldMismatchLayout {
-						id: self.id,
-						expected,
-						found,
-						because: expected_meta,
-					}
-					.into(),
-					found_meta,
-				)
-			},
-		)
-	}
-
-	pub fn replace_layout(&mut self, layout: MetaOption<Id, M>) {
-		self.layout = layout
-	}
-
-	pub fn default_layout<D: crate::Descriptions<M>>(
-		&self,
-		context: &crate::Context<M, D>,
-	) -> Option<DefaultLayout<M>>
+	pub fn default_layout(&self, context: &crate::Context<M>) -> Option<DefaultLayout<M>>
 	where
 		M: Clone,
 	{
-		let prop_id = self.property()?;
-		let prop = context.get(**prop_id)?.as_property()?;
-		let range_id = prop.range()?;
-
-		let range_node = context.get(**range_id)?;
-		if range_node.as_layout().is_some() {
-			if prop.is_functional() {
-				Some(DefaultLayout::Functional(range_id.clone()))
-			} else {
-				Some(DefaultLayout::NonFunctional(range_id.clone()))
-			}
+		let Meta(prop_id, _) = self.property().first()?;
+		let prop = context.get(*prop_id)?;
+		let range_id = prop.as_property().range().first()?;
+		if prop.has_type(context, prop::Type::FunctionalProperty) {
+			Some(DefaultLayout::Functional(range_id.cloned()))
 		} else {
-			None
+			Some(DefaultLayout::NonFunctional(range_id.cloned()))
 		}
 	}
 
-	pub fn require_layout(&self, causes: &M) -> Result<&Meta<Id, M>, Error<M>>
+	pub fn bindings(&self) -> ClassBindings<M> {
+		ClassBindings {
+			prop: self.prop.iter(),
+		}
+	}
+
+	pub(crate) fn build(
+		&self,
+		context: &Context<M>,
+		as_resource: &treeldr::node::Data<M>,
+		_as_component: &treeldr::component::Data<M>,
+		as_formatted: &treeldr::component::formatted::Data<M>,
+		meta: M,
+	) -> Result<Meta<treeldr::layout::field::Definition<M>, M>, Error<M>>
 	where
 		M: Clone,
 	{
-		self.layout.value_or_else(|| {
-			Error::new(
-				error::LayoutFieldMissingLayout(self.id).into(),
-				causes.clone(),
-			)
-		})
+		as_formatted.assert_formatted(as_resource, &meta)?;
+
+		let prop = self.prop.clone().into_property_at_node_binding(
+			context,
+			as_resource.id,
+			Property::For,
+		)?;
+
+		Ok(Meta(treeldr::layout::field::Definition::new(prop), meta))
 	}
 }
 
-pub trait Build<M> {
-	fn require_name(&self) -> Result<Meta<Name, M>, Error<M>>;
-
-	fn build(
-		&self,
-		label: Option<String>,
-		doc: Documentation,
-		nodes: &super::super::context::allocated::Nodes<M>,
-	) -> Result<treeldr::layout::Field<M>, Error<M>>;
+pub fn is_included_in<M>(context: &Context<M>, a: Id, b: Id) -> bool {
+	if a == b {
+		true
+	} else {
+		let a = context.get(a).unwrap();
+		let b = context.get(b).unwrap();
+		a.as_layout_field().is_included_in(
+			context,
+			a.as_component().data(),
+			a.as_formatted().data(),
+			b.as_layout_field(),
+			b.as_component().data(),
+			b.as_formatted().data(),
+		)
+	}
 }
 
-impl<M: Clone> Build<M> for Meta<Definition<M>, M> {
-	fn require_name(&self) -> Result<Meta<Name, M>, Error<M>> {
-		self.name.clone().ok_or_else(|| {
-			Meta::new(
-				error::LayoutFieldMissingName(self.id).into(),
-				self.metadata().clone(),
-			)
-		})
+pub enum ClassBinding {
+	For(Id),
+}
+
+pub type Binding = ClassBinding;
+
+impl ClassBinding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::For(_) => Property::For,
+		}
 	}
 
-	fn build(
-		&self,
-		label: Option<String>,
-		doc: Documentation,
-		nodes: &super::super::context::allocated::Nodes<M>,
-	) -> Result<treeldr::layout::Field<M>, Error<M>> {
-		let prop = self
-			.prop
-			.clone()
-			.try_map_with_causes(|Meta(prop_id, causes)| {
-				Ok(Meta(**nodes.require_property(prop_id, &causes)?, causes))
-			})?;
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::For(v) => BindingValueRef::Id(*v),
+		}
+	}
+}
 
-		let name = self.require_name()?;
+pub struct ClassBindings<'a, M> {
+	prop: single::Iter<'a, Id, M>,
+}
 
-		let layout_id = self.require_layout(self.metadata())?;
-		let layout = nodes
-			.require_layout(**layout_id, layout_id.metadata())?
-			.clone();
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
 
-		Ok(treeldr::layout::Field::new(prop, name, label, layout, doc))
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.prop
+			.next()
+			.map(|m| m.into_cloned_value().map(ClassBinding::For))
 	}
 }

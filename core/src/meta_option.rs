@@ -3,6 +3,8 @@ use locspan_derive::{
 	StrippedEq, StrippedHash, StrippedOrd, StrippedPartialEq, StrippedPartialOrd,
 };
 
+use crate::metadata::Merge;
+
 /// Optional value with metadata.
 #[derive(
 	Clone, Debug, StrippedPartialEq, StrippedEq, StrippedPartialOrd, StrippedOrd, StrippedHash,
@@ -35,6 +37,10 @@ impl<T, M> MetaOption<T, M> {
 		self.value.is_some()
 	}
 
+	pub fn is_none(&self) -> bool {
+		self.value.is_none()
+	}
+
 	pub fn take(&mut self) -> Self {
 		Self {
 			value: self.value.take(),
@@ -45,17 +51,19 @@ impl<T, M> MetaOption<T, M> {
 		self.value.replace(Meta(value, metadata))
 	}
 
-	pub fn set_once(&mut self, metadata: M, f: impl FnOnce() -> T) {
+	pub fn set_once(&mut self, metadata: M, f: impl FnOnce() -> T)
+	where
+		M: Merge,
+	{
 		match self.value.as_mut() {
-			Some(value) => value.1 = metadata,
+			Some(value) => value.1.merge_with(metadata),
 			None => self.value = Some(Meta(f(), metadata)),
 		}
 	}
 
 	pub fn try_unify<E>(
 		&mut self,
-		value: T,
-		metadata: M,
+		Meta(value, metadata): Meta<T, M>,
 		unify: impl Fn(Meta<T, M>, Meta<T, M>) -> Result<Meta<T, M>, E>,
 	) -> Result<(), E> {
 		match self.value.take() {
@@ -74,14 +82,13 @@ impl<T, M> MetaOption<T, M> {
 
 	pub fn try_set<E>(
 		&mut self,
-		value: T,
-		metadata: M,
+		value: Meta<T, M>,
 		on_err: impl Fn(Meta<T, M>, Meta<T, M>) -> E,
 	) -> Result<(), E>
 	where
 		T: PartialEq,
 	{
-		self.try_unify(value, metadata, |Meta(a, a_meta), Meta(b, b_meta)| {
+		self.try_unify(value, |Meta(a, a_meta), Meta(b, b_meta)| {
 			if a == b {
 				Ok(Meta(a, a_meta))
 			} else {
@@ -99,10 +106,7 @@ impl<T, M> MetaOption<T, M> {
 		T: PartialEq,
 	{
 		match value.unwrap() {
-			Some(value) => {
-				let Meta(value, meta) = value;
-				self.try_set(value, meta, on_err)
-			}
+			Some(value) => self.try_set(value, on_err),
 			None => Ok(()),
 		}
 	}
@@ -213,16 +217,34 @@ impl<T, M> MetaOption<T, M> {
 		}
 	}
 
-	pub fn try_map<U, E>(self, f: impl FnOnce(T) -> Result<U, E>) -> Result<MetaOption<U, M>, E> {
-		Ok(MetaOption {
-			value: self.value.map(|t| t.try_map(f)).transpose()?,
-		})
+	pub fn map_borrow_metadata<U>(self, f: impl FnOnce(T, &M) -> U) -> MetaOption<U, M> {
+		MetaOption {
+			value: self.value.map(|Meta(t, m)| Meta(f(t, &m), m)),
+		}
 	}
 
 	pub fn map_with_causes<U>(self, f: impl FnOnce(Meta<T, M>) -> Meta<U, M>) -> MetaOption<U, M> {
 		MetaOption {
 			value: self.value.map(f),
 		}
+	}
+
+	pub fn try_map<U, E>(self, f: impl FnOnce(T) -> Result<U, E>) -> Result<MetaOption<U, M>, E> {
+		Ok(MetaOption {
+			value: self.value.map(|t| t.try_map(f)).transpose()?,
+		})
+	}
+
+	pub fn try_map_borrow_metadata<U, E>(
+		self,
+		f: impl FnOnce(T, &M) -> Result<U, E>,
+	) -> Result<MetaOption<U, M>, E> {
+		let value = match self.value {
+			Some(Meta(t, m)) => Some(Meta(f(t, &m)?, m)),
+			None => None,
+		};
+
+		Ok(MetaOption { value })
 	}
 
 	pub fn try_map_with_causes<U, E>(
@@ -235,6 +257,10 @@ impl<T, M> MetaOption<T, M> {
 		};
 
 		Ok(MetaOption { value })
+	}
+
+	pub fn clear(&mut self) {
+		self.value = None
 	}
 }
 

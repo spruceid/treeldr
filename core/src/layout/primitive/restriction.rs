@@ -1,4 +1,7 @@
+use crate::layout::DescriptionBindingRef;
+
 use super::Primitive;
+use derivative::Derivative;
 use locspan::Meta;
 
 pub mod double;
@@ -53,14 +56,22 @@ impl<M> Restricted<M> {
 		}
 	}
 
-	pub fn restrictions(&self) -> Restrictions<M> {
+	pub fn restrictions(&self) -> Option<Restrictions<M>> {
 		match self {
-			Self::Integer(r) => Restrictions::Integer(r.iter()),
-			Self::UnsignedInteger(r) => Restrictions::UnsignedInteger(r.iter()),
-			Self::Float(r) => Restrictions::Float(r.iter()),
-			Self::Double(r) => Restrictions::Double(r.iter()),
-			Self::String(r) => Restrictions::String(r.iter()),
-			_ => Restrictions::None,
+			Self::Integer(r) => Some(Restrictions::Integer(r)),
+			Self::UnsignedInteger(r) => Some(Restrictions::UnsignedInteger(r)),
+			Self::Float(r) => Some(Restrictions::Float(r)),
+			Self::Double(r) => Some(Restrictions::Double(r)),
+			Self::String(r) => Some(Restrictions::String(r)),
+			_ => None,
+		}
+	}
+
+	pub fn as_binding_ref(&self) -> Option<DescriptionBindingRef<M>> {
+		if self.is_restricted() {
+			Some(DescriptionBindingRef::DerivedFrom(self.primitive()))
+		} else {
+			None
 		}
 	}
 }
@@ -84,6 +95,7 @@ impl<M> From<Primitive> for Restricted<M> {
 	}
 }
 
+#[derive(Clone, Copy)]
 pub enum RestrictionRef<'a> {
 	Integer(integer::Restriction),
 	UnsignedInteger(unsigned::Restriction),
@@ -92,7 +104,29 @@ pub enum RestrictionRef<'a> {
 	String(string::RestrictionRef<'a>),
 }
 
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub enum Restrictions<'a, M> {
+	Integer(&'a integer::Restrictions<M>),
+	UnsignedInteger(&'a unsigned::Restrictions<M>),
+	Float(&'a float::Restrictions<M>),
+	Double(&'a double::Restrictions<M>),
+	String(&'a string::Restrictions<M>),
+}
+
+impl<'a, M> Restrictions<'a, M> {
+	pub fn iter(&self) -> RestrictionsIter<'a, M> {
+		match self {
+			Self::Integer(r) => RestrictionsIter::Integer(r.iter()),
+			Self::UnsignedInteger(r) => RestrictionsIter::UnsignedInteger(r.iter()),
+			Self::Float(r) => RestrictionsIter::Float(r.iter()),
+			Self::Double(r) => RestrictionsIter::Double(r.iter()),
+			Self::String(r) => RestrictionsIter::String(r.iter()),
+		}
+	}
+}
+
+pub enum RestrictionsIter<'a, M> {
 	None,
 	Integer(integer::Iter<'a, M>),
 	UnsignedInteger(unsigned::Iter<'a, M>),
@@ -101,7 +135,13 @@ pub enum Restrictions<'a, M> {
 	String(string::Iter<'a, M>),
 }
 
-impl<'a, M> Iterator for Restrictions<'a, M> {
+impl<'a, M> Default for RestrictionsIter<'a, M> {
+	fn default() -> Self {
+		Self::None
+	}
+}
+
+impl<'a, M> Iterator for RestrictionsIter<'a, M> {
 	type Item = Meta<RestrictionRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
@@ -112,6 +152,21 @@ impl<'a, M> Iterator for Restrictions<'a, M> {
 			Self::Float(r) => r.next().map(|r| r.map(RestrictionRef::Float)),
 			Self::Double(r) => r.next().map(|r| r.map(RestrictionRef::Double)),
 			Self::String(r) => r.next().map(|r| r.map(RestrictionRef::String)),
+		}
+	}
+}
+
+impl<'a, M> DoubleEndedIterator for RestrictionsIter<'a, M> {
+	fn next_back(&mut self) -> Option<Self::Item> {
+		match self {
+			Self::None => None,
+			Self::Integer(r) => r.next_back().map(|r| r.map(RestrictionRef::Integer)),
+			Self::UnsignedInteger(r) => r
+				.next_back()
+				.map(|r| r.map(RestrictionRef::UnsignedInteger)),
+			Self::Float(r) => r.next_back().map(|r| r.map(RestrictionRef::Float)),
+			Self::Double(r) => r.next_back().map(|r| r.map(RestrictionRef::Double)),
+			Self::String(r) => r.next_back().map(|r| r.map(RestrictionRef::String)),
 		}
 	}
 }

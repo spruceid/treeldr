@@ -1,120 +1,239 @@
-use crate::{context, Error};
+use crate::{
+	context::{MapIds, MapIdsIn},
+	resource::BindingValueRef,
+	single, Context, Error, Single,
+};
 use locspan::Meta;
-use std::collections::BTreeMap;
 use treeldr::{metadata::Merge, Id};
 
+pub use treeldr::ty::restriction::{Cardinality, Property};
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum RangeRestriction {
+pub enum Range {
 	Any(Id),
 	All(Id),
 }
 
-pub type CardinalityRestriction = treeldr::prop::restriction::Cardinality;
+impl MapIds for Range {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		match self {
+			Self::Any(id) => id.map_ids_in(Some(Property::SomeValuesFrom.into()), f),
+			Self::All(id) => id.map_ids_in(Some(Property::AllValuesFrom.into()), f),
+		}
+	}
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PropertyRestriction {
-	Range(RangeRestriction),
-	Cardinality(CardinalityRestriction),
+pub enum Restriction {
+	Range(Range),
+	Cardinality(Cardinality),
+}
+
+impl MapIds for Restriction {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		if let Self::Range(r) = self {
+			r.map_ids(f)
+		}
+	}
 }
 
 #[derive(Clone)]
-pub struct Restriction<M> {
-	property: Meta<Id, M>,
-	restrictions: BTreeMap<PropertyRestriction, M>,
+pub struct Definition<M> {
+	property: Single<Id, M>,
+	restriction: Single<Restriction, M>,
 }
 
-impl<M> PartialEq for Restriction<M> {
-	fn eq(&self, other: &Self) -> bool {
-		*self.property == *other.property
-			&& self.restrictions.len() == other.restrictions.len()
-			&& self
-				.restrictions
-				.keys()
-				.zip(other.restrictions.keys())
-				.all(|(a, b)| a == b)
-	}
-}
-
-impl<M> Restriction<M> {
-	pub fn new(property: Meta<Id, M>) -> Self {
+impl<M> Default for Definition<M> {
+	fn default() -> Self {
 		Self {
-			property,
-			restrictions: BTreeMap::new(),
+			property: Single::default(),
+			restriction: Single::default(),
 		}
 	}
+}
 
-	pub fn add_restriction(&mut self, r: PropertyRestriction, metadata: M)
-	where
-		M: Merge,
-	{
-		use std::collections::btree_map::Entry;
-		match self.restrictions.entry(r) {
-			Entry::Vacant(entry) => {
-				entry.insert(metadata);
-			}
-			Entry::Occupied(mut entry) => entry.get_mut().merge_with(metadata),
+impl<M> Definition<M> {
+	pub fn property(&self) -> &Single<Id, M> {
+		&self.property
+	}
+
+	pub fn property_mut(&mut self) -> &mut Single<Id, M> {
+		&mut self.property
+	}
+
+	pub fn restriction(&self) -> &Single<Restriction, M> {
+		&self.restriction
+	}
+
+	pub fn restriction_mut(&mut self) -> &mut Single<Restriction, M> {
+		&mut self.restriction
+	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings {
+			on_property: self.property.iter(),
+			restriction: self.restriction.iter(),
 		}
 	}
 
 	pub fn build(
-		self,
-		nodes: &context::allocated::Nodes<M>,
-	) -> Result<treeldr::ty::Description<M>, Error<M>>
+		&self,
+		context: &Context<M>,
+		as_resource: &treeldr::node::Data<M>,
+		meta: &M,
+	) -> Result<treeldr::ty::restriction::Definition<M>, Error<M>>
 	where
 		M: Clone + Merge,
 	{
-		let Meta(prop_id, prop_causes) = self.property;
-		let prop_ref = nodes.require_property(prop_id, &prop_causes)?;
+		let prop_ref = self
+			.property
+			.clone()
+			.into_required_property_at_node_binding(
+				context,
+				as_resource.id,
+				Property::OnProperty,
+				meta,
+			)?;
+		let restriction = self
+			.restriction
+			.clone()
+			.try_unwrap()
+			.map_err(|_| todo!())?
+			.ok_or_else(|| todo!())?;
 
-		let mut restrictions = treeldr::prop::Restrictions::new();
-		for (restriction, restriction_causes) in self.restrictions {
-			if let Err(treeldr::prop::restriction::Contradiction) =
-				restrictions.restrict(restriction.build(nodes, &restriction_causes)?)
-			{
-				return Ok(treeldr::ty::Description::Empty);
-			}
-		}
-
-		let result =
-			treeldr::ty::Restriction::new(Meta::new(**prop_ref, prop_causes), restrictions);
-		Ok(treeldr::ty::Description::Restriction(result))
+		Ok(treeldr::ty::restriction::Definition::new(
+			prop_ref,
+			restriction.build(context, as_resource.id, meta.clone())?,
+		))
 	}
 }
 
-impl PropertyRestriction {
+impl<M: Merge> MapIds for Definition<M> {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		self.property
+			.map_ids_in(Some(Property::OnProperty.into()), &f);
+		self.restriction.map_ids(f)
+	}
+}
+
+impl Restriction {
 	pub fn build<M>(
 		self,
-		nodes: &context::allocated::Nodes<M>,
-		causes: &M,
-	) -> Result<treeldr::prop::Restriction<M>, Error<M>>
+		context: &Context<M>,
+		id: Id,
+		meta: M,
+	) -> Result<Meta<treeldr::ty::Restriction, M>, Error<M>>
+	where
+		M: Clone,
+	{
+		let r = match self {
+			Self::Range(r) => treeldr::ty::Restriction::Range(r.build(context, id, &meta)?),
+			Self::Cardinality(c) => treeldr::ty::Restriction::Cardinality(c),
+		};
+
+		Ok(Meta(r, meta))
+	}
+
+	pub fn as_binding(&self) -> ClassBinding {
+		match self {
+			Self::Range(r) => r.as_binding(),
+			Self::Cardinality(r) => match r {
+				Cardinality::AtLeast(v) => ClassBinding::MinCardinality(*v),
+				Cardinality::AtMost(v) => ClassBinding::MaxCardinality(*v),
+				Cardinality::Exactly(v) => ClassBinding::Cardinality(*v),
+			},
+		}
+	}
+}
+
+impl Range {
+	pub fn build<M>(
+		self,
+		context: &Context<M>,
+		id: Id,
+		meta: &M,
+	) -> Result<treeldr::ty::restriction::Range, Error<M>>
 	where
 		M: Clone,
 	{
 		match self {
-			Self::Range(r) => Ok(treeldr::prop::Restriction::Range(r.build(nodes, causes)?)),
-			Self::Cardinality(c) => Ok(treeldr::prop::Restriction::Cardinality(c)),
+			Self::Any(ty_id) => {
+				let ty_ref = context
+					.require_type_id(ty_id)
+					.map_err(|e| e.at_node_property(id, Property::SomeValuesFrom, meta.clone()))?;
+				Ok(treeldr::ty::restriction::Range::Any(ty_ref))
+			}
+			Self::All(ty_id) => {
+				let ty_ref = context
+					.require_type_id(ty_id)
+					.map_err(|e| e.at_node_property(id, Property::AllValuesFrom, meta.clone()))?;
+				Ok(treeldr::ty::restriction::Range::All(ty_ref))
+			}
+		}
+	}
+
+	pub fn as_binding(&self) -> ClassBinding {
+		match self {
+			Self::Any(v) => ClassBinding::SomeValuesFrom(*v),
+			Self::All(v) => ClassBinding::AllValuesFrom(*v),
 		}
 	}
 }
 
-impl RangeRestriction {
-	pub fn build<M>(
-		self,
-		nodes: &context::allocated::Nodes<M>,
-		causes: &M,
-	) -> Result<treeldr::prop::restriction::Range<M>, Error<M>>
-	where
-		M: Clone,
-	{
+pub enum ClassBinding {
+	OnProperty(Id),
+	SomeValuesFrom(Id),
+	AllValuesFrom(Id),
+	MinCardinality(u64),
+	MaxCardinality(u64),
+	Cardinality(u64),
+}
+
+pub type Binding = ClassBinding;
+
+impl ClassBinding {
+	pub fn property(&self) -> Property {
 		match self {
-			Self::Any(id) => {
-				let ty_ref = nodes.require_type(id, causes)?;
-				Ok(treeldr::prop::restriction::Range::Any(**ty_ref))
-			}
-			Self::All(id) => {
-				let ty_ref = nodes.require_type(id, causes)?;
-				Ok(treeldr::prop::restriction::Range::All(**ty_ref))
-			}
+			Self::OnProperty(_) => Property::OnProperty,
+			Self::SomeValuesFrom(_) => Property::SomeValuesFrom,
+			Self::AllValuesFrom(_) => Property::AllValuesFrom,
+			Self::MinCardinality(_) => Property::MinCardinality,
+			Self::MaxCardinality(_) => Property::MaxCardinality,
+			Self::Cardinality(_) => Property::Cardinality,
 		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::OnProperty(v) => BindingValueRef::Id(*v),
+			Self::SomeValuesFrom(v) => BindingValueRef::Id(*v),
+			Self::AllValuesFrom(v) => BindingValueRef::Id(*v),
+			Self::MinCardinality(v) => BindingValueRef::U64(*v),
+			Self::MaxCardinality(v) => BindingValueRef::U64(*v),
+			Self::Cardinality(v) => BindingValueRef::U64(*v),
+		}
+	}
+}
+
+pub struct ClassBindings<'a, M> {
+	on_property: single::Iter<'a, Id, M>,
+	restriction: single::Iter<'a, Restriction, M>,
+}
+
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.on_property
+			.next()
+			.map(Meta::into_cloned_value)
+			.map(|m| m.map(ClassBinding::OnProperty))
+			.or_else(|| {
+				self.restriction
+					.next()
+					.map(|m| m.map(Restriction::as_binding))
+			})
 	}
 }

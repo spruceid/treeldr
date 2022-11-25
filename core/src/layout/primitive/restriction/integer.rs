@@ -4,7 +4,7 @@ use locspan_derive::{
 	StrippedEq, StrippedHash, StrippedOrd, StrippedPartialEq, StrippedPartialOrd,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Restriction {
 	MinInclusive(i64),
 	MaxInclusive(i64),
@@ -143,5 +143,14 @@ impl<'a, M> Iterator for Iter<'a, M> {
 			.take()
 			.map(|m| m.map(Restriction::MinInclusive))
 			.or_else(|| self.max.take().map(|m| m.map(Restriction::MaxInclusive)))
+	}
+}
+
+impl<'a, M> DoubleEndedIterator for Iter<'a, M> {
+	fn next_back(&mut self) -> Option<Self::Item> {
+		self.max
+			.take()
+			.map(|m| m.map(Restriction::MaxInclusive))
+			.or_else(|| self.min.take().map(|m| m.map(Restriction::MinInclusive)))
 	}
 }

@@ -8,7 +8,7 @@ use json_ld::{
 use locspan::{BorrowStripped, Span};
 use rdf_types::{IndexVocabulary, IriVocabulary, VocabularyMut};
 use static_iref::iri;
-use treeldr::{BlankIdIndex, Id, IriIndex};
+use treeldr::{BlankIdIndex, Id, IriIndex, TId};
 use treeldr_build::Document;
 use treeldr_syntax::Parse;
 
@@ -79,9 +79,7 @@ impl Test {
 				let mut vocabulary = IndexVocabulary::new();
 				let mut generator = rdf_types::generator::Blank::new();
 
-				context
-					.apply_built_in_definitions(&mut vocabulary, &mut generator)
-					.unwrap();
+				context.apply_built_in_definitions(&mut vocabulary, &mut generator);
 				let mut local_context = treeldr_syntax::build::LocalContext::new(Some(
 					iri!("http://www.example.com").into(),
 				));
@@ -94,17 +92,13 @@ impl Test {
 				)
 				.expect("build error");
 				ast.into_value()
-					.relate(
+					.define(
 						&mut local_context,
 						&mut context,
 						&mut vocabulary,
 						&mut generator,
 					)
 					.expect("build error");
-
-				let context = context
-					.simplify(&mut vocabulary, &mut generator)
-					.expect("simplification failed");
 
 				let model = context
 					.build(&mut vocabulary, &mut generator)
@@ -113,11 +107,13 @@ impl Test {
 				let layouts: Vec<_> = layouts
 					.into_iter()
 					.map(|iri| {
-						model
-							.require_layout(Id::Iri(
-								vocabulary.get(Iri::from_str(iri).unwrap()).unwrap(),
-							))
-							.unwrap()
+						let id: TId<treeldr::Layout> = TId::new(Id::Iri(
+							vocabulary.get(Iri::from_str(iri).unwrap()).unwrap(),
+						));
+
+						model.require(id).unwrap();
+
+						id
 					})
 					.collect();
 
@@ -163,9 +159,7 @@ impl Test {
 				let mut vocabulary = rdf_types::IndexVocabulary::new();
 				let mut generator = rdf_types::generator::Blank::new();
 
-				context
-					.apply_built_in_definitions(&mut vocabulary, &mut generator)
-					.unwrap();
+				context.apply_built_in_definitions(&mut vocabulary, &mut generator);
 				let mut local_context = treeldr_syntax::build::LocalContext::new(Some(
 					iri!("http://www.example.com").into(),
 				));
@@ -178,17 +172,13 @@ impl Test {
 				)
 				.expect("build error");
 				ast.into_value()
-					.relate(
+					.define(
 						&mut local_context,
 						&mut context,
 						&mut vocabulary,
 						&mut generator,
 					)
 					.expect("build error");
-
-				let context = context
-					.simplify(&mut vocabulary, &mut generator)
-					.expect("simplification failed");
 
 				let model = context
 					.build(&mut vocabulary, &mut generator)
@@ -197,11 +187,13 @@ impl Test {
 				let layouts: Vec<_> = layouts
 					.into_iter()
 					.map(|iri| {
-						model
-							.require_layout(Id::Iri(
-								vocabulary.get(Iri::from_str(iri).unwrap()).unwrap(),
-							))
-							.unwrap()
+						let id: TId<treeldr::Layout> = TId::new(Id::Iri(
+							vocabulary.get(Iri::from_str(iri).unwrap()).unwrap(),
+						));
+
+						model.require(id).unwrap();
+
+						id
 					})
 					.collect();
 
