@@ -16,7 +16,7 @@ pub struct Definition<M> {
 	domain: Multiple<Id, M>,
 
 	/// Range.
-	range: Single<Id, M>,
+	range: Multiple<Id, M>,
 
 	/// Is the property required.
 	required: Single<bool, M>,
@@ -26,7 +26,7 @@ impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
 			domain: Multiple::default(),
-			range: Single::default(),
+			range: Multiple::default(),
 			required: Single::default(),
 		}
 	}
@@ -37,11 +37,11 @@ impl<M> Definition<M> {
 		Self::default()
 	}
 
-	pub fn range(&self) -> &Single<Id, M> {
+	pub fn range(&self) -> &Multiple<Id, M> {
 		&self.range
 	}
 
-	pub fn range_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn range_mut(&mut self) -> &mut Multiple<Id, M> {
 		&mut self.range
 	}
 
@@ -78,12 +78,13 @@ impl<M> Definition<M> {
 	where
 		M: Clone + Merge,
 	{
-		let range = self.range.clone().into_required_type_at_node_binding(
-			context,
-			as_resource.id,
-			RdfProperty::Range,
-			&meta,
-		)?;
+		let mut range = Multiple::default();
+		for Meta(range_id, range_causes) in &self.range {
+			let range_ref = context.require_type_id(*range_id).map_err(|e| {
+				e.at_node_property(as_resource.id, RdfProperty::Range, range_causes.clone())
+			})?;
+			range.insert(Meta(range_ref, range_causes.clone()))
+		}
 
 		let required = self
 			.required
@@ -148,7 +149,7 @@ impl ClassBinding {
 
 pub struct ClassBindings<'a, M> {
 	domain: multiple::Iter<'a, Id, M>,
-	range: single::Iter<'a, Id, M>,
+	range: multiple::Iter<'a, Id, M>,
 	required: single::Iter<'a, bool, M>,
 }
 
