@@ -206,6 +206,15 @@ impl<T> TId<T> {
 	}
 }
 
+impl<T, V> contextual::DisplayWithContext<V> for TId<T>
+where
+	Id: contextual::DisplayWithContext<V>,
+{
+	fn fmt_with(&self, context: &V, f: &mut fmt::Formatter) -> fmt::Result {
+		self.0.fmt_with(context, f)
+	}
+}
+
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Copy(bound = ""))]
 /// Typed Resource reference.

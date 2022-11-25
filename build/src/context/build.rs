@@ -24,18 +24,28 @@ impl<M: Clone> Context<M> {
 	where
 		M: Clone + Merge,
 	{
+		log::debug!("computing layout intersections...");
 		self.compute_layout_intersections(vocabulary, generator)?;
 
-		self.simplify_composite_types_and_layouts();
-		self.remove_unused_nodes();
-		self.unify(vocabulary, generator);
+		log::debug!("simplifying composite types and layouts...");
 		self.simplify_composite_types_and_layouts();
 		self.remove_unused_nodes();
 
+		log::debug!("unifying blank nodes...");
+		self.unify(vocabulary, generator);
+
+		log::debug!("simplifying composite types and layouts...");
+		self.simplify_composite_types_and_layouts();
+		self.remove_unused_nodes();
+
+		log::debug!("assigning default layouts...");
 		self.assign_default_layouts(vocabulary, generator);
+
+		log::debug!("assigning default component names...");
 		let layouts_relations = self.compute_layouts_relations();
 		self.assign_default_names(vocabulary, &layouts_relations);
 
+		log::debug!("building...");
 		let mut nodes = BTreeMap::new();
 		for (id, node) in &self.nodes {
 			if let Some(node) = node.build(self)? {
@@ -43,6 +53,7 @@ impl<M: Clone> Context<M> {
 			}
 		}
 
+		log::debug!("done.");
 		Ok(Model::from_parts(nodes))
 	}
 }

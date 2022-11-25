@@ -127,7 +127,7 @@ impl Command {
 		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
 		M: Clone + Send + Sync,
 	{
-		log::info!("generating JSON Schema.");
+		log::info!("generating JSON-LD context...");
 		match self.try_execute(vocabulary, files, model).await {
 			Ok(()) => (),
 			Err(e) => {

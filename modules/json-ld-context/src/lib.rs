@@ -7,7 +7,7 @@ use json_ld::{
 use locspan::{BorrowStripped, Meta};
 use rdf_types::{Vocabulary, VocabularyMut};
 use shelves::{Ref, Shelf};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use treeldr::{
 	vocab::{Term, TreeLdr},
@@ -118,6 +118,7 @@ impl<V: Vocabulary, M> Default for Options<V, M> {
 }
 
 pub struct LocalContext {
+	included_layouts: HashSet<TId<treeldr::Layout>>,
 	terms: BTreeMap<String, TermDefinition>,
 	parent: ParentContext,
 	do_propagate: bool,
@@ -126,6 +127,7 @@ pub struct LocalContext {
 impl LocalContext {
 	pub fn new(parent: ParentContext, do_propagate: bool) -> Self {
 		Self {
+			included_layouts: HashSet::new(),
 			terms: BTreeMap::new(),
 			parent,
 			do_propagate,
@@ -711,6 +713,26 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		}
 	}
 
+	pub fn context_contains_layout(
+		&self,
+		context_ref: Ref<LocalContext>,
+		layout_ref: TId<treeldr::Layout>,
+	) -> bool {
+		let context = self.contexts.get(context_ref).unwrap();
+
+		if context.included_layouts.contains(&layout_ref) {
+			return true;
+		}
+
+		if let ParentContext::Intern(parent_ref) = context.parent {
+			if self.context_contains_layout(parent_ref, layout_ref) {
+				return true;
+			}
+		}
+
+		false
+	}
+
 	pub fn insert_layout_terms(
 		&mut self,
 		vocabulary: &V,
@@ -718,6 +740,10 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		layout_ref: TId<treeldr::Layout>,
 		type_scoped_context: bool,
 	) -> Result<(), Error> {
+		if self.context_contains_layout(context_ref, layout_ref) {
+			return Ok(());
+		}
+
 		let layout = self.model.get(layout_ref).unwrap();
 
 		use treeldr::layout::Description;
@@ -776,6 +802,9 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 						}
 					}
 				}
+
+				let context = self.contexts.get_mut(context_ref).unwrap();
+				context.included_layouts.insert(layout_ref);
 
 				// otherwise, include the fields directly in this context.
 				for field_id in s.fields() {
@@ -1107,18 +1136,25 @@ where
 		.insert(LocalContext::new(ParentContext::Extern, true));
 
 	for layout_ref in layouts {
+		log::debug!("inserting layout `{}`...", layout_ref.with(&*vocabulary));
 		builder
 			.insert_layout_terms(vocabulary, context_ref, *layout_ref, false)
 			.map_err(GenerateError::Error)?;
 	}
 
+	log::debug!("simplifying context...");
 	builder
 		.simplify(vocabulary, loader)
 		.await
 		.map_err(GenerateError::Simplify)?;
-	builder
+
+	log::debug!("simplifying context...");
+	let result = builder
 		.build(vocabulary, context_ref)
-		.map_err(GenerateError::Error)
+		.map_err(GenerateError::Error);
+
+	log::debug!("done.");
+	result
 }
 
 fn generate_primitive_type<M>(
