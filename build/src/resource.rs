@@ -406,9 +406,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, component::Type::Layout) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			eprintln!("not a layout: {:?}", self.data.id);
-			Ok(treeldr::TId::new(self.data.id))
-			// Err(NodeTypeInvalid { id: self.data.id, expected: component::Type::Layout.into(), found: self.data.type_.clone() })
+			Err(NodeTypeInvalid {
+				id: self.data.id,
+				expected: component::Type::Layout.into(),
+				found: self.data.type_.clone(),
+			})
 		}
 	}
 

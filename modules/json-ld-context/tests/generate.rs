@@ -77,19 +77,7 @@ impl Test {
 					treeldr_syntax::Document::parse_str(&input, |span| span).expect("parse error");
 				let mut context = treeldr_build::Context::new();
 				let mut vocabulary = IndexVocabulary::new();
-
-				pub struct DebugGenerator(rdf_types::generator::Blank);
-
-				impl rdf_types::Generator<IndexVocabulary<IriIndex>> for DebugGenerator {
-					fn next(&mut self, vocabulary: &mut IndexVocabulary<IriIndex>) -> treeldr::Id {
-						let id = self.0.next(vocabulary);
-						// eprintln!("generating {:?}", id);
-						// assert_ne!(id, Id::Blank(10.into()));
-						id
-					}
-				}
-
-				let mut generator = DebugGenerator(rdf_types::generator::Blank::new());
+				let mut generator = rdf_types::generator::Blank::new();
 
 				context.apply_built_in_definitions(&mut vocabulary, &mut generator);
 				let mut local_context = treeldr_syntax::build::LocalContext::new(Some(

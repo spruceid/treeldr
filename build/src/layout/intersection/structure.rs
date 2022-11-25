@@ -214,7 +214,6 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Field<M> {
 				}
 
 				let id = generator.next(vocabulary);
-				eprintln!("new intersection layout field {:?}", id);
 
 				let node = context.declare_layout_field(id, meta);
 				*node.as_component_mut().name_mut() = self.name;
