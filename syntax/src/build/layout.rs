@@ -1,11 +1,15 @@
 use locspan::Meta;
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{metadata::Merge, BlankIdIndex, IriIndex, Id, vocab::{Term, TreeLdr}};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{
+	metadata::Merge,
+	vocab::{Term, TreeLdr},
+	BlankIdIndex, Id, IriIndex,
+};
 use treeldr_build::Context;
 
-use crate::{LayoutFieldRestriction, LayoutFieldRangeRestriction};
+use crate::{LayoutFieldRangeRestriction, LayoutFieldRestriction};
 
-use super::{Declare, LocalContext, Error, Build, LocalError};
+use super::{Build, Declare, Error, LocalContext, LocalError};
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::LayoutDefinition<M>, M> {
 	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -39,7 +43,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 			.id
 			.build(local_context, context, vocabulary, generator)?;
 
-		if let Some(comment) = def.doc.map(|doc| doc.build(local_context, context, vocabulary, generator)).transpose()?.flatten() {
+		if let Some(comment) = def
+			.doc
+			.map(|doc| doc.build(local_context, context, vocabulary, generator))
+			.transpose()?
+			.flatten()
+		{
 			let node = context.get_mut(id).unwrap();
 			node.comment_mut().insert(comment)
 		}
@@ -79,7 +88,10 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 					.unwrap()
 					.as_layout_mut()
 					.description_mut()
-					.insert(Meta(treeldr_build::layout::Description::Struct(fields_list), fields_loc));
+					.insert(Meta(
+						treeldr_build::layout::Description::Struct(fields_list),
+						fields_loc,
+					));
 			}
 			Meta(crate::LayoutDescription::Alias(expr), expr_loc) => {
 				local_context.alias_id = Some(Meta(id, id_loc));
@@ -110,7 +122,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 			}
 			crate::OuterLayoutExpr::Union(label, options) => {
 				let Meta(id, _) =
-					local_context.anonymous_id(Some(label), vocabulary, generator, loc.clone());
+					local_context.anonymous_id(label, vocabulary, generator, loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, loc.clone());
 				}
@@ -144,10 +156,11 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 
 						context.declare_layout_variant(variant_id, loc.clone());
 
-						let variant = context
-							.get_mut(variant_id)
-							.unwrap();
-						variant.as_formatted_mut().format_mut().insert(Meta(layout, layout_loc));
+						let variant = context.get_mut(variant_id).unwrap();
+						variant
+							.as_formatted_mut()
+							.format_mut()
+							.insert(Meta(layout, layout_loc));
 
 						if let Some(name) = variant_name {
 							variant.as_component_mut().name_mut().insert(name)
@@ -158,7 +171,10 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 				)?;
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut();
-				layout.description_mut().insert(Meta(treeldr_build::layout::Description::Enum(variants), loc.clone()));
+				layout.description_mut().insert(Meta(
+					treeldr_build::layout::Description::Enum(variants),
+					loc.clone(),
+				));
 				if local_context.implicit_definition {
 					layout.ty_mut().insert(Meta(id, loc.clone()))
 				}
@@ -167,7 +183,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 			}
 			crate::OuterLayoutExpr::Intersection(label, layouts) => {
 				let Meta(id, _) =
-					local_context.anonymous_id(Some(label), vocabulary, generator, loc.clone());
+					local_context.anonymous_id(label, vocabulary, generator, loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, loc.clone());
 				}
@@ -184,7 +200,9 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 				)?;
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut();
-				layout.intersection_of_mut().insert(Meta(layouts_list, loc.clone()));
+				layout
+					.intersection_of_mut()
+					.insert(Meta(layouts_list, loc.clone()));
 				if local_context.implicit_definition {
 					layout.ty_mut().insert(Meta(id, loc.clone()));
 				}
@@ -257,25 +275,15 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 						}
 
 						let layout = context.get_mut(alias_id).unwrap().as_layout_mut();
-						layout.description_mut().insert(Meta(treeldr_build::layout::Description::Alias(*id), loc.clone()));
+						layout.description_mut().insert(Meta(
+							treeldr_build::layout::Description::Alias(*id),
+							loc.clone(),
+						));
 
 						Ok(Meta(alias_id, loc))
 					}
 					None => Ok(id),
 				}
-			}
-			crate::InnerLayoutExpr::Primitive(p) => {
-				let Meta(id, _) =
-					local_context.anonymous_id(None, vocabulary, generator, loc.clone());
-
-				if id.is_blank() {
-					context.declare_layout(id, loc.clone());
-				}
-
-				let layout = context.get_mut(id).unwrap().as_layout_mut();
-				layout.description_mut().insert(Meta(treeldr_build::layout::Description::Primitive(p), loc.clone()));
-
-				Ok(Meta(id, loc))
 			}
 			crate::InnerLayoutExpr::Reference(ty_expr) => {
 				let Meta(id, _) =
@@ -297,9 +305,15 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 
 				Ok(Meta(id, loc))
 			}
-			crate::InnerLayoutExpr::Literal(lit) => {
-				let id = local_context.anonymous_id(None, vocabulary, generator, loc.clone());
-				local_context.generate_literal_layout(&id, context, vocabulary, generator, Meta(lit, loc))?;
+			crate::InnerLayoutExpr::Literal(label, lit) => {
+				let id = local_context.anonymous_id(label, vocabulary, generator, loc.clone());
+				local_context.generate_literal_layout(
+					&id,
+					context,
+					vocabulary,
+					generator,
+					Meta(lit, loc),
+				)?;
 				Ok(id)
 			}
 			crate::InnerLayoutExpr::FieldRestriction(r) => {
@@ -310,8 +324,13 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 					context.declare_layout(id, loc.clone());
 				}
 
-				let name = r.alias.map(|a| a.build(local_context, context, vocabulary, generator)).transpose()?;
-				let prop_id = r.prop.build(local_context, context, vocabulary, generator)?;
+				let name = r
+					.alias
+					.map(|a| a.build(local_context, context, vocabulary, generator))
+					.transpose()?;
+				let prop_id = r
+					.prop
+					.build(local_context, context, vocabulary, generator)?;
 
 				let format = match r.restriction {
 					Meta(LayoutFieldRestriction::Cardinality(_), _) => todo!(),
@@ -319,9 +338,13 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 						LayoutFieldRangeRestriction::All(expr) => {
 							expr.build(local_context, context, vocabulary, generator)?
 						}
-						LayoutFieldRangeRestriction::Any(_) => todo!()
-					}
+						LayoutFieldRangeRestriction::Any(_) => todo!(),
+					},
 				};
+
+				let container_id = generator.next(vocabulary);
+				let container = context.declare_layout(container_id, loc.clone());
+				container.as_layout_mut().set_one_or_many(format);
 
 				let field_id = generator.next(vocabulary);
 				let field = context.declare_layout_field(field_id, loc.clone());
@@ -330,10 +353,17 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 					field.as_component_mut().name_mut().insert(name)
 				}
 
-				field.as_formatted_mut().format_mut().insert(format);
+				field
+					.as_formatted_mut()
+					.format_mut()
+					.insert(Meta(container_id, loc.clone()));
 				field.as_layout_field_mut().property_mut().insert(prop_id);
 
-				let fields_id = context.create_list(vocabulary, generator, Some(Meta(field_id.into_term(), loc.clone())));
+				let fields_id = context.create_list(
+					vocabulary,
+					generator,
+					Some(Meta(field_id.into_term(), loc.clone())),
+				);
 
 				let layout = context.get_mut(id).unwrap().as_layout_mut();
 				layout.set_fields(Meta(fields_id, loc.clone()));
@@ -342,7 +372,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 			}
 			crate::InnerLayoutExpr::Array(label, item) => {
 				let Meta(id, _) =
-					local_context.anonymous_id(Some(label), vocabulary, generator, loc.clone());
+					local_context.anonymous_id(label, vocabulary, generator, loc.clone());
 				if id.is_blank() {
 					context.declare_layout(id, loc.clone());
 				}
@@ -430,20 +460,25 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 							Some(multiple_loc) => {
 								// Wrap inside non-empty set.
 								let restriction_id = generator.next(vocabulary);
-								let restriction = context.declare_layout_restriction(id, required_loc.clone());
-								use treeldr_build::layout::{Restriction, restriction};
+								let restriction = context.declare_layout_restriction(
+									restriction_id,
+									required_loc.clone(),
+								);
+								use treeldr_build::layout::{restriction, Restriction};
 								restriction.as_layout_restriction_mut().restriction_mut().insert(Meta(
-									Restriction::Container(restriction::container::Restriction::Cardinal(treeldr::layout::restriction::cardinal::Restriction::Min(1))),
+									Restriction::Container(restriction::container::ContainerRestriction::Cardinal(treeldr::layout::restriction::cardinal::Restriction::Min(1))),
 									required_loc.clone()
 								));
-								let restrictions_list = context.create_list(vocabulary, generator, Some(Meta(restriction_id.into_term(), required_loc.clone())));
+								let restrictions_list = context.create_list(
+									vocabulary,
+									generator,
+									Some(Meta(restriction_id.into_term(), required_loc.clone())),
+								);
 
 								let container_id = generator.next(vocabulary);
 								context.declare_layout(container_id, multiple_loc.clone());
-								let container_layout = context
-									.get_mut(container_id)
-									.unwrap()
-									.as_layout_mut();
+								let container_layout =
+									context.get_mut(container_id).unwrap().as_layout_mut();
 								let Meta(item_layout_id, item_layout_loc) = layout_id;
 
 								match single_loc {
@@ -454,7 +489,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 										));
 									}
 									None => {
-										container_layout.set_set(Meta(item_layout_id, multiple_loc));
+										container_layout
+											.set_set(Meta(item_layout_id, multiple_loc));
 									}
 								}
 
@@ -468,10 +504,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 								// Wrap inside non-empty set.
 								let container_id = generator.next(vocabulary);
 								context.declare_layout(container_id, required_loc.clone());
-								let container_layout = context
-									.get_mut(container_id)
-									.unwrap()
-									.as_layout_mut();
+								let container_layout =
+									context.get_mut(container_id).unwrap().as_layout_mut();
 								let Meta(item_layout_id, item_layout_loc) = layout_id;
 								container_layout.set_required(Meta(item_layout_id, required_loc));
 								Meta(container_id, item_layout_loc)
@@ -484,10 +518,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 								// Wrap inside set.
 								let container_id = generator.next(vocabulary);
 								context.declare_layout(container_id, multiple_loc.clone());
-								let container_layout = context
-									.get_mut(container_id)
-									.unwrap()
-									.as_layout_mut();
+								let container_layout =
+									context.get_mut(container_id).unwrap().as_layout_mut();
 								let Meta(item_layout_id, item_layout_loc) = layout_id;
 
 								match single_loc {
@@ -498,7 +530,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 										));
 									}
 									None => {
-										container_layout.set_set(Meta(item_layout_id, multiple_loc));
+										container_layout
+											.set_set(Meta(item_layout_id, multiple_loc));
 									}
 								}
 
@@ -509,10 +542,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 								let container_id = generator.next(vocabulary);
 								let Meta(item_layout_id, item_layout_loc) = layout_id;
 								context.declare_layout(container_id, item_layout_loc.clone());
-								let container_layout = context
-									.get_mut(container_id)
-									.unwrap()
-									.as_layout_mut();
+								let container_layout =
+									context.get_mut(container_id).unwrap().as_layout_mut();
 								container_layout
 									.set_option(Meta(item_layout_id, item_layout_loc.clone()));
 								Meta(container_id, item_layout_loc)
@@ -526,7 +557,11 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 			None => None,
 		};
 
-		let doc = def.doc.map(|doc| doc.build(local_context, context, vocabulary, generator)).transpose()?.flatten();
+		let doc = def
+			.doc
+			.map(|doc| doc.build(local_context, context, vocabulary, generator))
+			.transpose()?
+			.flatten();
 
 		context.declare_layout_field(id, loc.clone());
 		let node = context.get_mut(id).unwrap();
@@ -534,13 +569,17 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 			node.comment_mut().insert(comment)
 		}
 
-		node.as_component_mut().name_mut().insert(Meta(name, name_loc));
+		node.as_component_mut()
+			.name_mut()
+			.insert(Meta(name, name_loc));
 
 		if let Some(layout) = layout {
 			node.as_formatted_mut().format_mut().insert(layout);
 		}
 
-		node.as_layout_field_mut().property_mut().insert(Meta(prop_id, prop_id_loc));
+		node.as_layout_field_mut()
+			.property_mut()
+			.insert(Meta(prop_id, prop_id_loc));
 
 		Ok(Meta(id, loc))
 	}

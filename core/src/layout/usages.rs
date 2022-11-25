@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{Layout, TId, Model};
+use crate::{Layout, Model, TId};
 
 pub struct Usages {
 	map: HashMap<TId<Layout>, HashSet<TId<Layout>>>,

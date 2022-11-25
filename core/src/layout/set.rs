@@ -1,4 +1,4 @@
-use super::Restrictions;
+use super::ContainerRestrictions;
 use crate::{Layout, TId};
 use locspan::Meta;
 
@@ -9,18 +9,12 @@ pub struct Set<M> {
 	item: Meta<TId<Layout>, M>,
 
 	/// Restrictions.
-	restrictions: Restrictions<M>,
+	restrictions: ContainerRestrictions<M>,
 }
 
 impl<M> Set<M> {
-	pub fn new(
-		item: Meta<TId<Layout>, M>,
-		restrictions: Restrictions<M>,
-	) -> Self {
-		Self {
-			item,
-			restrictions,
-		}
+	pub fn new(item: Meta<TId<Layout>, M>, restrictions: ContainerRestrictions<M>) -> Self {
+		Self { item, restrictions }
 	}
 
 	pub fn item_layout(&self) -> &Meta<TId<Layout>, M> {
@@ -31,7 +25,7 @@ impl<M> Set<M> {
 		self.item = item
 	}
 
-	pub fn restrictions(&self) -> &Restrictions<M> {
+	pub fn restrictions(&self) -> &ContainerRestrictions<M> {
 		&self.restrictions
 	}
 

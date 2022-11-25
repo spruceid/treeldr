@@ -3,8 +3,8 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
 use shelves::{Ref, Shelf};
-use std::collections::HashMap;
-use treeldr::{BlankIdIndex, IriIndex};
+use std::collections::BTreeMap;
+use treeldr::{BlankIdIndex, IriIndex, TId};
 
 #[derive(Clone, Copy)]
 pub enum IdentType {
@@ -15,11 +15,11 @@ impl IdentType {
 	pub fn for_property<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
 		&self,
 		context: &Context<V, M>,
-		prop_ref: Ref<treeldr::prop::Definition<M>>,
+		prop_ref: TId<treeldr::Property>,
 	) -> TokenStream {
 		match self {
 			Self::RdfSubject => {
-				let prop = context.model().properties().get(prop_ref).unwrap();
+				let prop = context.model().get(prop_ref).unwrap();
 				match prop.id() {
 					treeldr::Id::Iri(id) => {
 						let iri = context.vocabulary().iri(&id).unwrap();
@@ -62,8 +62,8 @@ impl quote::ToTokens for Referenced<IdentType> {
 pub struct Context<'a, V, M> {
 	model: &'a treeldr::Model<M>,
 	vocabulary: &'a V,
-	modules: Shelf<Vec<Module<M>>>,
-	layouts: shelves::Map<treeldr::layout::Definition<M>, HashMap<usize, Type<M>>>,
+	modules: Shelf<Vec<Module>>,
+	layouts: BTreeMap<TId<treeldr::Layout>, Type>,
 	ident_type: IdentType,
 }
 
@@ -73,7 +73,7 @@ impl<'a, V, M> Context<'a, V, M> {
 			model,
 			vocabulary,
 			modules: Shelf::default(),
-			layouts: shelves::Map::default(),
+			layouts: BTreeMap::default(),
 			ident_type: IdentType::RdfSubject,
 		}
 	}
@@ -90,11 +90,11 @@ impl<'a, V, M> Context<'a, V, M> {
 		self.vocabulary
 	}
 
-	pub fn module(&self, r: Ref<Module<M>>) -> Option<&Module<M>> {
+	pub fn module(&self, r: Ref<Module>) -> Option<&Module> {
 		self.modules.get(r)
 	}
 
-	pub fn module_path(&self, r: Option<Ref<Module<M>>>) -> Path {
+	pub fn module_path(&self, r: Option<Ref<Module>>) -> Path {
 		match r {
 			Some(module_ref) => self
 				.module(module_ref)
@@ -104,7 +104,7 @@ impl<'a, V, M> Context<'a, V, M> {
 		}
 	}
 
-	pub fn parent_module_path(&self, r: Option<module::Parent<M>>) -> Option<Path> {
+	pub fn parent_module_path(&self, r: Option<module::Parent>) -> Option<Path> {
 		match r {
 			Some(module::Parent::Extern) => None,
 			Some(module::Parent::Ref(module_ref)) => Some(
@@ -116,15 +116,15 @@ impl<'a, V, M> Context<'a, V, M> {
 		}
 	}
 
-	pub fn layout_type(&self, r: Ref<treeldr::layout::Definition<M>>) -> Option<&Type<M>> {
-		self.layouts.get(r)
+	pub fn layout_type(&self, r: TId<treeldr::Layout>) -> Option<&Type> {
+		self.layouts.get(&r)
 	}
 
 	pub fn add_module(
 		&mut self,
-		parent: Option<Ref<Module<M>>>,
+		parent: Option<Ref<Module>>,
 		ident: proc_macro2::Ident,
-	) -> Ref<Module<M>> {
+	) -> Ref<Module> {
 		let r = self.modules.insert(Module::new(parent, ident));
 		if let Some(parent) = parent {
 			self.modules
@@ -136,18 +136,13 @@ impl<'a, V, M> Context<'a, V, M> {
 		r
 	}
 
-	pub fn add_layout(
-		&mut self,
-		module: Option<module::Parent<M>>,
-		layout_ref: Ref<treeldr::layout::Definition<M>>,
-	) {
+	pub fn add_layout(&mut self, module: Option<module::Parent>, layout_ref: TId<treeldr::Layout>) {
 		let layout = self
 			.model()
-			.layouts()
 			.get(layout_ref)
 			.expect("undefined described layout");
-		let label = layout.preferred_label(self.model()).map(String::from);
-		let doc = layout.preferred_documentation(self.model()).clone();
+		let label = layout.preferred_label().map(String::from);
+		let doc = layout.comment().clone_stripped();
 
 		self.layouts.insert(
 			layout_ref,

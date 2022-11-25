@@ -33,7 +33,7 @@ pub enum ParseError {
 
 pub type SpannedParseError = (ParseError, Span);
 
-pub type GenError = treeldr_rust_gen::Error<treeldr_load::Metadata>;
+pub type GenError = treeldr_rust_gen::Error;
 
 pub struct Inputs {
 	list: Vec<Input>,
@@ -206,7 +206,7 @@ pub struct Prefix {
 	/// Module content.
 	content: Vec<syn::Item>,
 
-	module: Option<treeldr_rust_gen::Ref<treeldr_rust_gen::Module<treeldr_load::Metadata>>>,
+	module: Option<treeldr_rust_gen::Ref<treeldr_rust_gen::Module>>,
 }
 
 pub struct PrefixAttributes {

@@ -1,6 +1,6 @@
-use crate::{Error, Single, single, resource::BindingValueRef, context::MapIds};
-use std::collections::BTreeMap;
+use crate::{context::MapIds, resource::BindingValueRef, single, Error, Single};
 use locspan::Meta;
+use std::collections::BTreeMap;
 use treeldr::{
 	metadata::Merge,
 	ty::data::{restriction, RegExp},
@@ -11,12 +11,20 @@ pub use treeldr::ty::data::restriction::Property;
 
 #[derive(Clone)]
 pub struct Definition<M> {
-	restriction: Single<Restriction, M>
+	restriction: Single<Restriction, M>,
+}
+
+impl<M> Default for Definition<M> {
+	fn default() -> Self {
+		Self {
+			restriction: Single::default(),
+		}
+	}
 }
 
 impl<M> Definition<M> {
 	pub fn new() -> Self {
-		Self { restriction: Single::default() }
+		Self::default()
 	}
 
 	pub fn restriction(&self) -> &Single<Restriction, M> {
@@ -28,16 +36,25 @@ impl<M> Definition<M> {
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
-		ClassBindings { restriction: self.restriction.iter() }
+		ClassBindings {
+			restriction: self.restriction.iter(),
+		}
 	}
 
-	pub fn build(&self) -> Result<Meta<Restriction, M>, Error<M>> where M: Clone {
-		self.restriction.clone().try_unwrap().map_err(|_| todo!())?.ok_or_else(|| todo!())
+	pub fn build(&self) -> Result<Meta<Restriction, M>, Error<M>>
+	where
+		M: Clone,
+	{
+		self.restriction
+			.clone()
+			.try_unwrap()
+			.map_err(|_| todo!())?
+			.ok_or_else(|| todo!())
 	}
 }
 
 impl<M: Merge> MapIds for Definition<M> {
-	fn map_ids(&mut self, _f: impl Fn(Id) -> Id) {
+	fn map_ids(&mut self, _f: impl Fn(Id, Option<crate::Property>) -> Id) {
 		// nothing.
 	}
 }
@@ -71,7 +88,7 @@ impl Numeric {
 			Self::MinInclusive(v) => NumericBindingRef::MinInclusive(v),
 			Self::MinExclusive(v) => NumericBindingRef::MinExclusive(v),
 			Self::MaxInclusive(v) => NumericBindingRef::MaxInclusive(v),
-			Self::MaxExclusive(v) => NumericBindingRef::MaxExclusive(v)
+			Self::MaxExclusive(v) => NumericBindingRef::MaxExclusive(v),
 		}
 	}
 }
@@ -88,7 +105,7 @@ impl String {
 		match self {
 			Self::MinLength(v) => StringBindingRef::MinLength(v),
 			Self::MaxLength(v) => StringBindingRef::MaxLength(v),
-			Self::Pattern(v) => StringBindingRef::Pattern(v)
+			Self::Pattern(v) => StringBindingRef::Pattern(v),
 		}
 	}
 }
@@ -132,18 +149,30 @@ impl<M> Restrictions<M> {
 		Ok(())
 	}
 
-	pub fn build_real(self, _id: Id) -> Result<restriction::real::Restrictions, Error<M>> {
+	pub fn build_real(
+		self,
+		_id: Id,
+		meta: M,
+	) -> Result<Meta<restriction::real::Restrictions, M>, Error<M>> {
 		use restriction::real::{Max, Min};
 		let mut r = restriction::real::Restrictions::default();
 
 		for restriction in self.map.into_keys() {
 			match restriction {
 				Restriction::Numeric(restriction) => match restriction {
-					Numeric::MinInclusive(value::Numeric::Real(min)) => r.add_min(Min::Included(min)),
-					Numeric::MinExclusive(value::Numeric::Real(min)) => r.add_min(Min::Excluded(min)),
-					Numeric::MaxInclusive(value::Numeric::Real(max)) => r.add_max(Max::Included(max)),
-					Numeric::MaxExclusive(value::Numeric::Real(max)) => r.add_max(Max::Excluded(max)),
-					_ => todo!()
+					Numeric::MinInclusive(value::Numeric::Real(min)) => {
+						r.add_min(Min::Included(min))
+					}
+					Numeric::MinExclusive(value::Numeric::Real(min)) => {
+						r.add_min(Min::Excluded(min))
+					}
+					Numeric::MaxInclusive(value::Numeric::Real(max)) => {
+						r.add_max(Max::Included(max))
+					}
+					Numeric::MaxExclusive(value::Numeric::Real(max)) => {
+						r.add_max(Max::Excluded(max))
+					}
+					_ => todo!(),
 				},
 				_ => {
 					todo!()
@@ -151,21 +180,33 @@ impl<M> Restrictions<M> {
 			}
 		}
 
-		Ok(r)
+		Ok(Meta(r, meta))
 	}
 
-	pub fn build_float(self, _id: Id) -> Result<restriction::float::Restrictions, Error<M>> {
+	pub fn build_float(
+		self,
+		_id: Id,
+		meta: M,
+	) -> Result<Meta<restriction::float::Restrictions, M>, Error<M>> {
 		use restriction::float::{Max, Min};
 		let mut r = restriction::float::Restrictions::default();
 
 		for restriction in self.map.into_keys() {
 			match restriction {
 				Restriction::Numeric(restriction) => match restriction {
-					Numeric::MinInclusive(value::Numeric::Float(min)) => r.add_min(Min::Included(min)),
-					Numeric::MinExclusive(value::Numeric::Float(min)) => r.add_min(Min::Excluded(min)),
-					Numeric::MaxInclusive(value::Numeric::Float(max)) => r.add_max(Max::Included(max)),
-					Numeric::MaxExclusive(value::Numeric::Float(max)) => r.add_max(Max::Excluded(max)),
-					_ => todo!()
+					Numeric::MinInclusive(value::Numeric::Float(min)) => {
+						r.add_min(Min::Included(min))
+					}
+					Numeric::MinExclusive(value::Numeric::Float(min)) => {
+						r.add_min(Min::Excluded(min))
+					}
+					Numeric::MaxInclusive(value::Numeric::Float(max)) => {
+						r.add_max(Max::Included(max))
+					}
+					Numeric::MaxExclusive(value::Numeric::Float(max)) => {
+						r.add_max(Max::Excluded(max))
+					}
+					_ => todo!(),
 				},
 				_ => {
 					todo!()
@@ -173,21 +214,33 @@ impl<M> Restrictions<M> {
 			}
 		}
 
-		Ok(r)
+		Ok(Meta(r, meta))
 	}
 
-	pub fn build_double(self, _id: Id) -> Result<restriction::double::Restrictions, Error<M>> {
+	pub fn build_double(
+		self,
+		_id: Id,
+		meta: M,
+	) -> Result<Meta<restriction::double::Restrictions, M>, Error<M>> {
 		use restriction::double::{Max, Min};
 		let mut r = restriction::double::Restrictions::default();
 
 		for restriction in self.map.into_keys() {
 			match restriction {
 				Restriction::Numeric(restriction) => match restriction {
-					Numeric::MinInclusive(value::Numeric::Double(min)) => r.add_min(Min::Included(min)),
-					Numeric::MinExclusive(value::Numeric::Double(min)) => r.add_min(Min::Excluded(min)),
-					Numeric::MaxInclusive(value::Numeric::Double(max)) => r.add_max(Max::Included(max)),
-					Numeric::MaxExclusive(value::Numeric::Double(max)) => r.add_max(Max::Excluded(max)),
-					_ => todo!()
+					Numeric::MinInclusive(value::Numeric::Double(min)) => {
+						r.add_min(Min::Included(min))
+					}
+					Numeric::MinExclusive(value::Numeric::Double(min)) => {
+						r.add_min(Min::Excluded(min))
+					}
+					Numeric::MaxInclusive(value::Numeric::Double(max)) => {
+						r.add_max(Max::Included(max))
+					}
+					Numeric::MaxExclusive(value::Numeric::Double(max)) => {
+						r.add_max(Max::Excluded(max))
+					}
+					_ => todo!(),
 				},
 				_ => {
 					todo!()
@@ -195,10 +248,14 @@ impl<M> Restrictions<M> {
 			}
 		}
 
-		Ok(r)
+		Ok(Meta(r, meta))
 	}
 
-	pub fn build_string(self, _id: Id) -> Result<restriction::string::Restrictions, Error<M>> {
+	pub fn build_string(
+		self,
+		_id: Id,
+		meta: M,
+	) -> Result<Meta<restriction::string::Restrictions, M>, Error<M>> {
 		let mut r = restriction::string::Restrictions::default();
 
 		for restriction in self.map.into_keys() {
@@ -214,7 +271,7 @@ impl<M> Restrictions<M> {
 			}
 		}
 
-		Ok(r)
+		Ok(Meta(r, meta))
 	}
 
 	pub fn build_date(self, _id: Id) -> Result<(), Error<M>> {
@@ -254,7 +311,7 @@ pub enum NumericBindingRef<'a> {
 	MinInclusive(&'a value::Numeric),
 	MinExclusive(&'a value::Numeric),
 	MaxInclusive(&'a value::Numeric),
-	MaxExclusive(&'a value::Numeric)
+	MaxExclusive(&'a value::Numeric),
 }
 
 impl<'a> NumericBindingRef<'a> {
@@ -263,7 +320,7 @@ impl<'a> NumericBindingRef<'a> {
 			Self::MinInclusive(_) => Property::MinInclusive,
 			Self::MinExclusive(_) => Property::MinExclusive,
 			Self::MaxInclusive(_) => Property::MaxInclusive,
-			Self::MaxExclusive(_) => Property::MaxExclusive
+			Self::MaxExclusive(_) => Property::MaxExclusive,
 		}
 	}
 
@@ -272,7 +329,7 @@ impl<'a> NumericBindingRef<'a> {
 			Self::MinInclusive(v) => BindingValueRef::Numeric(v),
 			Self::MinExclusive(v) => BindingValueRef::Numeric(v),
 			Self::MaxInclusive(v) => BindingValueRef::Numeric(v),
-			Self::MaxExclusive(v) => BindingValueRef::Numeric(v)
+			Self::MaxExclusive(v) => BindingValueRef::Numeric(v),
 		}
 	}
 }
@@ -288,7 +345,7 @@ impl<'a> StringBindingRef<'a> {
 		match self {
 			Self::MinLength(_) => Property::MinLength,
 			Self::MaxLength(_) => Property::MaxLength,
-			Self::Pattern(_) => Property::Pattern
+			Self::Pattern(_) => Property::Pattern,
 		}
 	}
 
@@ -296,7 +353,7 @@ impl<'a> StringBindingRef<'a> {
 		match self {
 			Self::MinLength(v) => BindingValueRef::Integer(v),
 			Self::MaxLength(v) => BindingValueRef::Integer(v),
-			Self::Pattern(v) => BindingValueRef::RegExp(v)
+			Self::Pattern(v) => BindingValueRef::RegExp(v),
 		}
 	}
 }
@@ -319,13 +376,13 @@ impl<'a> ClassBindingRef<'a> {
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::Numeric(b) => b.value(),
-			Self::String(b) => b.value()
+			Self::String(b) => b.value(),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
-	restriction: single::Iter<'a, Restriction, M>
+	restriction: single::Iter<'a, Restriction, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -334,6 +391,8 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	type Item = Meta<ClassBindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.restriction.next().map(|m| m.map(Restriction::as_binding))
+		self.restriction
+			.next()
+			.map(|m| m.map(Restriction::as_binding))
 	}
 }

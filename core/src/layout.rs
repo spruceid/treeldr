@@ -1,38 +1,41 @@
 use std::collections::HashMap;
 
 use crate::{
-	MetaOption, TId, ResourceType, component, Type, vocab, node
+	component,
+	node::{self, BindingValueRef},
+	vocab, MetaOption, Multiple, ResourceType, TId, Type,
 };
+use derivative::Derivative;
 use locspan::Meta;
 
-pub mod restriction;
 pub mod array;
-pub mod variant;
 pub mod enumeration;
+pub mod field;
 mod one_or_many;
 mod optional;
 pub mod primitive;
 mod reference;
 mod required;
+pub mod restriction;
 mod set;
-pub mod field;
 mod structure;
+pub mod variant;
 
 mod strongly_connected;
 mod usages;
 
-pub use restriction::{Restriction, Restrictions};
 pub use array::Array;
-pub use variant::Variant;
 pub use enumeration::Enum;
+pub use field::Field;
 pub use one_or_many::OneOrMany;
 pub use optional::Optional;
 pub use primitive::{restriction::Restricted as RestrictedPrimitive, Primitive};
 pub use reference::Reference;
 pub use required::Required;
+pub use restriction::{ContainerRestriction, ContainerRestrictions, Restrictions};
 pub use set::Set;
-pub use field::Field;
 pub use structure::Struct;
+pub use variant::Variant;
 
 pub use strongly_connected::StronglyConnectedLayouts;
 pub use usages::Usages;
@@ -40,7 +43,8 @@ pub use usages::Usages;
 pub struct Layout;
 
 impl ResourceType for Layout {
-	const TYPE: crate::Type = crate::Type::Resource(Some(node::Type::Component(Some(component::Type::Layout))));
+	const TYPE: crate::Type =
+		crate::Type::Resource(Some(node::Type::Component(Some(component::Type::Layout))));
 
 	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
 		resource.is_layout()
@@ -81,7 +85,10 @@ pub struct Definition<M> {
 	ty: MetaOption<TId<Type>, M>,
 
 	/// Layout description.
-	desc: Meta<Description<M>, M>
+	desc: Meta<Description<M>, M>,
+
+	/// Intersection.
+	intersection_of: MetaOption<Multiple<TId<Layout>, M>, M>,
 }
 
 /// Layout description.
@@ -151,17 +158,61 @@ impl<M> Description<M> {
 			_ => false,
 		}
 	}
+
+	pub fn array_semantics(&self) -> Option<&array::Semantics<M>> {
+		match self {
+			Self::Array(a) => a.semantics(),
+			_ => None,
+		}
+	}
+
+	pub fn as_binding_ref(&self) -> Option<DescriptionBindingRef<M>> {
+		match self {
+			Self::Never => None,
+			Self::Primitive(p) => p.as_binding_ref(),
+			Self::Reference(r) => Some(DescriptionBindingRef::Reference(**r.id_layout())),
+			Self::Struct(s) => Some(DescriptionBindingRef::Struct(s.fields())),
+			Self::Enum(e) => Some(DescriptionBindingRef::Enum(e.variants())),
+			Self::Required(r) => Some(DescriptionBindingRef::Required(**r.item_layout())),
+			Self::Option(o) => Some(DescriptionBindingRef::Option(**o.item_layout())),
+			Self::Array(a) => Some(DescriptionBindingRef::Array(**a.item_layout())),
+			Self::Set(s) => Some(DescriptionBindingRef::Set(**s.item_layout())),
+			Self::OneOrMany(o) => Some(DescriptionBindingRef::OneOrMany(**o.item_layout())),
+			Self::Alias(l) => Some(DescriptionBindingRef::Alias(*l)),
+		}
+	}
+
+	pub fn restrictions(&self) -> Option<Restrictions<M>> {
+		match self {
+			Self::Primitive(p) => p.restrictions().map(Restrictions::new_primitive),
+			Self::Array(a) => a
+				.restrictions()
+				.as_restricted()
+				.map(Restrictions::new_container),
+			Self::Set(s) => s
+				.restrictions()
+				.as_restricted()
+				.map(Restrictions::new_container),
+			Self::OneOrMany(o) => o
+				.restrictions()
+				.as_restricted()
+				.map(Restrictions::new_container),
+			_ => None,
+		}
+	}
 }
 
 impl<M> Definition<M> {
 	/// Creates a new layout definition.
 	pub fn new(
 		ty: MetaOption<TId<Type>, M>,
-		desc: Meta<Description<M>, M>
+		desc: Meta<Description<M>, M>,
+		intersection_of: MetaOption<Multiple<TId<Layout>, M>, M>,
 	) -> Self {
 		Self {
 			ty,
-			desc
+			desc,
+			intersection_of,
 		}
 	}
 
@@ -224,10 +275,33 @@ impl<M> Definition<M> {
 			_ => false,
 		}
 	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings {
+			ty: self.ty.as_ref(),
+			desc: self
+				.desc
+				.as_binding_ref()
+				.map(|b| Meta(b, self.desc.metadata())),
+			intersection_of: self.intersection_of.as_ref(),
+			restrictions: self
+				.desc
+				.restrictions()
+				.map(|r| Meta(r, self.desc.metadata())),
+			array_semantics: self
+				.desc
+				.array_semantics()
+				.map(|s| s.bindings())
+				.unwrap_or_default(),
+		}
+	}
 }
 
 pub enum ComposingLayouts<'a, M> {
-	Fields(&'a crate::Model<M>, std::slice::Iter<'a, Meta<TId<Field>, M>>),
+	Fields(
+		&'a crate::Model<M>,
+		std::slice::Iter<'a, Meta<TId<Field>, M>>,
+	),
 	Enum(enumeration::ComposingLayouts<'a, M>),
 	One(Option<&'a Meta<TId<Layout>, M>>),
 	None,
@@ -259,6 +333,7 @@ pub enum Property {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DescriptionProperty {
+	DerivedFrom,
 	Fields,
 	Variants,
 	Reference,
@@ -267,7 +342,7 @@ pub enum DescriptionProperty {
 	Set,
 	OneOrMany,
 	Array,
-	Alias
+	Alias,
 }
 
 impl Property {
@@ -288,11 +363,26 @@ impl Property {
 		match self {
 			Self::For => "layout type",
 			Self::Description(p) => p.name(),
-			Self::IntersectionOf => "intersection", 
+			Self::IntersectionOf => "intersection",
 			Self::WithRestrictions => "layout restrictions",
 			Self::ArrayListFirst => "\"array as list\" `first` property",
 			Self::ArrayListRest => "\"array as list\" `rest` property",
 			Self::ArrayListNil => "\"array as list\" empty list value",
+		}
+	}
+
+	pub fn expect_type(&self) -> bool {
+		match self {
+			Self::For => true,
+			Self::Description(p) => p.expect_type(),
+			_ => false,
+		}
+	}
+
+	pub fn expect_layout(&self) -> bool {
+		match self {
+			Self::Description(p) => p.expect_layout(),
+			_ => false,
 		}
 	}
 }
@@ -301,6 +391,7 @@ impl DescriptionProperty {
 	pub fn term(&self) -> vocab::Term {
 		use vocab::{Term, TreeLdr};
 		match self {
+			Self::DerivedFrom => Term::TreeLdr(TreeLdr::DerivedFrom),
 			Self::Reference => Term::TreeLdr(TreeLdr::Reference),
 			Self::Fields => Term::TreeLdr(TreeLdr::Fields),
 			Self::Variants => Term::TreeLdr(TreeLdr::Enumeration),
@@ -309,13 +400,13 @@ impl DescriptionProperty {
 			Self::Set => Term::TreeLdr(TreeLdr::Set),
 			Self::OneOrMany => Term::TreeLdr(TreeLdr::OneOrMany),
 			Self::Array => Term::TreeLdr(TreeLdr::Array),
-			Self::Alias => Term::TreeLdr(TreeLdr::Alias)
-			
+			Self::Alias => Term::TreeLdr(TreeLdr::Alias),
 		}
 	}
 
 	pub fn name(&self) -> &'static str {
 		match self {
+			Self::DerivedFrom => "derived primitive layout",
 			Self::Reference => "referenced type",
 			Self::Fields => "structure fields",
 			Self::Variants => "enum variants",
@@ -324,7 +415,143 @@ impl DescriptionProperty {
 			Self::Set => "set item layout",
 			Self::OneOrMany => "one or many item layout",
 			Self::Array => "array item layout",
-			Self::Alias => "alias layout"
+			Self::Alias => "alias layout",
 		}
+	}
+
+	pub fn expect_layout(&self) -> bool {
+		matches!(
+			self,
+			Self::DerivedFrom
+				| Self::Reference
+				| Self::Required | Self::Option
+				| Self::OneOrMany
+				| Self::Array | Self::Alias
+		)
+	}
+
+	pub fn expect_type(&self) -> bool {
+		false
+	}
+}
+
+#[derive(Debug, Derivative)]
+#[derivative(Clone(bound = ""), Copy(bound = ""))]
+pub enum DescriptionBindingRef<'a, M> {
+	DerivedFrom(Primitive),
+	Reference(TId<Layout>),
+	Struct(&'a [Meta<TId<Field>, M>]),
+	Enum(&'a [Meta<TId<Variant>, M>]),
+	Required(TId<Layout>),
+	Option(TId<Layout>),
+	Array(TId<Layout>),
+	Set(TId<Layout>),
+	OneOrMany(TId<Layout>),
+	Alias(TId<Layout>),
+}
+
+impl<'a, M> DescriptionBindingRef<'a, M> {
+	pub fn property(&self) -> DescriptionProperty {
+		match self {
+			Self::DerivedFrom(_) => DescriptionProperty::DerivedFrom,
+			Self::Reference(_) => DescriptionProperty::Reference,
+			Self::Struct(_) => DescriptionProperty::Fields,
+			Self::Enum(_) => DescriptionProperty::Variants,
+			Self::Required(_) => DescriptionProperty::Required,
+			Self::Option(_) => DescriptionProperty::Option,
+			Self::Array(_) => DescriptionProperty::Array,
+			Self::Set(_) => DescriptionProperty::Set,
+			Self::OneOrMany(_) => DescriptionProperty::OneOrMany,
+			Self::Alias(_) => DescriptionProperty::Alias,
+		}
+	}
+
+	pub fn value(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::DerivedFrom(p) => BindingValueRef::Type(p.ty()),
+			Self::Reference(v) => BindingValueRef::Layout(*v),
+			Self::Struct(v) => BindingValueRef::Fields(v),
+			Self::Enum(v) => BindingValueRef::Variants(v),
+			Self::Required(v) => BindingValueRef::Layout(*v),
+			Self::Option(v) => BindingValueRef::Layout(*v),
+			Self::Array(v) => BindingValueRef::Layout(*v),
+			Self::Set(v) => BindingValueRef::Layout(*v),
+			Self::OneOrMany(v) => BindingValueRef::Layout(*v),
+			Self::Alias(v) => BindingValueRef::Layout(*v),
+		}
+	}
+}
+
+pub enum ClassBindingRef<'a, M> {
+	For(TId<crate::Type>),
+	Description(DescriptionBindingRef<'a, M>),
+	IntersectionOf(&'a Multiple<TId<Layout>, M>),
+	WithRestrictions(Restrictions<'a, M>),
+	ArraySemantics(array::Binding),
+}
+
+pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
+
+impl<'a, M> ClassBindingRef<'a, M> {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::For(_) => Property::For,
+			Self::Description(d) => Property::Description(d.property()),
+			Self::IntersectionOf(_) => Property::IntersectionOf,
+			Self::WithRestrictions(_) => Property::WithRestrictions,
+			Self::ArraySemantics(b) => b.property(),
+		}
+	}
+
+	pub fn value(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::For(v) => BindingValueRef::Type(*v),
+			Self::Description(d) => d.value(),
+			Self::IntersectionOf(v) => BindingValueRef::Layouts(v),
+			Self::WithRestrictions(v) => BindingValueRef::LayoutRestrictions(*v),
+			Self::ArraySemantics(b) => b.value(),
+		}
+	}
+}
+
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct ClassBindings<'a, M> {
+	ty: Option<&'a Meta<TId<crate::Type>, M>>,
+	desc: Option<Meta<DescriptionBindingRef<'a, M>, &'a M>>,
+	intersection_of: Option<&'a Meta<Multiple<TId<Layout>, M>, M>>,
+	restrictions: Option<Meta<Restrictions<'a, M>, &'a M>>,
+	array_semantics: array::Bindings<'a, M>,
+}
+
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBindingRef<'a, M>, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.ty
+			.take()
+			.map(|v| v.borrow().into_cloned_value().map(ClassBindingRef::For))
+			.or_else(|| {
+				self.desc
+					.take()
+					.map(|v| v.map(ClassBindingRef::Description))
+					.or_else(|| {
+						self.intersection_of
+							.take()
+							.map(|v| v.borrow().map(ClassBindingRef::IntersectionOf))
+							.or_else(|| {
+								self.restrictions
+									.take()
+									.map(|v| v.map(ClassBindingRef::WithRestrictions))
+									.or_else(|| {
+										self.array_semantics
+											.next()
+											.map(|v| v.map(ClassBindingRef::ArraySemantics))
+									})
+							})
+					})
+			})
 	}
 }

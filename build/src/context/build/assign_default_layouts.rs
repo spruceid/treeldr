@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{IriIndex, BlankIdIndex, metadata::Merge};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{metadata::Merge, BlankIdIndex, IriIndex};
 
 use crate::Context;
 
@@ -27,7 +27,8 @@ impl<M> Context<M> {
 			self.get_mut(id)
 				.unwrap()
 				.as_formatted_mut()
-				.format_mut().insert(default_layout.into())
+				.format_mut()
+				.insert(default_layout)
 		}
 	}
 }

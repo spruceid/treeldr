@@ -1,12 +1,12 @@
 use std::collections::VecDeque;
 
-use locspan::{Meta, StrippedPartialEq, StrippedPartialOrd, StrippedOrd};
-use locspan_derive::{StrippedPartialEq, StrippedEq, StrippedPartialOrd, StrippedOrd};
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{metadata::Merge, IriIndex, BlankIdIndex, Id, Name};
+use locspan::{Meta, StrippedOrd, StrippedPartialEq, StrippedPartialOrd};
+use locspan_derive::{StrippedEq, StrippedOrd, StrippedPartialEq, StrippedPartialOrd};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, Name};
 
-use crate::{Error, Context, Single};
-use super::{IdIntersection, list::IntersectionListItem, list_intersection, build_lists};
+use super::{build_lists, list::IntersectionListItem, list_intersection, IdIntersection};
+use crate::{Context, Error, Single};
 
 #[derive(Debug, Clone, StrippedPartialEq, StrippedEq, StrippedPartialOrd, StrippedOrd)]
 #[locspan(ignore(M))]
@@ -15,22 +15,31 @@ pub struct EnumIntersection<M> {
 	enums: IdIntersection<M>,
 
 	#[locspan(stripped)]
-	non_enums: IdIntersection<M>
+	non_enums: IdIntersection<M>,
 }
 
 impl<M> EnumIntersection<M> {
-	pub fn intersect_with(&mut self, other: Self) where M: Clone + Merge {
+	pub fn intersect_with(&mut self, other: Self)
+	where
+		M: Clone + Merge,
+	{
 		self.enums.intersect_with(other.enums)
 	}
 
-	pub fn intersect_with_non_enum(&mut self, other: Meta<Id, M>) where M: Clone + Merge {
+	pub fn intersect_with_non_enum(&mut self, other: Meta<Id, M>)
+	where
+		M: Clone + Merge,
+	{
 		self.non_enums.insert(other)
 	}
 }
 
 impl<M> EnumIntersection<M> {
 	pub fn new(id: Meta<Id, M>) -> Self {
-		Self { enums: IdIntersection::new(id), non_enums: IdIntersection::empty() }
+		Self {
+			enums: IdIntersection::new(id),
+			non_enums: IdIntersection::empty(),
+		}
 	}
 }
 
@@ -54,12 +63,15 @@ impl<M> Ord for EnumIntersection<M> {
 	}
 }
 
-pub fn enum_intersection<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>, M: Clone + Merge>(
+pub fn enum_intersection<
+	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+	M: Clone + Merge,
+>(
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
 	context: &mut Context<M>,
 	stack: &mut VecDeque<Id>,
-	inter: &EnumIntersection<M>
+	inter: &EnumIntersection<M>,
 ) -> Result<Vec<Option<Id>>, Error<M>> {
 	let mut lists = list_intersection::<Variant<M>, _>(context, &inter.enums)?;
 
@@ -67,7 +79,7 @@ pub fn enum_intersection<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>, M
 		non_enum_intersection(list.as_mut(), &inter.non_enums)
 	}
 
-	build_lists(vocabulary, generator, context, stack, lists)
+	Ok(build_lists(vocabulary, generator, context, stack, lists))
 }
 
 /// Variant intersection.
@@ -75,55 +87,81 @@ pub fn enum_intersection<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>, M
 pub struct Variant<M> {
 	id: Option<Id>,
 	name: Single<Name, M>,
-	layout: Single<IdIntersection<M>, M>
+	layout: Single<IdIntersection<M>, M>,
 }
 
 impl<M> Variant<M> {
-	pub fn from_id(context: &Context<M>, id: Id, meta: &M) -> Result<Self, Error<M>> where M: Clone + Merge {
+	pub fn from_id(context: &Context<M>, id: Id, meta: &M) -> Result<Self, Error<M>>
+	where
+		M: Clone + Merge,
+	{
 		let node = context.require(id).map_err(|e| e.at(meta.clone()))?;
-		node.require_layout_variant(context).map_err(|e| e.at(meta.clone()))?;
+		node.require_layout_variant(context)
+			.map_err(|e| e.at(meta.clone()))?;
 
 		Ok(Self {
 			id: Some(id),
 			name: node.as_component().name().clone(),
-			layout: node.as_formatted().format().iter().map(|id| {
-				let meta = id.into_metadata().clone();
-				Meta(IdIntersection::new(id.cloned()), meta)
-			}).collect()
+			layout: node
+				.as_formatted()
+				.format()
+				.iter()
+				.map(|id| {
+					let meta = id.into_metadata().clone();
+					Meta(IdIntersection::new(id.cloned()), meta)
+				})
+				.collect(),
 		})
 	}
 }
 
 impl<M> Variant<M> {
 	pub fn matches(&self, other: &Self) -> bool {
-		let common_name = self.name.iter().any(|Meta(a, _)| other.name.iter().any(|Meta(b, _)| a == b));
+		let common_name = self
+			.name
+			.iter()
+			.any(|Meta(a, _)| other.name.iter().any(|Meta(b, _)| a == b));
 		let no_name = self.name.is_empty() && other.name.is_empty();
 
 		common_name || no_name
 	}
 
-	pub fn intersected_with(&self, other: &Self) -> Option<Self> where M: Clone + Merge {
+	pub fn intersected_with(&self, other: &Self) -> Option<Self>
+	where
+		M: Clone + Merge,
+	{
 		if let (Some(a), Some(b)) = (self.id, other.id) {
 			if a == b {
-				return Some(self.clone())
+				return Some(self.clone());
 			}
 		}
 
-		let common_name = self.name.iter().any(|Meta(a, _)| other.name.iter().any(|Meta(b, _)| a == b));
+		let common_name = self
+			.name
+			.iter()
+			.any(|Meta(a, _)| other.name.iter().any(|Meta(b, _)| a == b));
 		let no_name = self.name.is_empty() && other.name.is_empty();
 
 		if common_name || no_name {
 			let mut layout = Single::default();
 			for Meta(a, a_meta) in &self.layout {
 				for Meta(b, b_meta) in &other.layout {
-					layout.insert(Meta(a.intersection(b), a_meta.clone().merged_with(b_meta.clone())))
+					layout.insert(Meta(
+						a.intersection(b),
+						a_meta.clone().merged_with(b_meta.clone()),
+					))
 				}
 			}
 
 			Some(Self {
 				id: None,
-				name: self.name.iter().chain(&other.name).map(|n| n.cloned()).collect(),
-				layout
+				name: self
+					.name
+					.iter()
+					.chain(&other.name)
+					.map(|n| n.cloned())
+					.collect(),
+				layout,
 			})
 		} else {
 			None
@@ -136,7 +174,10 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Variant<M> {
 		Ok(Meta(Variant::from_id(context, id, &meta)?, meta))
 	}
 
-	fn list_intersection(variants: Option<&[Meta<Self, M>]>, other_variants: &[Meta<Self, M>]) -> Result<Option<Vec<Meta<Self, M>>>, Error<M>> {
+	fn list_intersection(
+		variants: Option<&[Meta<Self, M>]>,
+		other_variants: &[Meta<Self, M>],
+	) -> Result<Option<Vec<Meta<Self, M>>>, Error<M>> {
 		match variants {
 			Some(variants) => {
 				let mut result = Vec::new();
@@ -144,7 +185,7 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Variant<M> {
 				let mut other_variants = other_variants.to_vec();
 				variants.reverse();
 				other_variants.reverse();
-	
+
 				'next_variant: while !variants.is_empty() && !other_variants.is_empty() {
 					if let Some(Meta(variant, causes)) = variants.pop() {
 						while let Some(other_variant) = other_variants.pop() {
@@ -158,17 +199,17 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Variant<M> {
 										causes.merged_with(other_causes),
 									))
 								}
-		
+
 								continue 'next_variant;
 							} else {
 								for after_variant in &variants {
 									if after_variant.matches(&other_variant) {
-										for j in 0..other_variants.len() {
-											if variant.matches(&other_variants[j]) {
+										for v in &other_variants {
+											if variant.matches(v) {
 												panic!("unaligned layouts")
 											}
 										}
-		
+
 										other_variants.push(other_variant);
 										continue 'next_variant;
 									}
@@ -177,27 +218,36 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Variant<M> {
 						}
 					}
 				}
-		
+
 				Ok(Some(result))
 			}
-			None => Ok(None)
+			None => Ok(None),
 		}
 	}
 
-	fn build<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>>(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
-		meta: M
-	) -> Result<Id, Error<M>> {
+		meta: M,
+	) -> Id {
 		match self.id {
-			Some(id) => Ok(id),
+			Some(id) => id,
 			None => {
 				let mut layout = Single::default();
 				for Meta(layout_id, layout_meta) in self.layout {
-					layout.insert(Meta(layout_id.prepare_layout(vocabulary, generator, context, stack, layout_meta.clone())?, layout_meta))
+					layout.insert(Meta(
+						layout_id.prepare_layout(
+							vocabulary,
+							generator,
+							context,
+							stack,
+							layout_meta.clone(),
+						),
+						layout_meta,
+					))
 				}
 
 				let id = generator.next(vocabulary);
@@ -206,7 +256,7 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Variant<M> {
 				*node.as_component_mut().name_mut() = self.name;
 				*node.as_formatted_mut().format_mut() = layout;
 
-				Ok(id)
+				id
 			}
 		}
 	}
@@ -214,8 +264,10 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Variant<M> {
 
 fn non_enum_intersection<M>(
 	variants: Option<&mut Vec<Meta<Variant<M>, M>>>,
-	other: &IdIntersection<M>
-) where M: Clone + Merge {
+	other: &IdIntersection<M>,
+) where
+	M: Clone + Merge,
+{
 	if let Some(variants) = variants {
 		for v in variants {
 			let layout = std::mem::take(&mut v.layout);

@@ -12,24 +12,52 @@ pub enum Restriction<'a> {
 	String(string::Restriction<'a>),
 }
 
+#[derive(Clone, Copy)]
 pub enum Restrictions<'a> {
-	None,
+	Real(&'a real::Restrictions),
+	Float(&'a float::Restrictions),
+	Double(&'a double::Restrictions),
+	String(&'a string::Restrictions),
+}
+
+impl<'a> Restrictions<'a> {
+	pub fn iter(&self) -> RestrictionsIter<'a> {
+		match self {
+			Self::Real(r) => RestrictionsIter::Real(r.iter()),
+			Self::Float(r) => RestrictionsIter::Float(r.iter()),
+			Self::Double(r) => RestrictionsIter::Double(r.iter()),
+			Self::String(r) => RestrictionsIter::String(r.iter()),
+		}
+	}
+}
+
+pub enum RestrictionsIter<'a> {
 	Real(real::Iter<'a>),
 	Float(float::Iter),
 	Double(double::Iter),
 	String(string::Iter<'a>),
 }
 
-impl<'a> Iterator for Restrictions<'a> {
+impl<'a> Iterator for RestrictionsIter<'a> {
 	type Item = Restriction<'a>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
-			Self::None => None,
 			Self::Real(r) => r.next().map(Restriction::Real),
 			Self::Float(r) => r.next().map(Restriction::Float),
 			Self::Double(r) => r.next().map(Restriction::Double),
 			Self::String(r) => r.next().map(Restriction::String),
+		}
+	}
+}
+
+impl<'a> DoubleEndedIterator for RestrictionsIter<'a> {
+	fn next_back(&mut self) -> Option<Self::Item> {
+		match self {
+			Self::Real(r) => r.next_back().map(Restriction::Real),
+			Self::Float(r) => r.next_back().map(Restriction::Float),
+			Self::Double(r) => r.next_back().map(Restriction::Double),
+			Self::String(r) => r.next_back().map(Restriction::String),
 		}
 	}
 }
@@ -68,7 +96,7 @@ pub enum Property {
 	MaxExclusive,
 	MinLength,
 	MaxLength,
-	Pattern
+	Pattern,
 }
 
 impl Property {
@@ -92,7 +120,15 @@ impl Property {
 			Self::MaxExclusive => "exclusive maximum",
 			Self::MinLength => "minimum length",
 			Self::MaxLength => "maximum length",
-			Self::Pattern => "pattern"
+			Self::Pattern => "pattern",
 		}
+	}
+
+	pub fn expect_type(&self) -> bool {
+		false
+	}
+
+	pub fn expect_layout(&self) -> bool {
+		false
 	}
 }

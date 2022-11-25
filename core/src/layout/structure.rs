@@ -1,6 +1,4 @@
-use crate::{
-	TId
-};
+use crate::TId;
 use locspan::Meta;
 
 use super::field::Field;

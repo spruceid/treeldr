@@ -1,17 +1,17 @@
 use std::collections::BTreeMap;
 
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{IriIndex, BlankIdIndex, Model, metadata::Merge};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{metadata::Merge, BlankIdIndex, IriIndex, Model};
 
 use crate::{Context, Error};
 
-mod compute_layout_intersections;
-mod simplify_composite_layouts;
-mod remove_unused_nodes;
-mod unify;
-mod compute_layouts_relations;
 mod assign_default_layouts;
 mod assign_default_names;
+mod compute_layout_intersections;
+mod compute_layouts_relations;
+mod remove_unused_nodes;
+mod simplify_composite_types_and_layouts;
+mod unify;
 
 pub use compute_layouts_relations::LayoutRelations;
 
@@ -25,11 +25,11 @@ impl<M: Clone> Context<M> {
 		M: Clone + Merge,
 	{
 		self.compute_layout_intersections(vocabulary, generator)?;
-		
-		self.simplify_composite_layouts();
+
+		self.simplify_composite_types_and_layouts();
 		self.remove_unused_nodes();
 		self.unify(vocabulary, generator);
-		self.simplify_composite_layouts();
+		self.simplify_composite_types_and_layouts();
 		self.remove_unused_nodes();
 
 		self.assign_default_layouts(vocabulary, generator);
@@ -38,7 +38,9 @@ impl<M: Clone> Context<M> {
 
 		let mut nodes = BTreeMap::new();
 		for (id, node) in &self.nodes {
-			nodes.insert(*id, node.build(self)?);
+			if let Some(node) = node.build(self)? {
+				nodes.insert(*id, node);
+			}
 		}
 
 		Ok(Model::from_parts(nodes))

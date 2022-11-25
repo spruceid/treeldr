@@ -1,5 +1,9 @@
 use std::collections::BTreeSet;
 
+use locspan::Meta;
+
+use crate::{metadata::Merge, multiple, Multiple};
+
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Block {
 	/// Block content.
@@ -91,12 +95,20 @@ impl Block {
 	}
 }
 
-#[derive(Clone, Default, Debug)]
-pub struct Documentation {
-	blocks: BTreeSet<Block>,
+#[derive(Clone, Debug)]
+pub struct Documentation<M> {
+	blocks: Multiple<Block, M>,
 }
 
-impl Documentation {
+impl<M> Default for Documentation<M> {
+	fn default() -> Self {
+		Self {
+			blocks: Multiple::default(),
+		}
+	}
+}
+
+impl<M> Documentation<M> {
 	pub fn new() -> Self {
 		Self::default()
 	}
@@ -125,15 +137,77 @@ impl Documentation {
 		None
 	}
 
-	pub fn add(&mut self, comment: String) {
+	pub fn insert(&mut self, Meta(comment, meta): Meta<String, M>)
+	where
+		M: Merge,
+	{
+		self.blocks.insert(Meta(Block::new(comment), meta));
+	}
+
+	pub fn as_str(&self) -> Option<&str> {
+		self.blocks.iter().next().map(|b| b.as_str())
+	}
+
+	pub fn iter(&self) -> Iter<M> {
+		self.blocks.iter()
+	}
+
+	pub fn clone_stripped(&self) -> StrippedDocumentation {
+		let mut result = StrippedDocumentation::new();
+
+		for Meta(b, _) in self.iter() {
+			result.blocks.insert(b.clone());
+		}
+
+		result
+	}
+}
+
+pub type Iter<'a, M> = multiple::Iter<'a, Block, M>;
+
+#[derive(Clone, Default, Debug)]
+pub struct StrippedDocumentation {
+	blocks: BTreeSet<Block>,
+}
+
+impl StrippedDocumentation {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.blocks.is_empty()
+	}
+
+	pub fn short_description(&self) -> Option<&str> {
+		for block in &self.blocks {
+			if let Some(s) = block.short_description() {
+				return Some(s);
+			}
+		}
+
+		None
+	}
+
+	pub fn long_description(&self) -> Option<&str> {
+		for block in &self.blocks {
+			if let Some(s) = block.long_description() {
+				return Some(s);
+			}
+		}
+
+		None
+	}
+
+	pub fn insert(&mut self, comment: String) {
 		self.blocks.insert(Block::new(comment));
 	}
 
 	pub fn as_str(&self) -> Option<&str> {
-		self.blocks.iter().next().map(Block::as_str)
+		self.blocks.iter().next().map(|b| b.as_str())
 	}
 
-	pub fn blocks(&self) -> impl Iterator<Item = &Block> {
+	pub fn iter(&self) -> std::collections::btree_set::Iter<Block> {
 		self.blocks.iter()
 	}
 }

@@ -1,13 +1,13 @@
-use crate::{Id, IriIndex, BlankIdIndex, component, Type, Multiple, ty::SubClass, prop, node};
-use locspan::{Meta, MaybeLocated, Span};
+use crate::{Id, IriIndex, BlankIdIndex, component, Type, Multiple, ty::SubClass, prop, node, TId};
+use locspan::{MaybeLocated, Span, Meta};
 use rdf_types::Vocabulary;
 use contextual::WithContext;
 
 #[derive(Debug)]
 pub struct NodeInvalidType<M> {
 	pub id: Id,
-	pub expected: Type,
-	pub found: Multiple<Type, M>
+	pub expected: TId<Type>,
+	pub found: Multiple<TId<Type>, M>
 }
 
 trait NodeTypeName {
@@ -85,6 +85,7 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeInvalidType<M> where
 		let mut labels = Vec::new();
 
 		for Meta(ty, metadata) in self.found.iter() {
+			let ty: Type = (*ty).into();
 			if let Some(loc) = metadata.optional_location().cloned() {
 				labels.push(loc.into_secondary_label().with_message(format!("declared as a {} here", ty.name())));
 			}
@@ -96,9 +97,11 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeInvalidType<M> where
 	fn notes(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<String> {
 		let mut notes = Vec::new();
 
-		notes.push(format!("expected a {}", self.expected.name()));
+		let expected: Type = self.expected.into();
+		notes.push(format!("expected a {}", expected.name()));
 
 		for (i, ty) in self.found.iter().enumerate() {
+			let ty: Type = (**ty).into();
 			if i == 0 {
 				notes.push(format!("found a {}", ty.name()))
 			} else {

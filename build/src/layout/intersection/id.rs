@@ -1,13 +1,19 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use locspan::Meta;
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{Id, metadata::Merge, BlankIdIndex, IriIndex};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
 
-use crate::{Context, Error};
+use crate::Context;
 
 #[derive(Debug, Clone)]
 pub struct IdIntersection<M>(BTreeMap<Id, M>);
+
+impl<M> Default for IdIntersection<M> {
+	fn default() -> Self {
+		Self::empty()
+	}
+}
 
 impl<M> IdIntersection<M> {
 	pub fn new(Meta(id, m): Meta<Id, M>) -> Self {
@@ -37,7 +43,10 @@ impl<M: Merge> IdIntersection<M> {
 		}
 	}
 
-	pub fn intersection(&self, other: &Self) -> Self where M: Clone + Merge {
+	pub fn intersection(&self, other: &Self) -> Self
+	where
+		M: Clone + Merge,
+	{
 		let mut result = self.clone();
 
 		for v in other.iter() {
@@ -47,35 +56,60 @@ impl<M: Merge> IdIntersection<M> {
 		result
 	}
 
-	pub fn intersect_with(&mut self, other: Self) where M: Clone + Merge {
+	pub fn intersect_with(&mut self, other: Self)
+	where
+		M: Clone + Merge,
+	{
 		for (v, m) in other.0 {
 			self.insert(Meta(v, m))
 		}
 	}
 
-	pub fn prepare_layout<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>>(
+	pub fn intersected_with(mut self, other: Self) -> Self
+	where
+		M: Clone + Merge,
+	{
+		self.intersect_with(other);
+		self
+	}
+
+	pub fn prepare_layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
-		meta: M
-	) -> Result<Id, Error<M>> where M: Clone {
-		if self.0.len() == 1 {
-			Ok(self.0.into_iter().next().unwrap().0)
-		} else {
-			let id = generator.next(vocabulary);
+		meta: M,
+	) -> Id
+	where
+		M: Clone,
+	{
+		self.0
+			.keys()
+			.find(|a| {
+				self.0
+					.keys()
+					.all(|b| crate::layout::is_included_in(context, **a, *b))
+			})
+			.copied()
+			.unwrap_or_else(|| {
+				let id = generator.next(vocabulary);
 
-			let list_id = context.create_list_with(vocabulary, generator, self.0, |(layout_id, layout_meta), _, _| {
-				Meta(layout_id.into_term(), layout_meta)
-			})?;
+				let list_id = context.create_list_with(
+					vocabulary,
+					generator,
+					self.0,
+					|(layout_id, layout_meta), _, _, _| Meta(layout_id.into_term(), layout_meta),
+				);
 
-			let node = context.declare_layout(id, meta.clone());
-			node.as_layout_mut().intersection_of_mut().insert(Meta(list_id, meta));
+				let node = context.declare_layout(id, meta.clone());
+				node.as_layout_mut()
+					.intersection_of_mut()
+					.insert(Meta(list_id, meta));
 
-			stack.push_back(id);
-			Ok(id)
-		}
+				stack.push_back(id);
+				id
+			})
 	}
 }
 

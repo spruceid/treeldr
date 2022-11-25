@@ -4,18 +4,14 @@ use treeldr::{metadata::Merge, Id, MetaOption};
 
 use crate::{
 	error::{self, NodeBindingFunctionalConflict},
-	Error, ListRef, Context, Property
+	Context, Error, ListRef, Property,
 };
 
 #[derive(Debug, Clone)]
 pub struct Conflict<T, M>(pub Meta<T, M>, pub Meta<T, M>);
 
 impl<T, M> Conflict<T, M> {
-	pub fn at_functional_node_property(
-		self,
-		id: Id,
-		property: impl Into<Property>,
-	) -> Error<M>
+	pub fn at_functional_node_property(self, id: Id, property: impl Into<Property>) -> Error<M>
 	where
 		(T, Meta<T, M>): Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
 	{
@@ -57,13 +53,17 @@ impl<T, M> Single<T, M> {
 	pub fn first(&self) -> Option<Meta<&T, &M>> {
 		self.iter().next()
 	}
-	
+
 	pub fn is_empty(&self) -> bool {
 		self.0.is_empty()
 	}
 
 	pub fn len(&self) -> usize {
 		self.0.len()
+	}
+
+	pub fn clear(&mut self) {
+		self.0.clear()
 	}
 
 	pub fn iter(&self) -> Iter<T, M> {
@@ -110,14 +110,18 @@ impl<T, M> Single<T, M> {
 		}
 	}
 
-	pub fn try_unwraped(&self) -> Result<Option<Meta<&T, &M>>, Conflict<T, M>> where T: Clone, M: Clone {
+	pub fn try_unwraped(&self) -> Result<Option<Meta<&T, &M>>, Conflict<T, M>>
+	where
+		T: Clone,
+		M: Clone,
+	{
 		let mut it = self.iter();
 		match it.next() {
 			Some(a) => match it.next() {
 				Some(b) => Err(Conflict(a.cloned(), b.cloned())),
 				None => Ok(Some(a)),
 			},
-			None => Ok(None.into()),
+			None => Ok(None),
 		}
 	}
 
@@ -165,9 +169,24 @@ impl<M: Clone> Single<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				Ok(context
+				context
 					.require_type_id(p)
-					.map_err(|e| e.at_node_property(id, prop, meta.clone()))?)
+					.map_err(|e| e.at_node_property(id, prop, meta.clone()))
+			})
+	}
+
+	pub fn into_datatype_at_node_binding(
+		self,
+		context: &Context<M>,
+		id: Id,
+		prop: impl Copy + Into<Property>,
+	) -> Result<MetaOption<treeldr::TId<treeldr::ty::DataType<M>>, M>, Error<M>> {
+		self.try_unwrap()
+			.map_err(|c| c.at_functional_node_property(id, prop))?
+			.try_map_borrow_metadata(|p, meta| {
+				context
+					.require_datatype_id(p)
+					.map_err(|e| e.at_node_property(id, prop, meta.clone()))
 			})
 	}
 
@@ -183,6 +202,18 @@ impl<M: Clone> Single<Id, M> {
 			.err_at(|| meta.clone())
 	}
 
+	pub fn into_required_datatype_at_node_binding(
+		self,
+		context: &Context<M>,
+		id: Id,
+		prop: impl Copy + Into<Property>,
+		meta: &M,
+	) -> Result<Meta<treeldr::TId<treeldr::ty::DataType<M>>, M>, Error<M>> {
+		self.into_datatype_at_node_binding(context, id, prop)?
+			.ok_or_else(|| error::NodeBindingMissing::new(id, prop).into())
+			.err_at(|| meta.clone())
+	}
+
 	pub fn into_property_at_node_binding(
 		self,
 		context: &Context<M>,
@@ -192,9 +223,9 @@ impl<M: Clone> Single<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				Ok(context
+				context
 					.require_property_id(p)
-					.map_err(|e| e.at_node_property(id, prop, meta.clone()))?)
+					.map_err(|e| e.at_node_property(id, prop, meta.clone()))
 			})
 	}
 
@@ -219,9 +250,9 @@ impl<M: Clone> Single<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				Ok(context
+				context
 					.require_layout_id(p)
-					.map_err(|e| e.at_node_property(id, prop, meta.clone()))?)
+					.map_err(|e| e.at_node_property(id, prop, meta.clone()))
 			})
 	}
 
@@ -246,9 +277,9 @@ impl<M: Clone> Single<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				Ok(context
+				context
 					.require_list(p)
-					.map_err(|e| e.at_node_property(id, prop, meta.clone()))?)
+					.map_err(|e| e.at_node_property(id, prop, meta.clone()))
 			})
 	}
 

@@ -2,11 +2,15 @@ use std::collections::HashMap;
 
 use iref::{IriBuf, IriRef};
 use locspan::Meta;
-use rdf_types::{VocabularyMut, Generator, Vocabulary};
-use treeldr::{Id, IriIndex, BlankIdIndex, metadata::Merge, vocab::{Term, Xsd}};
+use rdf_types::{Generator, Vocabulary, VocabularyMut};
+use treeldr::{
+	metadata::Merge,
+	vocab::{Term, Xsd},
+	BlankIdIndex, Id, IriIndex,
+};
 use treeldr_build::Context;
 
-use super::{LocalError, Error};
+use super::{Error, LocalError};
 
 /// Build context.
 pub struct LocalContext<M> {
@@ -58,15 +62,13 @@ impl<M> LocalContext<M> {
 				match self.label_id.entry(label) {
 					Entry::Occupied(entry) => entry.get().clone(),
 					Entry::Vacant(entry) => {
-						let id = alias_id
-							.unwrap_or_else(|| Meta(generator.next(vocabulary), loc));
+						let id = alias_id.unwrap_or_else(|| Meta(generator.next(vocabulary), loc));
 						entry.insert(id.clone());
 						id
 					}
 				}
 			}
-			None => alias_id
-				.unwrap_or_else(|| Meta(generator.next(vocabulary), loc)),
+			None => alias_id.unwrap_or_else(|| Meta(generator.next(vocabulary), loc)),
 		};
 
 		self.alias_id.take();
@@ -154,7 +156,7 @@ impl<M: Clone> LocalContext<M> {
 	{
 		if id.is_blank() {
 			// Declare the type.
-			context.declare_type(*id, loc.clone());
+			context.declare_datatype(*id, loc.clone());
 		}
 
 		if self.implicit_definition {
@@ -162,7 +164,8 @@ impl<M: Clone> LocalContext<M> {
 				.get_mut(*id)
 				.unwrap()
 				.as_layout_mut()
-				.ty_mut().insert(Meta(*id, loc.clone()))
+				.ty_mut()
+				.insert(Meta(*id, loc.clone()))
 		}
 
 		let regexp = match lit {
@@ -173,7 +176,7 @@ impl<M: Clone> LocalContext<M> {
 					Err(e) => {
 						return Err(treeldr_build::Error::new(
 							treeldr_build::error::RegExpInvalid(regexp_string, e).into(),
-							loc.clone(),
+							loc,
 						)
 						.into())
 					}
@@ -181,19 +184,29 @@ impl<M: Clone> LocalContext<M> {
 			}
 		};
 
-		use treeldr_build::ty::datatype::{Restriction, restriction};
+		use treeldr_build::ty::datatype::{restriction, Restriction};
 		let restriction_id = generator.next(vocabulary);
 		let restriction = context.declare_datatype_restriction(restriction_id, loc.clone());
-		restriction.as_datatype_restriction_mut().restriction_mut().insert(Meta(
-			Restriction::String(restriction::String::Pattern(regexp)),
-			loc.clone(),
-		));
-		let restrictions_list = context.create_list(vocabulary, generator, Some(Meta(restriction_id.into_term(), loc.clone())));
+		restriction
+			.as_datatype_restriction_mut()
+			.restriction_mut()
+			.insert(Meta(
+				Restriction::String(restriction::String::Pattern(regexp)),
+				loc.clone(),
+			));
+		let restrictions_list = context.create_list(
+			vocabulary,
+			generator,
+			Some(Meta(restriction_id.into_term(), loc.clone())),
+		);
 
 		let ty = context.get_mut(*id).unwrap().as_type_mut();
 		let dt = ty.as_datatype_mut();
-		dt.base_mut().insert(Meta(Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::String))), loc.clone()));
-		dt.restrictions_mut().insert(Meta(restrictions_list, loc.clone()));
+		dt.base_mut().insert(Meta(
+			Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::String))),
+			loc.clone(),
+		));
+		dt.restrictions_mut().insert(Meta(restrictions_list, loc));
 
 		Ok(())
 	}
@@ -232,7 +245,7 @@ impl<M: Clone> LocalContext<M> {
 					Err(e) => {
 						return Err(treeldr_build::Error::new(
 							treeldr_build::error::RegExpInvalid(regexp_string, e).into(),
-							loc.clone(),
+							loc,
 						)
 						.into())
 					}
@@ -240,18 +253,32 @@ impl<M: Clone> LocalContext<M> {
 			}
 		};
 
-		use treeldr_build::layout::{Restriction, restriction};
+		use treeldr_build::layout::{restriction, Restriction};
 		let restriction_id = generator.next(vocabulary);
 		let restriction = context.declare_layout_restriction(restriction_id, loc.clone());
-		restriction.as_layout_restriction_mut().restriction_mut().insert(Meta(
-			Restriction::Primitive(restriction::primitive::Restriction::String(restriction::primitive::String::Pattern(regexp))),
-			loc.clone(),
-		));
-		let restrictions_list = context.create_list(vocabulary, generator, Some(Meta(restriction_id.into_term(), loc.clone())));
+		restriction
+			.as_layout_restriction_mut()
+			.restriction_mut()
+			.insert(Meta(
+				Restriction::Primitive(restriction::primitive::Restriction::String(
+					restriction::primitive::String::Pattern(regexp),
+				)),
+				loc.clone(),
+			));
+		let restrictions_list = context.create_list(
+			vocabulary,
+			generator,
+			Some(Meta(restriction_id.into_term(), loc.clone())),
+		);
 
 		let layout = context.get_mut(*id).unwrap().as_layout_mut();
-		layout.description_mut().insert(Meta(treeldr_build::layout::Description::Primitive(treeldr_build::layout::Primitive::String), loc.clone()));
-		layout.restrictions_mut().insert(Meta(restrictions_list, loc.clone()));
+		layout.description_mut().insert(Meta(
+			treeldr_build::layout::Description::Primitive(treeldr_build::layout::Primitive::String),
+			loc.clone(),
+		));
+		layout
+			.restrictions_mut()
+			.insert(Meta(restrictions_list, loc));
 
 		Ok(())
 	}

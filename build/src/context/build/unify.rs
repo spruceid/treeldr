@@ -1,29 +1,46 @@
-use std::{collections::{BTreeMap, BTreeSet, HashMap, VecDeque}, hash::Hash};
+use std::{
+	collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+	hash::Hash,
+};
 
 use langtag::LanguageTag;
 use locspan::Meta;
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{Id, BlankIdIndex, IriIndex, Name, value, ty::data::RegExp, vocab::{Object, Literal}, utils::UnionFind, Property, metadata::Merge};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{
+	metadata::Merge,
+	ty::data::RegExp,
+	utils::UnionFind,
+	value,
+	vocab::{Literal, Object},
+	BlankIdIndex, Id, IriIndex, Name, Property,
+};
 
-use crate::{Context, resource::{self, BindingValueRef}, context::MapIds};
+use crate::{
+	context::MapIds,
+	resource::{self, BindingValueRef},
+	Context,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BindingRef<'a, B> {
 	property: Property,
-	value: ValueRef<'a, B>
+	value: ValueRef<'a, B>,
 }
 
 impl<'a, B> BindingRef<'a, B> {
 	fn strip_blank(self) -> BindingRef<'a, ()> {
-		BindingRef { property: self.property, value: self.value.strip_blank() }
+		BindingRef {
+			property: self.property,
+			value: self.value.strip_blank(),
+		}
 	}
 }
 
 impl<'a, M> From<resource::BindingRef<'a, M>> for BindingRef<'a, BlankIdIndex> {
 	fn from(b: resource::BindingRef<'a, M>) -> Self {
 		Self {
-			property: b.property().into(),
-			value: b.value().into()
+			property: b.property(),
+			value: b.value().into(),
 		}
 	}
 }
@@ -40,7 +57,7 @@ pub enum ValueRef<'a, B> {
 	LangString(&'a str, LanguageTag<'a>),
 	TypedString(&'a str, IriIndex),
 	Name(&'a Name),
-	RegExp(&'a RegExp)
+	RegExp(&'a RegExp),
 }
 
 impl<'a, B> ValueRef<'a, B> {
@@ -56,10 +73,10 @@ impl<'a, B> ValueRef<'a, B> {
 			Self::LangString(s, t) => ValueRef::LangString(s, t),
 			Self::TypedString(s, t) => ValueRef::TypedString(s, t),
 			Self::Name(n) => ValueRef::Name(n),
-			Self::RegExp(e) => ValueRef::RegExp(e)
+			Self::RegExp(e) => ValueRef::RegExp(e),
 		}
 	}
-} 
+}
 
 impl<'a, M> From<BindingValueRef<'a, M>> for ValueRef<'a, BlankIdIndex> {
 	fn from(v: BindingValueRef<'a, M>) -> Self {
@@ -68,7 +85,7 @@ impl<'a, M> From<BindingValueRef<'a, M>> for ValueRef<'a, BlankIdIndex> {
 			BindingValueRef::Id(Id::Iri(iri)) => Self::Iri(iri),
 			BindingValueRef::Type(t) => match t.id() {
 				Id::Blank(b) => Self::Blank(b),
-				Id::Iri(i) => Self::Iri(i)
+				Id::Iri(i) => Self::Iri(i),
 			},
 			BindingValueRef::Boolean(b) => Self::Boolean(b),
 			BindingValueRef::U64(u) => Self::U64(u),
@@ -82,10 +99,12 @@ impl<'a, M> From<BindingValueRef<'a, M>> for ValueRef<'a, BlankIdIndex> {
 				Object::Iri(i) => Self::Iri(*i),
 				Object::Literal(l) => match l {
 					Literal::String(s) => Self::String(s),
-					Literal::LangString(Meta(s, _), Meta(tag, _)) => Self::LangString(s, tag.as_ref()),
-					Literal::TypedString(Meta(s, _), Meta(ty, _)) => Self::TypedString(s, *ty)
-				}
-			}
+					Literal::LangString(Meta(s, _), Meta(tag, _)) => {
+						Self::LangString(s, tag.as_ref())
+					}
+					Literal::TypedString(Meta(s, _), Meta(ty, _)) => Self::TypedString(s, *ty),
+				},
+			},
 		}
 	}
 }
@@ -94,28 +113,31 @@ impl<M> Context<M> {
 	pub fn unify<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
 		vocabulary: &mut V,
-		generator: &mut impl Generator<V>
-	) where M: Merge {
+		generator: &mut impl Generator<V>,
+	) where
+		M: Merge,
+	{
 		let equivalences = self.compute_equivalences();
 		let ids = equivalences.assign_ids(vocabulary, generator);
-		self.map_ids(|id| match id {
+		self.map_ids(|id, _| match id {
 			Id::Blank(b) => *ids.get(&b).unwrap(),
-			Id::Iri(i) => Id::Iri(i)
+			Id::Iri(i) => Id::Iri(i),
 		})
 	}
 
 	fn compute_equivalences(&self) -> Equivalences {
 		#[derive(Default)]
 		struct BlankData<'a> {
+			is_property: bool,
 			color: BTreeSet<BindingRef<'a, ()>>,
-			bindings: BTreeMap<Property, BTreeSet<BlankIdIndex>>
+			bindings: BTreeMap<Property, BTreeSet<BlankIdIndex>>,
 		}
 
 		impl<'a> BlankData<'a> {
 			fn insert(&mut self, binding: BindingRef<'a, BlankIdIndex>) {
+				self.color.insert(binding.strip_blank());
 				if let ValueRef::Blank(b) = binding.value {
 					self.bindings.entry(binding.property).or_default().insert(b);
-					self.color.insert(binding.strip_blank());
 				}
 			}
 		}
@@ -126,7 +148,9 @@ impl<M> Context<M> {
 		let mut blank_data: BTreeMap<BlankIdIndex, BlankData> = BTreeMap::new();
 		for (id, node) in &self.nodes {
 			if let Id::Blank(id) = id {
-				if !node.has_type(self, resource::Type::Property(None)) {
+				if node.has_type(self, resource::Type::Property(None)) {
+					blank_data.entry(*id).or_default().is_property = true;
+				} else {
 					for Meta(binding, _) in node.bindings() {
 						blank_data.entry(*id).or_default().insert(binding.into())
 					}
@@ -140,11 +164,17 @@ impl<M> Context<M> {
 		let blank_simplified_data: HashMap<_, _> = blank_data
 			.into_iter()
 			.map(|(b, data)| {
-				let color = *colors.entry(data.color).or_insert_with(|| {
+				let color = if data.is_property {
 					let len = by_color.len();
 					by_color.push(Vec::new());
 					len
-				});
+				} else {
+					*colors.entry(data.color).or_insert_with(|| {
+						let len = by_color.len();
+						by_color.push(Vec::new());
+						len
+					})
+				};
 
 				by_color[color].push(b);
 
@@ -152,7 +182,11 @@ impl<M> Context<M> {
 					b,
 					SimplifiedBlankData {
 						color,
-						bindings: data.bindings.into_iter().map(|(_, v)| v.into_iter().collect()).collect()
+						bindings: data
+							.bindings
+							.into_iter()
+							.map(|(_, v)| v.into_iter().collect())
+							.collect(),
 					},
 				)
 			})
@@ -180,7 +214,7 @@ impl<M> Context<M> {
 
 struct SimplifiedBlankData {
 	color: usize,
-	bindings: Vec<Vec<BlankIdIndex>>
+	bindings: Vec<Vec<BlankIdIndex>>,
 }
 
 #[derive(Clone, Default)]
@@ -219,7 +253,7 @@ impl Equivalences {
 #[derive(Clone)]
 pub enum Item<'a> {
 	Equivalence(BlankIdIndex, BlankIdIndex),
-	Bijection(&'a [BlankIdIndex], &'a [BlankIdIndex])
+	Bijection(&'a [BlankIdIndex], &'a [BlankIdIndex]),
 }
 
 #[derive(Default)]
@@ -285,71 +319,69 @@ impl<'a> Stack<'a> {
 
 	fn next(mut self, blanks: &'a HashMap<BlankIdIndex, SimplifiedBlankData>) -> Vec<Self> {
 		match self.stack.pop() {
-			Some(item) => {
-				match item {
-					Item::Equivalence(a, b) => {
-						self.equivalences.merge(a, b);
-						self.statements.push((a, b));
+			Some(item) => match item {
+				Item::Equivalence(a, b) => {
+					self.equivalences.merge(a, b);
+					self.statements.push((a, b));
 
-						for (a, b) in blanks[&a].bindings.iter().zip(&blanks[&b].bindings) {
-							self.stack.push(Item::Bijection(a, b))
-						}
-
-						vec![self]
+					for (a, b) in blanks[&a].bindings.iter().zip(&blanks[&b].bindings) {
+						self.stack.push(Item::Bijection(a, b))
 					}
-					Item::Bijection(a, b) => {
-						let mut result = Vec::new();
-						let mut indexes = Vec::new();
-						indexes.resize(a.len(), 0);
 
-						fn child_environment<'a>(
-							blanks: &'a HashMap<BlankIdIndex, SimplifiedBlankData>,
-							mut stack: Vec<Item<'a>>,
-							indexes: &[usize],
-							equivalences: &Equivalences,
-							statements: &[(BlankIdIndex, BlankIdIndex)],
-							a: &[BlankIdIndex],
-							b: &[BlankIdIndex],
-						) -> Option<Stack<'a>> {
-							for (i, a) in a.iter().cloned().enumerate() {
-								let b = b[indexes[i]];
+					vec![self]
+				}
+				Item::Bijection(a, b) => {
+					let mut result = Vec::new();
+					let mut indexes = Vec::new();
+					indexes.resize(a.len(), 0);
 
-								if blanks[&a].color != blanks[&b].color {
-									return None;
-								}
+					fn child_environment<'a>(
+						blanks: &'a HashMap<BlankIdIndex, SimplifiedBlankData>,
+						mut stack: Vec<Item<'a>>,
+						indexes: &[usize],
+						equivalences: &Equivalences,
+						statements: &[(BlankIdIndex, BlankIdIndex)],
+						a: &[BlankIdIndex],
+						b: &[BlankIdIndex],
+					) -> Option<Stack<'a>> {
+						for (i, a) in a.iter().cloned().enumerate() {
+							let b = b[indexes[i]];
 
-								if !equivalences.eq(a, b) {
-									stack.push(Item::Equivalence(a, b))
-								}
+							if blanks[&a].color != blanks[&b].color {
+								return None;
 							}
 
-							Some(Stack {
-								stack,
-								equivalences: equivalences.clone(),
-								statements: statements.to_vec(),
-							})
+							if !equivalences.eq(a, b) {
+								stack.push(Item::Equivalence(a, b))
+							}
 						}
 
-						loop {
-							if let Some(env) = child_environment(
-								blanks,
-								self.stack.clone(),
-								&indexes,
-								&self.equivalences,
-								&self.statements,
-								a,
-								b,
-							) {
-								result.push(env)
-							}
+						Some(Stack {
+							stack,
+							equivalences: equivalences.clone(),
+							statements: statements.to_vec(),
+						})
+					}
 
-							if !incr(&mut indexes, b.len()) {
-								break result;
-							}
+					loop {
+						if let Some(env) = child_environment(
+							blanks,
+							self.stack.clone(),
+							&indexes,
+							&self.equivalences,
+							&self.statements,
+							a,
+							b,
+						) {
+							result.push(env)
+						}
+
+						if !incr(&mut indexes, b.len()) {
+							break result;
 						}
 					}
 				}
-			}
+			},
 			None => vec![self],
 		}
 	}
@@ -362,7 +394,7 @@ fn incr(digits: &mut [usize], base: usize) -> bool {
 		if *d == base {
 			*d = 0
 		} else {
-			return true
+			return true;
 		}
 	}
 

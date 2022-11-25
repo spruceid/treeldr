@@ -1,20 +1,26 @@
-use crate::{Single, Context, resource::{self, BindingValueRef}, component::{AssertNamed, formatted::AssertFormatted}, prop, single, context::MapIds};
+use crate::{
+	component::formatted::AssertFormatted,
+	context::{MapIds, MapIdsIn},
+	prop,
+	resource::{self, BindingValueRef},
+	single, Context, Single,
+};
 
 use super::Error;
 use locspan::Meta;
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, Name};
 pub use treeldr::layout::field::Property;
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, Name};
 
 /// Layout field definition.
 #[derive(Debug, Clone)]
 pub struct Definition<M> {
-	prop: Single<Id, M>
+	prop: Single<Id, M>,
 }
 
 impl<M: Merge> MapIds for Definition<M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
-		self.prop.map_ids(f)
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		self.prop.map_ids_in(Some(Property::For.into()), f)
 	}
 }
 
@@ -45,11 +51,17 @@ impl<M> DefaultLayout<M> {
 	}
 }
 
+impl<M> Default for Definition<M> {
+	fn default() -> Self {
+		Self {
+			prop: Single::default(),
+		}
+	}
+}
+
 impl<M> Definition<M> {
 	pub fn new() -> Self {
-		Self {
-			prop: Single::default()
-		}
+		Self::default()
 	}
 
 	pub fn property(&self) -> &Single<Id, M> {
@@ -60,24 +72,54 @@ impl<M> Definition<M> {
 		&mut self.prop
 	}
 
+	pub fn is_included_in(
+		&self,
+		context: &Context<M>,
+		as_component: &crate::component::Data<M>,
+		as_formatted: &crate::component::formatted::Data<M>,
+		other: &Self,
+		other_as_component: &crate::component::Data<M>,
+		other_as_formatted: &crate::component::formatted::Data<M>,
+	) -> bool {
+		let common_prop = self
+			.prop
+			.iter()
+			.any(|Meta(a, _)| other.prop.iter().any(|Meta(b, _)| a == b));
+		let no_prop = self.prop.is_empty() && other.prop.is_empty();
+
+		let common_name = as_component
+			.name
+			.iter()
+			.any(|Meta(a, _)| other_as_component.name.iter().any(|Meta(b, _)| a == b));
+		let no_name = as_component.name.is_empty() && other_as_component.name.is_empty();
+
+		let included_layout = as_formatted.format.iter().all(|Meta(a, _)| {
+			other_as_formatted
+				.format
+				.iter()
+				.all(|Meta(b, _)| crate::layout::is_included_in(context, *a, *b))
+		});
+
+		(common_prop || no_prop) && (common_name || no_name) && included_layout
+	}
+
 	pub fn default_name(
 		&self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		as_resource: &resource::Data<M>
+		as_resource: &resource::Data<M>,
 	) -> Option<Meta<Name, M>>
 	where
 		M: Clone,
 	{
-		as_resource.id.as_iri()
+		as_resource
+			.id
+			.as_iri()
 			.and_then(|term| vocabulary.iri(term))
 			.and_then(|iri| Name::from_iri(iri).ok().flatten())
 			.map(|name| Meta::new(name, as_resource.metadata.clone()))
 	}
 
-	pub fn default_layout(
-		&self,
-		context: &crate::Context<M>,
-	) -> Option<DefaultLayout<M>>
+	pub fn default_layout(&self, context: &crate::Context<M>) -> Option<DefaultLayout<M>>
 	where
 		M: Clone,
 	{
@@ -92,30 +134,53 @@ impl<M> Definition<M> {
 	}
 
 	pub fn bindings(&self) -> ClassBindings<M> {
-		ClassBindings { prop: self.prop.iter() }
+		ClassBindings {
+			prop: self.prop.iter(),
+		}
 	}
 
 	pub(crate) fn build(
 		&self,
 		context: &Context<M>,
 		as_resource: &treeldr::node::Data<M>,
-		as_component: &treeldr::component::Data<M>,
+		_as_component: &treeldr::component::Data<M>,
 		as_formatted: &treeldr::component::formatted::Data<M>,
-		meta: M
-	) -> Result<Meta<treeldr::layout::field::Definition<M>, M>, Error<M>> where M: Clone {
-		as_component.assert_named(as_resource, &meta)?;
+		meta: M,
+	) -> Result<Meta<treeldr::layout::field::Definition<M>, M>, Error<M>>
+	where
+		M: Clone,
+	{
 		as_formatted.assert_formatted(as_resource, &meta)?;
 
-		let prop =
-			self.prop.clone()
-				.into_property_at_node_binding(context, as_resource.id, Property::For)?;
+		let prop = self.prop.clone().into_property_at_node_binding(
+			context,
+			as_resource.id,
+			Property::For,
+		)?;
 
 		Ok(Meta(treeldr::layout::field::Definition::new(prop), meta))
 	}
 }
 
+pub fn is_included_in<M>(context: &Context<M>, a: Id, b: Id) -> bool {
+	if a == b {
+		true
+	} else {
+		let a = context.get(a).unwrap();
+		let b = context.get(b).unwrap();
+		a.as_layout_field().is_included_in(
+			context,
+			a.as_component().data(),
+			a.as_formatted().data(),
+			b.as_layout_field(),
+			b.as_component().data(),
+			b.as_formatted().data(),
+		)
+	}
+}
+
 pub enum ClassBinding {
-	For(Id)
+	For(Id),
 }
 
 pub type Binding = ClassBinding;
@@ -123,19 +188,19 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::For(_) => Property::For
+			Self::For(_) => Property::For,
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::For(v) => BindingValueRef::Id(*v)
+			Self::For(v) => BindingValueRef::Id(*v),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
-	prop: single::Iter<'a, Id, M>
+	prop: single::Iter<'a, Id, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -144,6 +209,8 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	type Item = Meta<ClassBinding, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.prop.next().map(|m| m.into_cloned_value().map(ClassBinding::For))
+		self.prop
+			.next()
+			.map(|m| m.into_cloned_value().map(ClassBinding::For))
 	}
 }

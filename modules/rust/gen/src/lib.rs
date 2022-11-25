@@ -22,20 +22,20 @@ pub trait Generate<M> {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module<M>>>,
+		scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>>;
+	) -> Result<(), Error>;
 
 	fn with<'a, 'c, V>(
 		&self,
 		context: &'c Context<'a, V, M>,
-		scope: Option<Ref<Module<M>>>,
+		scope: Option<Ref<Module>>,
 	) -> With<'a, 'c, '_, V, M, Self> {
 		With(context, scope, self)
 	}
 }
 
-pub struct With<'a, 'c, 't, V, M, T: ?Sized>(&'c Context<'a, V, M>, Option<Ref<Module<M>>>, &'t T);
+pub struct With<'a, 'c, 't, V, M, T: ?Sized>(&'c Context<'a, V, M>, Option<Ref<Module>>, &'t T);
 
 impl<
 		'a,
@@ -46,7 +46,7 @@ impl<
 		T: ?Sized + Generate<M>,
 	> With<'a, 'c, 't, V, M, T>
 {
-	pub fn into_tokens(self) -> Result<TokenStream, Error<M>> {
+	pub fn into_tokens(self) -> Result<TokenStream, Error> {
 		let mut tokens = TokenStream::new();
 		self.2.generate(self.0, self.1, &mut tokens)?;
 		Ok(tokens)

@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use rdf_types::Vocabulary;
 use shelves::Ref;
-use treeldr::{BlankIdIndex, IriIndex};
+use treeldr::{BlankIdIndex, IriIndex, TId};
 
 mod json_ld;
 mod rdf;
@@ -26,7 +26,10 @@ pub fn variant_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
 	quote::format_ident!("{}", name.to_pascal_case())
 }
 
-pub fn doc_attribute(label: Option<&str>, doc: &treeldr::Documentation) -> Vec<TokenStream> {
+pub fn doc_attribute(
+	label: Option<&str>,
+	doc: &treeldr::StrippedDocumentation,
+) -> Vec<TokenStream> {
 	let mut content = String::new();
 
 	if let Some(label) = label {
@@ -59,13 +62,13 @@ pub fn doc_attribute(label: Option<&str>, doc: &treeldr::Documentation) -> Vec<T
 		.collect()
 }
 
-impl<M> Generate<M> for BuiltIn<M> {
+impl<M> Generate<M> for BuiltIn {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module<M>>>,
+		scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		match self {
 			Self::Required(item) => {
 				item.generate(context, scope, tokens)?;
@@ -92,13 +95,13 @@ impl<M> Generate<M> for BuiltIn<M> {
 	}
 }
 
-impl<M> Generate<M> for Referenced<BuiltIn<M>> {
+impl<M> Generate<M> for Referenced<BuiltIn> {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module<M>>>,
+		scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		match self.0 {
 			BuiltIn::Required(item) => {
 				Referenced(item).generate(context, scope, tokens)?;
@@ -125,13 +128,13 @@ impl<M> Generate<M> for Referenced<BuiltIn<M>> {
 	}
 }
 
-impl<M> Generate<M> for Type<M> {
+impl<M> Generate<M> for Type {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module<M>>>,
+		scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		let doc = doc_attribute(self.label(), self.documentation());
 
 		match &self.desc {
@@ -232,13 +235,13 @@ impl<M> Generate<M> for Type<M> {
 	}
 }
 
-impl<M> Generate<M> for Ref<treeldr::layout::Definition<M>> {
+impl<M> Generate<M> for TId<treeldr::Layout> {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module<M>>>,
+		scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		let ty = context
 			.layout_type(*self)
 			.expect("undefined generated layout");
@@ -279,13 +282,13 @@ impl<M> Generate<M> for Ref<treeldr::layout::Definition<M>> {
 	}
 }
 
-impl<M> Generate<M> for Referenced<Ref<treeldr::layout::Definition<M>>> {
+impl<M> Generate<M> for Referenced<TId<treeldr::Layout>> {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module<M>>>,
+		scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		let ty = context
 			.layout_type(self.0)
 			.expect("undefined generated layout");
@@ -332,9 +335,9 @@ impl<M> Generate<M> for treeldr::layout::Primitive {
 	fn generate<V>(
 		&self,
 		_context: &Context<V, M>,
-		_scope: Option<Ref<Module<M>>>,
+		_scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		tokens.extend(match self {
 			Self::Boolean => quote! { bool },
 			Self::Integer => quote! { i32 },
@@ -358,9 +361,9 @@ impl<M> Generate<M> for Referenced<treeldr::layout::Primitive> {
 	fn generate<V>(
 		&self,
 		_context: &Context<V, M>,
-		_scope: Option<Ref<Module<M>>>,
+		_scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		tokens.extend(match self.0 {
 			Primitive::Boolean => quote! { bool },
 			Primitive::Integer => quote! { i32 },

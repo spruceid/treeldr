@@ -1,4 +1,4 @@
-use treeldr::{vocab, IriIndex, metadata::Merge, Id};
+use treeldr::{metadata::Merge, vocab, Id, IriIndex};
 
 use crate::Context;
 
@@ -8,9 +8,6 @@ impl<M> Context<M> {
 		M: Clone + Merge,
 	{
 		use vocab::{Term, Xsd};
-		self.declare_datatype(
-			Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::String))),
-			metadata,
-		);
+		self.declare_datatype(Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::String))), metadata);
 	}
 }

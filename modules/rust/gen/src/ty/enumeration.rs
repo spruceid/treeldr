@@ -3,15 +3,15 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
 use shelves::Ref;
-use treeldr::{BlankIdIndex, IriIndex};
+use treeldr::{BlankIdIndex, IriIndex, TId};
 
-pub struct Enum<M> {
+pub struct Enum {
 	ident: proc_macro2::Ident,
-	variants: Vec<Variant<M>>,
+	variants: Vec<Variant>,
 }
 
-impl<M> Enum<M> {
-	pub fn new(ident: proc_macro2::Ident, variants: Vec<Variant<M>>) -> Self {
+impl Enum {
+	pub fn new(ident: proc_macro2::Ident, variants: Vec<Variant>) -> Self {
 		Self { ident, variants }
 	}
 
@@ -19,29 +19,29 @@ impl<M> Enum<M> {
 		&self.ident
 	}
 
-	pub fn variants(&self) -> &[Variant<M>] {
+	pub fn variants(&self) -> &[Variant] {
 		&self.variants
 	}
 }
 
-pub struct Variant<M> {
+pub struct Variant {
 	ident: proc_macro2::Ident,
-	ty: Option<Ref<treeldr::layout::Definition<M>>>,
+	ty: Option<TId<treeldr::Layout>>,
 }
 
-impl<M> Variant<M> {
-	pub fn new(ident: proc_macro2::Ident, ty: Option<Ref<treeldr::layout::Definition<M>>>) -> Self {
+impl Variant {
+	pub fn new(ident: proc_macro2::Ident, ty: Option<TId<treeldr::Layout>>) -> Self {
 		Self { ident, ty }
 	}
 }
 
-impl<M> Generate<M> for Variant<M> {
+impl<M> Generate<M> for Variant {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module<M>>>,
+		scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		let ident = &self.ident;
 
 		match self.ty.as_ref() {

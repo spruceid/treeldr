@@ -1,6 +1,6 @@
 use locspan::Meta;
 
-use crate::{TId, Layout};
+use crate::{Layout, TId};
 
 /// Reference layout.
 #[derive(Debug, Clone)]

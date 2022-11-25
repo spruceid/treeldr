@@ -1,4 +1,4 @@
-use crate::{TId, Layout};
+use crate::{Layout, TId};
 use locspan::Meta;
 
 #[derive(Debug, Clone)]

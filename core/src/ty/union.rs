@@ -1,10 +1,10 @@
 use locspan::Meta;
 
-use crate::{Model, Type, TId, Multiple};
+use crate::{Model, Multiple, TId, Type};
 
 #[derive(Debug)]
 pub struct Union<M> {
-	options: Multiple<TId<Type>, M>
+	options: Multiple<TId<Type>, M>,
 }
 
 impl<M> Union<M> {

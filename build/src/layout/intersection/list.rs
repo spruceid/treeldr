@@ -1,36 +1,43 @@
 use std::collections::VecDeque;
 
 use locspan::Meta;
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{metadata::Merge, IriIndex, BlankIdIndex, Id};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
 
-use crate::{Context, Error, ObjectAsRequiredId, utils::TryCollect};
+use crate::{utils::TryCollect, Context, Error, ObjectAsRequiredId};
 
 use super::IdIntersection;
 
 pub trait IntersectionListItem<M>: Clone {
 	fn get(context: &Context<M>, id: Meta<Id, M>) -> Result<Meta<Self, M>, Error<M>>;
 
-	fn list_intersection(a: Option<&[Meta<Self, M>]>, b: &[Meta<Self, M>]) -> Result<Option<Vec<Meta<Self, M>>>, Error<M>>;
+	fn list_intersection(
+		a: Option<&[Meta<Self, M>]>,
+		b: &[Meta<Self, M>],
+	) -> Result<Option<Vec<Meta<Self, M>>>, Error<M>>;
 
-	fn build<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>>(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
-		meta: M
-	) -> Result<Id, Error<M>>;
+		meta: M,
+	) -> Id;
 }
+
+pub type IntersectedListItem<T, M> = Option<Vec<Meta<T, M>>>;
 
 pub fn list_intersection<T: IntersectionListItem<M>, M: Clone + Merge>(
 	context: &mut Context<M>,
 	lists: &IdIntersection<M>,
-) -> Result<Vec<Option<Vec<Meta<T, M>>>>, Error<M>> {
-	let mut result: Vec<Option<Vec<Meta<T, M>>>> = Vec::new();
+) -> Result<Vec<IntersectedListItem<T, M>>, Error<M>> {
+	let mut result: Vec<IntersectedListItem<T, M>> = Vec::new();
 
 	for (i, Meta(list_id, meta)) in lists.iter().enumerate() {
-		let list = context.require_list(list_id).map_err(|e| e.at(meta.clone()))?;
+		let list = context
+			.require_list(list_id)
+			.map_err(|e| e.at(meta.clone()))?;
 
 		let structs = list.try_fold(context, Vec::new(), |struct_, item| {
 			let mut structs = Vec::new();
@@ -64,21 +71,34 @@ pub fn list_intersection<T: IntersectionListItem<M>, M: Clone + Merge>(
 	Ok(result)
 }
 
-pub fn build_lists<T: IntersectionListItem<M>, V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>, M: Clone + Merge>(
+pub fn build_lists<
+	T: IntersectionListItem<M>,
+	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+	M: Clone + Merge,
+>(
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
 	context: &mut Context<M>,
 	stack: &mut VecDeque<Id>,
-	result: Vec<Option<Vec<Meta<T, M>>>>
-) -> Result<Vec<Option<Id>>, Error<M>> {
-	result.into_iter().map(|fields| {
-		fields.map(|fields| {
-			let built_fields: Vec<_> = fields
-				.into_iter()
-				.map(|Meta(f, m)| Ok(Meta(f.build(vocabulary, generator, context, stack, m.clone())?.into_term(), m)))
-				.try_collect()?;
-
-			Ok(context.create_list(vocabulary, generator, built_fields))
-		}).transpose()
-	}).try_collect()
+	result: Vec<Option<Vec<Meta<T, M>>>>,
+) -> Vec<Option<Id>> {
+	result
+		.into_iter()
+		.map(|fields| {
+			fields.map(|fields| {
+				context.create_list_with(
+					vocabulary,
+					generator,
+					fields,
+					|Meta(f, m), context, vocabulary, generator| {
+						Meta(
+							f.build(vocabulary, generator, context, stack, m.clone())
+								.into_term(),
+							m,
+						)
+					},
+				)
+			})
+		})
+		.collect()
 }

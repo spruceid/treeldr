@@ -1,5 +1,5 @@
 use locspan::Meta;
-use treeldr::{vocab, IriIndex, metadata::Merge, Id};
+use treeldr::{metadata::Merge, vocab, Id, IriIndex};
 
 use crate::Context;
 
@@ -10,21 +10,52 @@ impl<M> Context<M> {
 	{
 		use treeldr::layout::Primitive;
 
-		self.declare_property(
-			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_))),
-			metadata.clone(),
-		);
 		let prop = self
-			.get_mut(Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
-				vocab::TreeLdr::Self_,
-			))))
-			.unwrap()
+			.declare_property(
+				Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_))),
+				metadata.clone(),
+			)
 			.as_property_mut();
-
 		prop.range_mut().insert(Meta(
 			Id::Iri(IriIndex::Iri(vocab::Term::Rdfs(vocab::Rdfs::Resource))),
-			metadata.clone()
+			metadata.clone(),
 		));
+
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
+				vocab::TreeLdr::Component,
+			))),
+			metadata.clone(),
+		);
+
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Layout))),
+			metadata.clone(),
+		);
+
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
+				vocab::TreeLdr::Formatted,
+			))),
+			metadata.clone(),
+		);
+
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Field))),
+			metadata.clone(),
+		);
+
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Variant))),
+			metadata.clone(),
+		);
+
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
+				vocab::TreeLdr::LayoutRestriction,
+			))),
+			metadata.clone(),
+		);
 
 		self.declare_primitive_layout(Primitive::Boolean, metadata.clone());
 		self.declare_primitive_layout(Primitive::Integer, metadata.clone());

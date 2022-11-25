@@ -1,18 +1,20 @@
-use crate::{vocab, Id, IriIndex};
+use crate::{node::BindingValueRef, vocab, Id, IriIndex, TId};
 
 pub mod regexp;
 pub mod restriction;
 
+use derivative::Derivative;
+use locspan::Meta;
 pub use regexp::RegExp;
 pub use restriction::{Restriction, Restrictions};
 
 #[derive(Debug, Clone)]
-pub enum DataType {
+pub enum DataType<M> {
 	Primitive(Primitive),
-	Derived(Derived),
+	Derived(Derived<M>),
 }
 
-impl DataType {
+impl<M> DataType<M> {
 	pub fn primitive(&self) -> Primitive {
 		match self {
 			Self::Primitive(p) => *p,
@@ -22,17 +24,38 @@ impl DataType {
 }
 
 #[derive(Debug, Clone)]
-pub struct Definition {
-	desc: DataType
+pub struct Definition<M> {
+	desc: DataType<M>,
 }
 
-impl Definition {
-	pub fn new(desc: DataType) -> Self {
+impl<M> Definition<M> {
+	pub fn new(desc: DataType<M>) -> Self {
 		Self { desc }
 	}
 
-	pub fn description(&self) -> &DataType {
+	pub fn description(&self) -> &DataType<M> {
 		&self.desc
+	}
+
+	pub fn on_datatype(&self) -> Option<&Meta<TId<crate::ty::DataType<M>>, M>> {
+		match &self.desc {
+			DataType::Derived(d) => Some(d.base()),
+			_ => None,
+		}
+	}
+
+	pub fn with_restrictions(&self) -> Option<Meta<Restrictions, &M>> {
+		match &self.desc {
+			DataType::Derived(d) => d.restrictions(),
+			_ => None,
+		}
+	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings {
+			on_datatype: self.on_datatype(),
+			with_restrictions: self.with_restrictions(),
+		}
 	}
 }
 
@@ -94,43 +117,55 @@ impl Primitive {
 			IriIndex::Iri(Term::Xsd(Xsd::Time)) => Some(Self::Time),
 			IriIndex::Iri(Term::Xsd(Xsd::DateTime)) => Some(Self::DateTime),
 			IriIndex::Iri(Term::Xsd(Xsd::Duration)) => Some(Self::Duration),
-			_ => None
+			_ => None,
 		}
 	}
 
 	pub fn from_id(id: Id) -> Option<Self> {
 		match id {
 			Id::Iri(iri) => Self::from_iri(iri),
-			Id::Blank(_) => None
+			Id::Blank(_) => None,
 		}
 	}
 }
 
 #[derive(Debug, Clone)]
-pub enum Derived {
-	Boolean(Id),
-	Real(Id, restriction::real::Restrictions),
-	Float(Id, restriction::float::Restrictions),
-	Double(Id, restriction::double::Restrictions),
-	String(Id, restriction::string::Restrictions),
-	Date(Id),
-	Time(Id),
-	DateTime(Id),
-	Duration(Id),
+pub enum Derived<M> {
+	Boolean(Meta<TId<crate::ty::DataType<M>>, M>),
+	Real(
+		Meta<TId<crate::ty::DataType<M>>, M>,
+		Meta<restriction::real::Restrictions, M>,
+	),
+	Float(
+		Meta<TId<crate::ty::DataType<M>>, M>,
+		Meta<restriction::float::Restrictions, M>,
+	),
+	Double(
+		Meta<TId<crate::ty::DataType<M>>, M>,
+		Meta<restriction::double::Restrictions, M>,
+	),
+	String(
+		Meta<TId<crate::ty::DataType<M>>, M>,
+		Meta<restriction::string::Restrictions, M>,
+	),
+	Date(Meta<TId<crate::ty::DataType<M>>, M>),
+	Time(Meta<TId<crate::ty::DataType<M>>, M>),
+	DateTime(Meta<TId<crate::ty::DataType<M>>, M>),
+	Duration(Meta<TId<crate::ty::DataType<M>>, M>),
 }
 
-impl Derived {
-	pub fn base(&self) -> Id {
+impl<M> Derived<M> {
+	pub fn base(&self) -> &Meta<TId<crate::ty::DataType<M>>, M> {
 		match self {
-			Self::Boolean(id) => *id,
-			Self::Real(id, _) => *id,
-			Self::Float(id, _) => *id,
-			Self::Double(id, _) => *id,
-			Self::String(id, _) => *id,
-			Self::Date(id) => *id,
-			Self::Time(id) => *id,
-			Self::DateTime(id) => *id,
-			Self::Duration(id) => *id,
+			Self::Boolean(id) => id,
+			Self::Real(id, _) => id,
+			Self::Float(id, _) => id,
+			Self::Double(id, _) => id,
+			Self::String(id, _) => id,
+			Self::Date(id) => id,
+			Self::Time(id) => id,
+			Self::DateTime(id) => id,
+			Self::Duration(id) => id,
 		}
 	}
 
@@ -148,13 +183,13 @@ impl Derived {
 		}
 	}
 
-	pub fn restrictions(&self) -> Restrictions {
+	pub fn restrictions(&self) -> Option<Meta<Restrictions, &M>> {
 		match self {
-			Self::Real(_, r) => Restrictions::Real(r.iter()),
-			Self::Float(_, r) => Restrictions::Float(r.iter()),
-			Self::Double(_, r) => Restrictions::Double(r.iter()),
-			Self::String(_, r) => Restrictions::String(r.iter()),
-			_ => Restrictions::None,
+			Self::Real(_, Meta(r, m)) => Some(Meta(Restrictions::Real(r), m)),
+			Self::Float(_, Meta(r, m)) => Some(Meta(Restrictions::Float(r), m)),
+			Self::Double(_, Meta(r, m)) => Some(Meta(Restrictions::Double(r), m)),
+			Self::String(_, Meta(r, m)) => Some(Meta(Restrictions::String(r), m)),
+			_ => None,
 		}
 	}
 }
@@ -162,22 +197,81 @@ impl Derived {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
 	OnDatatype,
-	WithRestrictions
+	WithRestrictions,
 }
 
 impl Property {
 	pub fn term(&self) -> vocab::Term {
-		use vocab::{Term, Owl};
+		use vocab::{Owl, Term};
 		match self {
 			Self::OnDatatype => Term::Owl(Owl::OnDatatype),
-			Self::WithRestrictions => Term::Owl(Owl::WithRestrictions)
+			Self::WithRestrictions => Term::Owl(Owl::WithRestrictions),
 		}
 	}
 
 	pub fn name(&self) -> &'static str {
 		match self {
 			Self::OnDatatype => "restricted datatype",
-			Self::WithRestrictions => "datatype restrictions"
+			Self::WithRestrictions => "datatype restrictions",
 		}
+	}
+
+	pub fn expect_type(&self) -> bool {
+		matches!(self, Self::OnDatatype)
+	}
+
+	pub fn expect_layout(&self) -> bool {
+		false
+	}
+}
+
+pub enum ClassBindingRef<'a, M> {
+	OnDatatype(TId<crate::ty::DataType<M>>),
+	WithRestrictions(Restrictions<'a>),
+}
+
+pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
+
+impl<'a, M> ClassBindingRef<'a, M> {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::OnDatatype(_) => Property::OnDatatype,
+			Self::WithRestrictions(_) => Property::WithRestrictions,
+		}
+	}
+
+	pub fn value(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::OnDatatype(v) => BindingValueRef::DataType(*v),
+			Self::WithRestrictions(v) => BindingValueRef::DatatypeRestrictions(*v),
+		}
+	}
+}
+
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct ClassBindings<'a, M> {
+	on_datatype: Option<&'a Meta<TId<crate::ty::DataType<M>>, M>>,
+	with_restrictions: Option<Meta<Restrictions<'a>, &'a M>>,
+}
+
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBindingRef<'a, M>, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.on_datatype
+			.take()
+			.map(|m| {
+				m.borrow()
+					.into_cloned_value()
+					.map(ClassBindingRef::OnDatatype)
+			})
+			.or_else(|| {
+				self.with_restrictions
+					.take()
+					.map(|m| m.map(ClassBindingRef::WithRestrictions))
+			})
 	}
 }

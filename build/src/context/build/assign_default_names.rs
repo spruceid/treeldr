@@ -1,17 +1,17 @@
 use std::collections::{BTreeMap, HashMap};
 
 use rdf_types::Vocabulary;
-use treeldr::{IriIndex, BlankIdIndex, Id, metadata::Merge};
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
 
-use crate::{Context, component};
 use super::LayoutRelations;
+use crate::{component, Context};
 
 impl<M: Clone + Merge> Context<M> {
 	/// Assigns default name for layouts/variants that don't have a name yet.
 	pub fn assign_default_names(
 		&mut self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		layout_relations: &HashMap<Id, LayoutRelations<M>>
+		layout_relations: &HashMap<Id, LayoutRelations<M>>,
 	) {
 		// Start with the fields.
 		let mut default_field_names = BTreeMap::new();
@@ -74,12 +74,9 @@ impl<M: Clone + Merge> Context<M> {
 				let node = self.nodes.get(id).unwrap();
 				let layout = node.as_layout();
 				let parent_layouts = &layout_relations.get(id).unwrap().parent;
-				if let Some(name) = layout.default_name(
-					self,
-					vocabulary,
-					parent_layouts,
-					node.as_resource()
-				) {
+				if let Some(name) =
+					layout.default_name(self, vocabulary, parent_layouts, node.as_resource())
+				{
 					let layout = self.get_mut(*id).unwrap().as_component_mut();
 					if layout.name().is_empty() {
 						layout.name_mut().insert(name);
@@ -92,9 +89,12 @@ impl<M: Clone + Merge> Context<M> {
 		let mut default_variant_names = BTreeMap::new();
 		for (id, node) in &self.nodes {
 			if node.has_type(self, component::formatted::Type::LayoutVariant) {
-				if let Some(name) =
-					node.as_layout_variant().default_name(self, vocabulary, node.as_resource(), node.as_formatted().data())
-				{
+				if let Some(name) = node.as_layout_variant().default_name(
+					self,
+					vocabulary,
+					node.as_resource(),
+					node.as_formatted().data(),
+				) {
 					default_variant_names.insert(*id, name);
 				}
 			}

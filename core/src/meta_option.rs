@@ -51,7 +51,10 @@ impl<T, M> MetaOption<T, M> {
 		self.value.replace(Meta(value, metadata))
 	}
 
-	pub fn set_once(&mut self, metadata: M, f: impl FnOnce() -> T) where M: Merge {
+	pub fn set_once(&mut self, metadata: M, f: impl FnOnce() -> T)
+	where
+		M: Merge,
+	{
 		match self.value.as_mut() {
 			Some(value) => value.1.merge_with(metadata),
 			None => self.value = Some(Meta(f(), metadata)),

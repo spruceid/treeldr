@@ -56,7 +56,7 @@ fn primitive_from_literal<V, M>(
 	}
 }
 
-fn from_object<V, M>(context: &Context<V, M>, ty: &Type<M>, object: TokenStream) -> TokenStream {
+fn from_object<V, M>(context: &Context<V, M>, ty: &Type, object: TokenStream) -> TokenStream {
 	match ty.description() {
 		Description::BuiltIn(BuiltIn::Required(item)) => {
 			let ty = context.layout_type(*item).unwrap();
@@ -115,7 +115,7 @@ fn from_object<V, M>(context: &Context<V, M>, ty: &Type<M>, object: TokenStream)
 	}
 }
 
-fn from_objects<V, M>(context: &Context<V, M>, ty: &Type<M>, objects: TokenStream) -> TokenStream {
+fn from_objects<V, M>(context: &Context<V, M>, ty: &Type, objects: TokenStream) -> TokenStream {
 	match ty.description() {
 		Description::BuiltIn(BuiltIn::Vec(item)) => {
 			let object = quote! { object };
@@ -154,7 +154,7 @@ fn from_objects<V, M>(context: &Context<V, M>, ty: &Type<M>, objects: TokenStrea
 /// from an RDF graph.
 pub fn structure_reader<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
 	context: &Context<V, M>,
-	ty: &Struct<M>,
+	ty: &Struct,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	let mut fields_init = Vec::with_capacity(ty.fields().len());
@@ -164,16 +164,16 @@ pub fn structure_reader<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M
 
 		let init = match field.property() {
 			Some(prop_ref) => {
-				let prop = context.model().properties().get(prop_ref).unwrap();
+				let prop = context.model().get(prop_ref).unwrap();
 
 				let layout_ref = field.layout();
-				let layout = context.model().layouts().get(layout_ref).unwrap();
+				let layout = context.model().get(layout_ref).unwrap();
 
 				if prop.id()
 					== treeldr::Id::Iri(IriIndex::Iri(treeldr::vocab::Term::TreeLdr(
 						treeldr::vocab::TreeLdr::Self_,
 					))) {
-					match layout.description().value() {
+					match layout.as_layout().description().value() {
 						treeldr::layout::Description::Required(_) => {
 							quote! {
 								::treeldr_rust_prelude::Id::from_ref(id)
@@ -196,7 +196,7 @@ pub fn structure_reader<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M
 					let id = quote! { ::treeldr_rust_prelude::Id::from_ref(id) }; // FIXME: same limitation
 					let objects = quote! { graph.objects(&#id, &#prop_id) };
 
-					match layout.description().value() {
+					match layout.as_layout().description().value() {
 						treeldr::layout::Description::Required(_) => {
 							let object = quote! { object };
 							let from_object =
@@ -278,7 +278,7 @@ pub fn structure_reader<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M
 /// from an RDF graph.
 pub fn enum_reader<V, M>(
 	context: &Context<V, M>,
-	_ty: &Enum<M>,
+	_ty: &Enum,
 	ident: &proc_macro2::Ident,
 ) -> Result<TokenStream, Error> {
 	let id_ty = context.ident_type();

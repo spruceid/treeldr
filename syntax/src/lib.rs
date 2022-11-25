@@ -185,18 +185,26 @@ pub enum OuterTypeExpr<M> {
 }
 
 impl<M: Clone> OuterTypeExpr<M> {
+	pub fn label(&self) -> Option<Label> {
+		match self {
+			Self::Inner(e) => e.label(),
+			Self::Union(l, _) => Some(*l),
+			Self::Intersection(l, _) => Some(*l),
+		}
+	}
+
 	pub fn implicit_layout_expr(&self) -> OuterLayoutExpr<M> {
 		match self {
 			Self::Inner(i) => OuterLayoutExpr::Inner(i.implicit_layout_expr()),
 			Self::Union(label, options) => OuterLayoutExpr::Union(
-				*label,
+				Some(*label),
 				options
 					.iter()
 					.map(|Meta(ty_expr, loc)| Meta(ty_expr.implicit_layout_expr(), loc.clone()))
 					.collect(),
 			),
 			Self::Intersection(label, types) => OuterLayoutExpr::Intersection(
-				*label,
+				Some(*label),
 				types
 					.iter()
 					.map(|Meta(ty_expr, loc)| Meta(ty_expr.implicit_layout_expr(), loc.clone()))
@@ -219,6 +227,10 @@ pub enum NamedInnerTypeExprLayout<M> {
 }
 
 impl<M: Clone> NamedInnerTypeExpr<M> {
+	pub fn label(&self) -> Option<Label> {
+		self.expr.label()
+	}
+
 	pub fn as_id(&self) -> Option<Meta<Id, M>> {
 		self.expr.as_id()
 	}
@@ -232,7 +244,12 @@ impl<M: Clone> NamedInnerTypeExpr<M> {
 				),
 				name: name.clone(),
 			},
-			NamedInnerTypeExprLayout::Explicit(expr) => expr.value().clone(),
+			NamedInnerTypeExprLayout::Explicit(expr) => {
+				let label = self.expr.label();
+				let mut layout = expr.value().clone();
+				layout.set_label(label);
+				layout
+			}
 		}
 	}
 }
@@ -241,7 +258,7 @@ impl<M: Clone> NamedInnerTypeExpr<M> {
 pub enum InnerTypeExpr<M> {
 	Id(Meta<Id, M>),
 	Reference(Box<Meta<Self, M>>),
-	Literal(Literal),
+	Literal(Label, Literal),
 	PropertyRestriction(TypeRestrictedProperty<M>),
 	List(Label, Box<Meta<OuterTypeExpr<M>, M>>),
 	Outer(Box<Meta<OuterTypeExpr<M>, M>>),
@@ -255,16 +272,25 @@ impl<M: Clone> InnerTypeExpr<M> {
 		}
 	}
 
+	pub fn label(&self) -> Option<Label> {
+		match self {
+			Self::Literal(l, _) => Some(*l),
+			Self::List(l, _) => Some(*l),
+			Self::Outer(e) => e.label(),
+			_ => None,
+		}
+	}
+
 	pub fn implicit_layout_expr(&self) -> InnerLayoutExpr<M> {
 		match self {
 			Self::Id(id) => InnerLayoutExpr::Id(id.clone()),
 			Self::Reference(r) => InnerLayoutExpr::Reference(r.clone()),
-			Self::Literal(lit) => InnerLayoutExpr::Literal(lit.clone()),
+			Self::Literal(label, lit) => InnerLayoutExpr::Literal(Some(*label), lit.clone()),
 			Self::PropertyRestriction(r) => {
 				InnerLayoutExpr::FieldRestriction(r.implicit_layout_restricted_field())
 			}
 			Self::List(label, item) => InnerLayoutExpr::Array(
-				*label,
+				Some(*label),
 				Box::new(Meta(item.implicit_layout_expr(), item.metadata().clone())),
 			),
 			Self::Outer(outer) => InnerLayoutExpr::Outer(Box::new(Meta(
@@ -394,11 +420,19 @@ pub struct AnnotatedLayoutExpr<M> {
 #[derive(Clone)]
 pub enum OuterLayoutExpr<M> {
 	Inner(NamedInnerLayoutExpr<M>),
-	Union(Label, Vec<Meta<NamedInnerLayoutExpr<M>, M>>),
-	Intersection(Label, Vec<Meta<NamedInnerLayoutExpr<M>, M>>),
+	Union(Option<Label>, Vec<Meta<NamedInnerLayoutExpr<M>, M>>),
+	Intersection(Option<Label>, Vec<Meta<NamedInnerLayoutExpr<M>, M>>),
 }
 
 impl<M> OuterLayoutExpr<M> {
+	pub fn set_label(&mut self, label: Option<Label>) {
+		match self {
+			Self::Inner(e) => e.set_label(label),
+			Self::Union(l, _) => *l = label,
+			Self::Intersection(l, _) => *l = label,
+		}
+	}
+
 	pub fn into_restriction(self) -> Result<LayoutRestrictedField<M>, Self> {
 		match self {
 			Self::Inner(i) => i.into_restriction().map_err(Self::Inner),
@@ -426,6 +460,10 @@ impl<M> NamedInnerLayoutExpr<M> {
 		self.expr.as_id()
 	}
 
+	pub fn set_label(&mut self, label: Option<Label>) {
+		self.expr.set_label(label)
+	}
+
 	pub fn into_restriction(self) -> Result<LayoutRestrictedField<M>, Self> {
 		if self.name.is_some() {
 			Err(self)
@@ -442,11 +480,10 @@ impl<M> NamedInnerLayoutExpr<M> {
 #[derive(Clone)]
 pub enum InnerLayoutExpr<M> {
 	Id(Meta<Id, M>),
-	Primitive(Primitive),
 	Reference(Box<Meta<InnerTypeExpr<M>, M>>),
-	Literal(Literal),
+	Literal(Option<Label>, Literal),
 	FieldRestriction(LayoutRestrictedField<M>),
-	Array(Label, Box<Meta<OuterLayoutExpr<M>, M>>),
+	Array(Option<Label>, Box<Meta<OuterLayoutExpr<M>, M>>),
 	Outer(Box<Meta<OuterLayoutExpr<M>, M>>),
 }
 
@@ -462,6 +499,15 @@ impl<M> InnerLayoutExpr<M> {
 		match self {
 			Self::Id(id) => Some(id.clone()),
 			_ => None,
+		}
+	}
+
+	pub fn set_label(&mut self, label: Option<Label>) {
+		match self {
+			Self::Literal(l, _) => *l = label,
+			Self::Array(l, _) => *l = label,
+			Self::Outer(e) => e.set_label(label),
+			_ => (),
 		}
 	}
 

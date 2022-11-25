@@ -1,5 +1,12 @@
-use crate::{TId, ResourceType, Id, node, vocab::{self, Term}, BlankIdIndex, IriIndex, ty, layout, list, component, Multiple};
+use crate::{
+	component, layout, list, multiple,
+	node::{self, BindingValueRef},
+	ty,
+	vocab::{self, Term},
+	BlankIdIndex, Id, IriIndex, Multiple, ResourceType, TId,
+};
 use contextual::DisplayWithContext;
+use derivative::Derivative;
 use locspan::Meta;
 use rdf_types::Vocabulary;
 use std::fmt;
@@ -12,10 +19,31 @@ pub enum Property {
 }
 
 impl Property {
+	pub fn id(&self) -> Id {
+		match self {
+			Self::Resource(p) => Id::Iri(IriIndex::Iri(p.term())),
+			Self::Other(id) => *id,
+		}
+	}
+
 	pub fn name(&self) -> PropertyName {
 		match self {
 			Self::Resource(b) => PropertyName::Resource(b.name()),
 			Self::Other(id) => PropertyName::Other(*id),
+		}
+	}
+
+	pub fn expect_type(&self) -> bool {
+		match self {
+			Self::Resource(p) => p.expect_type(),
+			Self::Other(_) => false,
+		}
+	}
+
+	pub fn expect_layout(&self) -> bool {
+		match self {
+			Self::Resource(p) => p.expect_layout(),
+			Self::Other(_) => false,
 		}
 	}
 }
@@ -72,7 +100,9 @@ impl From<layout::Property> for Property {
 
 impl From<layout::DescriptionProperty> for Property {
 	fn from(p: layout::DescriptionProperty) -> Self {
-		Self::Resource(node::Property::Component(component::Property::Layout(layout::Property::Description(p))))
+		Self::Resource(node::Property::Component(component::Property::Layout(
+			layout::Property::Description(p),
+		)))
 	}
 }
 
@@ -84,7 +114,9 @@ impl From<component::formatted::Property> for Property {
 
 impl From<layout::field::Property> for Property {
 	fn from(p: layout::field::Property) -> Self {
-		Self::Resource(node::Property::Component(component::Property::Formatted(component::formatted::Property::LayoutField(p))))
+		Self::Resource(node::Property::Component(component::Property::Formatted(
+			component::formatted::Property::LayoutField(p),
+		)))
 	}
 }
 
@@ -98,7 +130,7 @@ impl From<list::Property> for Property {
 pub enum RdfProperty {
 	Domain,
 	Range,
-	Required
+	Required,
 }
 
 impl RdfProperty {
@@ -107,7 +139,7 @@ impl RdfProperty {
 		match self {
 			Self::Domain => Term::Rdfs(Rdfs::Domain),
 			Self::Range => Term::Rdfs(Rdfs::Range),
-			Self::Required => Term::Schema(Schema::ValueRequired)
+			Self::Required => Term::Schema(Schema::ValueRequired),
 		}
 	}
 
@@ -115,14 +147,22 @@ impl RdfProperty {
 		match self {
 			Self::Domain => "domain",
 			Self::Range => "range",
-			Self::Required => "value requirement"
+			Self::Required => "value requirement",
 		}
+	}
+
+	pub fn expect_type(&self) -> bool {
+		matches!(self, Self::Domain | Self::Range)
+	}
+
+	pub fn expect_layout(&self) -> bool {
+		false
 	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Type {
-	FunctionalProperty
+	FunctionalProperty,
 }
 
 impl Type {
@@ -133,7 +173,7 @@ impl Type {
 
 	pub fn term(&self) -> Term {
 		match self {
-			Self::FunctionalProperty => Term::Owl(vocab::Owl::FunctionalProperty)
+			Self::FunctionalProperty => Term::Owl(vocab::Owl::FunctionalProperty),
 		}
 	}
 }
@@ -144,7 +184,7 @@ pub struct Definition<M> {
 	domain: Multiple<TId<crate::Type>, M>,
 	range: Meta<TId<crate::Type>, M>,
 	required: Meta<bool, M>,
-	functional: Meta<bool, M>
+	functional: Meta<bool, M>,
 }
 
 impl<M> Definition<M> {
@@ -152,7 +192,7 @@ impl<M> Definition<M> {
 		domain: Multiple<TId<crate::Type>, M>,
 		range: Meta<TId<crate::Type>, M>,
 		required: Meta<bool, M>,
-		functional: Meta<bool, M>
+		functional: Meta<bool, M>,
 	) -> Self {
 		Self {
 			domain,
@@ -179,6 +219,18 @@ impl<M> Definition<M> {
 	pub fn is_functional(&self) -> bool {
 		*self.functional
 	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings {
+			domain: self.domain.iter(),
+			range: Some(&self.range),
+			required: if self.is_required() {
+				Some(&self.required)
+			} else {
+				None
+			},
+		}
+	}
 }
 
 pub enum PropertyName {
@@ -192,5 +244,62 @@ impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V
 			Self::Resource(name) => fmt::Display::fmt(name, f),
 			Self::Other(id) => id.fmt_with(context, f),
 		}
+	}
+}
+
+pub enum ClassBinding {
+	Domain(TId<crate::Type>),
+	Range(TId<crate::Type>),
+	Required(bool),
+}
+
+pub type Binding = ClassBinding;
+
+impl ClassBinding {
+	pub fn property(&self) -> RdfProperty {
+		match self {
+			Self::Domain(_) => RdfProperty::Domain,
+			Self::Range(_) => RdfProperty::Range,
+			Self::Required(_) => RdfProperty::Required,
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::Domain(v) => BindingValueRef::Type(*v),
+			Self::Range(v) => BindingValueRef::Type(*v),
+			Self::Required(v) => BindingValueRef::Boolean(*v),
+		}
+	}
+}
+
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct ClassBindings<'a, M> {
+	domain: multiple::Iter<'a, TId<crate::Type>, M>,
+	range: Option<&'a Meta<TId<crate::Type>, M>>,
+	required: Option<&'a Meta<bool, M>>,
+}
+
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.domain
+			.next()
+			.map(Meta::into_cloned_value)
+			.map(|m| m.map(ClassBinding::Domain))
+			.or_else(|| {
+				self.range
+					.take()
+					.map(|m| m.borrow().into_cloned_value().map(ClassBinding::Range))
+					.or_else(|| {
+						self.required
+							.take()
+							.map(|m| m.borrow().into_cloned_value().map(ClassBinding::Required))
+					})
+			})
 	}
 }

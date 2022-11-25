@@ -6,14 +6,12 @@ use json_ld::{
 };
 use locspan::{BorrowStripped, Meta};
 use rdf_types::{Vocabulary, VocabularyMut};
-use shelves::Shelf;
+use shelves::{Ref, Shelf};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use treeldr::{
-	layout::{self, Field},
-	prop,
 	vocab::{Term, TreeLdr},
-	BlankIdIndex, Id, IriIndex, Ref,
+	BlankIdIndex, Id, IriIndex, TId,
 };
 
 pub use json_ld;
@@ -68,7 +66,7 @@ where
 			if let Some(local_context) = binding.definition().context() {
 				if let Some(json_ld::Term::Ref(id)) = binding.definition().value() {
 					if let Ok(id) = Id::try_from(id.clone()) {
-						if let Some(node) = model.get(id) {
+						if let Some(node) = model.get_resource(id) {
 							if node.is_type() {
 								let new_context = local_context
 									.value
@@ -429,7 +427,7 @@ pub struct ContextBuilder<'a, V: Vocabulary, M> {
 	model: &'a treeldr::Model<M>,
 	options: &'a Options<V, M>,
 	contexts: Shelf<Vec<LocalContext>>,
-	reference_layouts: HashMap<Ref<treeldr::layout::Definition<M>>, bool>,
+	reference_layouts: HashMap<TId<treeldr::Layout>, bool>,
 }
 
 impl<'a, V: Vocabulary, M> ContextBuilder<'a, V, M> {
@@ -467,32 +465,34 @@ impl<'a, V: Vocabulary, M> ContextBuilder<'a, V, M> {
 }
 
 impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilder<'a, V, M> {
-	pub fn is_type_property(&self, vocabulary: &V, property_ref: Ref<prop::Definition<M>>) -> bool {
-		let property = self.model.properties().get(property_ref).unwrap();
+	pub fn is_type_property(&self, vocabulary: &V, property_ref: TId<treeldr::Property>) -> bool {
+		let property = self.model.get(property_ref).unwrap();
 		match property.id().as_iri() {
 			Some(iri) => vocabulary.iri(iri).unwrap() == json_ld::rdf::RDF_TYPE,
 			None => false,
 		}
 	}
 
-	pub fn is_id_property(&self, property_ref: Ref<prop::Definition<M>>) -> bool {
-		let property = self.model.properties().get(property_ref).unwrap();
+	pub fn is_id_property(&self, property_ref: TId<treeldr::Property>) -> bool {
+		let property = self.model.get(property_ref).unwrap();
 		match property.id().as_iri() {
 			Some(iri) => *iri == IriIndex::Iri(Term::TreeLdr(TreeLdr::Self_)),
 			None => false,
 		}
 	}
 
-	pub fn is_type_field(&self, vocabulary: &V, field: &Field<M>) -> bool {
-		match field.property() {
-			Some(property_ref) => self.is_type_property(vocabulary, property_ref),
+	pub fn is_type_field(&self, vocabulary: &V, field_id: TId<treeldr::layout::Field>) -> bool {
+		let field = self.model.get(field_id).unwrap();
+		match field.as_layout_field().property() {
+			Some(property_ref) => self.is_type_property(vocabulary, **property_ref),
 			None => false,
 		}
 	}
 
-	pub fn is_id_field(&self, field: &Field<M>) -> bool {
-		match field.property() {
-			Some(property_ref) => self.is_id_property(property_ref),
+	pub fn is_id_field(&self, field_id: TId<treeldr::layout::Field>) -> bool {
+		let field = self.model.get(field_id).unwrap();
+		match field.as_layout_field().property() {
+			Some(property_ref) => self.is_id_property(**property_ref),
 			None => false,
 		}
 	}
@@ -593,22 +593,27 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		&mut self,
 		vocabulary: &V,
 		context_ref: Ref<LocalContext>,
-		field: &'a Field<M>,
+		field_id: TId<treeldr::layout::Field>,
 	) -> Result<(), Error> {
-		match field.property() {
+		let field = self.model.get(field_id).unwrap();
+		match field.as_layout_field().property() {
 			Some(property_ref) => {
-				let term = field.name().to_string();
-				let layout_ref = field.layout();
+				let term = field.name().expect("missing field name").to_string();
+				let layout_ref = **field
+					.as_formatted()
+					.format()
+					.as_ref()
+					.expect("missing field layout");
 
-				let is_type = self.is_type_property(vocabulary, property_ref);
-				let is_id = self.is_id_property(property_ref);
+				let is_type = self.is_type_property(vocabulary, **property_ref);
+				let is_id = self.is_id_property(**property_ref);
 
 				let id = if is_type {
 					json_ld::Term::Keyword(Keyword::Type)
 				} else if is_id {
 					json_ld::Term::Keyword(Keyword::Id)
 				} else {
-					let property = self.model.properties().get(property_ref).unwrap();
+					let property = self.model.get(**property_ref).unwrap();
 					json_ld::Term::Ref(property.id().into())
 				};
 
@@ -638,12 +643,12 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		&mut self,
 		vocabulary: &V,
 		context_ref: Ref<LocalContext>,
-		layout_ref: Ref<layout::Definition<M>>,
+		layout_ref: TId<treeldr::Layout>,
 	) -> Result<(), Error> {
-		let layout = self.model.layouts().get(layout_ref).unwrap();
-		let ty = self.model.types().get(layout.ty().unwrap()).unwrap();
+		let layout = self.model.get(layout_ref).unwrap();
+		let ty = self.model.get(layout.as_layout().ty().unwrap()).unwrap();
 
-		let term = layout.name().unwrap().to_string();
+		let term = layout.as_component().name().unwrap().to_string();
 
 		let definition = TermDefinition {
 			id: json_ld::Term::Ref(ty.id().into()),
@@ -663,20 +668,20 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 	/// Generate the `@type` entry of a term definition.
 	fn generate_property_definition_type(
 		&mut self,
-		layout_ref: Ref<layout::Definition<M>>,
+		layout_ref: TId<treeldr::Layout>,
 		generate_id_type: bool,
 	) -> Option<json_ld::Type<IriIndex>> {
-		let layout = self.model.layouts().get(layout_ref).unwrap();
+		let layout = self.model.get(layout_ref).unwrap();
 
 		use treeldr::layout::Description;
-		match layout.description().value() {
+		match layout.as_layout().description().value() {
 			Description::Required(r) => {
-				self.generate_property_definition_type(r.item_layout(), generate_id_type)
+				self.generate_property_definition_type(**r.item_layout(), generate_id_type)
 			}
 			Description::Option(o) => {
-				self.generate_property_definition_type(o.item_layout(), generate_id_type)
+				self.generate_property_definition_type(**o.item_layout(), generate_id_type)
 			}
-			Description::Primitive(n, _) => Some(generate_primitive_type(n)),
+			Description::Primitive(n) => Some(generate_primitive_type(n)),
 			_ => {
 				if generate_id_type
 					&& self
@@ -694,12 +699,12 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 	/// Generate the `@container` entry of a term definition.
 	fn generate_property_definition_container(
 		&self,
-		layout_ref: Ref<layout::Definition<M>>,
+		layout_ref: TId<treeldr::Layout>,
 	) -> json_ld::Container {
-		let layout = self.model.layouts().get(layout_ref).unwrap();
+		let layout = self.model.get(layout_ref).unwrap();
 
 		use treeldr::layout::Description;
-		match layout.description().value() {
+		match layout.as_layout().description().value() {
 			Description::Set(_) => json_ld::Container::Set,
 			Description::Array(_) => json_ld::Container::List,
 			_ => json_ld::Container::None,
@@ -710,44 +715,45 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		&mut self,
 		vocabulary: &V,
 		context_ref: Ref<LocalContext>,
-		layout_ref: Ref<layout::Definition<M>>,
+		layout_ref: TId<treeldr::Layout>,
 		type_scoped_context: bool,
 	) -> Result<(), Error> {
-		let layout = self.model.layouts().get(layout_ref).unwrap();
+		let layout = self.model.get(layout_ref).unwrap();
 
 		use treeldr::layout::Description;
-		match layout.description().value() {
+		match layout.as_layout().description().value() {
 			Description::Set(s) => self.insert_layout_terms(
 				vocabulary,
 				context_ref,
-				s.item_layout(),
+				**s.item_layout(),
 				type_scoped_context,
 			),
 			Description::OneOrMany(s) => self.insert_layout_terms(
 				vocabulary,
 				context_ref,
-				s.item_layout(),
+				**s.item_layout(),
 				type_scoped_context,
 			),
 			Description::Required(o) => self.insert_layout_terms(
 				vocabulary,
 				context_ref,
-				o.item_layout(),
+				**o.item_layout(),
 				type_scoped_context,
 			),
 			Description::Option(o) => self.insert_layout_terms(
 				vocabulary,
 				context_ref,
-				o.item_layout(),
+				**o.item_layout(),
 				type_scoped_context,
 			),
 			Description::Enum(e) => {
-				for v in e.variants() {
-					if let Some(layout_ref) = v.layout() {
+				for v_id in e.variants() {
+					let v = self.model.get(**v_id).unwrap();
+					if let Some(layout_ref) = v.as_formatted().format().as_ref() {
 						self.insert_layout_terms(
 							vocabulary,
 							context_ref,
-							layout_ref,
+							**layout_ref,
 							type_scoped_context,
 						)?
 					}
@@ -758,9 +764,12 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 			Description::Struct(s) => {
 				if !type_scoped_context && self.options.rdf_type_to_layout_name {
 					// check if there is a required `rdf:type` property field.
-					for field in s.fields() {
-						if field.is_required(self.model) && self.is_type_field(vocabulary, field) {
-							self.insert_field(vocabulary, context_ref, field)?;
+					for field_id in s.fields() {
+						let field = self.model.get(**field_id).unwrap();
+						if field.is_required(self.model)
+							&& self.is_type_field(vocabulary, **field_id)
+						{
+							self.insert_field(vocabulary, context_ref, **field_id)?;
 							self.insert_typed_layout(vocabulary, context_ref, layout_ref)?;
 
 							return Ok(());
@@ -769,8 +778,8 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 				}
 
 				// otherwise, include the fields directly in this context.
-				for field in s.fields() {
-					self.insert_field(vocabulary, context_ref, field)?
+				for field_id in s.fields() {
+					self.insert_field(vocabulary, context_ref, **field_id)?
 				}
 
 				Ok(())
@@ -789,7 +798,7 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		&mut self,
 		vocabulary: &V,
 		current_context_ref: Ref<LocalContext>,
-		layout_ref: Ref<layout::Definition<M>>,
+		layout_ref: TId<treeldr::Layout>,
 	) -> Result<Ref<LocalContext>, Error> {
 		let context_ref = self.contexts.insert(LocalContext::new(
 			self.propagate_context(current_context_ref),
@@ -804,7 +813,7 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		&mut self,
 		vocabulary: &V,
 		current_context_ref: Ref<LocalContext>,
-		layout_ref: Ref<layout::Definition<M>>,
+		layout_ref: TId<treeldr::Layout>,
 	) -> Result<Ref<LocalContext>, Error> {
 		let context_ref = self.contexts.insert(LocalContext::new(
 			self.propagate_context(current_context_ref),
@@ -1083,7 +1092,7 @@ pub async fn generate<V, L, M>(
 	loader: &mut L,
 	model: &treeldr::Model<M>,
 	options: Options<V, M>,
-	layouts: &[Ref<layout::Definition<M>>],
+	layouts: &[TId<treeldr::Layout>],
 ) -> Result<json_ld::syntax::context::Value<()>, GenerateError<L::ContextError, M>>
 where
 	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,

@@ -1,6 +1,11 @@
-use crate::{Error, Single, Multiple, single, multiple, context::{HasType, MapIds}, resource::BindingValueRef};
+use crate::{
+	context::{HasType, MapIds, MapIdsIn},
+	multiple,
+	resource::BindingValueRef,
+	single, Error, Multiple, Single,
+};
 use locspan::Meta;
-use treeldr::{metadata::Merge, Id, prop::RdfProperty};
+use treeldr::{metadata::Merge, prop::RdfProperty, Id};
 
 pub use treeldr::prop::{Property, Type};
 
@@ -17,13 +22,19 @@ pub struct Definition<M> {
 	required: Single<bool, M>,
 }
 
-impl<M> Definition<M> {
-	pub fn new() -> Self {
+impl<M> Default for Definition<M> {
+	fn default() -> Self {
 		Self {
 			domain: Multiple::default(),
 			range: Single::default(),
-			required: Single::default()
+			required: Single::default(),
 		}
+	}
+}
+
+impl<M> Definition<M> {
+	pub fn new() -> Self {
+		Self::default()
 	}
 
 	pub fn range(&self) -> &Single<Id, M> {
@@ -51,7 +62,11 @@ impl<M> Definition<M> {
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
-		ClassBindings { domain: self.domain.iter(), range: self.range.iter(), required: self.required.iter() }
+		ClassBindings {
+			domain: self.domain.iter(),
+			range: self.range.iter(),
+			required: self.required.iter(),
+		}
 	}
 
 	pub(crate) fn build(
@@ -59,42 +74,56 @@ impl<M> Definition<M> {
 		context: &crate::Context<M>,
 		as_resource: &treeldr::node::Data<M>,
 		meta: M,
-	) -> Result<Meta<treeldr::prop::Definition<M>, M>, Error<M>> where M: Clone + Merge {
-		let range = self
-			.range.clone().into_required_type_at_node_binding(context, as_resource.id, RdfProperty::Range, &meta)?;
+	) -> Result<Meta<treeldr::prop::Definition<M>, M>, Error<M>>
+	where
+		M: Clone + Merge,
+	{
+		let range = self.range.clone().into_required_type_at_node_binding(
+			context,
+			as_resource.id,
+			RdfProperty::Range,
+			&meta,
+		)?;
 
-		let required = self.required.clone()
+		let required = self
+			.required
+			.clone()
 			.try_unwrap()
 			.map_err(|e| e.at_functional_node_property(as_resource.id, RdfProperty::Required))?
 			.unwrap()
 			.unwrap_or_else(|| Meta(false, meta.clone()));
-			
+
 		let functional = match as_resource.type_metadata(context, Type::FunctionalProperty) {
 			Some(meta) => Meta(true, meta.clone()),
-			None => Meta(false, meta.clone())
+			None => Meta(false, meta.clone()),
 		};
 
 		let mut domain = Multiple::default();
 		for Meta(domain_id, domain_causes) in &self.domain {
-			let domain_ref = context.require_type_id(*domain_id).map_err(|e| e.at_node_property(as_resource.id, RdfProperty::Domain, domain_causes.clone()))?;
+			let domain_ref = context.require_type_id(*domain_id).map_err(|e| {
+				e.at_node_property(as_resource.id, RdfProperty::Domain, domain_causes.clone())
+			})?;
 			domain.insert(Meta(domain_ref, domain_causes.clone()))
 		}
 
-		Ok(Meta(treeldr::prop::Definition::new(domain, range, required, functional), meta))
+		Ok(Meta(
+			treeldr::prop::Definition::new(domain, range, required, functional),
+			meta,
+		))
 	}
 }
 
 impl<M: Merge> MapIds for Definition<M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
-		self.domain.map_ids(&f);
-		self.range.map_ids(f);
+	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id) {
+		self.domain.map_ids_in(Some(RdfProperty::Domain.into()), &f);
+		self.range.map_ids_in(Some(RdfProperty::Range.into()), f);
 	}
 }
 
 pub enum ClassBinding {
 	Domain(Id),
 	Range(Id),
-	Required(bool)
+	Required(bool),
 }
 
 pub type Binding = ClassBinding;
@@ -104,7 +133,7 @@ impl ClassBinding {
 		match self {
 			Self::Domain(_) => RdfProperty::Domain,
 			Self::Range(_) => RdfProperty::Range,
-			Self::Required(_) => RdfProperty::Required
+			Self::Required(_) => RdfProperty::Required,
 		}
 	}
 
@@ -112,7 +141,7 @@ impl ClassBinding {
 		match self {
 			Self::Domain(v) => BindingValueRef::Id(*v),
 			Self::Range(v) => BindingValueRef::Id(*v),
-			Self::Required(v) => BindingValueRef::Boolean(*v)
+			Self::Required(v) => BindingValueRef::Boolean(*v),
 		}
 	}
 }
@@ -120,7 +149,7 @@ impl ClassBinding {
 pub struct ClassBindings<'a, M> {
 	domain: multiple::Iter<'a, Id, M>,
 	range: single::Iter<'a, Id, M>,
-	required: single::Iter<'a, bool, M>
+	required: single::Iter<'a, bool, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;

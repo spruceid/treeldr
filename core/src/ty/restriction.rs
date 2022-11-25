@@ -1,16 +1,12 @@
 use super::Properties;
-use crate::{TId, metadata::Merge, vocab, Multiple, Type, multiple, MetaOption};
+use crate::{
+	metadata::Merge, multiple, node::BindingValueRef, vocab, MetaOption, Multiple, TId, Type,
+};
 use derivative::Derivative;
 use locspan::Meta;
 
 /// Property restriction.
-#[derive(Derivative)]
-#[derivative(
-	Clone(bound = ""),
-	Copy(bound = ""),
-	PartialEq(bound = ""),
-	Eq(bound = "")
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Restriction {
 	/// Range restriction.
 	Range(Range),
@@ -19,14 +15,17 @@ pub enum Restriction {
 	Cardinality(Cardinality),
 }
 
+impl Restriction {
+	pub fn as_binding(&self) -> ClassBinding {
+		match self {
+			Self::Range(r) => r.as_binding(),
+			Self::Cardinality(r) => r.as_binding(),
+		}
+	}
+}
+
 /// Property range restriction.
-#[derive(Derivative)]
-#[derivative(
-	Clone(bound = ""),
-	Copy(bound = ""),
-	PartialEq(bound = ""),
-	Eq(bound = "")
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Range {
 	/// At least one value must be an instance of the given type.
 	Any(TId<Type>),
@@ -35,8 +34,17 @@ pub enum Range {
 	All(TId<Type>),
 }
 
+impl Range {
+	pub fn as_binding(&self) -> ClassBinding {
+		match self {
+			Self::Any(v) => ClassBinding::SomeValuesFrom(*v),
+			Self::All(v) => ClassBinding::AllValuesFrom(*v),
+		}
+	}
+}
+
 /// Property cardinality restriction.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Cardinality {
 	/// The property must have at least the given number of values.
 	AtLeast(u64),
@@ -48,6 +56,16 @@ pub enum Cardinality {
 	Exactly(u64),
 }
 
+impl Cardinality {
+	pub fn as_binding(&self) -> ClassBinding {
+		match self {
+			Self::AtLeast(v) => ClassBinding::MinCardinality(*v),
+			Self::AtMost(v) => ClassBinding::MaxCardinality(*v),
+			Self::Exactly(v) => ClassBinding::Cardinality(*v),
+		}
+	}
+}
+
 /// Type restricted on a property.
 ///
 /// Puts a restriction on a given property.
@@ -56,34 +74,51 @@ pub enum Cardinality {
 /// given restriction.
 #[derive(Debug)]
 pub struct Definition<M> {
+	property: Meta<TId<crate::Property>, M>,
+	restriction: Meta<Restriction, M>,
 	properties: Properties<M>,
 }
 
 impl<M> Definition<M> {
 	pub fn new(
 		Meta(prop, causes): Meta<TId<crate::Property>, M>,
-		restriction: Meta<Restriction, M>
+		restriction: Meta<Restriction, M>,
 	) -> Self
 	where
 		M: Clone + Merge,
 	{
 		let mut properties = Properties::none();
 
-		properties.insert(prop, Some(Restrictions::singleton(restriction)), causes);
+		properties.insert(
+			prop,
+			Some(Restrictions::singleton(restriction.clone())),
+			causes.clone(),
+		);
 
-		Self { properties }
+		Self {
+			property: Meta(prop, causes),
+			restriction,
+			properties,
+		}
 	}
 
 	pub fn properties(&self) -> &Properties<M> {
 		&self.properties
 	}
 
-	pub fn property(&self) -> TId<crate::Property> {
-		self.properties.included().next().unwrap().property()
+	pub fn property(&self) -> &Meta<TId<crate::Property>, M> {
+		&self.property
 	}
 
 	pub fn restrictions(&self) -> &Restrictions<M> {
 		self.properties.included().next().unwrap().restrictions()
+	}
+
+	pub fn bindings(&self) -> Bindings<M> {
+		ClassBindings {
+			on_property: Some(&self.property),
+			restriction: Some(&self.restriction),
+		}
 	}
 }
 
@@ -102,7 +137,10 @@ impl<M> Restrictions<M> {
 		Self::default()
 	}
 
-	pub fn singleton(restriction: Meta<Restriction, M>) -> Self where M: Clone + Merge {
+	pub fn singleton(restriction: Meta<Restriction, M>) -> Self
+	where
+		M: Clone + Merge,
+	{
 		let mut result = Self::new();
 		result.restrict(restriction).ok().unwrap();
 		result
@@ -123,7 +161,13 @@ impl<M> Restrictions<M> {
 		}
 	}
 
-	pub fn restrict(&mut self, Meta(restriction, meta): Meta<Restriction, M>) -> Result<(), Contradiction> where M: Clone + Merge {
+	pub fn restrict(
+		&mut self,
+		Meta(restriction, meta): Meta<Restriction, M>,
+	) -> Result<(), Contradiction>
+	where
+		M: Clone + Merge,
+	{
 		match restriction {
 			Restriction::Range(r) => {
 				self.range.restrict(Meta(r, meta));
@@ -138,14 +182,20 @@ impl<M> Restrictions<M> {
 		self.cardinality.clear()
 	}
 
-	pub fn union_with(&self, other: &Self) -> Self where M: Clone + Merge {
+	pub fn union_with(&self, other: &Self) -> Self
+	where
+		M: Clone + Merge,
+	{
 		Self {
 			range: self.range.union_with(&other.range),
 			cardinality: self.cardinality.union_with(&other.cardinality),
 		}
 	}
 
-	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction> where M: Clone + Merge {
+	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction>
+	where
+		M: Clone + Merge,
+	{
 		Ok(Self {
 			range: self.range.intersection_with(&other.range),
 			cardinality: self.cardinality.intersection_with(&other.cardinality)?,
@@ -205,7 +255,10 @@ impl<M> RangeRestrictions<M> {
 		}
 	}
 
-	pub fn restrict(&mut self, Meta(restriction, meta): Meta<Range, M>) where M: Merge {
+	pub fn restrict(&mut self, Meta(restriction, meta): Meta<Range, M>)
+	where
+		M: Merge,
+	{
 		match restriction {
 			Range::All(r) => {
 				self.all.insert(Meta(r, meta));
@@ -221,17 +274,35 @@ impl<M> RangeRestrictions<M> {
 		self.any.clear();
 	}
 
-	pub fn union_with(&self, other: &Self) -> Self where M: Clone + Merge {
+	pub fn union_with(&self, other: &Self) -> Self
+	where
+		M: Clone + Merge,
+	{
 		Self {
-			all: self.all.clone().intersected_with(other.all.iter().map(|m| m.cloned())),
-			any: self.any.clone().intersected_with(other.any.iter().map(|m| m.cloned())),
+			all: self
+				.all
+				.clone()
+				.intersected_with(other.all.iter().map(|m| m.cloned())),
+			any: self
+				.any
+				.clone()
+				.intersected_with(other.any.iter().map(|m| m.cloned())),
 		}
 	}
 
-	pub fn intersection_with(&self, other: &Self) -> Self where M: Clone + Merge {
+	pub fn intersection_with(&self, other: &Self) -> Self
+	where
+		M: Clone + Merge,
+	{
 		Self {
-			all: self.all.clone().extended_with(other.all.iter().map(|m| m.cloned())),
-			any: self.any.clone().extended_with(other.any.iter().map(|m| m.cloned())),
+			all: self
+				.all
+				.clone()
+				.extended_with(other.all.iter().map(|m| m.cloned())),
+			any: self
+				.any
+				.clone()
+				.extended_with(other.any.iter().map(|m| m.cloned())),
 		}
 	}
 }
@@ -248,11 +319,7 @@ impl<'a, M> Iterator for RangeRestrictionsIter<'a, M> {
 		self.any
 			.next()
 			.map(|Meta(r, m)| Meta(Range::Any(*r), m))
-			.or_else(|| {
-				self.all
-					.next()
-					.map(|Meta(r, m)| Meta(Range::All(*r), m))
-			})
+			.or_else(|| self.all.next().map(|Meta(r, m)| Meta(Range::All(*r), m)))
 	}
 }
 
@@ -285,7 +352,13 @@ impl<M> CardinalityRestrictions<M> {
 		}
 	}
 
-	pub fn restrict(&mut self, Meta(restriction, meta): Meta<Cardinality, M>) -> Result<(), Contradiction> where M: Clone {
+	pub fn restrict(
+		&mut self,
+		Meta(restriction, meta): Meta<Cardinality, M>,
+	) -> Result<(), Contradiction>
+	where
+		M: Clone,
+	{
 		match restriction {
 			Cardinality::AtLeast(min) => {
 				if let Some(max) = self.max.value() {
@@ -331,7 +404,10 @@ impl<M> CardinalityRestrictions<M> {
 		self.max.clear();
 	}
 
-	pub fn union_with(&self, other: &Self) -> Self where M: Clone {
+	pub fn union_with(&self, other: &Self) -> Self
+	where
+		M: Clone,
+	{
 		let min = match (self.min.as_ref(), other.min.as_ref()) {
 			(Some(a), Some(b)) => {
 				if **a <= **b {
@@ -339,9 +415,10 @@ impl<M> CardinalityRestrictions<M> {
 				} else {
 					Some(b.clone())
 				}
-			},
+			}
 			_ => None,
-		}.into();
+		}
+		.into();
 
 		let max = match (self.max.as_ref(), other.max.as_ref()) {
 			(Some(a), Some(b)) => {
@@ -350,14 +427,18 @@ impl<M> CardinalityRestrictions<M> {
 				} else {
 					Some(b.clone())
 				}
-			},
+			}
 			_ => None,
-		}.into();
+		}
+		.into();
 
 		Self { min, max }
 	}
 
-	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction> where M: Clone {
+	pub fn intersection_with(&self, other: &Self) -> Result<Self, Contradiction>
+	where
+		M: Clone,
+	{
 		let min: MetaOption<u64, M> = match (self.min.as_ref(), other.min.as_ref()) {
 			(Some(a), Some(b)) => {
 				if **a >= **b {
@@ -365,11 +446,12 @@ impl<M> CardinalityRestrictions<M> {
 				} else {
 					Some(b.clone())
 				}
-			},
+			}
 			(Some(min), None) => Some(min.clone()),
 			(None, Some(min)) => Some(min.clone()),
 			(None, None) => None,
-		}.into();
+		}
+		.into();
 
 		let max: MetaOption<u64, M> = match (self.max.as_ref(), other.max.as_ref()) {
 			(Some(a), Some(b)) => {
@@ -378,11 +460,12 @@ impl<M> CardinalityRestrictions<M> {
 				} else {
 					Some(b.clone())
 				}
-			},
+			}
 			(Some(max), None) => Some(max.clone()),
 			(None, Some(max)) => Some(max.clone()),
 			_ => None,
-		}.into();
+		}
+		.into();
 
 		if let (Some(min), Some(max)) = (min.value(), max.value()) {
 			if min > max {
@@ -410,9 +493,7 @@ impl<'a, M> Iterator for CardinalityRestrictionsIter<'a, M> {
 			self.min
 				.take()
 				.map(|m| m.map(Cardinality::AtLeast))
-				.or_else(|| {
-					self.max.take().map(|m| m.map(Cardinality::AtMost))
-				})
+				.or_else(|| self.max.take().map(|m| m.map(Cardinality::AtMost)))
 		}
 	}
 }
@@ -424,19 +505,19 @@ pub enum Property {
 	SomeValuesFrom,
 	MinCardinality,
 	MaxCardinality,
-	Cardinality
+	Cardinality,
 }
 
 impl Property {
 	pub fn term(&self) -> vocab::Term {
-		use vocab::{Term, Owl};
+		use vocab::{Owl, Term};
 		match self {
 			Self::OnProperty => Term::Owl(Owl::OnProperty),
 			Self::AllValuesFrom => Term::Owl(Owl::AllValuesFrom),
 			Self::SomeValuesFrom => Term::Owl(Owl::SomeValuesFrom),
 			Self::MinCardinality => Term::Owl(Owl::MinCardinality),
 			Self::MaxCardinality => Term::Owl(Owl::MaxCardinality),
-			Self::Cardinality => Term::Owl(Owl::Cardinality)
+			Self::Cardinality => Term::Owl(Owl::Cardinality),
 		}
 	}
 
@@ -447,7 +528,74 @@ impl Property {
 			Self::SomeValuesFrom => "some values from range",
 			Self::MinCardinality => "minimum cardinality",
 			Self::MaxCardinality => "maximum cardinality",
-			Self::Cardinality => "cardinality"
+			Self::Cardinality => "cardinality",
 		}
+	}
+
+	pub fn expect_type(&self) -> bool {
+		matches!(self, Self::AllValuesFrom | Self::SomeValuesFrom)
+	}
+
+	pub fn expect_layout(&self) -> bool {
+		false
+	}
+}
+
+pub enum ClassBinding {
+	OnProperty(TId<crate::Property>),
+	SomeValuesFrom(TId<Type>),
+	AllValuesFrom(TId<Type>),
+	MinCardinality(u64),
+	MaxCardinality(u64),
+	Cardinality(u64),
+}
+
+pub type Binding = ClassBinding;
+
+impl ClassBinding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::OnProperty(_) => Property::OnProperty,
+			Self::SomeValuesFrom(_) => Property::SomeValuesFrom,
+			Self::AllValuesFrom(_) => Property::AllValuesFrom,
+			Self::MinCardinality(_) => Property::MinCardinality,
+			Self::MaxCardinality(_) => Property::MaxCardinality,
+			Self::Cardinality(_) => Property::Cardinality,
+		}
+	}
+
+	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::OnProperty(v) => BindingValueRef::Property(*v),
+			Self::SomeValuesFrom(v) => BindingValueRef::Type(*v),
+			Self::AllValuesFrom(v) => BindingValueRef::Type(*v),
+			Self::MinCardinality(v) => BindingValueRef::U64(*v),
+			Self::MaxCardinality(v) => BindingValueRef::U64(*v),
+			Self::Cardinality(v) => BindingValueRef::U64(*v),
+		}
+	}
+}
+
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct ClassBindings<'a, M> {
+	on_property: Option<&'a Meta<TId<crate::Property>, M>>,
+	restriction: Option<&'a Meta<Restriction, M>>,
+}
+
+pub type Bindings<'a, M> = ClassBindings<'a, M>;
+
+impl<'a, M> Iterator for ClassBindings<'a, M> {
+	type Item = Meta<ClassBinding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.on_property
+			.take()
+			.map(|m| m.borrow().into_cloned_value().map(ClassBinding::OnProperty))
+			.or_else(|| {
+				self.restriction
+					.take()
+					.map(|m| m.borrow().map(Restriction::as_binding))
+			})
 	}
 }

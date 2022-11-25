@@ -1,4 +1,4 @@
-use crate::{Layout, TId, Model};
+use crate::{Layout, Model, TId};
 
 use std::collections::HashMap;
 
@@ -27,11 +27,7 @@ impl<'l, M> StronglyConnectedLayouts<'l, M> {
 		model: &'l Model<M>,
 		filter: impl Clone + Fn(TId<Layout>, TId<Layout>) -> bool,
 	) -> Self {
-		Self::from_entry_points_with_filter(
-			model,
-			model.layouts().map(|(r, _)| r),
-			filter,
-		)
+		Self::from_entry_points_with_filter(model, model.layouts().map(|(r, _)| r), filter)
 	}
 
 	pub fn from_entry_points_with_filter<I: IntoIterator<Item = TId<Layout>>>(
@@ -130,10 +126,16 @@ fn strong_connect<'l, F>(
 	let layout = components.model.get(layout_ref).unwrap().as_layout();
 	for sub_layout_ref in layout.composing_layouts(model) {
 		if filter(layout_ref, **sub_layout_ref) {
-			let new_layout_low_link = match map.get(&sub_layout_ref) {
+			let new_layout_low_link = match map.get(sub_layout_ref) {
 				None => {
-					let sub_layout_low_link =
-						strong_connect(model, components, map, stack, **sub_layout_ref, filter.clone());
+					let sub_layout_low_link = strong_connect(
+						model,
+						components,
+						map,
+						stack,
+						**sub_layout_ref,
+						filter.clone(),
+					);
 					Some(std::cmp::min(
 						map[&layout_ref].low_link,
 						sub_layout_low_link,

@@ -1,21 +1,24 @@
 use std::collections::VecDeque;
 
 use locspan::Meta;
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{metadata::Merge, IriIndex, BlankIdIndex, Id, Name};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, Name};
 
-use crate::{Error, Context, Single};
-use super::{IdIntersection, list::IntersectionListItem, list_intersection, build_lists};
+use super::{build_lists, list::IntersectionListItem, list_intersection, IdIntersection};
+use crate::{Context, Error, Single};
 
-pub fn struct_intersection<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>, M: Clone + Merge>(
+pub fn struct_intersection<
+	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+	M: Clone + Merge,
+>(
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
 	context: &mut Context<M>,
 	stack: &mut VecDeque<Id>,
-	lists: &IdIntersection<M>
+	lists: &IdIntersection<M>,
 ) -> Result<Vec<Option<Id>>, Error<M>> {
 	let list = list_intersection::<Field<M>, _>(context, lists)?;
-	build_lists(vocabulary, generator, context, stack, list)
+	Ok(build_lists(vocabulary, generator, context, stack, list))
 }
 
 /// Field intersection.
@@ -24,63 +27,101 @@ pub struct Field<M> {
 	id: Option<Id>,
 	name: Single<Name, M>,
 	layout: Single<IdIntersection<M>, M>,
-	prop: Single<Id, M>
+	prop: Single<Id, M>,
 }
 
 impl<M> Field<M> {
-	pub fn from_id(context: &Context<M>, id: Id, meta: &M) -> Result<Self, Error<M>> where M: Clone + Merge {
+	pub fn from_id(context: &Context<M>, id: Id, meta: &M) -> Result<Self, Error<M>>
+	where
+		M: Clone + Merge,
+	{
 		let node = context.require(id).map_err(|e| e.at(meta.clone()))?;
-		let field = node.require_layout_field(context).map_err(|e| e.at(meta.clone()))?;
+		let field = node
+			.require_layout_field(context)
+			.map_err(|e| e.at(meta.clone()))?;
 
 		Ok(Self {
 			id: Some(id),
 			name: node.as_component().name().clone(),
-			layout: node.as_formatted().format().iter().map(|id| {
-				let meta = id.into_metadata().clone();
-				Meta(IdIntersection::new(id.cloned()), meta)
-			}).collect(),
-			prop: field.property().clone()
+			layout: node
+				.as_formatted()
+				.format()
+				.iter()
+				.map(|id| {
+					let meta = id.into_metadata().clone();
+					Meta(IdIntersection::new(id.cloned()), meta)
+				})
+				.collect(),
+			prop: field.property().clone(),
 		})
 	}
 }
 
 impl<M> Field<M> {
 	pub fn matches(&self, other: &Self) -> bool {
-		let common_name = self.name.iter().any(|Meta(a, _)| other.name.iter().any(|Meta(b, _)| a == b));
+		let common_name = self
+			.name
+			.iter()
+			.any(|Meta(a, _)| other.name.iter().any(|Meta(b, _)| a == b));
 		let no_name = self.name.is_empty() && other.name.is_empty();
 
-		let common_property = self.prop.iter().any(|Meta(a, _)| other.prop.iter().any(|Meta(b, _)| a == b));
+		let common_property = self
+			.prop
+			.iter()
+			.any(|Meta(a, _)| other.prop.iter().any(|Meta(b, _)| a == b));
 		let no_property = self.prop.is_empty() && other.prop.is_empty();
 
 		common_name || common_property || (no_name && no_property)
 	}
 
-	pub fn intersected_with(&self, other: &Self) -> Option<Self> where M: Clone + Merge {
+	pub fn intersected_with(&self, other: &Self) -> Option<Self>
+	where
+		M: Clone + Merge,
+	{
 		if let (Some(a), Some(b)) = (self.id, other.id) {
 			if a == b {
-				return Some(self.clone())
+				return Some(self.clone());
 			}
 		}
 
-		let common_name = self.name.iter().any(|Meta(a, _)| other.name.iter().any(|Meta(b, _)| a == b));
+		let common_name = self
+			.name
+			.iter()
+			.any(|Meta(a, _)| other.name.iter().any(|Meta(b, _)| a == b));
 		let no_name = self.name.is_empty() && other.name.is_empty();
 
-		let common_property = self.prop.iter().any(|Meta(a, _)| other.prop.iter().any(|Meta(b, _)| a == b));
+		let common_property = self
+			.prop
+			.iter()
+			.any(|Meta(a, _)| other.prop.iter().any(|Meta(b, _)| a == b));
 		let no_property = self.prop.is_empty() && other.prop.is_empty();
 
-		if (common_property || no_property) && (common_name || no_name) {
+		if common_name || common_property || (no_name && no_property) {
 			let mut layout = Single::default();
 			for Meta(a, a_meta) in &self.layout {
 				for Meta(b, b_meta) in &other.layout {
-					layout.insert(Meta(a.intersection(b), a_meta.clone().merged_with(b_meta.clone())))
+					layout.insert(Meta(
+						a.intersection(b),
+						a_meta.clone().merged_with(b_meta.clone()),
+					))
 				}
 			}
 
 			Some(Self {
 				id: None,
-				name: self.name.iter().chain(&other.name).map(|n| n.cloned()).collect(),
+				name: self
+					.name
+					.iter()
+					.chain(&other.name)
+					.map(|n| n.cloned())
+					.collect(),
 				layout,
-				prop: self.prop.iter().chain(&other.prop).map(|p| p.cloned()).collect()
+				prop: self
+					.prop
+					.iter()
+					.chain(&other.prop)
+					.map(|p| p.cloned())
+					.collect(),
 			})
 		} else {
 			None
@@ -93,7 +134,10 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Field<M> {
 		Ok(Meta(Field::from_id(context, id, &meta)?, meta))
 	}
 
-	fn list_intersection(fields: Option<&[Meta<Self, M>]>, other_fields: &[Meta<Self, M>]) -> Result<Option<Vec<Meta<Self, M>>>, Error<M>> {
+	fn list_intersection(
+		fields: Option<&[Meta<Self, M>]>,
+		other_fields: &[Meta<Self, M>],
+	) -> Result<Option<Vec<Meta<Self, M>>>, Error<M>> {
 		match fields {
 			Some(fields) => {
 				let mut result = Vec::new();
@@ -101,7 +145,7 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Field<M> {
 				let mut other_fields = other_fields.to_vec();
 				fields.reverse();
 				other_fields.reverse();
-	
+
 				'next_field: while !fields.is_empty() || !other_fields.is_empty() {
 					match fields.pop() {
 						Some(field) => {
@@ -116,23 +160,20 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Field<M> {
 										)),
 										None => return Ok(None),
 									}
-	
+
 									continue 'next_field;
-								} else {
-									for after_field in &fields {
-										if after_field.matches(&other_field) {
-											for j in 0..other_fields.len() {
-												if field.matches(&other_fields[j]) {
-													panic!("unaligned layouts")
-												}
-											}
-										}
+								} else if other_fields.iter().any(|f| field.matches(f)) {
+									if fields.iter().any(|f| other_field.matches(f)) {
+										panic!("unaligned layouts")
 									}
-	
+
 									result.push(other_field);
+								} else {
+									other_fields.push(other_field);
+									break;
 								}
 							}
-	
+
 							result.push(Meta(field, causes));
 						}
 						None => {
@@ -140,37 +181,47 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Field<M> {
 						}
 					}
 				}
-	
+
 				Ok(Some(result))
 			}
-			None => Ok(None)
+			None => Ok(None),
 		}
 	}
 
-	fn build<V: VocabularyMut<Iri=IriIndex, BlankId=BlankIdIndex>>(
+	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
-		meta: M
-	) -> Result<Id, Error<M>> {
+		meta: M,
+	) -> Id {
 		match self.id {
-			Some(id) => Ok(id),
+			Some(id) => id,
 			None => {
 				let mut layout = Single::default();
 				for Meta(layout_id, layout_meta) in self.layout {
-					layout.insert(Meta(layout_id.prepare_layout(vocabulary, generator, context, stack, layout_meta.clone())?, layout_meta))
+					layout.insert(Meta(
+						layout_id.prepare_layout(
+							vocabulary,
+							generator,
+							context,
+							stack,
+							layout_meta.clone(),
+						),
+						layout_meta,
+					))
 				}
 
 				let id = generator.next(vocabulary);
+				eprintln!("new intersection layout field {:?}", id);
 
 				let node = context.declare_layout_field(id, meta);
 				*node.as_component_mut().name_mut() = self.name;
 				*node.as_formatted_mut().format_mut() = layout;
 				*node.as_layout_field_mut().property_mut() = self.prop;
 
-				Ok(id)
+				id
 			}
 		}
 	}

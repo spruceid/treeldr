@@ -5,14 +5,14 @@ use thiserror::Error;
 use treeldr::{metadata::Merge, vocab::*, Id};
 use treeldr_build::Context;
 
-mod local_context;
 mod error;
-mod ty;
-mod prop;
 mod layout;
+mod local_context;
+mod prop;
+mod ty;
 
-pub use local_context::LocalContext;
 pub use error::{Error, LocalError};
+pub use local_context::LocalContext;
 
 impl<M: Clone + Merge> treeldr_build::Document<M> for crate::Document<M> {
 	type LocalContext = LocalContext<M>;
@@ -133,7 +133,6 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::Documentation<M>, M> {
 
 			description.push_str(&line);
 		}
-
 
 		let description = if description.is_empty() {
 			None

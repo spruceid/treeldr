@@ -4,7 +4,7 @@ use derivative::Derivative;
 use locspan::Meta;
 use treeldr::Id;
 
-use crate::{Context, SubLayout, ParentLayout, component};
+use crate::{component, Context, ParentLayout, SubLayout};
 
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]

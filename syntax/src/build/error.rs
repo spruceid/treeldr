@@ -1,8 +1,8 @@
 use iref::IriBuf;
-use locspan::{Span, MaybeLocated, Meta};
+use locspan::{MaybeLocated, Meta, Span};
 use rdf_types::Vocabulary;
-use treeldr::{reporting, IriIndex, BlankIdIndex, Id};
 use thiserror::Error;
+use treeldr::{reporting, BlankIdIndex, Id, IriIndex};
 
 #[derive(Debug)]
 pub enum Error<M> {

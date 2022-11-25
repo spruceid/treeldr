@@ -1,7 +1,7 @@
 use iref::Iri;
 use rdf_types::IriVocabulary;
 use static_iref::iri;
-use treeldr::Id;
+use treeldr::{Id, TId};
 use treeldr_build::Document;
 use treeldr_syntax::Parse;
 
@@ -31,9 +31,7 @@ impl Test {
 				let mut vocabulary = rdf_types::IndexVocabulary::new();
 				let mut generator = rdf_types::generator::Blank::new();
 
-				context
-					.apply_built_in_definitions(&mut vocabulary, &mut generator)
-					.unwrap();
+				context.apply_built_in_definitions(&mut vocabulary, &mut generator);
 				let mut local_context = treeldr_syntax::build::LocalContext::new(Some(
 					iri!("http://www.example.com").into(),
 				));
@@ -46,7 +44,7 @@ impl Test {
 				)
 				.expect("build error");
 				ast.into_value()
-					.relate(
+					.define(
 						&mut local_context,
 						&mut context,
 						&mut vocabulary,
@@ -54,19 +52,15 @@ impl Test {
 					)
 					.expect("build error");
 
-				let context = context
-					.simplify(&mut vocabulary, &mut generator)
-					.expect("simplification failed");
-
 				let model = context
 					.build(&mut vocabulary, &mut generator)
 					.expect("build error");
 
-				let layout_ref = model
-					.require_layout(Id::Iri(
-						vocabulary.get(Iri::from_str(layout).unwrap()).unwrap(),
-					))
-					.unwrap();
+				let layout_ref: TId<treeldr::Layout> = TId::new(Id::Iri(
+					vocabulary.get(Iri::from_str(layout).unwrap()).unwrap(),
+				));
+
+				model.require(layout_ref).unwrap();
 
 				let embedding = treeldr_json_schema::embedding::Configuration::default();
 
@@ -101,9 +95,7 @@ impl Test {
 				let mut vocabulary = rdf_types::IndexVocabulary::new();
 				let mut generator = rdf_types::generator::Blank::new();
 
-				context
-					.apply_built_in_definitions(&mut vocabulary, &mut generator)
-					.unwrap();
+				context.apply_built_in_definitions(&mut vocabulary, &mut generator);
 				let mut local_context = treeldr_syntax::build::LocalContext::new(Some(
 					iri!("http://www.example.com").into(),
 				));
@@ -116,7 +108,7 @@ impl Test {
 				)
 				.expect("build error");
 				ast.into_value()
-					.relate(
+					.define(
 						&mut local_context,
 						&mut context,
 						&mut vocabulary,
@@ -124,19 +116,15 @@ impl Test {
 					)
 					.expect("build error");
 
-				let context = context
-					.simplify(&mut vocabulary, &mut generator)
-					.expect("simplification failed");
-
 				let model = context
 					.build(&mut vocabulary, &mut generator)
 					.expect("build error");
 
-				let layout_ref = model
-					.require_layout(Id::Iri(
-						vocabulary.get(Iri::from_str(layout).unwrap()).unwrap(),
-					))
-					.unwrap();
+				let layout_ref: TId<treeldr::Layout> = TId::new(Id::Iri(
+					vocabulary.get(Iri::from_str(layout).unwrap()).unwrap(),
+				));
+
+				model.require(layout_ref).unwrap();
 
 				let embedding = treeldr_json_schema::embedding::Configuration::default();
 

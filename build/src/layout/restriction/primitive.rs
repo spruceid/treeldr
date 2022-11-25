@@ -1,4 +1,4 @@
-use crate::{error, Error, resource::BindingValueRef};
+use crate::{error, resource::BindingValueRef, Error};
 use locspan::{MapLocErr, Meta};
 use std::collections::BTreeMap;
 pub use treeldr::{
@@ -23,7 +23,7 @@ impl Restriction {
 	pub fn as_binding(&self) -> BindingRef {
 		match self {
 			Self::Numeric(r) => BindingRef::Numeric(r.as_binding()),
-			Self::String(r) => BindingRef::String(r.as_binding())
+			Self::String(r) => BindingRef::String(r.as_binding()),
 		}
 	}
 }
@@ -43,7 +43,7 @@ impl Numeric {
 			Self::InclusiveMinimum(v) => NumericBindingRef::InclusiveMinimum(v),
 			Self::ExclusiveMinimum(v) => NumericBindingRef::ExclusiveMinimum(v),
 			Self::InclusiveMaximum(v) => NumericBindingRef::InclusiveMaximum(v),
-			Self::ExclusiveMaximum(v) => NumericBindingRef::ExclusiveMaximum(v)
+			Self::ExclusiveMaximum(v) => NumericBindingRef::ExclusiveMaximum(v),
 		}
 	}
 }
@@ -79,7 +79,7 @@ pub enum String {
 impl String {
 	pub fn as_binding(&self) -> StringBindingRef {
 		match self {
-			Self::Pattern(v) => StringBindingRef::Pattern(v)
+			Self::Pattern(v) => StringBindingRef::Pattern(v),
 		}
 	}
 }
@@ -112,8 +112,17 @@ impl<M> PartialEq for Restrictions<M> {
 impl<M> Eq for Restrictions<M> {}
 
 impl<M> Restrictions<M> {
+	pub fn is_empty(&self) -> bool {
+		self.map.is_empty()
+	}
+
 	pub fn is_included_in(&self, other: &Self) -> bool {
 		self.map.keys().all(|r| other.map.contains_key(r))
+	}
+
+	#[allow(clippy::should_implement_trait)]
+	pub fn into_iter(self) -> impl DoubleEndedIterator<Item = Meta<Restriction, M>> {
+		self.map.into_iter().map(|(k, v)| Meta(k, v))
 	}
 }
 
@@ -499,21 +508,21 @@ impl<M: Clone> Restrictions<M> {
 
 pub enum BindingRef<'a> {
 	Numeric(NumericBindingRef<'a>),
-	String(StringBindingRef<'a>)
+	String(StringBindingRef<'a>),
 }
 
 impl<'a> BindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
 			Self::Numeric(b) => b.property(),
-			Self::String(b) => b.property()
+			Self::String(b) => b.property(),
 		}
 	}
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::Numeric(b) => b.value(),
-			Self::String(b) => b.value()
+			Self::String(b) => b.value(),
 		}
 	}
 }
@@ -531,7 +540,7 @@ impl<'a> NumericBindingRef<'a> {
 			Self::InclusiveMinimum(_) => Property::InclusiveMinimum,
 			Self::ExclusiveMinimum(_) => Property::ExclusiveMinimum,
 			Self::InclusiveMaximum(_) => Property::InclusiveMaximum,
-			Self::ExclusiveMaximum(_) => Property::ExclusiveMaximum
+			Self::ExclusiveMaximum(_) => Property::ExclusiveMaximum,
 		}
 	}
 
@@ -540,7 +549,7 @@ impl<'a> NumericBindingRef<'a> {
 			Self::InclusiveMinimum(v) => BindingValueRef::Numeric(v),
 			Self::ExclusiveMinimum(v) => BindingValueRef::Numeric(v),
 			Self::InclusiveMaximum(v) => BindingValueRef::Numeric(v),
-			Self::ExclusiveMaximum(v) => BindingValueRef::Numeric(v)
+			Self::ExclusiveMaximum(v) => BindingValueRef::Numeric(v),
 		}
 	}
 }
@@ -552,13 +561,13 @@ pub enum StringBindingRef<'a> {
 impl<'a> StringBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::Pattern(_) => Property::Pattern
+			Self::Pattern(_) => Property::Pattern,
 		}
 	}
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Pattern(v) => BindingValueRef::RegExp(v)
+			Self::Pattern(v) => BindingValueRef::RegExp(v),
 		}
 	}
 }

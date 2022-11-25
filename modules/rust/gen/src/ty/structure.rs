@@ -3,15 +3,15 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
 use shelves::Ref;
-use treeldr::{BlankIdIndex, IriIndex, Name};
+use treeldr::{BlankIdIndex, IriIndex, Name, TId};
 
-pub struct Struct<M> {
+pub struct Struct {
 	ident: proc_macro2::Ident,
-	fields: Vec<Field<M>>,
+	fields: Vec<Field>,
 }
 
-impl<M> Struct<M> {
-	pub fn new(ident: proc_macro2::Ident, fields: Vec<Field<M>>) -> Self {
+impl Struct {
+	pub fn new(ident: proc_macro2::Ident, fields: Vec<Field>) -> Self {
 		Self { ident, fields }
 	}
 
@@ -19,11 +19,11 @@ impl<M> Struct<M> {
 		&self.ident
 	}
 
-	pub fn fields(&self) -> &[Field<M>] {
+	pub fn fields(&self) -> &[Field] {
 		&self.fields
 	}
 
-	pub fn impl_default<V>(&self, context: &Context<V, M>) -> bool {
+	pub fn impl_default<V, M>(&self, context: &Context<V, M>) -> bool {
 		self.fields
 			.iter()
 			.all(|f| f.ty(context).impl_default(context))
@@ -33,15 +33,15 @@ impl<M> Struct<M> {
 // #[derive(Derivative)]
 // #[derivative(Clone(bound = ""), Copy(bound = ""))]
 // pub struct FieldType<M> {
-// 	layout: Ref<treeldr::layout::Definition<M>>,
+// 	layout: TId<treeldr::Layout>,
 // }
 
 // impl<M> FieldType<M> {
-// 	pub fn new(layout: Ref<treeldr::layout::Definition<M>>) -> Self {
+// 	pub fn new(layout: TId<treeldr::Layout>) -> Self {
 // 		Self { layout }
 // 	}
 
-// 	pub fn layout(&self) -> Ref<treeldr::layout::Definition<M>> {
+// 	pub fn layout(&self) -> TId<treeldr::Layout> {
 // 		self.layout
 // 	}
 
@@ -58,9 +58,9 @@ impl<M> Struct<M> {
 // 	fn generate(
 // 		&self,
 // 		context: &Context<M>,
-// 		scope: Option<Ref<Module<M>>>,
+// 		scope: Option<Ref<Module>>,
 // 		tokens: &mut TokenStream,
-// 	) -> Result<(), Error<M>> {
+// 	) -> Result<(), Error> {
 // 		let layout = self.layout.with(context, scope).into_tokens()?;
 
 // 		tokens.extend(layout);
@@ -69,23 +69,23 @@ impl<M> Struct<M> {
 // 	}
 // }
 
-pub struct Field<M> {
+pub struct Field {
 	name: Name,
 	ident: proc_macro2::Ident,
-	layout: Ref<treeldr::layout::Definition<M>>,
-	prop: Option<Ref<treeldr::prop::Definition<M>>>,
+	layout: TId<treeldr::Layout>,
+	prop: Option<TId<treeldr::Property>>,
 	label: Option<String>,
-	doc: treeldr::Documentation,
+	doc: treeldr::StrippedDocumentation,
 }
 
-impl<M> Field<M> {
+impl Field {
 	pub fn new(
 		name: Name,
 		ident: proc_macro2::Ident,
-		layout: Ref<treeldr::layout::Definition<M>>,
-		prop: Option<Ref<treeldr::prop::Definition<M>>>,
+		layout: TId<treeldr::Layout>,
+		prop: Option<TId<treeldr::Property>>,
 		label: Option<String>,
-		doc: treeldr::Documentation,
+		doc: treeldr::StrippedDocumentation,
 	) -> Self {
 		Self {
 			name,
@@ -105,15 +105,15 @@ impl<M> Field<M> {
 		&self.ident
 	}
 
-	pub fn layout(&self) -> Ref<treeldr::layout::Definition<M>> {
+	pub fn layout(&self) -> TId<treeldr::Layout> {
 		self.layout
 	}
 
-	pub fn ty<'c, V>(&self, context: &'c Context<V, M>) -> &'c super::Type<M> {
+	pub fn ty<'c, V, M>(&self, context: &'c Context<V, M>) -> &'c super::Type {
 		context.layout_type(self.layout).unwrap()
 	}
 
-	pub fn property(&self) -> Option<Ref<treeldr::prop::Definition<M>>> {
+	pub fn property(&self) -> Option<TId<treeldr::Property>> {
 		self.prop
 	}
 
@@ -121,18 +121,18 @@ impl<M> Field<M> {
 		self.label.as_deref()
 	}
 
-	pub fn documentation(&self) -> &treeldr::Documentation {
+	pub fn documentation(&self) -> &treeldr::StrippedDocumentation {
 		&self.doc
 	}
 }
 
-impl<M> Generate<M> for Field<M> {
+impl<M> Generate<M> for Field {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module<M>>>,
+		scope: Option<Ref<Module>>,
 		tokens: &mut TokenStream,
-	) -> Result<(), Error<M>> {
+	) -> Result<(), Error> {
 		let ident = &self.ident;
 		let ty = self.layout.with(context, scope).into_tokens()?;
 		let doc = super::generate::doc_attribute(self.label(), self.documentation());

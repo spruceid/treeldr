@@ -13,7 +13,7 @@ mod source;
 pub use source::*;
 
 pub use treeldr::reporting;
-pub type BuildContext = treeldr_build::Context<source::Metadata, syntax::build::Descriptions>;
+pub type BuildContext = treeldr_build::Context<source::Metadata>;
 
 /// Build all the given documents.
 pub fn build_all<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -22,9 +22,7 @@ pub fn build_all<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 	build_context: &mut BuildContext,
 	mut documents: Vec<Document>,
 ) -> Result<treeldr::Model<source::Metadata>, BuildAllError> {
-	build_context
-		.apply_built_in_definitions(vocabulary, generator)
-		.unwrap();
+	build_context.apply_built_in_definitions(vocabulary, generator);
 
 	for doc in &mut documents {
 		doc.declare(build_context, vocabulary, generator)
@@ -36,9 +34,6 @@ pub fn build_all<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 			.map_err(BuildAllError::Link)?
 	}
 
-	let build_context = build_context
-		.simplify(vocabulary, generator)
-		.map_err(BuildAllError::simplification)?;
 	build_context
 		.build(vocabulary, generator)
 		.map_err(BuildAllError::Build)
@@ -81,25 +76,14 @@ impl TreeLdrDocument {
 	) -> Result<(), syntax::build::Error<source::Metadata>> {
 		use treeldr_build::Document;
 		self.doc
-			.relate(&mut self.local_context, context, vocabulary, generator)
+			.define(&mut self.local_context, context, vocabulary, generator)
 	}
 }
 
 pub enum BuildAllError {
 	Declaration(LangError),
 	Link(LangError),
-	Simplification(
-		Box<<syntax::build::Descriptions as treeldr_build::Simplify<source::Metadata>>::Error>,
-	),
 	Build(treeldr_build::Error<source::Metadata>),
-}
-
-impl BuildAllError {
-	pub fn simplification(
-		e: <syntax::build::Descriptions as treeldr_build::Simplify<source::Metadata>>::Error,
-	) -> Self {
-		Self::Simplification(Box::new(e))
-	}
 }
 
 impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllError {
@@ -110,7 +94,6 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllEr
 		match self {
 			Self::Declaration(e) => e.message(vocabulary),
 			Self::Link(e) => e.message(vocabulary),
-			Self::Simplification(e) => e.message(vocabulary),
 			Self::Build(e) => e.message(vocabulary),
 		}
 	}
@@ -122,7 +105,6 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllEr
 		match self {
 			Self::Declaration(e) => e.labels(vocabulary),
 			Self::Link(e) => e.labels(vocabulary),
-			Self::Simplification(e) => e.labels(vocabulary),
 			Self::Build(e) => e.labels(vocabulary),
 		}
 	}
@@ -134,7 +116,6 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllEr
 		match self {
 			Self::Declaration(e) => e.notes(vocabulary),
 			Self::Link(e) => e.notes(vocabulary),
-			Self::Simplification(e) => e.notes(vocabulary),
 			Self::Build(e) => e.notes(vocabulary),
 		}
 	}

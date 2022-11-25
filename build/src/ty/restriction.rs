@@ -1,8 +1,12 @@
-use crate::{Error, Single, single, Context, resource::BindingValueRef, context::MapIds};
+use crate::{
+	context::{MapIds, MapIdsIn},
+	resource::BindingValueRef,
+	single, Context, Error, Single,
+};
 use locspan::Meta;
 use treeldr::{metadata::Merge, Id};
 
-pub use treeldr::ty::restriction::{Property, Cardinality};
+pub use treeldr::ty::restriction::{Cardinality, Property};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Range {
@@ -11,10 +15,10 @@ pub enum Range {
 }
 
 impl MapIds for Range {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
 		match self {
-			Self::Any(id) => id.map_ids(f),
-			Self::All(id) => id.map_ids(f)
+			Self::Any(id) => id.map_ids_in(Some(Property::SomeValuesFrom.into()), f),
+			Self::All(id) => id.map_ids_in(Some(Property::AllValuesFrom.into()), f),
 		}
 	}
 }
@@ -26,7 +30,7 @@ pub enum Restriction {
 }
 
 impl MapIds for Restriction {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
 		if let Self::Range(r) = self {
 			r.map_ids(f)
 		}
@@ -43,7 +47,7 @@ impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
 			property: Single::default(),
-			restriction: Single::default()
+			restriction: Single::default(),
 		}
 	}
 }
@@ -66,31 +70,51 @@ impl<M> Definition<M> {
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
-		ClassBindings { on_property: self.property.iter(), restriction: self.restriction.iter() }
+		ClassBindings {
+			on_property: self.property.iter(),
+			restriction: self.restriction.iter(),
+		}
 	}
 
 	pub fn build(
 		&self,
 		context: &Context<M>,
 		as_resource: &treeldr::node::Data<M>,
-		meta: &M
+		meta: &M,
 	) -> Result<treeldr::ty::restriction::Definition<M>, Error<M>>
 	where
 		M: Clone + Merge,
 	{
-		let prop_ref = self.property.clone().into_required_property_at_node_binding(context, as_resource.id, Property::OnProperty, &meta)?;
-		let restriction = self.restriction.clone().try_unwrap().map_err(|_| todo!())?.ok_or_else(|| todo!())?;
+		let prop_ref = self
+			.property
+			.clone()
+			.into_required_property_at_node_binding(
+				context,
+				as_resource.id,
+				Property::OnProperty,
+				meta,
+			)?;
+		let restriction = self
+			.restriction
+			.clone()
+			.try_unwrap()
+			.map_err(|_| todo!())?
+			.ok_or_else(|| todo!())?;
 
-		Ok(treeldr::ty::restriction::Definition::new(prop_ref, restriction.build(context, as_resource.id, meta.clone())?))
+		Ok(treeldr::ty::restriction::Definition::new(
+			prop_ref,
+			restriction.build(context, as_resource.id, meta.clone())?,
+		))
 	}
 }
 
 impl<M: Merge> MapIds for Definition<M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
-		self.property.map_ids(&f);
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		self.property
+			.map_ids_in(Some(Property::OnProperty.into()), &f);
 		self.restriction.map_ids(f)
 	}
-} 
+}
 
 impl Restriction {
 	pub fn build<M>(
@@ -104,7 +128,7 @@ impl Restriction {
 	{
 		let r = match self {
 			Self::Range(r) => treeldr::ty::Restriction::Range(r.build(context, id, &meta)?),
-			Self::Cardinality(c) => treeldr::ty::Restriction::Cardinality(c)
+			Self::Cardinality(c) => treeldr::ty::Restriction::Cardinality(c),
 		};
 
 		Ok(Meta(r, meta))
@@ -113,13 +137,11 @@ impl Restriction {
 	pub fn as_binding(&self) -> ClassBinding {
 		match self {
 			Self::Range(r) => r.as_binding(),
-			Self::Cardinality(r) => {
-				match r {
-					Cardinality::AtLeast(v) => ClassBinding::MinCardinality(*v),
-					Cardinality::AtMost(v) => ClassBinding::MaxCardinality(*v),
-					Cardinality::Exactly(v) => ClassBinding::Cardinality(*v)
-				}
-			}
+			Self::Cardinality(r) => match r {
+				Cardinality::AtLeast(v) => ClassBinding::MinCardinality(*v),
+				Cardinality::AtMost(v) => ClassBinding::MaxCardinality(*v),
+				Cardinality::Exactly(v) => ClassBinding::Cardinality(*v),
+			},
 		}
 	}
 }
@@ -136,11 +158,15 @@ impl Range {
 	{
 		match self {
 			Self::Any(ty_id) => {
-				let ty_ref = context.require_type_id(ty_id).map_err(|e| e.at_node_property(id, Property::SomeValuesFrom, meta.clone()))?;
+				let ty_ref = context
+					.require_type_id(ty_id)
+					.map_err(|e| e.at_node_property(id, Property::SomeValuesFrom, meta.clone()))?;
 				Ok(treeldr::ty::restriction::Range::Any(ty_ref))
 			}
 			Self::All(ty_id) => {
-				let ty_ref = context.require_type_id(ty_id).map_err(|e| e.at_node_property(id, Property::AllValuesFrom, meta.clone()))?;
+				let ty_ref = context
+					.require_type_id(ty_id)
+					.map_err(|e| e.at_node_property(id, Property::AllValuesFrom, meta.clone()))?;
 				Ok(treeldr::ty::restriction::Range::All(ty_ref))
 			}
 		}
@@ -149,7 +175,7 @@ impl Range {
 	pub fn as_binding(&self) -> ClassBinding {
 		match self {
 			Self::Any(v) => ClassBinding::SomeValuesFrom(*v),
-			Self::All(v) => ClassBinding::AllValuesFrom(*v)
+			Self::All(v) => ClassBinding::AllValuesFrom(*v),
 		}
 	}
 }
@@ -160,7 +186,7 @@ pub enum ClassBinding {
 	AllValuesFrom(Id),
 	MinCardinality(u64),
 	MaxCardinality(u64),
-	Cardinality(u64)
+	Cardinality(u64),
 }
 
 pub type Binding = ClassBinding;
@@ -173,7 +199,7 @@ impl ClassBinding {
 			Self::AllValuesFrom(_) => Property::AllValuesFrom,
 			Self::MinCardinality(_) => Property::MinCardinality,
 			Self::MaxCardinality(_) => Property::MaxCardinality,
-			Self::Cardinality(_) => Property::Cardinality
+			Self::Cardinality(_) => Property::Cardinality,
 		}
 	}
 
@@ -184,14 +210,14 @@ impl ClassBinding {
 			Self::AllValuesFrom(v) => BindingValueRef::Id(*v),
 			Self::MinCardinality(v) => BindingValueRef::U64(*v),
 			Self::MaxCardinality(v) => BindingValueRef::U64(*v),
-			Self::Cardinality(v) => BindingValueRef::U64(*v)
+			Self::Cardinality(v) => BindingValueRef::U64(*v),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
 	on_property: single::Iter<'a, Id, M>,
-	restriction: single::Iter<'a, Restriction, M>
+	restriction: single::Iter<'a, Restriction, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;

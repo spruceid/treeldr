@@ -164,4 +164,13 @@ impl<'a> Iterator for Iter<'a> {
 	}
 }
 
+impl<'a> DoubleEndedIterator for Iter<'a> {
+	fn next_back(&mut self) -> Option<Self::Item> {
+		self.max
+			.take()
+			.map(Restriction::Max)
+			.or_else(|| self.min.take().map(Restriction::Min))
+	}
+}
+
 impl<'a> ExactSizeIterator for Iter<'a> {}

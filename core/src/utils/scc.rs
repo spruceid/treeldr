@@ -15,9 +15,13 @@ pub trait SccGraph {
 	/// Vertex reference.
 	type Vertex: Copy + Eq + Hash;
 
-	type Vertices<'a>: 'a + IntoIterator<Item = Self::Vertex> where Self: 'a;
+	type Vertices<'a>: 'a + IntoIterator<Item = Self::Vertex>
+	where
+		Self: 'a;
 
-	type Successors<'a>: 'a + IntoIterator<Item = Self::Vertex> where Self: 'a;
+	type Successors<'a>: 'a + IntoIterator<Item = Self::Vertex>
+	where
+		Self: 'a;
 
 	fn vertices(&self) -> Self::Vertices<'_>;
 

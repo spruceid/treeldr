@@ -1,19 +1,15 @@
+use crate::{ty::restriction, Model, Multiple, TId, Type};
 use locspan::Meta;
-use crate::{
-	ty::restriction, Model, Type, TId, Multiple
-};
 
 /// Intersection type.
 #[derive(Debug)]
 pub struct Intersection<M> {
 	/// Types in the intersection.
-	types: Multiple<TId<Type>, M>
+	types: Multiple<TId<Type>, M>,
 }
 
 impl<M> Intersection<M> {
-	pub fn new(
-		types: Multiple<TId<Type>, M>
-	) -> Result<Self, restriction::Contradiction> {
+	pub fn new(types: Multiple<TId<Type>, M>) -> Result<Self, restriction::Contradiction> {
 		// let mut properties = Properties::all();
 		// for &ty_ref in types.keys() {
 		// 	properties

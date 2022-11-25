@@ -1,9 +1,13 @@
 use locspan::Meta;
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{metadata::Merge, BlankIdIndex, IriIndex, Id, vocab::{Object, Term, Rdf}};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{
+	metadata::Merge,
+	vocab::{Object, Rdf, Term},
+	BlankIdIndex, Id, IriIndex,
+};
 use treeldr_build::Context;
 
-use super::{Declare, LocalContext, Error, Build, LocalError};
+use super::{Build, Declare, Error, LocalContext, LocalError};
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::TypeDefinition<M>, M> {
 	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -67,7 +71,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 			}
 		}
 
-		if let Some(comment) = def.doc.map(|doc| doc.build(local_context, context, vocabulary, generator)).transpose()?.flatten() {
+		if let Some(comment) = def
+			.doc
+			.map(|doc| doc.build(local_context, context, vocabulary, generator))
+			.transpose()?
+			.flatten()
+		{
 			let node = context.get_mut(id).unwrap();
 			node.comment_mut().insert(comment)
 		}
@@ -139,7 +148,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterTypeExpr<M>, M> {
 				)?;
 
 				let ty = context.get_mut(id).unwrap().as_type_mut();
-				ty.intersection_of_mut().insert(Meta(types_list, loc.clone()));
+				ty.intersection_of_mut()
+					.insert(Meta(types_list, loc.clone()));
 
 				Ok(Meta(id, loc))
 			}
@@ -189,9 +199,16 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 			crate::InnerTypeExpr::Reference(r) => {
 				r.build(local_context, context, vocabulary, generator)
 			}
-			crate::InnerTypeExpr::Literal(lit) => {
-				let id = local_context.anonymous_id(None, vocabulary, generator, loc.clone());
-				local_context.generate_literal_type(&id, context, vocabulary, generator, Meta(lit, loc))?;
+			crate::InnerTypeExpr::Literal(label, lit) => {
+				let id =
+					local_context.anonymous_id(Some(label), vocabulary, generator, loc.clone());
+				local_context.generate_literal_type(
+					&id,
+					context,
+					vocabulary,
+					generator,
+					Meta(lit, loc),
+				)?;
 				Ok(id)
 			}
 			crate::InnerTypeExpr::PropertyRestriction(r) => {
@@ -241,9 +258,14 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 				};
 
 				let node = context.get_mut(id).unwrap();
-				node.type_mut().insert(Meta(treeldr_build::ty::SubClass::Restriction.into(), loc.clone()));
+				node.type_mut().insert(Meta(
+					treeldr_build::ty::SubClass::Restriction.into(),
+					loc.clone(),
+				));
 				node.as_restriction_mut().property_mut().insert(prop_id);
-				node.as_restriction_mut().restriction_mut().insert(Meta(restriction, restriction_loc));
+				node.as_restriction_mut()
+					.restriction_mut()
+					.insert(Meta(restriction, restriction_loc));
 
 				Ok(Meta(id, loc))
 			}
@@ -260,28 +282,42 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 				use treeldr_build::ty::{restriction, Restriction};
 				let Meta(first_restriction_id, _) =
 					local_context.anonymous_id(None, vocabulary, generator, loc.clone());
-				let first_restriction = context.declare_restriction(first_restriction_id, loc.clone());
-				first_restriction.as_restriction_mut().property_mut().insert(Meta(
-					Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::First))),
-					loc.clone(),
-				));
-				first_restriction.as_restriction_mut().restriction_mut().insert(Meta(
-					Restriction::Range(restriction::Range::All(item_id)),
-					loc.clone()
-				));
+				let first_restriction =
+					context.declare_restriction(first_restriction_id, loc.clone());
+				first_restriction
+					.as_restriction_mut()
+					.property_mut()
+					.insert(Meta(
+						Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::First))),
+						loc.clone(),
+					));
+				first_restriction
+					.as_restriction_mut()
+					.restriction_mut()
+					.insert(Meta(
+						Restriction::Range(restriction::Range::All(item_id)),
+						loc.clone(),
+					));
 
 				// Restriction on the `rdf:rest` property.
 				let Meta(rest_restriction_id, _) =
-				local_context.anonymous_id(None, vocabulary, generator, loc.clone());
-				let rest_restriction = context.declare_restriction(rest_restriction_id, loc.clone());
-				rest_restriction.as_restriction_mut().property_mut().insert(Meta(
-					Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Rest))),
-					loc.clone(),
-				));
-				rest_restriction.as_restriction_mut().restriction_mut().insert(Meta(
-					Restriction::Range(restriction::Range::All(id)),
-					loc.clone()
-				));
+					local_context.anonymous_id(None, vocabulary, generator, loc.clone());
+				let rest_restriction =
+					context.declare_restriction(rest_restriction_id, loc.clone());
+				rest_restriction
+					.as_restriction_mut()
+					.property_mut()
+					.insert(Meta(
+						Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Rest))),
+						loc.clone(),
+					));
+				rest_restriction
+					.as_restriction_mut()
+					.restriction_mut()
+					.insert(Meta(
+						Restriction::Range(restriction::Range::All(id)),
+						loc.clone(),
+					));
 
 				// Intersection list.
 				let types_id = context.create_list(

@@ -4,7 +4,7 @@ use embedding::Embedding;
 use iref::{Iri, IriBuf};
 use rdf_types::Vocabulary;
 use std::fmt;
-use treeldr::{layout, BlankIdIndex, IriIndex, Ref};
+use treeldr::{BlankIdIndex, IriIndex, TId};
 
 #[derive(clap::Args)]
 /// Generate a JSON Schema from a TreeLDR model.
@@ -23,7 +23,7 @@ pub struct Command {
 	type_property: Option<String>,
 }
 
-pub struct NotALayoutError<M>(pub IriBuf, pub treeldr::node::TypesMetadata<M>);
+pub struct NotALayoutError<M>(pub IriBuf, pub treeldr::Multiple<TId<treeldr::Type>, M>);
 
 pub enum Error<M> {
 	NoLayoutName(String),
@@ -49,18 +49,18 @@ fn find_layout<F: Clone>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<F>,
 	iri: Iri,
-) -> Result<Ref<layout::Definition<F>>, Box<Error<F>>> {
+) -> Result<TId<treeldr::Layout>, Box<Error<F>>> {
 	let name = vocabulary
 		.get(iri)
 		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
-	model
-		.require_layout(treeldr::Id::Iri(name))
-		.map_err(|e| match e {
-			treeldr::Error::NodeUnknown(_) => Box::new(Error::UndefinedLayout(iri.into())),
-			treeldr::Error::NodeInvalidType(e) => Box::new(Error::NotALayout(Box::new(
-				NotALayoutError(iri.into(), e.found),
-			))),
-		})
+	let id: TId<treeldr::Layout> = treeldr::TId::new(treeldr::Id::Iri(name));
+	model.require(id).map_err(|e| match e {
+		treeldr::Error::NodeUnknown(_) => Box::new(Error::UndefinedLayout(iri.into())),
+		treeldr::Error::NodeInvalidType(e) => Box::new(Error::NotALayout(Box::new(
+			NotALayoutError(iri.into(), e.found),
+		))),
+	})?;
+	Ok(id)
 }
 
 impl Command {
@@ -121,22 +121,10 @@ impl Command {
 				Ok(())
 			}
 			Err(crate::Error::NoLayoutName(r)) => Err(Box::new(Error::NoLayoutName(
-				model
-					.layouts()
-					.get(r)
-					.unwrap()
-					.id()
-					.with(vocabulary)
-					.to_string(),
+				model.get(r).unwrap().id().with(vocabulary).to_string(),
 			))),
 			Err(crate::Error::InfiniteSchema(r)) => Err(Box::new(Error::InfiniteSchema(
-				model
-					.layouts()
-					.get(r)
-					.unwrap()
-					.id()
-					.with(vocabulary)
-					.to_string(),
+				model.get(r).unwrap().id().with(vocabulary).to_string(),
 			))),
 			Err(crate::Error::Serialization(e)) => Err(Box::new(Error::Serialization(e))),
 		}

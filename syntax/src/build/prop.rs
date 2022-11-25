@@ -1,9 +1,9 @@
 use locspan::Meta;
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{metadata::Merge, BlankIdIndex, IriIndex, Id};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
 use treeldr_build::Context;
 
-use super::{Declare, LocalContext, Error, Build};
+use super::{Build, Declare, Error, LocalContext};
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::PropertyDefinition<M>, M> {
 	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -81,7 +81,10 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 		}
 
 		if let Some(functional_loc) = functional_loc {
-			node.type_mut().insert(Meta(treeldr_build::prop::Type::FunctionalProperty.into(), functional_loc));
+			node.type_mut().insert(Meta(
+				treeldr_build::prop::Type::FunctionalProperty.into(),
+				functional_loc,
+			));
 		}
 
 		let prop = node.as_property_mut();

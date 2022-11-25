@@ -1,6 +1,6 @@
+use crate::metadata::Merge;
 use locspan::{Meta, StrippedPartialEq};
 use std::collections::{btree_map::Entry, BTreeMap};
-use crate::metadata::Merge;
 
 /// Multiple values.
 #[derive(Clone, Debug)]
@@ -20,13 +20,13 @@ impl<T, M> Multiple<T, M> {
 	pub fn len(&self) -> usize {
 		self.0.len()
 	}
-	
+
 	pub fn is_empty(&self) -> bool {
 		self.0.is_empty()
 	}
 
 	pub fn iter(&self) -> Iter<T, M> {
-		Iter(self.0.iter())
+		Iter::Some(self.0.iter())
 	}
 
 	pub fn clear(&mut self) {
@@ -42,7 +42,7 @@ impl<T: Ord, M> Multiple<T, M> {
 	pub fn get_metadata(&self, item: &T) -> Option<&M> {
 		self.0.get(item)
 	}
-	
+
 	pub fn insert(&mut self, Meta(value, meta): Meta<T, M>)
 	where
 		M: Merge,
@@ -60,13 +60,17 @@ impl<T: Ord, M> Multiple<T, M> {
 		self.0.insert(value, meta);
 	}
 
+	pub fn remove(&mut self, t: &T) -> Option<M> {
+		self.0.remove(t)
+	}
+
 	pub fn intersected_with<I: IntoIterator<Item = Meta<T, M>>>(mut self, iter: I) -> Self
 	where
 		M: Merge,
 	{
-		iter.into_iter().filter_map(|Meta(k, m1)| {
-			self.0.remove(&k).map(|m2| Meta(k, m1.merged_with(m2)))
-		}).collect()
+		iter.into_iter()
+			.filter_map(|Meta(k, m1)| self.0.remove(&k).map(|m2| Meta(k, m1.merged_with(m2))))
+			.collect()
 	}
 
 	pub fn extended_with<I: IntoIterator<Item = Meta<T, M>>>(mut self, iter: I) -> Self
@@ -107,7 +111,7 @@ impl<T: Ord, M: Merge> Extend<Meta<T, M>> for Multiple<T, M> {
 impl<T: Ord, M: Merge> FromIterator<Meta<T, M>> for Multiple<T, M> {
 	fn from_iter<I: IntoIterator<Item = Meta<T, M>>>(iter: I) -> Self {
 		let mut result = Self::default();
-		
+
 		result.extend(iter);
 
 		result
@@ -132,17 +136,32 @@ impl<'a, T, M> IntoIterator for &'a Multiple<T, M> {
 	}
 }
 
-pub struct Iter<'a, T, M>(std::collections::btree_map::Iter<'a, T, M>);
+pub enum Iter<'a, T, M> {
+	Some(std::collections::btree_map::Iter<'a, T, M>),
+	None,
+}
+
+impl<'a, T, M> Default for Iter<'a, T, M> {
+	fn default() -> Self {
+		Self::None
+	}
+}
 
 impl<'a, T, M> Iterator for Iter<'a, T, M> {
 	type Item = Meta<&'a T, &'a M>;
 
 	fn size_hint(&self) -> (usize, Option<usize>) {
-		self.0.size_hint()
+		match self {
+			Self::Some(i) => i.size_hint(),
+			Self::None => (0, Some(0)),
+		}
 	}
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.0.next().map(|(t, m)| Meta(t, m))
+		match self {
+			Self::Some(i) => i.next().map(|(t, m)| Meta(t, m)),
+			Self::None => None,
+		}
 	}
 }
 
@@ -150,7 +169,10 @@ impl<'a, T, M> ExactSizeIterator for Iter<'a, T, M> {}
 
 impl<'a, T, M> DoubleEndedIterator for Iter<'a, T, M> {
 	fn next_back(&mut self) -> Option<Self::Item> {
-		self.0.next_back().map(|(t, m)| Meta(t, m))
+		match self {
+			Self::Some(i) => i.next_back().map(|(t, m)| Meta(t, m)),
+			Self::None => None,
+		}
 	}
 }
 

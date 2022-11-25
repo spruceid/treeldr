@@ -1,10 +1,10 @@
+use super::restriction::primitive::Restrictions;
 use crate::Error;
 use treeldr::metadata::Merge;
 pub use treeldr::{
 	layout::{primitive::RegExp, Primitive},
 	Id, MetaOption, Metadata,
 };
-use super::restriction::primitive::Restrictions;
 
 pub trait BuildPrimitive<M>: Sized {
 	fn build(

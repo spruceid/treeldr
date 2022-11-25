@@ -5,44 +5,44 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
-mod doc;
+pub mod component;
+pub mod doc;
 pub mod error;
 mod feature;
-pub mod list;
-pub mod component;
 pub mod layout;
+pub mod list;
 mod meta_option;
 pub mod metadata;
+pub mod multiple;
 pub mod name;
 pub mod node;
 pub mod prop;
 pub mod reporting;
-// pub mod to_rdf;
+pub mod to_rdf;
 pub mod ty;
 pub mod utils;
 pub mod value;
 pub mod vocab;
-pub mod multiple;
 
-pub use doc::Documentation;
+pub use doc::{Documentation, StrippedDocumentation};
 pub use error::Error;
 pub use feature::Feature;
+pub use layout::Layout;
 pub use meta_option::MetaOption;
 pub use metadata::Metadata;
+pub use multiple::Multiple;
 pub use name::Name;
+pub use prop::Property;
+pub use ty::Type;
 pub use value::Value;
 pub use vocab::{BlankIdIndex, Id, IriIndex};
-pub use ty::Type;
-pub use prop::Property;
-pub use layout::Layout;
-pub use multiple::Multiple;
 
 /// TreeLDR model.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Model<M> {
 	/// Nodes.
-	nodes: BTreeMap<Id, node::Definition<M>>
+	nodes: BTreeMap<Id, node::Definition<M>>,
 }
 
 impl<M> Model<M> {
@@ -51,12 +51,8 @@ impl<M> Model<M> {
 		Self::default()
 	}
 
-	pub fn from_parts(
-		nodes: BTreeMap<Id, node::Definition<M>>
-	) -> Self {
-		Self {
-			nodes
-		}
+	pub fn from_parts(nodes: BTreeMap<Id, node::Definition<M>>) -> Self {
+		Self { nodes }
 	}
 
 	pub fn can_be_reference_layout(
@@ -75,13 +71,35 @@ impl<M> Model<M> {
 	}
 
 	/// Returns the node associated to the given `id`, if any.
+	pub fn get_resource(&self, id: Id) -> Option<Ref<node::Resource, M>> {
+		self.get(TId::new(id))
+	}
+
+	/// Returns a mutable reference to the node associated to the given `id`, if any.
+	pub fn get_resource_mut(&mut self, id: Id) -> Option<RefMut<node::Resource, M>> {
+		self.get_mut(TId::new(id))
+	}
+
+	/// Returns the node associated to the given `id`, if any.
 	pub fn get<T: ResourceType>(&self, id: TId<T>) -> Option<Ref<T, M>> {
-		self.nodes.get(&id.0).and_then(|n| if T::check(n) { Some(Ref(n, PhantomData)) } else { None })
+		self.nodes.get(&id.0).and_then(|n| {
+			if T::check(n) {
+				Some(Ref(n, PhantomData))
+			} else {
+				None
+			}
+		})
 	}
 
 	/// Returns a mutable reference to the node associated to the given `id`, if any.
 	pub fn get_mut<T: ResourceType>(&mut self, id: TId<T>) -> Option<RefMut<T, M>> {
-		self.nodes.get_mut(&id.0).and_then(|n| if T::check(n) { Some(RefMut(n, PhantomData)) } else { None })
+		self.nodes.get_mut(&id.0).and_then(|n| {
+			if T::check(n) {
+				Some(RefMut(n, PhantomData))
+			} else {
+				None
+			}
+		})
 	}
 
 	pub fn nodes(&self) -> impl Iterator<Item = (Id, &node::Definition<M>)> {
@@ -109,21 +127,28 @@ impl<M> Model<M> {
 		self.nodes.insert(node.id(), node)
 	}
 
-	pub fn require<T: ResourceType>(&self, id: TId<T>) -> Result<Ref<T, M>, Error<M>> where M: Clone {
+	pub fn require<T: ResourceType>(&self, id: TId<T>) -> Result<Ref<T, M>, Error<M>>
+	where
+		M: Clone,
+	{
 		match self.nodes.get(&id.0) {
-			Some(r) => if T::check(r) {
-				Ok(Ref(r, PhantomData))
-			} else {
-				Err(error::NodeInvalidType {
-					id: id.id(),
-					expected: T::TYPE,
-					found: r.type_().clone()
-				}.into())
+			Some(r) => {
+				if T::check(r) {
+					Ok(Ref(r, PhantomData))
+				} else {
+					Err(error::NodeInvalidType {
+						id: id.id(),
+						expected: TId::new(T::TYPE.id()),
+						found: r.type_().clone(),
+					}
+					.into())
+				}
 			}
 			None => Err(error::NodeUnknown {
 				id: id.id(),
-				expected_ty: T::TYPE
-			}.into())
+				expected_ty: T::TYPE,
+			}
+			.into()),
 		}
 	}
 }
@@ -163,7 +188,7 @@ pub trait ResourceType {
 	Eq(bound = ""),
 	PartialOrd(bound = ""),
 	Ord(bound = ""),
-	Hash(bound = ""),
+	Hash(bound = "")
 )]
 pub struct TId<T>(Id, PhantomData<T>);
 
@@ -182,10 +207,7 @@ impl<T> TId<T> {
 }
 
 #[derive(Derivative)]
-#[derivative(
-	Clone(bound = ""),
-	Copy(bound = "")
-)]
+#[derivative(Clone(bound = ""), Copy(bound = ""))]
 /// Typed Resource reference.
 pub struct Ref<'a, T, M>(&'a node::Definition<M>, PhantomData<T>);
 

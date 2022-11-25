@@ -1,7 +1,12 @@
-use crate::{Context, Error, Single, error, single, resource::BindingValueRef, context::MapIds};
+use crate::{
+	context::{MapIds, MapIdsIn},
+	error,
+	resource::BindingValueRef,
+	single, Context, Error, Single,
+};
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
-use treeldr::{vocab::Object, Id, metadata::Merge};
+use treeldr::{metadata::Merge, vocab::Object, Id};
 
 pub use treeldr::list::Property;
 
@@ -11,12 +16,18 @@ pub struct Definition<M> {
 	rest: Single<Id, M>,
 }
 
-impl<M> Definition<M> {
-	pub fn new() -> Self {
+impl<M> Default for Definition<M> {
+	fn default() -> Self {
 		Self {
 			first: Single::default(),
 			rest: Single::default(),
 		}
+	}
+}
+
+impl<M> Definition<M> {
+	pub fn new() -> Self {
+		Self::default()
 	}
 
 	pub fn first(&self) -> &Single<Stripped<Object<M>>, M> {
@@ -36,27 +47,37 @@ impl<M> Definition<M> {
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
-		ClassBindings { first: self.first.iter(), rest: self.rest.iter() }
+		ClassBindings {
+			first: self.first.iter(),
+			rest: self.rest.iter(),
+		}
 	}
 }
 
 impl<M: Merge> MapIds for Definition<M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
-		self.first.map_ids(&f);
-		self.rest.map_ids(f)
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		self.first.map_ids_in(Some(Property::First.into()), &f);
+		self.rest.map_ids_in(Some(Property::Rest.into()), f)
 	}
 }
 
 #[derive(Derivative)]
-#[derivative(Clone(bound=""), Copy(bound=""))]
+#[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub enum ListRef<'l, M> {
 	Nil,
 	Cons(Id, &'l Definition<M>, &'l M),
 }
 
 impl<'l, M> ListRef<'l, M> {
-	pub fn try_fold<T, F>(&self, context: &'l Context<M>, first: T, f: F) -> TryFold<'l, T, M, F> where F: Fn(T, &Single<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>> {
-		TryFold { context, stack: vec![Ok((*self, first))], f }
+	pub fn try_fold<T, F>(&self, context: &'l Context<M>, first: T, f: F) -> TryFold<'l, T, M, F>
+	where
+		F: Fn(T, &Single<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>>,
+	{
+		TryFold {
+			context,
+			stack: vec![Ok((*self, first))],
+			f,
+		}
 	}
 
 	pub fn iter(&self, context: &'l Context<M>) -> Iter<'l, M> {
@@ -74,64 +95,80 @@ impl<'l, M> ListRef<'l, M> {
 	}
 }
 
+type TryFoldState<'l, T, M> = (ListRef<'l, M>, T);
+
 pub struct TryFold<'l, T, M, F> {
 	context: &'l Context<M>,
-	stack: Vec<Result<(ListRef<'l, M>, T), Error<M>>>,
-	f: F
+	stack: Vec<Result<TryFoldState<'l, T, M>, Error<M>>>,
+	f: F,
 }
 
-impl<'l, T, M, F> Iterator for TryFold<'l, T, M, F> where T: Clone, M: Clone, F: Fn(T, &Single<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>> {
+impl<'l, T, M, F> Iterator for TryFold<'l, T, M, F>
+where
+	T: Clone,
+	M: Clone,
+	F: Fn(T, &Single<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>>,
+{
 	type Item = Result<T, Error<M>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		loop {
 			match self.stack.pop() {
 				Some(Err(e)) => break Some(Err(e)),
-				Some(Ok((list, t))) => {
-					match list {
-						ListRef::Nil => break Some(Ok(t)),
-						ListRef::Cons(id, d, meta) => {
-							if d.rest.is_empty() {
-								break Some(Err(Meta(
-									error::NodeBindingMissing {
-										id,
-										property: Property::Rest.into()
-									}.into(),
-									meta.clone()
-								)))
-							} else {
-								match (self.f)(t, &d.first) {
-									Ok(new_states) => {
-										'next_state: for u in new_states {
-											let len = d.rest.len();
-		
-											for (i, Meta(rest_id, rest_meta)) in d.rest.iter().enumerate() {
-												if i + 1 == len {
-													let item = match self.context.require_list(*rest_id).map_err(|e| e.at(rest_meta.clone())) {
-														Ok(rest) => Ok((rest, u)),
-														Err(e) => Err(e)
-													};
-													
-													self.stack.push(item);
-													continue 'next_state;
-												} else {
-													let item = match self.context.require_list(*rest_id).map_err(|e| e.at(rest_meta.clone())) {
-														Ok(rest) => Ok((rest, u.clone())),
-														Err(e) => Err(e)
-													};
-													
-													self.stack.push(item)
-												}
+				Some(Ok((list, t))) => match list {
+					ListRef::Nil => break Some(Ok(t)),
+					ListRef::Cons(id, d, meta) => {
+						if d.rest.is_empty() {
+							break Some(Err(Meta(
+								error::NodeBindingMissing {
+									id,
+									property: Property::Rest.into(),
+								}
+								.into(),
+								meta.clone(),
+							)));
+						} else {
+							match (self.f)(t, &d.first) {
+								Ok(new_states) => {
+									'next_state: for u in new_states {
+										let len = d.rest.len();
+
+										for (i, Meta(rest_id, rest_meta)) in
+											d.rest.iter().enumerate()
+										{
+											if i + 1 == len {
+												let item = match self
+													.context
+													.require_list(*rest_id)
+													.map_err(|e| e.at(rest_meta.clone()))
+												{
+													Ok(rest) => Ok((rest, u)),
+													Err(e) => Err(e),
+												};
+
+												self.stack.push(item);
+												continue 'next_state;
+											} else {
+												let item = match self
+													.context
+													.require_list(*rest_id)
+													.map_err(|e| e.at(rest_meta.clone()))
+												{
+													Ok(rest) => Ok((rest, u.clone())),
+													Err(e) => Err(e),
+												};
+
+												self.stack.push(item)
 											}
 										}
 									}
-									Err(e) => break Some(Err(e))
 								}
+								Err(e) => break Some(Err(e)),
 							}
 						}
 					}
-				}
-				None => break None
+				},
+				None => break None,
 			}
 		}
 	}
@@ -149,22 +186,36 @@ impl<'l, M: Clone> Iterator for Iter<'l, M> {
 		match self {
 			Self::Nil => None,
 			Self::Cons(nodes, id, d, meta) => {
-				match d.first.as_required_at_node_binding(*id, Property::First, meta) {
+				match d
+					.first
+					.as_required_at_node_binding(*id, Property::First, meta)
+				{
 					Ok(item) => {
-						match d.rest.as_required_at_node_binding(*id, Property::Rest, meta) {
+						match d
+							.rest
+							.as_required_at_node_binding(*id, Property::Rest, meta)
+						{
 							Ok(Meta(rest_id, _)) => {
 								match nodes.require_list(*rest_id) {
-									Ok(ListRef::Cons(rest_id, rest, rest_meta)) => *self = Self::Cons(*nodes, rest_id, rest, rest_meta),
+									Ok(ListRef::Cons(rest_id, rest, rest_meta)) => {
+										*self = Self::Cons(*nodes, rest_id, rest, rest_meta)
+									}
 									Ok(ListRef::Nil) => *self = Self::Nil,
-									Err(e) => return Some(Err(e.at_node_property(*id, Property::Rest, meta.clone())))
+									Err(e) => {
+										return Some(Err(e.at_node_property(
+											*id,
+											Property::Rest,
+											meta.clone(),
+										)))
+									}
 								}
 
 								Some(Ok(item.map(Stripped::as_ref)))
 							}
-							Err(e) => Some(Err(e))
+							Err(e) => Some(Err(e)),
 						}
 					}
-					Err(e) => Some(Err(e))
+					Err(e) => Some(Err(e)),
 				}
 			}
 		}
@@ -188,11 +239,11 @@ impl<'l, M> Iterator for LenientIter<'l, M> {
 
 					match d.rest.first().and_then(|rest| nodes.get_list(**rest)) {
 						Some(ListRef::Cons(_, rest, _)) => *self = Self::Cons(*nodes, rest),
-						_ => *self = Self::Nil
+						_ => *self = Self::Nil,
 					}
 
 					if let Some(item) = item {
-						break Some(item.map(Stripped::as_ref))
+						break Some(item.map(Stripped::as_ref));
 					}
 				}
 			}
@@ -223,7 +274,7 @@ impl<'a, M> ClassBindingRef<'a, M> {
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::First(v) => BindingValueRef::Object(v),
-			Self::Rest(v) => BindingValueRef::Id(*v)
+			Self::Rest(v) => BindingValueRef::Id(*v),
 		}
 	}
 }

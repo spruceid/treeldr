@@ -155,7 +155,7 @@ pub enum TreeLdr {
 	MaxLength,
 
 	#[iri("tldr:pattern")]
-	Pattern
+	Pattern,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -201,7 +201,7 @@ pub enum Owl {
 	WithRestrictions,
 
 	#[iri("owl:FunctionalProperty")]
-	FunctionalProperty
+	FunctionalProperty,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

@@ -1,10 +1,14 @@
-use crate::{Error, Single, Context, single, resource::BindingValueRef, context::MapIds};
+use super::Property;
+use crate::{
+	context::{MapIds, MapIdsIn},
+	resource::BindingValueRef,
+	single, Context, Error, Single,
+};
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::StrippedPartialEq;
 use treeldr::{metadata::Merge, vocab, Id, IriIndex};
 use vocab::{Rdf, Term};
-use super::Property;
 
 #[derive(Clone, Debug, Derivative, StrippedPartialEq)]
 #[derivative(Default(bound = ""))]
@@ -70,7 +74,7 @@ impl<M> Semantics<M> {
 		self.nil.insert(id)
 	}
 
-	pub fn unify_with(&mut self, other: Self) 
+	pub fn unify_with(&mut self, other: Self)
 	where
 		M: Merge,
 	{
@@ -80,7 +84,11 @@ impl<M> Semantics<M> {
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
-		Bindings { first: self.first.iter(), rest: self.rest.iter(), nil: self.nil.iter() }
+		Bindings {
+			first: self.first.iter(),
+			rest: self.rest.iter(),
+			nil: self.nil.iter(),
+		}
 	}
 
 	pub fn build(
@@ -91,12 +99,14 @@ impl<M> Semantics<M> {
 	where
 		M: Clone,
 	{
-		let first = self.first.try_unwrap().map_err(|c| {
-			c.at_functional_node_property(id, Property::ArrayListFirst)
-		})?;
-		let rest = self.rest.try_unwrap().map_err(|c| {
-			c.at_functional_node_property(id, Property::ArrayListRest)
-		})?;
+		let first = self
+			.first
+			.try_unwrap()
+			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListFirst))?;
+		let rest = self
+			.rest
+			.try_unwrap()
+			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListRest))?;
 		let nil = self
 			.nil
 			.try_unwrap()
@@ -104,23 +114,25 @@ impl<M> Semantics<M> {
 
 		let first = first.try_map_with_causes(|Meta(id, meta)| {
 			Ok(Meta(
-				model.require_property_id(id).map_err(|e| {
-					e.at_node_property(id, Property::ArrayListFirst, meta.clone())
-				})?,
+				model
+					.require_property_id(id)
+					.map_err(|e| e.at_node_property(id, Property::ArrayListFirst, meta.clone()))?,
 				meta,
 			))
 		})?;
 		let rest = rest.try_map_with_causes(|Meta(id, meta)| {
 			Ok(Meta(
-				model.require_property_id(id).map_err(|e| {
-					e.at_node_property(id, Property::ArrayListRest, meta.clone())
-				})?,
+				model
+					.require_property_id(id)
+					.map_err(|e| e.at_node_property(id, Property::ArrayListRest, meta.clone()))?,
 				meta,
 			))
 		})?;
 
 		if first.is_some() || rest.is_some() || nil.is_some() {
-			Ok(Some(treeldr::layout::array::Semantics::new(first, rest, nil)))
+			Ok(Some(treeldr::layout::array::Semantics::new(
+				first, rest, nil,
+			)))
 		} else {
 			Ok(None)
 		}
@@ -128,10 +140,12 @@ impl<M> Semantics<M> {
 }
 
 impl<M: Merge> MapIds for Semantics<M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
-		self.first.map_ids(&f);
-		self.rest.map_ids(&f);
-		self.nil.map_ids(f)
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		self.first
+			.map_ids_in(Some(Property::ArrayListFirst.into()), &f);
+		self.rest
+			.map_ids_in(Some(Property::ArrayListRest.into()), &f);
+		self.nil.map_ids_in(Some(Property::ArrayListNil.into()), f)
 	}
 }
 
@@ -144,7 +158,7 @@ impl<M> PartialEq for Semantics<M> {
 pub enum Binding {
 	ArrayListFirst(Id),
 	ArrayListRest(Id),
-	ArrayListNil(Id)
+	ArrayListNil(Id),
 }
 
 impl Binding {
@@ -152,7 +166,7 @@ impl Binding {
 		match self {
 			Self::ArrayListFirst(_) => Property::ArrayListFirst,
 			Self::ArrayListRest(_) => Property::ArrayListRest,
-			Self::ArrayListNil(_) => Property::ArrayListNil
+			Self::ArrayListNil(_) => Property::ArrayListNil,
 		}
 	}
 
@@ -160,7 +174,7 @@ impl Binding {
 		match self {
 			Self::ArrayListFirst(v) => BindingValueRef::Id(*v),
 			Self::ArrayListRest(v) => BindingValueRef::Id(*v),
-			Self::ArrayListNil(v) => BindingValueRef::Id(*v)
+			Self::ArrayListNil(v) => BindingValueRef::Id(*v),
 		}
 	}
 }
@@ -168,7 +182,7 @@ impl Binding {
 pub struct Bindings<'a, M> {
 	first: single::Iter<'a, Id, M>,
 	rest: single::Iter<'a, Id, M>,
-	nil: single::Iter<'a, Id, M>
+	nil: single::Iter<'a, Id, M>,
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {

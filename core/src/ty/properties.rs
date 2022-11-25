@@ -5,7 +5,7 @@ use crate::{Property, TId};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use super::{Restriction, Restrictions, restriction::Contradiction};
+use super::{restriction::Contradiction, Restriction, Restrictions};
 
 #[derive(Debug, Clone)]
 struct PropertyData<M> {
@@ -14,7 +14,10 @@ struct PropertyData<M> {
 }
 
 impl<M> PropertyData<M> {
-	pub fn restrict(&mut self, restriction: Meta<Restriction, M>) -> Result<(), Contradiction> where M: Clone + Merge {
+	pub fn restrict(&mut self, restriction: Meta<Restriction, M>) -> Result<(), Contradiction>
+	where
+		M: Clone + Merge,
+	{
 		self.restrictions.restrict(restriction)
 	}
 }
@@ -116,7 +119,7 @@ impl<M> Properties<M> {
 	pub fn restrict(
 		&mut self,
 		prop: TId<Property>,
-		Meta(restriction, metadata): Meta<Restriction, M>
+		Meta(restriction, metadata): Meta<Restriction, M>,
 	) -> Result<(), Contradiction>
 	where
 		M: Clone + Merge,

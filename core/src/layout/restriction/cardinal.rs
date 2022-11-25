@@ -1,7 +1,8 @@
+use super::Property;
 use crate::{metadata::Merge, MetaOption};
+use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::{StrippedEq, StrippedPartialEq};
-use super::Property;
 
 /// Cardinal restriction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -14,7 +15,7 @@ impl Restriction {
 	pub fn as_binding(&self) -> Binding {
 		match self {
 			Self::Min(v) => Binding::Min(*v),
-			Self::Max(v) => Binding::Max(*v)
+			Self::Max(v) => Binding::Max(*v),
 		}
 	}
 }
@@ -43,6 +44,20 @@ impl<M> Default for Restrictions<M> {
 impl<M> Restrictions<M> {
 	pub fn is_included_in(&self, other: &Self) -> bool {
 		self.min.value() >= other.min.value() && self.max.value() <= other.max.value()
+	}
+
+	#[allow(clippy::should_implement_trait)]
+	pub fn into_iter(self) -> impl DoubleEndedIterator<Item = Meta<Restriction, M>> {
+		self.min
+			.unwrap()
+			.into_iter()
+			.map(|m| m.map(Restriction::Min))
+			.chain(
+				self.max
+					.unwrap()
+					.into_iter()
+					.map(|m| m.map(Restriction::Max)),
+			)
 	}
 
 	pub fn insert(
@@ -156,6 +171,48 @@ impl<M> Restrictions<M> {
 	pub fn is_required(&self) -> bool {
 		self.min() != 0
 	}
+
+	pub fn iter(&self) -> RestrictionsIter<M> {
+		RestrictionsIter {
+			min: self.min.as_ref(),
+			max: self.max.as_ref(),
+		}
+	}
+}
+
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct RestrictionsIter<'a, M> {
+	min: Option<&'a Meta<u64, M>>,
+	max: Option<&'a Meta<u64, M>>,
+}
+
+impl<'a, M> Iterator for RestrictionsIter<'a, M> {
+	type Item = Meta<Restriction, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.min
+			.take()
+			.map(|m| m.borrow().into_cloned_value().map(Restriction::Min))
+			.or_else(|| {
+				self.max
+					.take()
+					.map(|m| m.borrow().into_cloned_value().map(Restriction::Max))
+			})
+	}
+}
+
+impl<'a, M> DoubleEndedIterator for RestrictionsIter<'a, M> {
+	fn next_back(&mut self) -> Option<Self::Item> {
+		self.max
+			.take()
+			.map(|m| m.borrow().into_cloned_value().map(Restriction::Max))
+			.or_else(|| {
+				self.min
+					.take()
+					.map(|m| m.borrow().into_cloned_value().map(Restriction::Min))
+			})
+	}
 }
 
 pub enum Binding {
@@ -167,7 +224,7 @@ impl Binding {
 	pub fn property(&self) -> Property {
 		match self {
 			Self::Min(_) => Property::MinCardinality,
-			Self::Max(_) => Property::MaxCardinality
+			Self::Max(_) => Property::MaxCardinality,
 		}
 	}
 }

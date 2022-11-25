@@ -1,23 +1,32 @@
 use crate::{
-	error::{NodeUnknown, NodeTypeInvalid}, Error, Property, IriIndex, ListRef, component, layout, resource, prop, Single
+	component,
+	error::{NodeTypeInvalid, NodeUnknown},
+	layout, prop, resource, Error, IriIndex, ListRef, Property, Single,
 };
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
 use rdf_types::{Generator, VocabularyMut};
-use std::collections::{BTreeMap, HashMap, btree_map::Entry};
-use treeldr::{metadata::Merge, vocab::{self, Object}, BlankIdIndex, Id, ty::SubClass, Multiple, node::Type};
+use std::collections::{btree_map::Entry, BTreeMap, HashMap};
+use treeldr::{
+	metadata::Merge,
+	node::Type,
+	ty::SubClass,
+	vocab::{self, Object},
+	BlankIdIndex, Id, Multiple, TId,
+};
 
-mod initialize;
 pub mod build;
+mod initialize;
 
-pub type Ids<'a, M> = std::iter::Copied<std::collections::btree_map::Keys<'a, Id, resource::Definition<M>>>;
+pub type Ids<'a, M> =
+	std::iter::Copied<std::collections::btree_map::Keys<'a, Id, resource::Definition<M>>>;
 
 /// TreeLDR build context.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct Context<M> {
 	/// Nodes.
-	nodes: BTreeMap<Id, resource::Definition<M>>
+	nodes: BTreeMap<Id, resource::Definition<M>>,
 }
 
 impl<M> Context<M> {
@@ -25,64 +34,124 @@ impl<M> Context<M> {
 		Self::default()
 	}
 
-	pub fn declare(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Merge {
+	pub fn declare(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M>
+	where
+		M: Merge,
+	{
 		match self.nodes.entry(id) {
 			Entry::Occupied(entry) => {
 				let node = entry.into_mut();
 				node.metadata_mut().merge_with(metadata);
 				node
-			},
-			Entry::Vacant(entry) => entry.insert(resource::Definition::new(id, metadata))
+			}
+			Entry::Vacant(entry) => entry.insert(resource::Definition::new(id, metadata)),
 		}
 	}
 
-	pub fn declare_with(&mut self, id: Id, type_: impl Into<crate::Type>, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_with(
+		&mut self,
+		id: Id,
+		type_: impl Into<crate::Type>,
+		metadata: M,
+	) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		let node = self.declare(id, metadata.clone());
 		node.type_mut().insert(Meta(type_.into(), metadata));
 		node
 	}
 
-	pub fn declare_type(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_type(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_with(id, Type::Class(None), metadata)
 	}
 
-	pub fn declare_datatype(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_datatype(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_with(id, SubClass::DataType, metadata)
 	}
 
-	pub fn declare_restriction(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_restriction(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_with(id, SubClass::Restriction, metadata)
 	}
 
-	pub fn declare_datatype_restriction(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_datatype_restriction(
+		&mut self,
+		id: Id,
+		metadata: M,
+	) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_with(id, Type::DatatypeRestriction, metadata)
 	}
 
-	pub fn declare_property(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_property(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_with(id, Type::Property(None), metadata)
 	}
 
-	pub fn declare_functional_property(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_functional_property(
+		&mut self,
+		id: Id,
+		metadata: M,
+	) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_with(id, prop::Type::FunctionalProperty, metadata)
 	}
 
-	pub fn declare_layout(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_layout(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_with(id, component::Type::Layout, metadata)
 	}
 
-	pub fn declare_primitive_layout(&mut self, primitive: layout::Primitive, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_primitive_layout(
+		&mut self,
+		primitive: layout::Primitive,
+		metadata: M,
+	) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_layout(primitive.id(), metadata)
 	}
 
-	pub fn declare_layout_field(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_layout_field(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_with(id, component::formatted::Type::LayoutField, metadata)
 	}
 
-	pub fn declare_layout_variant(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_layout_variant(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_with(id, component::formatted::Type::LayoutVariant, metadata)
 	}
 
-	pub fn declare_layout_restriction(&mut self, id: Id, metadata: M) -> &mut resource::Definition<M> where M: Clone + Merge {
+	pub fn declare_layout_restriction(
+		&mut self,
+		id: Id,
+		metadata: M,
+	) -> &mut resource::Definition<M>
+	where
+		M: Clone + Merge,
+	{
 		self.declare_with(id, Type::LayoutRestriction, metadata)
 	}
 
@@ -109,7 +178,9 @@ impl<M> Context<M> {
 	pub fn get_list(&self, id: Id) -> Option<ListRef<M>> {
 		match id {
 			Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil))) => Some(ListRef::Nil),
-			id => self.get(id).map(|n| ListRef::Cons(id, n.as_list(), n.metadata()))
+			id => self
+				.get(id)
+				.map(|n| ListRef::Cons(id, n.as_list(), n.metadata())),
 		}
 	}
 
@@ -134,52 +205,61 @@ impl<M> Context<M> {
 }
 
 pub trait MapIds {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id);
+	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id);
+}
+
+pub trait MapIdsIn {
+	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id);
 }
 
 impl<M: Merge> MapIds for Context<M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id) {
 		for (id, mut node) in std::mem::take(&mut self.nodes) {
 			node.map_ids(&f);
-			self.nodes.insert(f(id), node);
+			self.nodes.insert(f(id, None), node);
 		}
 	}
 }
 
-impl MapIds for Id {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
-		*self = f(*self)
+impl MapIdsIn for Id {
+	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
+		*self = f(*self, prop)
 	}
 }
 
-impl<M> MapIds for Object<M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+impl<M> MapIdsIn for Object<M> {
+	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
 		match self {
-			Self::Blank(b) => {
-				match f(Id::Blank(*b)) {
-					Id::Blank(b) => *self = Self::Blank(b),
-					Id::Iri(i) => *self = Self::Iri(i)
-				}
-			}
-			Self::Iri(i) => {
-				match f(Id::Iri(*i)) {
-					Id::Blank(b) => *self = Self::Blank(b),
-					Id::Iri(i) => *self = Self::Iri(i)
-				}
-			}
-			Self::Literal(_) => ()
+			Self::Blank(b) => match f(Id::Blank(*b), prop) {
+				Id::Blank(b) => *self = Self::Blank(b),
+				Id::Iri(i) => *self = Self::Iri(i),
+			},
+			Self::Iri(i) => match f(Id::Iri(*i), prop) {
+				Id::Blank(b) => *self = Self::Blank(b),
+				Id::Iri(i) => *self = Self::Iri(i),
+			},
+			Self::Literal(_) => (),
 		}
 	}
 }
 
-impl<T: MapIds> MapIds for Stripped<T> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
-		self.0.map_ids(f)
+impl<T: MapIdsIn> MapIdsIn for Stripped<T> {
+	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
+		self.0.map_ids_in(prop, f)
+	}
+}
+
+impl<T: MapIdsIn + Ord, M: Merge> MapIdsIn for Single<T, M> {
+	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
+		for Meta(mut t, m) in std::mem::take(self) {
+			t.map_ids_in(prop, &f);
+			self.insert(Meta(t, m))
+		}
 	}
 }
 
 impl<T: MapIds + Ord, M: Merge> MapIds for Single<T, M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id) {
 		for Meta(mut t, m) in std::mem::take(self) {
 			t.map_ids(&f);
 			self.insert(Meta(t, m))
@@ -187,22 +267,22 @@ impl<T: MapIds + Ord, M: Merge> MapIds for Single<T, M> {
 	}
 }
 
-impl<T: MapIds + Ord, M: Merge> MapIds for Multiple<T, M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+impl<T: MapIdsIn + Ord, M: Merge> MapIdsIn for Multiple<T, M> {
+	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
 		for Meta(mut t, m) in std::mem::take(self) {
-			t.map_ids(&f);
+			t.map_ids_in(prop, &f);
 			self.insert(Meta(t, m))
 		}
 	}
 }
 
 impl<M: Merge> MapIds for HashMap<Id, M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id) {
 		for (id, m) in std::mem::take(self) {
-			match self.entry(f(id)) {
+			match self.entry(f(id, None)) {
 				std::collections::hash_map::Entry::Occupied(mut e) => {
 					e.get_mut().merge_with(m);
-				},
+				}
 				std::collections::hash_map::Entry::Vacant(e) => {
 					e.insert(m);
 				}
@@ -212,10 +292,7 @@ impl<M: Merge> MapIds for HashMap<Id, M> {
 }
 
 impl<M: Clone> Context<M> {
-	pub fn require(
-		&self,
-		id: Id
-	) -> Result<&resource::Definition<M>, NodeUnknown> {
+	pub fn require(&self, id: Id) -> Result<&resource::Definition<M>, NodeUnknown> {
 		match self.get(id) {
 			Some(node) => Ok(node),
 			None => Err(NodeUnknown {
@@ -239,23 +316,45 @@ impl<M: Clone> Context<M> {
 		Ok(self.require(id)?.require_type_id(self)?)
 	}
 
-	pub fn require_property_id(&self, id: Id) -> Result<treeldr::TId<treeldr::Property>, RequireError<M>> {
+	pub fn require_datatype_id(
+		&self,
+		id: Id,
+	) -> Result<treeldr::TId<treeldr::ty::DataType<M>>, RequireError<M>> {
+		Ok(self.require(id)?.require_datatype_id(self)?)
+	}
+
+	pub fn require_property_id(
+		&self,
+		id: Id,
+	) -> Result<treeldr::TId<treeldr::Property>, RequireError<M>> {
 		Ok(self.require(id)?.require_property_id(self)?)
 	}
 
-	pub fn require_layout_id(&self, id: Id) -> Result<treeldr::TId<treeldr::Layout>, RequireError<M>> {
+	pub fn require_layout_id(
+		&self,
+		id: Id,
+	) -> Result<treeldr::TId<treeldr::Layout>, RequireError<M>> {
 		Ok(self.require(id)?.require_layout_id(self)?)
 	}
 
-	pub fn require_layout_field_id(&self, id: Id) -> Result<treeldr::TId<treeldr::layout::Field>, RequireError<M>> {
+	pub fn require_layout_field_id(
+		&self,
+		id: Id,
+	) -> Result<treeldr::TId<treeldr::layout::Field>, RequireError<M>> {
 		Ok(self.require(id)?.require_layout_field_id(self)?)
 	}
 
-	pub fn require_layout_variant_id(&self, id: Id) -> Result<treeldr::TId<treeldr::layout::Variant>, RequireError<M>> {
+	pub fn require_layout_variant_id(
+		&self,
+		id: Id,
+	) -> Result<treeldr::TId<treeldr::layout::Variant>, RequireError<M>> {
 		Ok(self.require(id)?.require_layout_variant_id(self)?)
 	}
 
-	pub fn require_layout_restriction_id(&self, id: Id) -> Result<treeldr::TId<treeldr::layout::Restriction>, RequireError<M>> {
+	pub fn require_layout_restriction_id(
+		&self,
+		id: Id,
+	) -> Result<treeldr::TId<treeldr::layout::ContainerRestriction>, RequireError<M>> {
 		Ok(self.require(id)?.require_layout_restriction_id(self)?)
 	}
 }
@@ -272,13 +371,8 @@ impl<M: Clone + Merge> Context<M> {
 		self.create_named_option_layout(id, item_layout, cause)
 	}
 
-	pub fn create_named_option_layout(
-		&mut self,
-		id: Id,
-		item_layout: Id,
-		cause: M,
-	) -> Id {
-		let layout = self.declare_with(id, component::Type::Layout, cause.clone()).as_layout_mut();
+	pub fn create_named_option_layout(&mut self, id: Id, item_layout: Id, cause: M) -> Id {
+		let layout = self.declare_layout(id, cause.clone()).as_layout_mut();
 		layout.set_option(Meta(item_layout, cause));
 		id
 	}
@@ -321,13 +415,13 @@ impl<M: Clone + Merge> Context<M> {
 		cause: M,
 		deref_cause: M,
 	) -> Id {
-		let layout = self.declare_with(id, component::Type::Layout, cause.clone()).as_layout_mut();
+		let layout = self.declare_layout(id, cause.clone()).as_layout_mut();
 		layout.ty_mut().insert(Meta(target_ty, deref_cause));
 		layout.set_reference(Meta(
 			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
 				vocab::TreeLdr::Primitive(treeldr::layout::Primitive::Iri),
 			))),
-			cause
+			cause,
 		));
 		id
 	}
@@ -349,7 +443,9 @@ impl<M: Clone + Merge> Context<M> {
 		for Meta(item, cause) in list.into_iter().rev() {
 			let id = generator.next(vocabulary);
 
-			let node = self.declare_with(id, Type::List, cause.clone()).as_list_mut();
+			let node = self
+				.declare_with(id, Type::List, cause.clone())
+				.as_list_mut();
 			node.first_mut().insert(Meta(Stripped(item), cause.clone()));
 			node.rest_mut().insert(Meta(head, cause));
 			head = id;
@@ -358,31 +454,34 @@ impl<M: Clone + Merge> Context<M> {
 		head
 	}
 
-	pub fn create_list_with<I: IntoIterator, C, V>(
+	pub fn create_list_with<I: IntoIterator, C, V, G>(
 		&mut self,
 		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		generator: &mut G,
 		list: I,
 		mut f: C,
-	) -> Result<Id, Error<M>>
+	) -> Id
 	where
 		I::IntoIter: DoubleEndedIterator,
 		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
-		C: FnMut(I::Item, &mut Self, &mut V) -> Meta<vocab::Object<M>, M>,
+		G: Generator<V>,
+		C: FnMut(I::Item, &mut Self, &mut V, &mut G) -> Meta<vocab::Object<M>, M>,
 	{
 		let mut head = Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)));
 
 		for item in list.into_iter().rev() {
 			let id = generator.next(vocabulary);
-			let Meta(item, cause) = f(item, self, vocabulary);
+			let Meta(item, cause) = f(item, self, vocabulary, generator);
 
-			let node = self.declare_with(id, Type::List, cause.clone()).as_list_mut();
+			let node = self
+				.declare_with(id, Type::List, cause.clone())
+				.as_list_mut();
 			node.first_mut().insert(Meta(Stripped(item), cause.clone()));
 			node.rest_mut().insert(Meta(head, cause));
 			head = id;
 		}
 
-		Ok(head)
+		head
 	}
 
 	pub fn try_create_list_with<E, I: IntoIterator, C, V, G>(
@@ -405,7 +504,9 @@ impl<M: Clone + Merge> Context<M> {
 			let id = generator.next(vocabulary);
 			let Meta(item, cause) = f(item, self, vocabulary, generator)?;
 
-			let node = self.declare_with(id, Type::List, cause.clone()).as_list_mut();
+			let node = self
+				.declare_with(id, Type::List, cause.clone())
+				.as_list_mut();
 			node.first_mut().insert(Meta(Stripped(item), cause.clone()));
 			node.rest_mut().insert(Meta(head, cause));
 			head = id;
@@ -433,22 +534,14 @@ impl<M> From<NodeTypeInvalid<M>> for RequireError<M> {
 }
 
 impl<M> RequireError<M> {
-	pub fn at_node_property(
-		self,
-		id: Id,
-		property: impl Into<Property>,
-		meta: M,
-	) -> Error<M> {
+	pub fn at_node_property(self, id: Id, property: impl Into<Property>, meta: M) -> Error<M> {
 		match self {
 			Self::InvalidNodeType(e) => Meta(e.for_node_binding(id, property).into(), meta),
 			Self::UnknownNode(e) => Meta(e.into(), meta),
 		}
 	}
 
-	pub fn at(
-		self,
-		meta: M,
-	) -> Error<M> {
+	pub fn at(self, meta: M) -> Error<M> {
 		match self {
 			Self::InvalidNodeType(e) => Meta(e.into(), meta),
 			Self::UnknownNode(e) => Meta(e.into(), meta),
@@ -457,12 +550,18 @@ impl<M> RequireError<M> {
 }
 
 pub trait HasType<M> {
-	fn types(&self) -> &Multiple<crate::Type, M>;
+	type Type: Copy + Into<crate::Type>;
+	type Types<'a>: 'a + IntoIterator<Item = Meta<&'a Self::Type, &'a M>>
+	where
+		Self: 'a,
+		M: 'a;
+
+	fn types(&self) -> Self::Types<'_>;
 
 	fn type_metadata(&self, context: &Context<M>, type_: impl Into<crate::Type>) -> Option<&M> {
 		let a = type_.into();
-		self.types().iter().find_map(|Meta(b, meta)| {
-			if context.is_subclass_of_or_eq(a, *b) {
+		self.types().into_iter().find_map(|Meta(b, meta)| {
+			if context.is_subclass_of_or_eq(a, (*b).into()) {
 				Some(meta)
 			} else {
 				None
@@ -472,17 +571,25 @@ pub trait HasType<M> {
 
 	fn has_type(&self, context: &Context<M>, type_: impl Into<crate::Type>) -> bool {
 		let a = type_.into();
-		self.types().iter().any(|Meta(b, _)| context.is_subclass_of_or_eq(a, *b))
+		self.types()
+			.into_iter()
+			.any(|Meta(b, _)| context.is_subclass_of_or_eq(a, (*b).into()))
 	}
 }
 
 impl<M> HasType<M> for treeldr::node::Data<M> {
-	fn types(&self) -> &Multiple<crate::Type, M> {
+	type Type = TId<crate::Type>;
+	type Types<'a> = &'a Multiple<TId<crate::Type>, M> where Self: 'a, M: 'a;
+
+	fn types(&self) -> Self::Types<'_> {
 		&self.type_
 	}
 }
 
 impl<M> HasType<M> for resource::Data<M> {
+	type Type = crate::Type;
+	type Types<'a> = &'a Multiple<crate::Type, M> where Self: 'a, M: 'a;
+
 	fn types(&self) -> &Multiple<crate::Type, M> {
 		&self.type_
 	}

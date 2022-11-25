@@ -28,7 +28,9 @@ impl<M> Context<M> {
 			}
 		}
 
-		let filtered_nodes = std::mem::take(&mut self.nodes).into_iter().filter(|(id, _)| used_nodes.contains(id));
+		let filtered_nodes = std::mem::take(&mut self.nodes)
+			.into_iter()
+			.filter(|(id, _)| used_nodes.contains(id));
 		self.nodes.extend(filtered_nodes);
 	}
 }

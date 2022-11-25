@@ -1,9 +1,14 @@
 use locspan::Meta;
-use treeldr::{Id, metadata::Merge};
+use treeldr::{metadata::Merge, Id};
 
-use crate::{Single, layout, Error, error, Context, context::{HasType, MapIds}, single, resource::BindingValueRef};
+use crate::{
+	context::{HasType, MapIds, MapIdsIn},
+	error, layout,
+	resource::BindingValueRef,
+	single, Context, Error, Single,
+};
 
-pub use treeldr::component::formatted::{Type, Property};
+pub use treeldr::component::formatted::{Property, Type};
 
 /// Formatted layout component.
 #[derive(Clone)]
@@ -13,13 +18,19 @@ pub struct Definition<M> {
 	layout_variant: layout::variant::Definition,
 }
 
-impl<M> Definition<M> {
-	pub fn new() -> Self {
+impl<M> Default for Definition<M> {
+	fn default() -> Self {
 		Self {
 			data: Data::default(),
 			layout_field: layout::field::Definition::new(),
-			layout_variant: layout::variant::Definition::new()
+			layout_variant: layout::variant::Definition::new(),
 		}
+	}
+}
+
+impl<M> Definition<M> {
+	pub fn new() -> Self {
+		Self::default()
 	}
 
 	pub fn data(&self) -> &Data<M> {
@@ -51,7 +62,10 @@ impl<M> Definition<M> {
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
-		Bindings { data: self.data.bindings(), layout_field: self.layout_field.bindings() }
+		Bindings {
+			data: self.data.bindings(),
+			layout_field: self.layout_field.bindings(),
+		}
 	}
 
 	pub(crate) fn build(
@@ -59,26 +73,46 @@ impl<M> Definition<M> {
 		context: &Context<M>,
 		as_resource: &treeldr::node::Data<M>,
 		as_component: &treeldr::component::Data<M>,
-		meta: M
-	) -> Result<Meta<treeldr::component::formatted::Definition<M>, M>, Error<M>> where M: Clone {
+		meta: M,
+	) -> Result<Meta<treeldr::component::formatted::Definition<M>, M>, Error<M>>
+	where
+		M: Clone,
+	{
 		let data = treeldr::component::formatted::Data {
-			format: self.data.format.clone().into_layout_at_node_binding(context, as_resource.id, Property::Format)?
+			format: self.data.format.clone().into_layout_at_node_binding(
+				context,
+				as_resource.id,
+				Property::Format,
+			)?,
 		};
 
-		let layout_field = as_resource.type_metadata(context, Type::LayoutField).map(|meta| {
-			self.layout_field.build(context, as_resource, as_component, &data, meta.clone())
-		}).transpose()?.into();
+		let layout_field = as_resource
+			.type_metadata(context, Type::LayoutField)
+			.map(|meta| {
+				self.layout_field
+					.build(context, as_resource, as_component, &data, meta.clone())
+			})
+			.transpose()?
+			.into();
 
-		let layout_variant = as_resource.type_metadata(context, Type::LayoutVariant).map(|meta| {
-			self.layout_variant.build(context, as_resource, as_component, &data, meta.clone())
-		}).transpose()?.into();
+		let layout_variant = as_resource
+			.type_metadata(context, Type::LayoutVariant)
+			.map(|meta| {
+				self.layout_variant
+					.build(context, as_resource, as_component, &data, meta.clone())
+			})
+			.transpose()?
+			.into();
 
-		Ok(Meta(treeldr::component::formatted::Definition::new(data, layout_field, layout_variant), meta))
+		Ok(Meta(
+			treeldr::component::formatted::Definition::new(data, layout_field, layout_variant),
+			meta,
+		))
 	}
 }
 
 impl<M: Merge> MapIds for Definition<M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
 		self.data.map_ids(&f);
 		self.layout_field.map_ids(&f);
 		self.layout_variant.map_ids(f)
@@ -87,94 +121,109 @@ impl<M: Merge> MapIds for Definition<M> {
 
 #[derive(Debug, Clone)]
 pub struct Data<M> {
-	pub format: Single<Id, M>
+	pub format: Single<Id, M>,
 }
 
 impl<M> Data<M> {
 	pub fn bindings(&self) -> ClassBindings<M> {
-		ClassBindings { format: self.format.iter() }
+		ClassBindings {
+			format: self.format.iter(),
+		}
 	}
 }
 
 impl<M: Merge> MapIds for Data<M> {
-	fn map_ids(&mut self, f: impl Fn(Id) -> Id) {
-		self.format.map_ids(f)
+	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
+		self.format.map_ids_in(Some(Property::Format.into()), f)
 	}
 }
 
 impl<M> Default for Data<M> {
 	fn default() -> Self {
 		Self {
-			format: Single::default()
+			format: Single::default(),
 		}
 	}
 }
 
 pub trait AssertFormatted<M> {
-	fn assert_formatted(&self, as_resource: &treeldr::node::Data<M>, metadata: &M) -> Result<(), Error<M>>;
+	fn assert_formatted(
+		&self,
+		as_resource: &treeldr::node::Data<M>,
+		metadata: &M,
+	) -> Result<(), Error<M>>;
 }
 
 impl<M: Clone> AssertFormatted<M> for treeldr::component::formatted::Data<M> {
-	fn assert_formatted(&self, as_resource: &treeldr::node::Data<M>, metadata: &M) -> Result<(), Error<M>> {
-		self.format.as_ref().ok_or_else(|| Meta(
-			error::NodeBindingMissing {
-				id: as_resource.id,
-				property: Property::Format.into()
-			}.into(),
-			metadata.clone()
-		))?;
+	fn assert_formatted(
+		&self,
+		as_resource: &treeldr::node::Data<M>,
+		metadata: &M,
+	) -> Result<(), Error<M>> {
+		self.format.as_ref().ok_or_else(|| {
+			Meta(
+				error::NodeBindingMissing {
+					id: as_resource.id,
+					property: Property::Format.into(),
+				}
+				.into(),
+				metadata.clone(),
+			)
+		})?;
 		Ok(())
 	}
 }
 
 pub enum ClassBinding {
-	Format(Id)
+	Format(Id),
 }
 
 impl ClassBinding {
 	pub fn into_binding(self) -> Binding {
 		match self {
-			Self::Format(id) => Binding::Format(id)
+			Self::Format(id) => Binding::Format(id),
 		}
 	}
 }
 
 pub enum Binding {
 	Format(Id),
-	LayoutField(layout::field::ClassBinding)
+	LayoutField(layout::field::ClassBinding),
 }
 
 impl Binding {
 	pub fn property(&self) -> Property {
 		match self {
 			Self::Format(_) => Property::Format,
-			Self::LayoutField(b) => Property::LayoutField(b.property())
+			Self::LayoutField(b) => Property::LayoutField(b.property()),
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::Format(v) => BindingValueRef::Id(*v),
-			Self::LayoutField(b) => b.value()
+			Self::LayoutField(b) => b.value(),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
-	format: single::Iter<'a, Id, M>
+	format: single::Iter<'a, Id, M>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
 	type Item = Meta<ClassBinding, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.format.next().map(|m| m.into_cloned_value().map(ClassBinding::Format))
+		self.format
+			.next()
+			.map(|m| m.into_cloned_value().map(ClassBinding::Format))
 	}
 }
 
 pub struct Bindings<'a, M> {
 	data: ClassBindings<'a, M>,
-	layout_field: crate::layout::field::ClassBindings<'a, M>
+	layout_field: crate::layout::field::ClassBindings<'a, M>,
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {
