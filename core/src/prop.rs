@@ -182,7 +182,7 @@ impl Type {
 #[derive(Debug)]
 pub struct Definition<M> {
 	domain: Multiple<TId<crate::Type>, M>,
-	range: Meta<TId<crate::Type>, M>,
+	range: Multiple<TId<crate::Type>, M>,
 	required: Meta<bool, M>,
 	functional: Meta<bool, M>,
 }
@@ -190,7 +190,7 @@ pub struct Definition<M> {
 impl<M> Definition<M> {
 	pub fn new(
 		domain: Multiple<TId<crate::Type>, M>,
-		range: Meta<TId<crate::Type>, M>,
+		range: Multiple<TId<crate::Type>, M>,
 		required: Meta<bool, M>,
 		functional: Meta<bool, M>,
 	) -> Self {
@@ -202,7 +202,7 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn range(&self) -> &Meta<TId<crate::Type>, M> {
+	pub fn range(&self) -> &Multiple<TId<crate::Type>, M> {
 		&self.range
 	}
 
@@ -223,7 +223,7 @@ impl<M> Definition<M> {
 	pub fn bindings(&self) -> Bindings<M> {
 		ClassBindings {
 			domain: self.domain.iter(),
-			range: Some(&self.range),
+			range: self.range.iter(),
 			required: if self.is_required() {
 				Some(&self.required)
 			} else {
@@ -277,7 +277,7 @@ impl ClassBinding {
 #[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
 	domain: multiple::Iter<'a, TId<crate::Type>, M>,
-	range: Option<&'a Meta<TId<crate::Type>, M>>,
+	range: multiple::Iter<'a, TId<crate::Type>, M>,
 	required: Option<&'a Meta<bool, M>>,
 }
 
@@ -289,12 +289,11 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.domain
 			.next()
-			.map(Meta::into_cloned_value)
-			.map(|m| m.map(ClassBinding::Domain))
+			.map(|m| m.into_cloned_value().map(ClassBinding::Domain))
 			.or_else(|| {
 				self.range
-					.take()
-					.map(|m| m.borrow().into_cloned_value().map(ClassBinding::Range))
+					.next()
+					.map(|m| m.into_cloned_value().map(ClassBinding::Range))
 					.or_else(|| {
 						self.required
 							.take()
