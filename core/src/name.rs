@@ -7,6 +7,10 @@ use std::{
 	ops::Deref,
 };
 
+use rdf_types::IriVocabulary;
+
+use crate::{Id, IriIndex};
+
 /// Name.
 ///
 /// A name is a string that can serve as type/function/variable identifier in
@@ -138,6 +142,19 @@ impl Name {
 			normalized: normalize(id.as_ref())?,
 			preferred: Some(id.as_ref().into()),
 		})
+	}
+
+	pub fn from_id(
+		vocabulary: &impl IriVocabulary<Iri = IriIndex>,
+		id: Id,
+	) -> Result<Option<Self>, InvalidName> {
+		match id {
+			Id::Iri(i) => match vocabulary.iri(&i) {
+				Some(iri) => Self::from_iri(iri),
+				None => Ok(None),
+			},
+			_ => Ok(None),
+		}
 	}
 
 	pub fn from_iri(iri: iref::Iri) -> Result<Option<Self>, InvalidName> {

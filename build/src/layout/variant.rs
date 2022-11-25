@@ -23,6 +23,11 @@ impl Definition {
 	}
 
 	/// Build a default name for this layout variant.
+	///
+	/// The default name follows these rules:
+	///   - If the variant layout has a name, it is used as default name,
+	///   - If the variant layout is a reference, the default name is the
+	///     concatenation of the referenced type name and `Ref`.
 	pub fn default_name<M>(
 		&self,
 		context: &Context<M>,
@@ -40,15 +45,23 @@ impl Definition {
 		}
 
 		if let Some(layout_id) = as_formatted.format.first() {
-			if let Some(layout) = context
-				.get(**layout_id)
-				.map(resource::Definition::as_component)
-			{
-				if let Some(name) = layout.name().first() {
+			if let Some(layout) = context.get(**layout_id) {
+				if let Some(name) = layout.as_component().name().first() {
 					return Some(Meta::new(
 						name.into_value().clone(),
 						as_resource.metadata.clone(),
 					));
+				}
+
+				if let Some(Meta(super::Description::Reference(_), _)) =
+					layout.as_layout().description().first()
+				{
+					if let Some(ty_id) = layout.as_layout().ty().first() {
+						if let Ok(Some(mut name)) = Name::from_id(vocabulary, **ty_id) {
+							name.push("ref");
+							return Some(Meta(name, as_resource.metadata.clone()));
+						}
+					}
 				}
 			}
 		}
