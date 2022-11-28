@@ -31,24 +31,30 @@ fn clone_definition<T: Clone, B: Clone, C: Clone, M: Clone>(
 	}
 }
 
-pub type ProtectedDefinitions<M> = Vec<ProtectedDefinition<M>>;
+pub type OverriddenDefinitions<M> = Vec<OverriddenDefinition<M>>;
 
-pub type ProtectedDefinition<M> = (
-	json_ld::context::TermDefinition<IriIndex, BlankIdIndex, json_ld::syntax::context::Value<M>, M>,
-	ProcessedContext<M>,
-);
+pub struct OverriddenDefinition<M> {
+	definition: json_ld::context::TermDefinition<
+		IriIndex,
+		BlankIdIndex,
+		json_ld::syntax::context::Value<M>,
+		M,
+	>,
+	context: ProcessedContext<M>,
+	protected: bool,
+}
 
 pub type ProcessedContext<M> =
 	Context<IriIndex, BlankIdIndex, json_ld::syntax::context::Value<M>, M>;
 
-async fn find_protected_definitions<'a, V, L, M>(
+async fn find_overridden_definitions<'a, V, L, M>(
 	vocabulary: &'a mut V,
 	model: &'a treeldr::Model<M>,
 	loader: &'a mut L,
 	context: &'a ProcessedContext<M>,
 	term: &'a str,
 	visit_type_defs: bool,
-) -> Result<ProtectedDefinitions<M>, Meta<json_ld::context_processing::Error<L::ContextError>, M>>
+) -> Result<OverriddenDefinitions<M>, Meta<json_ld::context_processing::Error<L::ContextError>, M>>
 where
 	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
 	L: ContextLoader<IriIndex, M> + Send + Sync,
@@ -58,8 +64,12 @@ where
 	use json_ld::Process;
 	let mut result = Vec::new();
 	for binding in context.definitions() {
-		if binding.key().as_str() == term && binding.definition().protected() {
-			result.push((clone_definition(binding.definition()), context.clone()));
+		if binding.key().as_str() == term {
+			result.push(OverriddenDefinition {
+				definition: clone_definition(binding.definition()),
+				context: context.clone(),
+				protected: binding.definition().protected(),
+			});
 		}
 
 		if visit_type_defs {
@@ -82,13 +92,12 @@ where
 									.await?;
 
 								for binding in new_context.definitions() {
-									if binding.key().as_str() == term
-										&& binding.definition().protected()
-									{
-										result.push((
-											clone_definition(binding.definition()),
-											new_context.clone(),
-										));
+									if binding.key().as_str() == term {
+										result.push(OverriddenDefinition {
+											definition: clone_definition(binding.definition()),
+											context: new_context.clone(),
+											protected: binding.definition().protected(),
+										});
 									}
 								}
 							}
@@ -221,10 +230,13 @@ impl TermDefinition {
 		other: &Self,
 	) -> TermDefinitionCmp {
 		if self.id == other.id && self.type_ == other.type_ && self.container == other.container {
-			if builder.context_eq(self.context, other.context) {
-				TermDefinitionCmp::Equal
-			} else {
-				TermDefinitionCmp::ContextNeq
+			let context_cmp = builder.context_cmp(self.context, other.context);
+
+			match context_cmp {
+				Some(std::cmp::Ordering::Equal) => TermDefinitionCmp::Equal,
+				Some(std::cmp::Ordering::Greater) => TermDefinitionCmp::ContextGreater,
+				Some(std::cmp::Ordering::Less) => TermDefinitionCmp::ContextLess,
+				None => TermDefinitionCmp::ContextNeq,
 			}
 		} else {
 			TermDefinitionCmp::Neq
@@ -351,21 +363,28 @@ impl<'a, M> TermDefinitionRef<'a, M> {
 					{
 						match &n.context {
 							Some(context) => {
-								if builder.context_extern_eq(
+								let context_cmp = builder.context_extern_cmp(
 									vocabulary,
 									context.value(),
 									def.context,
-								) {
-									TermDefinitionCmp::Equal
-								} else {
-									TermDefinitionCmp::ContextNeq
+								);
+
+								match context_cmp {
+									Some(std::cmp::Ordering::Equal) => TermDefinitionCmp::Equal,
+									Some(std::cmp::Ordering::Greater) => {
+										TermDefinitionCmp::ContextGreater
+									}
+									Some(std::cmp::Ordering::Less) => {
+										TermDefinitionCmp::ContextLess
+									}
+									None => TermDefinitionCmp::ContextNeq,
 								}
 							}
 							None => {
 								if builder.is_context_empty(def.context) {
 									TermDefinitionCmp::Equal
 								} else {
-									TermDefinitionCmp::ContextNeq
+									TermDefinitionCmp::ContextLess
 								}
 							}
 						}
@@ -516,6 +535,45 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 		}
 	}
 
+	pub fn context_cmp(
+		&self,
+		a: Ref<LocalContext>,
+		b: Ref<LocalContext>,
+	) -> Option<std::cmp::Ordering> {
+		if a == b {
+			Some(std::cmp::Ordering::Equal)
+		} else {
+			let a = self.contexts.get(a).unwrap();
+			let b = self.contexts.get(b).unwrap();
+
+			if a.terms.len() <= b.terms.len() {
+				if a.terms.iter().all(|(t, a)| {
+					b.terms
+						.get(t)
+						.map(|b| a.context_eq(self, b))
+						.unwrap_or(false)
+				}) {
+					Some(if a.terms.len() == b.terms.len() {
+						std::cmp::Ordering::Equal
+					} else {
+						std::cmp::Ordering::Less
+					})
+				} else {
+					None
+				}
+			} else if b.terms.iter().all(|(t, b)| {
+				a.terms
+					.get(t)
+					.map(|a| a.context_eq(self, b))
+					.unwrap_or(false)
+			}) {
+				Some(std::cmp::Ordering::Greater)
+			} else {
+				None
+			}
+		}
+	}
+
 	pub fn context_extern_eq(
 		&self,
 		vocabulary: &V,
@@ -542,6 +600,59 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 				_ => false,
 			},
 			json_ld::syntax::context::Value::Many(_) => false,
+		}
+	}
+
+	pub fn context_extern_cmp(
+		&self,
+		vocabulary: &V,
+		a: &json_ld::syntax::context::Value<M>,
+		b: Ref<LocalContext>,
+	) -> Option<std::cmp::Ordering> {
+		match a {
+			json_ld::syntax::context::Value::One(a) => match a.value() {
+				json_ld::syntax::Context::Definition(a) => {
+					let b = self.contexts.get(b).unwrap();
+
+					if a.version.is_none()
+						&& a.base.is_none() && a.vocab.is_none()
+						&& a.import.is_none() && a.language.is_none()
+						&& a.direction.is_none() && a.propagate.is_none()
+						&& a.protected.is_none() && a.type_.is_none()
+					{
+						if a.bindings.len() <= b.terms.len() {
+							if a.bindings.iter().all(|(t, a)| {
+								b.terms
+									.get(t.as_str())
+									.map(|b| b.eq_syntax(vocabulary, self, a.definition.value()))
+									.unwrap_or(false)
+							}) {
+								Some(if a.bindings.len() == b.terms.len() {
+									std::cmp::Ordering::Equal
+								} else {
+									std::cmp::Ordering::Less
+								})
+							} else {
+								None
+							}
+						} else if b.terms.iter().all(|(t, b)| {
+							let key = json_ld::context::Key::from(t.clone());
+							a.bindings
+								.get(&key)
+								.map(|a| b.eq_syntax(vocabulary, self, a.definition.value()))
+								.unwrap_or(false)
+						}) {
+							Some(std::cmp::Ordering::Greater)
+						} else {
+							None
+						}
+					} else {
+						None
+					}
+				}
+				_ => None,
+			},
+			json_ld::syntax::context::Value::Many(_) => None,
 		}
 	}
 
@@ -917,15 +1028,17 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 						.parent
 						.get(&self.options.context, &self.contexts, &term)
 				{
-					if parent_def.intern_cmp(vocabulary, self, &definition)
-						== TermDefinitionCmp::Equal
-					{
+					let cmp = parent_def.intern_cmp(vocabulary, self, &definition);
+					if matches!(
+						cmp,
+						TermDefinitionCmp::Equal | TermDefinitionCmp::ContextGreater
+					) {
 						// we can ignore this term.
 						continue;
 					}
 				}
 
-				let protected_definitions = find_protected_definitions(
+				let overridden_definitions = find_overridden_definitions(
 					vocabulary,
 					self.model,
 					loader,
@@ -936,60 +1049,82 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 				.await
 				.map_err(SimplifyError::ContextProcessing)?;
 
-				if protected_definitions.is_empty() {
+				if overridden_definitions.is_empty() {
 					preserved_terms.insert(term, definition);
 				} else {
-					for (protected_definition, active_context) in protected_definitions {
-						match self.extern_term_definition_cmp(
-							vocabulary,
-							&protected_definition,
-							&definition,
-						) {
-							TermDefinitionCmp::Equal => (),
-							TermDefinitionCmp::ContextNeq => {
-								// we must not redefine the term.
-								// let parent_definition_context = parent_definition.context(&self.contexts);
-								let context = self.contexts.get(definition.context).unwrap();
-								match protected_definition.context() {
-									Some(local_context) => {
-										use json_ld::Process;
-										let active_context = local_context
-											.process_with(
-												vocabulary,
-												&active_context,
-												loader,
-												active_context.base_iri().cloned(),
-												json_ld::context_processing::Options::default(),
-											)
-											.await
-											.map_err(SimplifyError::ContextProcessing)?;
+					let mut preserve = false;
 
-										for (t, def) in &context.terms {
-											match active_context.get(t.as_str()) {
-												Some(parent_def) => {
-													if TermDefinitionRef::Extern(parent_def)
-														.intern_cmp(vocabulary, self, def)
-														!= TermDefinitionCmp::Equal
-													{
-														return Err(SimplifyError::ProtectedTermRedefinition(term.clone()));
+					for overridden in overridden_definitions {
+						let context_cmp = self.extern_term_definition_cmp(
+							vocabulary,
+							&overridden.definition,
+							&definition,
+						);
+
+						if overridden.protected {
+							match context_cmp {
+								TermDefinitionCmp::Equal => (),
+								TermDefinitionCmp::ContextNeq
+								| TermDefinitionCmp::ContextGreater
+								| TermDefinitionCmp::ContextLess => {
+									// we must not redefine the term.
+									// let parent_definition_context = parent_definition.context(&self.contexts);
+									let context = self.contexts.get(definition.context).unwrap();
+									match overridden.definition.context() {
+										Some(local_context) => {
+											use json_ld::Process;
+											let active_context = local_context
+												.process_with(
+													vocabulary,
+													&overridden.context,
+													loader,
+													overridden.context.base_iri().cloned(),
+													json_ld::context_processing::Options::default(),
+												)
+												.await
+												.map_err(SimplifyError::ContextProcessing)?;
+
+											for (t, def) in &context.terms {
+												match active_context.get(t.as_str()) {
+													Some(parent_def) => {
+														if TermDefinitionRef::Extern(parent_def)
+															.intern_cmp(vocabulary, self, def)
+															!= TermDefinitionCmp::Equal
+														{
+															return Err(SimplifyError::ProtectedTermRedefinition(term.clone()));
+														}
+													}
+													None => {
+														moved_terms.push((t.clone(), def.clone()))
 													}
 												}
-												None => moved_terms.push((t.clone(), def.clone())),
+											}
+										}
+										None => {
+											for (t, def) in &context.terms {
+												moved_terms.push((t.clone(), def.clone()))
 											}
 										}
 									}
-									None => {
-										for (t, def) in &context.terms {
-											moved_terms.push((t.clone(), def.clone()))
-										}
-									}
+								}
+								TermDefinitionCmp::Neq => {
+									// we cannot define this term!
+									return Err(SimplifyError::ProtectedTermRedefinition(
+										term.clone(),
+									));
 								}
 							}
-							TermDefinitionCmp::Neq => {
-								// we cannot define this term!
-								return Err(SimplifyError::ProtectedTermRedefinition(term.clone()));
-							}
+						} else if matches!(
+							context_cmp,
+							TermDefinitionCmp::Neq
+								| TermDefinitionCmp::ContextNeq | TermDefinitionCmp::ContextGreater
+						) {
+							preserve = true;
 						}
+					}
+
+					if preserve {
+						preserved_terms.insert(term, definition);
 					}
 				}
 			}
@@ -1041,6 +1176,8 @@ impl<'a, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> ContextBuilde
 pub enum TermDefinitionCmp {
 	Equal,
 	ContextNeq,
+	ContextGreater,
+	ContextLess,
 	Neq,
 }
 
