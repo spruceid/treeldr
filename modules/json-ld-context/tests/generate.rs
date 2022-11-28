@@ -279,7 +279,8 @@ positive! {
 	t18: ["http://www.example.com/Foo"],
 	t19: ["http://www.example.com/Foo"],
 	t20: ["http://www.example.com/Bar"],
-	t21: ["http://www.example.com/Foo"]
+	t21: ["http://www.example.com/Foo"],
+	t22: ["http://www.example.com/A"]
 }
 
 negative! {
