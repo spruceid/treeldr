@@ -303,7 +303,7 @@ impl LayoutLocalContexts {
 	) -> bool {
 		self.forward
 			.get(&r)
-			.map(|l| l.layouts.contains(layout))
+			.map(|l| l.layouts.contains(layout) || self.contains_layout(l.parent, layout))
 			.unwrap_or(false)
 	}
 
@@ -331,17 +331,22 @@ impl LayoutLocalContexts {
 			type_scoped,
 		};
 
+		let mut define = false;
+
 		let r = *self
 			.backward
 			.entry(context.clone())
 			.or_insert_with_key(|context| {
 				let r = local_contexts.insert(unresolved::LocalContext::default());
 				self.forward.insert(r, context.clone());
+				define = true;
 				r
 			});
 
-		let bindings = context.compute_definitions(r, builder, local_contexts, self);
-		local_contexts.set_bindings(r, bindings);
+		if define {
+			let bindings = context.compute_definitions(r, builder, local_contexts, self);
+			local_contexts.set_bindings(r, bindings);
+		}
 
 		r
 	}

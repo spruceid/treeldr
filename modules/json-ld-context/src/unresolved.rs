@@ -635,6 +635,8 @@ impl LocalContexts {
 			return state.get(&r).unwrap().as_ref();
 		}
 
+		state.insert(r, None);
+
 		let mut prefixes: Option<Prefixes> = None;
 
 		for p in relations.parents(r) {
