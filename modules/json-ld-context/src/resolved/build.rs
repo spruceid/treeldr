@@ -184,8 +184,7 @@ impl LocalContexts {
 	) -> Result<Option<json_ld::syntax::context::Value<()>>, Error> {
 		let bindings = self.build_definitions(context_comparison, r);
 		let context = self.contexts.get(r).unwrap();
-		let r = context.build(vocabulary, self, context_comparison, bindings);
-		r
+		context.build(vocabulary, self, context_comparison, bindings)
 	}
 }
 
