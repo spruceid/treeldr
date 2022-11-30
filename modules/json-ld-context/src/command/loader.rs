@@ -10,8 +10,8 @@ use treeldr::IriIndex;
 
 use super::Files;
 
-pub type ContextError<M> =
-	json_ld::loader::ContextLoaderError<Error<M>, Meta<json_ld::loader::ExtractContextError<M>, M>>;
+// pub type ContextError<M> =
+// 	json_ld::loader::ContextLoaderError<Error<M>, Meta<json_ld::loader::ExtractContextError<M>, M>>;
 
 #[derive(Debug)]
 pub enum Error<M> {
