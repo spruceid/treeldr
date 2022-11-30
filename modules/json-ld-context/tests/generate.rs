@@ -23,7 +23,7 @@ impl Options {
 		self,
 		vocabulary: &mut V,
 		loader: &mut L,
-	) -> treeldr_json_ld_context::Options<V, Span>
+	) -> treeldr_json_ld_context::Options<Span>
 	where
 		V: Send + Sync + VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
 		L: Send + Sync + ContextLoader<IriIndex, Span>,

@@ -298,8 +298,8 @@ impl<'a, P: DisplayPath<'a>> codespan_reporting::files::Files<'a> for Files<P> {
 }
 
 #[cfg(feature = "json-ld-context")]
-impl<P: Send + Sync + Clone + Eq + Hash + for<'a> From<&'a Path>> treeldr_json_ld_context::Files
-	for Files<P>
+impl<P: Send + Sync + Clone + Eq + Hash + for<'a> From<&'a Path>>
+	treeldr_json_ld_context::command::Files for Files<P>
 {
 	type Id = FileId;
 

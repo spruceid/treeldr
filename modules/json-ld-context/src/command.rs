@@ -81,19 +81,19 @@ impl FromStr for MountPoint {
 	}
 }
 
-pub enum Error<E, M> {
+pub enum Error<M> {
 	UndefinedLayout(IriBuf),
 	NotALayout(IriBuf, treeldr::Multiple<TId<treeldr::Type>, M>),
-	Generation(crate::GenerateError<E, M>),
+	Generation(crate::Error),
 	ExternContextLoadFailed(IriBuf),
 }
 
-impl<E, M> fmt::Display for Error<E, M> {
+impl<M> fmt::Display for Error<M> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{}`", iri),
 			Self::NotALayout(iri, _) => write!(f, "node `{}` is not a layout", iri),
-			Self::Generation(e) => e.fmt(f),
+			Self::Generation(_) => Ok(()),
 			Self::ExternContextLoadFailed(iri) => {
 				write!(f, "unable to load extern context `{iri}`")
 			}
@@ -101,11 +101,11 @@ impl<E, M> fmt::Display for Error<E, M> {
 	}
 }
 
-fn find_layout<E, M: Clone>(
+fn find_layout<M: Clone>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
 	model: &treeldr::Model<M>,
 	iri: Iri,
-) -> Result<TId<treeldr::Layout>, Box<Error<E, M>>> {
+) -> Result<TId<treeldr::Layout>, Box<Error<M>>> {
 	let name = vocabulary
 		.get(iri)
 		.ok_or_else(|| Error::UndefinedLayout(iri.into()))?;
@@ -142,7 +142,7 @@ impl Command {
 		vocabulary: &mut V,
 		files: &mut impl Files<Metadata = M>,
 		model: &treeldr::Model<M>,
-	) -> Result<(), Box<Error<loader::ContextError<M>, M>>>
+	) -> Result<(), Box<Error<M>>>
 	where
 		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
 		M: Clone + Send + Sync,
