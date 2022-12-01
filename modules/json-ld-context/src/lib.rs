@@ -110,10 +110,9 @@ impl IncludedLayout {
 
 		if let Description::Struct(s) = layout.as_layout().description().value() {
 			if !self.type_scoped && builder.options.rdf_type_to_layout_name {
-				// check if there is a required `rdf:type` property field.
+				// check if there is a `rdf:type` property field.
 				for fid in s.fields() {
-					let field = builder.model.get(**fid).unwrap();
-					if field.is_required(builder.model) && builder.is_type_field(**fid) {
+					if builder.is_type_field(**fid) {
 						bindings.insert_field(
 							builder,
 							local_contexts,
@@ -128,7 +127,15 @@ impl IncludedLayout {
 							parent,
 							self.id,
 						);
-						return;
+
+						let field = builder.model.get(**fid).unwrap();
+						if field.is_required(builder.model) {
+							// if it is required then we don't need to
+							// include the other layout fields here.
+							return;
+						} else {
+							break;
+						}
 					}
 				}
 			}

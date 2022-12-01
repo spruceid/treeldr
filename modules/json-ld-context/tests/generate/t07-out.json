@@ -1,3 +1,4 @@
 {
+	"Foo": "http://www.example.com/Foo",
 	"prop": "http://www.example.com/Foo/prop"
 }
