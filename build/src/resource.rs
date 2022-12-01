@@ -432,7 +432,7 @@ impl<M: Clone> Definition<M> {
 	pub fn require_layout_field_id(
 		&self,
 		context: &crate::Context<M>,
-	) -> Result<treeldr::TId<treeldr::layout::Field>, NodeTypeInvalid<M>> {
+	) -> Result<treeldr::TId<treeldr::layout::structure::Field>, NodeTypeInvalid<M>> {
 		if self.has_type(context, component::formatted::Type::LayoutField) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
@@ -462,7 +462,7 @@ impl<M: Clone> Definition<M> {
 	pub fn require_layout_variant_id(
 		&self,
 		context: &crate::Context<M>,
-	) -> Result<treeldr::TId<treeldr::layout::Variant>, NodeTypeInvalid<M>> {
+	) -> Result<treeldr::TId<treeldr::layout::enumeration::Variant>, NodeTypeInvalid<M>> {
 		if self.has_type(context, component::formatted::Type::LayoutVariant) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {

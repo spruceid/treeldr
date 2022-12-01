@@ -10,7 +10,7 @@ use locspan::Meta;
 
 pub mod array;
 pub mod enumeration;
-pub mod field;
+pub mod value_enumeration;
 mod one_or_many;
 mod optional;
 pub mod primitive;
@@ -18,15 +18,14 @@ mod reference;
 mod required;
 pub mod restriction;
 mod set;
-mod structure;
-pub mod variant;
+pub mod structure;
 
 mod strongly_connected;
 mod usages;
 
 pub use array::Array;
 pub use enumeration::Enum;
-pub use field::Field;
+pub use value_enumeration::ValueEnum;
 pub use one_or_many::OneOrMany;
 pub use optional::Optional;
 pub use primitive::{restriction::Restricted as RestrictedPrimitive, Primitive};
@@ -35,7 +34,6 @@ pub use required::Required;
 pub use restriction::{ContainerRestriction, ContainerRestrictions, Restrictions};
 pub use set::Set;
 pub use structure::Struct;
-pub use variant::Variant;
 
 pub use strongly_connected::StronglyConnectedLayouts;
 pub use usages::Usages;
@@ -300,7 +298,7 @@ impl<M> Definition<M> {
 pub enum ComposingLayouts<'a, M> {
 	Fields(
 		&'a crate::Model<M>,
-		std::slice::Iter<'a, Meta<TId<Field>, M>>,
+		std::slice::Iter<'a, Meta<TId<structure::Field>, M>>,
 	),
 	Enum(enumeration::ComposingLayouts<'a, M>),
 	One(Option<&'a Meta<TId<Layout>, M>>),
@@ -440,8 +438,8 @@ impl DescriptionProperty {
 pub enum DescriptionBindingRef<'a, M> {
 	DerivedFrom(Primitive),
 	Reference(TId<Layout>),
-	Struct(&'a [Meta<TId<Field>, M>]),
-	Enum(&'a [Meta<TId<Variant>, M>]),
+	Struct(&'a [Meta<TId<structure::Field>, M>]),
+	Enum(&'a [Meta<TId<enumeration::Variant>, M>]),
 	Required(TId<Layout>),
 	Option(TId<Layout>),
 	Array(TId<Layout>),

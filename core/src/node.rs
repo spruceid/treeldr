@@ -142,13 +142,13 @@ impl<M> Definition<M> {
 			.and_then(component::Definition::as_formatted)
 	}
 
-	pub fn as_layout_field(&self) -> Option<&Meta<layout::field::Definition<M>, M>> {
+	pub fn as_layout_field(&self) -> Option<&Meta<layout::structure::field::Definition<M>, M>> {
 		self.component
 			.value()
 			.and_then(component::Definition::as_layout_field)
 	}
 
-	pub fn as_layout_variant(&self) -> Option<&Meta<layout::variant::Definition, M>> {
+	pub fn as_layout_variant(&self) -> Option<&Meta<layout::enumeration::variant::Definition, M>> {
 		self.component
 			.value()
 			.and_then(component::Definition::as_layout_variant)
@@ -356,8 +356,8 @@ pub enum BindingValueRef<'a, M> {
 	DataType(TId<crate::ty::DataType<M>>),
 	Layout(TId<crate::Layout>),
 	Layouts(&'a Multiple<TId<crate::Layout>, M>),
-	Fields(&'a [Meta<TId<layout::Field>, M>]),
-	Variants(&'a [Meta<TId<layout::Variant>, M>]),
+	Fields(&'a [Meta<TId<layout::structure::Field>, M>]),
+	Variants(&'a [Meta<TId<layout::enumeration::Variant>, M>]),
 	Property(TId<crate::Property>),
 	DatatypeRestrictions(ty::data::Restrictions<'a>),
 	LayoutRestrictions(layout::Restrictions<'a, M>),
@@ -388,8 +388,8 @@ pub enum BindingValueIds<'a, M> {
 	DataType(Option<TId<crate::ty::DataType<M>>>),
 	Layout(Option<TId<crate::Layout>>),
 	Layouts(multiple::Iter<'a, TId<crate::Layout>, M>),
-	Fields(std::slice::Iter<'a, Meta<TId<layout::Field>, M>>),
-	Variants(std::slice::Iter<'a, Meta<TId<layout::Variant>, M>>),
+	Fields(std::slice::Iter<'a, Meta<TId<layout::structure::Field>, M>>),
+	Variants(std::slice::Iter<'a, Meta<TId<layout::enumeration::Variant>, M>>),
 	Property(Option<TId<crate::Property>>),
 }
 

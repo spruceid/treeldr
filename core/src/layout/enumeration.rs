@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use crate::{Layout, TId};
 use locspan::Meta;
 
-use super::Variant;
+pub mod variant;
+
+pub use variant::Variant;
 
 /// Enum layout.
 #[derive(Debug, Clone)]

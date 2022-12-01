@@ -101,13 +101,13 @@ impl Definition {
 		as_component: &treeldr::component::Data<M>,
 		_as_formatted: &treeldr::component::formatted::Data<M>,
 		meta: M,
-	) -> Result<Meta<treeldr::layout::variant::Definition, M>, Error<M>>
+	) -> Result<Meta<treeldr::layout::enumeration::variant::Definition, M>, Error<M>>
 	where
 		M: Clone,
 	{
 		as_component.assert_named(as_resource, &meta)?;
 
-		Ok(Meta(treeldr::layout::variant::Definition, meta))
+		Ok(Meta(treeldr::layout::enumeration::variant::Definition, meta))
 	}
 }
 

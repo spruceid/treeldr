@@ -9,7 +9,7 @@ use crate::{
 use super::Error;
 use locspan::Meta;
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
-pub use treeldr::layout::field::Property;
+pub use treeldr::layout::structure::field::Property;
 use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, Name};
 
 /// Layout field definition.
@@ -146,7 +146,7 @@ impl<M> Definition<M> {
 		_as_component: &treeldr::component::Data<M>,
 		as_formatted: &treeldr::component::formatted::Data<M>,
 		meta: M,
-	) -> Result<Meta<treeldr::layout::field::Definition<M>, M>, Error<M>>
+	) -> Result<Meta<treeldr::layout::structure::field::Definition<M>, M>, Error<M>>
 	where
 		M: Clone,
 	{
@@ -158,7 +158,7 @@ impl<M> Definition<M> {
 			Property::For,
 		)?;
 
-		Ok(Meta(treeldr::layout::field::Definition::new(prop), meta))
+		Ok(Meta(treeldr::layout::structure::field::Definition::new(prop), meta))
 	}
 }
 

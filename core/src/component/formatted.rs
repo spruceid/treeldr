@@ -26,15 +26,15 @@ impl<M> Data<M> {
 #[derive(Debug)]
 pub struct Definition<M> {
 	data: Data<M>,
-	layout_field: MetaOption<layout::field::Definition<M>, M>,
-	layout_variant: MetaOption<layout::variant::Definition, M>,
+	layout_field: MetaOption<layout::structure::field::Definition<M>, M>,
+	layout_variant: MetaOption<layout::enumeration::variant::Definition, M>,
 }
 
 impl<M> Definition<M> {
 	pub fn new(
 		data: Data<M>,
-		layout_field: MetaOption<layout::field::Definition<M>, M>,
-		layout_variant: MetaOption<layout::variant::Definition, M>,
+		layout_field: MetaOption<layout::structure::field::Definition<M>, M>,
+		layout_variant: MetaOption<layout::enumeration::variant::Definition, M>,
 	) -> Self {
 		Self {
 			data,
@@ -55,11 +55,11 @@ impl<M> Definition<M> {
 		self.layout_variant.is_some()
 	}
 
-	pub fn as_layout_field(&self) -> Option<&Meta<layout::field::Definition<M>, M>> {
+	pub fn as_layout_field(&self) -> Option<&Meta<layout::structure::field::Definition<M>, M>> {
 		self.layout_field.as_ref()
 	}
 
-	pub fn as_layout_variant(&self) -> Option<&Meta<layout::variant::Definition, M>> {
+	pub fn as_layout_variant(&self) -> Option<&Meta<layout::enumeration::variant::Definition, M>> {
 		self.layout_variant.as_ref()
 	}
 
@@ -98,7 +98,7 @@ impl Type {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
 	Format,
-	LayoutField(layout::field::Property),
+	LayoutField(layout::structure::field::Property),
 }
 
 impl Property {
@@ -146,7 +146,7 @@ impl ClassBinding {
 
 pub enum Binding {
 	Format(TId<Layout>),
-	LayoutField(layout::field::ClassBinding),
+	LayoutField(layout::structure::field::ClassBinding),
 }
 
 impl Binding {
@@ -185,7 +185,7 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 #[derivative(Default(bound = ""))]
 pub struct Bindings<'a, M> {
 	data: ClassBindings<'a, M>,
-	layout_field: crate::layout::field::ClassBindings<'a, M>,
+	layout_field: crate::layout::structure::field::ClassBindings<'a, M>,
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {
