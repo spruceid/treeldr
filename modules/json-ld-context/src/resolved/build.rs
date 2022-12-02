@@ -1,6 +1,6 @@
 use std::{
 	cmp::Ordering,
-	collections::{btree_map, BTreeMap},
+	collections::{btree_map, BTreeMap, HashMap},
 	ops::{Deref, DerefMut},
 };
 
@@ -25,17 +25,18 @@ impl TermDefinition {
 	pub fn build(
 		&self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		prefixes: &HashMap<String, IriIndex>,
 		local_contexts: &LocalContexts,
 		context_comparison: &LocalContextComparison,
 	) -> Result<Nullable<json_ld::syntax::context::TermDefinition<()>>, Error> {
 		let mut definition = json_ld::syntax::context::term_definition::Expanded::new();
 
-		definition.id = self.build_id(vocabulary);
+		definition.id = self.build_id(vocabulary, prefixes);
 		definition.type_ = self.build_type(vocabulary);
 		definition.container = self.build_container();
 
 		definition.context = local_contexts
-			.build(vocabulary, context_comparison, self.context)?
+			.build(vocabulary, prefixes, context_comparison, self.context)?
 			.map(|c| Entry::new((), Meta(Box::new(c), ())));
 
 		Ok(definition.simplify())
@@ -53,12 +54,23 @@ impl TermDefinition {
 	pub fn build_id<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		vocabulary: &V,
+		prefixes: &HashMap<String, IriIndex>,
 	) -> Option<Entry<Nullable<term_definition::Id>, ()>> {
 		let syntax_id = match self.id.clone()? {
 			json_ld::Term::Null => Nullable::Null,
 			json_ld::Term::Keyword(k) => Nullable::Some(term_definition::Id::Keyword(k)),
 			json_ld::Term::Ref(r) => {
-				Nullable::Some(term_definition::Id::Term(r.with(vocabulary).to_string()))
+				let mut term = r.with(vocabulary).to_string();
+
+				for (prefix, iri) in prefixes {
+					if let Some(suffix) = term.strip_prefix(vocabulary.iri(iri).unwrap().as_str()) {
+						if !suffix.is_empty() {
+							term = prefix.to_string() + ":" + suffix
+						}
+					}
+				}
+
+				Nullable::Some(term_definition::Id::Term(term))
 			}
 		};
 
@@ -93,6 +105,7 @@ impl LocalContext {
 	pub fn build(
 		&self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		prefixes: &HashMap<String, IriIndex>,
 		local_contexts: &LocalContexts,
 		context_comparison: &LocalContextComparison,
 		bindings: BuiltDefinitions,
@@ -109,6 +122,7 @@ impl LocalContext {
 						Meta(
 							term_definition.build(
 								vocabulary,
+								prefixes,
 								local_contexts,
 								context_comparison,
 							)?,
@@ -179,12 +193,13 @@ impl LocalContexts {
 	pub fn build(
 		&self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		prefixes: &HashMap<String, IriIndex>,
 		context_comparison: &LocalContextComparison,
 		r: Ref<LocalContext>,
 	) -> Result<Option<json_ld::syntax::context::Value<()>>, Error> {
 		let bindings = self.build_definitions(context_comparison, r);
 		let context = self.contexts.get(r).unwrap();
-		context.build(vocabulary, self, context_comparison, bindings)
+		context.build(vocabulary, prefixes, self, context_comparison, bindings)
 	}
 }
 

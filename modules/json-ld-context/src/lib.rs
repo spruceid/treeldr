@@ -27,18 +27,19 @@ pub enum Error {
 pub struct Options<M> {
 	pub rdf_type_to_layout_name: bool,
 	pub flatten: bool,
+	pub prefixes: HashMap<String, IriIndex>,
 	pub context: json_ld::Context<IriIndex, BlankIdIndex, json_ld::syntax::context::Value<M>, M>,
 }
 
 pub struct Builder<'a, V, M> {
-	vocabulary: &'a V,
+	vocabulary: &'a mut V,
 	model: &'a Model<M>,
 	options: Options<M>,
 	reference_layouts: HashMap<TId<treeldr::Layout>, bool>,
 }
 
 impl<'a, V, M> Builder<'a, V, M> {
-	pub fn new(vocabulary: &'a V, model: &'a Model<M>, options: Options<M>) -> Self {
+	pub fn new(vocabulary: &'a mut V, model: &'a Model<M>, options: Options<M>) -> Self {
 		Self {
 			model,
 			vocabulary,
@@ -496,8 +497,11 @@ where
 		false,
 	);
 
+	local_contexts.add_iri_prefixes(&builder.options.prefixes, context_ref);
+
 	local_contexts.set_base_context(base_context, Some(context_ref));
-	let local_contexts = local_contexts.resolve(vocabulary);
+
+	let local_contexts = local_contexts.resolve(&mut *builder.vocabulary);
 
 	let accessible_bindings = local_contexts.compute_accessible_bindings();
 	let context_comparison =
@@ -505,7 +509,12 @@ where
 
 	log::debug!("building...");
 	let result = local_contexts
-		.build(vocabulary, &context_comparison, context_ref.cast())?
+		.build(
+			builder.vocabulary,
+			&builder.options.prefixes,
+			&context_comparison,
+			context_ref.cast(),
+		)?
 		.unwrap_or_else(|| {
 			json_ld::syntax::context::Value::One(Meta(
 				json_ld::syntax::Context::Definition(json_ld::syntax::context::Definition::new()),

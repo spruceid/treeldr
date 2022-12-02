@@ -459,6 +459,33 @@ impl LocalContexts {
 		self.definitions.insert(r, bindings);
 	}
 
+	pub fn add_iri_prefixes(
+		&mut self,
+		prefixes: &HashMap<String, IriIndex>,
+		root: Ref<LocalContext>,
+	) {
+		let definitions: Vec<_> = prefixes
+			.iter()
+			.map(|(prefix, value)| {
+				(
+					prefix.clone(),
+					Nullable::Some(TermDefinition {
+						id: Some(Unresolved::Resolved(json_ld::Term::Ref(
+							json_ld::Id::Valid(Id::Iri(*value)),
+						))),
+						context: self.empty_context(),
+						..Default::default()
+					}),
+				)
+			})
+			.collect();
+
+		let bindings = self.definitions.get_mut(&root).unwrap();
+		for (prefix, def) in definitions {
+			bindings.insert(prefix, def)
+		}
+	}
+
 	pub fn propagated_sub_contexts(
 		&self,
 		r: Ref<LocalContext>,
