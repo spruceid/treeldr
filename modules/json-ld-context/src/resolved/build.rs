@@ -21,18 +21,46 @@ use super::{
 
 use crate::Error;
 
+pub struct Prefixes(HashMap<String, IriIndex>);
+
+impl Prefixes {
+	pub fn compact(
+		&self,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		id: json_ld::Id<IriIndex, BlankIdIndex>,
+	) -> String {
+		let mut term = id.with(vocabulary).to_string();
+
+		for (prefix, iri) in &self.0 {
+			if let Some(suffix) = term.strip_prefix(vocabulary.iri(iri).unwrap().as_str()) {
+				if !suffix.is_empty() {
+					term = prefix.to_string() + ":" + suffix
+				}
+			}
+		}
+
+		term
+	}
+}
+
+impl From<HashMap<String, IriIndex>> for Prefixes {
+	fn from(map: HashMap<String, IriIndex>) -> Self {
+		Self(map)
+	}
+}
+
 impl TermDefinition {
 	pub fn build(
 		&self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		prefixes: &HashMap<String, IriIndex>,
+		prefixes: &Prefixes,
 		local_contexts: &LocalContexts,
 		context_comparison: &LocalContextComparison,
 	) -> Result<Nullable<json_ld::syntax::context::TermDefinition<()>>, Error> {
 		let mut definition = json_ld::syntax::context::term_definition::Expanded::new();
 
 		definition.id = self.build_id(vocabulary, prefixes);
-		definition.type_ = self.build_type(vocabulary);
+		definition.type_ = self.build_type(vocabulary, prefixes);
 		definition.container = self.build_container();
 
 		definition.context = local_contexts
@@ -54,23 +82,13 @@ impl TermDefinition {
 	pub fn build_id<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		vocabulary: &V,
-		prefixes: &HashMap<String, IriIndex>,
+		prefixes: &Prefixes,
 	) -> Option<Entry<Nullable<term_definition::Id>, ()>> {
 		let syntax_id = match self.id.clone()? {
 			json_ld::Term::Null => Nullable::Null,
 			json_ld::Term::Keyword(k) => Nullable::Some(term_definition::Id::Keyword(k)),
 			json_ld::Term::Ref(r) => {
-				let mut term = r.with(vocabulary).to_string();
-
-				for (prefix, iri) in prefixes {
-					if let Some(suffix) = term.strip_prefix(vocabulary.iri(iri).unwrap().as_str()) {
-						if !suffix.is_empty() {
-							term = prefix.to_string() + ":" + suffix
-						}
-					}
-				}
-
-				Nullable::Some(term_definition::Id::Term(term))
+				Nullable::Some(term_definition::Id::Term(prefixes.compact(vocabulary, r)))
 			}
 		};
 
@@ -80,6 +98,7 @@ impl TermDefinition {
 	pub fn build_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		vocabulary: &V,
+		prefixes: &Prefixes,
 	) -> Option<Entry<Nullable<term_definition::Type>, ()>> {
 		let syntax_type = self.type_.clone()?.map(|t| match t {
 			json_ld::Type::Id => term_definition::Type::Keyword(term_definition::TypeKeyword::Id),
@@ -93,7 +112,7 @@ impl TermDefinition {
 				term_definition::Type::Keyword(term_definition::TypeKeyword::Vocab)
 			}
 			json_ld::Type::Ref(i) => {
-				term_definition::Type::Term(vocabulary.iri(&i).unwrap().to_string())
+				term_definition::Type::Term(prefixes.compact(vocabulary, i.into()))
 			}
 		});
 
@@ -105,7 +124,7 @@ impl LocalContext {
 	pub fn build(
 		&self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		prefixes: &HashMap<String, IriIndex>,
+		prefixes: &Prefixes,
 		local_contexts: &LocalContexts,
 		context_comparison: &LocalContextComparison,
 		bindings: BuiltDefinitions,
@@ -193,7 +212,7 @@ impl LocalContexts {
 	pub fn build(
 		&self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		prefixes: &HashMap<String, IriIndex>,
+		prefixes: &Prefixes,
 		context_comparison: &LocalContextComparison,
 		r: Ref<LocalContext>,
 	) -> Result<Option<json_ld::syntax::context::Value<()>>, Error> {

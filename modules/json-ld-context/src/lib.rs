@@ -6,7 +6,7 @@ use rdf_types::{IriVocabulary, VocabularyMut};
 use shelves::Ref;
 use treeldr::{
 	layout::Description,
-	vocab::{Term, TreeLdr},
+	vocab::{self, Term, TreeLdr},
 	BlankIdIndex, IriIndex, Model, TId,
 };
 use unresolved::Unresolved;
@@ -32,14 +32,14 @@ pub struct Options<M> {
 }
 
 pub struct Builder<'a, V, M> {
-	vocabulary: &'a mut V,
+	vocabulary: &'a V,
 	model: &'a Model<M>,
 	options: Options<M>,
 	reference_layouts: HashMap<TId<treeldr::Layout>, bool>,
 }
 
 impl<'a, V, M> Builder<'a, V, M> {
-	pub fn new(vocabulary: &'a mut V, model: &'a Model<M>, options: Options<M>) -> Self {
+	pub fn new(vocabulary: &'a V, model: &'a Model<M>, options: Options<M>) -> Self {
 		Self {
 			model,
 			vocabulary,
@@ -201,6 +201,7 @@ impl unresolved::Bindings {
 				}
 			}
 		} else if let Some(property_ref) = f.as_layout_field().property() {
+			let property = builder.model.get(**property_ref).unwrap();
 			let is_type = builder.is_type_property(**property_ref);
 			let is_id = builder.is_id_property(**property_ref);
 
@@ -209,16 +210,23 @@ impl unresolved::Bindings {
 			} else if is_id {
 				json_ld::Term::Keyword(Keyword::Id)
 			} else {
-				let property = builder.model.get(**property_ref).unwrap();
 				json_ld::Term::Ref(property.id().into())
 			};
 
 			let layout_id = **f.as_formatted().format().as_ref().unwrap();
 
+			let datatype = property
+				.as_property()
+				.range()
+				.iter()
+				.find(|Meta(id, _)| builder.model.get(**id).unwrap().is_datatype(builder.model))
+				.map(Meta::into_value)
+				.cloned();
+
 			let definition = unresolved::TermDefinition {
 				id: Some(Unresolved::Resolved(id)),
 				type_: builder
-					.generate_property_definition_type(layout_id, !is_id && !is_type)
+					.generate_property_definition_type(layout_id, datatype, !is_id && !is_type)
 					.map(Unresolved::Resolved)
 					.map(Nullable::Some),
 				container: builder.generate_property_definition_container(layout_id),
@@ -397,17 +405,49 @@ impl<'a, V, M> Builder<'a, V, M> {
 	fn generate_property_definition_type(
 		&mut self,
 		layout_ref: TId<treeldr::Layout>,
+		type_ref: Option<TId<treeldr::Type>>,
 		generate_id_type: bool,
 	) -> Option<json_ld::Type<IriIndex>> {
 		let layout = self.model.get(layout_ref).unwrap();
 		match layout.as_layout().description().value() {
-			Description::Required(r) => {
-				self.generate_property_definition_type(**r.item_layout(), generate_id_type)
+			Description::Alias(a) => {
+				self.generate_property_definition_type(*a, type_ref, generate_id_type)
 			}
-			Description::Option(o) => {
-				self.generate_property_definition_type(**o.item_layout(), generate_id_type)
-			}
-			Description::Primitive(n) => Some(generate_primitive_type(n)),
+			Description::Required(r) => self.generate_property_definition_type(
+				**r.item_layout(),
+				type_ref,
+				generate_id_type,
+			),
+			Description::Option(o) => self.generate_property_definition_type(
+				**o.item_layout(),
+				type_ref,
+				generate_id_type,
+			),
+			Description::Array(a) => self.generate_property_definition_type(
+				**a.item_layout(),
+				type_ref,
+				generate_id_type,
+			),
+			Description::Set(s) => self.generate_property_definition_type(
+				**s.item_layout(),
+				type_ref,
+				generate_id_type,
+			),
+			Description::OneOrMany(o) => self.generate_property_definition_type(
+				**o.item_layout(),
+				type_ref,
+				generate_id_type,
+			),
+			Description::Primitive(p) => match p.primitive() {
+				vocab::Primitive::Iri | vocab::Primitive::Uri | vocab::Primitive::Url => {
+					Some(json_ld::Type::Id)
+				}
+				_ => type_ref.and_then(|type_ref| match type_ref.id() {
+					treeldr::Id::Iri(IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String))) => None,
+					treeldr::Id::Iri(iri) => Some(json_ld::Type::Ref(iri)),
+					_ => None,
+				}),
+			},
 			_ => {
 				if generate_id_type
 					&& self
@@ -434,12 +474,6 @@ impl<'a, V, M> Builder<'a, V, M> {
 			_ => None,
 		}
 	}
-}
-
-fn generate_primitive_type<M>(
-	n: &treeldr::layout::primitive::Restricted<M>,
-) -> json_ld::Type<IriIndex> {
-	json_ld::Type::Ref(*n.primitive().id().as_iri().unwrap())
 }
 
 impl<'a, V: IriVocabulary<Iri = IriIndex>, M> Builder<'a, V, M> {
@@ -498,10 +532,11 @@ where
 	);
 
 	local_contexts.add_iri_prefixes(&builder.options.prefixes, context_ref);
-
 	local_contexts.set_base_context(base_context, Some(context_ref));
 
-	let local_contexts = local_contexts.resolve(&mut *builder.vocabulary);
+	let prefixes = builder.options.prefixes.clone().into();
+
+	let local_contexts = local_contexts.resolve(vocabulary);
 
 	let accessible_bindings = local_contexts.compute_accessible_bindings();
 	let context_comparison =
@@ -510,8 +545,8 @@ where
 	log::debug!("building...");
 	let result = local_contexts
 		.build(
-			builder.vocabulary,
-			&builder.options.prefixes,
+			vocabulary,
+			&prefixes,
 			&context_comparison,
 			context_ref.cast(),
 		)?

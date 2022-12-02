@@ -10,15 +10,15 @@ pub use restriction::{Restriction, Restrictions};
 
 #[derive(Debug, Clone)]
 pub enum DataType<M> {
-	Primitive(Primitive),
+	Primitive(Option<Primitive>),
 	Derived(Derived<M>),
 }
 
 impl<M> DataType<M> {
-	pub fn primitive(&self) -> Primitive {
+	pub fn primitive(&self) -> Option<Primitive> {
 		match self {
 			Self::Primitive(p) => *p,
-			Self::Derived(d) => d.primitive(),
+			Self::Derived(d) => Some(d.primitive()),
 		}
 	}
 }

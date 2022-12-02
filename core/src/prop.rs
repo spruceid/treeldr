@@ -3,7 +3,7 @@ use crate::{
 	node::{self, BindingValueRef},
 	ty,
 	vocab::{self, Term},
-	BlankIdIndex, Id, IriIndex, Multiple, ResourceType, TId,
+	BlankIdIndex, Id, IriIndex, Multiple, Ref, ResourceType, TId,
 };
 use contextual::DisplayWithContext;
 use derivative::Derivative;
@@ -53,6 +53,12 @@ impl ResourceType for Property {
 
 	fn check<M>(resource: &crate::node::Definition<M>) -> bool {
 		resource.is_property()
+	}
+}
+
+impl<'a, M> Ref<'a, Property, M> {
+	pub fn as_property(&self) -> &'a Meta<Definition<M>, M> {
+		self.as_resource().as_property().unwrap()
 	}
 }
 
