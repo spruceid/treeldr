@@ -16,6 +16,7 @@ use treeldr_syntax::Parse;
 pub struct Options {
 	rdf_type_to_layout_name: bool,
 	flatten: bool,
+	prefixes: Vec<(&'static str, Iri<'static>)>,
 	context: Option<&'static str>,
 }
 
@@ -44,9 +45,16 @@ impl Options {
 			None => json_ld::Context::default(),
 		};
 
+		let prefixes = self
+			.prefixes
+			.iter()
+			.map(|(prefix, iri)| (prefix.to_string(), vocabulary.insert(*iri)))
+			.collect();
+
 		treeldr_json_ld_context::Options {
 			rdf_type_to_layout_name: self.rdf_type_to_layout_name,
 			flatten: self.flatten,
+			prefixes,
 			context,
 		}
 	}
@@ -285,7 +293,8 @@ positive! {
 	p022: ["http://www.example.com/A"],
 	p023: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
 	p024: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, flatten: true },
-	p025: ["http://www.example.com/Bar"] { rdf_type_to_layout_name: true }
+	p025: ["http://www.example.com/Bar"] { rdf_type_to_layout_name: true },
+	p026: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, flatten: true, prefixes: vec![("ex", iri!("http://www.example.com/"))] }
 }
 
 negative! {

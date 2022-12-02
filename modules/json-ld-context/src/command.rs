@@ -4,6 +4,7 @@ use json_ld::{Context, ContextLoader, Process};
 use locspan::Span;
 use rdf_types::{Vocabulary, VocabularyMut};
 use std::{
+	collections::HashMap,
 	fmt, io,
 	path::{Path, PathBuf},
 	str::FromStr,
@@ -46,6 +47,10 @@ pub struct Command {
 	/// This may increase the risk of ambiguities.
 	#[clap(short = 'f', long = "flatten")]
 	flatten: bool,
+
+	/// Define a prefix using the syntax `prefix=IRI`.
+	#[clap(short = 'p', long = "prefix")]
+	prefixes: Vec<PrefixBinding>,
 }
 
 #[derive(Debug)]
@@ -84,6 +89,46 @@ impl FromStr for MountPoint {
 				})
 			}
 			None => Err(InvalidMountPointSyntax::MissingSeparator(s.to_string())),
+		}
+	}
+}
+
+#[derive(Debug)]
+pub enum InvalidPrefixBinding {
+	MissingSeparator(String),
+	InvalidIri(String, iref::Error),
+}
+
+impl std::error::Error for InvalidPrefixBinding {}
+
+impl fmt::Display for InvalidPrefixBinding {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::MissingSeparator(s) => write!(f, "missing separator `=` in `{s}`"),
+			Self::InvalidIri(i, e) => write!(f, "invalid IRI `{i}`: {e}"),
+		}
+	}
+}
+
+pub struct PrefixBinding {
+	pub prefix: String,
+	pub iri: IriBuf,
+}
+
+impl FromStr for PrefixBinding {
+	type Err = InvalidPrefixBinding;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s.split_once('=') {
+			Some((prefix, iri)) => {
+				let iri = IriBuf::new(iri)
+					.map_err(|e| InvalidPrefixBinding::InvalidIri(iri.to_string(), e))?;
+				Ok(Self {
+					prefix: prefix.to_owned(),
+					iri,
+				})
+			}
+			None => Err(InvalidPrefixBinding::MissingSeparator(s.to_string())),
 		}
 	}
 }
@@ -165,9 +210,16 @@ impl Command {
 			loader.mount(vocabulary.insert(m.iri.as_iri()), m.path);
 		}
 
+		let mut prefixes = HashMap::new();
+
+		for b in self.prefixes {
+			prefixes.insert(b.prefix, vocabulary.insert(b.iri.as_iri()));
+		}
+
 		let mut options = Options {
 			rdf_type_to_layout_name: self.rdf_type_to_layout_name,
 			flatten: self.flatten,
+			prefixes,
 			context: Context::new(None),
 		};
 
