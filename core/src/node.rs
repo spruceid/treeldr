@@ -1,7 +1,7 @@
 use crate::{
 	component, doc, error, layout, list, multiple, prop, ty,
 	vocab::{self, Term},
-	Documentation, Error, Id, MetaOption, Multiple, Name, ResourceType, TId,
+	Documentation, Error, Id, MetaOption, Model, Multiple, Name, ResourceType, TId,
 };
 use locspan::Meta;
 
@@ -91,6 +91,13 @@ impl<M> Definition<M> {
 
 	pub fn is_type(&self) -> bool {
 		self.ty.is_some()
+	}
+
+	pub fn is_datatype(&self, model: &Model<M>) -> bool {
+		self.ty
+			.value()
+			.map(|v| v.is_datatype(model))
+			.unwrap_or(false)
 	}
 
 	pub fn is_property(&self) -> bool {

@@ -1,11 +1,9 @@
 use <http://www.w3.org/1999/02/22-rdf-syntax-ns#> as rdf;
 use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
-use <https://treeldr.org/> as tldr;
-
-type Integer with tldr:Integer;
+use <http://www.w3.org/2001/XMLSchema#> as xsd;
 
 type Foo {
 	rdf:type: required &rdfs:Class,
 
-	prop: Integer
+	prop: xsd:string
 }

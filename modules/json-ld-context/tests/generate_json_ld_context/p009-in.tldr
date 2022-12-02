@@ -1,7 +1,5 @@
-use <https://treeldr.org/> as tldr;
-
-type Integer with tldr:Integer;
+use <http://www.w3.org/2001/XMLSchema#> as xsd;
 
 type Foo {
-	prop: single multiple Integer
+	prop: single multiple xsd:string
 }
