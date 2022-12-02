@@ -152,9 +152,9 @@ macro_rules! positive {
 			#[test]
 			fn $id () {
 				Test::Positive {
-					input: include_str!(concat!("generate/", stringify!($id), "-in.tldr")),
+					input: include_str!(concat!("json_schema_generate/", stringify!($id), "-in.tldr")),
 					layout: $iri,
-					expected_output: include_str!(concat!("generate/", stringify!($id), "-out.schema.json"))
+					expected_output: include_str!(concat!("json_schema_generate/", stringify!($id), "-out.schema.json"))
 				}.run()
 			}
 		)*
@@ -162,8 +162,8 @@ macro_rules! positive {
 }
 
 positive! {
-	t01: "http://www.example.com/Foo",
-	t02: "http://www.example.com/Foo",
-	t03: "http://www.example.com/Foo",
-	t04: "http://www.example.com/Foo"
+	p001: "http://www.example.com/Foo",
+	p002: "http://www.example.com/Foo",
+	p003: "http://www.example.com/Foo",
+	p004: "http://www.example.com/Foo"
 }
