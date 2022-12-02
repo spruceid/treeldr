@@ -26,6 +26,7 @@ pub enum Error {
 /// Generator options.
 pub struct Options<M> {
 	pub rdf_type_to_layout_name: bool,
+	pub flatten: bool,
 	pub context: json_ld::Context<IriIndex, BlankIdIndex, json_ld::syntax::context::Value<M>, M>,
 }
 
@@ -58,39 +59,51 @@ impl IncludedLayout {
 		Self { id, type_scoped }
 	}
 
-	fn flatten<M>(&self, model: &Model<M>, result: &mut HashSet<IncludedLayout>) {
+	fn flatten<M>(
+		&self,
+		model: &Model<M>,
+		options: &Options<M>,
+		result: &mut HashSet<IncludedLayout>,
+	) {
 		if result.insert(*self) {
 			let layout = model.get(self.id).unwrap();
 
 			match layout.as_layout().description().value() {
-				Description::Never
-				| Description::Primitive(_)
-				| Description::Reference(_)
-				| Description::Struct(_) => (),
+				Description::Never | Description::Primitive(_) | Description::Reference(_) => (),
 				Description::Alias(id) => {
-					IncludedLayout::new(*id, self.type_scoped).flatten(model, result)
+					IncludedLayout::new(*id, self.type_scoped).flatten(model, options, result)
 				}
 				Description::Required(r) => {
-					IncludedLayout::new(**r.item_layout(), self.type_scoped).flatten(model, result)
+					IncludedLayout::new(**r.item_layout(), self.type_scoped)
+						.flatten(model, options, result)
 				}
-				Description::Option(o) => {
-					IncludedLayout::new(**o.item_layout(), self.type_scoped).flatten(model, result)
-				}
+				Description::Option(o) => IncludedLayout::new(**o.item_layout(), self.type_scoped)
+					.flatten(model, options, result),
 				Description::OneOrMany(o) => {
-					IncludedLayout::new(**o.item_layout(), self.type_scoped).flatten(model, result)
+					IncludedLayout::new(**o.item_layout(), self.type_scoped)
+						.flatten(model, options, result)
 				}
-				Description::Set(s) => {
-					IncludedLayout::new(**s.item_layout(), self.type_scoped).flatten(model, result)
-				}
-				Description::Array(a) => {
-					IncludedLayout::new(**a.item_layout(), self.type_scoped).flatten(model, result)
-				}
+				Description::Set(s) => IncludedLayout::new(**s.item_layout(), self.type_scoped)
+					.flatten(model, options, result),
+				Description::Array(a) => IncludedLayout::new(**a.item_layout(), self.type_scoped)
+					.flatten(model, options, result),
 				Description::Enum(e) => {
 					for vid in e.variants() {
 						let v = model.get(**vid).unwrap();
 						if let Some(layout_id) = v.as_formatted().format().as_ref() {
 							IncludedLayout::new(**layout_id, self.type_scoped)
-								.flatten(model, result)
+								.flatten(model, options, result)
+						}
+					}
+				}
+				Description::Struct(s) => {
+					if options.flatten {
+						for fid in s.fields() {
+							let field = model.get(**fid).unwrap();
+							if let Some(layout_id) = field.as_formatted().format().as_ref() {
+								IncludedLayout::new(**layout_id, self.type_scoped)
+									.flatten(model, options, result)
+							}
 						}
 					}
 				}
@@ -129,7 +142,7 @@ impl IncludedLayout {
 						);
 
 						let field = builder.model.get(**fid).unwrap();
-						if field.is_required(builder.model) {
+						if !builder.options.flatten && field.is_required(builder.model) {
 							// if it is required then we don't need to
 							// include the other layout fields here.
 							return;
@@ -230,19 +243,15 @@ impl unresolved::Bindings {
 		parent: Ref<unresolved::LocalContext>,
 		layout_id: TId<treeldr::Layout>,
 	) {
-		let term = builder
-			.model
-			.get(layout_id)
-			.unwrap()
-			.as_component()
-			.name()
-			.unwrap()
-			.to_string();
+		let layout = builder.model.get(layout_id).unwrap();
+
+		let term = layout.as_component().name().unwrap().to_string();
 
 		let definition = unresolved::TermDefinition {
-			id: Some(Unresolved::Resolved(json_ld::Term::Ref(
-				layout_id.id().into(),
-			))),
+			id: layout
+				.as_layout()
+				.ty()
+				.map(|id| Unresolved::Resolved(json_ld::Term::Ref(id.id().into()))),
 			context: layout_contexts.insert(builder, local_contexts, parent, [layout_id], true),
 			..Default::default()
 		};
@@ -324,6 +333,7 @@ impl LayoutLocalContexts {
 	) -> Ref<unresolved::LocalContext> {
 		let layouts = flatten_layouts(
 			builder.model,
+			&builder.options,
 			layouts
 				.into_iter()
 				.map(|id| IncludedLayout::new(id, type_scoped)),
@@ -361,12 +371,13 @@ impl LayoutLocalContexts {
 
 fn flatten_layouts<M>(
 	model: &Model<M>,
+	options: &Options<M>,
 	layouts: impl IntoIterator<Item = IncludedLayout>,
 ) -> HashSet<IncludedLayout> {
 	let mut result = HashSet::new();
 
 	for layout in layouts {
-		layout.flatten(model, &mut result)
+		layout.flatten(model, options, &mut result)
 	}
 
 	result

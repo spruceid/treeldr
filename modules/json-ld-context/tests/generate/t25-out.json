@@ -1,0 +1,11 @@
+{
+	"Bar": {
+		"@id": "http://www.example.com/Foo",
+		"@context": {
+			"a": {
+				"@id": "http://www.example.com/a",
+				"@type": "@id"
+			}
+		}
+	}
+}
