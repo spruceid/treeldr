@@ -15,6 +15,7 @@ use treeldr_syntax::Parse;
 #[derive(Debug, Default)]
 pub struct Options {
 	rdf_type_to_layout_name: bool,
+	flatten: bool,
 	context: Option<&'static str>,
 }
 
@@ -45,6 +46,7 @@ impl Options {
 
 		treeldr_json_ld_context::Options {
 			rdf_type_to_layout_name: self.rdf_type_to_layout_name,
+			flatten: self.flatten,
 			context,
 		}
 	}
@@ -280,7 +282,10 @@ positive! {
 	t19: ["http://www.example.com/Foo"],
 	t20: ["http://www.example.com/Bar"],
 	t21: ["http://www.example.com/Foo"],
-	t22: ["http://www.example.com/A"]
+	t22: ["http://www.example.com/A"],
+	t23: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
+	t24: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, flatten: true },
+	t25: ["http://www.example.com/Bar"] { rdf_type_to_layout_name: true }
 }
 
 negative! {

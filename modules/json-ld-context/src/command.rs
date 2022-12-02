@@ -39,6 +39,13 @@ pub struct Command {
 	/// Use layout name as `rdf:type` value.
 	#[clap(long = "rdf-type-to-layout-name")]
 	rdf_type_to_layout_name: bool,
+
+	/// Do not nest terms.
+	///
+	/// All terms will be generated in the top level context.
+	/// This may increase the risk of ambiguities.
+	#[clap(short = 'f', long = "flatten")]
+	flatten: bool,
 }
 
 #[derive(Debug)]
@@ -160,6 +167,7 @@ impl Command {
 
 		let mut options = Options {
 			rdf_type_to_layout_name: self.rdf_type_to_layout_name,
+			flatten: self.flatten,
 			context: Context::new(None),
 		};
 
