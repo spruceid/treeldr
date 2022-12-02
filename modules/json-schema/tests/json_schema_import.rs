@@ -123,9 +123,9 @@ macro_rules! positive {
 			#[test]
 			fn $id () {
 				Test::Positive {
-					input: include_str!(concat!("import/", stringify!($id), "-in.json")),
+					input: include_str!(concat!("json_schema_import/", stringify!($id), "-in.json")),
 					expected_iri: $iri,
-					expected_output: include_str!(concat!("import/", stringify!($id), "-out.nq"))
+					expected_output: include_str!(concat!("json_schema_import/", stringify!($id), "-out.nq"))
 				}.run()
 			}
 		)*
@@ -133,10 +133,10 @@ macro_rules! positive {
 }
 
 positive! {
-	t01: "https://treeldr.org/String",
-	t02: "https://example.com/product.schema.json",
-	t03: "https://example.com/product.schema.json",
-	t04: "https://example.com/product.schema.json",
-	t05: "https://example.com/product.schema.json",
-	t06: "https://example.com/foo.schema.json"
+	p001: "https://treeldr.org/String",
+	p002: "https://example.com/product.schema.json",
+	p003: "https://example.com/product.schema.json",
+	p004: "https://example.com/product.schema.json",
+	p005: "https://example.com/product.schema.json",
+	p006: "https://example.com/foo.schema.json"
 }

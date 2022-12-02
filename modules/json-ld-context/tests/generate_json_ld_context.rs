@@ -224,9 +224,9 @@ macro_rules! positive {
 			#[async_std::test]
 			async fn $id () {
 				Test::Positive {
-					input: include_str!(concat!("generate/", stringify!($id), "-in.tldr")),
+					input: include_str!(concat!("generate_json_ld_context/", stringify!($id), "-in.tldr")),
 					layouts: &[$($iri,)*],
-					expected_output: include_str!(concat!("generate/", stringify!($id), "-out.json")),
+					expected_output: include_str!(concat!("generate_json_ld_context/", stringify!($id), "-out.json")),
 					options: Options {
 						$($(
 							$option: $value,
@@ -246,7 +246,7 @@ macro_rules! negative {
 			#[should_panic]
 			async fn $id () {
 				Test::Negative {
-					input: include_str!(concat!("generate/", stringify!($id), ".tldr")),
+					input: include_str!(concat!("generate_json_ld_context/", stringify!($id), ".tldr")),
 					layouts: &[$($iri,)*],
 					options: Options {
 						$($(
@@ -261,33 +261,33 @@ macro_rules! negative {
 }
 
 positive! {
-	t01: ["http://www.example.com/Foo"],
-	t02: ["http://www.example.com/Foo"],
-	t03: ["http://www.example.com/Foo"],
-	t04: ["http://www.example.com/Foo", "http://www.example.com/Bar"],
-	t05: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
-	t06: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
-	t07: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
-	t08: ["http://www.example.com/Foo"],
-	t09: ["http://www.example.com/Foo"],
-	t10: ["http://www.example.com/Foo"],
-	t11: ["http://www.example.com/Foo"],
-	t12: ["http://www.example.com/Foo"] { context: Some(include_str!("generate/t12-context.json")) },
-	t13: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t13-context.json")) },
-	t14: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t14-context.json")) },
-	t15: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t15-context.json")) },
-	t16: ["http://www.example.com/CustomCredential"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate/t16-context.json")) },
-	t17: ["http://www.example.com/Foo"],
-	t18: ["http://www.example.com/Foo"],
-	t19: ["http://www.example.com/Foo"],
-	t20: ["http://www.example.com/Bar"],
-	t21: ["http://www.example.com/Foo"],
-	t22: ["http://www.example.com/A"],
-	t23: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
-	t24: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, flatten: true },
-	t25: ["http://www.example.com/Bar"] { rdf_type_to_layout_name: true }
+	p001: ["http://www.example.com/Foo"],
+	p002: ["http://www.example.com/Foo"],
+	p003: ["http://www.example.com/Foo"],
+	p004: ["http://www.example.com/Foo", "http://www.example.com/Bar"],
+	p005: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
+	p006: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
+	p007: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
+	p008: ["http://www.example.com/Foo"],
+	p009: ["http://www.example.com/Foo"],
+	p010: ["http://www.example.com/Foo"],
+	p011: ["http://www.example.com/Foo"],
+	p012: ["http://www.example.com/Foo"] { context: Some(include_str!("generate_json_ld_context/p012-context.json")) },
+	p013: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate_json_ld_context/p013-context.json")) },
+	p014: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate_json_ld_context/p014-context.json")) },
+	p015: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate_json_ld_context/p015-context.json")) },
+	p016: ["http://www.example.com/CustomCredential"] { rdf_type_to_layout_name: true, context: Some(include_str!("generate_json_ld_context/p016-context.json")) },
+	p017: ["http://www.example.com/Foo"],
+	p018: ["http://www.example.com/Foo"],
+	p019: ["http://www.example.com/Foo"],
+	p020: ["http://www.example.com/Bar"],
+	p021: ["http://www.example.com/Foo"],
+	p022: ["http://www.example.com/A"],
+	p023: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true },
+	p024: ["http://www.example.com/Foo"] { rdf_type_to_layout_name: true, flatten: true },
+	p025: ["http://www.example.com/Bar"] { rdf_type_to_layout_name: true }
 }
 
 negative! {
-	e01: ["http://www.example.com/Foo", "http://www.example.com/Bar"]
+	n001: ["http://www.example.com/Foo", "http://www.example.com/Bar"]
 }
