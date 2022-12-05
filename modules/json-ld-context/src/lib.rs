@@ -220,7 +220,7 @@ impl unresolved::Bindings {
 				.range()
 				.iter()
 				.find(|Meta(id, _)| builder.model.get(**id).unwrap().is_datatype(builder.model))
-				.or(property.as_property().range().first())
+				.or_else(|| property.as_property().range().first())
 				.map(Meta::into_value)
 				.cloned()
 				.unwrap();
@@ -448,7 +448,7 @@ impl<'a, V, M> Builder<'a, V, M> {
 					treeldr::Id::Iri(IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String))) => None,
 					treeldr::Id::Iri(iri) => Some(json_ld::Type::Ref(iri)),
 					_ => None,
-				}
+				},
 			},
 			_ => {
 				if generate_id_type
