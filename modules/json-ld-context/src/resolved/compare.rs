@@ -204,11 +204,11 @@ impl CompareTermDefinition for TermDefinition {
 							self.direction.compare_then(&other.direction, ord, |ord| {
 								self.prefix.compare_then(&other.prefix, ord, |ord| {
 									self.reverse.compare_then(&other.reverse, ord, |ord| {
-										self.nest.compare_then(&other.nest, ord, |a| {
+										self.nest.compare_then(&other.nest, ord, |ord| {
 											header_ordering = Some(ord);
 											context_ordering = context_comparison
 												.compare(self.context, other.context);
-											match (a, context_ordering) {
+											match (ord, context_ordering) {
 												(Ordering::Equal, Some(Ordering::Equal)) => {
 													Some(Ordering::Equal)
 												}
