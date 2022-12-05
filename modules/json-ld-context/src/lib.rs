@@ -220,8 +220,10 @@ impl unresolved::Bindings {
 				.range()
 				.iter()
 				.find(|Meta(id, _)| builder.model.get(**id).unwrap().is_datatype(builder.model))
+				.or(property.as_property().range().first())
 				.map(Meta::into_value)
-				.cloned();
+				.cloned()
+				.unwrap();
 
 			let definition = unresolved::TermDefinition {
 				id: Some(Unresolved::Resolved(id)),
@@ -405,7 +407,7 @@ impl<'a, V, M> Builder<'a, V, M> {
 	fn generate_property_definition_type(
 		&mut self,
 		layout_ref: TId<treeldr::Layout>,
-		type_ref: Option<TId<treeldr::Type>>,
+		type_ref: TId<treeldr::Type>,
 		generate_id_type: bool,
 	) -> Option<json_ld::Type<IriIndex>> {
 		let layout = self.model.get(layout_ref).unwrap();
@@ -442,11 +444,11 @@ impl<'a, V, M> Builder<'a, V, M> {
 				vocab::Primitive::Iri | vocab::Primitive::Uri | vocab::Primitive::Url => {
 					Some(json_ld::Type::Id)
 				}
-				_ => type_ref.and_then(|type_ref| match type_ref.id() {
+				_ => match type_ref.id() {
 					treeldr::Id::Iri(IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String))) => None,
 					treeldr::Id::Iri(iri) => Some(json_ld::Type::Ref(iri)),
 					_ => None,
-				}),
+				}
 			},
 			_ => {
 				if generate_id_type
