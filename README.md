@@ -28,7 +28,7 @@ cargo +nightly install --path tldrc
 
 ## User Guide
 
-See the [user guide](https://www.spruceid.dev) for a complete overview
+See the [user guide](https://www.spruceid.dev/treeldr) for a complete overview
 of TreeLDR's features.
 
 ## Basic Usage
