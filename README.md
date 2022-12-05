@@ -7,10 +7,8 @@ This way, developers can define data structures in a familiar way and focus pure
 
 ## Installation
 
-You will need [Rust](https://rust-lang.org) 1.64 (nightly) or later
+You will need [Rust](https://rust-lang.org) 1.65 or later
 to install TreeLDR, with [cargo](https://doc.rust-lang.org/cargo/).
-The nightly version is required until
-[generic associated types are stabilized](https://github.com/rust-lang/rust/pull/96709).
 
 TreeLDR can be installed from the source by first cloning
 the git repository:
@@ -23,7 +21,7 @@ the TreeLDR language, the compiler library and its modules.
 You can then build and install the compiler using `cargo`
 from the repository root:
 ```
-cargo +nightly install --path tldrc
+cargo install --path tldrc
 ```
 
 ## User Guide
