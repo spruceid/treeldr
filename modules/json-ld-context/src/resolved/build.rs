@@ -299,7 +299,7 @@ impl BuiltDefinitions {
 										return;
 									}
 									_ => {
-										panic!("protected term redefinition")
+										panic!("protected term redefinition: {:?}, {:?}", parent_def, def)
 									}
 								}
 							}
