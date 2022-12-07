@@ -2,7 +2,7 @@ use crate::{
 	component,
 	node::{self, BindingValueRef},
 	prop,
-	vocab::{self, Term},
+	vocab::{self, Term, Rdfs},
 	Id, IriIndex, Model, Multiple, Ref, ResourceType, TId,
 };
 
@@ -23,10 +23,10 @@ pub use restriction::{Restriction, Restrictions};
 pub use union::Union;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub struct OtherTypeId(Id);
+pub struct OtherTypeId(TId<Type>);
 
 impl OtherTypeId {
-	fn id(&self) -> Id {
+	fn id(&self) -> TId<Type> {
 		self.0
 	}
 }
@@ -38,22 +38,24 @@ pub enum Type {
 }
 
 impl Type {
-	/// Checks if this is a subclass of `other`.
-	pub fn is_subclass_of(&self, other: Self) -> bool {
-		match (self, other) {
-			(Self::Resource(None), Self::Resource(None)) => false,
-			(_, Self::Resource(None)) => true,
-			(Self::Resource(Some(a)), Self::Resource(Some(b))) => a.is_subclass_of(b),
-			_ => false,
+	pub fn id(&self) -> TId<Type> {
+		match self {
+			Self::Resource(None) => TId::new(Id::Iri(IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Resource)))),
+			Self::Resource(Some(ty)) => TId::new(Id::Iri(IriIndex::Iri(ty.term()))),
+			Self::Other(ty) => ty.id(),
 		}
 	}
 
-	pub fn id(&self) -> Id {
-		match self {
-			Self::Resource(None) => Id::Iri(IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Resource))),
-			Self::Resource(Some(ty)) => Id::Iri(IriIndex::Iri(ty.term())),
-			Self::Other(ty) => ty.id(),
-		}
+	pub fn into_id(self) -> TId<Type> {
+		self.id()
+	}
+
+	pub fn raw_id(&self) -> Id {
+		self.id().id()
+	}
+
+	pub fn into_raw_id(self) -> Id {
+		self.into_id().into_id()
 	}
 }
 
@@ -120,7 +122,7 @@ impl From<Term> for Type {
 			Term::TreeLdr(vocab::TreeLdr::Variant) => {
 				component::formatted::Type::LayoutVariant.into()
 			}
-			t => Self::Other(OtherTypeId(Id::Iri(IriIndex::Iri(t)))),
+			t => Self::Other(OtherTypeId(TId::new(Id::Iri(IriIndex::Iri(t))))),
 		}
 	}
 }
@@ -129,7 +131,7 @@ impl From<Id> for Type {
 	fn from(id: Id) -> Self {
 		match id {
 			Id::Iri(IriIndex::Iri(t)) => t.into(),
-			id => Self::Other(OtherTypeId(id)),
+			id => Self::Other(OtherTypeId(TId::new(id))),
 		}
 	}
 }
@@ -271,8 +273,9 @@ impl<M> Definition<M> {
 pub enum Property {
 	Datatype(data::Property),
 	Restriction(restriction::Property),
+	SubClassOf,
 	UnionOf,
-	IntersectionOf,
+	IntersectionOf
 }
 
 impl Property {
@@ -281,8 +284,9 @@ impl Property {
 		match self {
 			Self::Datatype(p) => p.term(),
 			Self::Restriction(p) => p.term(),
+			Self::SubClassOf => Term::Rdfs(Rdfs::SubClassOf),
 			Self::UnionOf => Term::Owl(Owl::UnionOf),
-			Self::IntersectionOf => Term::Owl(Owl::IntersectionOf),
+			Self::IntersectionOf => Term::Owl(Owl::IntersectionOf)
 		}
 	}
 
@@ -290,6 +294,7 @@ impl Property {
 		match self {
 			Self::Datatype(p) => p.name(),
 			Self::Restriction(p) => p.name(),
+			Self::SubClassOf => "super class",
 			Self::UnionOf => "type union",
 			Self::IntersectionOf => "type intersection",
 		}

@@ -99,11 +99,28 @@ impl<V> Components<V> {
 		self.successors.get(i).map(|s| s.iter().cloned())
 	}
 
-	/// Order components by depth.
-	///
+	fn remove_indirect_successors(&self, result: &mut HashSet<usize>, i: usize) {
+		for j in self.successors(i).unwrap() {
+			result.remove(&j);
+			self.remove_indirect_successors(result, j);
+		}
+	}
+
+	pub fn direct_successors(&self, i: usize) -> Option<HashSet<usize>> {
+		let mut result: HashSet<_> = self.successors(i)?.collect();
+		
+		for j in self.successors(i).unwrap() {
+			self.remove_indirect_successors(&mut result, j);
+		}
+
+		Some(result)
+	}
+
+	/// Returns the depth of each component.
+	/// 
 	/// The depth of a component is the maximum of the depth of its predecessors
 	/// plus 1. A component with no predecessors has depth 0.
-	pub fn order_by_depth(&self) -> Vec<usize> {
+	pub fn depths(&self) -> Vec<usize> {
 		let mut depth = Vec::new();
 		depth.resize(self.components.len(), 0);
 		let mut stack: Vec<_> = depth.iter().cloned().enumerate().collect();
@@ -119,10 +136,55 @@ impl<V> Components<V> {
 			}
 		}
 
+		depth
+	}
+
+	pub fn predecessors(&self) -> Vec<HashSet<usize>> {
+		let mut predecessors = Vec::new();
+		predecessors.resize_with(self.components.len(), HashSet::default);
+
+		for (i, successors) in self.successors.iter().enumerate() {
+			for &j in successors {
+				predecessors[j].insert(i);
+			}
+		}
+
+		predecessors
+	}
+
+	/// Order components by depth.
+	///
+	/// The depth of a component is the maximum of the depth of its predecessors
+	/// plus 1. A component with no predecessors has depth 0.
+	pub fn order_by_depth(&self) -> Vec<usize> {
+		let depth = self.depths();
 		let mut ordered_components: Vec<_> = (0..self.components.len()).collect();
 		ordered_components.sort_unstable_by_key(|i| depth[*i]);
 		ordered_components
 	}
+}
+
+/// Returns the depth of each component.
+/// 
+/// The depth of a component is the maximum of the depth of its predecessors
+/// plus 1. A component with no predecessors has depth 0.
+pub fn depths(predecessors: &[HashSet<usize>]) -> Vec<usize> {
+	let mut depth = Vec::new();
+	depth.resize(predecessors.len(), 0);
+	let mut stack: Vec<_> = depth.iter().cloned().enumerate().collect();
+
+	while let Some((i, new_depth)) = stack.pop() {
+		if depth[i] == 0 || new_depth > depth[i] {
+			depth[i] = new_depth;
+			for &c in &predecessors[i] {
+				if c != i {
+					stack.push((c, new_depth + 1))
+				}
+			}
+		}
+	}
+
+	depth
 }
 
 fn strong_connect<G: ?Sized + SccGraph>(

@@ -168,10 +168,8 @@ impl<M> Definition<M> {
 		self.as_layout().ok_or_else(|| {
 			error::NodeInvalidType {
 				id: self.data.id,
-				expected: TId::new(
-					crate::Type::Resource(Some(Type::Component(Some(component::Type::Layout))))
-						.id(),
-				),
+				expected: crate::Type::Resource(Some(Type::Component(Some(component::Type::Layout))))
+					.id(),
 				found: self.type_().clone(),
 			}
 			.into()
@@ -198,6 +196,7 @@ impl<M> Definition<M> {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Type {
+	Literal,
 	Class(Option<ty::SubClass>),
 	DatatypeRestriction,
 	Property(Option<prop::Type>),
@@ -222,6 +221,7 @@ impl Type {
 
 	pub fn term(&self) -> Term {
 		match self {
+			Self::Literal => Term::Rdfs(vocab::Rdfs::Literal),
 			Self::Class(None) => Term::Rdfs(vocab::Rdfs::Class),
 			Self::Class(Some(ty)) => ty.term(),
 			Self::DatatypeRestriction => Term::Rdfs(vocab::Rdfs::Resource),
