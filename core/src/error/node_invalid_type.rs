@@ -27,6 +27,7 @@ impl NodeTypeName for Type {
 impl NodeTypeName for node::Type {
 	fn name(&self) -> &str {
 		match self {
+			Self::Literal => "literal",
 			Self::Class(None) => "class",
 			Self::Class(Some(ty)) => ty.name(),
 			Self::DatatypeRestriction => "datatype restriction",

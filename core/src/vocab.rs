@@ -296,8 +296,14 @@ pub enum Rdfs {
 	#[iri("rdfs:Resource")]
 	Resource,
 
+	#[iri("rdfs:Literal")]
+	Literal,
+
 	#[iri("rdfs:Class")]
 	Class,
+
+	#[iri("rdfs:subClassOf")]
+	SubClassOf,
 
 	#[iri("rdfs:Datatype")]
 	Datatype,

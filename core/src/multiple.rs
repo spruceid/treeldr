@@ -55,6 +55,10 @@ impl<T: Ord, M> Multiple<T, M> {
 		}
 	}
 
+	pub fn insert_unique(&mut self, Meta(value, meta): Meta<T, M>) -> Option<M> {
+		self.0.insert(value, meta)
+	}
+
 	pub fn replace(&mut self, Meta(value, meta): Meta<T, M>) {
 		self.0.clear();
 		self.0.insert(value, meta);

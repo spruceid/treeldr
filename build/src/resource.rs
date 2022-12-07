@@ -5,7 +5,7 @@ use crate::{
 	component,
 	context::{HasType, MapIds},
 	error::NodeTypeInvalid,
-	layout, list, multiple, prop, ty, Error, Multiple, ObjectAsId,
+	layout, list, multiple, prop, ty::{self, ClassHierarchy, TypeCycleSegment}, Error, Multiple, ObjectAsId, Context,
 };
 pub use treeldr::node::{Property, Type};
 
@@ -27,6 +27,69 @@ impl<M> Data<M> {
 			label: Multiple::default(),
 			comment: Multiple::default(),
 		}
+	}
+
+	fn find_type_cycle_from_subclass(
+		&self,
+		context: &Context<M>,
+		class_hierarchy: &ClassHierarchy<M>,
+		component: &[Id],
+		meta: &M
+	) -> Option<(Vec<TypeCycleSegment<Meta<Id, M>>>, TypeCycleSegment<M>)> where M: Clone {
+		if self.id == component[0] {
+			return Some((Vec::new(), TypeCycleSegment::SuperClass(meta.clone())))
+		} else if component.contains(&self.id) {
+			for Meta(super_class, m) in class_hierarchy.super_classes(self.id) {
+				let super_class = context.get(super_class.raw_id()).unwrap().as_resource();
+				if let Some((mut path, end)) = super_class.find_type_cycle_from_subclass(context, class_hierarchy, component, m) {
+					path.push(TypeCycleSegment::SuperClass(Meta(self.id, meta.clone())));
+					return Some((path, end));
+				}
+			}
+		}
+
+		self.find_type_cycle(context, class_hierarchy, component).map(|(mut path, end)| {
+			path.push(TypeCycleSegment::SuperClass(Meta(self.id, meta.clone())));
+			(path, end)
+		})
+	}
+
+	/// Find a path to the first member of the given type `component`.
+	/// 
+	/// This computes a path from this node to the first member of `component`
+	/// by only going through types contained in `component` in their super classes.
+	/// 
+	/// The path is given in reverse order (for performance reasons).
+	/// The last segment contains only the metadata.
+	pub fn find_type_cycle(
+		&self,
+		context: &Context<M>,
+		class_hierarchy: &ClassHierarchy<M>,
+		component: &[Id]
+	) -> Option<(Vec<TypeCycleSegment<Meta<Id, M>>>, TypeCycleSegment<M>)> where M: Clone {
+		for Meta(ty, meta) in &self.type_ {
+			let id = ty.into_raw_id();
+
+			if id == component[0] {
+				return Some((Vec::new(), TypeCycleSegment::Type(meta.clone())))
+			} else if component.contains(&id) {
+				let node = context.get(id).unwrap().as_resource();
+				if let Some((mut path, end)) = node.find_type_cycle(context, class_hierarchy, component) {
+					path.push(TypeCycleSegment::Type(Meta(id, meta.clone())));
+					return Some((path, end));
+				}
+
+				for Meta(super_class, m) in class_hierarchy.super_classes(id) {
+					let super_class = context.get(super_class.raw_id()).unwrap().as_resource();
+					if let Some((mut path, end)) = super_class.find_type_cycle_from_subclass(context, class_hierarchy, component, m) {
+						path.push(TypeCycleSegment::Type(Meta(id, meta.clone())));
+						return Some((path, end));
+					}
+				}
+			}
+		}
+
+		None
 	}
 
 	pub fn bindings(&self) -> ClassBindings<M> {
@@ -529,7 +592,7 @@ impl<M: Clone> Definition<M> {
 		let mut type_ = Multiple::default();
 		for Meta(ty, m) in &self.data.type_ {
 			let ty = context
-				.require_type_id(ty.id())
+				.require_type_id(ty.id().id())
 				.map_err(|e| e.at_node_property(self.data.id, Property::Type, m.clone()))?;
 			type_.insert(Meta(ty, m.clone()))
 		}
@@ -646,7 +709,7 @@ pub enum BindingValueRef<'a, M> {
 impl<'a, M> BindingValueRef<'a, M> {
 	pub fn into_id(self) -> Option<Id> {
 		match self {
-			Self::Type(ty) => Some(ty.id()),
+			Self::Type(ty) => Some(ty.id().id()),
 			Self::Id(id) => Some(id),
 			Self::Object(obj) => obj.as_id(),
 			_ => None,

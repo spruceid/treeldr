@@ -138,7 +138,7 @@ impl<M> Model<M> {
 				} else {
 					Err(error::NodeInvalidType {
 						id: id.id(),
-						expected: TId::new(T::TYPE.id()),
+						expected: T::TYPE.id(),
 						found: r.type_().clone(),
 					}
 					.into())

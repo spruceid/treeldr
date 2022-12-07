@@ -109,7 +109,7 @@ impl<'a, M> From<BindingValueRef<'a, M>> for ValueRef<'a, BlankIdIndex> {
 		match v {
 			BindingValueRef::Id(Id::Blank(b)) => Self::Blank(b),
 			BindingValueRef::Id(Id::Iri(iri)) => Self::Iri(iri),
-			BindingValueRef::Type(t) => match t.id() {
+			BindingValueRef::Type(t) => match t.id().id() {
 				Id::Blank(b) => Self::Blank(b),
 				Id::Iri(i) => Self::Iri(i),
 			},

@@ -165,6 +165,15 @@ impl<M> Documentation<M> {
 
 pub type Iter<'a, M> = multiple::Iter<'a, Block, M>;
 
+impl<'a, M> IntoIterator for &'a Documentation<M> {
+	type Item = Meta<&'a Block, &'a M>;
+	type IntoIter = Iter<'a, M>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter()
+	}
+}
+
 #[derive(Clone, Default, Debug)]
 pub struct StrippedDocumentation {
 	blocks: BTreeSet<Block>,
