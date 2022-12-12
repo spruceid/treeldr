@@ -855,9 +855,10 @@ pub fn is_included_in<M>(context: &Context<M>, a: Id, b: Id) -> bool {
 	if a == b {
 		true
 	} else {
-		let a = context.get(a).unwrap();
-		let b = context.get(b).unwrap();
-		a.as_layout().is_included_in(context, b.as_layout())
+		context.get(a).and_then(|a| {
+			context.get(b).map(|b| a.as_layout().is_included_in(context, b.as_layout()))
+		}).unwrap_or(false)
+		
 	}
 }
 
