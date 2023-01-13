@@ -1,25 +1,25 @@
 [package]
 name = "treeldr"
-version = "0.1.0"
-authors = ["Spruce Systems Inc."]
 description = "Schema definition language."
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
-iref = "2.2"
-iref-enum = "2.1"
-static-iref = "2.0"
-log = "0.4"
-derivative = "2.2.0"
-locspan = { version = "0.7.11", features = ["reporting"] }
-locspan-derive = "0.6"
-codespan-reporting = "0.11"
-rdf-types = { version = "0.12.3", features = ["meta", "contextual"] }
-xsd-types = "0.3.0"
-num = "0.4.0"
-grdf = { version = "0.14", features = ["meta"] }
+iref.workspace = true
+static-iref.workspace = true
+log.workspace = true
+derivative.workspace = true
+locspan = { workspace = true, features = ["reporting"] }
+locspan-derive.workspace = true
+codespan-reporting.workspace = true
+rdf-types = { workspace = true, features = ["meta", "contextual"] }
+xsd-types.workspace = true
+grdf = { workspace = true, features = ["meta"] }
+contextual.workspace = true
 btree-range-map = { version = "0.5", features = ["ordered-float"] }
+iref-enum = "2.1"
+num = "0.4.0"
 lazy_static = "1.4.0"
 ordered-float = "3.0.0"
-contextual = "0.1.3"
 permutator = "0.4.3"

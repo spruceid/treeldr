@@ -1,17 +1,18 @@
 [package]
 name = "treeldr-rust-prelude"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = [ "json-ld" ]
 
 [dependencies]
-grdf = "0.14"
-rdf-types = "0.12.3"
-xsd-types = "0.3"
-chrono = "0.4.19"
-iref = "2.2"
-static-iref = "2.0"
-json-ld = { version = "0.9.1-beta", optional = true }
+grdf.workspace = true
+rdf-types.workspace = true
+xsd-types.workspace = true
+iref.workspace = true
+static-iref.workspace = true
+json-ld = { workspace = true, optional = true }
+chrono.workspace = true

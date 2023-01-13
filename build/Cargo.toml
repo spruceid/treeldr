@@ -1,18 +1,19 @@
 [package]
 name = "treeldr-build"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
-treeldr = { path = "../core" }
-log = "0.4"
-rdf-types = { version = "0.12.3", features = ["meta"] }
+treeldr.workspace = true
+log.workspace = true
+rdf-types = { workspace = true, features = ["meta"] }
+iref.workspace = true
+derivative.workspace = true
+locspan = { workspace = true, features = ["reporting"] }
+locspan-derive.workspace = true
+codespan-reporting.workspace = true
+grdf = { workspace = true, features = ["meta"] }
+contextual.workspace = true
+shelves.workspace = true
 langtag = "0.3.2"
-iref = "2.2"
-shelves = "1"
-derivative = "2.2.0"
-locspan = { version = "0.7.11", features = ["reporting"] }
-locspan-derive = "0.6"
-codespan-reporting = "0.11"
-grdf = { version = "0.14", features = ["meta"] }
-contextual = "0.1.3"
