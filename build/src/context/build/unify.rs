@@ -184,8 +184,8 @@ impl<M> Context<M> {
 						color,
 						bindings: data
 							.bindings
-							.into_iter()
-							.map(|(_, v)| v.into_iter().collect())
+							.into_values()
+							.map(|v| v.into_iter().collect())
 							.collect(),
 					},
 				)
