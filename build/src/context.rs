@@ -340,14 +340,14 @@ impl<M: Clone> Context<M> {
 	pub fn require_layout_field_id(
 		&self,
 		id: Id,
-	) -> Result<treeldr::TId<treeldr::layout::Field>, RequireError<M>> {
+	) -> Result<treeldr::TId<treeldr::layout::structure::Field>, RequireError<M>> {
 		Ok(self.require(id)?.require_layout_field_id(self)?)
 	}
 
 	pub fn require_layout_variant_id(
 		&self,
 		id: Id,
-	) -> Result<treeldr::TId<treeldr::layout::Variant>, RequireError<M>> {
+	) -> Result<treeldr::TId<treeldr::layout::enumeration::Variant>, RequireError<M>> {
 		Ok(self.require(id)?.require_layout_variant_id(self)?)
 	}
 

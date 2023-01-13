@@ -170,7 +170,7 @@ impl unresolved::Bindings {
 		local_contexts: &mut unresolved::LocalContexts,
 		layout_contexts: &mut LayoutLocalContexts,
 		parent: Ref<unresolved::LocalContext>,
-		fid: TId<treeldr::layout::Field>,
+		fid: TId<treeldr::layout::structure::Field>,
 	) {
 		let f = builder.model.get(fid).unwrap();
 
@@ -487,7 +487,7 @@ impl<'a, V: IriVocabulary<Iri = IriIndex>, M> Builder<'a, V, M> {
 		}
 	}
 
-	pub fn is_type_field(&self, field_id: TId<treeldr::layout::Field>) -> bool {
+	pub fn is_type_field(&self, field_id: TId<treeldr::layout::structure::Field>) -> bool {
 		let field = self.model.get(field_id).unwrap();
 		match field.as_layout_field().property() {
 			Some(property_ref) => self.is_type_property(**property_ref),

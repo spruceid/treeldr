@@ -118,8 +118,8 @@ impl From<component::formatted::Property> for Property {
 	}
 }
 
-impl From<layout::field::Property> for Property {
-	fn from(p: layout::field::Property) -> Self {
+impl From<layout::structure::field::Property> for Property {
+	fn from(p: layout::structure::field::Property) -> Self {
 		Self::Resource(node::Property::Component(component::Property::Formatted(
 			component::formatted::Property::LayoutField(p),
 		)))

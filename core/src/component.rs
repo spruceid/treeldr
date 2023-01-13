@@ -69,13 +69,13 @@ impl<M> Definition<M> {
 		self.formatted.as_ref()
 	}
 
-	pub fn as_layout_field(&self) -> Option<&Meta<layout::field::Definition<M>, M>> {
+	pub fn as_layout_field(&self) -> Option<&Meta<layout::structure::field::Definition<M>, M>> {
 		self.formatted
 			.value()
 			.and_then(formatted::Definition::as_layout_field)
 	}
 
-	pub fn as_layout_variant(&self) -> Option<&Meta<layout::variant::Definition, M>> {
+	pub fn as_layout_variant(&self) -> Option<&Meta<layout::enumeration::variant::Definition, M>> {
 		self.formatted
 			.value()
 			.and_then(formatted::Definition::as_layout_variant)

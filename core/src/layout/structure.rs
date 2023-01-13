@@ -1,7 +1,9 @@
 use crate::TId;
 use locspan::Meta;
 
-use super::field::Field;
+pub mod field;
+
+pub use field::Field;
 
 /// Structure layout.
 #[derive(Debug, Clone)]
