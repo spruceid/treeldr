@@ -855,10 +855,14 @@ pub fn is_included_in<M>(context: &Context<M>, a: Id, b: Id) -> bool {
 	if a == b {
 		true
 	} else {
-		context.get(a).and_then(|a| {
-			context.get(b).map(|b| a.as_layout().is_included_in(context, b.as_layout()))
-		}).unwrap_or(false)
-		
+		context
+			.get(a)
+			.and_then(|a| {
+				context
+					.get(b)
+					.map(|b| a.as_layout().is_included_in(context, b.as_layout()))
+			})
+			.unwrap_or(false)
 	}
 }
 
