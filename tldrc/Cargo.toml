@@ -1,9 +1,9 @@
 [package]
 name = "tldrc"
-version = "0.1.0"
-authors = ["Spruce Systems Inc."]
 description = "Schema definition language."
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [features]
 default = ["json-schema", "json-ld-context"]
@@ -18,25 +18,25 @@ json-ld-context = [
 ]
 
 [dependencies]
-treeldr = { path = "../core" }
-treeldr-build = { path = "../build" }
-treeldr-syntax = { path = "../syntax" }
-treeldr-load = { path = "../load" }
-rdf-types = "0.12.3"
-contextual = "0.1.3"
-iref = "2.2"
-grdf = { version = "0.14", features = ["meta"] }
-log = "0.4"
-locspan = "0.7.11"
-codespan-reporting = "0.11"
+treeldr.workspace = true
+treeldr-build.workspace = true
+treeldr-syntax.workspace = true
+treeldr-load.workspace = true
+rdf-types.workspace = true
+contextual.workspace = true
+iref.workspace = true
+grdf = { workspace = true, features = ["meta"] }
+log.workspace = true
+locspan.workspace = true
+codespan-reporting.workspace = true
+clap = { workspace = true, features = ["derive"] }
+async-std = { workspace = true, features = ["attributes"] }
 stderrlog = "0.5"
-clap = { version = "3.0", features = ["derive"] }
-async-std = { version = "1.12.0", features = ["attributes"] }
 
 # Extensions.
-treeldr-json-schema = { path = "../modules/json-schema", version = "0.1", optional = true }
-serde_json = { version = "1.0.81", optional = true }
-treeldr-json-ld-context = { path = "../modules/json-ld-context", version = "0.1", optional = true }
+treeldr-json-schema = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+treeldr-json-ld-context = { workspace = true, optional = true }
 
 [[bin]]
 name = "tldrc"
