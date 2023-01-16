@@ -1,13 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{Layout, Model, TId};
+use crate::{Layout, MutableModel, TId};
 
 pub struct Usages {
 	map: HashMap<TId<Layout>, HashSet<TId<Layout>>>,
 }
 
 impl Usages {
-	pub fn new<M>(model: &Model<M>) -> Self {
+	pub fn new<M>(model: &MutableModel<M>) -> Self {
 		use std::collections::hash_map::Entry;
 		let mut map: HashMap<TId<Layout>, HashSet<TId<Layout>>> = HashMap::new();
 

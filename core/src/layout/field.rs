@@ -40,7 +40,7 @@ impl<'a, M> crate::Ref<'a, Field, M> {
 		self.as_formatted().format().as_ref().unwrap()
 	}
 
-	pub fn is_required(&self, model: &crate::Model<M>) -> bool {
+	pub fn is_required(&self, model: &crate::MutableModel<M>) -> bool {
 		let layout = model.get(**self.format()).unwrap().as_layout();
 		layout.is_required()
 	}

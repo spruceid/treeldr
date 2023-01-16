@@ -7,7 +7,7 @@ use shelves::Ref;
 use treeldr::{
 	layout::Description,
 	vocab::{self, Term, TreeLdr},
-	BlankIdIndex, IriIndex, Model, TId,
+	BlankIdIndex, IriIndex, MutableModel, TId,
 };
 use unresolved::Unresolved;
 
@@ -33,13 +33,13 @@ pub struct Options<M> {
 
 pub struct Builder<'a, V, M> {
 	vocabulary: &'a V,
-	model: &'a Model<M>,
+	model: &'a MutableModel<M>,
 	options: Options<M>,
 	reference_layouts: HashMap<TId<treeldr::Layout>, bool>,
 }
 
 impl<'a, V, M> Builder<'a, V, M> {
-	pub fn new(vocabulary: &'a V, model: &'a Model<M>, options: Options<M>) -> Self {
+	pub fn new(vocabulary: &'a V, model: &'a MutableModel<M>, options: Options<M>) -> Self {
 		Self {
 			model,
 			vocabulary,
@@ -62,7 +62,7 @@ impl IncludedLayout {
 
 	fn flatten<M>(
 		&self,
-		model: &Model<M>,
+		model: &MutableModel<M>,
 		options: &Options<M>,
 		result: &mut HashSet<IncludedLayout>,
 	) {
@@ -381,7 +381,7 @@ impl LayoutLocalContexts {
 }
 
 fn flatten_layouts<M>(
-	model: &Model<M>,
+	model: &MutableModel<M>,
 	options: &Options<M>,
 	layouts: impl IntoIterator<Item = IncludedLayout>,
 ) -> HashSet<IncludedLayout> {
@@ -508,7 +508,7 @@ impl<'a, V: IriVocabulary<Iri = IriIndex>, M> Builder<'a, V, M> {
 pub async fn generate<V, L, M>(
 	vocabulary: &mut V,
 	_loader: &mut L,
-	model: &treeldr::Model<M>,
+	model: &treeldr::MutableModel<M>,
 	options: Options<M>,
 	layouts: &[TId<treeldr::Layout>],
 ) -> Result<json_ld::syntax::context::Value<()>, Error>

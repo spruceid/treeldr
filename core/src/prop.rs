@@ -262,6 +262,10 @@ pub enum ClassBinding {
 pub type Binding = ClassBinding;
 
 impl ClassBinding {
+	pub fn domain(&self) -> Option<Type> {
+		None
+	}
+
 	pub fn property(&self) -> RdfProperty {
 		match self {
 			Self::Domain(_) => RdfProperty::Domain,
@@ -274,7 +278,7 @@ impl ClassBinding {
 		match self {
 			Self::Domain(v) => BindingValueRef::Type(*v),
 			Self::Range(v) => BindingValueRef::Type(*v),
-			Self::Required(v) => BindingValueRef::Boolean(*v),
+			Self::Required(v) => BindingValueRef::SchemaBoolean(*v),
 		}
 	}
 }

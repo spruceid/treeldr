@@ -47,7 +47,7 @@ impl<F> fmt::Display for Error<F> {
 
 fn find_layout<F: Clone>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	iri: Iri,
 ) -> Result<TId<treeldr::Layout>, Box<Error<F>>> {
 	let name = vocabulary
@@ -67,7 +67,7 @@ impl Command {
 	pub fn execute<F: Clone>(
 		self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		model: &treeldr::Model<F>,
+		model: &treeldr::MutableModel<F>,
 	) {
 		log::info!("generating JSON Schema.");
 		match self.try_execute(vocabulary, model) {
@@ -82,7 +82,7 @@ impl Command {
 	fn try_execute<F: Clone>(
 		self,
 		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		model: &treeldr::Model<F>,
+		model: &treeldr::MutableModel<F>,
 	) -> Result<(), Box<Error<F>>> {
 		// Find the layouts to generate.
 		let mut layouts = Vec::new();

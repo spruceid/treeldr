@@ -1,6 +1,6 @@
 use locspan::Meta;
 
-use crate::{Model, Multiple, TId, Type};
+use crate::{Multiple, MutableModel, TId, Type};
 
 #[derive(Debug)]
 pub struct Union<M> {
@@ -27,7 +27,7 @@ impl<M> Union<M> {
 		&self.options
 	}
 
-	pub fn is_datatype(&self, model: &Model<M>) -> bool {
+	pub fn is_datatype(&self, model: &MutableModel<M>) -> bool {
 		self.options
 			.iter()
 			.all(|Meta(ty_ref, _)| model.get(*ty_ref).unwrap().as_type().is_datatype(model))

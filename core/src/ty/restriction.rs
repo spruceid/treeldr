@@ -1,4 +1,3 @@
-use super::Properties;
 use crate::{
 	metadata::Merge, multiple, node::BindingValueRef, vocab, MetaOption, Multiple, TId, Type,
 };
@@ -76,7 +75,6 @@ impl Cardinality {
 pub struct Definition<M> {
 	property: Meta<TId<crate::Property>, M>,
 	restriction: Meta<Restriction, M>,
-	properties: Properties<M>,
 }
 
 impl<M> Definition<M> {
@@ -87,31 +85,18 @@ impl<M> Definition<M> {
 	where
 		M: Clone + Merge,
 	{
-		let mut properties = Properties::none();
-
-		properties.insert(
-			prop,
-			Some(Restrictions::singleton(restriction.clone())),
-			causes.clone(),
-		);
-
 		Self {
 			property: Meta(prop, causes),
 			restriction,
-			properties,
 		}
-	}
-
-	pub fn properties(&self) -> &Properties<M> {
-		&self.properties
 	}
 
 	pub fn property(&self) -> &Meta<TId<crate::Property>, M> {
 		&self.property
 	}
 
-	pub fn restrictions(&self) -> &Restrictions<M> {
-		self.properties.included().next().unwrap().restrictions()
+	pub fn restriction(&self) -> &Meta<Restriction, M> {
+		&self.restriction
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
@@ -122,7 +107,7 @@ impl<M> Definition<M> {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Contradiction;
 
 #[derive(Debug, Derivative, Clone)]

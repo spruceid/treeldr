@@ -150,6 +150,13 @@ pub enum Binding {
 }
 
 impl Binding {
+	pub fn domain(&self) -> Option<Type> {
+		match self {
+			Self::LayoutField(_) => Some(Type::LayoutField),
+			_ => None,
+		}
+	}
+
 	pub fn property(&self) -> Property {
 		match self {
 			Self::Format(_) => Property::Format,

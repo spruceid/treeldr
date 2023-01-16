@@ -1,22 +1,22 @@
-use crate::{Layout, Model, TId};
+use crate::{Layout, MutableModel, TId};
 
 use std::collections::HashMap;
 
 pub struct StronglyConnectedLayouts<'l, M> {
-	model: &'l Model<M>,
+	model: &'l MutableModel<M>,
 	map: HashMap<TId<Layout>, u32>,
 	component_count: u32,
 }
 
 impl<'l, M> StronglyConnectedLayouts<'l, M> {
 	#[inline(always)]
-	pub fn new(model: &'l Model<M>) -> Self {
+	pub fn new(model: &'l MutableModel<M>) -> Self {
 		Self::from_entry_points(model, model.layouts().map(|(r, _)| r))
 	}
 
 	#[inline(always)]
 	pub fn from_entry_points<I: IntoIterator<Item = TId<Layout>>>(
-		model: &'l Model<M>,
+		model: &'l MutableModel<M>,
 		entry_points: I,
 	) -> Self {
 		Self::from_entry_points_with_filter(model, entry_points, |_, _| true)
@@ -24,14 +24,14 @@ impl<'l, M> StronglyConnectedLayouts<'l, M> {
 
 	#[inline(always)]
 	pub fn with_filter(
-		model: &'l Model<M>,
+		model: &'l MutableModel<M>,
 		filter: impl Clone + Fn(TId<Layout>, TId<Layout>) -> bool,
 	) -> Self {
 		Self::from_entry_points_with_filter(model, model.layouts().map(|(r, _)| r), filter)
 	}
 
 	pub fn from_entry_points_with_filter<I: IntoIterator<Item = TId<Layout>>>(
-		model: &'l Model<M>,
+		model: &'l MutableModel<M>,
 		entry_points: I,
 		filter: impl Clone + Fn(TId<Layout>, TId<Layout>) -> bool,
 	) -> Self {
@@ -75,13 +75,13 @@ impl<'l, M> StronglyConnectedLayouts<'l, M> {
 	}
 
 	#[inline(always)]
-	pub fn is_recursive(&self, model: &Model<M>, layout_ref: TId<Layout>) -> Option<bool> {
+	pub fn is_recursive(&self, model: &MutableModel<M>, layout_ref: TId<Layout>) -> Option<bool> {
 		self.is_recursive_with_filter(model, layout_ref, |_| true)
 	}
 
 	pub fn is_recursive_with_filter(
 		&self,
-		model: &Model<M>,
+		model: &MutableModel<M>,
 		layout_ref: TId<Layout>,
 		filter: impl Fn(TId<Layout>) -> bool,
 	) -> Option<bool> {
@@ -105,7 +105,7 @@ struct Data {
 }
 
 fn strong_connect<'l, F>(
-	model: &Model<F>,
+	model: &MutableModel<F>,
 	components: &mut StronglyConnectedLayouts<'l, F>,
 	map: &mut HashMap<TId<Layout>, Data>,
 	stack: &mut Vec<TId<Layout>>,

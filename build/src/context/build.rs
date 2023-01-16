@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use locspan::MapLocErr;
 use rdf_types::{Generator, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, IriIndex, Model};
+use treeldr::{metadata::Merge, BlankIdIndex, IriIndex, Model, MutableModel};
 
-use crate::{Context, Error, ty::ClassHierarchy, error};
+use crate::{error, ty::ClassHierarchy, Context, Error};
 
 mod assign_default_layouts;
 mod assign_default_names;
@@ -41,11 +41,8 @@ impl<M: Clone> Context<M> {
 		self.simplify_composite_types_and_layouts();
 		self.remove_unused_nodes();
 
-		log::debug!("type hierarchy analysis");
+		log::debug!("class hierarchy analysis...");
 		let class_hierarchy = ClassHierarchy::new(self).map_loc_err(error::Description::from)?;
-		if let Some(cycle) = self.find_type_cycle(&class_hierarchy) {
-			return Err(cycle.map(error::Description::from))
-		}
 		class_hierarchy.apply(self);
 
 		log::debug!("assigning default layouts...");
@@ -65,7 +62,12 @@ impl<M: Clone> Context<M> {
 			}
 		}
 
+		let mutable_model = MutableModel::from_parts(nodes);
+
+		log::debug!("post build analysis...");
+		let model = Model::new(mutable_model).expect("property restriction contradiction");
+
 		log::debug!("done.");
-		Ok(Model::from_parts(nodes))
+		Ok(model)
 	}
 }

@@ -1,9 +1,12 @@
+use std::collections::{HashMap, HashSet};
+
 use crate::{
 	component,
+	metadata::Merge,
 	node::{self, BindingValueRef},
 	prop,
-	vocab::{self, Term, Rdfs},
-	Id, IriIndex, Model, Multiple, Ref, ResourceType, TId,
+	vocab::{self, Rdfs, Term},
+	BlankIdIndex, Id, IriIndex, Multiple, MutableModel, Ref, ResourceType, TId,
 };
 
 pub mod data;
@@ -13,12 +16,15 @@ pub mod properties;
 pub mod restriction;
 mod r#union;
 
+use contextual::DisplayWithContext;
 pub use data::DataType;
 use derivative::Derivative;
 pub use intersection::Intersection;
 use locspan::Meta;
 pub use normal::Normal;
+use once_cell::unsync::OnceCell;
 pub use properties::{Properties, PseudoProperty};
+use rdf_types::Vocabulary;
 pub use restriction::{Restriction, Restrictions};
 pub use union::Union;
 
@@ -26,8 +32,12 @@ pub use union::Union;
 pub struct OtherTypeId(TId<Type>);
 
 impl OtherTypeId {
-	fn id(&self) -> TId<Type> {
+	pub fn id(&self) -> TId<Type> {
 		self.0
+	}
+
+	pub fn raw_id(&self) -> Id {
+		self.0.id()
 	}
 }
 
@@ -40,7 +50,9 @@ pub enum Type {
 impl Type {
 	pub fn id(&self) -> TId<Type> {
 		match self {
-			Self::Resource(None) => TId::new(Id::Iri(IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Resource)))),
+			Self::Resource(None) => {
+				TId::new(Id::Iri(IriIndex::Iri(Term::Rdfs(vocab::Rdfs::Resource))))
+			}
 			Self::Resource(Some(ty)) => TId::new(Id::Iri(IriIndex::Iri(ty.term()))),
 			Self::Other(ty) => ty.id(),
 		}
@@ -142,6 +154,18 @@ impl From<TId<Type>> for Type {
 	}
 }
 
+impl<C: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<C> for OtherTypeId {
+	fn fmt_with(&self, context: &C, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		self.raw_id().fmt_with(context, f)
+	}
+}
+
+impl<C: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<C> for Type {
+	fn fmt_with(&self, context: &C, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		self.raw_id().fmt_with(context, f)
+	}
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum SubClass {
 	DataType,
@@ -192,13 +216,55 @@ impl<M> Description<M> {
 		}
 	}
 
-	pub fn is_datatype(&self, model: &Model<M>) -> bool {
+	pub fn is_datatype(&self, model: &MutableModel<M>) -> bool {
 		match self {
 			Self::Data(_) => true,
 			Self::Union(u) => u.is_datatype(model),
 			Self::Intersection(i) => i.is_datatype(model),
 			_ => false,
 		}
+	}
+
+	pub fn dependencies(&self) -> Multiple<TId<crate::Type>, M>
+	where
+		M: Clone,
+	{
+		let mut result = Multiple::default();
+
+		if let Self::Intersection(i) = self {
+			for id in i.types() {
+				result.insert_unique(id.cloned());
+			}
+		}
+
+		result
+	}
+
+	pub(crate) fn compute_properties(
+		&self,
+		class_properties: &HashMap<TId<crate::Type>, Properties<M>>,
+		result: &mut Properties<M>,
+	) -> Result<(), restriction::Contradiction>
+	where
+		M: Clone + Merge,
+	{
+		match self {
+			Self::Intersection(i) => {
+				*result = Properties::all();
+
+				for Meta(id, _) in i.types() {
+					result.intersect_with(class_properties.get(id).unwrap())?;
+				}
+			}
+			Self::Restriction(r) => {
+				*result = Properties::all();
+
+				result.restrict(*r.property().value(), r.restriction().clone())?;
+			}
+			_ => (),
+		}
+
+		Ok(())
 	}
 }
 
@@ -221,7 +287,7 @@ impl<M> Definition<M> {
 		&self.desc
 	}
 
-	pub fn is_datatype(&self, model: &Model<M>) -> bool {
+	pub fn is_datatype(&self, model: &MutableModel<M>) -> bool {
 		self.desc.is_datatype(model)
 	}
 
@@ -237,6 +303,34 @@ impl<M> Definition<M> {
 			Description::Intersection(i) => Some(Meta(i.types(), self.desc.metadata())),
 			_ => None,
 		}
+	}
+
+	pub fn sub_class_of(&self) -> Option<&Multiple<TId<crate::Type>, M>> {
+		match self.desc.value() {
+			Description::Normal(n) => Some(n.sub_class_of()),
+			_ => None,
+		}
+	}
+
+	pub fn collect_all_superclasses(
+		&self,
+		model: &MutableModel<M>,
+		result: &mut HashSet<TId<crate::Type>>,
+	) {
+		if let Some(super_classes) = self.sub_class_of() {
+			for Meta(&id, _) in super_classes {
+				if result.insert(id) {
+					let ty = model.get(id).unwrap();
+					ty.as_type().collect_all_superclasses(model, result);
+				}
+			}
+		}
+	}
+
+	pub fn all_superclasses(&self, model: &MutableModel<M>) -> HashSet<TId<crate::Type>> {
+		let mut result = HashSet::new();
+		self.collect_all_superclasses(model, &mut result);
+		result
 	}
 
 	pub fn class_bindings(&self) -> ClassBindings<M> {
@@ -267,6 +361,24 @@ impl<M> Definition<M> {
 			restriction: self.restriction_bindings().unwrap_or_default(),
 		}
 	}
+
+	pub fn dependencies(&self) -> Multiple<TId<crate::Type>, M>
+	where
+		M: Clone,
+	{
+		self.desc.dependencies()
+	}
+
+	pub(crate) fn compute_properties(
+		&self,
+		class_properties: &HashMap<TId<crate::Type>, Properties<M>>,
+		result: &mut Properties<M>,
+	) -> Result<(), restriction::Contradiction>
+	where
+		M: Clone + Merge,
+	{
+		self.desc.compute_properties(class_properties, result)
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -275,7 +387,7 @@ pub enum Property {
 	Restriction(restriction::Property),
 	SubClassOf,
 	UnionOf,
-	IntersectionOf
+	IntersectionOf,
 }
 
 impl Property {
@@ -286,7 +398,7 @@ impl Property {
 			Self::Restriction(p) => p.term(),
 			Self::SubClassOf => Term::Rdfs(Rdfs::SubClassOf),
 			Self::UnionOf => Term::Owl(Owl::UnionOf),
-			Self::IntersectionOf => Term::Owl(Owl::IntersectionOf)
+			Self::IntersectionOf => Term::Owl(Owl::IntersectionOf),
 		}
 	}
 
@@ -361,6 +473,14 @@ pub enum BindingRef<'a, M> {
 }
 
 impl<'a, M> BindingRef<'a, M> {
+	pub fn domain(&self) -> Option<SubClass> {
+		match self {
+			Self::Datatype(_) => Some(SubClass::DataType),
+			Self::Restriction(_) => Some(SubClass::Restriction),
+			_ => None,
+		}
+	}
+
 	pub fn property(&self) -> Property {
 		match self {
 			Self::UnionOf(_) => Property::UnionOf,
@@ -405,5 +525,170 @@ impl<'a, M> Iterator for Bindings<'a, M> {
 							.map(|m| m.map(BindingRef::Restriction))
 					})
 			})
+	}
+}
+
+pub struct Hierarchy<M> {
+	sub_classes: HashMap<TId<crate::Type>, Multiple<TId<crate::Type>, M>>,
+	depths: OnceCell<HashMap<TId<crate::Type>, usize>>,
+}
+
+impl<M> Hierarchy<M> {
+	pub fn new(model: &MutableModel<M>) -> Self
+	where
+		M: Clone,
+	{
+		let mut result: HashMap<TId<crate::Type>, Multiple<TId<crate::Type>, M>> = HashMap::new();
+
+		for (id, node) in model.nodes() {
+			if let Some(ty) = node.as_type() {
+				result.insert(TId::new(id), Multiple::default());
+
+				if let Some(super_classes) = ty.sub_class_of() {
+					for Meta(s, meta) in super_classes {
+						result
+							.entry(*s)
+							.or_default()
+							.insert_unique(Meta(TId::new(id), meta.clone()));
+					}
+				}
+			}
+		}
+
+		Self {
+			sub_classes: result,
+			depths: OnceCell::new(),
+		}
+	}
+
+	/// Assigns an index to each declared type where sub classes has a greater index than their super classes.
+	fn compute_type_depths(&self) -> HashMap<TId<crate::Type>, usize> {
+		let mut stack: Vec<(TId<crate::Type>, usize)> =
+			self.sub_classes.keys().copied().map(|id| (id, 0)).collect();
+
+		let mut result = HashMap::new();
+
+		while let Some((ty, depth)) = stack.pop() {
+			if !result.contains_key(&ty) || result[&ty] < depth {
+				result.insert(ty, depth);
+
+				for Meta(&sub_class, _) in &self.sub_classes[&ty] {
+					stack.push((sub_class, depth + 1));
+				}
+			}
+		}
+
+		result
+	}
+
+	/// Returns the "depth" of the given type.
+	///
+	/// The depth of a type is always grater that the depth of its super classes.
+	pub fn depth(&self, ty: TId<crate::Type>) -> Option<usize> {
+		self.depths
+			.get_or_init(|| self.compute_type_depths())
+			.get(&ty)
+			.copied()
+	}
+}
+
+/// Class dependency analysis.
+///
+/// A class is dependent from another class if it is required to compute
+/// its set of properties.
+///
+/// The intersection `A & B` depends on `A` and `B`.
+pub struct Dependencies<M> {
+	map: HashMap<TId<crate::Type>, Multiple<TId<crate::Type>, M>>,
+	depths: OnceCell<HashMap<TId<crate::Type>, usize>>,
+}
+
+impl<M> Dependencies<M> {
+	pub fn new(model: &MutableModel<M>) -> Self
+	where
+		M: Clone,
+	{
+		let mut result: HashMap<TId<crate::Type>, Multiple<TId<crate::Type>, M>> = HashMap::new();
+
+		for (id, node) in model.nodes() {
+			if let Some(ty) = node.as_type() {
+				result.insert(TId::new(id), Multiple::default());
+
+				for Meta(d, meta) in ty.dependencies() {
+					result
+						.entry(d)
+						.or_default()
+						.insert_unique(Meta(TId::new(id), meta.clone()));
+				}
+			}
+		}
+
+		Self {
+			map: result,
+			depths: OnceCell::new(),
+		}
+	}
+
+	/// Assigns an index to each declared type where dependent classes have a greater index than their depended classes.
+	fn compute_type_depths(&self) -> HashMap<TId<crate::Type>, usize> {
+		let mut stack: Vec<(TId<crate::Type>, usize)> =
+			self.map.keys().copied().map(|id| (id, 0)).collect();
+
+		let mut result = HashMap::new();
+
+		while let Some((ty, depth)) = stack.pop() {
+			if !result.contains_key(&ty) || result[&ty] < depth {
+				result.insert(ty, depth);
+
+				for Meta(&sub_class, _) in &self.map[&ty] {
+					stack.push((sub_class, depth + 1));
+				}
+			}
+		}
+
+		result
+	}
+
+	/// Returns the "depth" of the given type.
+	///
+	/// The depth of a type is always grater that the depth of its dependencies.
+	pub fn depth(&self, ty: TId<crate::Type>) -> Option<usize> {
+		self.depths
+			.get_or_init(|| self.compute_type_depths())
+			.get(&ty)
+			.copied()
+	}
+
+	pub fn compute_class_properties(
+		&self,
+		model: &MutableModel<M>,
+	) -> Result<HashMap<TId<Type>, Properties<M>>, restriction::Contradiction>
+	where
+		M: Clone + Merge,
+	{
+		let mut classes: Vec<_> = self.map.keys().copied().collect();
+		classes.sort_unstable_by_key(|id| self.depth(*id));
+
+		let mut direct_properties: HashMap<TId<Type>, Properties<M>> = HashMap::new();
+
+		for (prop_id, prop) in model.properties() {
+			for Meta(&domain, meta) in prop.as_property().domain() {
+				direct_properties
+					.entry(domain)
+					.or_default()
+					.insert(prop_id, None, meta.clone());
+			}
+		}
+
+		let mut result: HashMap<TId<Type>, Properties<M>> = HashMap::new();
+
+		for id in classes.into_iter().rev() {
+			let ty = model.get(id).unwrap();
+			let mut properties = direct_properties.remove(&id).unwrap_or_default();
+			ty.as_type().compute_properties(&result, &mut properties)?;
+			result.insert(id, properties);
+		}
+
+		Ok(result)
 	}
 }
