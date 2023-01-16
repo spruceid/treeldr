@@ -111,7 +111,7 @@ impl Test {
 macro_rules! positive {
 	{ $($id:ident),* } => {
 		$(
-			#[test]
+			#[test_log::test]
 			fn $id () {
 				Test::Positive {
 					input: concat!("tests/build/", stringify!($id), "-in.tldr"),
@@ -125,7 +125,7 @@ macro_rules! positive {
 macro_rules! negative {
 	{ $($id:ident),* } => {
 		$(
-			#[test]
+			#[test_log::test]
 			#[should_panic]
 			fn $id () {
 				Test::Negative {

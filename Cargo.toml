@@ -54,3 +54,6 @@ async-std = "1.12.0"
 nquads-syntax = "0.9"
 
 serde_json = "1.0.81"
+
+env_logger = "0.10.0"
+test-log = "0.2.11"
