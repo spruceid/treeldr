@@ -1,7 +1,7 @@
 use crate::{
 	component, doc, error, layout, list, multiple, prop, ty,
 	vocab::{self, Term},
-	Documentation, Error, Id, MetaOption, Model, Multiple, Name, ResourceType, TId,
+	Documentation, Error, Id, MetaOption, Multiple, MutableModel, Name, ResourceType, TId,
 };
 use locspan::Meta;
 
@@ -93,7 +93,7 @@ impl<M> Definition<M> {
 		self.ty.is_some()
 	}
 
-	pub fn is_datatype(&self, model: &Model<M>) -> bool {
+	pub fn is_datatype(&self, model: &MutableModel<M>) -> bool {
 		self.ty
 			.value()
 			.map(|v| v.is_datatype(model))
@@ -168,8 +168,10 @@ impl<M> Definition<M> {
 		self.as_layout().ok_or_else(|| {
 			error::NodeInvalidType {
 				id: self.data.id,
-				expected: crate::Type::Resource(Some(Type::Component(Some(component::Type::Layout))))
-					.id(),
+				expected: crate::Type::Resource(Some(Type::Component(Some(
+					component::Type::Layout,
+				))))
+				.id(),
 				found: self.type_().clone(),
 			}
 			.into()
@@ -353,7 +355,7 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 }
 
 pub enum BindingValueRef<'a, M> {
-	Boolean(bool),
+	SchemaBoolean(bool),
 	U64(u64),
 	String(&'a str),
 	Name(&'a Name),
@@ -429,6 +431,15 @@ pub enum BindingRef<'a, M> {
 }
 
 impl<'a, M> BindingRef<'a, M> {
+	pub fn domain(&self) -> Option<Type> {
+		match self {
+			Self::Class(b) => Some(Type::Class(b.domain())),
+			Self::Property(b) => Some(Type::Property(b.domain())),
+			Self::Component(b) => Some(Type::Component(b.domain())),
+			_ => None,
+		}
+	}
+
 	pub fn resource_property(&self) -> Property {
 		match self {
 			Self::Type(_) => Property::Type,

@@ -25,7 +25,7 @@ impl<M> PropertyData<M> {
 /// Type properties.
 #[derive(Debug, Clone)]
 pub struct Properties<M> {
-	/// Included properties.
+	/// Included properties, with their eventual restrictions.
 	included: HashMap<TId<Property>, PropertyData<M>>,
 
 	/// Excluded properties.

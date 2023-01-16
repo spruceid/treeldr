@@ -5,7 +5,7 @@ use crate::{
 	node::BindingValueRef,
 	ty,
 	vocab::{self, StrippedObject, StrippedQuad, Term, Xsd},
-	BlankIdIndex, Id, IriIndex, Model,
+	BlankIdIndex, Id, IriIndex, MutableModel,
 };
 use locspan::Meta;
 use rdf_types::{Generator, Literal, Object, Quad, Vocabulary};
@@ -95,7 +95,7 @@ pub trait MapIntoRdf: Sized + DoubleEndedIterator {
 	) -> Self::Target;
 }
 
-impl<M> ToRdf for Model<M> {
+impl<M> ToRdf for MutableModel<M> {
 	type Target = ();
 
 	fn to_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -154,7 +154,7 @@ impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 		options: Options,
 	) -> StrippedObject {
 		match self {
-			Self::Boolean(b) => {
+			Self::SchemaBoolean(b) => {
 				let term = if b {
 					Term::Schema(crate::vocab::Schema::True)
 				} else {

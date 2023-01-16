@@ -189,6 +189,14 @@ pub enum BindingRef<'a, M> {
 }
 
 impl<'a, M> BindingRef<'a, M> {
+	pub fn domain(&self) -> Option<Type> {
+		match self {
+			Self::Layout(_) => Some(Type::Layout),
+			Self::Formatted(b) => Some(Type::Formatted(b.domain())),
+			_ => None,
+		}
+	}
+
 	pub fn property(&self) -> Property {
 		match self {
 			Self::Name(_) => Property::Name,

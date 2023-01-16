@@ -1,4 +1,4 @@
-use crate::{ty::restriction, Model, Multiple, TId, Type};
+use crate::{ty::restriction, Multiple, MutableModel, TId, Type};
 use locspan::Meta;
 
 /// Intersection type.
@@ -23,7 +23,7 @@ impl<M> Intersection<M> {
 		&self.types
 	}
 
-	pub fn is_datatype(&self, model: &Model<M>) -> bool {
+	pub fn is_datatype(&self, model: &MutableModel<M>) -> bool {
 		self.types
 			.iter()
 			.any(|Meta(ty_ref, _)| model.get(*ty_ref).unwrap().as_type().is_datatype(model))

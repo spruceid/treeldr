@@ -1,4 +1,6 @@
 use derivative::Derivative;
+use metadata::Merge;
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
@@ -38,14 +40,79 @@ pub use value::Value;
 pub use vocab::{BlankIdIndex, Id, IriIndex};
 
 /// TreeLDR model.
+pub struct Model<M> {
+	/// Inner mutable model.
+	inner: MutableModel<M>,
+
+	/// Type hierarchy.
+	type_hierarchy: ty::Hierarchy<M>,
+
+	/// Type dependencies.
+	type_dependencies: ty::Dependencies<M>,
+
+	/// Type properties.
+	type_properties: HashMap<TId<Type>, ty::Properties<M>>,
+}
+
+impl<M> Model<M> {
+	pub fn new(model: MutableModel<M>) -> Result<Self, ty::restriction::Contradiction>
+	where
+		M: Clone + Merge,
+	{
+		let type_hierarchy = ty::Hierarchy::new(&model);
+		let type_dependencies = ty::Dependencies::new(&model);
+		let type_properties = type_dependencies.compute_class_properties(&model)?;
+
+		Ok(Self {
+			inner: model,
+			type_hierarchy,
+			type_dependencies,
+			type_properties,
+		})
+	}
+
+	pub fn type_hierarchy(&self) -> &ty::Hierarchy<M> {
+		&self.type_hierarchy
+	}
+
+	pub fn type_dependencies(&self) -> &ty::Dependencies<M> {
+		&self.type_dependencies
+	}
+
+	pub fn type_properties(&self, ty: TId<Type>) -> Option<&ty::Properties<M>> {
+		self.type_properties.get(&ty)
+	}
+}
+
+impl<M> Deref for Model<M> {
+	type Target = MutableModel<M>;
+
+	fn deref(&self) -> &Self::Target {
+		&self.inner
+	}
+}
+
+impl<M> Borrow<MutableModel<M>> for Model<M> {
+	fn borrow(&self) -> &MutableModel<M> {
+		&self.inner
+	}
+}
+
+impl<M> AsRef<MutableModel<M>> for Model<M> {
+	fn as_ref(&self) -> &MutableModel<M> {
+		&self.inner
+	}
+}
+
+/// TreeLDR mutable model.
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct Model<M> {
+pub struct MutableModel<M> {
 	/// Nodes.
 	nodes: BTreeMap<Id, node::Definition<M>>,
 }
 
-impl<M> Model<M> {
+impl<M> MutableModel<M> {
 	/// Creates a new empty context.
 	pub fn new() -> Self {
 		Self::default()
@@ -110,6 +177,26 @@ impl<M> Model<M> {
 		self.nodes.iter_mut().map(|(i, n)| (*i, n))
 	}
 
+	pub fn classes(&self) -> impl Iterator<Item = (TId<Type>, Ref<Type, M>)> {
+		self.nodes.iter().filter_map(|(i, n)| {
+			if n.is_type() {
+				Some((TId(*i, PhantomData), Ref(n, PhantomData)))
+			} else {
+				None
+			}
+		})
+	}
+
+	pub fn properties(&self) -> impl Iterator<Item = (TId<Property>, Ref<Property, M>)> {
+		self.nodes.iter().filter_map(|(i, n)| {
+			if n.is_property() {
+				Some((TId(*i, PhantomData), Ref(n, PhantomData)))
+			} else {
+				None
+			}
+		})
+	}
+
 	pub fn layouts(&self) -> impl Iterator<Item = (TId<Layout>, Ref<Layout, M>)> {
 		self.nodes.iter().filter_map(|(i, n)| {
 			if n.is_layout() {
@@ -154,14 +241,14 @@ impl<M> Model<M> {
 }
 
 pub struct WithModel<'m, 't, T: ?Sized, F> {
-	model: &'m Model<F>,
+	model: &'m MutableModel<F>,
 	value: &'t T,
 }
 
 pub trait DisplayWithModel<F> {
-	fn fmt(&self, model: &Model<F>, f: &mut fmt::Formatter) -> fmt::Result;
+	fn fmt(&self, model: &MutableModel<F>, f: &mut fmt::Formatter) -> fmt::Result;
 
-	fn with_model<'m>(&self, model: &'m Model<F>) -> WithModel<'m, '_, Self, F> {
+	fn with_model<'m>(&self, model: &'m MutableModel<F>) -> WithModel<'m, '_, Self, F> {
 		WithModel { model, value: self }
 	}
 }

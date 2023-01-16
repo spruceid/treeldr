@@ -155,13 +155,18 @@ impl<M> Context<M> {
 		self.declare_with(id, Type::LayoutRestriction, metadata)
 	}
 
-	pub(crate) fn is_subclass_of_with(&self, visited: &mut HashSet<crate::Type>, a: crate::Type, b: crate::Type) -> bool {
+	pub(crate) fn is_subclass_of_with(
+		&self,
+		visited: &mut HashSet<crate::Type>,
+		a: crate::Type,
+		b: crate::Type,
+	) -> bool {
 		if visited.insert(a) {
 			match self.get(a.id().id()) {
-				Some(ty) => {
-					ty.as_type().is_subclass_of_with(self, visited, ty.as_resource(), b)
-				}
-				None => false
+				Some(ty) => ty
+					.as_type()
+					.is_subclass_of_with(self, visited, ty.as_resource(), b),
+				None => false,
 			}
 		} else {
 			false

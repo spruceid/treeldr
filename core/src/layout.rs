@@ -234,7 +234,10 @@ impl<M> Definition<M> {
 		self.desc.is_required()
 	}
 
-	pub fn composing_layouts<'a>(&'a self, model: &'a crate::Model<M>) -> ComposingLayouts<'a, M> {
+	pub fn composing_layouts<'a>(
+		&'a self,
+		model: &'a crate::MutableModel<M>,
+	) -> ComposingLayouts<'a, M> {
 		match self.description().value() {
 			Description::Never => ComposingLayouts::None,
 			Description::Struct(s) => ComposingLayouts::Fields(model, s.fields().iter()),
@@ -263,7 +266,7 @@ impl<M> Definition<M> {
 	pub fn can_be_reference(
 		&self,
 		map: &mut HashMap<TId<Layout>, bool>,
-		model: &crate::Model<M>,
+		model: &crate::MutableModel<M>,
 	) -> bool {
 		match self.description().value() {
 			Description::Reference(_) => true,
@@ -299,7 +302,7 @@ impl<M> Definition<M> {
 
 pub enum ComposingLayouts<'a, M> {
 	Fields(
-		&'a crate::Model<M>,
+		&'a crate::MutableModel<M>,
 		std::slice::Iter<'a, Meta<TId<Field>, M>>,
 	),
 	Enum(enumeration::ComposingLayouts<'a, M>),

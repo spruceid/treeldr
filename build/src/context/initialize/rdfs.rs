@@ -65,6 +65,12 @@ impl<M> Context<M> {
 		);
 
 		// rdfs:DataType
-		self.declare_type(Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Datatype))), metadata);
+		self.declare_type(
+			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Datatype))),
+			metadata.clone(),
+		);
+
+		// rdfs:Literal
+		self.declare_type(Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Literal))), metadata);
 	}
 }

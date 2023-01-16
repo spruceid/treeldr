@@ -110,6 +110,5 @@ errors! {
 	regexp_invalid::RegExpInvalid,
 	name_invalid::NameInvalid,
 	literal_unexpected::LiteralUnexpected<M>,
-	subclass_cycle::SubClassCycle<M>,
-	type_cycle::TypeCycle<M>
+	subclass_cycle::SubClassCycle<M>
 }

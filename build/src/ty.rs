@@ -1,11 +1,11 @@
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
-	resource::{BindingValueRef, self},
-	single, Error, ObjectAsRequiredId, Single, Context,
+	resource::{self, BindingValueRef},
+	single, Context, Error, ObjectAsRequiredId, Single,
 };
 use locspan::Meta;
 use std::collections::{HashMap, HashSet};
-use treeldr::{metadata::Merge, Id, Multiple, multiple, utils::SccGraph};
+use treeldr::{metadata::Merge, multiple, utils::SccGraph, Id, Multiple};
 
 pub mod datatype;
 pub mod restriction;
@@ -101,16 +101,20 @@ impl<M> Definition<M> {
 		context: &Context<M>,
 		visited: &mut HashSet<crate::Type>,
 		as_resource: &resource::Data<M>,
-		other: crate::Type
+		other: crate::Type,
 	) -> bool {
 		match other {
-			crate::Type::Resource(None) if as_resource.id != crate::Type::Resource(None).raw_id() => return true,
+			crate::Type::Resource(None)
+				if as_resource.id != crate::Type::Resource(None).raw_id() =>
+			{
+				return true
+			}
 			crate::Type::Resource(Some(resource::Type::Literal)) => {
 				if as_resource.has_type(context, SubClass::DataType) {
-					return true
+					return true;
 				}
 			}
-			_ => ()
+			_ => (),
 		}
 
 		if self.data.sub_class_of.contains(&other) {
@@ -118,7 +122,7 @@ impl<M> Definition<M> {
 		} else {
 			for Meta(super_class, _) in &self.data.sub_class_of {
 				if context.is_subclass_of_with(visited, *super_class, other) {
-					return true
+					return true;
 				}
 			}
 
@@ -132,12 +136,21 @@ impl<M> Definition<M> {
 		as_resource: &'a resource::Data<M>,
 	) -> SuperClasses<'a, M> {
 		SuperClasses {
-			resource: if as_resource.id == crate::Type::Resource(None).raw_id() || self.data.sub_class_of.contains(&crate::Type::Resource(None)) {
+			resource: if as_resource.id == crate::Type::Resource(None).raw_id()
+				|| self
+					.data
+					.sub_class_of
+					.contains(&crate::Type::Resource(None))
+			{
 				None
 			} else {
 				Some(&as_resource.metadata)
 			},
-			literal: if self.data.sub_class_of.contains(&crate::Type::Resource(Some(resource::Type::Literal))) {
+			literal: if self
+				.data
+				.sub_class_of
+				.contains(&crate::Type::Resource(Some(resource::Type::Literal)))
+			{
 				None
 			} else {
 				as_resource.type_metadata(context, SubClass::DataType)
@@ -146,33 +159,58 @@ impl<M> Definition<M> {
 		}
 	}
 
+	fn find_sub_class_cycle_from(
+		&self,
+		context: &Context<M>,
+		as_resource: &resource::Data<M>,
+		component: &[Id],
+		visited: &HashSet<Id>,
+	) -> Option<(Vec<Meta<Id, M>>, M)>
+	where
+		M: Clone,
+	{
+		for Meta(ty, meta) in self.super_classes(context, as_resource) {
+			let id = ty.raw_id();
+			if id == component[0] {
+				return Some((Vec::new(), meta.clone()));
+			}
+
+			if !visited.contains(&id) && component.contains(&id) {
+				let mut visited = visited.clone();
+				visited.insert(id);
+				let node = context.get(id).unwrap();
+				if let Some((mut path, end)) = node.as_type().find_sub_class_cycle_from(
+					context,
+					node.as_resource(),
+					component,
+					&visited,
+				) {
+					path.push(Meta(id, meta.clone()));
+					return Some((path, end));
+				}
+			}
+		}
+
+		None
+	}
+
 	/// Find a path to the first member of the given super-class `component`.
-	/// 
+	///
 	/// This computes a path from this node to the first member of `component`
 	/// by only going through super classes contained in `component`.
-	/// 
+	///
 	/// The path is given in reverse order (for performance reasons).
 	/// The last segment contains only the metadata.
 	pub fn find_sub_class_cycle(
 		&self,
 		context: &Context<M>,
 		as_resource: &resource::Data<M>,
-		component: &[Id]
-	) -> Option<(Vec<Meta<Id, M>>, M)> where M: Clone {
-		for Meta(ty, meta) in self.super_classes(context, as_resource) {
-			let id = ty.raw_id();
-			if id == component[0] {
-				return Some((Vec::new(), meta.clone()))
-			} else if component.contains(&id) {
-				let node = context.get(id).unwrap();
-				if let Some((mut path, end)) = node.as_type().find_sub_class_cycle(context, node.as_resource(), component) {
-					path.push(Meta(id, meta.clone()));
-					return Some((path, end))
-				}
-			}
-		}
-
-		None
+		component: &[Id],
+	) -> Option<(Vec<Meta<Id, M>>, M)>
+	where
+		M: Clone,
+	{
+		self.find_sub_class_cycle_from(context, as_resource, component, &HashSet::new())
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
@@ -187,7 +225,7 @@ impl<M> Definition<M> {
 pub struct SuperClasses<'a, M> {
 	resource: Option<&'a M>,
 	literal: Option<&'a M>,
-	sub_class_of: multiple::Iter<'a, crate::Type, M>
+	sub_class_of: multiple::Iter<'a, crate::Type, M>,
 }
 
 impl<'a, M> Iterator for SuperClasses<'a, M> {
@@ -201,11 +239,7 @@ impl<'a, M> Iterator for SuperClasses<'a, M> {
 				self.literal
 					.take()
 					.map(|meta| Meta(crate::Type::Resource(Some(resource::Type::Literal)), meta))
-					.or_else(|| {
-						self.sub_class_of
-							.next()
-							.map(Meta::into_cloned_value)
-					})
+					.or_else(|| self.sub_class_of.next().map(Meta::into_cloned_value))
 			})
 	}
 }
@@ -273,7 +307,9 @@ impl<M> Definition<M> {
 
 		let mut sub_class_of = Multiple::default();
 		for Meta(ty, m) in &self.data.sub_class_of {
-			let id = context.require_type_id(ty.raw_id()).map_err(|e| e.at_node_property(as_resource.id, Property::SubClassOf, m.clone()))?;
+			let id = context
+				.require_type_id(ty.raw_id())
+				.map_err(|e| e.at_node_property(as_resource.id, Property::SubClassOf, m.clone()))?;
 			sub_class_of.insert(Meta(id, m.clone()));
 		}
 
@@ -327,15 +363,7 @@ impl<M> Definition<M> {
 
 			Meta(desc, intersection_of.metadata().clone())
 		} else {
-			let mut result = treeldr::ty::Normal::new(sub_class_of);
-
-			for (prop_id, prop_causes) in &self.data.properties {
-				let prop_ref = context
-					.require_property_id(*prop_id)
-					.map_err(|e| e.at(prop_causes.clone()))?;
-				result.insert_property(prop_ref, prop_causes.clone())
-			}
-
+			let result = treeldr::ty::Normal::new(sub_class_of);
 			Meta(treeldr::ty::Description::Normal(result), meta.clone())
 		};
 
@@ -433,15 +461,18 @@ pub struct SubClassCycle<M>(pub Id, pub Vec<Meta<Id, M>>, pub M);
 
 /// Minimal class hierarchy.
 pub struct ClassHierarchy<M> {
-	map: HashMap<Id, Multiple<crate::Type, M>>
+	map: HashMap<Id, Multiple<crate::Type, M>>,
 }
 
 impl<M> ClassHierarchy<M> {
-	pub fn new(context: &Context<M>) -> Result<Self, Meta<SubClassCycle<M>, M>> where M: Clone {
+	pub fn new(context: &Context<M>) -> Result<Self, Meta<SubClassCycle<M>, M>>
+	where
+		M: Clone,
+	{
 		struct Graph {
-			map: HashMap<Id, HashSet<Id>>
+			map: HashMap<Id, HashSet<Id>>,
 		}
-		
+
 		impl SccGraph for Graph {
 			type Vertex = Id;
 
@@ -459,7 +490,7 @@ impl<M> ClassHierarchy<M> {
 		}
 
 		let mut graph = Graph {
-			map: HashMap::new()
+			map: HashMap::new(),
 		};
 
 		for (id, node) in context.nodes() {
@@ -478,9 +509,15 @@ impl<M> ClassHierarchy<M> {
 		for component in components.iter() {
 			if component.len() > 1 {
 				let node = context.get(component[0]).unwrap();
-				let (mut path, end) = node.as_type().find_sub_class_cycle(context, node.as_resource(), component).unwrap();
+				let (mut path, end) = node
+					.as_type()
+					.find_sub_class_cycle(context, node.as_resource(), component)
+					.unwrap();
 				path.reverse();
-				return Err(Meta(SubClassCycle(node.id(), path, end), node.metadata().clone()))
+				return Err(Meta(
+					SubClassCycle(node.id(), path, end),
+					node.metadata().clone(),
+				));
 			}
 		}
 
@@ -493,23 +530,25 @@ impl<M> ClassHierarchy<M> {
 			let mut super_classes = Multiple::default();
 			for super_i in components.direct_successors(i).unwrap() {
 				let super_id = components.get(super_i).unwrap()[0];
-				let meta = node.as_type().super_classes(context, node.as_resource()).find_map(|Meta(ty, m)| {
-					if ty.raw_id() == super_id {
-						Some(m)
-					} else {
-						None
-					}
-				}).unwrap();
-				
+				let meta = node
+					.as_type()
+					.super_classes(context, node.as_resource())
+					.find_map(|Meta(ty, m)| {
+						if ty.raw_id() == super_id {
+							Some(m)
+						} else {
+							None
+						}
+					})
+					.unwrap();
+
 				super_classes.insert_unique(Meta(crate::Type::from(super_id), meta.clone()));
 			}
 
 			map.insert(id, super_classes);
 		}
 
-		Ok(Self {
-			map
-		})
+		Ok(Self { map })
 	}
 
 	pub fn super_classes(&self, id: Id) -> &Multiple<crate::Type, M> {
@@ -523,7 +562,10 @@ impl<M> ClassHierarchy<M> {
 		}
 	}
 
-	pub fn remove_indirect_classes(&self, result: &mut Multiple<crate::Type, M>) where M: Clone {
+	pub fn remove_indirect_classes(&self, result: &mut Multiple<crate::Type, M>)
+	where
+		M: Clone,
+	{
 		let types = result.clone();
 
 		for ty in types {
@@ -531,7 +573,10 @@ impl<M> ClassHierarchy<M> {
 		}
 	}
 
-	pub fn apply(self, context: &mut Context<M>) where M: Clone {
+	pub fn apply(self, context: &mut Context<M>)
+	where
+		M: Clone,
+	{
 		for (_, node) in context.nodes_mut() {
 			self.remove_indirect_classes(node.type_mut())
 		}
@@ -543,84 +588,5 @@ impl<M> ClassHierarchy<M> {
 				*node.as_type_mut().sub_class_of_mut() = super_classes;
 			}
 		}
-	}
-}
-
-#[derive(Debug)]
-pub enum TypeCycleSegment<T> {
-	Type(T),
-	SuperClass(T)
-}
-
-#[derive(Debug)]
-pub struct TypeCycle<M>(pub Id, pub Vec<TypeCycleSegment<Meta<Id, M>>>, pub TypeCycleSegment<M>);
-
-impl<M> Context<M> {
-	pub fn find_type_cycle(
-		&self,
-		class_hierarchy: &ClassHierarchy<M>
-	) -> Option<Meta<TypeCycle<M>, M>> where M: Clone {
-		struct Graph {
-			map: HashMap<Id, HashSet<Id>>
-		}
-		
-		impl SccGraph for Graph {
-			type Vertex = Id;
-	
-			type Vertices<'a> = std::iter::Copied<std::collections::hash_map::Keys<'a, Id, HashSet<Id>>> where Self: 'a;
-	
-			type Successors<'a> = std::iter::Copied<std::collections::hash_set::Iter<'a, Id>> where Self: 'a;
-	
-			fn vertices(&self) -> Self::Vertices<'_> {
-				self.map.keys().copied()
-			}
-	
-			fn successors(&self, v: Self::Vertex) -> Self::Successors<'_> {
-				self.map[&v].iter().copied()
-			}
-		}
-	
-		let mut graph = Graph {
-			map: HashMap::new()
-		};
-	
-		for (id, node) in self.nodes() {
-			let mut stack: Vec<_> = node.type_()
-				.iter()
-				.map(Meta::into_cloned_value)
-				.map(Meta::into_value)
-				.map(crate::Type::into_raw_id)
-				.collect();
-	
-			let mut types = HashSet::new();
-	
-			while let Some(id) = stack.pop() {
-				if types.insert(id) {
-					stack.extend(
-						class_hierarchy
-							.super_classes(id)
-							.iter()
-							.map(Meta::into_cloned_value)
-							.map(Meta::into_value)
-							.map(crate::Type::into_raw_id)
-					)
-				}
-			}
-	
-			graph.map.insert(id, types);
-		}
-	
-		let components = graph.strongly_connected_components();
-	
-		for component in components.iter() {
-			if component.len() > 1 {
-				let node = self.get(component[0]).unwrap();
-				let (mut path, end) = node.as_resource().find_type_cycle(self, class_hierarchy, component).unwrap();
-				path.reverse();
-				return Some(Meta(TypeCycle(node.id(), path, end), node.metadata().clone()))
-			}
-		}
-	
-		None
 	}
 }

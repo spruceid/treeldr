@@ -108,7 +108,7 @@ impl<V> Components<V> {
 
 	pub fn direct_successors(&self, i: usize) -> Option<HashSet<usize>> {
 		let mut result: HashSet<_> = self.successors(i)?.collect();
-		
+
 		for j in self.successors(i).unwrap() {
 			self.remove_indirect_successors(&mut result, j);
 		}
@@ -117,7 +117,7 @@ impl<V> Components<V> {
 	}
 
 	/// Returns the depth of each component.
-	/// 
+	///
 	/// The depth of a component is the maximum of the depth of its predecessors
 	/// plus 1. A component with no predecessors has depth 0.
 	pub fn depths(&self) -> Vec<usize> {
@@ -165,7 +165,7 @@ impl<V> Components<V> {
 }
 
 /// Returns the depth of each component.
-/// 
+///
 /// The depth of a component is the maximum of the depth of its predecessors
 /// plus 1. A component with no predecessors has depth 0.
 pub fn depths(predecessors: &[HashSet<usize>]) -> Vec<usize> {

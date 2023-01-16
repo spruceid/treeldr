@@ -155,7 +155,7 @@ impl<M> fmt::Display for Error<M> {
 
 fn find_layout<M: Clone>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<M>,
+	model: &treeldr::MutableModel<M>,
 	iri: Iri,
 ) -> Result<TId<treeldr::Layout>, Box<Error<M>>> {
 	let name = vocabulary
@@ -174,7 +174,7 @@ impl Command {
 		self,
 		vocabulary: &mut V,
 		files: &mut impl Files<Metadata = M>,
-		model: &treeldr::Model<M>,
+		model: &treeldr::MutableModel<M>,
 	) where
 		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
 		M: Clone + Send + Sync,
@@ -193,7 +193,7 @@ impl Command {
 		self,
 		vocabulary: &mut V,
 		files: &mut impl Files<Metadata = M>,
-		model: &treeldr::Model<M>,
+		model: &treeldr::MutableModel<M>,
 	) -> Result<(), Box<Error<M>>>
 	where
 		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,

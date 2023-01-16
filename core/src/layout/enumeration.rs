@@ -24,14 +24,17 @@ impl<M> Enum<M> {
 		&self.variants
 	}
 
-	pub fn composing_layouts<'a>(&'a self, model: &'a crate::Model<M>) -> ComposingLayouts<'a, M> {
+	pub fn composing_layouts<'a>(
+		&'a self,
+		model: &'a crate::MutableModel<M>,
+	) -> ComposingLayouts<'a, M> {
 		ComposingLayouts(model, self.variants.iter())
 	}
 
 	pub fn can_be_reference(
 		&self,
 		map: &mut HashMap<TId<Layout>, bool>,
-		model: &crate::Model<M>,
+		model: &crate::MutableModel<M>,
 	) -> bool {
 		for v in &self.variants {
 			if let Some(r) = model.get(**v).unwrap().as_formatted().format().value() {
@@ -46,7 +49,7 @@ impl<M> Enum<M> {
 }
 
 pub struct ComposingLayouts<'a, M>(
-	&'a crate::Model<M>,
+	&'a crate::MutableModel<M>,
 	std::slice::Iter<'a, Meta<TId<Variant>, M>>,
 );
 

@@ -60,7 +60,7 @@ impl quote::ToTokens for Referenced<IdentType> {
 }
 
 pub struct Context<'a, V, M> {
-	model: &'a treeldr::Model<M>,
+	model: &'a treeldr::MutableModel<M>,
 	vocabulary: &'a V,
 	modules: Shelf<Vec<Module>>,
 	layouts: BTreeMap<TId<treeldr::Layout>, Type>,
@@ -68,7 +68,7 @@ pub struct Context<'a, V, M> {
 }
 
 impl<'a, V, M> Context<'a, V, M> {
-	pub fn new(model: &'a treeldr::Model<M>, vocabulary: &'a V) -> Self {
+	pub fn new(model: &'a treeldr::MutableModel<M>, vocabulary: &'a V) -> Self {
 		Self {
 			model,
 			vocabulary,
@@ -78,7 +78,7 @@ impl<'a, V, M> Context<'a, V, M> {
 		}
 	}
 
-	pub fn model(&self) -> &'a treeldr::Model<M> {
+	pub fn model(&self) -> &'a treeldr::MutableModel<M> {
 		self.model
 	}
 

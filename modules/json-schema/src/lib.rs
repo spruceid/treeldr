@@ -22,7 +22,7 @@ pub enum Error {
 /// Generate a JSON Schema from a TreeLDR model.
 pub fn generate<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	layout_ref: TId<treeldr::Layout>,
@@ -116,7 +116,7 @@ fn remove_newlines(s: &str) -> String {
 
 fn generate_layout<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	required: Option<&mut bool>,
@@ -151,7 +151,7 @@ fn generate_layout<F>(
 
 fn generate_layout_schema<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	mut required: Option<&mut bool>,
@@ -247,7 +247,7 @@ fn generate_layout_schema<F>(
 
 fn generate_struct<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	name: &Name,
@@ -318,7 +318,7 @@ fn generate_struct<F>(
 
 fn embed_layout<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	required: Option<&mut bool>,
@@ -351,7 +351,7 @@ fn embed_layout<F>(
 
 fn generate_layout_defs_ref<F>(
 	json: &mut serde_json::Map<String, serde_json::Value>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	layout_ref: TId<treeldr::Layout>,
 ) -> Result<(), Error> {
 	json.insert(
@@ -372,7 +372,7 @@ fn generate_layout_defs_ref<F>(
 
 fn generate_layout_ref<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	mut required: Option<&mut bool>,
@@ -462,7 +462,7 @@ fn generate_layout_ref<F>(
 
 fn generate_option_type<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	item_layout_ref: TId<treeldr::Layout>,
@@ -487,7 +487,7 @@ fn generate_option_type<F>(
 
 fn generate_set_type<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	item_layout_ref: TId<treeldr::Layout>,
@@ -519,7 +519,7 @@ fn generate_set_type<F>(
 
 fn generate_one_or_many_type<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	item_layout_ref: TId<treeldr::Layout>,
@@ -557,7 +557,7 @@ fn generate_one_or_many_type<F>(
 
 fn generate_list_type<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	item_layout_ref: TId<treeldr::Layout>,
@@ -588,7 +588,7 @@ fn generate_list_type<F>(
 
 fn generate_enum_type<F>(
 	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	model: &treeldr::Model<F>,
+	model: &treeldr::MutableModel<F>,
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	enm: &layout::Enum<F>,
