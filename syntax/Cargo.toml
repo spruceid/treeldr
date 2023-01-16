@@ -23,4 +23,6 @@ static-iref.workspace = true
 contextual.workspace = true
 grdf.workspace = true
 nquads-syntax.workspace = true
+env_logger.workspace = true
+test-log.workspace = true
 abnf = "0.13"
