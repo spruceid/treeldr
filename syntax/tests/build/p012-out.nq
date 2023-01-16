@@ -4,6 +4,7 @@ _:t20 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/
 _:t20 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 _:t20 <http://www.w3.org/2002/07/owl#intersectionOf> _:t28 .
 _:t20 <https://treeldr.org/layoutFor> _:t20 .
+_:t20 <https://treeldr.org/name> "type_list" .
 _:t20 <https://treeldr.org/array> <http://www.example.com/Type> .
 _:t20 <https://treeldr.org/arrayListFirst> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> .
 _:t20 <https://treeldr.org/arrayListRest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> .
