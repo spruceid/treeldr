@@ -24,6 +24,8 @@ impl<M: Clone> Context<M> {
 	where
 		M: Clone + Merge,
 	{
+		// TODO check for infinite values (lists).
+
 		log::debug!("computing layout intersections...");
 		self.compute_layout_intersections(vocabulary, generator)?;
 
@@ -41,8 +43,10 @@ impl<M: Clone> Context<M> {
 		log::debug!("assigning default layouts...");
 		self.assign_default_layouts(vocabulary, generator);
 
-		log::debug!("assigning default component names...");
+		log::debug!("computing layouts relations...");
 		let layouts_relations = self.compute_layouts_relations();
+
+		log::debug!("assigning default component names...");
 		self.assign_default_names(vocabulary, &layouts_relations);
 
 		log::debug!("building...");

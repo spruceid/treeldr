@@ -28,11 +28,21 @@ pub struct BindingRef<'a, B> {
 }
 
 impl<'a, B> BindingRef<'a, B> {
+	/// Replace any blank node with `()`.
 	fn strip_blank(self) -> BindingRef<'a, ()> {
 		BindingRef {
 			property: self.property,
 			value: self.value.strip_blank(),
 		}
+	}
+
+	/// Try to replace any blank node in the binding by its color, given by the
+	/// provided `color` function.
+	fn color(self, color: impl FnOnce(B) -> Option<usize>) -> Option<BindingRef<'a, usize>> {
+		Some(BindingRef {
+			property: self.property,
+			value: self.value.color(color)?,
+		})
 	}
 }
 
@@ -76,6 +86,22 @@ impl<'a, B> ValueRef<'a, B> {
 			Self::RegExp(e) => ValueRef::RegExp(e),
 		}
 	}
+
+	fn color(self, color: impl FnOnce(B) -> Option<usize>) -> Option<ValueRef<'a, usize>> {
+		Some(match self {
+			Self::Blank(id) => ValueRef::Blank(color(id)?),
+			Self::Iri(i) => ValueRef::Iri(i),
+			Self::Boolean(b) => ValueRef::Boolean(b),
+			Self::U64(u) => ValueRef::U64(u),
+			Self::Integer(i) => ValueRef::Integer(i),
+			Self::Numeric(n) => ValueRef::Numeric(n),
+			Self::String(s) => ValueRef::String(s),
+			Self::LangString(s, t) => ValueRef::LangString(s, t),
+			Self::TypedString(s, t) => ValueRef::TypedString(s, t),
+			Self::Name(n) => ValueRef::Name(n),
+			Self::RegExp(e) => ValueRef::RegExp(e),
+		})
+	}
 }
 
 impl<'a, M> From<BindingValueRef<'a, M>> for ValueRef<'a, BlankIdIndex> {
@@ -109,7 +135,48 @@ impl<'a, M> From<BindingValueRef<'a, M>> for ValueRef<'a, BlankIdIndex> {
 	}
 }
 
+/// Blank node color.
+struct Color {
+	/// Is the color exact?
+	///
+	/// A color is exact if all the members of the color are equivalent and can
+	/// be merged without further computation.
+	exact: bool,
+
+	/// Members of the color.
+	members: Vec<BlankIdIndex>,
+}
+
+impl Color {
+	/// Create a new color for the given property.
+	///
+	/// Each property has its own color.
+	fn property(member: BlankIdIndex) -> Color {
+		Color {
+			exact: true,
+			members: vec![member],
+		}
+	}
+
+	/// Create a new exact color for non recursive blank nodes.
+	fn exact() -> Self {
+		Color {
+			exact: true,
+			members: Vec::new(),
+		}
+	}
+
+	/// Create a new (non exact) color for recursive blank nodes.
+	fn recursive() -> Self {
+		Color {
+			exact: false,
+			members: Vec::new(),
+		}
+	}
+}
+
 impl<M> Context<M> {
+	/// Merge equivalent blank nodes.
 	pub fn unify<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&mut self,
 		vocabulary: &mut V,
@@ -125,84 +192,145 @@ impl<M> Context<M> {
 		})
 	}
 
-	fn compute_equivalences(&self) -> Equivalences {
-		#[derive(Default)]
-		struct BlankData<'a> {
-			is_property: bool,
-			color: BTreeSet<BindingRef<'a, ()>>,
-			bindings: BTreeMap<Property, BTreeSet<BlankIdIndex>>,
-		}
+	/// Compute the color of each blank nodes.
+	fn compute_blank_colors(&self) -> Vec<Color> {
+		type RecursiveColor<'a> = BTreeSet<BindingRef<'a, ()>>;
 
-		impl<'a> BlankData<'a> {
-			fn insert(&mut self, binding: BindingRef<'a, BlankIdIndex>) {
-				self.color.insert(binding.strip_blank());
-				if let ValueRef::Blank(b) = binding.value {
-					self.bindings.entry(binding.property).or_default().insert(b);
-				}
-			}
-		}
+		type TreeColor<'a> = BTreeSet<BindingRef<'a, usize>>;
 
-		// Collect all the bindings for each blank node, independently of other
-		// blank nodes. This will allow us to assign a color for each node, such
-		// that two equivalent blank nodes have the same color.
-		let mut blank_data: BTreeMap<BlankIdIndex, BlankData> = BTreeMap::new();
-		for (id, node) in &self.nodes {
-			if let Id::Blank(id) = id {
-				if node.has_type(self, resource::Type::Property(None)) {
-					blank_data.entry(*id).or_default().is_property = true;
-				} else {
-					for Meta(binding, _) in node.bindings() {
-						blank_data.entry(*id).or_default().insert(binding.into())
+		/// Compute the color of the given blank node.
+		fn color<'a, M>(
+			context: &'a Context<M>,
+			id: BlankIdIndex,
+			colors: &mut Vec<Color>,
+			result: &mut HashMap<BlankIdIndex, Option<usize>>,
+			tree_colors: &mut HashMap<TreeColor<'a>, usize>,
+			recursive_colors: &mut HashMap<RecursiveColor<'a>, usize>,
+		) -> Option<usize> {
+			use std::collections::hash_map::Entry;
+			match result.entry(id) {
+				Entry::Occupied(entry) => *entry.get(),
+				Entry::Vacant(entry) => {
+					let node = context.get(Id::Blank(id)).unwrap();
+					if node.has_type(context, resource::Type::Property(None)) {
+						let c = colors.len();
+						colors.push(Color::property(id));
+						entry.insert(Some(c));
+						Some(c)
+					} else {
+						entry.insert(None);
+
+						let mut tree_color = Some(BTreeSet::new());
+						let mut recursive_color = BTreeSet::new();
+
+						for Meta(binding, _) in node.bindings() {
+							let binding: BindingRef<'a, BlankIdIndex> = binding.into();
+
+							recursive_color.insert(binding.strip_blank());
+
+							if let Some(tc) = &mut tree_color {
+								match binding.color(|b| {
+									color(context, b, colors, result, tree_colors, recursive_colors)
+										.filter(|c| colors[*c].exact)
+								}) {
+									Some(colored_binding) => {
+										tc.insert(colored_binding);
+									}
+									None => tree_color = None,
+								}
+							}
+						}
+
+						let c = match tree_color {
+							Some(tc) => *tree_colors.entry(tc).or_insert_with(|| {
+								let c = colors.len();
+								colors.push(Color::exact());
+								c
+							}),
+							None => *recursive_colors.entry(recursive_color).or_insert_with(|| {
+								let c = colors.len();
+								colors.push(Color::recursive());
+								c
+							}),
+						};
+
+						colors[c].members.push(id);
+						result.insert(id, Some(c));
+						Some(c)
 					}
 				}
 			}
 		}
 
-		// Actually compute the colors.
-		let mut colors = HashMap::new();
-		let mut by_color = Vec::new();
-		let blank_simplified_data: HashMap<_, _> = blank_data
-			.into_iter()
-			.map(|(b, data)| {
-				let color = if data.is_property {
-					let len = by_color.len();
-					by_color.push(Vec::new());
-					len
-				} else {
-					*colors.entry(data.color).or_insert_with(|| {
-						let len = by_color.len();
-						by_color.push(Vec::new());
-						len
-					})
-				};
+		let mut colors = Vec::new();
+		let mut result = HashMap::new();
+		let mut tree_colors = HashMap::new();
+		let mut recursive_colors = HashMap::new();
 
-				by_color[color].push(b);
+		for id in self.ids() {
+			if let Id::Blank(id) = id {
+				color(
+					self,
+					id,
+					&mut colors,
+					&mut result,
+					&mut tree_colors,
+					&mut recursive_colors,
+				);
+			}
+		}
 
-				(
-					b,
-					SimplifiedBlankData {
-						color,
-						bindings: data
-							.bindings
-							.into_values()
-							.map(|v| v.into_iter().collect())
-							.collect(),
-					},
-				)
-			})
-			.collect();
+		colors
+	}
+
+	/// Computes the blank node equivalences.
+	fn compute_equivalences(&self) -> Equivalences {
+		let colors = self.compute_blank_colors();
 
 		// Initialize the solver that will check for equivalences.
 		let mut solver = Solver::default();
-		for blank_ids in &by_color {
-			for &a in blank_ids {
-				solver.equivalences.insert(a);
+		let mut blank_simplified_data: HashMap<BlankIdIndex, SimplifiedBlankData> = HashMap::new();
+		for (c, color) in colors.iter().enumerate() {
+			for &id in &color.members {
+				let mut data = SimplifiedBlankData {
+					color: c,
+					bindings: Vec::new(),
+				};
+
+				if !color.exact {
+					let node = self.get(Id::Blank(id)).unwrap();
+					let mut bindings: BTreeMap<Property, BTreeSet<BlankIdIndex>> = BTreeMap::new();
+
+					for Meta(binding, _) in node.bindings() {
+						let binding: BindingRef<BlankIdIndex> = binding.into();
+						if let ValueRef::Blank(b) = binding.value {
+							bindings.entry(binding.property).or_default().insert(b);
+						}
+					}
+
+					data.bindings = bindings
+						.into_values()
+						.map(|v| v.into_iter().collect())
+						.collect();
+				}
+
+				blank_simplified_data.insert(id, data);
+				solver.equivalences.insert(id);
 			}
 		}
-		for blank_ids in by_color {
-			for (i, &a) in blank_ids.iter().enumerate() {
-				for &b in &blank_ids[i + 1..] {
-					solver.check(a, b)
+
+		for color in colors {
+			if color.exact {
+				if let Some((&a, rest)) = color.members.split_first() {
+					for &b in rest {
+						solver.equivalences.merge(a, b);
+					}
+				}
+			} else {
+				for (i, &a) in color.members.iter().enumerate() {
+					for &b in &color.members[i + 1..] {
+						solver.check(a, b)
+					}
 				}
 			}
 		}
@@ -290,6 +418,14 @@ impl<'a> Solver<'a> {
 	}
 
 	fn solve(mut self, blanks: &'a HashMap<BlankIdIndex, SimplifiedBlankData>) -> Equivalences {
+		// Make each stack inherit the initial knowledge.
+		for s in &mut self.stacks {
+			// FIXME: this is not efficient at all!
+			// TODO: write a hierarchical union-find data structure to avoid
+			//       cloning every time we want to inherit knowledge.
+			s.equivalences = s.equivalences.clone();
+		}
+
 		while !self.is_done() {
 			self.step(blanks)
 		}
