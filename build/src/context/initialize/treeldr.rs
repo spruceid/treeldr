@@ -28,27 +28,55 @@ impl<M> Context<M> {
 			metadata.clone(),
 		);
 
-		self.declare_type(
+		let layout = self.declare_type(
 			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Layout))),
 			metadata.clone(),
 		);
+		layout.as_type_mut().sub_class_of_mut().insert(Meta(
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
+				vocab::TreeLdr::Component,
+			)))
+			.into(),
+			metadata.clone(),
+		));
 
-		self.declare_type(
+		let formatted = self.declare_type(
 			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
 				vocab::TreeLdr::Formatted,
 			))),
 			metadata.clone(),
 		);
+		formatted.as_type_mut().sub_class_of_mut().insert(Meta(
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
+				vocab::TreeLdr::Component,
+			)))
+			.into(),
+			metadata.clone(),
+		));
 
-		self.declare_type(
+		let field = self.declare_type(
 			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Field))),
 			metadata.clone(),
 		);
+		field.as_type_mut().sub_class_of_mut().insert(Meta(
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
+				vocab::TreeLdr::Formatted,
+			)))
+			.into(),
+			metadata.clone(),
+		));
 
-		self.declare_type(
+		let variant = self.declare_type(
 			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Variant))),
 			metadata.clone(),
 		);
+		variant.as_type_mut().sub_class_of_mut().insert(Meta(
+			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
+				vocab::TreeLdr::Formatted,
+			)))
+			.into(),
+			metadata.clone(),
+		));
 
 		self.declare_type(
 			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
