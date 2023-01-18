@@ -65,10 +65,15 @@ impl<M> Context<M> {
 		);
 
 		// rdfs:DataType
-		self.declare_type(
+		let datatype = self.declare_type(
 			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Datatype))),
 			metadata.clone(),
 		);
+
+		datatype.as_type_mut().sub_class_of_mut().insert(Meta(
+			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Class))).into(),
+			metadata.clone()
+		));
 
 		// rdfs:Literal
 		self.declare_type(Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Literal))), metadata);
