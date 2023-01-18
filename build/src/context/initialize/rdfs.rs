@@ -69,10 +69,9 @@ impl<M> Context<M> {
 			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Datatype))),
 			metadata.clone(),
 		);
-
 		datatype.as_type_mut().sub_class_of_mut().insert(Meta(
 			Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Class))).into(),
-			metadata.clone()
+			metadata.clone(),
 		));
 
 		// rdfs:Literal
