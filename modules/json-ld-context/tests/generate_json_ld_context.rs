@@ -101,6 +101,7 @@ impl Test {
 					&mut generator,
 				)
 				.expect("build error");
+
 				ast.into_value()
 					.define(
 						&mut local_context,
