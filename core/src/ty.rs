@@ -612,14 +612,7 @@ impl<M> Dependencies<M> {
 
 		for (id, node) in model.nodes() {
 			if let Some(ty) = node.as_type() {
-				result.insert(TId::new(id), Multiple::default());
-
-				for Meta(d, meta) in ty.dependencies() {
-					result
-						.entry(d)
-						.or_default()
-						.insert_unique(Meta(TId::new(id), meta.clone()));
-				}
+				result.insert(TId::new(id), ty.dependencies());
 			}
 		}
 
@@ -640,8 +633,8 @@ impl<M> Dependencies<M> {
 			if !result.contains_key(&ty) || result[&ty] < depth {
 				result.insert(ty, depth);
 
-				for Meta(&sub_class, _) in &self.map[&ty] {
-					stack.push((sub_class, depth + 1));
+				for Meta(&dep, _) in &self.map[&ty] {
+					stack.push((dep, depth + 1));
 				}
 			}
 		}
