@@ -121,7 +121,7 @@ impl<M> Definition<M> {
 			true
 		} else {
 			for Meta(super_class, _) in &self.data.sub_class_of {
-				if context.is_subclass_of_with(visited, *super_class, other) {
+				if context.is_subclass_of_with(visited, other, *super_class) {
 					return true;
 				}
 			}
@@ -494,12 +494,24 @@ impl<M> ClassHierarchy<M> {
 		};
 
 		for (id, node) in context.nodes() {
-			let super_classes = node
+			let super_classes: HashSet<_> = node
 				.as_type()
 				.super_classes(context, node.as_resource())
 				.map(Meta::into_value)
 				.map(crate::Type::into_raw_id)
 				.collect();
+
+			// Detect cycles of size 1.
+			if super_classes.contains(&id) {
+				for Meta(i, meta) in node.as_type().super_classes(context, node.as_resource()) {
+					if i.into_raw_id() == id {
+						return Err(Meta(
+							SubClassCycle(node.id(), Vec::new(), meta.clone()),
+							node.metadata().clone(),
+						));
+					}
+				}
+			}
 
 			graph.map.insert(id, super_classes);
 		}
@@ -507,6 +519,7 @@ impl<M> ClassHierarchy<M> {
 		let components = graph.strongly_connected_components();
 
 		for component in components.iter() {
+			// Detect cycles greater than 1.
 			if component.len() > 1 {
 				let node = context.get(component[0]).unwrap();
 				let (mut path, end) = node
