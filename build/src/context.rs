@@ -322,6 +322,16 @@ impl<M: Clone> Context<M> {
 		}
 	}
 
+	pub fn require_mut(&mut self, id: Id) -> Result<&mut resource::Definition<M>, NodeUnknown> {
+		match self.get_mut(id) {
+			Some(node) => Ok(node),
+			None => Err(NodeUnknown {
+				id,
+				expected_type: None,
+			}),
+		}
+	}
+
 	pub fn require_list(&self, id: Id) -> Result<ListRef<M>, RequireError<M>> {
 		match id {
 			Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil))) => Ok(ListRef::Nil),

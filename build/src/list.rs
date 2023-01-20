@@ -1,6 +1,6 @@
 use crate::{
 	context::{MapIds, MapIdsIn},
-	error,
+	error, rdf,
 	resource::BindingValueRef,
 	single, Context, Error, Single,
 };
@@ -44,6 +44,18 @@ impl<M> Definition<M> {
 
 	pub fn rest_mut(&mut self) -> &mut Single<Id, M> {
 		&mut self.rest
+	}
+
+	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			Property::First => self.first.insert(value.map(Stripped)),
+			Property::Rest => self.rest.insert(rdf::from::expect_id(value)?),
+		}
+
+		Ok(())
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {

@@ -10,9 +10,16 @@ pub use decimal::Decimal;
 pub use double::Double;
 pub use float::Float;
 pub use integer::Integer;
+use locspan::Meta;
 pub use non_negative_integer::NonNegativeInteger;
 pub use rational::Rational;
+use rdf_types::StringLiteral;
 pub use real::Real;
+
+use crate::{
+	vocab::{Owl, Term, Xsd},
+	IriIndex,
+};
 
 /// Numeric value.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -26,7 +33,46 @@ pub enum Numeric {
 	Double(Double),
 }
 
+pub enum Error<M> {
+	UnexpectedString(StringLiteral),
+	UnexpectedType(Meta<StringLiteral, M>, IriIndex),
+	InvalidReal,
+}
+
 impl Numeric {
+	pub fn from_rdf_literal<M>(lit: crate::vocab::Literal<M>) -> Result<Self, Meta<Error<M>, M>> {
+		match lit {
+			crate::vocab::Literal::String(Meta(s, meta)) => {
+				Err(Meta(Error::UnexpectedString(s), meta))
+			}
+			crate::vocab::Literal::LangString(Meta(s, meta), _) => {
+				Err(Meta(Error::UnexpectedString(s), meta))
+			}
+			crate::vocab::Literal::TypedString(s, Meta(ty, meta)) => match ty {
+				IriIndex::Iri(Term::Owl(Owl::Real)) => Err(Meta(Error::InvalidReal, meta)),
+				IriIndex::Iri(Term::Owl(Owl::Rational)) => {
+					todo!("OWL rational")
+				}
+				IriIndex::Iri(Term::Xsd(Xsd::Decimal)) => {
+					todo!("XSD decimal")
+				}
+				IriIndex::Iri(Term::Xsd(Xsd::Integer)) => {
+					todo!("XSD integer")
+				}
+				IriIndex::Iri(Term::Xsd(Xsd::NonNegativeInteger)) => {
+					todo!("XSD non negative integer")
+				}
+				IriIndex::Iri(Term::Xsd(Xsd::Float)) => {
+					todo!("XSD float")
+				}
+				IriIndex::Iri(Term::Xsd(Xsd::Double)) => {
+					todo!("XSD double")
+				}
+				_ => Err(Meta(Error::UnexpectedType(s, ty), meta)),
+			},
+		}
+	}
+
 	pub fn into_real(self) -> Result<Real, Self> {
 		match self {
 			Self::Real(r) => Ok(r),

@@ -5,7 +5,7 @@ use crate::{
 	component,
 	context::{HasType, MapIds},
 	error::NodeTypeInvalid,
-	layout, list, multiple, prop, ty, Error, Multiple, ObjectAsId,
+	layout, list, multiple, prop, rdf, ty, Error, Multiple, ObjectAsId,
 };
 pub use treeldr::node::{Property, Type};
 
@@ -218,6 +218,40 @@ impl<M> Definition<M> {
 			layout_restriction: self.layout_restriction.bindings(),
 			list: self.list.bindings(),
 		}
+	}
+
+	pub fn set(
+		&mut self,
+		prop: impl Into<crate::Property>,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop.into() {
+			crate::Property::Resource(prop) => match prop {
+				Property::Self_ => (),
+				Property::Type => self.type_mut().insert(rdf::from::expect_type(value)?),
+				Property::Label => self.label_mut().insert(rdf::from::expect_string(value)?),
+				Property::Comment => self.comment_mut().insert(rdf::from::expect_string(value)?),
+				Property::Class(prop) => self.as_type_mut().set(prop, value)?,
+				Property::DatatypeRestriction(prop) => {
+					self.as_datatype_restriction_mut().set(prop, value)?
+				}
+				Property::Property(prop) => self.as_property_mut().set(prop, value)?,
+				Property::Component(prop) => self.as_component_mut().set(prop, value)?,
+				Property::LayoutRestriction(prop) => {
+					self.as_layout_restriction_mut().set(prop, value)?
+				}
+				Property::List(prop) => self.as_list_mut().set(prop, value)?,
+			},
+			crate::Property::Other(_) => {
+				// Ignore unknown property.
+				// TODO store them somewhere.
+			}
+		}
+
+		Ok(())
 	}
 }
 
