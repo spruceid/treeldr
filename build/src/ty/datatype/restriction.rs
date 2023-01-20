@@ -1,10 +1,12 @@
-use crate::{context::MapIds, resource::BindingValueRef, single, Error, Single};
+use crate::{context::MapIds, rdf, resource::BindingValueRef, single, Error, Single};
 use locspan::Meta;
 use std::collections::BTreeMap;
 use treeldr::{
 	metadata::Merge,
 	ty::data::{restriction, RegExp},
-	value, Id,
+	value,
+	vocab::Object,
+	Id,
 };
 
 pub use treeldr::ty::data::restriction::Property;
@@ -39,6 +41,43 @@ impl<M> Definition<M> {
 		ClassBindings {
 			restriction: self.restriction.iter(),
 		}
+	}
+
+	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			Property::MaxExclusive => self.restriction.insert(
+				rdf::from::expect_numeric(value)?
+					.map(|n| Restriction::Numeric(Numeric::MaxExclusive(n))),
+			),
+			Property::MaxInclusive => self.restriction.insert(
+				rdf::from::expect_numeric(value)?
+					.map(|n| Restriction::Numeric(Numeric::MaxInclusive(n))),
+			),
+			Property::MaxLength => self.restriction.insert(
+				rdf::from::expect_integer(value)?
+					.map(|n| Restriction::String(String::MaxLength(n))),
+			),
+			Property::MinExclusive => self.restriction.insert(
+				rdf::from::expect_numeric(value)?
+					.map(|n| Restriction::Numeric(Numeric::MinExclusive(n))),
+			),
+			Property::MinInclusive => self.restriction.insert(
+				rdf::from::expect_numeric(value)?
+					.map(|n| Restriction::Numeric(Numeric::MinInclusive(n))),
+			),
+			Property::MinLength => self.restriction.insert(
+				rdf::from::expect_integer(value)?
+					.map(|n| Restriction::String(String::MinLength(n))),
+			),
+			Property::Pattern => self.restriction.insert(
+				rdf::from::expect_regexp(value)?.map(|p| Restriction::String(String::Pattern(p))),
+			),
+		}
+
+		Ok(())
 	}
 
 	pub fn build(&self) -> Result<Meta<Restriction, M>, Error<M>>

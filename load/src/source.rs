@@ -56,6 +56,9 @@ pub enum MimeType {
 	/// application/treeldr
 	TreeLdr,
 
+	/// application/n-quads
+	NQuads,
+
 	/// application/schema+json
 	JsonSchema,
 }
@@ -64,6 +67,7 @@ impl MimeType {
 	fn name(&self) -> &'static str {
 		match self {
 			Self::TreeLdr => "application/treeldr",
+			Self::NQuads => "application/n-quads",
 			Self::JsonSchema => "application/schema+json",
 		}
 	}
@@ -74,6 +78,7 @@ impl MimeType {
 			.and_then(std::ffi::OsStr::to_str)
 			.and_then(|ext| match ext {
 				"tldr" => Some(MimeType::TreeLdr),
+				"nq" => Some(MimeType::NQuads),
 				"json" => Some(MimeType::JsonSchema),
 				_ => None,
 			})

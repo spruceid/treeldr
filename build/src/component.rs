@@ -1,9 +1,9 @@
 use locspan::Meta;
-use treeldr::{metadata::Merge, Name};
+use treeldr::{metadata::Merge, vocab::Object, Name};
 
 use crate::{
 	context::{HasType, MapIds},
-	error, layout,
+	error, layout, rdf,
 	resource::BindingValueRef,
 	single, Context, Error, Single,
 };
@@ -84,6 +84,19 @@ impl<M> Definition<M> {
 			layout: self.layout.bindings(),
 			formatted: self.formatted.bindings(),
 		}
+	}
+
+	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			Property::Name => self.name_mut().insert(rdf::from::expect_name(value)?),
+			Property::Formatted(prop) => self.as_formatted_mut().set(prop, value)?,
+			Property::Layout(prop) => self.as_layout_mut().set(prop, value)?,
+		}
+
+		Ok(())
 	}
 
 	pub(crate) fn build(

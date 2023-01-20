@@ -2,11 +2,16 @@ use codespan_reporting::term::{
 	self,
 	termcolor::{ColorChoice, StandardStream},
 };
+use locspan::{Location, MaybeLocated, Meta};
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use treeldr::{reporting::Diagnose, BlankIdIndex, IriIndex};
+use treeldr::{
+	reporting::Diagnose,
+	vocab::{GraphLabel, Object},
+	BlankIdIndex, Id, IriIndex,
+};
 use treeldr_syntax as syntax;
 
 mod source;
@@ -20,16 +25,19 @@ pub fn build_all<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
 	build_context: &mut BuildContext,
-	mut documents: Vec<Document>,
+	documents: Vec<Document>,
 ) -> Result<treeldr::Model<source::Metadata>, BuildAllError> {
 	build_context.apply_built_in_definitions(vocabulary, generator);
 
-	for doc in &mut documents {
-		doc.declare(build_context, vocabulary, generator)
-			.map_err(BuildAllError::Declaration)?
+	let mut declared_documents = Vec::with_capacity(documents.len());
+	for doc in documents {
+		declared_documents.push(
+			doc.declare(build_context, vocabulary, generator)
+				.map_err(BuildAllError::Declaration)?,
+		)
 	}
 
-	for doc in documents {
+	for doc in declared_documents {
 		doc.build(build_context, vocabulary, generator)
 			.map_err(BuildAllError::Link)?
 	}
@@ -123,6 +131,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllEr
 
 pub enum LangError {
 	TreeLdr(syntax::build::Error<source::Metadata>),
+	NQuads(treeldr_build::Error<source::Metadata>),
 	#[cfg(feature = "json-schema")]
 	JsonSchema(treeldr_json_schema::import::Error<source::Metadata>),
 }
@@ -147,6 +156,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 	) -> String {
 		match self {
 			Self::TreeLdr(e) => e.message(vocabulary),
+			Self::NQuads(e) => e.message(vocabulary),
 			#[cfg(feature = "json-schema")]
 			Self::JsonSchema(e) => e.message(vocabulary),
 		}
@@ -158,6 +168,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 	) -> Vec<codespan_reporting::diagnostic::Label<source::FileId>> {
 		match self {
 			Self::TreeLdr(e) => e.labels(vocabulary),
+			Self::NQuads(e) => e.labels(vocabulary),
 			#[cfg(feature = "json-schema")]
 			Self::JsonSchema(e) => e.labels(vocabulary),
 		}
@@ -169,6 +180,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 	) -> Vec<String> {
 		match self {
 			Self::TreeLdr(e) => e.notes(vocabulary),
+			Self::NQuads(e) => e.notes(vocabulary),
 			#[cfg(feature = "json-schema")]
 			Self::JsonSchema(e) => e.notes(vocabulary),
 		}
@@ -177,6 +189,17 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 
 pub enum Document {
 	TreeLdr(Box<TreeLdrDocument>),
+
+	NQuads(nquads_syntax::Document<source::Metadata>),
+
+	#[cfg(feature = "json-schema")]
+	JsonSchema(Box<treeldr_json_schema::Schema>),
+}
+
+pub enum DeclaredDocument {
+	TreeLdr(Box<TreeLdrDocument>),
+
+	NQuads(Dataset),
 
 	#[cfg(feature = "json-schema")]
 	JsonSchema(Box<treeldr_json_schema::Schema>),
@@ -197,6 +220,9 @@ impl Document {
 					Some(source::MimeType::TreeLdr) => {
 						Document::TreeLdr(Box::new(import_treeldr(files, file_id)))
 					}
+					Some(source::MimeType::NQuads) => {
+						Document::NQuads(import_nquads(files, file_id))
+					}
 					#[cfg(feature = "json-schema")]
 					Some(source::MimeType::JsonSchema) => {
 						Document::JsonSchema(Box::new(import_json_schema(files, file_id)))
@@ -213,24 +239,44 @@ impl Document {
 	}
 
 	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&mut self,
+		self,
 		context: &mut BuildContext,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
-	) -> Result<(), LangError> {
+	) -> Result<DeclaredDocument, LangError> {
 		match self {
-			Self::TreeLdr(d) => {
+			Self::TreeLdr(mut d) => {
 				d.declare(context, vocabulary, generator)?;
-				Ok(())
+				Ok(DeclaredDocument::TreeLdr(d))
+			}
+			Self::NQuads(d) => {
+				let dataset: Dataset = d
+					.into_iter()
+					.map(|Meta(quad, meta)| {
+						Meta(
+							quad.insert_into(vocabulary)
+								.map_predicate(|Meta(p, m)| Meta(Id::Iri(p), m)),
+							meta,
+						)
+					})
+					.collect();
+
+				use treeldr_build::Document;
+				dataset
+					.declare(&mut (), context, vocabulary, generator)
+					.map_err(LangError::NQuads)?;
+				Ok(DeclaredDocument::NQuads(dataset))
 			}
 			#[cfg(feature = "json-schema")]
 			Self::JsonSchema(s) => {
-				treeldr_json_schema::import_schema(s, None, context, vocabulary, generator)?;
-				Ok(())
+				treeldr_json_schema::import_schema(&s, None, context, vocabulary, generator)?;
+				Ok(DeclaredDocument::JsonSchema(s))
 			}
 		}
 	}
+}
 
+impl DeclaredDocument {
 	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		self,
 		context: &mut BuildContext,
@@ -240,6 +286,12 @@ impl Document {
 		match self {
 			Self::TreeLdr(d) => {
 				d.build(context, vocabulary, generator)?;
+				Ok(())
+			}
+			Self::NQuads(d) => {
+				use treeldr_build::Document;
+				d.define(&mut (), context, vocabulary, generator)
+					.map_err(LangError::NQuads)?;
 				Ok(())
 			}
 			#[cfg(feature = "json-schema")]
@@ -274,6 +326,43 @@ where
 		}
 		Err(e) => {
 			let diagnostic = e.diagnostic();
+			let writer = StandardStream::stderr(ColorChoice::Always);
+			let config = codespan_reporting::term::Config::default();
+			term::emit(&mut writer.lock(), &config, files, &diagnostic).expect("diagnostic failed");
+			std::process::exit(1);
+		}
+	}
+}
+
+/// RDF dataset.
+pub type Dataset =
+	grdf::meta::BTreeDataset<Id, Id, Object<source::Metadata>, GraphLabel, source::Metadata>;
+
+/// Import a N-Quads file.
+pub fn import_nquads<'f, P>(
+	files: &'f source::Files<P>,
+	source_id: source::FileId,
+) -> nquads_syntax::Document<source::Metadata>
+where
+	P: DisplayPath<'f>,
+{
+	use nquads_syntax::Parse;
+	let file = files.get(source_id).unwrap();
+	match nquads_syntax::Document::parse_str(file.buffer().as_str(), |span| {
+		source::Metadata::Extern(Location::new(source_id, span))
+	}) {
+		Ok(Meta(doc, _)) => {
+			log::debug!("parsing succeeded.");
+			doc
+		}
+		Err(Meta(e, meta)) => {
+			let diagnostic = codespan_reporting::diagnostic::Diagnostic::error()
+				.with_message("parse error")
+				.with_labels(vec![meta
+					.optional_location()
+					.unwrap()
+					.as_primary_label()
+					.with_message(e.to_string())]);
 			let writer = StandardStream::stderr(ColorChoice::Always);
 			let config = codespan_reporting::term::Config::default();
 			term::emit(&mut writer.lock(), &config, files, &diagnostic).expect("diagnostic failed");

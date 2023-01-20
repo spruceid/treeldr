@@ -1,7 +1,7 @@
 use crate::{
 	component::formatted::AssertFormatted,
 	context::{MapIds, MapIdsIn},
-	prop,
+	prop, rdf,
 	resource::{self, BindingValueRef},
 	single, Context, Single,
 };
@@ -10,7 +10,7 @@ use super::Error;
 use locspan::Meta;
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
 pub use treeldr::layout::field::Property;
-use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, Name};
+use treeldr::{metadata::Merge, vocab::Object, BlankIdIndex, Id, IriIndex, Name};
 
 /// Layout field definition.
 #[derive(Debug, Clone)]
@@ -137,6 +137,17 @@ impl<M> Definition<M> {
 		ClassBindings {
 			prop: self.prop.iter(),
 		}
+	}
+
+	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			Property::For => self.prop.insert(rdf::from::expect_id(value)?),
+		}
+
+		Ok(())
 	}
 
 	pub(crate) fn build(

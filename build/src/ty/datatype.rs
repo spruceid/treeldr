@@ -1,11 +1,12 @@
 use crate::{
 	context::{MapIds, MapIdsIn},
 	error::NodeBindingMissing,
+	rdf,
 	resource::BindingValueRef,
 	single, Context, Error, ObjectAsRequiredId, Single,
 };
 use locspan::Meta;
-use treeldr::{metadata::Merge, ty::data::Primitive, Id};
+use treeldr::{metadata::Merge, ty::data::Primitive, vocab::Object, Id};
 
 pub use treeldr::ty::data::Property;
 
@@ -53,6 +54,18 @@ impl<M> Definition<M> {
 			on_datatype: self.base.iter(),
 			with_restrictions: self.restrictions.iter(),
 		}
+	}
+
+	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			Property::OnDatatype => self.base.insert(rdf::from::expect_id(value)?),
+			Property::WithRestrictions => self.restrictions.insert(rdf::from::expect_id(value)?),
+		}
+
+		Ok(())
 	}
 
 	// pub fn dependencies(

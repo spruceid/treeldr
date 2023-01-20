@@ -1,10 +1,11 @@
 use crate::{
 	context::{MapIds, MapIdsIn},
+	rdf,
 	resource::BindingValueRef,
 	single, Context, Error, Single,
 };
 use locspan::Meta;
-use treeldr::{metadata::Merge, Id};
+use treeldr::{metadata::Merge, vocab::Object, Id};
 
 pub use treeldr::ty::restriction::{Cardinality, Property};
 
@@ -74,6 +75,35 @@ impl<M> Definition<M> {
 			on_property: self.property.iter(),
 			restriction: self.restriction.iter(),
 		}
+	}
+
+	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			Property::OnProperty => self.property.insert(rdf::from::expect_id(value)?),
+			Property::AllValuesFrom => self
+				.restriction
+				.insert(rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::All(id)))),
+			Property::SomeValuesFrom => self
+				.restriction
+				.insert(rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::Any(id)))),
+			Property::MaxCardinality => self.restriction.insert(
+				rdf::from::expect_non_negative_integer(value)?
+					.map(|n| Restriction::Cardinality(Cardinality::AtMost(n))),
+			),
+			Property::MinCardinality => self.restriction.insert(
+				rdf::from::expect_non_negative_integer(value)?
+					.map(|n| Restriction::Cardinality(Cardinality::AtLeast(n))),
+			),
+			Property::Cardinality => self.restriction.insert(
+				rdf::from::expect_non_negative_integer(value)?
+					.map(|n| Restriction::Cardinality(Cardinality::Exactly(n))),
+			),
+		}
+
+		Ok(())
 	}
 
 	pub fn build(

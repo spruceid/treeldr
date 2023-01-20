@@ -1,7 +1,7 @@
 use locspan::Meta;
-use treeldr::metadata::Merge;
+use treeldr::{metadata::Merge, vocab::Object};
 
-use crate::{context::MapIds, resource::BindingValueRef, single, Error, Single};
+use crate::{context::MapIds, rdf, resource::BindingValueRef, single, Error, Single};
 
 pub use treeldr::layout::restriction::Property;
 
@@ -39,6 +39,73 @@ impl<M> Definition<M> {
 		ClassBindings {
 			restriction: self.restriction.iter(),
 		}
+	}
+
+	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			Property::ExclusiveMaximum => {
+				self.restriction
+					.insert(rdf::from::expect_numeric(value)?.map(|n| {
+						Restriction::Primitive(primitive::Restriction::Numeric(
+							primitive::Numeric::ExclusiveMaximum(n),
+						))
+					}))
+			}
+			Property::ExclusiveMinimum => {
+				self.restriction
+					.insert(rdf::from::expect_numeric(value)?.map(|n| {
+						Restriction::Primitive(primitive::Restriction::Numeric(
+							primitive::Numeric::ExclusiveMinimum(n),
+						))
+					}))
+			}
+			Property::InclusiveMaximum => {
+				self.restriction
+					.insert(rdf::from::expect_numeric(value)?.map(|n| {
+						Restriction::Primitive(primitive::Restriction::Numeric(
+							primitive::Numeric::InclusiveMaximum(n),
+						))
+					}))
+			}
+			Property::InclusiveMinimum => {
+				self.restriction
+					.insert(rdf::from::expect_numeric(value)?.map(|n| {
+						Restriction::Primitive(primitive::Restriction::Numeric(
+							primitive::Numeric::InclusiveMinimum(n),
+						))
+					}))
+			}
+			Property::MaxLength => todo!(),
+			Property::MinLength => todo!(),
+			Property::Pattern => self
+				.restriction
+				.insert(rdf::from::expect_regexp(value)?.map(|p| {
+					Restriction::Primitive(primitive::Restriction::String(
+						primitive::String::Pattern(p),
+					))
+				})),
+			Property::MaxCardinality => {
+				self.restriction
+					.insert(rdf::from::expect_non_negative_integer(value)?.map(|n| {
+						Restriction::Container(container::ContainerRestriction::Cardinal(
+							container::cardinal::Restriction::Max(n),
+						))
+					}))
+			}
+			Property::MinCardinality => {
+				self.restriction
+					.insert(rdf::from::expect_non_negative_integer(value)?.map(|n| {
+						Restriction::Container(container::ContainerRestriction::Cardinal(
+							container::cardinal::Restriction::Min(n),
+						))
+					}))
+			}
+		}
+
+		Ok(())
 	}
 
 	pub fn build(&self) -> Result<Meta<Restriction, M>, Error<M>>

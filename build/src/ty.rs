@@ -1,11 +1,12 @@
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
+	rdf,
 	resource::{self, BindingValueRef},
 	single, Context, Error, ObjectAsRequiredId, Single,
 };
 use locspan::Meta;
 use std::collections::{HashMap, HashSet};
-use treeldr::{metadata::Merge, multiple, utils::SccGraph, Id, Multiple};
+use treeldr::{metadata::Merge, multiple, utils::SccGraph, vocab::Object, Id, Multiple};
 
 pub mod datatype;
 pub mod restriction;
@@ -219,6 +220,25 @@ impl<M> Definition<M> {
 			datatype: self.datatype.bindings(),
 			restriction: self.restriction.bindings(),
 		}
+	}
+
+	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			Property::SubClassOf => self
+				.sub_class_of_mut()
+				.insert(rdf::from::expect_type(value)?),
+			Property::UnionOf => self.union_of_mut().insert(rdf::from::expect_id(value)?),
+			Property::IntersectionOf => self
+				.intersection_of_mut()
+				.insert(rdf::from::expect_id(value)?),
+			Property::Datatype(prop) => self.as_datatype_mut().set(prop, value)?,
+			Property::Restriction(prop) => self.as_restriction_mut().set(prop, value)?,
+		}
+
+		Ok(())
 	}
 }
 

@@ -1,6 +1,6 @@
 use crate::{
 	context::{MapIds, MapIdsIn},
-	error,
+	error, rdf,
 	resource::{self, BindingValueRef},
 	single::{self, Conflict},
 	utils::TryCollect,
@@ -9,7 +9,7 @@ use crate::{
 use locspan::Meta;
 use rdf_types::IriVocabulary;
 pub use treeldr::layout::{DescriptionProperty, Property};
-use treeldr::{metadata::Merge, Id, IriIndex, Multiple, Name};
+use treeldr::{metadata::Merge, vocab::Object, Id, IriIndex, Multiple, Name};
 
 pub mod array;
 pub mod field;
@@ -361,6 +361,64 @@ impl<M> Definition<M> {
 				.iter()
 				.all(|Meta(b, _)| a.is_included_in(context, b))
 		})
+	}
+
+	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			Property::For => self.ty_mut().insert(rdf::from::expect_id(value)?),
+			Property::Description(DescriptionProperty::Alias) => self
+				.description_mut()
+				.insert(rdf::from::expect_id(value)?.map(|id| Description::Alias(id))),
+			Property::Description(DescriptionProperty::Array) => self
+				.description_mut()
+				.insert(rdf::from::expect_id(value)?.map(|id| Description::Array(id))),
+			Property::Description(DescriptionProperty::DerivedFrom) => {
+				let Meta(id, meta) = rdf::from::expect_id(value)?;
+				match Primitive::from_id(id) {
+					Some(p) => self
+						.description_mut()
+						.insert(Meta(Description::Primitive(p), meta)),
+					None => panic!("invalid primitive layout"),
+				}
+			}
+			Property::Description(DescriptionProperty::Fields) => self
+				.description_mut()
+				.insert(rdf::from::expect_id(value)?.map(|id| Description::Struct(id))),
+			Property::Description(DescriptionProperty::OneOrMany) => self
+				.description_mut()
+				.insert(rdf::from::expect_id(value)?.map(|id| Description::OneOrMany(id))),
+			Property::Description(DescriptionProperty::Option) => self
+				.description_mut()
+				.insert(rdf::from::expect_id(value)?.map(|id| Description::Option(id))),
+			Property::Description(DescriptionProperty::Reference) => self
+				.description_mut()
+				.insert(rdf::from::expect_id(value)?.map(|id| Description::Reference(id))),
+			Property::Description(DescriptionProperty::Required) => self
+				.description_mut()
+				.insert(rdf::from::expect_id(value)?.map(|id| Description::Required(id))),
+			Property::Description(DescriptionProperty::Set) => self
+				.description_mut()
+				.insert(rdf::from::expect_id(value)?.map(|id| Description::Set(id))),
+			Property::Description(DescriptionProperty::Variants) => self
+				.description_mut()
+				.insert(rdf::from::expect_id(value)?.map(|id| Description::Enum(id))),
+			Property::WithRestrictions => {
+				self.restrictions_mut().insert(rdf::from::expect_id(value)?)
+			}
+			Property::IntersectionOf => self
+				.intersection_of_mut()
+				.insert(rdf::from::expect_id(value)?),
+			Property::ArrayListFirst => {
+				self.array_semantics.set_first(rdf::from::expect_id(value)?)
+			}
+			Property::ArrayListRest => self.array_semantics.set_rest(rdf::from::expect_id(value)?),
+			Property::ArrayListNil => self.array_semantics.set_nil(rdf::from::expect_id(value)?),
+		}
+
+		Ok(())
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {

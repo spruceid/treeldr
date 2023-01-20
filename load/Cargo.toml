@@ -18,9 +18,10 @@ iref.workspace = true
 rdf-types.workspace = true
 grdf = { workspace = true, features = ["meta"] }
 log.workspace = true
-locspan.workspace = true
+locspan = { workspace = true, features = ["reporting"] }
 codespan-reporting.workspace = true
 thiserror.workspace = true
+nquads-syntax = "0.10.0"
 
 # Extensions.
 treeldr-json-schema = { workspace = true, optional = true }

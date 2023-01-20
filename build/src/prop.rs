@@ -1,11 +1,11 @@
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
-	multiple,
+	multiple, rdf,
 	resource::BindingValueRef,
 	single, Error, Multiple, Single,
 };
 use locspan::Meta;
-use treeldr::{metadata::Merge, prop::RdfProperty, Id};
+use treeldr::{metadata::Merge, prop::RdfProperty, vocab::Object, Id};
 
 pub use treeldr::prop::{Property, Type};
 
@@ -67,6 +67,21 @@ impl<M> Definition<M> {
 			range: self.range.iter(),
 			required: self.required.iter(),
 		}
+	}
+
+	pub fn set(&mut self, prop: RdfProperty, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			RdfProperty::Domain => self.domain.insert(rdf::from::expect_id(value)?),
+			RdfProperty::Range => self.range.insert(rdf::from::expect_id(value)?),
+			RdfProperty::Required => self
+				.required
+				.insert(rdf::from::expect_schema_boolean(value)?),
+		}
+
+		Ok(())
 	}
 
 	pub(crate) fn build(

@@ -2,7 +2,7 @@ use crate::{
 	component, layout, list, multiple,
 	node::{self, BindingValueRef},
 	ty,
-	vocab::{self, Term},
+	vocab::{self, Owl, Rdf, Rdfs, Schema, Term, TreeLdr, Xsd},
 	BlankIdIndex, Id, IriIndex, Multiple, Ref, ResourceType, TId,
 };
 use contextual::DisplayWithContext;
@@ -11,18 +11,39 @@ use locspan::Meta;
 use rdf_types::Vocabulary;
 use std::fmt;
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct OtherPropertyId(TId<Property>);
+
+impl OtherPropertyId {
+	pub fn id(&self) -> TId<Property> {
+		self.0
+	}
+
+	pub fn raw_id(&self) -> Id {
+		self.0.id()
+	}
+}
+
+impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V>
+	for OtherPropertyId
+{
+	fn fmt_with(&self, context: &V, f: &mut fmt::Formatter) -> fmt::Result {
+		self.raw_id().fmt_with(context, f)
+	}
+}
+
 /// Node property.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
 	Resource(node::Property),
-	Other(Id),
+	Other(OtherPropertyId),
 }
 
 impl Property {
 	pub fn id(&self) -> Id {
 		match self {
 			Self::Resource(p) => Id::Iri(IriIndex::Iri(p.term())),
-			Self::Other(id) => *id,
+			Self::Other(id) => id.raw_id(),
 		}
 	}
 
@@ -132,6 +153,194 @@ impl From<list::Property> for Property {
 	}
 }
 
+impl From<Term> for Property {
+	fn from(t: Term) -> Self {
+		match t {
+			Term::TreeLdr(TreeLdr::Self_) => Self::Resource(node::Property::Self_),
+			Term::Rdf(Rdf::Type) => Self::Resource(node::Property::Type),
+			Term::Rdfs(Rdfs::Label) => Self::Resource(node::Property::Label),
+			Term::Rdfs(Rdfs::Comment) => Self::Resource(node::Property::Comment),
+			Term::Rdfs(Rdfs::SubClassOf) => {
+				Self::Resource(node::Property::Class(ty::Property::SubClassOf))
+			}
+			Term::Owl(Owl::UnionOf) => Self::Resource(node::Property::Class(ty::Property::UnionOf)),
+			Term::Owl(Owl::IntersectionOf) => {
+				Self::Resource(node::Property::Class(ty::Property::IntersectionOf))
+			}
+			Term::Owl(Owl::OnDatatype) => Self::Resource(node::Property::Class(
+				ty::Property::Datatype(ty::data::Property::OnDatatype),
+			)),
+			Term::Owl(Owl::WithRestrictions) => Self::Resource(node::Property::Class(
+				ty::Property::Datatype(ty::data::Property::WithRestrictions),
+			)),
+			Term::Owl(Owl::OnProperty) => Self::Resource(node::Property::Class(
+				ty::Property::Restriction(ty::restriction::Property::OnProperty),
+			)),
+			Term::Owl(Owl::AllValuesFrom) => Self::Resource(node::Property::Class(
+				ty::Property::Restriction(ty::restriction::Property::AllValuesFrom),
+			)),
+			Term::Owl(Owl::SomeValuesFrom) => Self::Resource(node::Property::Class(
+				ty::Property::Restriction(ty::restriction::Property::SomeValuesFrom),
+			)),
+			Term::Owl(Owl::MinCardinality) => Self::Resource(node::Property::Class(
+				ty::Property::Restriction(ty::restriction::Property::MinCardinality),
+			)),
+			Term::Owl(Owl::MaxCardinality) => Self::Resource(node::Property::Class(
+				ty::Property::Restriction(ty::restriction::Property::MaxCardinality),
+			)),
+			Term::Owl(Owl::Cardinality) => Self::Resource(node::Property::Class(
+				ty::Property::Restriction(ty::restriction::Property::Cardinality),
+			)),
+			Term::Xsd(Xsd::MinInclusive) => Self::Resource(node::Property::DatatypeRestriction(
+				ty::data::restriction::Property::MinInclusive,
+			)),
+			Term::Xsd(Xsd::MinExclusive) => Self::Resource(node::Property::DatatypeRestriction(
+				ty::data::restriction::Property::MinExclusive,
+			)),
+			Term::Xsd(Xsd::MaxInclusive) => Self::Resource(node::Property::DatatypeRestriction(
+				ty::data::restriction::Property::MaxInclusive,
+			)),
+			Term::Xsd(Xsd::MaxExclusive) => Self::Resource(node::Property::DatatypeRestriction(
+				ty::data::restriction::Property::MaxExclusive,
+			)),
+			Term::Xsd(Xsd::MinLength) => Self::Resource(node::Property::DatatypeRestriction(
+				ty::data::restriction::Property::MinLength,
+			)),
+			Term::Xsd(Xsd::MaxLength) => Self::Resource(node::Property::DatatypeRestriction(
+				ty::data::restriction::Property::MaxLength,
+			)),
+			Term::Xsd(Xsd::Pattern) => Self::Resource(node::Property::DatatypeRestriction(
+				ty::data::restriction::Property::Pattern,
+			)),
+			Term::Rdfs(Rdfs::Domain) => {
+				Self::Resource(node::Property::Property(RdfProperty::Domain))
+			}
+			Term::Rdfs(Rdfs::Range) => Self::Resource(node::Property::Property(RdfProperty::Range)),
+			Term::Schema(Schema::ValueRequired) => {
+				Self::Resource(node::Property::Property(RdfProperty::Required))
+			}
+			Term::TreeLdr(TreeLdr::Name) => {
+				Self::Resource(node::Property::Component(component::Property::Name))
+			}
+			Term::TreeLdr(TreeLdr::LayoutFor) => Self::Resource(node::Property::Component(
+				component::Property::Layout(layout::Property::For),
+			)),
+			Term::TreeLdr(TreeLdr::Alias) => {
+				Self::Resource(node::Property::Component(component::Property::Layout(
+					layout::Property::Description(layout::DescriptionProperty::Alias),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::Array) => {
+				Self::Resource(node::Property::Component(component::Property::Layout(
+					layout::Property::Description(layout::DescriptionProperty::Array),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::DerivedFrom) => {
+				Self::Resource(node::Property::Component(component::Property::Layout(
+					layout::Property::Description(layout::DescriptionProperty::DerivedFrom),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::Fields) => {
+				Self::Resource(node::Property::Component(component::Property::Layout(
+					layout::Property::Description(layout::DescriptionProperty::Fields),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::OneOrMany) => {
+				Self::Resource(node::Property::Component(component::Property::Layout(
+					layout::Property::Description(layout::DescriptionProperty::OneOrMany),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::Option) => {
+				Self::Resource(node::Property::Component(component::Property::Layout(
+					layout::Property::Description(layout::DescriptionProperty::Option),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::Reference) => {
+				Self::Resource(node::Property::Component(component::Property::Layout(
+					layout::Property::Description(layout::DescriptionProperty::Reference),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::Required) => {
+				Self::Resource(node::Property::Component(component::Property::Layout(
+					layout::Property::Description(layout::DescriptionProperty::Required),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::Set) => {
+				Self::Resource(node::Property::Component(component::Property::Layout(
+					layout::Property::Description(layout::DescriptionProperty::Set),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::Enumeration) => {
+				Self::Resource(node::Property::Component(component::Property::Layout(
+					layout::Property::Description(layout::DescriptionProperty::Variants),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::IntersectionOf) => Self::Resource(node::Property::Component(
+				component::Property::Layout(layout::Property::IntersectionOf),
+			)),
+			Term::TreeLdr(TreeLdr::WithRestrictions) => Self::Resource(node::Property::Component(
+				component::Property::Layout(layout::Property::WithRestrictions),
+			)),
+			Term::TreeLdr(TreeLdr::ArrayListFirst) => Self::Resource(node::Property::Component(
+				component::Property::Layout(layout::Property::ArrayListFirst),
+			)),
+			Term::TreeLdr(TreeLdr::ArrayListRest) => Self::Resource(node::Property::Component(
+				component::Property::Layout(layout::Property::ArrayListRest),
+			)),
+			Term::TreeLdr(TreeLdr::ArrayListNil) => Self::Resource(node::Property::Component(
+				component::Property::Layout(layout::Property::ArrayListNil),
+			)),
+			Term::TreeLdr(TreeLdr::Format) => Self::Resource(node::Property::Component(
+				component::Property::Formatted(component::formatted::Property::Format),
+			)),
+			Term::TreeLdr(TreeLdr::FieldFor) => {
+				Self::Resource(node::Property::Component(component::Property::Formatted(
+					component::formatted::Property::LayoutField(layout::field::Property::For),
+				)))
+			}
+			Term::TreeLdr(TreeLdr::ExclusiveMaximum) => Self::Resource(
+				node::Property::LayoutRestriction(layout::restriction::Property::ExclusiveMaximum),
+			),
+			Term::TreeLdr(TreeLdr::ExclusiveMinimum) => Self::Resource(
+				node::Property::LayoutRestriction(layout::restriction::Property::ExclusiveMinimum),
+			),
+			Term::TreeLdr(TreeLdr::InclusiveMaximum) => Self::Resource(
+				node::Property::LayoutRestriction(layout::restriction::Property::InclusiveMaximum),
+			),
+			Term::TreeLdr(TreeLdr::InclusiveMinimum) => Self::Resource(
+				node::Property::LayoutRestriction(layout::restriction::Property::InclusiveMinimum),
+			),
+			Term::TreeLdr(TreeLdr::MaxCardinality) => Self::Resource(
+				node::Property::LayoutRestriction(layout::restriction::Property::MaxCardinality),
+			),
+			Term::TreeLdr(TreeLdr::MaxLength) => Self::Resource(node::Property::LayoutRestriction(
+				layout::restriction::Property::MaxLength,
+			)),
+			Term::TreeLdr(TreeLdr::MinCardinality) => Self::Resource(
+				node::Property::LayoutRestriction(layout::restriction::Property::MinCardinality),
+			),
+			Term::TreeLdr(TreeLdr::MinLength) => Self::Resource(node::Property::LayoutRestriction(
+				layout::restriction::Property::MinLength,
+			)),
+			Term::TreeLdr(TreeLdr::Pattern) => Self::Resource(node::Property::LayoutRestriction(
+				layout::restriction::Property::Pattern,
+			)),
+			Term::Rdf(Rdf::First) => Self::Resource(node::Property::List(list::Property::First)),
+			Term::Rdf(Rdf::Rest) => Self::Resource(node::Property::List(list::Property::Rest)),
+			t => Self::Other(OtherPropertyId(TId::new(Id::Iri(IriIndex::Iri(t))))),
+		}
+	}
+}
+
+impl From<Id> for Property {
+	fn from(id: Id) -> Self {
+		match id {
+			Id::Iri(IriIndex::Iri(t)) => t.into(),
+			id => Self::Other(OtherPropertyId(TId::new(id))),
+		}
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RdfProperty {
 	Domain,
@@ -141,7 +350,6 @@ pub enum RdfProperty {
 
 impl RdfProperty {
 	pub fn term(&self) -> vocab::Term {
-		use vocab::{Rdfs, Schema};
 		match self {
 			Self::Domain => Term::Rdfs(Rdfs::Domain),
 			Self::Range => Term::Rdfs(Rdfs::Range),
@@ -241,7 +449,7 @@ impl<M> Definition<M> {
 
 pub enum PropertyName {
 	Resource(&'static str),
-	Other(Id),
+	Other(OtherPropertyId),
 }
 
 impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V> for PropertyName {
