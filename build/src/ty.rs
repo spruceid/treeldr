@@ -397,10 +397,17 @@ pub enum ClassBinding {
 }
 
 impl ClassBinding {
-	pub fn into_binding(self) -> Binding {
+	pub fn as_binding_ref<'a>(&self) -> BindingRef<'a> {
 		match self {
-			Self::UnionOf(i) => Binding::UnionOf(i),
-			Self::IntersectionOf(i) => Binding::IntersectionOf(i),
+			Self::UnionOf(i) => BindingRef::UnionOf(*i),
+			Self::IntersectionOf(i) => BindingRef::IntersectionOf(*i),
+		}
+	}
+
+	pub fn into_binding_ref<'a>(self) -> BindingRef<'a> {
+		match self {
+			Self::UnionOf(i) => BindingRef::UnionOf(i),
+			Self::IntersectionOf(i) => BindingRef::IntersectionOf(i),
 		}
 	}
 }
@@ -444,7 +451,34 @@ impl Binding {
 		}
 	}
 
-	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value<M>(&self) -> BindingValueRef<M> {
+		match self {
+			Self::UnionOf(v) => BindingValueRef::Id(*v),
+			Self::IntersectionOf(v) => BindingValueRef::Id(*v),
+			Self::Datatype(b) => b.value(),
+			Self::Restriction(b) => b.value(),
+		}
+	}
+}
+
+pub enum BindingRef<'a> {
+	UnionOf(Id),
+	IntersectionOf(Id),
+	Datatype(datatype::Binding),
+	Restriction(restriction::BindingRef<'a>),
+}
+
+impl<'a> BindingRef<'a> {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::UnionOf(_) => Property::UnionOf,
+			Self::IntersectionOf(_) => Property::IntersectionOf,
+			Self::Datatype(b) => Property::Datatype(b.property()),
+			Self::Restriction(b) => Property::Restriction(b.property()),
+		}
+	}
+
+	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::UnionOf(v) => BindingValueRef::Id(*v),
 			Self::IntersectionOf(v) => BindingValueRef::Id(*v),
@@ -461,17 +495,21 @@ pub struct Bindings<'a, M> {
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {
-	type Item = Meta<Binding, &'a M>;
+	type Item = Meta<BindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.data
 			.next()
-			.map(|m| m.map(ClassBinding::into_binding))
+			.map(|m| m.map(ClassBinding::into_binding_ref))
 			.or_else(|| {
 				self.datatype
 					.next()
-					.map(|m| m.map(Binding::Datatype))
-					.or_else(|| self.restriction.next().map(|m| m.map(Binding::Restriction)))
+					.map(|m| m.map(BindingRef::Datatype))
+					.or_else(|| {
+						self.restriction
+							.next()
+							.map(|m| m.map(BindingRef::Restriction))
+					})
 			})
 	}
 }

@@ -1,8 +1,7 @@
-use super::{Decimal, Integer};
 use crate::{vocab::StrippedLiteral, IriIndex};
 use num::{BigInt, BigRational, Signed, Zero};
 use std::fmt;
-use std::fmt::Write;
+use xsd_types::{Decimal, Integer, NoDecimalRepresentation, NonNegativeInteger};
 
 lazy_static::lazy_static! {
 	static ref TEN: BigInt = 10u32.into();
@@ -13,11 +12,11 @@ pub struct Rational(BigRational);
 
 impl Rational {
 	pub fn numer(&self) -> &Integer {
-		unsafe { core::mem::transmute(self.0.numer()) }
+		Integer::from_bigint_ref(self.0.numer())
 	}
 
 	pub fn denom(&self) -> &Integer {
-		unsafe { core::mem::transmute(self.0.denom()) }
+		Integer::from_bigint_ref(self.0.denom())
 	}
 
 	pub fn into_parts(self) -> (Integer, Integer) {
@@ -41,6 +40,10 @@ impl Rational {
 		self.0.is_integer()
 	}
 
+	pub fn is_non_negative_integer(&self) -> bool {
+		self.0.is_integer() && !self.0.is_negative()
+	}
+
 	pub fn as_integer(&self) -> Option<&Integer> {
 		if self.is_integer() {
 			Some(self.numer())
@@ -49,76 +52,33 @@ impl Rational {
 		}
 	}
 
+	pub fn into_integer(self) -> Result<Integer, Self> {
+		if self.is_integer() {
+			Ok(self.into_numer())
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_non_negative_integer(self) -> Result<NonNegativeInteger, Self> {
+		if self.is_non_negative_integer() {
+			Ok(unsafe { NonNegativeInteger::new_unchecked(self.into_numer().into()) })
+		} else {
+			Err(self)
+		}
+	}
+
 	pub fn is_negative(&self) -> bool {
 		self.0.is_negative()
 	}
 
 	pub fn is_decimal(&self) -> bool {
-		let mut set = std::collections::HashSet::new();
-
-		let mut rem = if self.is_negative() {
-			-self.0.numer()
-		} else {
-			self.0.numer().clone()
-		};
-
-		rem %= self.0.denom();
-		while !rem.is_zero() && !set.contains(&rem) {
-			set.insert(rem.clone());
-			rem = (rem * TEN.clone()) % self.0.denom();
-		}
-
-		rem.is_zero()
-	}
-
-	pub fn as_lexical(&self) -> Option<&Decimal> {
-		if self.is_decimal() {
-			Some(unsafe { core::mem::transmute(self) })
-		} else {
-			None
-		}
-	}
-
-	pub fn lexical_decimal(&self) -> Option<xsd_types::DecimalBuf> {
-		let mut fraction = String::new();
-		let mut map = std::collections::HashMap::new();
-
-		let mut rem = if self.is_negative() {
-			-self.0.numer()
-		} else {
-			self.0.numer().clone()
-		};
-
-		rem %= self.0.denom();
-		while !rem.is_zero() && !map.contains_key(&rem) {
-			map.insert(rem.clone(), fraction.len());
-			rem *= TEN.clone();
-			fraction.push_str(&(rem.clone() / self.0.denom()).to_string());
-			rem %= self.0.denom();
-		}
-
-		let mut output = if self.is_negative() {
-			"-".to_owned()
-		} else {
-			String::new()
-		};
-
-		output.push_str(&(self.0.numer() / self.0.denom()).to_string());
-
-		if rem.is_zero() {
-			if !fraction.is_empty() {
-				write!(output, ".{}", &fraction).unwrap();
-			}
-
-			Some(unsafe { xsd_types::DecimalBuf::new_unchecked(output) })
-		} else {
-			None
-		}
+		xsd_types::is_decimal(&self.0)
 	}
 
 	pub fn literal(&self) -> StrippedLiteral {
 		use crate::vocab::{Owl, Term, Xsd};
-		match self.lexical_decimal() {
+		match xsd_types::decimal_lexical_representation(&self.0) {
 			Some(decimal) => StrippedLiteral::TypedString(
 				decimal.into_string().into(),
 				IriIndex::Iri(Term::Xsd(Xsd::Decimal)),
@@ -149,9 +109,10 @@ impl From<BigInt> for Rational {
 	}
 }
 
-impl From<Rational> for super::Real {
-	fn from(r: Rational) -> Self {
-		Self::Rational(r)
+impl From<Decimal> for Rational {
+	fn from(value: Decimal) -> Self {
+		let n: BigRational = value.into();
+		n.into()
 	}
 }
 
@@ -159,15 +120,14 @@ impl TryFrom<Rational> for super::Decimal {
 	type Error = Rational;
 
 	fn try_from(r: Rational) -> Result<Self, Self::Error> {
-		if r.is_decimal() {
-			Ok(unsafe { Self::new_unchecked(r) })
-		} else {
-			Err(r)
+		match super::Decimal::try_from(r.0) {
+			Ok(d) => Ok(d),
+			Err(NoDecimalRepresentation(r)) => Err(Rational(r)),
 		}
 	}
 }
 
-impl TryFrom<Rational> for super::Integer {
+impl TryFrom<Rational> for Integer {
 	type Error = Rational;
 
 	fn try_from(r: Rational) -> Result<Self, Self::Error> {
@@ -179,12 +139,12 @@ impl TryFrom<Rational> for super::Integer {
 	}
 }
 
-impl TryFrom<Rational> for super::NonNegativeInteger {
+impl TryFrom<Rational> for NonNegativeInteger {
 	type Error = Rational;
 
 	fn try_from(r: Rational) -> Result<Self, Self::Error> {
 		if r.is_integer() && !r.is_negative() {
-			Ok(unsafe { Self::new_unchecked(r.into_numer()) })
+			Ok(r.into_numer().try_into().unwrap())
 		} else {
 			Err(r)
 		}

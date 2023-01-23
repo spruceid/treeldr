@@ -3,9 +3,10 @@ use crate::{
 };
 use derivative::Derivative;
 use locspan::Meta;
+use xsd_types::NonNegativeInteger;
 
 /// Property restriction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Restriction {
 	/// Range restriction.
 	Range(Range),
@@ -15,10 +16,29 @@ pub enum Restriction {
 }
 
 impl Restriction {
-	pub fn as_binding(&self) -> ClassBinding {
+	pub fn as_binding_ref(&self) -> ClassBindingRef {
 		match self {
-			Self::Range(r) => r.as_binding(),
-			Self::Cardinality(r) => r.as_binding(),
+			Self::Range(r) => r.as_binding_ref(),
+			Self::Cardinality(r) => r.as_binding_ref(),
+		}
+	}
+}
+
+/// Property restriction reference.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RestrictionRef<'a> {
+	/// Range restriction.
+	Range(Range),
+
+	/// Cardinality restriction.
+	Cardinality(CardinalityRef<'a>),
+}
+
+impl<'a> RestrictionRef<'a> {
+	pub fn as_binding_ref(&self) -> ClassBindingRef<'a> {
+		match self {
+			Self::Range(r) => r.as_binding_ref(),
+			Self::Cardinality(r) => r.as_binding_ref(),
 		}
 	}
 }
@@ -40,27 +60,57 @@ impl Range {
 			Self::All(v) => ClassBinding::AllValuesFrom(*v),
 		}
 	}
+
+	pub fn as_binding_ref<'a>(&self) -> ClassBindingRef<'a> {
+		match self {
+			Self::Any(v) => ClassBindingRef::SomeValuesFrom(*v),
+			Self::All(v) => ClassBindingRef::AllValuesFrom(*v),
+		}
+	}
 }
 
 /// Property cardinality restriction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Cardinality {
 	/// The property must have at least the given number of values.
-	AtLeast(u64),
+	AtLeast(NonNegativeInteger),
 
 	/// The property must have at most the given number of values.
-	AtMost(u64),
+	AtMost(NonNegativeInteger),
 
 	/// The property must have exactly the given number of values.
-	Exactly(u64),
+	Exactly(NonNegativeInteger),
 }
 
 impl Cardinality {
-	pub fn as_binding(&self) -> ClassBinding {
+	pub fn as_binding_ref(&self) -> ClassBindingRef {
 		match self {
-			Self::AtLeast(v) => ClassBinding::MinCardinality(*v),
-			Self::AtMost(v) => ClassBinding::MaxCardinality(*v),
-			Self::Exactly(v) => ClassBinding::Cardinality(*v),
+			Self::AtLeast(v) => ClassBindingRef::MinCardinality(v),
+			Self::AtMost(v) => ClassBindingRef::MaxCardinality(v),
+			Self::Exactly(v) => ClassBindingRef::Cardinality(v),
+		}
+	}
+}
+
+/// Property cardinality restriction.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CardinalityRef<'a> {
+	/// The property must have at least the given number of values.
+	AtLeast(&'a NonNegativeInteger),
+
+	/// The property must have at most the given number of values.
+	AtMost(&'a NonNegativeInteger),
+
+	/// The property must have exactly the given number of values.
+	Exactly(&'a NonNegativeInteger),
+}
+
+impl<'a> CardinalityRef<'a> {
+	pub fn as_binding_ref(&self) -> ClassBindingRef<'a> {
+		match self {
+			Self::AtLeast(v) => ClassBindingRef::MinCardinality(v),
+			Self::AtMost(v) => ClassBindingRef::MaxCardinality(v),
+			Self::Exactly(v) => ClassBindingRef::Cardinality(v),
 		}
 	}
 }
@@ -194,22 +244,22 @@ pub struct Iter<'a, M> {
 }
 
 impl<'a, M> Iterator for Iter<'a, M> {
-	type Item = Meta<Restriction, &'a M>;
+	type Item = Meta<RestrictionRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.range
 			.next()
-			.map(|r| r.map(Restriction::Range))
+			.map(|r| r.map(RestrictionRef::Range))
 			.or_else(|| {
 				self.cardinality
 					.next()
-					.map(|r| r.map(Restriction::Cardinality))
+					.map(|r| r.map(RestrictionRef::Cardinality))
 			})
 	}
 }
 
 impl<'a, M> IntoIterator for &'a Restrictions<M> {
-	type Item = Meta<Restriction, &'a M>;
+	type Item = Meta<RestrictionRef<'a>, &'a M>;
 	type IntoIter = Iter<'a, M>;
 
 	fn into_iter(self) -> Self::IntoIter {
@@ -311,8 +361,8 @@ impl<'a, M> Iterator for RangeRestrictionsIter<'a, M> {
 #[derive(Debug, Derivative, Clone)]
 #[derivative(Default(bound = ""))]
 pub struct CardinalityRestrictions<M> {
-	min: MetaOption<u64, M>,
-	max: MetaOption<u64, M>,
+	min: MetaOption<NonNegativeInteger, M>,
+	max: MetaOption<NonNegativeInteger, M>,
 }
 
 impl<M> CardinalityRestrictions<M> {
@@ -332,8 +382,8 @@ impl<M> CardinalityRestrictions<M> {
 
 	pub fn iter(&self) -> CardinalityRestrictionsIter<M> {
 		CardinalityRestrictionsIter {
-			min: self.min.as_ref().map(Meta::borrow_metadata),
-			max: self.max.as_ref().map(Meta::borrow_metadata),
+			min: self.min.as_ref(),
+			max: self.max.as_ref(),
 		}
 	}
 
@@ -376,7 +426,7 @@ impl<M> CardinalityRestrictions<M> {
 					}
 				}
 
-				self.min = MetaOption::new(n, meta.clone());
+				self.min = MetaOption::new(n.clone(), meta.clone());
 				self.max = MetaOption::new(n, meta);
 			}
 		}
@@ -424,33 +474,35 @@ impl<M> CardinalityRestrictions<M> {
 	where
 		M: Clone,
 	{
-		let min: MetaOption<u64, M> = match (self.min.as_ref(), other.min.as_ref()) {
-			(Some(a), Some(b)) => {
-				if **a >= **b {
-					Some(a.clone())
-				} else {
-					Some(b.clone())
+		let min: MetaOption<NonNegativeInteger, M> =
+			match (self.min.as_ref(), other.min.as_ref()) {
+				(Some(a), Some(b)) => {
+					if **a >= **b {
+						Some(a.clone())
+					} else {
+						Some(b.clone())
+					}
 				}
+				(Some(min), None) => Some(min.clone()),
+				(None, Some(min)) => Some(min.clone()),
+				(None, None) => None,
 			}
-			(Some(min), None) => Some(min.clone()),
-			(None, Some(min)) => Some(min.clone()),
-			(None, None) => None,
-		}
-		.into();
+			.into();
 
-		let max: MetaOption<u64, M> = match (self.max.as_ref(), other.max.as_ref()) {
-			(Some(a), Some(b)) => {
-				if **a <= **b {
-					Some(a.clone())
-				} else {
-					Some(b.clone())
+		let max: MetaOption<NonNegativeInteger, M> =
+			match (self.max.as_ref(), other.max.as_ref()) {
+				(Some(a), Some(b)) => {
+					if **a <= **b {
+						Some(a.clone())
+					} else {
+						Some(b.clone())
+					}
 				}
+				(Some(max), None) => Some(max.clone()),
+				(None, Some(max)) => Some(max.clone()),
+				_ => None,
 			}
-			(Some(max), None) => Some(max.clone()),
-			(None, Some(max)) => Some(max.clone()),
-			_ => None,
-		}
-		.into();
+			.into();
 
 		if let (Some(min), Some(max)) = (min.value(), max.value()) {
 			if min > max {
@@ -463,22 +515,28 @@ impl<M> CardinalityRestrictions<M> {
 }
 
 pub struct CardinalityRestrictionsIter<'a, M> {
-	min: Option<Meta<u64, &'a M>>,
-	max: Option<Meta<u64, &'a M>>,
+	min: Option<&'a Meta<NonNegativeInteger, M>>,
+	max: Option<&'a Meta<NonNegativeInteger, M>>,
 }
 
 impl<'a, M> Iterator for CardinalityRestrictionsIter<'a, M> {
-	type Item = Meta<Cardinality, &'a M>;
+	type Item = Meta<CardinalityRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		if self.min.as_deref() == self.max.as_deref() {
+		if self.min.map(Meta::value) == self.max.map(Meta::value) {
 			self.min.take();
-			self.max.take().map(|m| m.map(Cardinality::Exactly))
+			self.max
+				.take()
+				.map(|m| m.borrow().map(CardinalityRef::Exactly))
 		} else {
 			self.min
 				.take()
-				.map(|m| m.map(Cardinality::AtLeast))
-				.or_else(|| self.max.take().map(|m| m.map(Cardinality::AtMost)))
+				.map(|m| m.borrow().map(CardinalityRef::AtLeast))
+				.or_else(|| {
+					self.max
+						.take()
+						.map(|m| m.borrow().map(CardinalityRef::AtMost))
+				})
 		}
 	}
 }
@@ -530,12 +588,10 @@ pub enum ClassBinding {
 	OnProperty(TId<crate::Property>),
 	SomeValuesFrom(TId<Type>),
 	AllValuesFrom(TId<Type>),
-	MinCardinality(u64),
-	MaxCardinality(u64),
-	Cardinality(u64),
+	MinCardinality(NonNegativeInteger),
+	MaxCardinality(NonNegativeInteger),
+	Cardinality(NonNegativeInteger),
 }
-
-pub type Binding = ClassBinding;
 
 impl ClassBinding {
 	pub fn property(&self) -> Property {
@@ -549,17 +605,54 @@ impl ClassBinding {
 		}
 	}
 
-	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value<M>(&self) -> BindingValueRef<M> {
 		match self {
 			Self::OnProperty(v) => BindingValueRef::Property(*v),
 			Self::SomeValuesFrom(v) => BindingValueRef::Type(*v),
 			Self::AllValuesFrom(v) => BindingValueRef::Type(*v),
-			Self::MinCardinality(v) => BindingValueRef::U64(*v),
-			Self::MaxCardinality(v) => BindingValueRef::U64(*v),
-			Self::Cardinality(v) => BindingValueRef::U64(*v),
+			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
 		}
 	}
 }
+
+pub enum ClassBindingRef<'a> {
+	OnProperty(TId<crate::Property>),
+	SomeValuesFrom(TId<Type>),
+	AllValuesFrom(TId<Type>),
+	MinCardinality(&'a NonNegativeInteger),
+	MaxCardinality(&'a NonNegativeInteger),
+	Cardinality(&'a NonNegativeInteger),
+}
+
+impl<'a> ClassBindingRef<'a> {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::OnProperty(_) => Property::OnProperty,
+			Self::SomeValuesFrom(_) => Property::SomeValuesFrom,
+			Self::AllValuesFrom(_) => Property::AllValuesFrom,
+			Self::MinCardinality(_) => Property::MinCardinality,
+			Self::MaxCardinality(_) => Property::MaxCardinality,
+			Self::Cardinality(_) => Property::Cardinality,
+		}
+	}
+
+	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::OnProperty(v) => BindingValueRef::Property(*v),
+			Self::SomeValuesFrom(v) => BindingValueRef::Type(*v),
+			Self::AllValuesFrom(v) => BindingValueRef::Type(*v),
+			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
+		}
+	}
+}
+
+pub type Binding = ClassBinding;
+
+pub type BindingRef<'a> = ClassBindingRef<'a>;
 
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
@@ -571,16 +664,20 @@ pub struct ClassBindings<'a, M> {
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
-	type Item = Meta<ClassBinding, &'a M>;
+	type Item = Meta<ClassBindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.on_property
 			.take()
-			.map(|m| m.borrow().into_cloned_value().map(ClassBinding::OnProperty))
+			.map(|m| {
+				m.borrow()
+					.into_cloned_value()
+					.map(ClassBindingRef::OnProperty)
+			})
 			.or_else(|| {
 				self.restriction
 					.take()
-					.map(|m| m.borrow().map(Restriction::as_binding))
+					.map(|m| m.borrow().map(Restriction::as_binding_ref))
 			})
 	}
 }

@@ -671,9 +671,9 @@ pub enum BindingValueRef<'a, M> {
 	String(&'a str),
 	Name(&'a Name),
 	Object(&'a Object<M>),
-	U64(u64),
 	Numeric(&'a value::Numeric),
 	Integer(&'a value::Integer),
+	NonNegativeInteger(&'a value::NonNegativeInteger),
 	RegExp(&'a RegExp),
 }
 
@@ -692,7 +692,7 @@ pub enum BindingRef<'a, M> {
 	Type(crate::Type),
 	Label(&'a str),
 	Comment(&'a str),
-	Class(crate::ty::Binding),
+	Class(crate::ty::BindingRef<'a>),
 	DatatypeRestriction(crate::ty::datatype::restriction::BindingRef<'a>),
 	Property(crate::prop::Binding),
 	Component(crate::component::BindingRef<'a>),

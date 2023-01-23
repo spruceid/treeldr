@@ -1,4 +1,6 @@
-use crate::{ty::data::RegExp, value::Integer};
+use xsd_types::Integer;
+
+use crate::ty::data::RegExp;
 
 #[derive(Clone, Debug)]
 pub struct Restrictions {

@@ -1,3 +1,3 @@
 pub use treeldr::layout::restriction::{
-	cardinal, Binding, ContainerRestriction, ContainerRestrictions,
+	cardinal, Binding, BindingRef, ContainerRestriction, ContainerRestrictions,
 };

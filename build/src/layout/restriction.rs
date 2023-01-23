@@ -140,7 +140,7 @@ impl Restriction {
 	pub fn as_binding(&self) -> ClassBindingRef {
 		match self {
 			Self::Primitive(r) => ClassBindingRef::Primitive(r.as_binding()),
-			Self::Container(r) => ClassBindingRef::Container(r.as_binding()),
+			Self::Container(r) => ClassBindingRef::Container(r.as_binding_ref()),
 		}
 	}
 }
@@ -207,7 +207,7 @@ impl<M> Restrictions<M> {
 
 pub enum ClassBindingRef<'a> {
 	Primitive(primitive::BindingRef<'a>),
-	Container(container::Binding),
+	Container(container::BindingRef<'a>),
 }
 
 pub type BindingRef<'a> = ClassBindingRef<'a>;
@@ -223,12 +223,12 @@ impl<'a> ClassBindingRef<'a> {
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::Primitive(b) => b.value(),
-			Self::Container(container::Binding::Cardinal(
-				treeldr::layout::restriction::cardinal::Binding::Min(v),
-			)) => BindingValueRef::U64(*v),
-			Self::Container(container::Binding::Cardinal(
-				treeldr::layout::restriction::cardinal::Binding::Max(v),
-			)) => BindingValueRef::U64(*v),
+			Self::Container(container::BindingRef::Cardinal(
+				treeldr::layout::restriction::cardinal::BindingRef::Min(v),
+			)) => BindingValueRef::NonNegativeInteger(v),
+			Self::Container(container::BindingRef::Cardinal(
+				treeldr::layout::restriction::cardinal::BindingRef::Max(v),
+			)) => BindingValueRef::NonNegativeInteger(v),
 		}
 	}
 }

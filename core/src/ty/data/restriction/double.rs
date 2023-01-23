@@ -1,5 +1,6 @@
-use crate::value::Double;
 use std::cmp::{Ord, Ordering};
+
+use xsd_types::Double;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Min {

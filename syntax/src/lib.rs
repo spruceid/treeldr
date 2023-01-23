@@ -9,6 +9,7 @@ mod peekable3;
 
 pub use lexing::{Id, Label, Lexer};
 pub use parsing::{Parse, Parser};
+use treeldr::value::NonNegativeInteger;
 pub use treeldr::{layout::Primitive, vocab};
 
 #[derive(Clone)]
@@ -344,17 +345,17 @@ impl<M: Clone> TypePropertyRangeRestriction<M> {
 
 #[derive(Clone)]
 pub enum TypePropertyCardinalityRestriction {
-	AtLeast(u64),
-	AtMost(u64),
-	Exactly(u64),
+	AtLeast(NonNegativeInteger),
+	AtMost(NonNegativeInteger),
+	Exactly(NonNegativeInteger),
 }
 
 impl TypePropertyCardinalityRestriction {
 	pub fn implicit_field_cardinality_restriction(&self) -> LayoutFieldCardinalityRestriction {
 		match self {
-			Self::AtLeast(n) => LayoutFieldCardinalityRestriction::AtLeast(*n),
-			Self::AtMost(n) => LayoutFieldCardinalityRestriction::AtMost(*n),
-			Self::Exactly(n) => LayoutFieldCardinalityRestriction::Exactly(*n),
+			Self::AtLeast(n) => LayoutFieldCardinalityRestriction::AtLeast(n.clone()),
+			Self::AtMost(n) => LayoutFieldCardinalityRestriction::AtMost(n.clone()),
+			Self::Exactly(n) => LayoutFieldCardinalityRestriction::Exactly(n.clone()),
 		}
 	}
 }
@@ -534,9 +535,9 @@ pub enum LayoutFieldRangeRestriction<M> {
 
 #[derive(Clone, PartialEq, Eq, StrippedPartialEq, StrippedEq)]
 pub enum LayoutFieldCardinalityRestriction {
-	AtLeast(u64),
-	AtMost(u64),
-	Exactly(u64),
+	AtLeast(#[locspan(stripped)] NonNegativeInteger),
+	AtMost(#[locspan(stripped)] NonNegativeInteger),
+	Exactly(#[locspan(stripped)] NonNegativeInteger),
 }
 
 #[derive(Clone)]

@@ -97,8 +97,8 @@ impl<M> From<Primitive> for Restricted<M> {
 
 #[derive(Clone, Copy)]
 pub enum RestrictionRef<'a> {
-	Integer(integer::Restriction),
-	UnsignedInteger(unsigned::Restriction),
+	Integer(integer::RestrictionRef<'a>),
+	UnsignedInteger(unsigned::RestrictionRef<'a>),
 	Float(float::Restriction),
 	Double(double::Restriction),
 	String(string::RestrictionRef<'a>),

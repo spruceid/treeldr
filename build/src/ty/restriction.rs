@@ -5,7 +5,7 @@ use crate::{
 	single, Context, Error, Single,
 };
 use locspan::Meta;
-use treeldr::{metadata::Merge, vocab::Object, Id};
+use treeldr::{metadata::Merge, value::NonNegativeInteger, vocab::Object, Id};
 
 pub use treeldr::ty::restriction::{Cardinality, Property};
 
@@ -24,7 +24,7 @@ impl MapIds for Range {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Restriction {
 	Range(Range),
 	Cardinality(Cardinality),
@@ -133,7 +133,9 @@ impl<M> Definition<M> {
 
 		Ok(treeldr::ty::restriction::Definition::new(
 			prop_ref,
-			restriction.build(context, as_resource.id, meta.clone())?,
+			restriction
+				.into_value()
+				.build(context, as_resource.id, meta.clone())?,
 		))
 	}
 }
@@ -164,13 +166,13 @@ impl Restriction {
 		Ok(Meta(r, meta))
 	}
 
-	pub fn as_binding(&self) -> ClassBinding {
+	pub fn as_binding_ref(&self) -> ClassBindingRef {
 		match self {
-			Self::Range(r) => r.as_binding(),
+			Self::Range(r) => r.as_binding_ref(),
 			Self::Cardinality(r) => match r {
-				Cardinality::AtLeast(v) => ClassBinding::MinCardinality(*v),
-				Cardinality::AtMost(v) => ClassBinding::MaxCardinality(*v),
-				Cardinality::Exactly(v) => ClassBinding::Cardinality(*v),
+				Cardinality::AtLeast(v) => ClassBindingRef::MinCardinality(v),
+				Cardinality::AtMost(v) => ClassBindingRef::MaxCardinality(v),
+				Cardinality::Exactly(v) => ClassBindingRef::Cardinality(v),
 			},
 		}
 	}
@@ -202,10 +204,10 @@ impl Range {
 		}
 	}
 
-	pub fn as_binding(&self) -> ClassBinding {
+	pub fn as_binding_ref<'a>(&self) -> ClassBindingRef<'a> {
 		match self {
-			Self::Any(v) => ClassBinding::SomeValuesFrom(*v),
-			Self::All(v) => ClassBinding::AllValuesFrom(*v),
+			Self::Any(v) => ClassBindingRef::SomeValuesFrom(*v),
+			Self::All(v) => ClassBindingRef::AllValuesFrom(*v),
 		}
 	}
 }
@@ -214,12 +216,10 @@ pub enum ClassBinding {
 	OnProperty(Id),
 	SomeValuesFrom(Id),
 	AllValuesFrom(Id),
-	MinCardinality(u64),
-	MaxCardinality(u64),
-	Cardinality(u64),
+	MinCardinality(NonNegativeInteger),
+	MaxCardinality(NonNegativeInteger),
+	Cardinality(NonNegativeInteger),
 }
-
-pub type Binding = ClassBinding;
 
 impl ClassBinding {
 	pub fn property(&self) -> Property {
@@ -233,17 +233,54 @@ impl ClassBinding {
 		}
 	}
 
-	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value<M>(&self) -> BindingValueRef<M> {
 		match self {
 			Self::OnProperty(v) => BindingValueRef::Id(*v),
 			Self::SomeValuesFrom(v) => BindingValueRef::Id(*v),
 			Self::AllValuesFrom(v) => BindingValueRef::Id(*v),
-			Self::MinCardinality(v) => BindingValueRef::U64(*v),
-			Self::MaxCardinality(v) => BindingValueRef::U64(*v),
-			Self::Cardinality(v) => BindingValueRef::U64(*v),
+			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
 		}
 	}
 }
+
+pub enum ClassBindingRef<'a> {
+	OnProperty(Id),
+	SomeValuesFrom(Id),
+	AllValuesFrom(Id),
+	MinCardinality(&'a NonNegativeInteger),
+	MaxCardinality(&'a NonNegativeInteger),
+	Cardinality(&'a NonNegativeInteger),
+}
+
+impl<'a> ClassBindingRef<'a> {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::OnProperty(_) => Property::OnProperty,
+			Self::SomeValuesFrom(_) => Property::SomeValuesFrom,
+			Self::AllValuesFrom(_) => Property::AllValuesFrom,
+			Self::MinCardinality(_) => Property::MinCardinality,
+			Self::MaxCardinality(_) => Property::MaxCardinality,
+			Self::Cardinality(_) => Property::Cardinality,
+		}
+	}
+
+	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+		match self {
+			Self::OnProperty(v) => BindingValueRef::Id(*v),
+			Self::SomeValuesFrom(v) => BindingValueRef::Id(*v),
+			Self::AllValuesFrom(v) => BindingValueRef::Id(*v),
+			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
+		}
+	}
+}
+
+pub type Binding = ClassBinding;
+
+pub type BindingRef<'a> = ClassBindingRef<'a>;
 
 pub struct ClassBindings<'a, M> {
 	on_property: single::Iter<'a, Id, M>,
@@ -253,17 +290,17 @@ pub struct ClassBindings<'a, M> {
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
-	type Item = Meta<ClassBinding, &'a M>;
+	type Item = Meta<ClassBindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.on_property
 			.next()
 			.map(Meta::into_cloned_value)
-			.map(|m| m.map(ClassBinding::OnProperty))
+			.map(|m| m.map(ClassBindingRef::OnProperty))
 			.or_else(|| {
 				self.restriction
 					.next()
-					.map(|m| m.map(Restriction::as_binding))
+					.map(|m| m.map(Restriction::as_binding_ref))
 			})
 	}
 }

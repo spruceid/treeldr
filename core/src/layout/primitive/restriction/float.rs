@@ -1,9 +1,10 @@
-use crate::{metadata::Merge, value::Float, MetaOption};
+use crate::{metadata::Merge, MetaOption};
 use locspan::Meta;
 use locspan_derive::{
 	StrippedEq, StrippedHash, StrippedOrd, StrippedPartialEq, StrippedPartialOrd,
 };
 use std::cmp::{Ord, Ordering};
+use xsd_types::Float;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Min {

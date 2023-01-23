@@ -371,10 +371,10 @@ impl<M> Definition<M> {
 			Property::For => self.ty_mut().insert(rdf::from::expect_id(value)?),
 			Property::Description(DescriptionProperty::Alias) => self
 				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(|id| Description::Alias(id))),
+				.insert(rdf::from::expect_id(value)?.map(Description::Alias)),
 			Property::Description(DescriptionProperty::Array) => self
 				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(|id| Description::Array(id))),
+				.insert(rdf::from::expect_id(value)?.map(Description::Array)),
 			Property::Description(DescriptionProperty::DerivedFrom) => {
 				let Meta(id, meta) = rdf::from::expect_id(value)?;
 				match Primitive::from_id(id) {
@@ -386,25 +386,25 @@ impl<M> Definition<M> {
 			}
 			Property::Description(DescriptionProperty::Fields) => self
 				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(|id| Description::Struct(id))),
+				.insert(rdf::from::expect_id(value)?.map(Description::Struct)),
 			Property::Description(DescriptionProperty::OneOrMany) => self
 				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(|id| Description::OneOrMany(id))),
+				.insert(rdf::from::expect_id(value)?.map(Description::OneOrMany)),
 			Property::Description(DescriptionProperty::Option) => self
 				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(|id| Description::Option(id))),
+				.insert(rdf::from::expect_id(value)?.map(Description::Option)),
 			Property::Description(DescriptionProperty::Reference) => self
 				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(|id| Description::Reference(id))),
+				.insert(rdf::from::expect_id(value)?.map(Description::Reference)),
 			Property::Description(DescriptionProperty::Required) => self
 				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(|id| Description::Required(id))),
+				.insert(rdf::from::expect_id(value)?.map(Description::Required)),
 			Property::Description(DescriptionProperty::Set) => self
 				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(|id| Description::Set(id))),
+				.insert(rdf::from::expect_id(value)?.map(Description::Set)),
 			Property::Description(DescriptionProperty::Variants) => self
 				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(|id| Description::Enum(id))),
+				.insert(rdf::from::expect_id(value)?.map(Description::Enum)),
 			Property::WithRestrictions => {
 				self.restrictions_mut().insert(rdf::from::expect_id(value)?)
 			}

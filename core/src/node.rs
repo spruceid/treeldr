@@ -4,6 +4,7 @@ use crate::{
 	Documentation, Error, Id, MetaOption, Multiple, MutableModel, Name, ResourceType, TId,
 };
 use locspan::Meta;
+use xsd_types::NonNegativeInteger;
 
 #[derive(Debug, Clone)]
 pub struct Data<M> {
@@ -356,7 +357,7 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 
 pub enum BindingValueRef<'a, M> {
 	SchemaBoolean(bool),
-	U64(u64),
+	NonNegativeInteger(&'a NonNegativeInteger),
 	String(&'a str),
 	Name(&'a Name),
 	Id(Id),

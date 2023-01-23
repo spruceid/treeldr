@@ -469,7 +469,7 @@ pub enum BindingRef<'a, M> {
 	UnionOf(&'a Multiple<TId<crate::Type>, M>),
 	IntersectionOf(&'a Multiple<TId<crate::Type>, M>),
 	Datatype(data::BindingRef<'a, M>),
-	Restriction(restriction::Binding),
+	Restriction(restriction::BindingRef<'a>),
 }
 
 impl<'a, M> BindingRef<'a, M> {

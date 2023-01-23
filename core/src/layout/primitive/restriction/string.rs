@@ -1,10 +1,11 @@
 use crate::{metadata::Merge, ty::data::RegExp, MetaOption};
 use locspan::Meta;
+use xsd_types::NonNegativeInteger;
 
 #[derive(Debug)]
 pub enum Restriction {
-	MinLength(u64),
-	MaxLength(u64),
+	MinLength(NonNegativeInteger),
+	MaxLength(NonNegativeInteger),
 	Pattern(RegExp),
 }
 
@@ -13,8 +14,8 @@ pub struct Conflict<M>(pub Restriction, pub Meta<Restriction, M>);
 
 #[derive(Clone, Debug)]
 pub struct Restrictions<M> {
-	len_min: MetaOption<u64, M>,
-	len_max: MetaOption<u64, M>,
+	len_min: MetaOption<NonNegativeInteger, M>,
+	len_max: MetaOption<NonNegativeInteger, M>,
 	pattern: MetaOption<RegExp, M>,
 }
 
@@ -30,24 +31,27 @@ impl<M> Default for Restrictions<M> {
 
 impl<M> Restrictions<M> {
 	pub fn is_len_bounded(&self) -> bool {
-		self.len_min() > 0 || self.len_max() < u64::MAX
+		self.len_max.is_some() || !self.len_min().is_zero()
 	}
 
 	pub fn is_restricted(&self) -> bool {
 		self.pattern.is_some() || self.is_len_bounded()
 	}
 
-	pub fn len_min_with_metadata(&self) -> &MetaOption<u64, M> {
+	pub fn len_min_with_metadata(&self) -> &MetaOption<NonNegativeInteger, M> {
 		&self.len_min
 	}
 
-	pub fn len_min(&self) -> u64 {
-		self.len_min.value().cloned().unwrap_or(u64::MIN)
+	pub fn len_min(&self) -> NonNegativeInteger {
+		self.len_min
+			.value()
+			.cloned()
+			.unwrap_or_else(NonNegativeInteger::zero)
 	}
 
 	pub fn insert_len_min(
 		&mut self,
-		Meta(min, meta): Meta<u64, M>,
+		Meta(min, meta): Meta<NonNegativeInteger, M>,
 	) -> Result<(), Meta<Conflict<M>, M>>
 	where
 		M: Clone + Merge,
@@ -57,7 +61,7 @@ impl<M> Restrictions<M> {
 				return Err(Meta(
 					Conflict(
 						Restriction::MinLength(min),
-						Meta(Restriction::MaxLength(*max), max_meta.clone()),
+						Meta(Restriction::MaxLength(max.clone()), max_meta.clone()),
 					),
 					meta,
 				));
@@ -77,17 +81,17 @@ impl<M> Restrictions<M> {
 		Ok(())
 	}
 
-	pub fn len_max_with_metadata(&self) -> &MetaOption<u64, M> {
+	pub fn len_max_with_metadata(&self) -> &MetaOption<NonNegativeInteger, M> {
 		&self.len_max
 	}
 
-	pub fn len_max(&self) -> u64 {
-		self.len_max.value().cloned().unwrap_or(u64::MAX)
+	pub fn len_max(&self) -> Option<&NonNegativeInteger> {
+		self.len_max.value()
 	}
 
 	pub fn insert_len_max(
 		&mut self,
-		Meta(max, meta): Meta<u64, M>,
+		Meta(max, meta): Meta<NonNegativeInteger, M>,
 	) -> Result<(), Meta<Conflict<M>, M>>
 	where
 		M: Clone + Merge,
@@ -97,7 +101,7 @@ impl<M> Restrictions<M> {
 				return Err(Meta(
 					Conflict(
 						Restriction::MaxLength(max),
-						Meta(Restriction::MinLength(*min), min_meta.clone()),
+						Meta(Restriction::MinLength(min.clone()), min_meta.clone()),
 					),
 					meta,
 				));
@@ -151,20 +155,8 @@ impl<M> Restrictions<M> {
 
 	pub fn iter(&self) -> Iter<M> {
 		Iter {
-			len_min: self.len_min.as_ref().and_then(|Meta(v, m)| {
-				if *v != u64::MIN {
-					Some(Meta(*v, m))
-				} else {
-					None
-				}
-			}),
-			len_max: self.len_max.as_ref().and_then(|Meta(v, m)| {
-				if *v != u64::MAX {
-					Some(Meta(*v, m))
-				} else {
-					None
-				}
-			}),
+			len_min: self.len_min.as_ref().filter(|v| !v.is_zero()),
+			len_max: self.len_max.as_ref(),
 			pattern: self.pattern.as_ref(),
 		}
 	}
@@ -172,14 +164,14 @@ impl<M> Restrictions<M> {
 
 #[derive(Clone, Copy)]
 pub enum RestrictionRef<'a> {
-	MinLength(u64),
-	MaxLength(u64),
+	MinLength(&'a NonNegativeInteger),
+	MaxLength(&'a NonNegativeInteger),
 	Pattern(&'a RegExp),
 }
 
 pub struct Iter<'a, M> {
-	len_min: Option<Meta<u64, &'a M>>,
-	len_max: Option<Meta<u64, &'a M>>,
+	len_min: Option<&'a Meta<NonNegativeInteger, M>>,
+	len_max: Option<&'a Meta<NonNegativeInteger, M>>,
 	pattern: Option<&'a Meta<RegExp, M>>,
 }
 
@@ -189,11 +181,11 @@ impl<'a, M> Iterator for Iter<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.len_min
 			.take()
-			.map(|m| m.map(RestrictionRef::MinLength))
+			.map(|m| m.borrow().map(RestrictionRef::MinLength))
 			.or_else(|| {
 				self.len_max
 					.take()
-					.map(|m| m.map(RestrictionRef::MaxLength))
+					.map(|m| m.borrow().map(RestrictionRef::MaxLength))
 			})
 			.or_else(|| {
 				self.pattern
@@ -211,12 +203,12 @@ impl<'a, M> DoubleEndedIterator for Iter<'a, M> {
 			.or_else(|| {
 				self.len_max
 					.take()
-					.map(|m| m.map(RestrictionRef::MaxLength))
+					.map(|m| m.borrow().map(RestrictionRef::MaxLength))
 			})
 			.or_else(|| {
 				self.len_min
 					.take()
-					.map(|m| m.map(RestrictionRef::MinLength))
+					.map(|m| m.borrow().map(RestrictionRef::MinLength))
 			})
 	}
 }

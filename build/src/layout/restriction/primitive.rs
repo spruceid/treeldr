@@ -51,10 +51,10 @@ impl Numeric {
 /// Numeric restriction reference.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum NumericRef<'a> {
-	InclusiveMinimum(&'a value::Numeric),
-	ExclusiveMinimum(&'a value::Numeric),
-	InclusiveMaximum(&'a value::Numeric),
-	ExclusiveMaximum(&'a value::Numeric),
+	InclusiveMinimum(&'a value::Real),
+	ExclusiveMinimum(&'a value::Real),
+	InclusiveMaximum(&'a value::Real),
+	ExclusiveMaximum(&'a value::Real),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -164,39 +164,27 @@ impl<M: Clone> Restrictions<M> {
 			match restriction {
 				Restriction::Numeric(restriction) => match restriction {
 					Numeric::InclusiveMinimum(min) => match min.into_integer() {
-						Ok(min) => match min.into_i64() {
-							Ok(min) => r.insert_min(Meta(min, causes)).map_loc_err(
-								error::Description::LayoutDatatypeRestrictionIntegerConflict,
-							)?,
-							Err(_) => todo!(),
-						},
+						Ok(min) => r.insert_min(Meta(min, causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionIntegerConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMinimum(min) => match min.into_integer() {
-						Ok(min) => match min.into_i64() {
-							Ok(min) => r.insert_min(Meta(min + 1, causes)).map_loc_err(
-								error::Description::LayoutDatatypeRestrictionIntegerConflict,
-							)?,
-							Err(_) => todo!(),
-						},
+						Ok(min) => r.insert_min(Meta(min + 1, causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionIntegerConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::InclusiveMaximum(max) => match max.into_integer() {
-						Ok(max) => match max.into_i64() {
-							Ok(max) => r.insert_max(Meta(max, causes)).map_loc_err(
-								error::Description::LayoutDatatypeRestrictionIntegerConflict,
-							)?,
-							Err(_) => todo!(),
-						},
+						Ok(max) => r.insert_max(Meta(max, causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionIntegerConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMaximum(max) => match max.into_integer() {
-						Ok(max) => match max.into_i64() {
-							Ok(max) => r.insert_max(Meta(max - 1, causes)).map_loc_err(
-								error::Description::LayoutDatatypeRestrictionIntegerConflict,
-							)?,
-							Err(_) => todo!(),
-						},
+						Ok(max) => r.insert_max(Meta(max - 1, causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionIntegerConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 				},
@@ -230,39 +218,27 @@ impl<M: Clone> Restrictions<M> {
 			match restriction {
 				Restriction::Numeric(restriction) => match restriction {
 					Numeric::InclusiveMinimum(min) => match min.into_non_negative_integer() {
-						Ok(min) => match min.into_u64() {
-							Ok(min) => r.insert_min(Meta(min, causes)).map_loc_err(
-								error::Description::LayoutDatatypeRestrictionUnsignedConflict,
-							)?,
-							Err(_) => todo!(),
-						},
+						Ok(min) => r.insert_min(Meta(min, causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionUnsignedConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMinimum(min) => match min.into_non_negative_integer() {
-						Ok(min) => match min.into_u64() {
-							Ok(min) => r.insert_min(Meta(min + 1, causes)).map_loc_err(
-								error::Description::LayoutDatatypeRestrictionUnsignedConflict,
-							)?,
-							Err(_) => todo!(),
-						},
+						Ok(min) => r.insert_min(Meta(min + 1, causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionUnsignedConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::InclusiveMaximum(max) => match max.into_non_negative_integer() {
-						Ok(max) => match max.into_u64() {
-							Ok(max) => r.insert_max(Meta(max, causes)).map_loc_err(
-								error::Description::LayoutDatatypeRestrictionUnsignedConflict,
-							)?,
-							Err(_) => todo!(),
-						},
+						Ok(max) => r.insert_max(Meta(max, causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionUnsignedConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 					Numeric::ExclusiveMaximum(max) => match max.into_non_negative_integer() {
-						Ok(max) => match max.into_u64() {
-							Ok(max) => r.insert_max(Meta(max - 1, causes)).map_loc_err(
-								error::Description::LayoutDatatypeRestrictionUnsignedConflict,
-							)?,
-							Err(_) => todo!(),
-						},
+						Ok(max) => r.insert_max(Meta(max - 1, causes)).map_loc_err(
+							error::Description::LayoutDatatypeRestrictionUnsignedConflict,
+						)?,
 						Err(_) => todo!(),
 					},
 				},
