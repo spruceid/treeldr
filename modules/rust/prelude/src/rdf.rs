@@ -71,7 +71,7 @@ impl<T: id::xsd::Integer + PartialEq> FromXsdLiteral<T> for i64 {
 	fn from_xsd_literal(literal: &Literal<T>) -> Result<Self, FromRdfError> {
 		let lexical = get_lexical!(literal: XSD_INTEGER);
 
-		match xsd_types::Integer::new(lexical) {
+		match xsd_types::lexical::Integer::new(lexical) {
 			Ok(i) => Ok(i.as_str().parse().unwrap()),
 			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
 		}

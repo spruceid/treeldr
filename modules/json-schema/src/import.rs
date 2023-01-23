@@ -1,4 +1,6 @@
 //! JSON Schema import functions.
+use std::str::FromStr;
+
 use crate::schema::{self, RegularSchema, Schema};
 use iref::{Iri, IriBuf};
 use locspan::{MaybeLocated, Meta, Span};
@@ -271,30 +273,20 @@ fn into_numeric(
 	use treeldr::value;
 	match primitive {
 		treeldr::layout::Primitive::Float => match n.as_f64() {
-			Some(d) => {
-				treeldr::value::Numeric::Float(value::Float::new((d as f32).try_into().unwrap()))
-			}
+			Some(d) => value::Float::new(d as f32).into(),
 			None => todo!(),
 		},
 		treeldr::layout::Primitive::Double => match n.as_f64() {
-			Some(d) => treeldr::value::Numeric::Double(value::Double::new(d.try_into().unwrap())),
+			Some(d) => value::Double::new(d).into(),
 			None => todo!(),
 		},
-		treeldr::layout::Primitive::Integer => match xsd_types::IntegerBuf::new(n.to_string()) {
-			Ok(n) => treeldr::value::Numeric::Integer(n.into()),
+		treeldr::layout::Primitive::Integer => match xsd_types::Integer::from_str(&n.to_string()) {
+			Ok(n) => n.into(),
 			Err(_) => todo!(),
 		},
 		treeldr::layout::Primitive::UnsignedInteger => {
-			match xsd_types::IntegerBuf::new(n.to_string()) {
-				Ok(n) => {
-					if n.is_negative() {
-						todo!()
-					} else {
-						treeldr::value::Numeric::NonNegativeInteger(unsafe {
-							value::NonNegativeInteger::new_unchecked(n.into())
-						})
-					}
-				}
+			match xsd_types::NonNegativeInteger::from_str(&n.to_string()) {
+				Ok(n) => n.into(),
 				Err(_) => todo!(),
 			}
 		}

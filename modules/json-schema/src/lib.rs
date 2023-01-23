@@ -506,12 +506,18 @@ fn generate_set_type<F>(
 	def.insert("items".into(), item_schema);
 	def.insert("uniqueItems".into(), true.into());
 
-	if restrictions.cardinal().min() > 0 {
-		def.insert("minItems".into(), restrictions.cardinal().min().into());
+	if !restrictions.cardinal().min().is_zero() {
+		let m: u64 = restrictions
+			.cardinal()
+			.min()
+			.try_into()
+			.expect("minimum is too large");
+		def.insert("minItems".into(), m.into());
 	}
 
-	if restrictions.cardinal().max() < u64::MAX {
-		def.insert("maxItems".into(), restrictions.cardinal().max().into());
+	if let Some(m) = restrictions.cardinal().max() {
+		let m: u64 = m.clone().try_into().expect("maximum is too large");
+		def.insert("maxItems".into(), m.into());
 	}
 
 	Ok(def.into())
@@ -575,12 +581,18 @@ fn generate_list_type<F>(
 	def.insert("type".into(), "array".into());
 	def.insert("items".into(), item_schema);
 
-	if restrictions.cardinal().min() > 0 {
-		def.insert("minItems".into(), restrictions.cardinal().min().into());
+	if !restrictions.cardinal().min().is_zero() {
+		let m: u64 = restrictions
+			.cardinal()
+			.min()
+			.try_into()
+			.expect("minimum is too large");
+		def.insert("minItems".into(), m.into());
 	}
 
-	if restrictions.cardinal().max() < u64::MAX {
-		def.insert("maxItems".into(), restrictions.cardinal().max().into());
+	if let Some(m) = restrictions.cardinal().max() {
+		let m: u64 = m.clone().try_into().expect("maximum is too large");
+		def.insert("maxItems".into(), m.into());
 	}
 
 	Ok(def.into())

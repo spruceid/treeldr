@@ -1,5 +1,6 @@
-use crate::value::Float;
 use std::cmp::{Ord, Ordering};
+
+use xsd_types::Float;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Min {

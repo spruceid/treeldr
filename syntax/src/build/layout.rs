@@ -466,7 +466,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 								);
 								use treeldr_build::layout::{restriction, Restriction};
 								restriction.as_layout_restriction_mut().restriction_mut().insert(Meta(
-									Restriction::Container(restriction::container::ContainerRestriction::Cardinal(treeldr::layout::restriction::cardinal::Restriction::Min(1))),
+									Restriction::Container(restriction::container::ContainerRestriction::Cardinal(treeldr::layout::restriction::cardinal::Restriction::Min(1u32.into()))),
 									required_loc.clone()
 								));
 								let restrictions_list = context.create_list(

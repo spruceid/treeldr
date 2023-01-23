@@ -3,19 +3,36 @@ use crate::{metadata::Merge, MetaOption};
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::{StrippedEq, StrippedPartialEq};
+use xsd_types::NonNegativeInteger;
 
 /// Cardinal restriction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Restriction {
-	Min(u64),
-	Max(u64),
+	Min(NonNegativeInteger),
+	Max(NonNegativeInteger),
 }
 
 impl Restriction {
-	pub fn as_binding(&self) -> Binding {
+	pub fn as_binding_ref(&self) -> BindingRef {
 		match self {
-			Self::Min(v) => Binding::Min(*v),
-			Self::Max(v) => Binding::Max(*v),
+			Self::Min(v) => BindingRef::Min(v),
+			Self::Max(v) => BindingRef::Max(v),
+		}
+	}
+}
+
+/// Cardinal restriction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RestrictionRef<'a> {
+	Min(&'a NonNegativeInteger),
+	Max(&'a NonNegativeInteger),
+}
+
+impl<'a> RestrictionRef<'a> {
+	pub fn as_binding_ref(&self) -> BindingRef<'a> {
+		match self {
+			Self::Min(v) => BindingRef::Min(v),
+			Self::Max(v) => BindingRef::Max(v),
 		}
 	}
 }
@@ -28,8 +45,11 @@ pub struct Conflict<M>(pub Restriction, pub Meta<Restriction, M>);
 #[derive(Clone, Debug, StrippedPartialEq, StrippedEq)]
 #[locspan(ignore(M))]
 pub struct Restrictions<M> {
-	min: MetaOption<u64, M>,
-	max: MetaOption<u64, M>,
+	#[locspan(unwrap_deref_stripped)]
+	min: MetaOption<NonNegativeInteger, M>,
+
+	#[locspan(unwrap_deref_stripped)]
+	max: MetaOption<NonNegativeInteger, M>,
 }
 
 impl<M> Default for Restrictions<M> {
@@ -73,7 +93,10 @@ impl<M> Restrictions<M> {
 		}
 	}
 
-	pub fn insert_min(&mut self, Meta(min, meta): Meta<u64, M>) -> Result<(), Meta<Conflict<M>, M>>
+	pub fn insert_min(
+		&mut self,
+		Meta(min, meta): Meta<NonNegativeInteger, M>,
+	) -> Result<(), Meta<Conflict<M>, M>>
 	where
 		M: Clone + Merge,
 	{
@@ -82,7 +105,7 @@ impl<M> Restrictions<M> {
 				return Err(Meta(
 					Conflict(
 						Restriction::Min(min),
-						Meta(Restriction::Max(*max), max_meta.clone()),
+						Meta(Restriction::Max(max.clone()), max_meta.clone()),
 					),
 					meta,
 				));
@@ -102,7 +125,10 @@ impl<M> Restrictions<M> {
 		Ok(())
 	}
 
-	pub fn insert_max(&mut self, Meta(max, meta): Meta<u64, M>) -> Result<(), Meta<Conflict<M>, M>>
+	pub fn insert_max(
+		&mut self,
+		Meta(max, meta): Meta<NonNegativeInteger, M>,
+	) -> Result<(), Meta<Conflict<M>, M>>
 	where
 		M: Clone + Merge,
 	{
@@ -111,7 +137,7 @@ impl<M> Restrictions<M> {
 				return Err(Meta(
 					Conflict(
 						Restriction::Max(max),
-						Meta(Restriction::Min(*min), min_meta.clone()),
+						Meta(Restriction::Min(min.clone()), min_meta.clone()),
 					),
 					meta,
 				));
@@ -146,30 +172,33 @@ impl<M> Restrictions<M> {
 		Ok(())
 	}
 
-	pub fn min(&self) -> u64 {
-		self.min.value().cloned().unwrap_or(0)
+	pub fn min(&self) -> NonNegativeInteger {
+		self.min
+			.value()
+			.cloned()
+			.unwrap_or_else(NonNegativeInteger::zero)
 	}
 
-	pub fn max(&self) -> u64 {
-		self.max.value().cloned().unwrap_or(u64::MAX)
+	pub fn max(&self) -> Option<&NonNegativeInteger> {
+		self.max.value()
 	}
 
-	pub fn min_with_metadata(&self) -> &MetaOption<u64, M> {
+	pub fn min_with_metadata(&self) -> &MetaOption<NonNegativeInteger, M> {
 		&self.min
 	}
 
-	pub fn max_with_metadata(&self) -> &MetaOption<u64, M> {
+	pub fn max_with_metadata(&self) -> &MetaOption<NonNegativeInteger, M> {
 		&self.max
 	}
 
 	/// Checks if the cardinal is restricted.
 	pub fn is_restricted(&self) -> bool {
-		self.min() != 0 || self.max() != u64::MAX
+		self.max.is_some() || !self.min().is_zero()
 	}
 
 	/// Checks if the required cardinal is at least 1.
 	pub fn is_required(&self) -> bool {
-		self.min() != 0
+		!self.min().is_zero()
 	}
 
 	pub fn iter(&self) -> RestrictionsIter<M> {
@@ -183,22 +212,18 @@ impl<M> Restrictions<M> {
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct RestrictionsIter<'a, M> {
-	min: Option<&'a Meta<u64, M>>,
-	max: Option<&'a Meta<u64, M>>,
+	min: Option<&'a Meta<NonNegativeInteger, M>>,
+	max: Option<&'a Meta<NonNegativeInteger, M>>,
 }
 
 impl<'a, M> Iterator for RestrictionsIter<'a, M> {
-	type Item = Meta<Restriction, &'a M>;
+	type Item = Meta<RestrictionRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.min
 			.take()
-			.map(|m| m.borrow().into_cloned_value().map(Restriction::Min))
-			.or_else(|| {
-				self.max
-					.take()
-					.map(|m| m.borrow().into_cloned_value().map(Restriction::Max))
-			})
+			.map(|m| m.borrow().map(RestrictionRef::Min))
+			.or_else(|| self.max.take().map(|m| m.borrow().map(RestrictionRef::Max)))
 	}
 }
 
@@ -206,21 +231,31 @@ impl<'a, M> DoubleEndedIterator for RestrictionsIter<'a, M> {
 	fn next_back(&mut self) -> Option<Self::Item> {
 		self.max
 			.take()
-			.map(|m| m.borrow().into_cloned_value().map(Restriction::Max))
-			.or_else(|| {
-				self.min
-					.take()
-					.map(|m| m.borrow().into_cloned_value().map(Restriction::Min))
-			})
+			.map(|m| m.borrow().map(RestrictionRef::Max))
+			.or_else(|| self.min.take().map(|m| m.borrow().map(RestrictionRef::Min)))
 	}
 }
 
 pub enum Binding {
-	Min(u64),
-	Max(u64),
+	Min(NonNegativeInteger),
+	Max(NonNegativeInteger),
 }
 
 impl Binding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::Min(_) => Property::MinCardinality,
+			Self::Max(_) => Property::MaxCardinality,
+		}
+	}
+}
+
+pub enum BindingRef<'a> {
+	Min(&'a NonNegativeInteger),
+	Max(&'a NonNegativeInteger),
+}
+
+impl<'a> BindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
 			Self::Min(_) => Property::MinCardinality,

@@ -4,7 +4,8 @@ use crate::{
 	layout,
 	node::BindingValueRef,
 	ty,
-	vocab::{self, StrippedObject, StrippedQuad, Term, Xsd},
+	value::AsRdfLiteral,
+	vocab::{self, StrippedObject, StrippedQuad, Term},
 	BlankIdIndex, Id, IriIndex, MutableModel,
 };
 use locspan::Meta;
@@ -163,10 +164,7 @@ impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 
 				Object::Iri(IriIndex::Iri(term))
 			}
-			Self::U64(u) => Object::Literal(Literal::TypedString(
-				u.to_string().into(),
-				IriIndex::Iri(Term::Xsd(Xsd::Integer)),
-			)),
+			Self::NonNegativeInteger(u) => Object::Literal(u.as_rdf_literal()),
 			Self::String(s) => Object::Literal(Literal::String(s.to_string().into())),
 			Self::Name(n) => Object::Literal(Literal::String(n.to_string().into())),
 			Self::Id(id) => id.into_term(),
@@ -376,7 +374,7 @@ impl IntoRdf for ty::data::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
-					Object::Literal(min.literal()),
+					Object::Literal(min.as_rdf_literal()),
 					None,
 				));
 			}
@@ -384,7 +382,7 @@ impl IntoRdf for ty::data::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
-					Object::Literal(min.literal()),
+					Object::Literal(min.as_rdf_literal()),
 					None,
 				));
 			}
@@ -392,7 +390,7 @@ impl IntoRdf for ty::data::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
-					Object::Literal(max.literal()),
+					Object::Literal(max.as_rdf_literal()),
 					None,
 				));
 			}
@@ -400,7 +398,7 @@ impl IntoRdf for ty::data::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
-					Object::Literal(max.literal()),
+					Object::Literal(max.as_rdf_literal()),
 					None,
 				));
 			}
@@ -428,7 +426,7 @@ impl IntoRdf for ty::data::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
-					Object::Literal(min.literal()),
+					Object::Literal(min.as_rdf_literal()),
 					None,
 				));
 			}
@@ -436,7 +434,7 @@ impl IntoRdf for ty::data::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
-					Object::Literal(min.literal()),
+					Object::Literal(min.as_rdf_literal()),
 					None,
 				));
 			}
@@ -444,7 +442,7 @@ impl IntoRdf for ty::data::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
-					Object::Literal(max.literal()),
+					Object::Literal(max.as_rdf_literal()),
 					None,
 				));
 			}
@@ -452,7 +450,7 @@ impl IntoRdf for ty::data::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
-					Object::Literal(max.literal()),
+					Object::Literal(max.as_rdf_literal()),
 					None,
 				));
 			}
@@ -548,7 +546,7 @@ impl<'a> IntoRdf for layout::primitive::RestrictionRef<'a> {
 	}
 }
 
-impl IntoRdf for layout::restriction::ContainerRestriction {
+impl<'a> IntoRdf for layout::restriction::ContainerRestrictionRef<'a> {
 	type Target = Id;
 
 	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -564,7 +562,7 @@ impl IntoRdf for layout::restriction::ContainerRestriction {
 	}
 }
 
-impl IntoRdf for layout::restriction::cardinal::Restriction {
+impl<'a> IntoRdf for layout::restriction::cardinal::RestrictionRef<'a> {
 	type Target = Id;
 
 	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -605,7 +603,7 @@ impl IntoRdf for layout::restriction::cardinal::Restriction {
 	}
 }
 
-impl IntoRdf for layout::primitive::restriction::integer::Restriction {
+impl<'a> IntoRdf for layout::primitive::restriction::integer::RestrictionRef<'a> {
 	type Target = Id;
 
 	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -646,7 +644,7 @@ impl IntoRdf for layout::primitive::restriction::integer::Restriction {
 	}
 }
 
-impl IntoRdf for layout::primitive::restriction::unsigned::Restriction {
+impl<'a> IntoRdf for layout::primitive::restriction::unsigned::RestrictionRef<'a> {
 	type Target = Id;
 
 	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -705,7 +703,7 @@ impl IntoRdf for layout::primitive::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
-					Object::Literal(min.literal()),
+					Object::Literal(min.as_rdf_literal()),
 					None,
 				));
 			}
@@ -713,7 +711,7 @@ impl IntoRdf for layout::primitive::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ExclusiveMinimum)),
-					Object::Literal(min.literal()),
+					Object::Literal(min.as_rdf_literal()),
 					None,
 				));
 			}
@@ -721,7 +719,7 @@ impl IntoRdf for layout::primitive::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
-					Object::Literal(max.literal()),
+					Object::Literal(max.as_rdf_literal()),
 					None,
 				));
 			}
@@ -729,7 +727,7 @@ impl IntoRdf for layout::primitive::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ExclusiveMaximum)),
-					Object::Literal(max.literal()),
+					Object::Literal(max.as_rdf_literal()),
 					None,
 				));
 			}
@@ -757,7 +755,7 @@ impl IntoRdf for layout::primitive::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
-					Object::Literal(min.literal()),
+					Object::Literal(min.as_rdf_literal()),
 					None,
 				));
 			}
@@ -765,7 +763,7 @@ impl IntoRdf for layout::primitive::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ExclusiveMinimum)),
-					Object::Literal(min.literal()),
+					Object::Literal(min.as_rdf_literal()),
 					None,
 				));
 			}
@@ -773,7 +771,7 @@ impl IntoRdf for layout::primitive::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
-					Object::Literal(max.literal()),
+					Object::Literal(max.as_rdf_literal()),
 					None,
 				));
 			}
@@ -781,7 +779,7 @@ impl IntoRdf for layout::primitive::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ExclusiveMaximum)),
-					Object::Literal(max.literal()),
+					Object::Literal(max.as_rdf_literal()),
 					None,
 				));
 			}
@@ -808,10 +806,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> 
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinLength)),
-					Object::Literal(Literal::TypedString(
-						xsd_types::IntegerBuf::from(min).into_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
-					)),
+					Object::Literal(min.as_rdf_literal()),
 					None,
 				));
 			}
@@ -819,10 +814,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> 
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxLength)),
-					Object::Literal(Literal::TypedString(
-						xsd_types::IntegerBuf::from(max).into_string().into(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
-					)),
+					Object::Literal(max.as_rdf_literal()),
 					None,
 				));
 			}

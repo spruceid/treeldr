@@ -3,11 +3,18 @@ use locspan::Meta;
 use locspan_derive::{
 	StrippedEq, StrippedHash, StrippedOrd, StrippedPartialEq, StrippedPartialOrd,
 };
+use xsd_types::NonNegativeInteger;
+
+#[derive(Debug, Clone)]
+pub enum Restriction {
+	MinInclusive(NonNegativeInteger),
+	MaxInclusive(NonNegativeInteger),
+}
 
 #[derive(Debug, Clone, Copy)]
-pub enum Restriction {
-	MinInclusive(u64),
-	MaxInclusive(u64),
+pub enum RestrictionRef<'a> {
+	MinInclusive(&'a NonNegativeInteger),
+	MaxInclusive(&'a NonNegativeInteger),
 }
 
 #[derive(
@@ -15,8 +22,11 @@ pub enum Restriction {
 )]
 #[locspan(ignore(M))]
 pub struct Restrictions<M> {
-	min: MetaOption<u64, M>,
-	max: MetaOption<u64, M>,
+	#[locspan(unwrap_deref_stripped)]
+	min: MetaOption<NonNegativeInteger, M>,
+
+	#[locspan(unwrap_deref_stripped)]
+	max: MetaOption<NonNegativeInteger, M>,
 }
 
 #[derive(Debug)]
@@ -33,18 +43,24 @@ impl<M> Default for Restrictions<M> {
 
 impl<M> Restrictions<M> {
 	pub fn is_restricted(&self) -> bool {
-		self.min() != u64::MIN || self.max() != u64::MAX
+		self.max.is_some() || !self.min().is_zero()
 	}
 
-	pub fn min_with_metadata(&self) -> &MetaOption<u64, M> {
+	pub fn min_with_metadata(&self) -> &MetaOption<NonNegativeInteger, M> {
 		&self.min
 	}
 
-	pub fn min(&self) -> u64 {
-		self.min.value().cloned().unwrap_or(u64::MIN)
+	pub fn min(&self) -> NonNegativeInteger {
+		self.min
+			.value()
+			.cloned()
+			.unwrap_or_else(NonNegativeInteger::zero)
 	}
 
-	pub fn insert_min(&mut self, Meta(min, meta): Meta<u64, M>) -> Result<(), Meta<Conflict<M>, M>>
+	pub fn insert_min(
+		&mut self,
+		Meta(min, meta): Meta<NonNegativeInteger, M>,
+	) -> Result<(), Meta<Conflict<M>, M>>
 	where
 		M: Clone + Merge,
 	{
@@ -53,7 +69,7 @@ impl<M> Restrictions<M> {
 				return Err(Meta(
 					Conflict(
 						Restriction::MinInclusive(min),
-						Meta(Restriction::MaxInclusive(*max), max_meta.clone()),
+						Meta(Restriction::MaxInclusive(max.clone()), max_meta.clone()),
 					),
 					meta,
 				));
@@ -73,15 +89,18 @@ impl<M> Restrictions<M> {
 		Ok(())
 	}
 
-	pub fn max_with_metadata(&self) -> &MetaOption<u64, M> {
+	pub fn max_with_metadata(&self) -> &MetaOption<NonNegativeInteger, M> {
 		&self.max
 	}
 
-	pub fn max(&self) -> u64 {
-		self.max.value().cloned().unwrap_or(u64::MAX)
+	pub fn max(&self) -> Option<&NonNegativeInteger> {
+		self.max.value()
 	}
 
-	pub fn insert_max(&mut self, Meta(max, meta): Meta<u64, M>) -> Result<(), Meta<Conflict<M>, M>>
+	pub fn insert_max(
+		&mut self,
+		Meta(max, meta): Meta<NonNegativeInteger, M>,
+	) -> Result<(), Meta<Conflict<M>, M>>
 	where
 		M: Clone + Merge,
 	{
@@ -90,7 +109,7 @@ impl<M> Restrictions<M> {
 				return Err(Meta(
 					Conflict(
 						Restriction::MaxInclusive(max),
-						Meta(Restriction::MinInclusive(*min), min_meta.clone()),
+						Meta(Restriction::MinInclusive(min.clone()), min_meta.clone()),
 					),
 					meta,
 				));
@@ -112,37 +131,29 @@ impl<M> Restrictions<M> {
 
 	pub fn iter(&self) -> Iter<M> {
 		Iter {
-			min: self.min.as_ref().and_then(|Meta(v, m)| {
-				if *v != u64::MIN {
-					Some(Meta(*v, m))
-				} else {
-					None
-				}
-			}),
-			max: self.max.as_ref().and_then(|Meta(v, m)| {
-				if *v != u64::MAX {
-					Some(Meta(*v, m))
-				} else {
-					None
-				}
-			}),
+			min: self.min.as_ref().filter(|v| !v.is_zero()),
+			max: self.max.as_ref(),
 		}
 	}
 }
 
 pub struct Iter<'a, M> {
-	min: Option<Meta<u64, &'a M>>,
-	max: Option<Meta<u64, &'a M>>,
+	min: Option<&'a Meta<NonNegativeInteger, M>>,
+	max: Option<&'a Meta<NonNegativeInteger, M>>,
 }
 
 impl<'a, M> Iterator for Iter<'a, M> {
-	type Item = Meta<Restriction, &'a M>;
+	type Item = Meta<RestrictionRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.min
 			.take()
-			.map(|m| m.map(Restriction::MinInclusive))
-			.or_else(|| self.max.take().map(|m| m.map(Restriction::MaxInclusive)))
+			.map(|m| m.borrow().map(RestrictionRef::MinInclusive))
+			.or_else(|| {
+				self.max
+					.take()
+					.map(|m| m.borrow().map(RestrictionRef::MaxInclusive))
+			})
 	}
 }
 
@@ -150,7 +161,11 @@ impl<'a, M> DoubleEndedIterator for Iter<'a, M> {
 	fn next_back(&mut self) -> Option<Self::Item> {
 		self.max
 			.take()
-			.map(|m| m.map(Restriction::MaxInclusive))
-			.or_else(|| self.min.take().map(|m| m.map(Restriction::MinInclusive)))
+			.map(|m| m.borrow().map(RestrictionRef::MaxInclusive))
+			.or_else(|| {
+				self.min
+					.take()
+					.map(|m| m.borrow().map(RestrictionRef::MinInclusive))
+			})
 	}
 }

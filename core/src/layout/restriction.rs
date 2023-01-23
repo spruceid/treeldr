@@ -8,21 +8,27 @@ pub mod cardinal;
 #[derive(Clone, Copy)]
 pub enum RestrictionRef<'a> {
 	Primitive(super::primitive::RestrictionRef<'a>),
-	Container(ContainerRestriction),
+	Container(ContainerRestrictionRef<'a>),
 }
 
 /// Container restriction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ContainerRestriction {
 	Cardinal(cardinal::Restriction),
 }
 
 impl ContainerRestriction {
-	pub fn as_binding(&self) -> Binding {
+	pub fn as_binding_ref(&self) -> BindingRef {
 		match self {
-			Self::Cardinal(r) => Binding::Cardinal(r.as_binding()),
+			Self::Cardinal(r) => BindingRef::Cardinal(r.as_binding_ref()),
 		}
 	}
+}
+
+/// Container restriction reference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ContainerRestrictionRef<'a> {
+	Cardinal(cardinal::RestrictionRef<'a>),
 }
 
 #[derive(Debug)]
@@ -196,12 +202,12 @@ pub struct ContainerRestrictionsIter<'a, M> {
 }
 
 impl<'a, M> Iterator for ContainerRestrictionsIter<'a, M> {
-	type Item = Meta<ContainerRestriction, &'a M>;
+	type Item = Meta<ContainerRestrictionRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.cardinal
 			.next()
-			.map(|m| m.map(ContainerRestriction::Cardinal))
+			.map(|m| m.map(ContainerRestrictionRef::Cardinal))
 	}
 }
 
@@ -209,7 +215,7 @@ impl<'a, M> DoubleEndedIterator for ContainerRestrictionsIter<'a, M> {
 	fn next_back(&mut self) -> Option<Self::Item> {
 		self.cardinal
 			.next_back()
-			.map(|m| m.map(ContainerRestriction::Cardinal))
+			.map(|m| m.map(ContainerRestrictionRef::Cardinal))
 	}
 }
 
@@ -218,6 +224,18 @@ pub enum Binding {
 }
 
 impl Binding {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::Cardinal(b) => b.property(),
+		}
+	}
+}
+
+pub enum BindingRef<'a> {
+	Cardinal(cardinal::BindingRef<'a>),
+}
+
+impl<'a> BindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
 			Self::Cardinal(b) => b.property(),

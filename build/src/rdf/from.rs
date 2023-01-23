@@ -5,7 +5,7 @@ use rdf_types::{Generator, VocabularyMut};
 use treeldr::{
 	metadata::Merge,
 	ty::data::RegExp,
-	value,
+	value::{self, NonNegativeInteger},
 	vocab::{self, GraphLabel, Object, Term},
 	BlankIdIndex, Id, IriIndex, Name,
 };
@@ -37,10 +37,10 @@ pub(crate) fn expect_string<M>(
 
 pub(crate) fn expect_non_negative_integer<M>(
 	Meta(value, _): Meta<vocab::Object<M>, M>,
-) -> Result<Meta<u64, M>, Error<M>> {
+) -> Result<Meta<NonNegativeInteger, M>, Error<M>> {
 	match value {
 		vocab::Object::Literal(vocab::Literal::TypedString(Meta(s, meta), _)) => {
-			match s.as_str().parse::<u64>() {
+			match s.as_str().parse::<NonNegativeInteger>() {
 				Ok(u) => Ok(Meta(u, meta)),
 				Err(_) => panic!("expected non negative integer"),
 			}
