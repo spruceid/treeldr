@@ -7,9 +7,9 @@ use ::treeldr::{
 };
 use locspan::{Meta, Span};
 use nquads_syntax::Parse;
-use rdf_types::{Generator, VocabularyMut};
+use rdf_types::{generator::Unscoped, vocabulary::Scoped, Generator, VocabularyMut};
 
-use crate::{Document, ScopedGenerator, ScopedVocabulary};
+use crate::Document;
 
 use super::Context;
 
@@ -55,8 +55,8 @@ impl<M> Context<M> {
 	) where
 		M: Clone + Ord + Merge,
 	{
-		let mut scoped_vocabulary = ScopedVocabulary::new(vocabulary, scope);
-		let mut scoped_generator = ScopedGenerator(generator);
+		let mut scoped_vocabulary = Scoped::new(vocabulary, scope);
+		let mut unscoped_generator = Unscoped(generator);
 
 		let doc = nquads_syntax::Document::parse_str(content, metadata)
 			.ok()
@@ -74,11 +74,21 @@ impl<M> Context<M> {
 			.collect();
 
 		dataset
-			.declare(&mut (), self, &mut scoped_vocabulary, &mut scoped_generator)
+			.declare(
+				&mut (),
+				self,
+				&mut scoped_vocabulary,
+				&mut unscoped_generator,
+			)
 			.ok()
 			.unwrap();
 		dataset
-			.define(&mut (), self, &mut scoped_vocabulary, &mut scoped_generator)
+			.define(
+				&mut (),
+				self,
+				&mut scoped_vocabulary,
+				&mut unscoped_generator,
+			)
 			.ok()
 			.unwrap();
 	}
