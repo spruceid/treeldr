@@ -622,12 +622,12 @@ impl<M> ClassHierarchy<M> {
 		Ok(Self { map })
 	}
 
-	pub fn super_classes(&self, id: Id) -> &Multiple<crate::Type, M> {
-		self.map.get(&id).unwrap()
+	pub fn super_classes(&self, id: Id) -> Option<&Multiple<crate::Type, M>> {
+		self.map.get(&id)
 	}
 
 	fn remove_indirect_classes_from(&self, result: &mut Multiple<crate::Type, M>, id: Id) {
-		for super_class in self.super_classes(id) {
+		for super_class in self.super_classes(id).unwrap() {
 			result.remove(*super_class);
 			self.remove_indirect_classes_from(result, super_class.raw_id());
 		}

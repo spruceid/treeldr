@@ -8,9 +8,6 @@ use std::path::PathBuf;
 use treeldr::to_rdf::ToRdf;
 use treeldr_load as load;
 
-mod source;
-use source::Source;
-
 type BuildContext = treeldr_build::Context<load::Metadata>;
 
 #[derive(Parser)]
@@ -51,14 +48,8 @@ async fn main() {
 	// Init logger.
 	stderrlog::new().verbosity(args.verbosity).init().unwrap();
 
-	let mut files = load::Files::<Source>::new();
+	let mut files = load::Files::<PathBuf>::new();
 	let mut documents = Vec::new();
-
-	documents.push(load_built_in(
-		&mut files,
-		Source::Xsd,
-		include_str!("../../schema/xsd.tldr"),
-	));
 
 	for filename in args.filenames {
 		match load::Document::load(&mut files, &filename) {
@@ -122,14 +113,4 @@ async fn main() {
 			std::process::exit(1);
 		}
 	}
-}
-
-fn load_built_in(files: &mut load::Files<Source>, source: Source, content: &str) -> load::Document {
-	let file_id = files.load_content(
-		source,
-		None,
-		Some(load::MimeType::TreeLdr),
-		content.to_string(),
-	);
-	load::Document::TreeLdr(Box::new(load::import_treeldr(files, file_id)))
 }

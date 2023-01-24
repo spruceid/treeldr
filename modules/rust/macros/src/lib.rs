@@ -5,13 +5,11 @@ use codespan_reporting::term::{
 use contextual::WithContext;
 use proc_macro::TokenStream;
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 use treeldr_load as load;
 
 mod module;
-mod source;
 use module::Module;
-use source::Source;
 
 #[proc_macro_attribute]
 #[proc_macro_error]
@@ -21,14 +19,8 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 			let item = syn::parse_macro_input!(item as syn::Item);
 			match Module::from_item(item) {
 				Ok(mut module) => {
-					let mut files = load::Files::<Source>::new();
+					let mut files = load::Files::<PathBuf>::new();
 					let mut documents = Vec::new();
-
-					documents.push(load_built_in(
-						&mut files,
-						Source::Xsd,
-						include_str!("../../../../schema/xsd.tldr"),
-					));
 
 					let mut file_id_span = HashMap::new();
 					for input in inputs {
@@ -88,14 +80,4 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 			abort!(span, "{}", e)
 		}
 	}
-}
-
-fn load_built_in(files: &mut load::Files<Source>, source: Source, content: &str) -> load::Document {
-	let file_id = files.load_content(
-		source,
-		None,
-		Some(load::MimeType::TreeLdr),
-		content.to_string(),
-	);
-	load::Document::TreeLdr(Box::new(load::import_treeldr(files, file_id)))
 }

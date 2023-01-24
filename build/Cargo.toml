@@ -16,4 +16,5 @@ codespan-reporting.workspace = true
 grdf = { workspace = true, features = ["meta"] }
 contextual.workspace = true
 shelves.workspace = true
+nquads-syntax.workspace = true
 langtag = "0.3.2"

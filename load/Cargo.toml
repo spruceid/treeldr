@@ -21,7 +21,7 @@ log.workspace = true
 locspan = { workspace = true, features = ["reporting"] }
 codespan-reporting.workspace = true
 thiserror.workspace = true
-nquads-syntax = "0.10.0"
+nquads-syntax.workspace = true
 
 # Extensions.
 treeldr-json-schema = { workspace = true, optional = true }

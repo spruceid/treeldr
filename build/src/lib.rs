@@ -10,6 +10,7 @@ pub mod list;
 pub mod prop;
 pub mod rdf;
 pub mod resource;
+mod scope;
 mod single;
 pub mod ty;
 pub mod utils;
@@ -20,6 +21,7 @@ pub use layout::{ParentLayout, SubLayout};
 pub use list::{ListMut, ListRef};
 pub use multiple::Multiple;
 pub use prop::Property;
+pub use scope::*;
 pub use single::Single;
 pub use ty::Type;
 

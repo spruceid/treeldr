@@ -207,26 +207,14 @@ pub enum Owl {
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("xsd" = "http://www.w3.org/2001/XMLSchema#")]
 pub enum Xsd {
+	#[iri("xsd:string")]
+	String,
+
 	#[iri("xsd:boolean")]
 	Boolean,
 
 	#[iri("xsd:decimal")]
 	Decimal,
-
-	#[iri("xsd:integer")]
-	Integer,
-
-	#[iri("xsd:nonNegativeInteger")]
-	NonNegativeInteger,
-
-	#[iri("xsd:nonPositiveInteger")]
-	NonPositiveInteger,
-
-	#[iri("xsd:positiveInteger")]
-	PositiveInteger,
-
-	#[iri("xsd:int")]
-	Int,
 
 	#[iri("xsd:float")]
 	Float,
@@ -234,8 +222,11 @@ pub enum Xsd {
 	#[iri("xsd:double")]
 	Double,
 
-	#[iri("xsd:string")]
-	String,
+	#[iri("xsd:duration")]
+	Duration,
+
+	#[iri("xsd:dateTime")]
+	DateTime,
 
 	#[iri("xsd:time")]
 	Time,
@@ -243,14 +234,131 @@ pub enum Xsd {
 	#[iri("xsd:date")]
 	Date,
 
-	#[iri("xsd:dateTime")]
-	DateTime,
+	#[iri("xsd:gYearMonth")]
+	GYearMonth,
 
-	#[iri("xsd:duration")]
-	Duration,
+	#[iri("xsd:gYear")]
+	GYear,
+
+	#[iri("xsd:gMonthDay")]
+	GMonthDay,
+
+	#[iri("xsd:gDay")]
+	GDay,
+
+	#[iri("xsd:gMonth")]
+	GMonth,
+
+	#[iri("xsd:hexBinary")]
+	HexBinary,
+
+	#[iri("xsd:base64Binary")]
+	Base64Binary,
 
 	#[iri("xsd:anyURI")]
 	AnyUri,
+
+	#[iri("xsd:QName")]
+	QName,
+
+	#[iri("xsd:NOTATION")]
+	Notation,
+
+	#[iri("xsd:normalizedString")]
+	NormalizedString,
+
+	#[iri("xsd:token")]
+	Token,
+
+	#[iri("xsd:language")]
+	Language,
+
+	#[iri("xsd:NMTOKEN")]
+	NMToken,
+
+	#[iri("xsd:NMTOKENS")]
+	NMTokens,
+
+	#[iri("xsd:Name")]
+	Name,
+
+	#[iri("xsd:NCName")]
+	NCName,
+
+	#[iri("xsd:ID")]
+	Id,
+
+	#[iri("xsd:IDREF")]
+	IdRef,
+
+	#[iri("xsd:IDREFS")]
+	IdRefs,
+
+	#[iri("xsd:ENTITY")]
+	Entity,
+
+	#[iri("xsd:ENTITIES")]
+	Entities,
+
+	#[iri("xsd:integer")]
+	Integer,
+
+	#[iri("xsd:nonPositiveInteger")]
+	NonPositiveInteger,
+
+	#[iri("xsd:negativeInteger")]
+	NegativeInteger,
+
+	#[iri("xsd:long")]
+	Long,
+
+	#[iri("xsd:int")]
+	Int,
+
+	#[iri("xsd:short")]
+	Short,
+
+	#[iri("xsd:byte")]
+	Byte,
+
+	#[iri("xsd:nonNegativeInteger")]
+	NonNegativeInteger,
+
+	#[iri("xsd:unsignedLong")]
+	UnsignedLong,
+
+	#[iri("xsd:unsignedInt")]
+	UnsignedInt,
+
+	#[iri("xsd:unsignedShort")]
+	UnsignedShort,
+
+	#[iri("xsd:unsignedByte")]
+	UnsignedByte,
+
+	#[iri("xsd:positiveInteger")]
+	PositiveInteger,
+
+	#[iri("xsd:yearMonthDuration")]
+	YearMonthDuration,
+
+	#[iri("xsd:dayTimeDuration")]
+	DayTimeDuration,
+
+	#[iri("xsd:dateTimeStamp")]
+	DateTimeStamp,
+
+	#[iri("xsd:ordered")]
+	Ordered,
+
+	#[iri("xsd:bounded")]
+	Bounded,
+
+	#[iri("xsd:cardinality")]
+	Cardinality,
+
+	#[iri("xsd:numeric")]
+	Numeric,
 
 	#[iri("xsd:length")]
 	Length,
@@ -264,6 +372,12 @@ pub enum Xsd {
 	#[iri("xsd:pattern")]
 	Pattern,
 
+	#[iri("xsd:enumeration")]
+	Enumeration,
+
+	#[iri("xsd:whiteSpace")]
+	WhiteSpace,
+
 	#[iri("xsd:maxExclusive")]
 	MaxExclusive,
 
@@ -275,6 +389,18 @@ pub enum Xsd {
 
 	#[iri("xsd:minInclusive")]
 	MinInclusive,
+
+	#[iri("xsd:totalDigits")]
+	TotalDigits,
+
+	#[iri("xsd:fractionDigits")]
+	FractionDigits,
+
+	#[iri("xsd:assertions")]
+	Assertions,
+
+	#[iri("xsd:explicitTimezone")]
+	ExplicitTimezone,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -307,6 +433,9 @@ pub enum Rdfs {
 
 	#[iri("rdfs:subClassOf")]
 	SubClassOf,
+
+	#[iri("rdfs:subPropertyOf")]
+	SubPropertyOf,
 
 	#[iri("rdfs:Datatype")]
 	Datatype,
