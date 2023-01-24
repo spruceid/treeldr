@@ -12,22 +12,14 @@ use treeldr::{
 
 type BuildContext = treeldr_build::Context<Span>;
 
-fn infallible<T>(t: T) -> Result<T, std::convert::Infallible> {
-	Ok(t)
-}
-
 fn parse_nquads<P: AsRef<Path>, V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 	vocabulary: &mut V,
 	path: P,
 ) -> grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel> {
-	use nquads_syntax::{lexing::Utf8Decoded, Document, Lexer, Parse};
+	use nquads_syntax::{Document, Parse};
 
 	let buffer = std::fs::read_to_string(path).expect("unable to read file");
-	let mut lexer = Lexer::new(
-		(),
-		Utf8Decoded::new(buffer.chars().map(infallible)).peekable(),
-	);
-	let Meta(quads, _) = Document::parse(&mut lexer).expect("parse error");
+	let Meta(quads, _) = Document::parse_str(&buffer, |span| span).expect("parse error");
 
 	let generate = move |vocabulary: &mut V, label: BlankIdBuf| {
 		vocabulary.insert_blank_id(label.as_blank_id_ref())
