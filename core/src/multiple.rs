@@ -1,6 +1,9 @@
 use crate::metadata::Merge;
 use locspan::{Meta, StrippedPartialEq};
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::{
+	cmp::Ordering,
+	collections::{btree_map::Entry, BTreeMap},
+};
 
 /// Multiple values.
 #[derive(Clone, Debug)]
@@ -31,6 +34,50 @@ impl<T, M> Multiple<T, M> {
 
 	pub fn clear(&mut self) {
 		self.0.clear()
+	}
+
+	pub fn keep_max_with(&mut self, cmp: impl Fn(&T, &T) -> Option<Ordering>)
+	where
+		T: Ord,
+	{
+		let map = std::mem::take(&mut self.0);
+		for (item, m) in map {
+			let mut insert = true;
+			self.0.retain(|other, _| match cmp(other, &item) {
+				None => true,
+				Some(Ordering::Greater) | Some(Ordering::Equal) => {
+					insert = false;
+					true
+				}
+				Some(Ordering::Less) => false,
+			});
+
+			if insert {
+				self.0.insert(item, m);
+			}
+		}
+	}
+
+	pub fn keep_min_with(&mut self, cmp: impl Fn(&T, &T) -> Option<Ordering>)
+	where
+		T: Ord,
+	{
+		let map = std::mem::take(&mut self.0);
+		for (item, m) in map {
+			let mut insert = true;
+			self.0.retain(|other, _| match cmp(other, &item) {
+				None => true,
+				Some(Ordering::Less) | Some(Ordering::Equal) => {
+					insert = false;
+					true
+				}
+				Some(Ordering::Greater) => false,
+			});
+
+			if insert {
+				self.0.insert(item, m);
+			}
+		}
 	}
 }
 
