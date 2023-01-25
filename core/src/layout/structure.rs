@@ -11,7 +11,8 @@ pub struct Struct<M> {
 }
 
 impl<M> Struct<M> {
-	pub fn new(fields: Vec<Meta<TId<Field>, M>>) -> Self {
+	pub fn new(mut fields: Vec<Meta<TId<Field>, M>>) -> Self {
+		fields.sort_by_key(|f| *f.value());
 		Self { fields }
 	}
 

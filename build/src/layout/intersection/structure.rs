@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use locspan::Meta;
+use locspan::{Meta, StrippedEq, StrippedOrd, StrippedPartialEq, StrippedPartialOrd};
 use rdf_types::{Generator, VocabularyMut};
 use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, Name};
 
@@ -28,6 +28,33 @@ pub struct Field<M> {
 	name: Single<Name, M>,
 	layout: Single<IdIntersection<M>, M>,
 	prop: Single<Id, M>,
+}
+
+impl<M> StrippedPartialEq for Field<M> {
+	fn stripped_eq(&self, other: &Self) -> bool {
+		self.name.stripped_eq(&other.name)
+			&& self.prop.stripped_eq(&other.prop)
+			&& self.layout.stripped_eq(&other.layout)
+			&& self.id == other.id
+	}
+}
+
+impl<M> StrippedEq for Field<M> {}
+
+impl<M> StrippedPartialOrd for Field<M> {
+	fn stripped_partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(self.stripped_cmp(other))
+	}
+}
+
+impl<M> StrippedOrd for Field<M> {
+	fn stripped_cmp(&self, other: &Self) -> std::cmp::Ordering {
+		self.name
+			.stripped_cmp(&other.name)
+			.then_with(|| self.prop.stripped_cmp(&other.prop))
+			.then_with(|| self.layout.stripped_cmp(&other.layout))
+			.then_with(|| self.id.cmp(&other.id))
+	}
 }
 
 impl<M> Field<M> {
@@ -58,22 +85,6 @@ impl<M> Field<M> {
 }
 
 impl<M> Field<M> {
-	pub fn matches(&self, other: &Self) -> bool {
-		let common_name = self
-			.name
-			.iter()
-			.any(|Meta(a, _)| other.name.iter().any(|Meta(b, _)| a == b));
-		let no_name = self.name.is_empty() && other.name.is_empty();
-
-		let common_property = self
-			.prop
-			.iter()
-			.any(|Meta(a, _)| other.prop.iter().any(|Meta(b, _)| a == b));
-		let no_property = self.prop.is_empty() && other.prop.is_empty();
-
-		common_name || common_property || (no_name && no_property)
-	}
-
 	pub fn intersected_with(&self, other: &Self) -> Option<Self>
 	where
 		M: Clone + Merge,
@@ -140,47 +151,35 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Field<M> {
 	) -> Result<Option<Vec<Meta<Self, M>>>, Error<M>> {
 		match fields {
 			Some(fields) => {
-				let mut result = Vec::new();
-				let mut fields = fields.to_vec();
-				let mut other_fields = other_fields.to_vec();
-				fields.reverse();
-				other_fields.reverse();
+				let mut other_fields: Vec<_> = other_fields.iter().map(Some).collect();
+				let mut result =
+					Vec::with_capacity(std::cmp::max(fields.len(), other_fields.len()));
 
-				'next_field: while !fields.is_empty() || !other_fields.is_empty() {
-					match fields.pop() {
-						Some(field) => {
-							let Meta(field, causes) = field;
-							while let Some(other_field) = other_fields.pop() {
-								if field.matches(&other_field) {
-									let Meta(other_field, other_causes) = other_field;
-									match field.intersected_with(&other_field) {
-										Some(intersected_field) => result.push(Meta(
-											intersected_field,
-											causes.merged_with(other_causes),
-										)),
-										None => return Ok(None),
-									}
-
-									continue 'next_field;
-								} else if other_fields.iter().any(|f| field.matches(f)) {
-									if fields.iter().any(|f| other_field.matches(f)) {
-										panic!("unaligned layouts")
-									}
-
-									result.push(other_field);
-								} else {
-									other_fields.push(other_field);
-									break;
-								}
+				'next_field: for field in fields {
+					for other_field_opt in &mut other_fields {
+						if let Some(other_field) = other_field_opt {
+							if let Some(intersected_field) = field.intersected_with(other_field) {
+								result.push(Meta(
+									intersected_field,
+									field
+										.metadata()
+										.clone()
+										.merged_with(other_field.metadata().clone()),
+								));
+								*other_field_opt = None;
+								continue 'next_field;
 							}
-
-							result.push(Meta(field, causes));
-						}
-						None => {
-							result.push(other_fields.pop().unwrap());
 						}
 					}
+
+					result.push(field.clone());
 				}
+
+				for other_field in other_fields.into_iter().flatten() {
+					result.push(other_field.clone());
+				}
+
+				result.sort_by(|a, b| a.value().stripped_cmp(b.value()));
 
 				Ok(Some(result))
 			}
