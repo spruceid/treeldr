@@ -1,4 +1,4 @@
-use locspan::{ErrAt, Meta, StrippedPartialEq};
+use locspan::{ErrAt, Meta, StrippedEq, StrippedOrd, StrippedPartialEq, StrippedPartialOrd};
 use std::collections::{btree_map::Entry, BTreeMap};
 use treeldr::{metadata::Merge, Id, MetaOption};
 
@@ -305,6 +305,26 @@ impl<T: Ord, M, N> PartialEq<Single<T, N>> for Single<T, M> {
 impl<T: Ord, M, N> StrippedPartialEq<Single<T, N>> for Single<T, M> {
 	fn stripped_eq(&self, other: &Single<T, N>) -> bool {
 		self.0.keys().any(|k| other.0.contains_key(k))
+	}
+}
+
+impl<T: Ord, M> StrippedEq for Single<T, M> {}
+
+impl<T: Ord, M, N> StrippedPartialOrd<Single<T, N>> for Single<T, M> {
+	fn stripped_partial_cmp(&self, other: &Single<T, N>) -> Option<std::cmp::Ordering> {
+		Some(
+			self.first()
+				.map(Meta::into_value)
+				.cmp(&other.first().map(Meta::into_value)),
+		)
+	}
+}
+
+impl<T: Ord, M> StrippedOrd for Single<T, M> {
+	fn stripped_cmp(&self, other: &Self) -> std::cmp::Ordering {
+		self.first()
+			.map(Meta::into_value)
+			.cmp(&other.first().map(Meta::into_value))
 	}
 }
 
