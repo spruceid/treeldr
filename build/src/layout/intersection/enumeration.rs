@@ -90,6 +90,31 @@ pub struct Variant<M> {
 	layout: Single<IdIntersection<M>, M>,
 }
 
+impl<M> StrippedPartialEq for Variant<M> {
+	fn stripped_eq(&self, other: &Self) -> bool {
+		self.name.stripped_eq(&other.name)
+			&& self.layout.stripped_eq(&other.layout)
+			&& self.id == other.id
+	}
+}
+
+impl<M> locspan::StrippedEq for Variant<M> {}
+
+impl<M> StrippedPartialOrd for Variant<M> {
+	fn stripped_partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(self.stripped_cmp(other))
+	}
+}
+
+impl<M> StrippedOrd for Variant<M> {
+	fn stripped_cmp(&self, other: &Self) -> std::cmp::Ordering {
+		self.name
+			.stripped_cmp(&other.name)
+			.then_with(|| self.layout.stripped_cmp(&other.layout))
+			.then_with(|| self.id.cmp(&other.id))
+	}
+}
+
 impl<M> Variant<M> {
 	pub fn from_id(context: &Context<M>, id: Id, meta: &M) -> Result<Self, Error<M>>
 	where
@@ -116,16 +141,6 @@ impl<M> Variant<M> {
 }
 
 impl<M> Variant<M> {
-	pub fn matches(&self, other: &Self) -> bool {
-		let common_name = self
-			.name
-			.iter()
-			.any(|Meta(a, _)| other.name.iter().any(|Meta(b, _)| a == b));
-		let no_name = self.name.is_empty() && other.name.is_empty();
-
-		common_name || no_name
-	}
-
 	pub fn intersected_with(&self, other: &Self) -> Option<Self>
 	where
 		M: Clone + Merge,
@@ -180,44 +195,31 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Variant<M> {
 	) -> Result<Option<Vec<Meta<Self, M>>>, Error<M>> {
 		match variants {
 			Some(variants) => {
-				let mut result = Vec::new();
-				let mut variants = variants.to_vec();
-				let mut other_variants = other_variants.to_vec();
-				variants.reverse();
-				other_variants.reverse();
+				let mut other_variants: Vec<_> = other_variants.iter().map(Some).collect();
+				let mut result =
+					Vec::with_capacity(std::cmp::max(variants.len(), other_variants.len()));
 
-				'next_variant: while !variants.is_empty() && !other_variants.is_empty() {
-					if let Some(Meta(variant, causes)) = variants.pop() {
-						while let Some(other_variant) = other_variants.pop() {
-							if variant.matches(&other_variant) {
-								let Meta(other_variant, other_causes) = other_variant;
-								if let Some(intersected_variant) =
-									variant.intersected_with(&other_variant)
-								{
-									result.push(Meta::new(
-										intersected_variant,
-										causes.merged_with(other_causes),
-									))
-								}
-
+				'next_variant: for variant in variants {
+					for other_variant_opt in &mut other_variants {
+						if let Some(other_variant) = other_variant_opt {
+							if let Some(intersected_variant) =
+								variant.intersected_with(other_variant)
+							{
+								result.push(Meta(
+									intersected_variant,
+									variant
+										.metadata()
+										.clone()
+										.merged_with(other_variant.metadata().clone()),
+								));
+								*other_variant_opt = None;
 								continue 'next_variant;
-							} else {
-								for after_variant in &variants {
-									if after_variant.matches(&other_variant) {
-										for v in &other_variants {
-											if variant.matches(v) {
-												panic!("unaligned layouts")
-											}
-										}
-
-										other_variants.push(other_variant);
-										continue 'next_variant;
-									}
-								}
 							}
 						}
 					}
 				}
+
+				result.sort_by(|a, b| a.value().stripped_cmp(b.value()));
 
 				Ok(Some(result))
 			}
