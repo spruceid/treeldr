@@ -6,7 +6,10 @@ use crate::{
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
 use rdf_types::{Generator, VocabularyMut};
-use std::collections::{btree_map::Entry, BTreeMap, HashMap, HashSet};
+use std::{
+	cmp::Ordering,
+	collections::{btree_map::Entry, BTreeMap, HashMap, HashSet},
+};
 use treeldr::{
 	metadata::Merge,
 	node::Type,
@@ -183,6 +186,24 @@ impl<M> Context<M> {
 	/// Checks if `b` is a subclass or equals `a`.
 	pub fn is_subclass_of_or_eq(&self, a: crate::Type, b: crate::Type) -> bool {
 		a == b || self.is_subclass_of(a, b)
+	}
+
+	/// Compare `a` and `b` w.r.t the subclass relation.
+	///
+	/// Returns [`Ordering::Greater`] if `b` is a subclass of `a`,
+	/// [`Ordering::Less`] if `a` is a subclass of `b`,
+	/// [`Ordering::Equal`] if `a` is equal to `b` and `None` if both classes
+	/// are unrelated.
+	pub fn subclass_partial_cmp(&self, a: crate::Type, b: crate::Type) -> Option<Ordering> {
+		if a == b {
+			Some(Ordering::Equal)
+		} else if self.is_subclass_of(a, b) {
+			Some(Ordering::Greater)
+		} else if self.is_subclass_of(b, a) {
+			Some(Ordering::Less)
+		} else {
+			None
+		}
 	}
 
 	/// Returns the node associated to the given `Id`, if any.

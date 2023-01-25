@@ -10,6 +10,7 @@ mod assign_default_layouts;
 mod assign_default_names;
 mod compute_layout_intersections;
 mod compute_layouts_relations;
+mod minimize;
 mod remove_unused_nodes;
 mod simplify_composite_types_and_layouts;
 mod unify;
@@ -44,6 +45,9 @@ impl<M: Clone> Context<M> {
 		log::debug!("class hierarchy analysis...");
 		let class_hierarchy = ClassHierarchy::new(self).map_loc_err(error::Description::from)?;
 		class_hierarchy.apply(self);
+
+		log::debug!("minimizing `rdfs:domain` and `rdfs:range`...");
+		self.minimize_domain_and_range();
 
 		log::debug!("assigning default layouts...");
 		self.assign_default_layouts(vocabulary, generator);
