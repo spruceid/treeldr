@@ -1,17 +1,19 @@
 use crate::{
-	component, doc, error, layout, list, multiple, prop, ty,
+	component, doc, error, layout, list, multiple, prop, property_values, ty,
 	vocab::{self, Term},
-	Documentation, Error, Id, MetaOption, Multiple, MutableModel, Name, ResourceType, TId,
+	Documentation, Error, Id, MetaOption, Multiple, MutableModel, Name, PropertyValues,
+	ResourceType, TId,
 };
 use locspan::Meta;
 use xsd_types::NonNegativeInteger;
 
+/// Resource data.
 #[derive(Debug, Clone)]
 pub struct Data<M> {
 	pub id: Id,
 	pub metadata: M,
-	pub type_: Multiple<TId<crate::Type>, M>,
-	pub label: Multiple<String, M>,
+	pub type_: PropertyValues<TId<crate::Type>, M>,
+	pub label: PropertyValues<String, M>,
 	pub comment: Documentation<M>,
 }
 
@@ -20,8 +22,8 @@ impl<M> Data<M> {
 		Self {
 			id,
 			metadata,
-			type_: Multiple::default(),
-			label: Multiple::default(),
+			type_: PropertyValues::default(),
+			label: PropertyValues::default(),
 			comment: Documentation::default(),
 		}
 	}
@@ -74,16 +76,16 @@ impl<M> Definition<M> {
 		self.data.id
 	}
 
-	pub fn type_(&self) -> &Multiple<TId<crate::Type>, M> {
+	pub fn type_(&self) -> &PropertyValues<TId<crate::Type>, M> {
 		&self.data.type_
 	}
 
-	pub fn label(&self) -> &Multiple<String, M> {
+	pub fn label(&self) -> &PropertyValues<String, M> {
 		&self.data.label
 	}
 
 	pub fn preferred_label(&self) -> Option<&str> {
-		self.data.label.first().map(|m| m.value().as_str())
+		self.data.label.first().map(|m| m.value.as_str())
 	}
 
 	pub fn comment(&self) -> &Documentation<M> {
@@ -311,24 +313,24 @@ impl Property {
 }
 
 pub enum ClassBindingRef<'a> {
-	Type(TId<crate::Type>),
-	Label(&'a str),
-	Comment(&'a str),
+	Type(Option<Id>, TId<crate::Type>),
+	Label(Option<Id>, &'a str),
+	Comment(Option<Id>, &'a str),
 }
 
 impl<'a> ClassBindingRef<'a> {
 	pub fn into_binding_ref<M>(self) -> BindingRef<'a, M> {
 		match self {
-			Self::Type(t) => BindingRef::Type(t),
-			Self::Label(l) => BindingRef::Label(l),
-			Self::Comment(c) => BindingRef::Comment(c),
+			Self::Type(p, t) => BindingRef::Type(p, t),
+			Self::Label(p, l) => BindingRef::Label(p, l),
+			Self::Comment(p, c) => BindingRef::Comment(p, c),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
-	type_: multiple::Iter<'a, TId<crate::Type>, M>,
-	label: multiple::Iter<'a, String, M>,
+	type_: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
+	label: property_values::non_functional::Iter<'a, String, M>,
 	comment: doc::Iter<'a, M>,
 }
 
@@ -338,20 +340,72 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.type_
 			.next()
-			.map(Meta::into_cloned_value)
-			.map(|m| m.map(ClassBindingRef::Type))
+			.map(|v| v.into_cloned_class_binding(ClassBindingRef::Type))
 			.or_else(|| {
 				self.label
 					.next()
-					.map(|v| v.map(String::as_str))
-					.map(|m| m.map(ClassBindingRef::Label))
+					.map(|v| v.into_deref_class_binding(ClassBindingRef::Label))
 					.or_else(|| {
 						self.comment
 							.next()
-							.map(|v| v.map(doc::Block::as_str))
-							.map(|m| m.map(ClassBindingRef::Comment))
+							.map(|v| v.into_deref_class_binding(ClassBindingRef::Comment))
 					})
 			})
+	}
+}
+
+pub enum MultipleIdValueRef<'a, T, M> {
+	Single(TId<T>),
+	PropertyValue(&'a PropertyValues<TId<T>, M>),
+	Multiple(&'a Multiple<TId<T>, M>),
+}
+
+impl<'a, T, M> MultipleIdValueRef<'a, T, M> {
+	pub fn iter(&self) -> MultipleIdValueIter<'a, T, M> {
+		match self {
+			Self::Single(v) => MultipleIdValueIter::Single(Some(*v)),
+			Self::PropertyValue(v) => MultipleIdValueIter::PropertyValue(v.iter()),
+			Self::Multiple(v) => MultipleIdValueIter::Multiple(v.iter()),
+		}
+	}
+}
+
+pub enum MultipleIdValueIter<'a, T, M> {
+	Single(Option<TId<T>>),
+	PropertyValue(property_values::non_functional::Iter<'a, TId<T>, M>),
+	Multiple(multiple::Iter<'a, TId<T>, M>),
+}
+
+impl<'a, T, M> Iterator for MultipleIdValueIter<'a, T, M> {
+	type Item = TId<T>;
+
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		match self {
+			Self::Single(Some(_)) => (1, Some(1)),
+			Self::Single(None) => (0, Some(0)),
+			Self::PropertyValue(i) => i.size_hint(),
+			Self::Multiple(i) => i.size_hint(),
+		}
+	}
+
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			Self::Single(i) => i.take(),
+			Self::PropertyValue(i) => i.next().map(|s| **s.value),
+			Self::Multiple(i) => i.next().map(|m| **m),
+		}
+	}
+}
+
+impl<'a, T, M> ExactSizeIterator for MultipleIdValueIter<'a, T, M> {}
+
+impl<'a, T, M> DoubleEndedIterator for MultipleIdValueIter<'a, T, M> {
+	fn next_back(&mut self) -> Option<Self::Item> {
+		match self {
+			Self::Single(i) => i.take(),
+			Self::PropertyValue(i) => i.next_back().map(|s| **s.value),
+			Self::Multiple(i) => i.next_back().map(|m| **m),
+		}
 	}
 }
 
@@ -361,11 +415,9 @@ pub enum BindingValueRef<'a, M> {
 	String(&'a str),
 	Name(&'a Name),
 	Id(Id),
-	Type(TId<crate::Type>),
-	Types(&'a Multiple<TId<crate::Type>, M>),
+	Types(MultipleIdValueRef<'a, crate::Type, M>),
 	DataType(TId<crate::ty::DataType<M>>),
-	Layout(TId<crate::Layout>),
-	Layouts(&'a Multiple<TId<crate::Layout>, M>),
+	Layouts(MultipleIdValueRef<'a, crate::Layout, M>),
 	Fields(&'a [Meta<TId<layout::Field>, M>]),
 	Variants(&'a [Meta<TId<layout::Variant>, M>]),
 	Property(TId<crate::Property>),
@@ -377,10 +429,8 @@ impl<'a, M> BindingValueRef<'a, M> {
 	pub fn ids(self) -> BindingValueIds<'a, M> {
 		match self {
 			Self::Id(id) => BindingValueIds::Id(Some(id)),
-			Self::Type(t) => BindingValueIds::Type(Some(t)),
 			Self::Types(t) => BindingValueIds::Types(t.iter()),
 			Self::DataType(t) => BindingValueIds::DataType(Some(t)),
-			Self::Layout(l) => BindingValueIds::Layout(Some(l)),
 			Self::Layouts(l) => BindingValueIds::Layouts(l.iter()),
 			Self::Fields(f) => BindingValueIds::Fields(f.iter()),
 			Self::Variants(v) => BindingValueIds::Variants(v.iter()),
@@ -393,11 +443,9 @@ impl<'a, M> BindingValueRef<'a, M> {
 pub enum BindingValueIds<'a, M> {
 	None,
 	Id(Option<Id>),
-	Type(Option<TId<crate::Type>>),
-	Types(multiple::Iter<'a, TId<crate::Type>, M>),
+	Types(MultipleIdValueIter<'a, crate::Type, M>),
 	DataType(Option<TId<crate::ty::DataType<M>>>),
-	Layout(Option<TId<crate::Layout>>),
-	Layouts(multiple::Iter<'a, TId<crate::Layout>, M>),
+	Layouts(MultipleIdValueIter<'a, crate::Layout, M>),
 	Fields(std::slice::Iter<'a, Meta<TId<layout::Field>, M>>),
 	Variants(std::slice::Iter<'a, Meta<TId<layout::Variant>, M>>),
 	Property(Option<TId<crate::Property>>),
@@ -410,10 +458,8 @@ impl<'a, M> Iterator for BindingValueIds<'a, M> {
 		match self {
 			Self::None => None,
 			Self::Id(i) => i.take(),
-			Self::Type(t) => t.take().map(|i| i.id()),
 			Self::Types(t) => t.next().map(|i| i.id()),
 			Self::DataType(d) => d.take().map(|i| i.id()),
-			Self::Layout(t) => t.take().map(|i| i.id()),
 			Self::Layouts(t) => t.next().map(|i| i.id()),
 			Self::Fields(d) => d.next().map(|i| i.id()),
 			Self::Variants(t) => t.next().map(|i| i.id()),
@@ -423,9 +469,9 @@ impl<'a, M> Iterator for BindingValueIds<'a, M> {
 }
 
 pub enum BindingRef<'a, M> {
-	Type(TId<crate::Type>),
-	Label(&'a str),
-	Comment(&'a str),
+	Type(Option<Id>, TId<crate::Type>),
+	Label(Option<Id>, &'a str),
+	Comment(Option<Id>, &'a str),
 	Class(crate::ty::BindingRef<'a, M>),
 	Property(crate::prop::Binding),
 	Component(crate::component::BindingRef<'a, M>),
@@ -443,9 +489,9 @@ impl<'a, M> BindingRef<'a, M> {
 
 	pub fn resource_property(&self) -> Property {
 		match self {
-			Self::Type(_) => Property::Type,
-			Self::Label(_) => Property::Label,
-			Self::Comment(_) => Property::Comment,
+			Self::Type(_, _) => Property::Type,
+			Self::Label(_, _) => Property::Label,
+			Self::Comment(_, _) => Property::Comment,
 			Self::Class(b) => Property::Class(b.property()),
 			Self::Property(b) => Property::Property(b.property()),
 			Self::Component(b) => Property::Component(b.property()),
@@ -458,9 +504,9 @@ impl<'a, M> BindingRef<'a, M> {
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Type(v) => BindingValueRef::Type(*v),
-			Self::Label(v) => BindingValueRef::String(v),
-			Self::Comment(v) => BindingValueRef::String(v),
+			Self::Type(_, v) => BindingValueRef::Types(MultipleIdValueRef::Single(*v)),
+			Self::Label(_, v) => BindingValueRef::String(v),
+			Self::Comment(_, v) => BindingValueRef::String(v),
 			Self::Class(b) => b.value(),
 			Self::Property(b) => b.value(),
 			Self::Component(b) => b.value(),

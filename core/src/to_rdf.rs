@@ -168,7 +168,6 @@ impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 			Self::String(s) => Object::Literal(Literal::String(s.to_string().into())),
 			Self::Name(n) => Object::Literal(Literal::String(n.to_string().into())),
 			Self::Id(id) => id.into_term(),
-			Self::Type(ty) => ty.id().into_term(),
 			Self::Types(types) => types
 				.iter()
 				.map(|ty| ty.id().into_term())
@@ -189,7 +188,6 @@ impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 				)
 				.into_term(),
 			Self::Property(p) => p.id().into_term(),
-			Self::Layout(l) => l.id().into_term(),
 			Self::Layouts(layouts) => layouts
 				.iter()
 				.map(|l| l.id().into_term())

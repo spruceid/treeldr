@@ -166,7 +166,9 @@ impl Binding {
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Format(v) => BindingValueRef::Layout(*v),
+			Self::Format(v) => {
+				BindingValueRef::Layouts(crate::node::MultipleIdValueRef::Single(*v))
+			}
 			Self::LayoutField(b) => b.value(),
 		}
 	}

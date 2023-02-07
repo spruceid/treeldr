@@ -608,8 +608,12 @@ impl ClassBinding {
 	pub fn value<M>(&self) -> BindingValueRef<M> {
 		match self {
 			Self::OnProperty(v) => BindingValueRef::Property(*v),
-			Self::SomeValuesFrom(v) => BindingValueRef::Type(*v),
-			Self::AllValuesFrom(v) => BindingValueRef::Type(*v),
+			Self::SomeValuesFrom(v) => {
+				BindingValueRef::Types(crate::node::MultipleIdValueRef::Single(*v))
+			}
+			Self::AllValuesFrom(v) => {
+				BindingValueRef::Types(crate::node::MultipleIdValueRef::Single(*v))
+			}
 			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
 			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
 			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
@@ -641,8 +645,12 @@ impl<'a> ClassBindingRef<'a> {
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::OnProperty(v) => BindingValueRef::Property(*v),
-			Self::SomeValuesFrom(v) => BindingValueRef::Type(*v),
-			Self::AllValuesFrom(v) => BindingValueRef::Type(*v),
+			Self::SomeValuesFrom(v) => {
+				BindingValueRef::Types(crate::node::MultipleIdValueRef::Single(*v))
+			}
+			Self::AllValuesFrom(v) => {
+				BindingValueRef::Types(crate::node::MultipleIdValueRef::Single(*v))
+			}
 			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
 			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
 			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),

@@ -1,4 +1,7 @@
-use crate::layout::DescriptionBindingRef;
+use crate::{
+	property_values, FunctionalPropertyValue, PropertyValue, PropertyValues,
+	RequiredFunctionalPropertyValue,
+};
 
 use super::Primitive;
 use derivative::Derivative;
@@ -14,11 +17,11 @@ pub mod unsigned;
 #[derive(Clone, Debug)]
 pub enum Restricted<M> {
 	Boolean,
-	Integer(integer::Restrictions<M>),
-	UnsignedInteger(unsigned::Restrictions<M>),
-	Float(float::Restrictions<M>),
-	Double(double::Restrictions<M>),
-	String(string::Restrictions<M>),
+	Integer(FunctionalPropertyValue<integer::Restrictions<M>, M>),
+	UnsignedInteger(FunctionalPropertyValue<unsigned::Restrictions<M>, M>),
+	Float(FunctionalPropertyValue<float::Restrictions<M>, M>),
+	Double(FunctionalPropertyValue<double::Restrictions<M>, M>),
+	String(FunctionalPropertyValue<string::Restrictions<M>, M>),
 	Time,
 	Date,
 	DateTime,
@@ -47,32 +50,89 @@ impl<M> Restricted<M> {
 
 	pub fn is_restricted(&self) -> bool {
 		match self {
-			Self::Integer(r) => r.is_restricted(),
-			Self::UnsignedInteger(r) => r.is_restricted(),
-			Self::Float(r) => r.is_restricted(),
-			Self::Double(r) => r.is_restricted(),
-			Self::String(r) => r.is_restricted(),
+			Self::Integer(r) => r.is_some_and(|r| r.is_restricted()),
+			Self::UnsignedInteger(r) => r.is_some_and(|r| r.is_restricted()),
+			Self::Float(r) => r.is_some_and(|r| r.is_restricted()),
+			Self::Double(r) => r.is_some_and(|r| r.is_restricted()),
+			Self::String(r) => r.is_some_and(|r| r.is_restricted()),
 			_ => false,
 		}
 	}
 
 	pub fn restrictions(&self) -> Option<Restrictions<M>> {
 		match self {
-			Self::Integer(r) => Some(Restrictions::Integer(r)),
-			Self::UnsignedInteger(r) => Some(Restrictions::UnsignedInteger(r)),
-			Self::Float(r) => Some(Restrictions::Float(r)),
-			Self::Double(r) => Some(Restrictions::Double(r)),
-			Self::String(r) => Some(Restrictions::String(r)),
+			Self::Integer(r) => r.value().map(Restrictions::Integer),
+			Self::UnsignedInteger(r) => r.value().map(Restrictions::UnsignedInteger),
+			Self::Float(r) => r.value().map(Restrictions::Float),
+			Self::Double(r) => r.value().map(Restrictions::Double),
+			Self::String(r) => r.value().map(Restrictions::String),
 			_ => None,
 		}
 	}
 
-	pub fn as_binding_ref(&self) -> Option<DescriptionBindingRef<M>> {
-		if self.is_restricted() {
-			Some(DescriptionBindingRef::DerivedFrom(self.primitive()))
-		} else {
-			None
+	pub fn with_restrictions(&self) -> Option<WithRestrictions<M>> {
+		match self {
+			Self::Integer(r) => r
+				.as_required()
+				.map(|s| WithRestrictions::new(s, Restrictions::Integer)),
+			Self::UnsignedInteger(r) => r
+				.as_required()
+				.map(|s| WithRestrictions::new(s, Restrictions::UnsignedInteger)),
+			Self::Float(r) => r
+				.as_required()
+				.map(|s| WithRestrictions::new(s, Restrictions::Float)),
+			Self::Double(r) => r
+				.as_required()
+				.map(|s| WithRestrictions::new(s, Restrictions::Double)),
+			Self::String(r) => r
+				.as_required()
+				.map(|s| WithRestrictions::new(s, Restrictions::String)),
+			_ => None,
 		}
+	}
+}
+
+/// Values of the `tldr:withRestrictions` property.
+pub struct WithRestrictions<'a, M> {
+	pub(crate) sub_properties: &'a PropertyValues<(), M>,
+	pub(crate) restrictions: Restrictions<'a, M>,
+}
+
+impl<'a, M> WithRestrictions<'a, M> {
+	fn new<T>(
+		value: &'a RequiredFunctionalPropertyValue<T, M>,
+		f: impl FnOnce(&'a T) -> Restrictions<'a, M>,
+	) -> Self {
+		Self {
+			sub_properties: value.sub_properties(),
+			restrictions: f(value.value()),
+		}
+	}
+
+	pub fn iter(&self) -> WithRestrictionsIter<'a, M> {
+		WithRestrictionsIter {
+			sub_properties: self.sub_properties.iter(),
+			restrictions: self.restrictions,
+		}
+	}
+}
+
+/// Iterator over the values of the `tldr:withRestrictions` property.
+pub struct WithRestrictionsIter<'a, M> {
+	sub_properties: property_values::non_functional::Iter<'a, (), M>,
+	restrictions: Restrictions<'a, M>,
+}
+
+impl<'a, M> Iterator for WithRestrictionsIter<'a, M> {
+	type Item = PropertyValue<Restrictions<'a, M>, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.sub_properties.next().map(|s| {
+			PropertyValue::new(
+				s.sub_property,
+				Meta(self.restrictions, s.value.into_metadata()),
+			)
+		})
 	}
 }
 
@@ -80,11 +140,11 @@ impl<M> From<Primitive> for Restricted<M> {
 	fn from(p: Primitive) -> Self {
 		match p {
 			Primitive::Boolean => Self::Boolean,
-			Primitive::Integer => Self::Integer(integer::Restrictions::default()),
-			Primitive::UnsignedInteger => Self::UnsignedInteger(unsigned::Restrictions::default()),
-			Primitive::Float => Self::Float(float::Restrictions::default()),
-			Primitive::Double => Self::Double(double::Restrictions::default()),
-			Primitive::String => Self::String(string::Restrictions::default()),
+			Primitive::Integer => Self::Integer(FunctionalPropertyValue::default()),
+			Primitive::UnsignedInteger => Self::UnsignedInteger(FunctionalPropertyValue::default()),
+			Primitive::Float => Self::Float(FunctionalPropertyValue::default()),
+			Primitive::Double => Self::Double(FunctionalPropertyValue::default()),
+			Primitive::String => Self::String(FunctionalPropertyValue::default()),
 			Primitive::Time => Self::Time,
 			Primitive::Date => Self::Date,
 			Primitive::DateTime => Self::DateTime,

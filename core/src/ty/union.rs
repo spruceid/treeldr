@@ -1,34 +1,29 @@
 use locspan::Meta;
 
-use crate::{Multiple, MutableModel, TId, Type};
+use crate::{Multiple, MutableModel, RequiredFunctionalPropertyValue, TId, Type};
 
+/// Union type built from `owl:unionOf`.
 #[derive(Debug)]
 pub struct Union<M> {
-	options: Multiple<TId<Type>, M>,
+	/// Union terms.
+	union_of: RequiredFunctionalPropertyValue<Multiple<TId<Type>, M>, M>,
 }
 
 impl<M> Union<M> {
-	pub fn new(options: Multiple<TId<Type>, M>) -> Self {
-		// let mut properties = Properties::none();
-		// for &ty_ref in options.keys() {
-		// 	if let Some(ty_properties) = get(ty_ref).properties() {
-		// 		properties.unite_with(ty_properties);
-		// 	}
-		// }
+	pub fn new(union_of: RequiredFunctionalPropertyValue<Multiple<TId<Type>, M>, M>) -> Self {
+		Self { union_of }
+	}
 
-		// Self {
-		// 	options,
-		// 	properties,
-		// }
-		Self { options }
+	pub fn union_of(&self) -> &RequiredFunctionalPropertyValue<Multiple<TId<Type>, M>, M> {
+		&self.union_of
 	}
 
 	pub fn options(&self) -> &Multiple<TId<Type>, M> {
-		&self.options
+		self.union_of.value()
 	}
 
 	pub fn is_datatype(&self, model: &MutableModel<M>) -> bool {
-		self.options
+		self.options()
 			.iter()
 			.all(|Meta(ty_ref, _)| model.get(*ty_ref).unwrap().as_type().is_datatype(model))
 	}

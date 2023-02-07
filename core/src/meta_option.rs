@@ -41,6 +41,13 @@ impl<T, M> MetaOption<T, M> {
 		self.value.is_none()
 	}
 
+	pub fn is_some_and(&self, f: impl FnOnce(&T) -> bool) -> bool {
+		self.value
+			.as_ref()
+			.map(|Meta(v, _)| f(v))
+			.unwrap_or_default()
+	}
+
 	pub fn take(&mut self) -> Self {
 		Self {
 			value: self.value.take(),

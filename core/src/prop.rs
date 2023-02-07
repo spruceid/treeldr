@@ -484,8 +484,8 @@ impl ClassBinding {
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Domain(v) => BindingValueRef::Type(*v),
-			Self::Range(v) => BindingValueRef::Type(*v),
+			Self::Domain(v) => BindingValueRef::Types(node::MultipleIdValueRef::Single(*v)),
+			Self::Range(v) => BindingValueRef::Types(node::MultipleIdValueRef::Single(*v)),
 			Self::Required(v) => BindingValueRef::SchemaBoolean(*v),
 		}
 	}

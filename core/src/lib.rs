@@ -19,6 +19,7 @@ pub mod multiple;
 pub mod name;
 pub mod node;
 pub mod prop;
+pub mod property_values;
 pub mod reporting;
 pub mod to_rdf;
 pub mod ty;
@@ -35,6 +36,10 @@ pub use metadata::Metadata;
 pub use multiple::Multiple;
 pub use name::Name;
 pub use prop::Property;
+pub use property_values::{
+	FunctionalPropertyValue, PropertyValue, PropertyValueRef, PropertyValues,
+	RequiredFunctionalPropertyValue,
+};
 pub use ty::Type;
 pub use value::Value;
 pub use vocab::{BlankIdIndex, Id, IriIndex};

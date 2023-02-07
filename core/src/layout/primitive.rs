@@ -5,7 +5,9 @@ use std::fmt;
 pub mod restriction;
 
 pub use crate::ty::data::RegExp;
-pub use restriction::{Restricted, RestrictionRef, Restrictions};
+pub use restriction::{
+	Restricted, RestrictionRef, Restrictions, WithRestrictions, WithRestrictionsIter,
+};
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]

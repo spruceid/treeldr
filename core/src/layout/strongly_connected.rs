@@ -104,9 +104,9 @@ struct Data {
 	on_stack: bool,
 }
 
-fn strong_connect<'l, F>(
+fn strong_connect<F>(
 	model: &MutableModel<F>,
-	components: &mut StronglyConnectedLayouts<'l, F>,
+	components: &mut StronglyConnectedLayouts<'_, F>,
 	map: &mut HashMap<TId<Layout>, Data>,
 	stack: &mut Vec<TId<Layout>>,
 	layout_ref: TId<Layout>,
