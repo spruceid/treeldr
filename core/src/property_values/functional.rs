@@ -14,8 +14,18 @@ impl<T, M> Default for FunctionalPropertyValue<T, M> {
 }
 
 impl<T, M> FunctionalPropertyValue<T, M> {
+	pub fn new(
+		value: Option<RequiredFunctionalPropertyValue<T, M>>
+	) -> Self {
+		Self(value)
+	}
+
 	pub fn as_required(&self) -> Option<&RequiredFunctionalPropertyValue<T, M>> {
 		self.0.as_ref()
+	}
+
+	pub fn into_required(self) -> Option<RequiredFunctionalPropertyValue<T, M>> {
+		self.0
 	}
 
 	pub fn sub_properties(&self) -> Option<&PropertyValues<(), M>> {
@@ -42,6 +52,16 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 		match self.0.as_ref() {
 			Some(i) => Iter::Some(i.iter()),
 			None => Iter::None,
+		}
+	}
+
+	pub fn try_map_borrow_metadata<U, E>(
+		self,
+		f: impl FnOnce(T, &PropertyValues<(), M>) -> Result<U, E>
+	) -> Result<FunctionalPropertyValue<U, M>, E> {
+		match self.0 {
+			Some(inner) => Ok(FunctionalPropertyValue(Some(inner.try_map_borrow_metadata(f)?))),
+			None => Ok(FunctionalPropertyValue(None))
 		}
 	}
 }

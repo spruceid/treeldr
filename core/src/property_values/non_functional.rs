@@ -113,6 +113,83 @@ impl<T, M> PropertyValues<T, M> {
 	{
 		self.iter().map(|v| v.value.cloned()).collect()
 	}
+
+	pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> PropertyValues<U, M> where U: Ord {
+		self.map_with(&mut f)
+	}
+
+	fn map_with<U>(self, f: &mut impl FnMut(T) -> U) -> PropertyValues<U, M> where U: Ord {
+		let base = self.base.into_iter().map(|(k, v)| (f(k), v)).collect();
+		let sub_properties = self.sub_properties.into_iter().map(|(id, m)| (id, m.map_with(f))).collect();
+
+		PropertyValues { base, sub_properties }
+	}
+
+	pub fn try_map<U, E>(self, mut f: impl FnMut(Option<Id>, T) -> Result<U, E>) -> Result<PropertyValues<U, M>, (Meta<E, M>, PropertyValues<U, M>)> where U: Ord {
+		self.try_map_with(None, &mut f)
+	}
+
+	fn try_map_with<U, E>(self, id: Option<Id>, f: &mut impl FnMut(Option<Id>, T) -> Result<U, E>) -> Result<PropertyValues<U, M>, (Meta<E, M>, PropertyValues<U, M>)> where U: Ord {
+		let mut base = BTreeMap::new();
+		for (t, m) in self.base {
+			match f(id, t) {
+				Ok(u) => {
+					base.insert(u, m);
+				}
+				Err(e) => {
+					return Err((Meta(e, m), PropertyValues { base, sub_properties: BTreeMap::new() }));
+				}
+			}
+		}
+
+		let mut sub_properties = BTreeMap::new();
+		for (id, t) in self.sub_properties {
+			match t.try_map_with(Some(id), f) {
+				Ok(u) => {
+					sub_properties.insert(id, u);
+				}
+				Err((e, u)) => {
+					sub_properties.insert(id, u);
+					return Err((e, PropertyValues { base, sub_properties }))
+				}
+			}
+		}
+
+		Ok(PropertyValues { base, sub_properties })
+	}
+
+	pub fn try_mapped<U, E>(&self, mut f: impl FnMut(Option<Id>, &T) -> Result<U, E>) -> Result<PropertyValues<U, &M>, (Meta<E, &M>, PropertyValues<U, &M>)> where U: Ord {
+		self.try_mapped_with(None, &mut f)
+	}
+
+	fn try_mapped_with<U, E>(&self, id: Option<Id>, f: &mut impl FnMut(Option<Id>, &T) -> Result<U, E>) -> Result<PropertyValues<U, &M>, (Meta<E, &M>, PropertyValues<U, &M>)> where U: Ord {
+		let mut base = BTreeMap::new();
+		for (t, m) in &self.base {
+			match f(id, t) {
+				Ok(u) => {
+					base.insert(u, m);
+				}
+				Err(e) => {
+					return Err((Meta(e, m), PropertyValues { base, sub_properties: BTreeMap::new() }));
+				}
+			}
+		}
+
+		let mut sub_properties = BTreeMap::new();
+		for (id, t) in &self.sub_properties {
+			match t.try_mapped_with(Some(*id), f) {
+				Ok(u) => {
+					sub_properties.insert(*id, u);
+				}
+				Err((e, u)) => {
+					sub_properties.insert(*id, u);
+					return Err((e, PropertyValues { base, sub_properties }))
+				}
+			}
+		}
+
+		Ok(PropertyValues { base, sub_properties })
+	}
 }
 
 impl<T: Ord, M> PropertyValues<T, M> {
@@ -190,7 +267,7 @@ impl<T: Ord, M> PropertyValues<T, M> {
 		self.base.insert(value, meta)
 	}
 
-	pub fn replace_base(&mut self, Meta(value, meta): Meta<T, M>) {
+	pub fn replace_with_base(&mut self, Meta(value, meta): Meta<T, M>) {
 		self.clear();
 		self.base.insert(value, meta);
 	}

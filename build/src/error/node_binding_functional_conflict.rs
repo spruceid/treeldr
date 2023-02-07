@@ -1,6 +1,6 @@
-use locspan::{Meta, MaybeLocated, Span, Stripped};
+use locspan::{MaybeLocated, Span, Stripped};
 use rdf_types::Vocabulary;
-use treeldr::{Id, IriIndex, BlankIdIndex, Name, vocab::Object};
+use treeldr::{Id, IriIndex, BlankIdIndex, Name, vocab::Object, PropertyValue};
 use contextual::WithContext;
 use crate::Property;
 
@@ -17,38 +17,38 @@ pub struct NodeBindingFunctionalConflict<M> {
 
 #[derive(Debug)]
 pub enum ConflictValues<M> {
-	Id(Id, Meta<Id, M>),
-	Object(Object<M>, Meta<Object<M>, M>),
-	Name(Name, Meta<Name, M>),
-	Boolean(bool, Meta<bool, M>)
+	Id(Id, PropertyValue<Id, M>),
+	Object(Object<M>, PropertyValue<Object<M>, M>),
+	Name(Name, PropertyValue<Name, M>),
+	Boolean(bool, PropertyValue<bool, M>)
 }
 
-impl<M> From<(Id, Meta<Id, M>)> for ConflictValues<M> {
-	fn from((a, b): (Id, Meta<Id, M>)) -> Self {
+impl<M> From<(Id, PropertyValue<Id, M>)> for ConflictValues<M> {
+	fn from((a, b): (Id, PropertyValue<Id, M>)) -> Self {
 		Self::Id(a, b)
 	}
 }
 
-impl<M> From<(Object<M>, Meta<Object<M>, M>)> for ConflictValues<M> {
-	fn from((a, b): (Object<M>, Meta<Object<M>, M>)) -> Self {
+impl<M> From<(Object<M>, PropertyValue<Object<M>, M>)> for ConflictValues<M> {
+	fn from((a, b): (Object<M>, PropertyValue<Object<M>, M>)) -> Self {
 		Self::Object(a, b)
 	}
 }
 
-impl<M> From<(Stripped<Object<M>>, Meta<Stripped<Object<M>>, M>)> for ConflictValues<M> {
-	fn from((a, b): (Stripped<Object<M>>, Meta<Stripped<Object<M>>, M>)) -> Self {
+impl<M> From<(Stripped<Object<M>>, PropertyValue<Stripped<Object<M>>, M>)> for ConflictValues<M> {
+	fn from((a, b): (Stripped<Object<M>>, PropertyValue<Stripped<Object<M>>, M>)) -> Self {
 		Self::Object(a.unwrap(), b.map(Stripped::unwrap))
 	}
 }
 
-impl<M> From<(Name, Meta<Name, M>)> for ConflictValues<M> {
-	fn from((a, b): (Name, Meta<Name, M>)) -> Self {
+impl<M> From<(Name, PropertyValue<Name, M>)> for ConflictValues<M> {
+	fn from((a, b): (Name, PropertyValue<Name, M>)) -> Self {
 		Self::Name(a, b)
 	}
 }
 
-impl<M> From<(bool, Meta<bool, M>)> for ConflictValues<M> {
-	fn from((a, b): (bool, Meta<bool, M>)) -> Self {
+impl<M> From<(bool, PropertyValue<bool, M>)> for ConflictValues<M> {
+	fn from((a, b): (bool, PropertyValue<bool, M>)) -> Self {
 		Self::Boolean(a, b)
 	}
 }

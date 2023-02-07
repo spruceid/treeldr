@@ -42,6 +42,14 @@ impl<T, M> RequiredFunctionalPropertyValue<T, M> {
 			value: &self.value,
 		}
 	}
+
+	pub fn try_map_borrow_metadata<U, E>(self, f: impl FnOnce(T, &PropertyValues<(), M>) -> Result<U, E>) -> Result<RequiredFunctionalPropertyValue<U, M>, E> {
+		let value = f(self.value, &self.sub_properties)?;
+		Ok(RequiredFunctionalPropertyValue {
+			sub_properties: self.sub_properties,
+			value
+		})
+	}
 }
 
 impl<T, M> Deref for RequiredFunctionalPropertyValue<T, M> {

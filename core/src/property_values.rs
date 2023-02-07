@@ -40,9 +40,19 @@ impl<T, M> PropertyValue<T, M> {
 		}
 	}
 
+	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PropertyValue<U, M> {
+		PropertyValue { sub_property: self.sub_property, value: self.value.map(f) }
+	}
+
 	pub(crate) fn into_class_binding<B>(self, binding: impl Fn(Option<Id>, T) -> B) -> Meta<B, M> {
 		let Meta(v, meta) = self.value;
 		Meta(binding(self.sub_property, v), meta)
+	}
+}
+
+impl<'a, T, M> PropertyValue<T, &'a M> {
+	pub fn into_cloned_metadata(self) -> PropertyValue<T, M> where M: Clone {
+		PropertyValue::new(self.sub_property, self.value.into_cloned_metadata())
 	}
 }
 
