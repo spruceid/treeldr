@@ -67,6 +67,7 @@ impl<'a, M> crate::Ref<'a, Layout, M> {
 pub enum Kind {
 	Never,
 	Primitive(Primitive),
+	Derived(Primitive),
 	Struct,
 	Enum,
 	Reference,
@@ -98,8 +99,11 @@ pub enum Description<M> {
 	/// Never layout.
 	Never,
 
-	/// Primitive layout, such as a number, a string, etc.
-	Primitive(RequiredFunctionalPropertyValue<RestrictedPrimitive<M>, M>),
+	/// Primitive layout such as a number, a string, etc.
+	Primitive(Primitive),
+
+	/// Derived primitive layout.
+	Derived(RequiredFunctionalPropertyValue<RestrictedPrimitive<M>, M>),
 
 	/// Reference.
 	Reference(RequiredFunctionalPropertyValue<Reference<M>, M>),
@@ -133,7 +137,8 @@ impl<M> Description<M> {
 	pub fn kind(&self) -> Kind {
 		match self {
 			Self::Never => Kind::Never,
-			Self::Primitive(n) => Kind::Primitive(n.primitive()),
+			Self::Primitive(p) => Kind::Primitive(*p),
+			Self::Derived(d) => Kind::Derived(d.primitive()),
 			Self::Reference(_) => Kind::Reference,
 			Self::Struct(_) => Kind::Struct,
 			Self::Enum(_) => Kind::Enum,
@@ -169,8 +174,8 @@ impl<M> Description<M> {
 
 	pub fn property_value(&self) -> Option<DescriptionPropertyValue<M>> {
 		match self {
-			Self::Never => None,
-			Self::Primitive(p) => Some(DescriptionPropertyValue::DerivedFrom(DerivedFrom::new(
+			Self::Never | Self::Primitive(_) => None,
+			Self::Derived(p) => Some(DescriptionPropertyValue::DerivedFrom(DerivedFrom::new(
 				p.sub_properties(),
 				p.primitive(),
 			))),
@@ -186,69 +191,51 @@ impl<M> Description<M> {
 		}
 	}
 
-	pub fn restrictions(&self) -> Option<Restrictions<M>> {
+	pub fn restrictions(&self) -> Option<Meta<Restrictions<M>, &M>> {
 		match self {
-			Self::Primitive(p) => p.restrictions().map(Restrictions::new_primitive),
+			Self::Derived(d) => d.restrictions().map(|m| m.map(Restrictions::new_primitive)),
 			Self::Array(a) => a
 				.restrictions()
-				.as_required()
-				.and_then(|r| r.as_restricted().map(Restrictions::new_container)),
+				.as_ref()
+				.map(|m| m.borrow().map(Restrictions::new_container)),
 			Self::Set(s) => s
 				.restrictions()
-				.as_required()
-				.and_then(|r| r.as_restricted().map(Restrictions::new_container)),
+				.as_ref()
+				.map(|m| m.borrow().map(Restrictions::new_container)),
 			Self::OneOrMany(o) => o
 				.restrictions()
-				.as_required()
-				.and_then(|r| r.as_restricted().map(Restrictions::new_container)),
+				.as_ref()
+				.map(|m| m.borrow().map(Restrictions::new_container)),
 			_ => None,
 		}
 	}
 
 	pub fn with_restrictions(&self) -> Option<WithRestrictions<M>> {
-		match self {
-			Self::Primitive(p) => p.with_restrictions().map(WithRestrictions::new_primitive),
-			Self::Array(a) => WithRestrictions::new_container(a.restrictions()),
-			Self::Set(s) => WithRestrictions::new_container(s.restrictions()),
-			Self::OneOrMany(o) => WithRestrictions::new_container(o.restrictions()),
-			_ => None,
-		}
+		self.restrictions().and_then(WithRestrictions::new)
 	}
 }
 
 /// Values of the `tldr:withRestrictions` property.
 pub struct WithRestrictions<'a, M> {
-	sub_properties: &'a PropertyValues<(), M>,
-	restrictions: Restrictions<'a, M>,
+	restrictions: Meta<Restrictions<'a, M>, &'a M>
 }
 
 impl<'a, M> WithRestrictions<'a, M> {
-	fn new<T>(
-		value: &'a RequiredFunctionalPropertyValue<T, M>,
-		f: impl FnOnce(&'a T) -> Restrictions<'a, M>,
-	) -> Self {
-		Self {
-			sub_properties: value.sub_properties(),
-			restrictions: f(value.value()),
+	fn new(
+		restrictions: Meta<Restrictions<'a, M>, &'a M>
+	) -> Option<Self> {
+		if restrictions.is_restricted() {
+			Some(Self {
+				restrictions
+			})
+		} else {
+			None
 		}
-	}
-
-	fn new_primitive(s: primitive::WithRestrictions<'a, M>) -> Self {
-		Self {
-			sub_properties: s.sub_properties,
-			restrictions: Restrictions::new_primitive(s.restrictions),
-		}
-	}
-
-	fn new_container(s: &'a FunctionalPropertyValue<ContainerRestrictions<M>, M>) -> Option<Self> {
-		s.as_required()
-			.map(|s| Self::new(s, Restrictions::new_container))
 	}
 
 	pub fn iter(&self) -> WithRestrictionsIter<'a, M> {
 		WithRestrictionsIter {
-			sub_properties: self.sub_properties.iter(),
-			restrictions: self.restrictions,
+			restrictions: Some(self.restrictions),
 		}
 	}
 }
@@ -264,18 +251,17 @@ impl<'a, M> IntoIterator for WithRestrictions<'a, M> {
 
 /// Iterator over the values of the `tldr:withRestrictions` property.
 pub struct WithRestrictionsIter<'a, M> {
-	sub_properties: property_values::non_functional::Iter<'a, (), M>,
-	restrictions: Restrictions<'a, M>,
+	restrictions: Option<Meta<Restrictions<'a, M>, &'a M>>,
 }
 
 impl<'a, M> Iterator for WithRestrictionsIter<'a, M> {
 	type Item = PropertyValue<Restrictions<'a, M>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.sub_properties.next().map(|s| {
+		self.restrictions.take().map(|r| {
 			PropertyValue::new(
-				s.sub_property,
-				Meta(self.restrictions, s.value.into_metadata()),
+				None,
+				r
 			)
 		})
 	}
@@ -424,11 +410,11 @@ impl<M> Definition<M> {
 		model: &'a crate::MutableModel<M>,
 	) -> ComposingLayouts<'a, M> {
 		match self.description() {
-			Description::Never => ComposingLayouts::None,
+			Description::Never | Description::Primitive(_) => ComposingLayouts::None,
 			Description::Struct(s) => ComposingLayouts::Fields(model, s.fields().iter()),
 			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts(model)),
 			Description::Reference(r) => ComposingLayouts::One(Some(r.id_layout())),
-			Description::Primitive(_) => ComposingLayouts::None,
+			Description::Derived(_) => ComposingLayouts::None,
 			Description::Option(o) => ComposingLayouts::One(Some(o.item_layout())),
 			Description::Required(r) => ComposingLayouts::One(Some(r.item_layout())),
 			Description::Array(a) => ComposingLayouts::One(Some(a.item_layout())),

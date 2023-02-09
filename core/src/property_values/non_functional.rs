@@ -158,16 +158,16 @@ impl<T, M> PropertyValues<T, M> {
 		Ok(PropertyValues { base, sub_properties })
 	}
 
-	pub fn try_mapped<U, E>(&self, mut f: impl FnMut(Option<Id>, &T) -> Result<U, E>) -> Result<PropertyValues<U, &M>, (Meta<E, &M>, PropertyValues<U, &M>)> where U: Ord {
+	pub fn try_mapped<U, N, E>(&self, mut f: impl FnMut(Option<Id>, Meta<&T, &M>) -> Result<Meta<U, N>, E>) -> Result<PropertyValues<U, N>, (Meta<E, &M>, PropertyValues<U, N>)> where U: Ord {
 		self.try_mapped_with(None, &mut f)
 	}
 
-	fn try_mapped_with<U, E>(&self, id: Option<Id>, f: &mut impl FnMut(Option<Id>, &T) -> Result<U, E>) -> Result<PropertyValues<U, &M>, (Meta<E, &M>, PropertyValues<U, &M>)> where U: Ord {
+	fn try_mapped_with<U, N, E>(&self, id: Option<Id>, f: &mut impl FnMut(Option<Id>, Meta<&T, &M>) -> Result<Meta<U, N>, E>) -> Result<PropertyValues<U, N>, (Meta<E, &M>, PropertyValues<U, N>)> where U: Ord {
 		let mut base = BTreeMap::new();
 		for (t, m) in &self.base {
-			match f(id, t) {
-				Ok(u) => {
-					base.insert(u, m);
+			match f(id, Meta(t, m)) {
+				Ok(Meta(u, n)) => {
+					base.insert(u, n);
 				}
 				Err(e) => {
 					return Err((Meta(e, m), PropertyValues { base, sub_properties: BTreeMap::new() }));
@@ -272,8 +272,51 @@ impl<T: Ord, M> PropertyValues<T, M> {
 		self.base.insert(value, meta);
 	}
 
-	pub fn remove_base(&mut self, t: &T) -> Option<M> {
-		self.base.remove(t)
+	pub fn remove(&mut self, t: &T) -> Option<M> {
+		let mut result = self.base.remove(t);
+
+		let mut reinsert = Vec::new();
+		self.sub_properties.retain(|_, s| {
+			if let Some(r) = s.remove(t) {
+				result = Some(r)
+			}
+
+			if s.base.is_empty() {
+				reinsert.extend(std::mem::take(&mut s.sub_properties));
+				false
+			} else {
+				true
+			}
+		});
+
+		for (id, s) in reinsert {
+			self.sub_properties.insert(id, s);
+		}
+
+		result
+	}
+
+	pub fn retain(&mut self, mut f: impl FnMut(&T) -> bool) {
+		self.retain_with(&mut f)
+	}
+
+	fn retain_with(&mut self, f: &mut impl FnMut(&T) -> bool) {
+		self.base.retain(|t, _| f(t));
+
+		let mut reinsert = Vec::new();
+		self.sub_properties.retain(|_, s| {
+			s.retain_with(f);
+			if s.base.is_empty() {
+				reinsert.extend(std::mem::take(&mut s.sub_properties));
+				false
+			} else {
+				true
+			}
+		});
+
+		for (id, s) in reinsert {
+			self.sub_properties.insert(id, s);
+		}
 	}
 
 	pub fn intersected_with_base<I: IntoIterator<Item = Meta<T, M>>>(mut self, iter: I) -> Self

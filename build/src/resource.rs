@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use locspan::Meta;
 use treeldr::{metadata::Merge, ty::data::RegExp, value, vocab::Object, Id, MetaOption, Name};
 
@@ -5,7 +7,8 @@ use crate::{
 	component,
 	context::{HasType, MapIds},
 	error::NodeTypeInvalid,
-	layout, list, multiple, prop, rdf, ty, Error, Multiple, ObjectAsId,
+	layout, list, prop, rdf, ty, property_values, Error, ObjectAsId,
+	PropertyValues
 };
 pub use treeldr::node::{Property, Type};
 
@@ -13,9 +16,9 @@ pub use treeldr::node::{Property, Type};
 pub struct Data<M> {
 	pub id: Id,
 	pub metadata: M,
-	pub type_: Multiple<crate::Type, M>,
-	pub label: Multiple<String, M>,
-	pub comment: Multiple<String, M>,
+	pub type_: PropertyValues<crate::Type, M>,
+	pub label: PropertyValues<String, M>,
+	pub comment: PropertyValues<String, M>,
 }
 
 impl<M> Data<M> {
@@ -23,9 +26,9 @@ impl<M> Data<M> {
 		Self {
 			id,
 			metadata,
-			type_: Multiple::default(),
-			label: Multiple::default(),
-			comment: Multiple::default(),
+			type_: PropertyValues::default(),
+			label: PropertyValues::default(),
+			comment: PropertyValues::default(),
 		}
 	}
 
@@ -80,11 +83,11 @@ impl<M> Definition<M> {
 		&mut self.data.metadata
 	}
 
-	pub fn type_(&self) -> &Multiple<crate::Type, M> {
+	pub fn type_(&self) -> &PropertyValues<crate::Type, M> {
 		&self.data.type_
 	}
 
-	pub fn type_mut(&mut self) -> &mut Multiple<crate::Type, M> {
+	pub fn type_mut(&mut self) -> &mut PropertyValues<crate::Type, M> {
 		&mut self.data.type_
 	}
 
@@ -92,19 +95,19 @@ impl<M> Definition<M> {
 		self.data.has_type(context, type_)
 	}
 
-	pub fn label(&self) -> &Multiple<String, M> {
+	pub fn label(&self) -> &PropertyValues<String, M> {
 		&self.data.label
 	}
 
-	pub fn label_mut(&mut self) -> &mut Multiple<String, M> {
+	pub fn label_mut(&mut self) -> &mut PropertyValues<String, M> {
 		&mut self.data.label
 	}
 
-	pub fn comment(&self) -> &Multiple<String, M> {
+	pub fn comment(&self) -> &PropertyValues<String, M> {
 		&self.data.comment
 	}
 
-	pub fn comment_mut(&mut self) -> &mut Multiple<String, M> {
+	pub fn comment_mut(&mut self) -> &mut PropertyValues<String, M> {
 		&mut self.data.comment
 	}
 
@@ -222,6 +225,7 @@ impl<M> Definition<M> {
 
 	pub fn set(
 		&mut self,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
 		prop: impl Into<crate::Property>,
 		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
@@ -231,19 +235,19 @@ impl<M> Definition<M> {
 		match prop.into() {
 			crate::Property::Resource(prop) => match prop {
 				Property::Self_ => (),
-				Property::Type => self.type_mut().insert(rdf::from::expect_type(value)?),
-				Property::Label => self.label_mut().insert(rdf::from::expect_string(value)?),
-				Property::Comment => self.comment_mut().insert(rdf::from::expect_string(value)?),
-				Property::Class(prop) => self.as_type_mut().set(prop, value)?,
+				Property::Type => self.type_mut().insert(None, prop_cmp, rdf::from::expect_type(value)?),
+				Property::Label => self.label_mut().insert(None, prop_cmp, rdf::from::expect_string(value)?),
+				Property::Comment => self.comment_mut().insert(None, prop_cmp, rdf::from::expect_string(value)?),
+				Property::Class(prop) => self.as_type_mut().set(prop_cmp, prop, value)?,
 				Property::DatatypeRestriction(prop) => {
-					self.as_datatype_restriction_mut().set(prop, value)?
+					self.as_datatype_restriction_mut().set(prop_cmp, prop, value)?
 				}
-				Property::Property(prop) => self.as_property_mut().set(prop, value)?,
-				Property::Component(prop) => self.as_component_mut().set(prop, value)?,
+				Property::Property(prop) => self.as_property_mut().set(prop_cmp, prop, value)?,
+				Property::Component(prop) => self.as_component_mut().set(prop_cmp, prop, value)?,
 				Property::LayoutRestriction(prop) => {
-					self.as_layout_restriction_mut().set(prop, value)?
+					self.as_layout_restriction_mut().set(prop_cmp, prop, value)?
 				}
-				Property::List(prop) => self.as_list_mut().set(prop, value)?,
+				Property::List(prop) => self.as_list_mut().set(prop_cmp, prop, value)?,
 			},
 			crate::Property::Other(_) => {
 				// Ignore unknown property.
@@ -560,18 +564,13 @@ impl<M: Clone> Definition<M> {
 	where
 		M: Merge,
 	{
-		let mut type_ = Multiple::default();
-		for Meta(ty, m) in &self.data.type_ {
-			let ty = context
+		let type_ = self.data.type_.try_mapped(|_, Meta(ty, m)| {
+			context
 				.require_type_id(ty.id().id())
-				.map_err(|e| e.at_node_property(self.data.id, Property::Type, m.clone()))?;
-			type_.insert(Meta(ty, m.clone()))
-		}
+				.map(|ty| Meta(ty, m.clone()))
+		}).map_err(|(Meta(e, m), _)| e.at_node_property(self.data.id, Property::Type, m.clone()))?;
 
-		let mut doc = treeldr::Documentation::default();
-		for c in &self.data.comment {
-			doc.insert(c.cloned())
-		}
+		let doc = treeldr::Documentation::from_comments(self.data.comment.map(From::from));
 
 		let data = treeldr::node::Data {
 			id: self.data.id,
@@ -620,25 +619,25 @@ impl<M: Clone> Definition<M> {
 }
 
 pub enum ClassBindingRef<'a> {
-	Type(crate::Type),
-	Label(&'a str),
-	Comment(&'a str),
+	Type(Option<Id>, crate::Type),
+	Label(Option<Id>, &'a str),
+	Comment(Option<Id>, &'a str),
 }
 
 impl<'a> ClassBindingRef<'a> {
 	pub fn into_binding_ref<M>(self) -> BindingRef<'a, M> {
 		match self {
-			Self::Type(t) => BindingRef::Type(t),
-			Self::Label(l) => BindingRef::Label(l),
-			Self::Comment(c) => BindingRef::Comment(c),
+			Self::Type(_, t) => BindingRef::Type(t),
+			Self::Label(_, l) => BindingRef::Label(l),
+			Self::Comment(_, c) => BindingRef::Comment(c),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
-	type_: multiple::Iter<'a, crate::Type, M>,
-	label: multiple::Iter<'a, String, M>,
-	comment: multiple::Iter<'a, String, M>,
+	type_: property_values::non_functional::Iter<'a, crate::Type, M>,
+	label: property_values::non_functional::Iter<'a, String, M>,
+	comment: property_values::non_functional::Iter<'a, String, M>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
@@ -647,18 +646,15 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.type_
 			.next()
-			.map(Meta::into_cloned_value)
-			.map(|m| m.map(ClassBindingRef::Type))
+			.map(|m| m.into_cloned_class_binding(ClassBindingRef::Type))
 			.or_else(|| {
 				self.label
 					.next()
-					.map(|v| v.map(String::as_str))
-					.map(|m| m.map(ClassBindingRef::Label))
+					.map(|m| m.into_deref_class_binding(ClassBindingRef::Label))
 					.or_else(|| {
 						self.comment
 							.next()
-							.map(|v| v.map(String::as_str))
-							.map(|m| m.map(ClassBindingRef::Comment))
+							.map(|m| m.into_deref_class_binding(ClassBindingRef::Comment))
 					})
 			})
 	}

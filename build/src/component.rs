@@ -1,11 +1,15 @@
+use std::cmp::Ordering;
+
 use locspan::Meta;
-use treeldr::{metadata::Merge, vocab::Object, Name};
+use treeldr::{metadata::Merge, vocab::Object, Name, Id};
 
 use crate::{
 	context::{HasType, MapIds},
 	error, layout, rdf,
 	resource::BindingValueRef,
-	single, Context, Error, Single,
+	Context, Error,
+	functional_property_value,
+	FunctionalPropertyValue
 };
 pub use treeldr::component::{Property, Type};
 
@@ -38,11 +42,11 @@ impl<M> Definition<M> {
 		&self.data
 	}
 
-	pub fn name(&self) -> &Single<Name, M> {
+	pub fn name(&self) -> &FunctionalPropertyValue<Name, M> {
 		&self.data.name
 	}
 
-	pub fn name_mut(&mut self) -> &mut Single<Name, M> {
+	pub fn name_mut(&mut self) -> &mut FunctionalPropertyValue<Name, M> {
 		&mut self.data.name
 	}
 
@@ -86,12 +90,12 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::Name => self.name_mut().insert(rdf::from::expect_name(value)?),
+			Property::Name => self.name_mut().insert(None, prop_cmp, rdf::from::expect_name(value)?),
 			Property::Formatted(prop) => self.as_formatted_mut().set(prop, value)?,
 			Property::Layout(prop) => self.as_layout_mut().set(prop, value)?,
 		}
@@ -148,7 +152,7 @@ impl<M: Merge> MapIds for Definition<M> {
 
 #[derive(Debug, Clone)]
 pub struct Data<M> {
-	pub name: Single<Name, M>,
+	pub name: FunctionalPropertyValue<Name, M>,
 }
 
 impl<M> Data<M> {
@@ -162,7 +166,7 @@ impl<M> Data<M> {
 impl<M> Default for Data<M> {
 	fn default() -> Self {
 		Self {
-			name: Single::default(),
+			name: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -232,7 +236,7 @@ impl<'a> BindingRef<'a> {
 }
 
 pub struct ClassBindings<'a, M> {
-	name: single::Iter<'a, Name, M>,
+	name: functional_property_value::Iter<'a, Name, M>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {

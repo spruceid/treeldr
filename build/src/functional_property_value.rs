@@ -102,6 +102,10 @@ impl<T: Ord, M> FunctionalPropertyValue<T, M> {
 }
 
 impl<T, M> FunctionalPropertyValue<T, M> {
+	pub fn map<U>(self, f: impl FnMut(T) -> U) -> FunctionalPropertyValue<U, M> where U: Ord {
+		FunctionalPropertyValue(self.0.map(f))
+	}
+
 	pub fn try_unwrap(self) -> Result<treeldr::FunctionalPropertyValue<T, M>, Conflict<T, M>> where T: PartialEq {
 		let mut value: Option<T> = None;
 
@@ -137,7 +141,7 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 	{
 		let mut value: Option<&T> = None;
 
-		let result = self.0.try_mapped(|id, a| {
+		let result = self.0.try_mapped(|id, Meta(a, m)| {
 			value = match value.take() {
 				Some(b) => if a == b {
 					Some(a)
@@ -147,7 +151,7 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 				None => Some(a)
 			};
 
-			Ok(())
+			Ok(Meta((), m))
 		});
 
 		match result {

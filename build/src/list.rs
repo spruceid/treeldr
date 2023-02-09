@@ -1,8 +1,12 @@
+use std::cmp::Ordering;
+
 use crate::{
 	context::{MapIds, MapIdsIn},
 	error, rdf,
 	resource::BindingValueRef,
-	single, Context, Error, Single,
+	Context, Error,
+	functional_property_value,
+	FunctionalPropertyValue
 };
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
@@ -12,15 +16,15 @@ pub use treeldr::list::Property;
 
 #[derive(Clone)]
 pub struct Definition<M> {
-	first: Single<Stripped<Object<M>>, M>,
-	rest: Single<Id, M>,
+	first: FunctionalPropertyValue<Stripped<Object<M>>, M>,
+	rest: FunctionalPropertyValue<Id, M>,
 }
 
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			first: Single::default(),
-			rest: Single::default(),
+			first: FunctionalPropertyValue::default(),
+			rest: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -30,29 +34,29 @@ impl<M> Definition<M> {
 		Self::default()
 	}
 
-	pub fn first(&self) -> &Single<Stripped<Object<M>>, M> {
+	pub fn first(&self) -> &FunctionalPropertyValue<Stripped<Object<M>>, M> {
 		&self.first
 	}
 
-	pub fn first_mut(&mut self) -> &mut Single<Stripped<Object<M>>, M> {
+	pub fn first_mut(&mut self) -> &mut FunctionalPropertyValue<Stripped<Object<M>>, M> {
 		&mut self.first
 	}
 
-	pub fn rest(&self) -> &Single<Id, M> {
+	pub fn rest(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.rest
 	}
 
-	pub fn rest_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn rest_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.rest
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::First => self.first.insert(value.map(Stripped)),
-			Property::Rest => self.rest.insert(rdf::from::expect_id(value)?),
+			Property::First => self.first.insert(None, prop_cmp, value.map(Stripped)),
+			Property::Rest => self.rest.insert(None, prop_cmp, rdf::from::expect_id(value)?),
 		}
 
 		Ok(())
@@ -83,7 +87,7 @@ pub enum ListRef<'l, M> {
 impl<'l, M> ListRef<'l, M> {
 	pub fn try_fold<T, F>(&self, context: &'l Context<M>, first: T, f: F) -> TryFold<'l, T, M, F>
 	where
-		F: Fn(T, &Single<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>>,
+		F: Fn(T, &FunctionalPropertyValue<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>>,
 	{
 		TryFold {
 			context,
@@ -119,7 +123,7 @@ impl<'l, T, M, F> Iterator for TryFold<'l, T, M, F>
 where
 	T: Clone,
 	M: Clone,
-	F: Fn(T, &Single<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>>,
+	F: Fn(T, &FunctionalPropertyValue<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>>,
 {
 	type Item = Result<T, Error<M>>;
 
@@ -293,8 +297,8 @@ impl<'a, M> ClassBindingRef<'a, M> {
 
 /// Iterator over the bindings of a given list.
 pub struct ClassBindings<'a, M> {
-	first: single::Iter<'a, Stripped<Object<M>>, M>,
-	rest: single::Iter<'a, Id, M>,
+	first: functional_property_value::Iter<'a, Stripped<Object<M>>, M>,
+	rest: functional_property_value::Iter<'a, Id, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;

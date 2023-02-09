@@ -1,7 +1,7 @@
 use crate::{
 	component,
 	error::{NodeTypeInvalid, NodeUnknown},
-	layout, prop, resource, Error, IriIndex, ListRef, Property, Single,
+	layout, prop, resource, Error, IriIndex, ListRef, Property, PropertyValues, FunctionalPropertyValue,
 };
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
@@ -61,7 +61,7 @@ impl<M> Context<M> {
 		M: Clone + Merge,
 	{
 		let node = self.declare(id, metadata.clone());
-		node.type_mut().insert(Meta(type_.into(), metadata));
+		node.type_mut().insert_base(Meta(type_.into(), metadata));
 		node
 	}
 
@@ -290,21 +290,23 @@ impl<T: MapIdsIn> MapIdsIn for Stripped<T> {
 	}
 }
 
-impl<T: MapIdsIn + Ord, M: Merge> MapIdsIn for Single<T, M> {
+impl<T: MapIdsIn + Ord, M> MapIdsIn for FunctionalPropertyValue<T, M> {
 	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
-		for Meta(mut t, m) in std::mem::take(self) {
+		let result = std::mem::take(self);
+		*self = result.map(|mut t| {
 			t.map_ids_in(prop, &f);
-			self.insert(Meta(t, m))
-		}
+			t
+		})
 	}
 }
 
-impl<T: MapIds + Ord, M: Merge> MapIds for Single<T, M> {
+impl<T: MapIds + Ord, M> MapIds for FunctionalPropertyValue<T, M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id) {
-		for Meta(mut t, m) in std::mem::take(self) {
+		let result = std::mem::take(self);
+		*self = result.map(|mut t| {
 			t.map_ids(&f);
-			self.insert(Meta(t, m))
-		}
+			t
+		})
 	}
 }
 
@@ -630,7 +632,7 @@ pub trait HasType<M> {
 
 impl<M> HasType<M> for treeldr::node::Data<M> {
 	type Type = TId<crate::Type>;
-	type Types<'a> = &'a Multiple<TId<crate::Type>, M> where Self: 'a, M: 'a;
+	type Types<'a> = &'a PropertyValues<TId<crate::Type>, M> where Self: 'a, M: 'a;
 
 	fn types(&self) -> Self::Types<'_> {
 		&self.type_
@@ -639,7 +641,7 @@ impl<M> HasType<M> for treeldr::node::Data<M> {
 
 impl<M> HasType<M> for resource::Data<M> {
 	type Type = crate::Type;
-	type Types<'a> = &'a Multiple<crate::Type, M> where Self: 'a, M: 'a;
+	type Types<'a> = &'a PropertyValues<crate::Type, M> where Self: 'a, M: 'a;
 
 	fn types(&self) -> &Multiple<crate::Type, M> {
 		&self.type_

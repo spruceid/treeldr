@@ -1,9 +1,11 @@
+use std::cmp::Ordering;
+
 use crate::{
 	component::formatted::AssertFormatted,
 	context::{MapIds, MapIdsIn},
 	prop, rdf,
 	resource::{self, BindingValueRef},
-	single, Context, Single,
+	Context, FunctionalPropertyValue, functional_property_value,
 };
 
 use super::Error;
@@ -15,7 +17,7 @@ use treeldr::{metadata::Merge, vocab::Object, BlankIdIndex, Id, IriIndex, Name};
 /// Layout field definition.
 #[derive(Debug, Clone)]
 pub struct Definition<M> {
-	prop: Single<Id, M>,
+	prop: FunctionalPropertyValue<Id, M>,
 }
 
 impl<M: Merge> MapIds for Definition<M> {
@@ -54,7 +56,7 @@ impl<M> DefaultLayout<M> {
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			prop: Single::default(),
+			prop: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -64,11 +66,11 @@ impl<M> Definition<M> {
 		Self::default()
 	}
 
-	pub fn property(&self) -> &Single<Id, M> {
+	pub fn property(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.prop
 	}
 
-	pub fn property_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn property_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.prop
 	}
 
@@ -139,12 +141,12 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::For => self.prop.insert(rdf::from::expect_id(value)?),
+			Property::For => self.prop.insert(None, prop_cmp, rdf::from::expect_id(value)?),
 		}
 
 		Ok(())
@@ -211,7 +213,7 @@ impl ClassBinding {
 }
 
 pub struct ClassBindings<'a, M> {
-	prop: single::Iter<'a, Id, M>,
+	prop: functional_property_value::Iter<'a, Id, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;

@@ -1,9 +1,11 @@
+use std::cmp::Ordering;
+
 use crate::{
 	context::{MapIds, MapIdsIn},
 	error::NodeBindingMissing,
 	rdf,
 	resource::BindingValueRef,
-	single, Context, Error, ObjectAsRequiredId, Single,
+	Context, Error, ObjectAsRequiredId, functional_property_value::{FunctionalPropertyValue, self},
 };
 use locspan::Meta;
 use treeldr::{metadata::Merge, ty::data::Primitive, vocab::Object, Id};
@@ -17,35 +19,35 @@ pub use restriction::{Restriction, Restrictions};
 #[derive(Clone)]
 pub struct Definition<M> {
 	/// Derived Datatype.
-	base: Single<Id, M>,
+	base: FunctionalPropertyValue<Id, M>,
 
 	/// List of restrictions.
-	restrictions: Single<Id, M>,
+	restrictions: FunctionalPropertyValue<Id, M>,
 }
 
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			base: Single::default(),
-			restrictions: Single::default(),
+			base: FunctionalPropertyValue::default(),
+			restrictions: FunctionalPropertyValue::default(),
 		}
 	}
 }
 
 impl<M> Definition<M> {
-	pub fn base(&self) -> &Single<Id, M> {
+	pub fn base(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.base
 	}
 
-	pub fn base_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn base_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.base
 	}
 
-	pub fn restrictions(&self) -> &Single<Id, M> {
+	pub fn restrictions(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.restrictions
 	}
 
-	pub fn restrictions_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn restrictions_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.restrictions
 	}
 
@@ -56,13 +58,13 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::OnDatatype => self.base.insert(rdf::from::expect_id(value)?),
-			Property::WithRestrictions => self.restrictions.insert(rdf::from::expect_id(value)?),
+			Property::OnDatatype => self.base.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			Property::WithRestrictions => self.restrictions.insert(None, prop_cmp, rdf::from::expect_id(value)?),
 		}
 
 		Ok(())
@@ -200,8 +202,8 @@ impl<M: Merge> MapIds for Definition<M> {
 }
 
 pub enum ClassBinding {
-	OnDatatype(Id),
-	WithRestrictions(Id),
+	OnDatatype(Option<Id>, Id),
+	WithRestrictions(Option<Id>, Id),
 }
 
 pub type Binding = ClassBinding;
@@ -209,22 +211,22 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::OnDatatype(_) => Property::OnDatatype,
-			Self::WithRestrictions(_) => Property::WithRestrictions,
+			Self::OnDatatype(_, _) => Property::OnDatatype,
+			Self::WithRestrictions(_, _) => Property::WithRestrictions,
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::OnDatatype(v) => BindingValueRef::Id(*v),
-			Self::WithRestrictions(v) => BindingValueRef::Id(*v),
+			Self::OnDatatype(_, v) => BindingValueRef::Id(*v),
+			Self::WithRestrictions(_, v) => BindingValueRef::Id(*v),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
-	on_datatype: single::Iter<'a, Id, M>,
-	with_restrictions: single::Iter<'a, Id, M>,
+	on_datatype: functional_property_value::Iter<'a, Id, M>,
+	with_restrictions: functional_property_value::Iter<'a, Id, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -235,13 +237,11 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.on_datatype
 			.next()
-			.map(Meta::into_cloned_value)
-			.map(|m| m.map(ClassBinding::OnDatatype))
+			.map(|m| m.into_cloned_class_binding(ClassBinding::OnDatatype))
 			.or_else(|| {
 				self.with_restrictions
 					.next()
-					.map(Meta::into_cloned_value)
-					.map(|m| m.map(ClassBinding::WithRestrictions))
+					.map(|m| m.into_cloned_class_binding(ClassBinding::WithRestrictions))
 			})
 	}
 }

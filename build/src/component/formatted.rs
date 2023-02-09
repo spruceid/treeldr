@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use locspan::Meta;
 use treeldr::{metadata::Merge, vocab::Object, Id};
 
@@ -5,7 +7,9 @@ use crate::{
 	context::{HasType, MapIds, MapIdsIn},
 	error, layout, rdf,
 	resource::BindingValueRef,
-	single, Context, Error, Single,
+	Context, Error,
+	functional_property_value,
+	FunctionalPropertyValue
 };
 
 pub use treeldr::component::formatted::{Property, Type};
@@ -37,11 +41,11 @@ impl<M> Definition<M> {
 		&self.data
 	}
 
-	pub fn format(&self) -> &Single<Id, M> {
+	pub fn format(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.data.format
 	}
 
-	pub fn format_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn format_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.data.format
 	}
 
@@ -68,12 +72,12 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::Format => self.format_mut().insert(rdf::from::expect_id(value)?),
+			Property::Format => self.format_mut().insert(None, prop_cmp, rdf::from::expect_id(value)?),
 			Property::LayoutField(prop) => self.as_layout_field_mut().set(prop, value)?,
 		}
 
@@ -133,7 +137,7 @@ impl<M: Merge> MapIds for Definition<M> {
 
 #[derive(Debug, Clone)]
 pub struct Data<M> {
-	pub format: Single<Id, M>,
+	pub format: FunctionalPropertyValue<Id, M>,
 }
 
 impl<M> Data<M> {
@@ -153,7 +157,7 @@ impl<M: Merge> MapIds for Data<M> {
 impl<M> Default for Data<M> {
 	fn default() -> Self {
 		Self {
-			format: Single::default(),
+			format: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -220,7 +224,7 @@ impl Binding {
 }
 
 pub struct ClassBindings<'a, M> {
-	format: single::Iter<'a, Id, M>,
+	format: functional_property_value::Iter<'a, Id, M>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {

@@ -1,8 +1,12 @@
+use std::cmp::Ordering;
+
 use crate::{
 	context::{MapIds, MapIdsIn},
 	rdf,
 	resource::BindingValueRef,
-	single, Context, Error, Single,
+	Context, Error,
+	functional_property_value,
+	FunctionalPropertyValue
 };
 use locspan::Meta;
 use treeldr::{metadata::Merge, value::NonNegativeInteger, vocab::Object, Id};
@@ -40,33 +44,33 @@ impl MapIds for Restriction {
 
 #[derive(Clone)]
 pub struct Definition<M> {
-	property: Single<Id, M>,
-	restriction: Single<Restriction, M>,
+	property: FunctionalPropertyValue<Id, M>,
+	restriction: FunctionalPropertyValue<Restriction, M>,
 }
 
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			property: Single::default(),
-			restriction: Single::default(),
+			property: FunctionalPropertyValue::default(),
+			restriction: FunctionalPropertyValue::default(),
 		}
 	}
 }
 
 impl<M> Definition<M> {
-	pub fn property(&self) -> &Single<Id, M> {
+	pub fn property(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.property
 	}
 
-	pub fn property_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn property_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.property
 	}
 
-	pub fn restriction(&self) -> &Single<Restriction, M> {
+	pub fn restriction(&self) -> &FunctionalPropertyValue<Restriction, M> {
 		&self.restriction
 	}
 
-	pub fn restriction_mut(&mut self) -> &mut Single<Restriction, M> {
+	pub fn restriction_mut(&mut self) -> &mut FunctionalPropertyValue<Restriction, M> {
 		&mut self.restriction
 	}
 
@@ -77,27 +81,33 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::OnProperty => self.property.insert(rdf::from::expect_id(value)?),
+			Property::OnProperty => self.property.insert(None, prop_cmp, rdf::from::expect_id(value)?),
 			Property::AllValuesFrom => self
 				.restriction
-				.insert(rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::All(id)))),
+				.insert(None, prop_cmp, rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::All(id)))),
 			Property::SomeValuesFrom => self
 				.restriction
-				.insert(rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::Any(id)))),
+				.insert(None, prop_cmp, rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::Any(id)))),
 			Property::MaxCardinality => self.restriction.insert(
+				None,
+				prop_cmp,
 				rdf::from::expect_non_negative_integer(value)?
 					.map(|n| Restriction::Cardinality(Cardinality::AtMost(n))),
 			),
 			Property::MinCardinality => self.restriction.insert(
+				None,
+				prop_cmp,
 				rdf::from::expect_non_negative_integer(value)?
 					.map(|n| Restriction::Cardinality(Cardinality::AtLeast(n))),
 			),
 			Property::Cardinality => self.restriction.insert(
+				None,
+				prop_cmp,
 				rdf::from::expect_non_negative_integer(value)?
 					.map(|n| Restriction::Cardinality(Cardinality::Exactly(n))),
 			),
@@ -283,8 +293,8 @@ pub type Binding = ClassBinding;
 pub type BindingRef<'a> = ClassBindingRef<'a>;
 
 pub struct ClassBindings<'a, M> {
-	on_property: single::Iter<'a, Id, M>,
-	restriction: single::Iter<'a, Restriction, M>,
+	on_property: functional_property_value::Iter<'a, Id, M>,
+	restriction: functional_property_value::Iter<'a, Restriction, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;

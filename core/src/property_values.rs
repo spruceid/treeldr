@@ -44,6 +44,10 @@ impl<T, M> PropertyValue<T, M> {
 		PropertyValue { sub_property: self.sub_property, value: self.value.map(f) }
 	}
 
+	pub fn into_value(self) -> T {
+		self.value.into_value()
+	}
+
 	pub(crate) fn into_class_binding<B>(self, binding: impl Fn(Option<Id>, T) -> B) -> Meta<B, M> {
 		let Meta(v, meta) = self.value;
 		Meta(binding(self.sub_property, v), meta)
@@ -80,7 +84,11 @@ impl<'a, T, M> PropertyValueRef<'a, T, M> {
 		}
 	}
 
-	pub(crate) fn into_class_binding<B>(
+	pub fn into_cloned_value(self) -> PropertyValue<T, &'a M> where T: Clone {
+		PropertyValue::new(self.sub_property, self.value.into_cloned_value())
+	}
+
+	pub fn into_class_binding<B>(
 		self,
 		binding: impl Fn(Option<Id>, &'a T) -> B,
 	) -> Meta<B, &'a M> {
@@ -88,7 +96,7 @@ impl<'a, T, M> PropertyValueRef<'a, T, M> {
 		Meta(binding(self.sub_property, v), meta)
 	}
 
-	pub(crate) fn into_cloned_class_binding<B>(
+	pub fn into_cloned_class_binding<B>(
 		self,
 		binding: impl Fn(Option<Id>, T) -> B,
 	) -> Meta<B, &'a M>
@@ -99,7 +107,7 @@ impl<'a, T, M> PropertyValueRef<'a, T, M> {
 		Meta(binding(self.sub_property, v), meta)
 	}
 
-	pub(crate) fn into_deref_class_binding<B>(
+	pub fn into_deref_class_binding<B>(
 		self,
 		binding: impl Fn(Option<Id>, &'a T::Target) -> B,
 	) -> Meta<B, &'a M>

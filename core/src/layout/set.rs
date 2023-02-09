@@ -1,5 +1,5 @@
 use super::ContainerRestrictions;
-use crate::{FunctionalPropertyValue, Layout, TId};
+use crate::{Layout, TId, MetaOption};
 use locspan::Meta;
 
 /// Set layout.
@@ -9,13 +9,13 @@ pub struct Set<M> {
 	item: Meta<TId<Layout>, M>,
 
 	/// Restrictions.
-	restrictions: FunctionalPropertyValue<ContainerRestrictions<M>, M>,
+	restrictions: MetaOption<ContainerRestrictions<M>, M>,
 }
 
 impl<M> Set<M> {
 	pub fn new(
 		item: Meta<TId<Layout>, M>,
-		restrictions: FunctionalPropertyValue<ContainerRestrictions<M>, M>,
+		restrictions: MetaOption<ContainerRestrictions<M>, M>,
 	) -> Self {
 		Self { item, restrictions }
 	}
@@ -28,7 +28,7 @@ impl<M> Set<M> {
 		self.item = item
 	}
 
-	pub fn restrictions(&self) -> &FunctionalPropertyValue<ContainerRestrictions<M>, M> {
+	pub fn restrictions(&self) -> &MetaOption<ContainerRestrictions<M>, M> {
 		&self.restrictions
 	}
 

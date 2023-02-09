@@ -10,7 +10,6 @@ pub mod list;
 pub mod prop;
 pub mod rdf;
 pub mod resource;
-mod single;
 pub mod ty;
 pub mod utils;
 pub mod functional_property_value;
@@ -21,8 +20,8 @@ pub use layout::{ParentLayout, SubLayout};
 pub use list::{ListMut, ListRef};
 pub use multiple::Multiple;
 pub use property_values::{PropertyValue, PropertyValueRef, PropertyValues};
+pub use functional_property_value::FunctionalPropertyValue;
 pub use prop::Property;
-pub use single::Single;
 pub use ty::Type;
 
 pub trait Document<M> {

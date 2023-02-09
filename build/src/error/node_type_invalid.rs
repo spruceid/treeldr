@@ -1,6 +1,6 @@
 use locspan::{MaybeLocated, Span, Meta};
 use rdf_types::Vocabulary;
-use treeldr::{Id, IriIndex, BlankIdIndex, Multiple, Type};
+use treeldr::{Id, IriIndex, BlankIdIndex, Type, PropertyValues};
 use contextual::WithContext;
 
 use crate::{Property, Error};
@@ -11,7 +11,7 @@ use super::NodeBindingTypeInvalid;
 pub struct NodeTypeInvalid<M> {
 	pub id: Id,
 	pub expected: Type,
-	pub found: Multiple<Type, M>
+	pub found: PropertyValues<Type, M>
 }
 
 impl<M> NodeTypeInvalid<M> {

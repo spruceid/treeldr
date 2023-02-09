@@ -2,7 +2,9 @@ use super::Property;
 use crate::{
 	context::{MapIds, MapIdsIn},
 	resource::BindingValueRef,
-	single, Context, Error, Single,
+	Context, Error,
+	functional_property_value,
+	FunctionalPropertyValue
 };
 use derivative::Derivative;
 use locspan::Meta;
@@ -14,11 +16,11 @@ use vocab::{Rdf, Term};
 #[derivative(Default(bound = ""))]
 #[locspan(ignore(M))]
 pub struct Semantics<M> {
-	first: Single<Id, M>,
+	first: FunctionalPropertyValue<Id, M>,
 
-	rest: Single<Id, M>,
+	rest: FunctionalPropertyValue<Id, M>,
 
-	nil: Single<Id, M>,
+	nil: FunctionalPropertyValue<Id, M>,
 }
 
 impl<M> Semantics<M> {
@@ -41,15 +43,15 @@ impl<M> Semantics<M> {
 		}
 	}
 
-	pub fn first(&self) -> &Single<Id, M> {
+	pub fn first(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.first
 	}
 
-	pub fn rest(&self) -> &Single<Id, M> {
+	pub fn rest(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.rest
 	}
 
-	pub fn nil(&self) -> &Single<Id, M> {
+	pub fn nil(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.nil
 	}
 
@@ -57,21 +59,21 @@ impl<M> Semantics<M> {
 	where
 		M: Merge,
 	{
-		self.first.insert(id)
+		self.first.insert_base(id)
 	}
 
 	pub fn set_rest(&mut self, id: Meta<Id, M>)
 	where
 		M: Merge,
 	{
-		self.rest.insert(id)
+		self.rest.insert_base(id)
 	}
 
 	pub fn set_nil(&mut self, id: Meta<Id, M>)
 	where
 		M: Merge,
 	{
-		self.nil.insert(id)
+		self.nil.insert_base(id)
 	}
 
 	pub fn unify_with(&mut self, other: Self)
@@ -180,9 +182,9 @@ impl Binding {
 }
 
 pub struct Bindings<'a, M> {
-	first: single::Iter<'a, Id, M>,
-	rest: single::Iter<'a, Id, M>,
-	nil: single::Iter<'a, Id, M>,
+	first: functional_property_value::Iter<'a, Id, M>,
+	rest: functional_property_value::Iter<'a, Id, M>,
+	nil: functional_property_value::Iter<'a, Id, M>,
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {

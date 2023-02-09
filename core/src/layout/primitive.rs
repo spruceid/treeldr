@@ -120,3 +120,9 @@ impl fmt::Display for Primitive {
 		self.name().fmt(f)
 	}
 }
+
+impl From<Primitive> for Id {
+	fn from(value: Primitive) -> Self {
+		value.id()
+	}
+}

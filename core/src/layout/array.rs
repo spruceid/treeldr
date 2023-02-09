@@ -1,5 +1,5 @@
 use super::{ContainerRestrictions, Layout};
-use crate::{node::BindingValueRef, property_values, FunctionalPropertyValue, Id, Property, TId};
+use crate::{node::BindingValueRef, property_values, FunctionalPropertyValue, Id, Property, TId, MetaOption};
 use derivative::Derivative;
 use locspan::Meta;
 
@@ -9,7 +9,7 @@ pub struct Array<M> {
 	item: Meta<TId<Layout>, M>,
 
 	/// Restrictions.
-	restrictions: FunctionalPropertyValue<ContainerRestrictions<M>, M>,
+	restrictions: MetaOption<ContainerRestrictions<M>, M>,
 
 	/// Semantics of the list layout.
 	///
@@ -20,7 +20,7 @@ pub struct Array<M> {
 impl<M> Array<M> {
 	pub fn new(
 		item: Meta<TId<Layout>, M>,
-		restrictions: FunctionalPropertyValue<ContainerRestrictions<M>, M>,
+		restrictions: MetaOption<ContainerRestrictions<M>, M>,
 		semantics: Option<Semantics<M>>,
 	) -> Self {
 		Self {
@@ -38,7 +38,7 @@ impl<M> Array<M> {
 		self.item = item
 	}
 
-	pub fn restrictions(&self) -> &FunctionalPropertyValue<ContainerRestrictions<M>, M> {
+	pub fn restrictions(&self) -> &MetaOption<ContainerRestrictions<M>, M> {
 		&self.restrictions
 	}
 

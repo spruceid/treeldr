@@ -1,7 +1,9 @@
-use locspan::Meta;
-use treeldr::{metadata::Merge, vocab::Object};
+use std::cmp::Ordering;
 
-use crate::{context::MapIds, rdf, resource::BindingValueRef, single, Error, Single};
+use locspan::Meta;
+use treeldr::{metadata::Merge, vocab::Object, Id};
+
+use crate::{context::MapIds, rdf, resource::BindingValueRef, Error, functional_property_value, FunctionalPropertyValue};
 
 pub use treeldr::layout::restriction::Property;
 
@@ -11,13 +13,13 @@ pub mod primitive;
 /// Layout restriction.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Definition<M> {
-	restriction: Single<Restriction, M>,
+	restriction: FunctionalPropertyValue<Restriction, M>,
 }
 
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			restriction: Single::default(),
+			restriction: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -27,11 +29,11 @@ impl<M> Definition<M> {
 		Self::default()
 	}
 
-	pub fn restriction(&self) -> &Single<Restriction, M> {
+	pub fn restriction(&self) -> &FunctionalPropertyValue<Restriction, M> {
 		&self.restriction
 	}
 
-	pub fn restriction_mut(&mut self) -> &mut Single<Restriction, M> {
+	pub fn restriction_mut(&mut self) -> &mut FunctionalPropertyValue<Restriction, M> {
 		&mut self.restriction
 	}
 
@@ -41,14 +43,14 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
 			Property::ExclusiveMaximum => {
 				self.restriction
-					.insert(rdf::from::expect_numeric(value)?.map(|n| {
+					.insert(None, prop_cmp, rdf::from::expect_numeric(value)?.map(|n| {
 						Restriction::Primitive(primitive::Restriction::Numeric(
 							primitive::Numeric::ExclusiveMaximum(n),
 						))
@@ -56,7 +58,7 @@ impl<M> Definition<M> {
 			}
 			Property::ExclusiveMinimum => {
 				self.restriction
-					.insert(rdf::from::expect_numeric(value)?.map(|n| {
+					.insert(None, prop_cmp, rdf::from::expect_numeric(value)?.map(|n| {
 						Restriction::Primitive(primitive::Restriction::Numeric(
 							primitive::Numeric::ExclusiveMinimum(n),
 						))
@@ -64,7 +66,7 @@ impl<M> Definition<M> {
 			}
 			Property::InclusiveMaximum => {
 				self.restriction
-					.insert(rdf::from::expect_numeric(value)?.map(|n| {
+					.insert(None, prop_cmp, rdf::from::expect_numeric(value)?.map(|n| {
 						Restriction::Primitive(primitive::Restriction::Numeric(
 							primitive::Numeric::InclusiveMaximum(n),
 						))
@@ -72,7 +74,7 @@ impl<M> Definition<M> {
 			}
 			Property::InclusiveMinimum => {
 				self.restriction
-					.insert(rdf::from::expect_numeric(value)?.map(|n| {
+					.insert(None, prop_cmp, rdf::from::expect_numeric(value)?.map(|n| {
 						Restriction::Primitive(primitive::Restriction::Numeric(
 							primitive::Numeric::InclusiveMinimum(n),
 						))
@@ -82,14 +84,14 @@ impl<M> Definition<M> {
 			Property::MinLength => todo!(),
 			Property::Pattern => self
 				.restriction
-				.insert(rdf::from::expect_regexp(value)?.map(|p| {
+				.insert(None, prop_cmp, rdf::from::expect_regexp(value)?.map(|p| {
 					Restriction::Primitive(primitive::Restriction::String(
 						primitive::String::Pattern(p),
 					))
 				})),
 			Property::MaxCardinality => {
 				self.restriction
-					.insert(rdf::from::expect_non_negative_integer(value)?.map(|n| {
+					.insert(None, prop_cmp, rdf::from::expect_non_negative_integer(value)?.map(|n| {
 						Restriction::Container(container::ContainerRestriction::Cardinal(
 							container::cardinal::Restriction::Max(n),
 						))
@@ -97,7 +99,7 @@ impl<M> Definition<M> {
 			}
 			Property::MinCardinality => {
 				self.restriction
-					.insert(rdf::from::expect_non_negative_integer(value)?.map(|n| {
+					.insert(None, prop_cmp, rdf::from::expect_non_negative_integer(value)?.map(|n| {
 						Restriction::Container(container::ContainerRestriction::Cardinal(
 							container::cardinal::Restriction::Min(n),
 						))
@@ -234,7 +236,7 @@ impl<'a> ClassBindingRef<'a> {
 }
 
 pub struct ClassBindings<'a, M> {
-	restriction: single::Iter<'a, Restriction, M>,
+	restriction: functional_property_value::Iter<'a, Restriction, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;

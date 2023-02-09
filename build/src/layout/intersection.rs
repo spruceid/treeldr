@@ -5,7 +5,7 @@ use locspan_derive::{StrippedEq, StrippedOrd, StrippedPartialEq, StrippedPartial
 use rdf_types::{Generator, VocabularyMut};
 use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
 
-use crate::{Context, Error, Single};
+use crate::{Context, Error, FunctionalPropertyValue};
 
 mod enumeration;
 mod id;
@@ -26,14 +26,14 @@ pub struct Definition<M> {
 	id: Meta<Id, M>,
 
 	/// Layout description.
-	desc: Single<Description<M>, M>,
+	desc: FunctionalPropertyValue<Description<M>, M>,
 }
 
 impl<M> Definition<M> {
 	pub fn new(id: Meta<Id, M>) -> Self {
 		Self {
 			id,
-			desc: Single::default(),
+			desc: FunctionalPropertyValue::default(),
 		}
 	}
 
@@ -111,7 +111,7 @@ impl<M> Definition<M> {
 	where
 		M: Clone + Merge,
 	{
-		let mut desc = Single::default();
+		let mut desc = FunctionalPropertyValue::default();
 
 		for Meta(d, meta) in self.desc {
 			for built_d in d.build(vocabulary, generator, context, stack, meta)? {
@@ -125,7 +125,7 @@ impl<M> Definition<M> {
 
 #[derive(Debug, Clone)]
 pub struct BuiltDefinition<M> {
-	pub desc: Single<super::Description, M>,
+	pub desc: FunctionalPropertyValue<super::Description, M>,
 }
 
 /// Layout intersection description.
@@ -253,11 +253,11 @@ impl<M> Description<M> {
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
 		meta: M,
-	) -> Result<Single<super::Description, M>, Error<M>>
+	) -> Result<FunctionalPropertyValue<super::Description, M>, Error<M>>
 	where
 		M: Clone + Merge,
 	{
-		let mut desc = Single::default();
+		let mut desc = FunctionalPropertyValue::default();
 
 		match self {
 			Self::Never => desc.insert(Meta(super::Description::Never, meta)),

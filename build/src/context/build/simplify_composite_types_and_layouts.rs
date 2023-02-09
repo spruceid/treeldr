@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use treeldr::{metadata::Merge, Id, ResourceType};
 
-use crate::{context::MapIds, Context, ListRef, ObjectAsId, Single};
+use crate::{context::MapIds, Context, ListRef, ObjectAsId, FunctionalPropertyValue};
 
 impl<M: Merge> Context<M> {
 	pub fn simplify_composite_types_and_layouts(&mut self) {
@@ -55,7 +55,7 @@ impl<M: Merge> Context<M> {
 	}
 }
 
-fn get_singleton<M>(context: &Context<M>, list: &Single<Id, M>) -> Option<Id> {
+fn get_singleton<M>(context: &Context<M>, list: &FunctionalPropertyValue<Id, M>) -> Option<Id> {
 	if list.len() == 1 {
 		let mut result = None;
 		let mut list_id = **list.first().unwrap();

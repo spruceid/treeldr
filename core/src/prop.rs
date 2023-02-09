@@ -32,6 +32,8 @@ impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V
 	}
 }
 
+pub type SubPropertyId = OtherPropertyId;
+
 /// Node property.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {

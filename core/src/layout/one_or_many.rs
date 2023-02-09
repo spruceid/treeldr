@@ -1,5 +1,5 @@
 use super::ContainerRestrictions;
-use crate::{FunctionalPropertyValue, Layout, TId};
+use crate::{Layout, TId, MetaOption};
 use locspan::Meta;
 
 /// "One or many" layout.
@@ -9,13 +9,13 @@ pub struct OneOrMany<M> {
 	item: Meta<TId<Layout>, M>,
 
 	/// Restrictions.
-	restrictions: FunctionalPropertyValue<ContainerRestrictions<M>, M>,
+	restrictions: MetaOption<ContainerRestrictions<M>, M>,
 }
 
 impl<M> OneOrMany<M> {
 	pub fn new(
 		item: Meta<TId<Layout>, M>,
-		restrictions: FunctionalPropertyValue<ContainerRestrictions<M>, M>,
+		restrictions: MetaOption<ContainerRestrictions<M>, M>,
 	) -> Self {
 		Self { item, restrictions }
 	}
@@ -28,7 +28,7 @@ impl<M> OneOrMany<M> {
 		self.item = item
 	}
 
-	pub fn restrictions(&self) -> &FunctionalPropertyValue<ContainerRestrictions<M>, M> {
+	pub fn restrictions(&self) -> &MetaOption<ContainerRestrictions<M>, M> {
 		&self.restrictions
 	}
 

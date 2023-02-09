@@ -103,6 +103,18 @@ impl Deref for Block {
 	}
 }
 
+impl From<String> for Block {
+	fn from(value: String) -> Self {
+		Self::new(value)
+	}
+}
+
+impl<'a> From<&'a str> for Block {
+	fn from(value: &'a str) -> Self {
+		Self::new(value.to_owned())
+	}
+}
+
 #[derive(Clone, Debug)]
 pub struct Documentation<M> {
 	blocks: PropertyValues<Block, M>,
@@ -119,6 +131,12 @@ impl<M> Default for Documentation<M> {
 impl<M> Documentation<M> {
 	pub fn new() -> Self {
 		Self::default()
+	}
+
+	pub fn from_comments(comments: PropertyValues<Block, M>) -> Self {
+		Self {
+			blocks: comments
+		}
 	}
 
 	pub fn is_empty(&self) -> bool {

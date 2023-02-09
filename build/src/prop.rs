@@ -1,8 +1,14 @@
+use std::cmp::Ordering;
+
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
-	multiple, rdf,
+	rdf,
 	resource::BindingValueRef,
-	single, Error, Multiple, Single,
+	Error, Multiple,
+	PropertyValues,
+	property_values,
+	functional_property_value,
+	FunctionalPropertyValue
 };
 use locspan::Meta;
 use treeldr::{metadata::Merge, prop::RdfProperty, vocab::Object, Id};
@@ -13,21 +19,21 @@ pub use treeldr::prop::{Property, Type};
 #[derive(Clone)]
 pub struct Definition<M> {
 	/// Domain.
-	domain: Multiple<Id, M>,
+	domain: PropertyValues<Id, M>,
 
 	/// Range.
-	range: Multiple<Id, M>,
+	range: PropertyValues<Id, M>,
 
 	/// Is the property required.
-	required: Single<bool, M>,
+	required: FunctionalPropertyValue<bool, M>,
 }
 
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			domain: Multiple::default(),
-			range: Multiple::default(),
-			required: Single::default(),
+			domain: PropertyValues::default(),
+			range: PropertyValues::default(),
+			required: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -37,27 +43,27 @@ impl<M> Definition<M> {
 		Self::default()
 	}
 
-	pub fn range(&self) -> &Multiple<Id, M> {
+	pub fn range(&self) -> &PropertyValues<Id, M> {
 		&self.range
 	}
 
-	pub fn range_mut(&mut self) -> &mut Multiple<Id, M> {
+	pub fn range_mut(&mut self) -> &mut PropertyValues<Id, M> {
 		&mut self.range
 	}
 
-	pub fn domain(&self) -> &Multiple<Id, M> {
+	pub fn domain(&self) -> &PropertyValues<Id, M> {
 		&self.domain
 	}
 
-	pub fn domain_mut(&mut self) -> &mut Multiple<Id, M> {
+	pub fn domain_mut(&mut self) -> &mut PropertyValues<Id, M> {
 		&mut self.domain
 	}
 
-	pub fn required(&self) -> &Single<bool, M> {
+	pub fn required(&self) -> &FunctionalPropertyValue<bool, M> {
 		&self.required
 	}
 
-	pub fn required_mut(&mut self) -> &mut Single<bool, M> {
+	pub fn required_mut(&mut self) -> &mut FunctionalPropertyValue<bool, M> {
 		&mut self.required
 	}
 
@@ -69,16 +75,16 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: RdfProperty, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: RdfProperty, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			RdfProperty::Domain => self.domain.insert(rdf::from::expect_id(value)?),
-			RdfProperty::Range => self.range.insert(rdf::from::expect_id(value)?),
+			RdfProperty::Domain => self.domain.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			RdfProperty::Range => self.range.insert(None, prop_cmp, rdf::from::expect_id(value)?),
 			RdfProperty::Required => self
 				.required
-				.insert(rdf::from::expect_schema_boolean(value)?),
+				.insert(None, prop_cmp, rdf::from::expect_schema_boolean(value)?),
 		}
 
 		Ok(())
@@ -163,9 +169,9 @@ impl ClassBinding {
 }
 
 pub struct ClassBindings<'a, M> {
-	domain: multiple::Iter<'a, Id, M>,
-	range: multiple::Iter<'a, Id, M>,
-	required: single::Iter<'a, bool, M>,
+	domain: property_values::non_functional::Iter<'a, Id, M>,
+	range: property_values::non_functional::Iter<'a, Id, M>,
+	required: functional_property_value::Iter<'a, bool, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
