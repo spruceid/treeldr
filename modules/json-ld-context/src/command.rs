@@ -135,7 +135,7 @@ impl FromStr for PrefixBinding {
 
 pub enum Error<M> {
 	UndefinedLayout(IriBuf),
-	NotALayout(IriBuf, treeldr::Multiple<TId<treeldr::Type>, M>),
+	NotALayout(IriBuf, treeldr::PropertyValues<TId<treeldr::Type>, M>),
 	Generation(crate::Error),
 	ExternContextLoadFailed(IriBuf),
 }
@@ -143,8 +143,8 @@ pub enum Error<M> {
 impl<M> fmt::Display for Error<M> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{}`", iri),
-			Self::NotALayout(iri, _) => write!(f, "node `{}` is not a layout", iri),
+			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{iri}`"),
+			Self::NotALayout(iri, _) => write!(f, "node `{iri}` is not a layout"),
 			Self::Generation(_) => Ok(()),
 			Self::ExternContextLoadFailed(iri) => {
 				write!(f, "unable to load extern context `{iri}`")

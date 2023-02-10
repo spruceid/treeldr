@@ -84,6 +84,10 @@ impl<'a, T, M> PropertyValueRef<'a, T, M> {
 		}
 	}
 
+	pub fn into_value(self) -> Meta<&'a T, &'a M> {
+		self.value
+	}
+
 	pub fn into_cloned_value(self) -> PropertyValue<T, &'a M> where T: Clone {
 		PropertyValue::new(self.sub_property, self.value.into_cloned_value())
 	}
