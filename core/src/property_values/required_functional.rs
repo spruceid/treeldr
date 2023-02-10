@@ -26,14 +26,15 @@ impl<T, M> RequiredFunctionalPropertyValue<T, M> {
 		Meta(&self.value, self.sub_property_metadata())
 	}
 
-	pub fn into_meta_value(self) -> Meta<T, M> where M: Merge {
+	pub fn into_meta_value(self) -> Meta<T, M>
+	where
+		M: Merge,
+	{
 		let mut meta: Option<M> = None;
 		for m in self.sub_properties {
 			match &mut meta {
-				Some(meta) => {
-					meta.merge_with(m.value.into_metadata())
-				}
-				None => meta = Some(m.value.into_metadata())
+				Some(meta) => meta.merge_with(m.value.into_metadata()),
+				None => meta = Some(m.value.into_metadata()),
 			}
 		}
 
@@ -63,11 +64,14 @@ impl<T, M> RequiredFunctionalPropertyValue<T, M> {
 		}
 	}
 
-	pub fn try_map_borrow_metadata<U, E>(self, f: impl FnOnce(T, &PropertyValues<(), M>) -> Result<U, E>) -> Result<RequiredFunctionalPropertyValue<U, M>, E> {
+	pub fn try_map_borrow_metadata<U, E>(
+		self,
+		f: impl FnOnce(T, &PropertyValues<(), M>) -> Result<U, E>,
+	) -> Result<RequiredFunctionalPropertyValue<U, M>, E> {
 		let value = f(self.value, &self.sub_properties)?;
 		Ok(RequiredFunctionalPropertyValue {
 			sub_properties: self.sub_properties,
-			value
+			value,
 		})
 	}
 }

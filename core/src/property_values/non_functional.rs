@@ -35,7 +35,7 @@ impl<T, M> PropertyValues<T, M> {
 	pub fn from_base(base: BTreeMap<T, M>) -> Self {
 		Self {
 			base,
-			sub_properties: BTreeMap::default()
+			sub_properties: BTreeMap::default(),
 		}
 	}
 
@@ -124,47 +124,117 @@ impl<T, M> PropertyValues<T, M> {
 		self.iter().map(|v| v.value.cloned()).collect()
 	}
 
-	pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> PropertyValues<U, M> where U: Ord {
+	pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> PropertyValues<U, M>
+	where
+		U: Ord,
+	{
 		self.map_with(&mut f)
 	}
 
-	fn map_with<U>(self, f: &mut impl FnMut(T) -> U) -> PropertyValues<U, M> where U: Ord {
+	fn map_with<U>(self, f: &mut impl FnMut(T) -> U) -> PropertyValues<U, M>
+	where
+		U: Ord,
+	{
 		let base = self.base.into_iter().map(|(k, v)| (f(k), v)).collect();
-		let sub_properties = self.sub_properties.into_iter().map(|(id, m)| (id, m.map_with(f))).collect();
+		let sub_properties = self
+			.sub_properties
+			.into_iter()
+			.map(|(id, m)| (id, m.map_with(f)))
+			.collect();
 
-		PropertyValues { base, sub_properties }
+		PropertyValues {
+			base,
+			sub_properties,
+		}
 	}
 
-	pub fn mapped<U, N>(&self, mut f: impl FnMut(Meta<&T, &M>) -> Meta<U, N>) -> PropertyValues<U, N> where U: Ord {
+	pub fn mapped<U, N>(
+		&self,
+		mut f: impl FnMut(Meta<&T, &M>) -> Meta<U, N>,
+	) -> PropertyValues<U, N>
+	where
+		U: Ord,
+	{
 		self.mapped_with(&mut f)
 	}
 
-	fn mapped_with<U, N>(&self, f: &mut impl FnMut(Meta<&T, &M>) -> Meta<U, N>) -> PropertyValues<U, N> where U: Ord {
-		let base = self.base.iter().map(|(t, m)| {
-			let Meta(u, n) = f(Meta(t, m));
-			(u, n)
-		}).collect();
-		let sub_properties = self.sub_properties.iter().map(|(id, m)| (*id, m.mapped_with(f))).collect();
+	fn mapped_with<U, N>(
+		&self,
+		f: &mut impl FnMut(Meta<&T, &M>) -> Meta<U, N>,
+	) -> PropertyValues<U, N>
+	where
+		U: Ord,
+	{
+		let base = self
+			.base
+			.iter()
+			.map(|(t, m)| {
+				let Meta(u, n) = f(Meta(t, m));
+				(u, n)
+			})
+			.collect();
+		let sub_properties = self
+			.sub_properties
+			.iter()
+			.map(|(id, m)| (*id, m.mapped_with(f)))
+			.collect();
 
-		PropertyValues { base, sub_properties }
+		PropertyValues {
+			base,
+			sub_properties,
+		}
 	}
 
-	pub fn map_properties<U>(self, mut g: impl FnMut(Id) -> Id, mut f: impl FnMut(T) -> U) -> PropertyValues<U, M> where U: Ord {
+	pub fn map_properties<U>(
+		self,
+		mut g: impl FnMut(Id) -> Id,
+		mut f: impl FnMut(T) -> U,
+	) -> PropertyValues<U, M>
+	where
+		U: Ord,
+	{
 		self.map_properties_with(&mut g, &mut f)
 	}
-	
-	fn map_properties_with<U>(self, g: &mut impl FnMut(Id) -> Id, f: &mut impl FnMut(T) -> U) -> PropertyValues<U, M> where U: Ord {
-		let base = self.base.into_iter().map(|(k, v)| (f(k), v)).collect();
-		let sub_properties = self.sub_properties.into_iter().map(|(id, m)| (g(id), m.map_with(f))).collect();
 
-		PropertyValues { base, sub_properties }
+	fn map_properties_with<U>(
+		self,
+		g: &mut impl FnMut(Id) -> Id,
+		f: &mut impl FnMut(T) -> U,
+	) -> PropertyValues<U, M>
+	where
+		U: Ord,
+	{
+		let base = self.base.into_iter().map(|(k, v)| (f(k), v)).collect();
+		let sub_properties = self
+			.sub_properties
+			.into_iter()
+			.map(|(id, m)| (g(id), m.map_with(f)))
+			.collect();
+
+		PropertyValues {
+			base,
+			sub_properties,
+		}
 	}
 
-	pub fn try_map<U, E>(self, mut f: impl FnMut(Option<Id>, T) -> Result<U, E>) -> Result<PropertyValues<U, M>, TryMapError<M, U, E>> where U: Ord {
+	pub fn try_map<U, E>(
+		self,
+		mut f: impl FnMut(Option<Id>, T) -> Result<U, E>,
+	) -> Result<PropertyValues<U, M>, TryMapError<M, U, E>>
+	where
+		U: Ord,
+	{
 		self.try_map_with(None, &mut f)
 	}
 
-	fn try_map_with<U, E>(self, id: Option<Id>, f: &mut impl FnMut(Option<Id>, T) -> Result<U, E>) -> Result<PropertyValues<U, M>, TryMapError<M, U, E>> where U: Ord {
+	fn try_map_with<U, E>(
+		self,
+		id: Option<Id>,
+		f: &mut impl FnMut(Option<Id>, T) -> Result<U, E>,
+	) -> Result<PropertyValues<U, M>, TryMapError<M, U, E>>
+	where
+		U: Ord,
+	{
 		let mut base = BTreeMap::new();
 		for (t, m) in self.base {
 			match f(id, t) {
@@ -172,7 +242,13 @@ impl<T, M> PropertyValues<T, M> {
 					base.insert(u, m);
 				}
 				Err(e) => {
-					return Err((Meta(e, m), PropertyValues { base, sub_properties: BTreeMap::new() }));
+					return Err((
+						Meta(e, m),
+						PropertyValues {
+							base,
+							sub_properties: BTreeMap::new(),
+						},
+					));
 				}
 			}
 		}
@@ -185,19 +261,41 @@ impl<T, M> PropertyValues<T, M> {
 				}
 				Err((e, u)) => {
 					sub_properties.insert(id, u);
-					return Err((e, PropertyValues { base, sub_properties }))
+					return Err((
+						e,
+						PropertyValues {
+							base,
+							sub_properties,
+						},
+					));
 				}
 			}
 		}
 
-		Ok(PropertyValues { base, sub_properties })
+		Ok(PropertyValues {
+			base,
+			sub_properties,
+		})
 	}
 
-	pub fn try_mapped<'a, U, N, E>(&'a self, mut f: impl FnMut(Option<Id>, Meta<&'a T, &'a M>) -> Result<Meta<U, N>, E>) -> Result<PropertyValues<U, N>, TryMappedError<'a, M, U, N, E>> where U: Ord {
+	pub fn try_mapped<'a, U, N, E>(
+		&'a self,
+		mut f: impl FnMut(Option<Id>, Meta<&'a T, &'a M>) -> Result<Meta<U, N>, E>,
+	) -> Result<PropertyValues<U, N>, TryMappedError<'a, M, U, N, E>>
+	where
+		U: Ord,
+	{
 		self.try_mapped_with(None, &mut f)
 	}
 
-	fn try_mapped_with<'a, U, N, E>(&'a self, id: Option<Id>, f: &mut impl FnMut(Option<Id>, Meta<&'a T, &'a M>) -> Result<Meta<U, N>, E>) -> Result<PropertyValues<U, N>, TryMappedError<'a, M, U, N, E>> where U: Ord {
+	fn try_mapped_with<'a, U, N, E>(
+		&'a self,
+		id: Option<Id>,
+		f: &mut impl FnMut(Option<Id>, Meta<&'a T, &'a M>) -> Result<Meta<U, N>, E>,
+	) -> Result<PropertyValues<U, N>, TryMappedError<'a, M, U, N, E>>
+	where
+		U: Ord,
+	{
 		let mut base = BTreeMap::new();
 		for (t, m) in &self.base {
 			match f(id, Meta(t, m)) {
@@ -205,7 +303,13 @@ impl<T, M> PropertyValues<T, M> {
 					base.insert(u, n);
 				}
 				Err(e) => {
-					return Err((Meta(e, m), PropertyValues { base, sub_properties: BTreeMap::new() }));
+					return Err((
+						Meta(e, m),
+						PropertyValues {
+							base,
+							sub_properties: BTreeMap::new(),
+						},
+					));
 				}
 			}
 		}
@@ -218,12 +322,21 @@ impl<T, M> PropertyValues<T, M> {
 				}
 				Err((e, u)) => {
 					sub_properties.insert(*id, u);
-					return Err((e, PropertyValues { base, sub_properties }))
+					return Err((
+						e,
+						PropertyValues {
+							base,
+							sub_properties,
+						},
+					));
 				}
 			}
 		}
 
-		Ok(PropertyValues { base, sub_properties })
+		Ok(PropertyValues {
+			base,
+			sub_properties,
+		})
 	}
 }
 
@@ -486,11 +599,16 @@ impl<'a, T, M> Iterator for Iter<'a, T, M> {
 						None => self.sub_property = None,
 					},
 					None => {
-						self.sub_property = self
+						let sub_property = self
 							.sub_properties
 							.next()
 							.map(|(id, s)| (*id, Box::new(s.iter())))
-							.or_else(|| self.back_sub_property.take())
+							.or_else(|| self.back_sub_property.take());
+
+						match sub_property {
+							Some(s) => self.sub_property = Some(s),
+							None => break None,
+						}
 					}
 				}
 			})
@@ -511,11 +629,16 @@ impl<'a, T, M> DoubleEndedIterator for Iter<'a, T, M> {
 					None => self.back_sub_property = None,
 				},
 				None => {
-					self.back_sub_property = self
+					let back_sub_property = self
 						.sub_properties
 						.next_back()
 						.map(|(id, s)| (*id, Box::new(s.iter())))
-						.or_else(|| self.sub_property.take())
+						.or_else(|| self.sub_property.take());
+
+					match back_sub_property {
+						Some(s) => self.back_sub_property = Some(s),
+						None => break None,
+					}
 				}
 			}
 		}
@@ -566,11 +689,16 @@ impl<T, M> Iterator for IntoIter<T, M> {
 						None => self.sub_property = None,
 					},
 					None => {
-						self.sub_property = self
+						let sub_property = self
 							.sub_properties
 							.next()
 							.map(|(id, s)| (id, Box::new(s.into_iter())))
-							.or_else(|| self.back_sub_property.take())
+							.or_else(|| self.back_sub_property.take());
+
+						match sub_property {
+							Some(s) => self.sub_property = Some(s),
+							None => break None,
+						}
 					}
 				}
 			})
@@ -591,11 +719,16 @@ impl<T, M> DoubleEndedIterator for IntoIter<T, M> {
 					None => self.back_sub_property = None,
 				},
 				None => {
-					self.back_sub_property = self
+					let back_sub_property = self
 						.sub_properties
 						.next_back()
 						.map(|(id, s)| (id, Box::new(s.into_iter())))
-						.or_else(|| self.sub_property.take())
+						.or_else(|| self.sub_property.take());
+
+					match back_sub_property {
+						Some(s) => self.back_sub_property = Some(s),
+						None => break None,
+					}
 				}
 			}
 		}

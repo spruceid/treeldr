@@ -1,5 +1,7 @@
 use super::{ContainerRestrictions, Layout};
-use crate::{node::BindingValueRef, property_values, FunctionalPropertyValue, Id, Property, TId, MetaOption};
+use crate::{
+	node::BindingValueRef, property_values, FunctionalPropertyValue, Id, MetaOption, Property, TId,
+};
 use derivative::Derivative;
 use locspan::Meta;
 

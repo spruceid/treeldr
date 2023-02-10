@@ -134,9 +134,7 @@ impl<M> Documentation<M> {
 	}
 
 	pub fn from_comments(comments: PropertyValues<Block, M>) -> Self {
-		Self {
-			blocks: comments
-		}
+		Self { blocks: comments }
 	}
 
 	pub fn is_empty(&self) -> bool {

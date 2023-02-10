@@ -509,9 +509,9 @@ impl<'a, M> BindingRef<'a, M> {
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::UnionOf(_, v) => BindingValueRef::Types(node::MultipleIdValueRef::Multiple(v)),
+			Self::UnionOf(_, v) => BindingValueRef::TypeList(node::MultipleIdValueRef::Multiple(v)),
 			Self::IntersectionOf(_, v) => {
-				BindingValueRef::Types(node::MultipleIdValueRef::Multiple(v))
+				BindingValueRef::TypeList(node::MultipleIdValueRef::Multiple(v))
 			}
 			Self::Datatype(b) => b.value(),
 			Self::Restriction(b) => b.value(),
@@ -688,7 +688,11 @@ impl<M> Dependencies<M> {
 		let mut direct_properties: HashMap<TId<Type>, Properties<M>> = HashMap::new();
 
 		for (prop_id, prop) in model.properties() {
-			for PropertyValueRef { value: Meta(&domain, meta), .. } in prop.as_property().domain() {
+			for PropertyValueRef {
+				value: Meta(&domain, meta),
+				..
+			} in prop.as_property().domain()
+			{
 				direct_properties
 					.entry(domain)
 					.or_default()

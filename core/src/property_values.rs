@@ -41,7 +41,10 @@ impl<T, M> PropertyValue<T, M> {
 	}
 
 	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PropertyValue<U, M> {
-		PropertyValue { sub_property: self.sub_property, value: self.value.map(f) }
+		PropertyValue {
+			sub_property: self.sub_property,
+			value: self.value.map(f),
+		}
 	}
 
 	pub fn into_value(self) -> T {
@@ -55,7 +58,10 @@ impl<T, M> PropertyValue<T, M> {
 }
 
 impl<'a, T, M> PropertyValue<T, &'a M> {
-	pub fn into_cloned_metadata(self) -> PropertyValue<T, M> where M: Clone {
+	pub fn into_cloned_metadata(self) -> PropertyValue<T, M>
+	where
+		M: Clone,
+	{
 		PropertyValue::new(self.sub_property, self.value.into_cloned_metadata())
 	}
 }
@@ -88,14 +94,14 @@ impl<'a, T, M> PropertyValueRef<'a, T, M> {
 		self.value
 	}
 
-	pub fn into_cloned_value(self) -> PropertyValue<T, &'a M> where T: Clone {
+	pub fn into_cloned_value(self) -> PropertyValue<T, &'a M>
+	where
+		T: Clone,
+	{
 		PropertyValue::new(self.sub_property, self.value.into_cloned_value())
 	}
 
-	pub fn into_class_binding<B>(
-		self,
-		binding: impl Fn(Option<Id>, &'a T) -> B,
-	) -> Meta<B, &'a M> {
+	pub fn into_class_binding<B>(self, binding: impl Fn(Option<Id>, &'a T) -> B) -> Meta<B, &'a M> {
 		let Meta(v, meta) = self.value;
 		Meta(binding(self.sub_property, v), meta)
 	}

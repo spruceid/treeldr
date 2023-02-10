@@ -1,9 +1,9 @@
 use crate::{
 	component, layout, list,
 	node::{self, BindingValueRef},
-	ty,
+	property_values, ty,
 	vocab::{self, Owl, Rdf, Rdfs, Schema, Term, TreeLdr, Xsd},
-	BlankIdIndex, Id, IriIndex, Ref, ResourceType, TId, PropertyValues, property_values, FunctionalPropertyValue,
+	BlankIdIndex, FunctionalPropertyValue, Id, IriIndex, PropertyValues, Ref, ResourceType, TId,
 };
 use contextual::DisplayWithContext;
 use locspan::Meta;
@@ -481,8 +481,8 @@ impl ClassBinding {
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Domain(_, v) => BindingValueRef::Types(node::MultipleIdValueRef::Single(*v)),
-			Self::Range(_, v) => BindingValueRef::Types(node::MultipleIdValueRef::Single(*v)),
+			Self::Domain(_, v) => BindingValueRef::Type(*v),
+			Self::Range(_, v) => BindingValueRef::Type(*v),
 			Self::Required(_, v) => BindingValueRef::SchemaBoolean(*v),
 		}
 	}
@@ -491,7 +491,7 @@ impl ClassBinding {
 pub struct ClassBindings<'a, M> {
 	domain: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
 	range: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
-	required: property_values::functional::Iter<'a, bool, M>
+	required: property_values::functional::Iter<'a, bool, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;

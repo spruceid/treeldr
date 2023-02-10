@@ -1,5 +1,6 @@
 use crate::{
-	metadata::Merge, multiple, node::BindingValueRef, vocab, MetaOption, Multiple, TId, Type, RequiredFunctionalPropertyValue, property_values, Id,
+	metadata::Merge, multiple, node::BindingValueRef, property_values, vocab, Id, MetaOption,
+	Multiple, RequiredFunctionalPropertyValue, TId, Type,
 };
 use derivative::Derivative;
 use locspan::Meta;
@@ -608,12 +609,8 @@ impl ClassBinding {
 	pub fn value<M>(&self) -> BindingValueRef<M> {
 		match self {
 			Self::OnProperty(v) => BindingValueRef::Property(*v),
-			Self::SomeValuesFrom(v) => {
-				BindingValueRef::Types(crate::node::MultipleIdValueRef::Single(*v))
-			}
-			Self::AllValuesFrom(v) => {
-				BindingValueRef::Types(crate::node::MultipleIdValueRef::Single(*v))
-			}
+			Self::SomeValuesFrom(v) => BindingValueRef::Type(*v),
+			Self::AllValuesFrom(v) => BindingValueRef::Type(*v),
 			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
 			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
 			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
@@ -645,12 +642,8 @@ impl<'a> ClassBindingRef<'a> {
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::OnProperty(_, v) => BindingValueRef::Property(*v),
-			Self::SomeValuesFrom(v) => {
-				BindingValueRef::Types(crate::node::MultipleIdValueRef::Single(*v))
-			}
-			Self::AllValuesFrom(v) => {
-				BindingValueRef::Types(crate::node::MultipleIdValueRef::Single(*v))
-			}
+			Self::SomeValuesFrom(v) => BindingValueRef::Type(*v),
+			Self::AllValuesFrom(v) => BindingValueRef::Type(*v),
 			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
 			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
 			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
@@ -679,9 +672,7 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 			.as_mut()
 			.and_then(|i| {
 				i.next()
-				.map(|m| {
-					m.into_cloned_class_binding(ClassBindingRef::OnProperty)
-				})
+					.map(|m| m.into_cloned_class_binding(ClassBindingRef::OnProperty))
 			})
 			.or_else(|| {
 				self.restriction

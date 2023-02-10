@@ -686,7 +686,7 @@ pub trait HasType<M> {
 		self.types().into_iter().any(
 			|PropertyValueRef {
 			     value: Meta(b, _), ..
-			 }| context.is_subclass_of_or_eq(a, (*b).into()),
+			 }| { context.is_subclass_of_or_eq(a, (*b).into()) },
 		)
 	}
 }

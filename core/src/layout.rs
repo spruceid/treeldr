@@ -217,17 +217,13 @@ impl<M> Description<M> {
 
 /// Values of the `tldr:withRestrictions` property.
 pub struct WithRestrictions<'a, M> {
-	restrictions: Meta<Restrictions<'a, M>, &'a M>
+	restrictions: Meta<Restrictions<'a, M>, &'a M>,
 }
 
 impl<'a, M> WithRestrictions<'a, M> {
-	fn new(
-		restrictions: Meta<Restrictions<'a, M>, &'a M>
-	) -> Option<Self> {
+	fn new(restrictions: Meta<Restrictions<'a, M>, &'a M>) -> Option<Self> {
 		if restrictions.is_restricted() {
-			Some(Self {
-				restrictions
-			})
+			Some(Self { restrictions })
 		} else {
 			None
 		}
@@ -258,12 +254,9 @@ impl<'a, M> Iterator for WithRestrictionsIter<'a, M> {
 	type Item = PropertyValue<Restrictions<'a, M>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.restrictions.take().map(|r| {
-			PropertyValue::new(
-				None,
-				r
-			)
-		})
+		self.restrictions
+			.take()
+			.map(|r| PropertyValue::new(None, r))
 	}
 }
 
@@ -368,7 +361,35 @@ impl<'a, M> Iterator for DescriptionPropertyValueIter<'a, M> {
 			Self::DerivedFrom(v) => v
 				.next()
 				.map(|s| s.into_class_binding(DescriptionBindingRef::DerivedFrom)),
-			_ => todo!(),
+			Self::Reference(v) => v.next().map(|s| {
+				s.into_class_binding(|id, r| DescriptionBindingRef::Reference(id, **r.id_layout()))
+			}),
+			Self::Struct(v) => v.next().map(|s| {
+				s.into_class_binding(|id, s| DescriptionBindingRef::Struct(id, s.fields()))
+			}),
+			Self::Enum(v) => v.next().map(|s| {
+				s.into_class_binding(|id, e| DescriptionBindingRef::Enum(id, e.variants()))
+			}),
+			Self::Required(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| DescriptionBindingRef::Required(id, **c.item_layout()))
+			}),
+			Self::Option(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| DescriptionBindingRef::Option(id, **c.item_layout()))
+			}),
+			Self::Array(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| DescriptionBindingRef::Array(id, **c.item_layout()))
+			}),
+			Self::Set(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| DescriptionBindingRef::Set(id, **c.item_layout()))
+			}),
+			Self::OneOrMany(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| {
+					DescriptionBindingRef::OneOrMany(id, **c.item_layout())
+				})
+			}),
+			Self::Alias(v) => v
+				.next()
+				.map(|s| s.into_cloned_class_binding(DescriptionBindingRef::Alias)),
 		}
 	}
 }
@@ -642,18 +663,16 @@ impl<'a, M> DescriptionBindingRef<'a, M> {
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::DerivedFrom(_, p) => {
-				BindingValueRef::Types(node::MultipleIdValueRef::Single(p.ty()))
-			}
-			Self::Reference(_, v) => BindingValueRef::Layouts(node::MultipleIdValueRef::Single(*v)),
+			Self::DerivedFrom(_, p) => BindingValueRef::Type(p.ty()),
+			Self::Reference(_, v) => BindingValueRef::Layout(*v),
 			Self::Struct(_, v) => BindingValueRef::Fields(v),
 			Self::Enum(_, v) => BindingValueRef::Variants(v),
-			Self::Required(_, v) => BindingValueRef::Layouts(node::MultipleIdValueRef::Single(*v)),
-			Self::Option(_, v) => BindingValueRef::Layouts(node::MultipleIdValueRef::Single(*v)),
-			Self::Array(_, v) => BindingValueRef::Layouts(node::MultipleIdValueRef::Single(*v)),
-			Self::Set(_, v) => BindingValueRef::Layouts(node::MultipleIdValueRef::Single(*v)),
-			Self::OneOrMany(_, v) => BindingValueRef::Layouts(node::MultipleIdValueRef::Single(*v)),
-			Self::Alias(_, v) => BindingValueRef::Layouts(node::MultipleIdValueRef::Single(*v)),
+			Self::Required(_, v) => BindingValueRef::Layout(*v),
+			Self::Option(_, v) => BindingValueRef::Layout(*v),
+			Self::Array(_, v) => BindingValueRef::Layout(*v),
+			Self::Set(_, v) => BindingValueRef::Layout(*v),
+			Self::OneOrMany(_, v) => BindingValueRef::Layout(*v),
+			Self::Alias(_, v) => BindingValueRef::Layout(*v),
 		}
 	}
 }
@@ -681,10 +700,10 @@ impl<'a, M> ClassBindingRef<'a, M> {
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::For(_, v) => BindingValueRef::Types(node::MultipleIdValueRef::Single(*v)),
+			Self::For(_, v) => BindingValueRef::Type(*v),
 			Self::Description(d) => d.value(),
 			Self::IntersectionOf(_, v) => {
-				BindingValueRef::Layouts(node::MultipleIdValueRef::Multiple(*v))
+				BindingValueRef::LayoutList(node::MultipleIdValueRef::Multiple(*v))
 			}
 			Self::WithRestrictions(_, v) => BindingValueRef::LayoutRestrictions(*v),
 			Self::ArraySemantics(b) => b.value(),

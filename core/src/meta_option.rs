@@ -42,7 +42,7 @@ impl<T, M> MetaOption<T, M> {
 	}
 
 	pub fn is_some_and(&self, f: impl FnOnce(&T) -> bool) -> bool {
-		self.value 
+		self.value
 			.as_ref()
 			.map(|Meta(v, _)| f(v))
 			.unwrap_or_default()

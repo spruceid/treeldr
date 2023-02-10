@@ -1,5 +1,5 @@
 use super::ContainerRestrictions;
-use crate::{Layout, TId, MetaOption};
+use crate::{Layout, MetaOption, TId};
 use locspan::Meta;
 
 /// Set layout.

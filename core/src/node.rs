@@ -185,10 +185,7 @@ impl<M> Definition<M> {
 		Bindings {
 			data: self.data.bindings(),
 			class: self.ty.as_ref().map(|t| t.bindings()).unwrap_or_default(),
-			property: self
-				.property
-				.as_ref()
-				.map(|p| p.bindings()),
+			property: self.property.as_ref().map(|p| p.bindings()),
 			component: self
 				.component
 				.as_ref()
@@ -414,9 +411,11 @@ pub enum BindingValueRef<'a, M> {
 	String(&'a str),
 	Name(&'a Name),
 	Id(Id),
-	Types(MultipleIdValueRef<'a, crate::Type, M>),
+	Type(TId<crate::Type>),
+	TypeList(MultipleIdValueRef<'a, crate::Type, M>),
 	DataType(TId<crate::ty::DataType<M>>),
-	Layouts(MultipleIdValueRef<'a, crate::Layout, M>),
+	Layout(TId<crate::Layout>),
+	LayoutList(MultipleIdValueRef<'a, crate::Layout, M>),
 	Fields(&'a [Meta<TId<layout::Field>, M>]),
 	Variants(&'a [Meta<TId<layout::Variant>, M>]),
 	Property(TId<crate::Property>),
@@ -428,9 +427,11 @@ impl<'a, M> BindingValueRef<'a, M> {
 	pub fn ids(self) -> BindingValueIds<'a, M> {
 		match self {
 			Self::Id(id) => BindingValueIds::Id(Some(id)),
-			Self::Types(t) => BindingValueIds::Types(t.iter()),
+			Self::Type(t) => BindingValueIds::Type(Some(t)),
+			Self::TypeList(t) => BindingValueIds::TypeList(t.iter()),
 			Self::DataType(t) => BindingValueIds::DataType(Some(t)),
-			Self::Layouts(l) => BindingValueIds::Layouts(l.iter()),
+			Self::Layout(l) => BindingValueIds::Layout(Some(l)),
+			Self::LayoutList(l) => BindingValueIds::LayoutList(l.iter()),
 			Self::Fields(f) => BindingValueIds::Fields(f.iter()),
 			Self::Variants(v) => BindingValueIds::Variants(v.iter()),
 			Self::Property(p) => BindingValueIds::Property(Some(p)),
@@ -442,9 +443,11 @@ impl<'a, M> BindingValueRef<'a, M> {
 pub enum BindingValueIds<'a, M> {
 	None,
 	Id(Option<Id>),
-	Types(MultipleIdValueIter<'a, crate::Type, M>),
+	Type(Option<TId<crate::Type>>),
+	TypeList(MultipleIdValueIter<'a, crate::Type, M>),
 	DataType(Option<TId<crate::ty::DataType<M>>>),
-	Layouts(MultipleIdValueIter<'a, crate::Layout, M>),
+	Layout(Option<TId<crate::Layout>>),
+	LayoutList(MultipleIdValueIter<'a, crate::Layout, M>),
 	Fields(std::slice::Iter<'a, Meta<TId<layout::Field>, M>>),
 	Variants(std::slice::Iter<'a, Meta<TId<layout::Variant>, M>>),
 	Property(Option<TId<crate::Property>>),
@@ -457,9 +460,11 @@ impl<'a, M> Iterator for BindingValueIds<'a, M> {
 		match self {
 			Self::None => None,
 			Self::Id(i) => i.take(),
-			Self::Types(t) => t.next().map(|i| i.id()),
+			Self::Type(t) => t.take().map(|t| t.id()),
+			Self::TypeList(t) => t.next().map(|i| i.id()),
 			Self::DataType(d) => d.take().map(|i| i.id()),
-			Self::Layouts(t) => t.next().map(|i| i.id()),
+			Self::Layout(l) => l.take().map(|l| l.id()),
+			Self::LayoutList(t) => t.next().map(|i| i.id()),
 			Self::Fields(d) => d.next().map(|i| i.id()),
 			Self::Variants(t) => t.next().map(|i| i.id()),
 			Self::Property(p) => p.take().map(|i| i.id()),
@@ -503,7 +508,7 @@ impl<'a, M> BindingRef<'a, M> {
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Type(_, v) => BindingValueRef::Types(MultipleIdValueRef::Single(*v)),
+			Self::Type(_, v) => BindingValueRef::Type(*v),
 			Self::Label(_, v) => BindingValueRef::String(v),
 			Self::Comment(_, v) => BindingValueRef::String(v),
 			Self::Class(b) => b.value(),
@@ -535,11 +540,7 @@ impl<'a, M> Iterator for Bindings<'a, M> {
 					.or_else(|| {
 						self.property
 							.as_mut()
-							.and_then(|i| {
-								i
-									.next()
-									.map(|m| m.map(BindingRef::Property))
-							})
+							.and_then(|i| i.next().map(|m| m.map(BindingRef::Property)))
 							.or_else(|| self.component.next().map(|m| m.map(BindingRef::Component)))
 					})
 			})

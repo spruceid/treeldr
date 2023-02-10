@@ -1,6 +1,6 @@
 use crate::{
-	node::BindingValueRef, vocab, Id, IriIndex,
-	PropertyValue, RequiredFunctionalPropertyValue, TId, MetaOption,
+	node::BindingValueRef, vocab, Id, IriIndex, MetaOption, PropertyValue,
+	RequiredFunctionalPropertyValue, TId,
 };
 
 pub mod regexp;
@@ -68,12 +68,8 @@ pub struct WithRestrictions<'a, M> {
 }
 
 impl<'a, M> WithRestrictions<'a, M> {
-	fn new(
-		value: Meta<Restrictions<'a>, &'a M>
-	) -> Self {
-		Self {
-			value
-		}
+	fn new(value: Meta<Restrictions<'a>, &'a M>) -> Self {
+		Self { value }
 	}
 }
 
@@ -89,7 +85,7 @@ impl<'a, M> IntoIterator for WithRestrictions<'a, M> {
 }
 
 pub struct WithRestrictionsIter<'a, M> {
-	value: Option<Meta<Restrictions<'a>, &'a M>>
+	value: Option<Meta<Restrictions<'a>, &'a M>>,
 }
 
 impl<'a, M> Iterator for WithRestrictionsIter<'a, M> {

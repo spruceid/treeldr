@@ -14,9 +14,7 @@ impl<T, M> Default for FunctionalPropertyValue<T, M> {
 }
 
 impl<T, M> FunctionalPropertyValue<T, M> {
-	pub fn new(
-		value: Option<RequiredFunctionalPropertyValue<T, M>>
-	) -> Self {
+	pub fn new(value: Option<RequiredFunctionalPropertyValue<T, M>>) -> Self {
 		Self(value)
 	}
 
@@ -65,11 +63,13 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 
 	pub fn try_map_borrow_metadata<U, E>(
 		self,
-		f: impl FnOnce(T, &PropertyValues<(), M>) -> Result<U, E>
+		f: impl FnOnce(T, &PropertyValues<(), M>) -> Result<U, E>,
 	) -> Result<FunctionalPropertyValue<U, M>, E> {
 		match self.0 {
-			Some(inner) => Ok(FunctionalPropertyValue(Some(inner.try_map_borrow_metadata(f)?))),
-			None => Ok(FunctionalPropertyValue(None))
+			Some(inner) => Ok(FunctionalPropertyValue(Some(
+				inner.try_map_borrow_metadata(f)?,
+			))),
+			None => Ok(FunctionalPropertyValue(None)),
 		}
 	}
 }

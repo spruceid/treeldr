@@ -4,8 +4,9 @@ use locspan::Meta;
 use crate::{
 	layout,
 	node::BindingValueRef,
+	property_values,
 	vocab::{self, Term},
-	Layout, TId, FunctionalPropertyValue, MetaOption, RequiredFunctionalPropertyValue, property_values, Id,
+	FunctionalPropertyValue, Id, Layout, MetaOption, RequiredFunctionalPropertyValue, TId,
 };
 
 pub struct Formatted;
@@ -44,7 +45,11 @@ impl<M> Definition<M> {
 	}
 
 	pub fn format(&self) -> Option<TId<Layout>> {
-		self.data.format.as_required().map(RequiredFunctionalPropertyValue::value).cloned()
+		self.data
+			.format
+			.as_required()
+			.map(RequiredFunctionalPropertyValue::value)
+			.cloned()
 	}
 
 	pub fn is_layout_field(&self) -> bool {
@@ -166,9 +171,7 @@ impl Binding {
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Format(v) => {
-				BindingValueRef::Layouts(crate::node::MultipleIdValueRef::Single(*v))
-			}
+			Self::Format(v) => BindingValueRef::Layout(*v),
 			Self::LayoutField(b) => b.value(),
 		}
 	}

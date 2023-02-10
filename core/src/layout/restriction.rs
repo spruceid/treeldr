@@ -59,7 +59,15 @@ impl<'a, M> Restrictions<'a, M> {
 	}
 
 	pub fn is_restricted(&self) -> bool {
-		self.primitive.as_ref().map(|p| p.is_restricted()).unwrap_or(false) || self.container.as_ref().map(|c| c.is_restricted()).unwrap_or(false)
+		self.primitive
+			.as_ref()
+			.map(|p| p.is_restricted())
+			.unwrap_or(false)
+			|| self
+				.container
+				.as_ref()
+				.map(|c| c.is_restricted())
+				.unwrap_or(false)
 	}
 
 	pub fn iter(&self) -> RestrictionsIter<'a, M> {

@@ -4,7 +4,8 @@ use locspan::Meta;
 use crate::{
 	component,
 	node::{self, BindingValueRef},
-	vocab, Layout, Name, ResourceType, TId, FunctionalPropertyValue, RequiredFunctionalPropertyValue, property_values, Id,
+	property_values, vocab, FunctionalPropertyValue, Id, Layout, Name,
+	RequiredFunctionalPropertyValue, ResourceType, TId,
 };
 
 pub struct Field;
@@ -86,7 +87,9 @@ impl<M> Definition<M> {
 	}
 
 	pub fn property(&self) -> Option<&TId<crate::Property>> {
-		self.prop.as_required().map(RequiredFunctionalPropertyValue::value)
+		self.prop
+			.as_required()
+			.map(RequiredFunctionalPropertyValue::value)
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {

@@ -4,8 +4,9 @@ use locspan::Meta;
 use crate::{
 	layout,
 	node::BindingValueRef,
+	property_values,
 	vocab::{self, Term},
-	MetaOption, Name, FunctionalPropertyValue, property_values, Id,
+	FunctionalPropertyValue, Id, MetaOption, Name,
 };
 
 pub mod formatted;

@@ -1,6 +1,4 @@
-use crate::{
-	PropertyValue, MetaOption,
-};
+use crate::{MetaOption, PropertyValue};
 
 use super::Primitive;
 use derivative::Derivative;
@@ -61,11 +59,13 @@ impl<M> Restricted<M> {
 	pub fn restrictions(&self) -> Option<Meta<Restrictions<M>, &M>> {
 		match self {
 			Self::Integer(r) => r.as_ref().map(|m| m.borrow().map(Restrictions::Integer)),
-			Self::UnsignedInteger(r) => r.as_ref().map(|m| m.borrow().map(Restrictions::UnsignedInteger)),
+			Self::UnsignedInteger(r) => r
+				.as_ref()
+				.map(|m| m.borrow().map(Restrictions::UnsignedInteger)),
 			Self::Float(r) => r.as_ref().map(|m| m.borrow().map(Restrictions::Float)),
 			Self::Double(r) => r.as_ref().map(|m| m.borrow().map(Restrictions::Double)),
 			Self::String(r) => r.as_ref().map(|m| m.borrow().map(Restrictions::String)),
-			_ => None
+			_ => None,
 		}
 	}
 
@@ -80,13 +80,9 @@ pub struct WithRestrictions<'a, M> {
 }
 
 impl<'a, M> WithRestrictions<'a, M> {
-	fn new(
-		restrictions: Meta<Restrictions<'a, M>, &'a M>
-	) -> Option<Self> {
+	fn new(restrictions: Meta<Restrictions<'a, M>, &'a M>) -> Option<Self> {
 		if restrictions.is_restricted() {
-			Some(Self {
-				restrictions,
-			})
+			Some(Self { restrictions })
 		} else {
 			None
 		}
@@ -108,10 +104,9 @@ impl<'a, M> Iterator for WithRestrictionsIter<'a, M> {
 	type Item = PropertyValue<Restrictions<'a, M>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.restrictions.take().map(|r| PropertyValue::new(
-			None,
-			r,
-		))
+		self.restrictions
+			.take()
+			.map(|r| PropertyValue::new(None, r))
 	}
 }
 
@@ -151,7 +146,7 @@ pub enum Restrictions<'a, M> {
 	Float(&'a float::Restrictions<M>),
 	Double(&'a double::Restrictions<M>),
 	String(&'a string::Restrictions<M>),
-	Other
+	Other,
 }
 
 impl<'a, M> Restrictions<'a, M> {
@@ -162,7 +157,7 @@ impl<'a, M> Restrictions<'a, M> {
 			Self::Float(r) => r.is_restricted(),
 			Self::Double(r) => r.is_restricted(),
 			Self::String(r) => r.is_restricted(),
-			Self::Other => false
+			Self::Other => false,
 		}
 	}
 
@@ -173,7 +168,7 @@ impl<'a, M> Restrictions<'a, M> {
 			Self::Float(r) => RestrictionsIter::Float(r.iter()),
 			Self::Double(r) => RestrictionsIter::Double(r.iter()),
 			Self::String(r) => RestrictionsIter::String(r.iter()),
-			Self::Other => RestrictionsIter::None
+			Self::Other => RestrictionsIter::None,
 		}
 	}
 }

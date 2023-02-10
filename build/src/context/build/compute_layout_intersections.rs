@@ -19,9 +19,8 @@ impl<M> Context<M> {
 		let mut stack = VecDeque::new();
 
 		for (id, node) in &self.nodes {
-			if node.has_type(self, component::Type::Layout)
-				&& !node.as_layout().intersection_of().is_empty()
-			{
+			let is_layout = node.has_type(self, component::Type::Layout);
+			if is_layout && !node.as_layout().intersection_of().is_empty() {
 				stack.push_back(*id)
 			}
 		}
