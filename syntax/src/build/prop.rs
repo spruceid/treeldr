@@ -77,11 +77,11 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 
 		let node = context.get_mut(id).unwrap();
 		if let Some(comment) = doc {
-			node.comment_mut().insert(comment)
+			node.comment_mut().insert_base(comment)
 		}
 
 		if let Some(functional_loc) = functional_loc {
-			node.type_mut().insert(Meta(
+			node.type_mut().insert_base(Meta(
 				treeldr_build::prop::Type::FunctionalProperty.into(),
 				functional_loc,
 			));
@@ -89,11 +89,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 
 		let prop = node.as_property_mut();
 		if let Some(Meta(range, range_loc)) = range {
-			prop.range_mut().insert(Meta(range, range_loc));
+			prop.range_mut().insert_base(Meta(range, range_loc));
 		}
 
 		if let Some(required_loc) = required_loc {
-			prop.required_mut().insert(Meta(required, required_loc));
+			prop.required_mut()
+				.insert_base(Meta(required, required_loc));
 		}
 
 		Ok(Meta(id, id_loc))

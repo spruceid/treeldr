@@ -165,7 +165,7 @@ impl<M: Clone> LocalContext<M> {
 				.unwrap()
 				.as_layout_mut()
 				.ty_mut()
-				.insert(Meta(*id, loc.clone()))
+				.insert_base(Meta(*id, loc.clone()))
 		}
 
 		let regexp = match lit {
@@ -190,7 +190,7 @@ impl<M: Clone> LocalContext<M> {
 		restriction
 			.as_datatype_restriction_mut()
 			.restriction_mut()
-			.insert(Meta(
+			.insert_base(Meta(
 				Restriction::String(restriction::String::Pattern(regexp)),
 				loc.clone(),
 			));
@@ -202,11 +202,12 @@ impl<M: Clone> LocalContext<M> {
 
 		let ty = context.get_mut(*id).unwrap().as_type_mut();
 		let dt = ty.as_datatype_mut();
-		dt.base_mut().insert(Meta(
+		dt.base_mut().insert_base(Meta(
 			Id::Iri(IriIndex::Iri(Term::Xsd(Xsd::String))),
 			loc.clone(),
 		));
-		dt.restrictions_mut().insert(Meta(restrictions_list, loc));
+		dt.restrictions_mut()
+			.insert_base(Meta(restrictions_list, loc));
 
 		Ok(())
 	}
@@ -234,7 +235,7 @@ impl<M: Clone> LocalContext<M> {
 				.unwrap()
 				.as_layout_mut()
 				.ty_mut()
-				.insert(Meta(*id, loc.clone()));
+				.insert_base(Meta(*id, loc.clone()));
 		}
 
 		let regexp = match lit {
@@ -259,7 +260,7 @@ impl<M: Clone> LocalContext<M> {
 		restriction
 			.as_layout_restriction_mut()
 			.restriction_mut()
-			.insert(Meta(
+			.insert_base(Meta(
 				Restriction::Primitive(restriction::primitive::Restriction::String(
 					restriction::primitive::String::Pattern(regexp),
 				)),
@@ -272,13 +273,15 @@ impl<M: Clone> LocalContext<M> {
 		);
 
 		let layout = context.get_mut(*id).unwrap().as_layout_mut();
-		layout.description_mut().insert(Meta(
-			treeldr_build::layout::Description::Primitive(treeldr_build::layout::Primitive::String),
+		layout.description_mut().insert_base(Meta(
+			treeldr_build::layout::BaseDescriptionBinding::DerivedFrom(
+				treeldr_build::layout::Primitive::String.id(),
+			),
 			loc.clone(),
 		));
 		layout
 			.restrictions_mut()
-			.insert(Meta(restrictions_list, loc));
+			.insert_base(Meta(restrictions_list, loc));
 
 		Ok(())
 	}

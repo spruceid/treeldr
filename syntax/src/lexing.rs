@@ -33,7 +33,7 @@ impl fmt::Display for Id {
 		match self {
 			Self::Name(name) => name.fmt(f),
 			Self::IriRef(iri) => iri.fmt(f),
-			Self::Compact(prefix, suffix) => write!(f, "{}:{}", prefix, suffix),
+			Self::Compact(prefix, suffix) => write!(f, "{prefix}:{suffix}"),
 		}
 	}
 }
@@ -66,8 +66,8 @@ impl fmt::Display for TokenKind {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::Doc => write!(f, "documentation comment"),
-			Self::Punct(p) => write!(f, "`{}`", p),
-			Self::Keyword(k) => write!(f, "keyword `{}`", k),
+			Self::Punct(p) => write!(f, "`{p}`"),
+			Self::Keyword(k) => write!(f, "keyword `{k}`"),
 			Self::Begin(d) => write!(f, "opening `{}`", d.start()),
 			Self::End(d) => write!(f, "closing `{}`", d.end()),
 			Self::Id => write!(f, "identifier"),
@@ -139,12 +139,12 @@ impl fmt::Display for Token {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::Doc(_) => write!(f, "documentation"),
-			Self::Punct(p) => write!(f, "punctuation mark `{}`", p),
+			Self::Punct(p) => write!(f, "punctuation mark `{p}`"),
 			Self::Begin(d) => write!(f, "opening `{}`", d.start()),
 			Self::End(d) => write!(f, "closing `{}`", d.end()),
-			Self::Keyword(k) => write!(f, "keyword `{}`", k),
-			Self::Id(id) => write!(f, "identifier `{}`", id),
-			Self::Literal(Literal::String(s)) => write!(f, "string literal {}", s),
+			Self::Keyword(k) => write!(f, "keyword `{k}`"),
+			Self::Id(id) => write!(f, "identifier `{id}`"),
+			Self::Literal(Literal::String(s)) => write!(f, "string literal {s}"),
 			Self::Literal(Literal::RegExp(_)) => write!(f, "regular expression"),
 		}
 	}
@@ -304,12 +304,12 @@ pub enum Error<E = std::convert::Infallible> {
 impl<E: fmt::Display> fmt::Display for Error<E> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			Self::InvalidId(id) => write!(f, "invalid identifier `{}`", id),
-			Self::InvalidCodepoint(c) => write!(f, "invalid character codepoint {:x}", c),
-			Self::InvalidSuffix(s) => write!(f, "invalid compact IRI suffix `{}`", s),
-			Self::InvalidPrimitive(p) => write!(f, "invalid primitive layout `#{}`", p),
+			Self::InvalidId(id) => write!(f, "invalid identifier `{id}`"),
+			Self::InvalidCodepoint(c) => write!(f, "invalid character codepoint {c:x}"),
+			Self::InvalidSuffix(s) => write!(f, "invalid compact IRI suffix `{s}`"),
+			Self::InvalidPrimitive(p) => write!(f, "invalid primitive layout `#{p}`"),
 			Self::Unexpected(None) => write!(f, "unexpected end of text"),
-			Self::Unexpected(Some(c)) => write!(f, "unexpected character `{}`", c),
+			Self::Unexpected(Some(c)) => write!(f, "unexpected character `{c}`"),
 			Self::Stream(e) => e.fmt(f),
 		}
 	}

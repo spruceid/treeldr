@@ -61,7 +61,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 					local_context.scope = None;
 
 					let prop = context.get_mut(prop_id).unwrap().as_property_mut();
-					prop.domain_mut().insert(Meta(id, prop_loc.clone()));
+					prop.domain_mut().insert_base(Meta(id, prop_loc.clone()));
 				}
 			}
 			Meta(crate::TypeDescription::Alias(expr), expr_loc) => {
@@ -78,7 +78,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 			.flatten()
 		{
 			let node = context.get_mut(id).unwrap();
-			node.comment_mut().insert(comment)
+			node.comment_mut().insert_base(comment)
 		}
 
 		local_context.implicit_definition = true;
@@ -125,7 +125,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterTypeExpr<M>, M> {
 				)?;
 
 				let ty = context.get_mut(id).unwrap().as_type_mut();
-				ty.union_of_mut().insert(Meta(options_list, loc.clone()));
+				ty.union_of_mut()
+					.insert_base(Meta(options_list, loc.clone()));
 
 				Ok(Meta(id, loc))
 			}
@@ -149,7 +150,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterTypeExpr<M>, M> {
 
 				let ty = context.get_mut(id).unwrap().as_type_mut();
 				ty.intersection_of_mut()
-					.insert(Meta(types_list, loc.clone()));
+					.insert_base(Meta(types_list, loc.clone()));
 
 				Ok(Meta(id, loc))
 			}
@@ -258,11 +259,13 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 				};
 
 				let node = context.get_mut(id).unwrap();
-				node.type_mut().insert(Meta(
+				node.type_mut().insert_base(Meta(
 					treeldr_build::ty::SubClass::Restriction.into(),
 					loc.clone(),
 				));
-				node.as_restriction_mut().property_mut().insert(prop_id);
+				node.as_restriction_mut()
+					.property_mut()
+					.insert_base(prop_id);
 				node.as_restriction_mut()
 					.restriction_mut()
 					.insert(Meta(restriction, restriction_loc));
@@ -287,7 +290,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 				first_restriction
 					.as_restriction_mut()
 					.property_mut()
-					.insert(Meta(
+					.insert_base(Meta(
 						Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::First))),
 						loc.clone(),
 					));
@@ -307,7 +310,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 				rest_restriction
 					.as_restriction_mut()
 					.property_mut()
-					.insert(Meta(
+					.insert_base(Meta(
 						Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Rest))),
 						loc.clone(),
 					));
@@ -334,7 +337,8 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 				);
 
 				let ty = context.get_mut(id).unwrap().as_type_mut();
-				ty.intersection_of_mut().insert(Meta(types_id, loc.clone()));
+				ty.intersection_of_mut()
+					.insert_base(Meta(types_id, loc.clone()));
 
 				Ok(Meta(id, loc))
 			}

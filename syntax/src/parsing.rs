@@ -75,11 +75,11 @@ impl<E: Debug + fmt::Display> fmt::Display for Error<E> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::Unexpected(None, _) => write!(f, "unexpected end of text"),
-			Self::Unexpected(Some(token), _) => write!(f, "unexpected {}", token),
-			Self::InvalidUseId(id) => write!(f, "invalid use IRI `{}`", id),
-			Self::InvalidPrefix(id) => write!(f, "invalid prefix `{}`", id),
-			Self::InvalidAlias(id) => write!(f, "invalid alias `{}`", id),
-			Self::Lexer(e) => write!(f, "tokens error: {}", e),
+			Self::Unexpected(Some(token), _) => write!(f, "unexpected {token}"),
+			Self::InvalidUseId(id) => write!(f, "invalid use IRI `{id}`"),
+			Self::InvalidPrefix(id) => write!(f, "invalid prefix `{id}`"),
+			Self::InvalidAlias(id) => write!(f, "invalid alias `{id}`"),
+			Self::Lexer(e) => write!(f, "tokens error: {e}"),
 		}
 	}
 }
