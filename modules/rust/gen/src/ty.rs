@@ -119,14 +119,15 @@ impl Description {
 			.get(layout_ref)
 			.expect("undefined described layout");
 
-		match layout.as_layout().description().value() {
+		match layout.as_layout().description() {
 			treeldr::layout::Description::Never => Self::Never,
 			treeldr::layout::Description::Alias(alias_ref) => {
 				let name = layout.as_component().name().expect("unnamed alias");
 				let ident = generate::type_ident_of_name(name);
-				Self::Alias(ident, *alias_ref)
+				Self::Alias(ident, *alias_ref.value())
 			}
-			treeldr::layout::Description::Primitive(p) => {
+			treeldr::layout::Description::Primitive(p) => Self::Primitive(*p),
+			treeldr::layout::Description::Derived(p) => {
 				if p.is_restricted() {
 					todo!("restricted primitives")
 				} else {
@@ -143,14 +144,10 @@ impl Description {
 					let field_name = field.as_component().name().expect("unnamed field");
 					let ident = generate::field_ident_of_name(field_name);
 					fields.push(structure::Field::new(
-						field_name.value().clone(),
+						field_name.clone(),
 						ident,
-						**field
-							.as_formatted()
-							.format()
-							.as_ref()
-							.expect("missing field layout"),
-						field.as_layout_field().property().map(|m| **m),
+						field.as_formatted().format().expect("missing field layout"),
+						field.as_layout_field().property().copied(),
 						field.preferred_label().map(String::from),
 						field.comment().clone_stripped(),
 					))
@@ -168,7 +165,7 @@ impl Description {
 					let ident = generate::variant_ident_of_name(variant_name);
 					variants.push(enumeration::Variant::new(
 						ident,
-						variant.as_formatted().format().as_ref().map(|m| **m),
+						variant.as_formatted().format().as_ref().copied(),
 					))
 				}
 

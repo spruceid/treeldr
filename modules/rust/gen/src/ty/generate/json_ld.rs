@@ -25,7 +25,7 @@ pub fn structure_builder<V, M>(
 		let layout_ref = field.layout();
 		let layout = context.model().get(layout_ref).unwrap();
 
-		insert_field.push(match layout.as_layout().description().value() {
+		insert_field.push(match layout.as_layout().description() {
 			treeldr::layout::Description::Required(_) => {
 				quote! {
 					result.insert(

@@ -173,7 +173,7 @@ pub fn structure_reader<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M
 					== treeldr::Id::Iri(IriIndex::Iri(treeldr::vocab::Term::TreeLdr(
 						treeldr::vocab::TreeLdr::Self_,
 					))) {
-					match layout.as_layout().description().value() {
+					match layout.as_layout().description() {
 						treeldr::layout::Description::Required(_) => {
 							quote! {
 								::treeldr_rust_prelude::Id::from_ref(id)
@@ -196,7 +196,7 @@ pub fn structure_reader<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M
 					let id = quote! { ::treeldr_rust_prelude::Id::from_ref(id) }; // FIXME: same limitation
 					let objects = quote! { graph.objects(&#id, &#prop_id) };
 
-					match layout.as_layout().description().value() {
+					match layout.as_layout().description() {
 						treeldr::layout::Description::Required(_) => {
 							let object = quote! { object };
 							let from_object =
