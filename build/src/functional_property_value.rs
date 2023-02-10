@@ -1,12 +1,11 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::BTreeMap};
 
 use locspan::{ErrAt, Meta, StrippedEq, StrippedPartialEq};
 use treeldr::{metadata::Merge, Id};
 
 use crate::{
-	PropertyValues, PropertyValue, PropertyValueRef,
 	error::{self, NodeBindingFunctionalConflict},
-	Context, Error, ListRef, Property,
+	Context, Error, ListRef, Property, PropertyValue, PropertyValueRef, PropertyValues, Single,
 };
 
 #[derive(Debug, Clone)]
@@ -15,9 +14,13 @@ pub struct Conflict<T, M>(pub PropertyValue<T, M>, pub PropertyValue<T, M>);
 impl<T, M> Conflict<T, M> {
 	pub fn at_functional_node_property(self, id: Id, property: impl Into<Property>) -> Error<M>
 	where
-		(T, PropertyValue<T, M>): Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
+		(T, PropertyValue<T, M>):
+			Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
 	{
-		let PropertyValue { value: Meta(a, meta), sub_property } = self.0;
+		let PropertyValue {
+			value: Meta(a, meta),
+			sub_property,
+		} = self.0;
 
 		Meta(
 			NodeBindingFunctionalConflict {
@@ -52,6 +55,10 @@ impl<T, M> Default for FunctionalPropertyValue<T, M> {
 }
 
 impl<T, M> FunctionalPropertyValue<T, M> {
+	pub fn from_base(base: BTreeMap<T, M>) -> Self {
+		Self(PropertyValues::from_base(base))
+	}
+
 	pub fn first(&self) -> Option<PropertyValueRef<T, M>> {
 		self.iter().next()
 	}
@@ -71,6 +78,20 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 	pub fn iter(&self) -> Iter<T, M> {
 		self.0.iter()
 	}
+
+	pub fn clone_into_single(&self) -> Single<T, M>
+	where
+		T: Ord + Clone,
+		M: Clone + Merge,
+	{
+		Single::from_iter(self.iter().map(|p| p.value.cloned()))
+	}
+}
+
+impl<T, M> From<PropertyValues<T, M>> for FunctionalPropertyValue<T, M> {
+	fn from(value: PropertyValues<T, M>) -> Self {
+		Self(value)
+	}
 }
 
 impl<T: Ord, M> FunctionalPropertyValue<T, M> {
@@ -80,9 +101,13 @@ impl<T: Ord, M> FunctionalPropertyValue<T, M> {
 	{
 		self.0.insert_base(value)
 	}
-	
-	pub fn insert(&mut self, id: Option<Id>, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, value: Meta<T, M>)
-	where
+
+	pub fn insert(
+		&mut self,
+		id: Option<Id>,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		value: Meta<T, M>,
+	) where
 		M: Merge,
 	{
 		self.0.insert(id, prop_cmp, value)
@@ -92,31 +117,66 @@ impl<T: Ord, M> FunctionalPropertyValue<T, M> {
 		self.0.replace_with_base(value)
 	}
 
-	pub fn extended_with<I: IntoIterator<Item = Meta<T, M>>>(mut self, iter: I) -> Self
+	pub fn extended_with_base<I: IntoIterator<Item = Meta<T, M>>>(mut self, iter: I) -> Self
 	where
 		M: Merge,
 	{
 		self.extend(iter);
 		self
 	}
+
+	pub fn extend_with<I: IntoIterator<Item = PropertyValue<T, M>>>(
+		&mut self,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		iter: I,
+	) where
+		M: Merge,
+	{
+		for PropertyValue {
+			sub_property,
+			value,
+		} in iter
+		{
+			self.insert(sub_property, &prop_cmp, value)
+		}
+	}
 }
 
 impl<T, M> FunctionalPropertyValue<T, M> {
-	pub fn map<U>(self, f: impl FnMut(T) -> U) -> FunctionalPropertyValue<U, M> where U: Ord {
+	pub fn map<U>(self, f: impl FnMut(T) -> U) -> FunctionalPropertyValue<U, M>
+	where
+		U: Ord,
+	{
 		FunctionalPropertyValue(self.0.map(f))
 	}
 
-	pub fn try_unwrap(self) -> Result<treeldr::FunctionalPropertyValue<T, M>, Conflict<T, M>> where T: PartialEq {
+	pub fn map_properties<U>(
+		self,
+		g: impl FnMut(Id) -> Id,
+		f: impl FnMut(T) -> U,
+	) -> FunctionalPropertyValue<U, M>
+	where
+		U: Ord,
+	{
+		FunctionalPropertyValue(self.0.map_properties(g, f))
+	}
+
+	pub fn try_unwrap(self) -> Result<treeldr::FunctionalPropertyValue<T, M>, Conflict<T, M>>
+	where
+		T: PartialEq,
+	{
 		let mut value: Option<T> = None;
 
 		let result = self.0.try_map(|id, a| {
 			value = match value.take() {
-				Some(b) => if a == b {
-					Some(a)
-				} else {
-					return Err((id, a))
-				},
-				None => Some(a)
+				Some(b) => {
+					if a == b {
+						Some(a)
+					} else {
+						return Err((id, a));
+					}
+				}
+				None => Some(a),
 			};
 
 			Ok(())
@@ -124,12 +184,14 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 
 		match result {
 			Ok(metadata) => {
-				Ok(treeldr::FunctionalPropertyValue::new(value.map(|v| treeldr::RequiredFunctionalPropertyValue::new(metadata, v))))
+				Ok(treeldr::FunctionalPropertyValue::new(value.map(|v| {
+					treeldr::RequiredFunctionalPropertyValue::new(metadata, v)
+				})))
 			}
 			Err((Meta((sub_property, a), meta), metadata)) => {
 				let a = PropertyValue::new(sub_property, Meta(a, meta));
 				let b = metadata.into_iter().next().unwrap().map(|_| value.unwrap());
-				return Err(Conflict(a, b))
+				Err(Conflict(a, b))
 			}
 		}
 	}
@@ -143,12 +205,14 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 
 		let result = self.0.try_mapped(|id, Meta(a, m)| {
 			value = match value.take() {
-				Some(b) => if a == b {
-					Some(a)
-				} else {
-					return Err((id, a))
-				},
-				None => Some(a)
+				Some(b) => {
+					if a == b {
+						Some(a)
+					} else {
+						return Err((id, a));
+					}
+				}
+				None => Some(a),
 			};
 
 			Ok(Meta((), m))
@@ -156,12 +220,19 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 
 		match result {
 			Ok(metadata) => {
-				Ok(treeldr::FunctionalPropertyValue::new(value.map(|v| treeldr::RequiredFunctionalPropertyValue::new(metadata, v))))
+				Ok(treeldr::FunctionalPropertyValue::new(value.map(|v| {
+					treeldr::RequiredFunctionalPropertyValue::new(metadata, v)
+				})))
 			}
 			Err((Meta((sub_property, a), meta), metadata)) => {
 				let a = PropertyValue::new(sub_property, Meta(a.clone(), meta.clone()));
-				let b = metadata.into_iter().next().unwrap().map(|_| value.unwrap().clone()).into_cloned_metadata();
-				return Err(Conflict(a, b))
+				let b = metadata
+					.into_iter()
+					.next()
+					.unwrap()
+					.map(|_| value.unwrap().clone())
+					.into_cloned_metadata();
+				Err(Conflict(a, b))
 			}
 		}
 	}
@@ -173,7 +244,8 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 		meta: &M,
 	) -> Result<treeldr::RequiredFunctionalPropertyValue<&T, &M>, Error<M>>
 	where
-		(T, PropertyValue<T, M>): Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
+		(T, PropertyValue<T, M>):
+			Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
 		T: PartialEq + Clone,
 		M: Clone,
 	{
@@ -191,9 +263,10 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 		meta: &M,
 	) -> Result<treeldr::RequiredFunctionalPropertyValue<T, M>, Error<M>>
 	where
-		(T, PropertyValue<T, M>): Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
+		(T, PropertyValue<T, M>):
+			Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
 		T: PartialEq,
-		M: Clone
+		M: Clone,
 	{
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
@@ -213,9 +286,9 @@ impl<M: Clone> FunctionalPropertyValue<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				context
-					.require_type_id(p)
-					.map_err(|e| e.at_node_property(id, prop, meta.first().unwrap().value.1.clone()))
+				context.require_type_id(p).map_err(|e| {
+					e.at_node_property(id, prop, meta.first().unwrap().value.1.clone())
+				})
 			})
 	}
 
@@ -224,13 +297,14 @@ impl<M: Clone> FunctionalPropertyValue<Id, M> {
 		context: &Context<M>,
 		id: Id,
 		prop: impl Copy + Into<Property>,
-	) -> Result<treeldr::FunctionalPropertyValue<treeldr::TId<treeldr::ty::DataType<M>>, M>, Error<M>> {
+	) -> Result<treeldr::FunctionalPropertyValue<treeldr::TId<treeldr::ty::DataType<M>>, M>, Error<M>>
+	{
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				context
-					.require_datatype_id(p)
-					.map_err(|e| e.at_node_property(id, prop, meta.first().unwrap().value.1.clone()))
+				context.require_datatype_id(p).map_err(|e| {
+					e.at_node_property(id, prop, meta.first().unwrap().value.1.clone())
+				})
 			})
 	}
 
@@ -240,7 +314,8 @@ impl<M: Clone> FunctionalPropertyValue<Id, M> {
 		id: Id,
 		prop: impl Copy + Into<Property>,
 		meta: &M,
-	) -> Result<treeldr::RequiredFunctionalPropertyValue<treeldr::TId<treeldr::Type>, M>, Error<M>> {
+	) -> Result<treeldr::RequiredFunctionalPropertyValue<treeldr::TId<treeldr::Type>, M>, Error<M>>
+	{
 		self.into_type_at_node_binding(context, id, prop)?
 			.into_required()
 			.ok_or_else(|| error::NodeBindingMissing::new(id, prop).into())
@@ -253,7 +328,10 @@ impl<M: Clone> FunctionalPropertyValue<Id, M> {
 		id: Id,
 		prop: impl Copy + Into<Property>,
 		meta: &M,
-	) -> Result<treeldr::RequiredFunctionalPropertyValue<treeldr::TId<treeldr::ty::DataType<M>>, M>, Error<M>> {
+	) -> Result<
+		treeldr::RequiredFunctionalPropertyValue<treeldr::TId<treeldr::ty::DataType<M>>, M>,
+		Error<M>,
+	> {
 		self.into_datatype_at_node_binding(context, id, prop)?
 			.into_required()
 			.ok_or_else(|| error::NodeBindingMissing::new(id, prop).into())
@@ -269,9 +347,9 @@ impl<M: Clone> FunctionalPropertyValue<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				context
-					.require_property_id(p)
-					.map_err(|e| e.at_node_property(id, prop, meta.first().unwrap().value.1.clone()))
+				context.require_property_id(p).map_err(|e| {
+					e.at_node_property(id, prop, meta.first().unwrap().value.1.clone())
+				})
 			})
 	}
 
@@ -281,7 +359,10 @@ impl<M: Clone> FunctionalPropertyValue<Id, M> {
 		id: Id,
 		prop: impl Copy + Into<Property>,
 		meta: &M,
-	) -> Result<treeldr::RequiredFunctionalPropertyValue<treeldr::TId<treeldr::Property>, M>, Error<M>> {
+	) -> Result<
+		treeldr::RequiredFunctionalPropertyValue<treeldr::TId<treeldr::Property>, M>,
+		Error<M>,
+	> {
 		self.into_property_at_node_binding(context, id, prop)?
 			.into_required()
 			.ok_or_else(|| error::NodeBindingMissing::new(id, prop).into())
@@ -297,9 +378,9 @@ impl<M: Clone> FunctionalPropertyValue<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				context
-					.require_layout_id(p)
-					.map_err(|e| e.at_node_property(id, prop, meta.first().unwrap().value.1.clone()))
+				context.require_layout_id(p).map_err(|e| {
+					e.at_node_property(id, prop, meta.first().unwrap().value.1.clone())
+				})
 			})
 	}
 
@@ -309,7 +390,8 @@ impl<M: Clone> FunctionalPropertyValue<Id, M> {
 		id: Id,
 		prop: impl Copy + Into<Property>,
 		meta: &M,
-	) -> Result<treeldr::RequiredFunctionalPropertyValue<treeldr::TId<treeldr::Layout>, M>, Error<M>> {
+	) -> Result<treeldr::RequiredFunctionalPropertyValue<treeldr::TId<treeldr::Layout>, M>, Error<M>>
+	{
 		self.into_layout_at_node_binding(context, id, prop)?
 			.into_required()
 			.ok_or_else(|| error::NodeBindingMissing::new(id, prop).into())
@@ -325,9 +407,9 @@ impl<M: Clone> FunctionalPropertyValue<Id, M> {
 		self.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, prop))?
 			.try_map_borrow_metadata(|p, meta| {
-				context
-					.require_list(p)
-					.map_err(|e| e.at_node_property(id, prop, meta.first().unwrap().value.1.clone()))
+				context.require_list(p).map_err(|e| {
+					e.at_node_property(id, prop, meta.first().unwrap().value.1.clone())
+				})
 			})
 	}
 
@@ -351,7 +433,9 @@ impl<T: Ord, M, N> PartialEq<FunctionalPropertyValue<T, N>> for FunctionalProper
 	}
 }
 
-impl<T: Ord, M, N> StrippedPartialEq<FunctionalPropertyValue<T, N>> for FunctionalPropertyValue<T, M> {
+impl<T: Ord, M, N> StrippedPartialEq<FunctionalPropertyValue<T, N>>
+	for FunctionalPropertyValue<T, M>
+{
 	fn stripped_eq(&self, other: &FunctionalPropertyValue<T, N>) -> bool {
 		self.0.iter().any(|s| other.0.contains(s.value.value()))
 	}

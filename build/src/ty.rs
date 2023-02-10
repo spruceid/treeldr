@@ -1,16 +1,15 @@
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
-	rdf,
+	functional_property_value, property_values, rdf,
 	resource::{self, BindingValueRef},
-	Context, Error, ObjectAsRequiredId,
-	FunctionalPropertyValue,
+	Context, Error, FunctionalPropertyValue, ObjectAsRequiredId, PropertyValue, PropertyValueRef,
 	PropertyValues,
-	functional_property_value,
-	PropertyValue, PropertyValueRef,
-	property_values
 };
 use locspan::Meta;
-use std::{collections::{HashMap, HashSet}, cmp::Ordering};
+use std::{
+	cmp::Ordering,
+	collections::{HashMap, HashSet},
+};
 use treeldr::{metadata::Merge, utils::SccGraph, vocab::Object, Id, Multiple};
 
 pub mod datatype;
@@ -126,7 +125,11 @@ impl<M> Definition<M> {
 		if self.data.sub_class_of.contains(&other) {
 			true
 		} else {
-			for PropertyValueRef { value: Meta(super_class, _), .. } in &self.data.sub_class_of {
+			for PropertyValueRef {
+				value: Meta(super_class, _),
+				..
+			} in &self.data.sub_class_of
+			{
 				if context.is_subclass_of_with(visited, other, *super_class) {
 					return true;
 				}
@@ -175,7 +178,11 @@ impl<M> Definition<M> {
 	where
 		M: Clone,
 	{
-		for PropertyValue { value: Meta(ty, meta), .. } in self.super_classes(context, as_resource) {
+		for PropertyValue {
+			value: Meta(ty, meta),
+			..
+		} in self.super_classes(context, as_resource)
+		{
 			let id = ty.raw_id();
 			if id == component[0] {
 				return Some((Vec::new(), meta.clone()));
@@ -231,19 +238,24 @@ impl<M> Definition<M> {
 		&mut self,
 		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
 		prop: Property,
-		value: Meta<Object<M>, M>
+		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::SubClassOf => self
-				.sub_class_of_mut()
-				.insert(None, prop_cmp, rdf::from::expect_type(value)?),
-			Property::UnionOf => self.union_of_mut().insert(None, prop_cmp, rdf::from::expect_id(value)?),
-			Property::IntersectionOf => self
-				.intersection_of_mut()
-				.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			Property::SubClassOf => {
+				self.sub_class_of_mut()
+					.insert(None, prop_cmp, rdf::from::expect_type(value)?)
+			}
+			Property::UnionOf => {
+				self.union_of_mut()
+					.insert(None, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			Property::IntersectionOf => {
+				self.intersection_of_mut()
+					.insert(None, prop_cmp, rdf::from::expect_id(value)?)
+			}
 			Property::Datatype(prop) => self.as_datatype_mut().set(prop_cmp, prop, value)?,
 			Property::Restriction(prop) => self.as_restriction_mut().set(prop_cmp, prop, value)?,
 		}
@@ -268,8 +280,17 @@ impl<'a, M> Iterator for SuperClasses<'a, M> {
 			.or_else(|| {
 				self.literal
 					.take()
-					.map(|meta| PropertyValue::new(None, Meta(crate::Type::Resource(Some(resource::Type::Literal)), meta)))
-					.or_else(|| self.sub_class_of.next().map(PropertyValueRef::into_cloned_value))
+					.map(|meta| {
+						PropertyValue::new(
+							None,
+							Meta(crate::Type::Resource(Some(resource::Type::Literal)), meta),
+						)
+					})
+					.or_else(|| {
+						self.sub_class_of
+							.next()
+							.map(PropertyValueRef::into_cloned_value)
+					})
 			})
 	}
 }
@@ -335,18 +356,25 @@ impl<M> Definition<M> {
 			.clone()
 			.into_list_at_node_binding(context, as_resource.id, Property::IntersectionOf)?;
 
-		let sub_class_of = self.data.sub_class_of.try_mapped(|_, Meta(ty, m)| {
-			context
-				.require_type_id(ty.raw_id()).map(|ty| Meta(ty, m.clone()))
-		}).map_err(|(Meta(e, m), _)| e.at_node_property(as_resource.id, Property::SubClassOf, m.clone()))?;
+		let sub_class_of = self
+			.data
+			.sub_class_of
+			.try_mapped(|_, Meta(ty, m)| {
+				context
+					.require_type_id(ty.raw_id())
+					.map(|ty| Meta(ty, m.clone()))
+			})
+			.map_err(|(Meta(e, m), _)| {
+				e.at_node_property(as_resource.id, Property::SubClassOf, m.clone())
+			})?;
 
 		let desc = if let Some(m) = as_resource.type_metadata(context, SubClass::DataType) {
-			treeldr::ty::Description::Data(self.datatype.build(context, as_resource, &meta)?)
+			treeldr::ty::Description::Data(self.datatype.build(context, as_resource, m)?)
 		} else if let Some(m) = as_resource.type_metadata(context, SubClass::Restriction) {
 			treeldr::ty::Description::Restriction(self.restriction.build(
 				context,
 				as_resource,
-				&meta,
+				m,
 			)?)
 		} else if let Some(union_of) = union_of.as_required() {
 			let mut options = Multiple::default();
@@ -361,7 +389,12 @@ impl<M> Definition<M> {
 				options.insert(Meta(option_ty, option_causes))
 			}
 
-			treeldr::ty::Description::Union(treeldr::ty::Union::new(treeldr::RequiredFunctionalPropertyValue::new(union_of.sub_properties().clone(), options)))
+			treeldr::ty::Description::Union(treeldr::ty::Union::new(
+				treeldr::RequiredFunctionalPropertyValue::new(
+					union_of.sub_properties().clone(),
+					options,
+				),
+			))
 		} else if let Some(intersection_of) = intersection_of.as_required() {
 			let mut factors = Multiple::default();
 
@@ -374,10 +407,14 @@ impl<M> Definition<M> {
 				factors.insert(Meta(factor_ty, factor_causes))
 			}
 
-			let desc = match treeldr::ty::Intersection::new(treeldr::RequiredFunctionalPropertyValue::new(intersection_of.sub_properties().clone(), factors)) {
-				Ok(intersection) => treeldr::ty::Description::Intersection(intersection),
-				Err(_) => treeldr::ty::Description::Empty,
-			};
+			let desc =
+				match treeldr::ty::Intersection::new(treeldr::RequiredFunctionalPropertyValue::new(
+					intersection_of.sub_properties().clone(),
+					factors,
+				)) {
+					Ok(intersection) => treeldr::ty::Description::Intersection(intersection),
+					Err(_) => treeldr::ty::Description::Empty,
+				};
 
 			desc
 		} else {
@@ -557,7 +594,11 @@ impl<M> ClassHierarchy<M> {
 
 			// Detect cycles of size 1.
 			if super_classes.contains(&id) {
-				for PropertyValue { value: Meta(i, meta), .. } in node.as_type().super_classes(context, node.as_resource()) {
+				for PropertyValue {
+					value: Meta(i, meta),
+					..
+				} in node.as_type().super_classes(context, node.as_resource())
+				{
 					if i.into_raw_id() == id {
 						return Err(Meta(
 							SubClassCycle(node.id(), Vec::new(), meta.clone()),
@@ -600,13 +641,17 @@ impl<M> ClassHierarchy<M> {
 				let meta = node
 					.as_type()
 					.super_classes(context, node.as_resource())
-					.find_map(|PropertyValue { value: Meta(ty, m), .. }| {
-						if ty.raw_id() == super_id {
-							Some(m)
-						} else {
-							None
-						}
-					})
+					.find_map(
+						|PropertyValue {
+						     value: Meta(ty, m), ..
+						 }| {
+							if ty.raw_id() == super_id {
+								Some(m)
+							} else {
+								None
+							}
+						},
+					)
 					.unwrap();
 
 				super_classes.insert_unique(Meta(crate::Type::from(super_id), meta.clone()));
@@ -653,10 +698,14 @@ impl<M> ClassHierarchy<M> {
 			if node.has_type(context, resource::Type::Class(None)) {
 				let node = context.get_mut(id).unwrap();
 
-				node.as_type_mut().sub_class_of_mut().retain(|ty| super_classes.contains(ty));
+				node.as_type_mut()
+					.sub_class_of_mut()
+					.retain(|ty| super_classes.contains(ty));
 				for Meta(ty, m) in super_classes {
 					if !node.as_type_mut().sub_class_of_mut().contains(&ty) {
-						node.as_type_mut().sub_class_of_mut().insert_base_unique(Meta(ty, m));
+						node.as_type_mut()
+							.sub_class_of_mut()
+							.insert_base_unique(Meta(ty, m));
 					}
 				}
 			}

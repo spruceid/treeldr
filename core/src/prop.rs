@@ -1,12 +1,11 @@
 use crate::{
-	component, layout, list, multiple,
+	component, layout, list,
 	node::{self, BindingValueRef},
 	ty,
 	vocab::{self, Owl, Rdf, Rdfs, Schema, Term, TreeLdr, Xsd},
-	BlankIdIndex, Id, IriIndex, Multiple, Ref, ResourceType, TId,
+	BlankIdIndex, Id, IriIndex, Ref, ResourceType, TId, PropertyValues, property_values, FunctionalPropertyValue,
 };
 use contextual::DisplayWithContext;
-use derivative::Derivative;
 use locspan::Meta;
 use rdf_types::Vocabulary;
 use std::fmt;
@@ -397,17 +396,17 @@ impl Type {
 /// Property definition.
 #[derive(Debug)]
 pub struct Definition<M> {
-	domain: Multiple<TId<crate::Type>, M>,
-	range: Multiple<TId<crate::Type>, M>,
-	required: Meta<bool, M>,
+	domain: PropertyValues<TId<crate::Type>, M>,
+	range: PropertyValues<TId<crate::Type>, M>,
+	required: FunctionalPropertyValue<bool, M>,
 	functional: Meta<bool, M>,
 }
 
 impl<M> Definition<M> {
 	pub fn new(
-		domain: Multiple<TId<crate::Type>, M>,
-		range: Multiple<TId<crate::Type>, M>,
-		required: Meta<bool, M>,
+		domain: PropertyValues<TId<crate::Type>, M>,
+		range: PropertyValues<TId<crate::Type>, M>,
+		required: FunctionalPropertyValue<bool, M>,
 		functional: Meta<bool, M>,
 	) -> Self {
 		Self {
@@ -418,16 +417,16 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn range(&self) -> &Multiple<TId<crate::Type>, M> {
+	pub fn range(&self) -> &PropertyValues<TId<crate::Type>, M> {
 		&self.range
 	}
 
-	pub fn domain(&self) -> &Multiple<TId<crate::Type>, M> {
+	pub fn domain(&self) -> &PropertyValues<TId<crate::Type>, M> {
 		&self.domain
 	}
 
 	pub fn is_required(&self) -> bool {
-		*self.required
+		self.required.is_some_and(|v| *v)
 	}
 
 	/// Checks if this property is functional,
@@ -440,11 +439,7 @@ impl<M> Definition<M> {
 		ClassBindings {
 			domain: self.domain.iter(),
 			range: self.range.iter(),
-			required: if self.is_required() {
-				Some(&self.required)
-			} else {
-				None
-			},
+			required: self.required.iter(),
 		}
 	}
 }
@@ -464,9 +459,9 @@ impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V
 }
 
 pub enum ClassBinding {
-	Domain(TId<crate::Type>),
-	Range(TId<crate::Type>),
-	Required(bool),
+	Domain(Option<Id>, TId<crate::Type>),
+	Range(Option<Id>, TId<crate::Type>),
+	Required(Option<Id>, bool),
 }
 
 pub type Binding = ClassBinding;
@@ -478,27 +473,25 @@ impl ClassBinding {
 
 	pub fn property(&self) -> RdfProperty {
 		match self {
-			Self::Domain(_) => RdfProperty::Domain,
-			Self::Range(_) => RdfProperty::Range,
-			Self::Required(_) => RdfProperty::Required,
+			Self::Domain(_, _) => RdfProperty::Domain,
+			Self::Range(_, _) => RdfProperty::Range,
+			Self::Required(_, _) => RdfProperty::Required,
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Domain(v) => BindingValueRef::Types(node::MultipleIdValueRef::Single(*v)),
-			Self::Range(v) => BindingValueRef::Types(node::MultipleIdValueRef::Single(*v)),
-			Self::Required(v) => BindingValueRef::SchemaBoolean(*v),
+			Self::Domain(_, v) => BindingValueRef::Types(node::MultipleIdValueRef::Single(*v)),
+			Self::Range(_, v) => BindingValueRef::Types(node::MultipleIdValueRef::Single(*v)),
+			Self::Required(_, v) => BindingValueRef::SchemaBoolean(*v),
 		}
 	}
 }
 
-#[derive(Derivative)]
-#[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
-	domain: multiple::Iter<'a, TId<crate::Type>, M>,
-	range: multiple::Iter<'a, TId<crate::Type>, M>,
-	required: Option<&'a Meta<bool, M>>,
+	domain: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
+	range: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
+	required: property_values::functional::Iter<'a, bool, M>
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -509,15 +502,15 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.domain
 			.next()
-			.map(|m| m.into_cloned_value().map(ClassBinding::Domain))
+			.map(|m| m.into_cloned_class_binding(ClassBinding::Domain))
 			.or_else(|| {
 				self.range
 					.next()
-					.map(|m| m.into_cloned_value().map(ClassBinding::Range))
+					.map(|m| m.into_cloned_class_binding(ClassBinding::Range))
 					.or_else(|| {
 						self.required
-							.take()
-							.map(|m| m.borrow().into_cloned_value().map(ClassBinding::Required))
+							.next()
+							.map(|m| m.into_cloned_class_binding(ClassBinding::Required))
 					})
 			})
 	}

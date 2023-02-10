@@ -1,6 +1,6 @@
 use treeldr::{Id, IriIndex, BlankIdIndex};
 use rdf_types::Vocabulary;
-use locspan::{Span, MaybeLocated, Meta};
+use locspan::{Span, MaybeLocated};
 use contextual::WithContext;
 
 #[derive(Debug)]

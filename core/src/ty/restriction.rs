@@ -1,5 +1,5 @@
 use crate::{
-	metadata::Merge, multiple, node::BindingValueRef, vocab, MetaOption, Multiple, TId, Type,
+	metadata::Merge, multiple, node::BindingValueRef, vocab, MetaOption, Multiple, TId, Type, RequiredFunctionalPropertyValue, property_values, Id,
 };
 use derivative::Derivative;
 use locspan::Meta;
@@ -123,26 +123,26 @@ impl<'a> CardinalityRef<'a> {
 /// given restriction.
 #[derive(Debug)]
 pub struct Definition<M> {
-	property: Meta<TId<crate::Property>, M>,
+	property: RequiredFunctionalPropertyValue<TId<crate::Property>, M>,
 	restriction: Meta<Restriction, M>,
 }
 
 impl<M> Definition<M> {
 	pub fn new(
-		Meta(prop, causes): Meta<TId<crate::Property>, M>,
+		property: RequiredFunctionalPropertyValue<TId<crate::Property>, M>,
 		restriction: Meta<Restriction, M>,
 	) -> Self
 	where
 		M: Clone + Merge,
 	{
 		Self {
-			property: Meta(prop, causes),
+			property,
 			restriction,
 		}
 	}
 
-	pub fn property(&self) -> &Meta<TId<crate::Property>, M> {
-		&self.property
+	pub fn property(&self) -> TId<crate::Property> {
+		*self.property.value()
 	}
 
 	pub fn restriction(&self) -> &Meta<Restriction, M> {
@@ -151,7 +151,7 @@ impl<M> Definition<M> {
 
 	pub fn bindings(&self) -> Bindings<M> {
 		ClassBindings {
-			on_property: Some(&self.property),
+			on_property: Some(self.property.iter()),
 			restriction: Some(&self.restriction),
 		}
 	}
@@ -622,7 +622,7 @@ impl ClassBinding {
 }
 
 pub enum ClassBindingRef<'a> {
-	OnProperty(TId<crate::Property>),
+	OnProperty(Option<Id>, TId<crate::Property>),
 	SomeValuesFrom(TId<Type>),
 	AllValuesFrom(TId<Type>),
 	MinCardinality(&'a NonNegativeInteger),
@@ -633,7 +633,7 @@ pub enum ClassBindingRef<'a> {
 impl<'a> ClassBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::OnProperty(_) => Property::OnProperty,
+			Self::OnProperty(_, _) => Property::OnProperty,
 			Self::SomeValuesFrom(_) => Property::SomeValuesFrom,
 			Self::AllValuesFrom(_) => Property::AllValuesFrom,
 			Self::MinCardinality(_) => Property::MinCardinality,
@@ -644,7 +644,7 @@ impl<'a> ClassBindingRef<'a> {
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::OnProperty(v) => BindingValueRef::Property(*v),
+			Self::OnProperty(_, v) => BindingValueRef::Property(*v),
 			Self::SomeValuesFrom(v) => {
 				BindingValueRef::Types(crate::node::MultipleIdValueRef::Single(*v))
 			}
@@ -665,7 +665,7 @@ pub type BindingRef<'a> = ClassBindingRef<'a>;
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
-	on_property: Option<&'a Meta<TId<crate::Property>, M>>,
+	on_property: Option<property_values::required_functional::Iter<'a, TId<crate::Property>, M>>,
 	restriction: Option<&'a Meta<Restriction, M>>,
 }
 
@@ -676,11 +676,12 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.on_property
-			.take()
-			.map(|m| {
-				m.borrow()
-					.into_cloned_value()
-					.map(ClassBindingRef::OnProperty)
+			.as_mut()
+			.and_then(|i| {
+				i.next()
+				.map(|m| {
+					m.into_cloned_class_binding(ClassBindingRef::OnProperty)
+				})
 			})
 			.or_else(|| {
 				self.restriction

@@ -45,19 +45,19 @@ impl Definition {
 		}
 
 		if let Some(layout_id) = as_formatted.format.first() {
-			if let Some(layout) = context.get(**layout_id) {
+			if let Some(layout) = context.get(**layout_id.value) {
 				if let Some(name) = layout.as_component().name().first() {
 					return Some(Meta::new(
-						name.into_value().clone(),
+						name.value.into_value().clone(),
 						as_resource.metadata.clone(),
 					));
 				}
 
-				if let Some(Meta(super::Description::Reference(_), _)) =
-					layout.as_layout().description().first()
+				if let Some(Meta(super::DescriptionBinding::Reference(_, _), _)) =
+					layout.as_layout().description().iter().next()
 				{
 					if let Some(ty_id) = layout.as_layout().ty().first() {
-						if let Ok(Some(mut name)) = Name::from_id(vocabulary, **ty_id) {
+						if let Ok(Some(mut name)) = Name::from_id(vocabulary, **ty_id.value) {
 							name.push("ref");
 							return Some(Meta(name, as_resource.metadata.clone()));
 						}
@@ -78,17 +78,18 @@ impl Definition {
 		other_as_component: &crate::component::Data<M>,
 		other_as_formatted: &crate::component::formatted::Data<M>,
 	) -> bool {
-		let common_name = as_component
-			.name
-			.iter()
-			.any(|Meta(a, _)| other_as_component.name.iter().any(|Meta(b, _)| a == b));
+		let common_name = as_component.name.iter().any(|a| {
+			other_as_component
+				.name
+				.iter()
+				.any(|b| a.value.value() == b.value.value())
+		});
 		let no_name = as_component.name.is_empty() && other_as_component.name.is_empty();
 
-		let included_layout = as_formatted.format.iter().all(|Meta(a, _)| {
-			other_as_formatted
-				.format
-				.iter()
-				.all(|Meta(b, _)| crate::layout::is_included_in(context, *a, *b))
+		let included_layout = as_formatted.format.iter().all(|a| {
+			other_as_formatted.format.iter().all(|b| {
+				crate::layout::is_included_in(context, **a.value.value(), **b.value.value())
+			})
 		});
 
 		(common_name || no_name) && included_layout

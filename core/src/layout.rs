@@ -413,13 +413,13 @@ impl<M> Definition<M> {
 			Description::Never | Description::Primitive(_) => ComposingLayouts::None,
 			Description::Struct(s) => ComposingLayouts::Fields(model, s.fields().iter()),
 			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts(model)),
-			Description::Reference(r) => ComposingLayouts::One(Some(r.id_layout())),
+			Description::Reference(r) => ComposingLayouts::One(Some(*r.id_layout().value())),
 			Description::Derived(_) => ComposingLayouts::None,
-			Description::Option(o) => ComposingLayouts::One(Some(o.item_layout())),
-			Description::Required(r) => ComposingLayouts::One(Some(r.item_layout())),
-			Description::Array(a) => ComposingLayouts::One(Some(a.item_layout())),
-			Description::Set(s) => ComposingLayouts::One(Some(s.item_layout())),
-			Description::OneOrMany(s) => ComposingLayouts::One(Some(s.item_layout())),
+			Description::Option(o) => ComposingLayouts::One(Some(*o.item_layout().value())),
+			Description::Required(r) => ComposingLayouts::One(Some(*r.item_layout().value())),
+			Description::Array(a) => ComposingLayouts::One(Some(*a.item_layout().value())),
+			Description::Set(s) => ComposingLayouts::One(Some(*s.item_layout().value())),
+			Description::OneOrMany(s) => ComposingLayouts::One(Some(*s.item_layout().value())),
 			Description::Alias(_) => ComposingLayouts::None,
 		}
 	}
@@ -477,12 +477,12 @@ pub enum ComposingLayouts<'a, M> {
 		std::slice::Iter<'a, Meta<TId<Field>, M>>,
 	),
 	Enum(enumeration::ComposingLayouts<'a, M>),
-	One(Option<&'a Meta<TId<Layout>, M>>),
+	One(Option<TId<Layout>>),
 	None,
 }
 
 impl<'a, M> Iterator for ComposingLayouts<'a, M> {
-	type Item = &'a Meta<TId<Layout>, M>;
+	type Item = TId<Layout>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {

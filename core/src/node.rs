@@ -188,8 +188,7 @@ impl<M> Definition<M> {
 			property: self
 				.property
 				.as_ref()
-				.map(|p| p.bindings())
-				.unwrap_or_default(),
+				.map(|p| p.bindings()),
 			component: self
 				.component
 				.as_ref()
@@ -518,7 +517,7 @@ impl<'a, M> BindingRef<'a, M> {
 pub struct Bindings<'a, M> {
 	data: ClassBindings<'a, M>,
 	class: crate::ty::Bindings<'a, M>,
-	property: crate::prop::Bindings<'a, M>,
+	property: Option<crate::prop::Bindings<'a, M>>,
 	component: crate::component::Bindings<'a, M>,
 }
 
@@ -535,8 +534,12 @@ impl<'a, M> Iterator for Bindings<'a, M> {
 					.map(|m| m.map(BindingRef::Class))
 					.or_else(|| {
 						self.property
-							.next()
-							.map(|m| m.map(BindingRef::Property))
+							.as_mut()
+							.and_then(|i| {
+								i
+									.next()
+									.map(|m| m.map(BindingRef::Property))
+							})
 							.or_else(|| self.component.next().map(|m| m.map(BindingRef::Component)))
 					})
 			})

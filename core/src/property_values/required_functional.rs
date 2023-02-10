@@ -2,6 +2,8 @@ use std::ops::{Deref, DerefMut};
 
 use locspan::Meta;
 
+use crate::metadata::Merge;
+
 use super::{non_functional, PropertyValue, PropertyValueRef, PropertyValues};
 
 /// Required functional property value.
@@ -18,6 +20,24 @@ impl<T, M> RequiredFunctionalPropertyValue<T, M> {
 			sub_properties,
 			value,
 		}
+	}
+
+	pub fn as_meta_value(&self) -> Meta<&T, &M> {
+		Meta(&self.value, self.sub_property_metadata())
+	}
+
+	pub fn into_meta_value(self) -> Meta<T, M> where M: Merge {
+		let mut meta: Option<M> = None;
+		for m in self.sub_properties {
+			match &mut meta {
+				Some(meta) => {
+					meta.merge_with(m.value.into_metadata())
+				}
+				None => meta = Some(m.value.into_metadata())
+			}
+		}
+
+		Meta(self.value, meta.unwrap())
 	}
 
 	pub fn sub_properties(&self) -> &PropertyValues<(), M> {

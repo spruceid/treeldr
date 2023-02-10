@@ -5,11 +5,9 @@ use treeldr::{metadata::Merge, vocab::Object, Id};
 
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
-	error, layout, rdf,
+	error, functional_property_value, layout, rdf,
 	resource::BindingValueRef,
-	Context, Error,
-	functional_property_value,
-	FunctionalPropertyValue
+	Context, Error, FunctionalPropertyValue,
 };
 
 pub use treeldr::component::formatted::{Property, Type};
@@ -72,13 +70,21 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::Format => self.format_mut().insert(None, prop_cmp, rdf::from::expect_id(value)?),
-			Property::LayoutField(prop) => self.as_layout_field_mut().set(prop, value)?,
+			Property::Format => {
+				self.format_mut()
+					.insert(None, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			Property::LayoutField(prop) => self.as_layout_field_mut().set(prop_cmp, prop, value)?,
 		}
 
 		Ok(())
@@ -176,7 +182,7 @@ impl<M: Clone> AssertFormatted<M> for treeldr::component::formatted::Data<M> {
 		as_resource: &treeldr::node::Data<M>,
 		metadata: &M,
 	) -> Result<(), Error<M>> {
-		self.format.as_ref().ok_or_else(|| {
+		self.format.as_required().ok_or_else(|| {
 			Meta(
 				error::NodeBindingMissing {
 					id: as_resource.id,
@@ -191,13 +197,13 @@ impl<M: Clone> AssertFormatted<M> for treeldr::component::formatted::Data<M> {
 }
 
 pub enum ClassBinding {
-	Format(Id),
+	Format(Option<Id>, Id),
 }
 
 impl ClassBinding {
 	pub fn into_binding(self) -> Binding {
 		match self {
-			Self::Format(id) => Binding::Format(id),
+			Self::Format(_, id) => Binding::Format(id),
 		}
 	}
 }
@@ -233,7 +239,7 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.format
 			.next()
-			.map(|m| m.into_cloned_value().map(ClassBinding::Format))
+			.map(|m| m.into_cloned_class_binding(ClassBinding::Format))
 	}
 }
 

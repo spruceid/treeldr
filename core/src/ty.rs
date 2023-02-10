@@ -260,7 +260,7 @@ impl<M> Description<M> {
 			Self::Restriction(r) => {
 				*result = Properties::all();
 
-				result.restrict(*r.property().value(), r.restriction().clone())?;
+				result.restrict(r.property(), r.restriction().clone())?;
 			}
 			_ => (),
 		}
@@ -688,7 +688,7 @@ impl<M> Dependencies<M> {
 		let mut direct_properties: HashMap<TId<Type>, Properties<M>> = HashMap::new();
 
 		for (prop_id, prop) in model.properties() {
-			for Meta(&domain, meta) in prop.as_property().domain() {
+			for PropertyValueRef { value: Meta(&domain, meta), .. } in prop.as_property().domain() {
 				direct_properties
 					.entry(domain)
 					.or_default()

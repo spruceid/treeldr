@@ -44,8 +44,16 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 		self.0.as_ref().map(RequiredFunctionalPropertyValue::value)
 	}
 
+	pub fn is_some(&self) -> bool {
+		self.value().is_some()
+	}
+
 	pub fn is_some_and(&self, f: impl FnOnce(&T) -> bool) -> bool {
 		self.value().map(f).unwrap_or_default()
+	}
+
+	pub fn is_none(&self) -> bool {
+		self.value().is_none()
 	}
 
 	pub fn iter(&self) -> Iter<T, M> {

@@ -26,7 +26,7 @@ impl<M: Clone + Merge> Context<M> {
 		for (id, name) in default_field_names {
 			let field = self.get_mut(id).unwrap().as_component_mut();
 			if field.name().is_empty() {
-				field.name_mut().insert(name);
+				field.name_mut().insert_base(name);
 			}
 		}
 
@@ -79,7 +79,7 @@ impl<M: Clone + Merge> Context<M> {
 				{
 					let layout = self.get_mut(*id).unwrap().as_component_mut();
 					if layout.name().is_empty() {
-						layout.name_mut().insert(name);
+						layout.name_mut().insert_base(name);
 					}
 				}
 			}
@@ -102,7 +102,7 @@ impl<M: Clone + Merge> Context<M> {
 		for (id, name) in default_variant_names {
 			let variant = self.get_mut(id).unwrap().as_component_mut();
 			if variant.name().is_empty() {
-				variant.name_mut().insert(name);
+				variant.name_mut().insert_base(name);
 			}
 		}
 	}

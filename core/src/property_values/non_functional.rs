@@ -28,7 +28,17 @@ impl<T, M> Default for PropertyValues<T, M> {
 	}
 }
 
+pub type TryMapError<M, U, E> = (Meta<E, M>, PropertyValues<U, M>);
+pub type TryMappedError<'a, M, U, N, E> = (Meta<E, &'a M>, PropertyValues<U, N>);
+
 impl<T, M> PropertyValues<T, M> {
+	pub fn from_base(base: BTreeMap<T, M>) -> Self {
+		Self {
+			base,
+			sub_properties: BTreeMap::default()
+		}
+	}
+
 	pub fn first(&self) -> Option<PropertyValueRef<T, M>> {
 		self.iter().next()
 	}
@@ -125,11 +135,36 @@ impl<T, M> PropertyValues<T, M> {
 		PropertyValues { base, sub_properties }
 	}
 
-	pub fn try_map<U, E>(self, mut f: impl FnMut(Option<Id>, T) -> Result<U, E>) -> Result<PropertyValues<U, M>, (Meta<E, M>, PropertyValues<U, M>)> where U: Ord {
+	pub fn mapped<U, N>(&self, mut f: impl FnMut(Meta<&T, &M>) -> Meta<U, N>) -> PropertyValues<U, N> where U: Ord {
+		self.mapped_with(&mut f)
+	}
+
+	fn mapped_with<U, N>(&self, f: &mut impl FnMut(Meta<&T, &M>) -> Meta<U, N>) -> PropertyValues<U, N> where U: Ord {
+		let base = self.base.iter().map(|(t, m)| {
+			let Meta(u, n) = f(Meta(t, m));
+			(u, n)
+		}).collect();
+		let sub_properties = self.sub_properties.iter().map(|(id, m)| (*id, m.mapped_with(f))).collect();
+
+		PropertyValues { base, sub_properties }
+	}
+
+	pub fn map_properties<U>(self, mut g: impl FnMut(Id) -> Id, mut f: impl FnMut(T) -> U) -> PropertyValues<U, M> where U: Ord {
+		self.map_properties_with(&mut g, &mut f)
+	}
+	
+	fn map_properties_with<U>(self, g: &mut impl FnMut(Id) -> Id, f: &mut impl FnMut(T) -> U) -> PropertyValues<U, M> where U: Ord {
+		let base = self.base.into_iter().map(|(k, v)| (f(k), v)).collect();
+		let sub_properties = self.sub_properties.into_iter().map(|(id, m)| (g(id), m.map_with(f))).collect();
+
+		PropertyValues { base, sub_properties }
+	}
+
+	pub fn try_map<U, E>(self, mut f: impl FnMut(Option<Id>, T) -> Result<U, E>) -> Result<PropertyValues<U, M>, TryMapError<M, U, E>> where U: Ord {
 		self.try_map_with(None, &mut f)
 	}
 
-	fn try_map_with<U, E>(self, id: Option<Id>, f: &mut impl FnMut(Option<Id>, T) -> Result<U, E>) -> Result<PropertyValues<U, M>, (Meta<E, M>, PropertyValues<U, M>)> where U: Ord {
+	fn try_map_with<U, E>(self, id: Option<Id>, f: &mut impl FnMut(Option<Id>, T) -> Result<U, E>) -> Result<PropertyValues<U, M>, TryMapError<M, U, E>> where U: Ord {
 		let mut base = BTreeMap::new();
 		for (t, m) in self.base {
 			match f(id, t) {
@@ -158,11 +193,11 @@ impl<T, M> PropertyValues<T, M> {
 		Ok(PropertyValues { base, sub_properties })
 	}
 
-	pub fn try_mapped<U, N, E>(&self, mut f: impl FnMut(Option<Id>, Meta<&T, &M>) -> Result<Meta<U, N>, E>) -> Result<PropertyValues<U, N>, (Meta<E, &M>, PropertyValues<U, N>)> where U: Ord {
+	pub fn try_mapped<'a, U, N, E>(&'a self, mut f: impl FnMut(Option<Id>, Meta<&'a T, &'a M>) -> Result<Meta<U, N>, E>) -> Result<PropertyValues<U, N>, TryMappedError<'a, M, U, N, E>> where U: Ord {
 		self.try_mapped_with(None, &mut f)
 	}
 
-	fn try_mapped_with<U, N, E>(&self, id: Option<Id>, f: &mut impl FnMut(Option<Id>, Meta<&T, &M>) -> Result<Meta<U, N>, E>) -> Result<PropertyValues<U, N>, (Meta<E, &M>, PropertyValues<U, N>)> where U: Ord {
+	fn try_mapped_with<'a, U, N, E>(&'a self, id: Option<Id>, f: &mut impl FnMut(Option<Id>, Meta<&'a T, &'a M>) -> Result<Meta<U, N>, E>) -> Result<PropertyValues<U, N>, TryMappedError<'a, M, U, N, E>> where U: Ord {
 		let mut base = BTreeMap::new();
 		for (t, m) in &self.base {
 			match f(id, Meta(t, m)) {

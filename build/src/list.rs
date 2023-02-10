@@ -2,15 +2,13 @@ use std::cmp::Ordering;
 
 use crate::{
 	context::{MapIds, MapIdsIn},
-	error, rdf,
+	error, functional_property_value, rdf,
 	resource::BindingValueRef,
-	Context, Error,
-	functional_property_value,
-	FunctionalPropertyValue
+	Context, Error, FunctionalPropertyValue,
 };
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
-use treeldr::{metadata::Merge, vocab::Object, Id};
+use treeldr::{metadata::Merge, vocab::Object, Id, PropertyValueRef};
 
 pub use treeldr::list::Property;
 
@@ -50,13 +48,20 @@ impl<M> Definition<M> {
 		&mut self.rest
 	}
 
-	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
 			Property::First => self.first.insert(None, prop_cmp, value.map(Stripped)),
-			Property::Rest => self.rest.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			Property::Rest => self
+				.rest
+				.insert(None, prop_cmp, rdf::from::expect_id(value)?),
 		}
 
 		Ok(())
@@ -149,8 +154,13 @@ where
 									'next_state: for u in new_states {
 										let len = d.rest.len();
 
-										for (i, Meta(rest_id, rest_meta)) in
-											d.rest.iter().enumerate()
+										for (
+											i,
+											PropertyValueRef {
+												value: Meta(rest_id, rest_meta),
+												..
+											},
+										) in d.rest.iter().enumerate()
 										{
 											if i + 1 == len {
 												let item = match self
@@ -211,8 +221,8 @@ impl<'l, M: Clone> Iterator for Iter<'l, M> {
 							.rest
 							.as_required_at_node_binding(*id, Property::Rest, meta)
 						{
-							Ok(Meta(rest_id, _)) => {
-								match nodes.require_list(*rest_id) {
+							Ok(rest_id) => {
+								match nodes.require_list(**rest_id.value()) {
 									Ok(ListRef::Cons(rest_id, rest, rest_meta)) => {
 										*self = Self::Cons(*nodes, rest_id, rest, rest_meta)
 									}
@@ -226,7 +236,7 @@ impl<'l, M: Clone> Iterator for Iter<'l, M> {
 									}
 								}
 
-								Some(Ok(item.map(Stripped::as_ref)))
+								Some(Ok(item.as_meta_value().cloned().map(Stripped::as_ref)))
 							}
 							Err(e) => Some(Err(e)),
 						}
@@ -253,13 +263,13 @@ impl<'l, M> Iterator for LenientIter<'l, M> {
 				Self::Cons(nodes, d) => {
 					let item = d.first.first();
 
-					match d.rest.first().and_then(|rest| nodes.get_list(**rest)) {
+					match d.rest.first().and_then(|rest| nodes.get_list(**rest.value)) {
 						Some(ListRef::Cons(_, rest, _)) => *self = Self::Cons(*nodes, rest),
 						_ => *self = Self::Nil,
 					}
 
 					if let Some(item) = item {
-						break Some(item.map(Stripped::as_ref));
+						break Some(item.value.map(Stripped::as_ref));
 					}
 				}
 			}
@@ -273,8 +283,8 @@ pub enum ListMut<'l, M> {
 }
 
 pub enum ClassBindingRef<'a, M> {
-	First(&'a Object<M>),
-	Rest(Id),
+	First(Option<Id>, &'a Object<M>),
+	Rest(Option<Id>, Id),
 }
 
 pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
@@ -282,15 +292,15 @@ pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
 impl<'a, M> ClassBindingRef<'a, M> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::First(_) => Property::First,
-			Self::Rest(_) => Property::Rest,
+			Self::First(_, _) => Property::First,
+			Self::Rest(_, _) => Property::Rest,
 		}
 	}
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::First(v) => BindingValueRef::Object(v),
-			Self::Rest(v) => BindingValueRef::Id(*v),
+			Self::First(_, v) => BindingValueRef::Object(v),
+			Self::Rest(_, v) => BindingValueRef::Id(*v),
 		}
 	}
 }
@@ -309,12 +319,11 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.first
 			.next()
-			.map(|m| m.map(|o| ClassBindingRef::First(&o.0)))
+			.map(|m| m.into_class_binding(|id, o| ClassBindingRef::First(id, &o.0)))
 			.or_else(|| {
 				self.rest
 					.next()
-					.map(Meta::into_cloned_value)
-					.map(|m| m.map(ClassBindingRef::Rest))
+					.map(|m| m.into_cloned_class_binding(ClassBindingRef::Rest))
 			})
 	}
 }

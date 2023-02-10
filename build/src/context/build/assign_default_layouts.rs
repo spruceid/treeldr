@@ -28,7 +28,7 @@ impl<M> Context<M> {
 				.unwrap()
 				.as_formatted_mut()
 				.format_mut()
-				.insert(default_layout)
+				.insert_base(default_layout)
 		}
 	}
 }

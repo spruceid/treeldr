@@ -5,7 +5,7 @@ use locspan_derive::{StrippedEq, StrippedOrd, StrippedPartialEq, StrippedPartial
 use rdf_types::{Generator, VocabularyMut};
 use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
 
-use crate::{Context, Error, FunctionalPropertyValue};
+use crate::{Context, Error, Single};
 
 mod enumeration;
 mod id;
@@ -19,21 +19,19 @@ use structure::struct_intersection;
 
 use self::enumeration::EnumIntersection;
 
-use super::Primitive;
-
 #[derive(Debug, Clone)]
 pub struct Definition<M> {
 	id: Meta<Id, M>,
 
 	/// Layout description.
-	desc: FunctionalPropertyValue<Description<M>, M>,
+	desc: Single<Description<M>, M>,
 }
 
 impl<M> Definition<M> {
 	pub fn new(id: Meta<Id, M>) -> Self {
 		Self {
 			id,
-			desc: FunctionalPropertyValue::default(),
+			desc: Single::default(),
 		}
 	}
 
@@ -111,7 +109,7 @@ impl<M> Definition<M> {
 	where
 		M: Clone + Merge,
 	{
-		let mut desc = FunctionalPropertyValue::default();
+		let mut desc = Single::default();
 
 		for Meta(d, meta) in self.desc {
 			for built_d in d.build(vocabulary, generator, context, stack, meta)? {
@@ -125,7 +123,7 @@ impl<M> Definition<M> {
 
 #[derive(Debug, Clone)]
 pub struct BuiltDefinition<M> {
-	pub desc: FunctionalPropertyValue<super::Description, M>,
+	pub desc: Single<super::BaseDescriptionBinding, M>,
 }
 
 /// Layout intersection description.
@@ -133,7 +131,7 @@ pub struct BuiltDefinition<M> {
 #[locspan(ignore(M))]
 pub enum Description<M> {
 	Never,
-	Primitive(#[locspan(stripped)] Primitive),
+	DerivedFrom(#[locspan(stripped)] IdIntersection<M>),
 	Struct(#[locspan(stripped)] IdIntersection<M>),
 	Reference(#[locspan(stripped)] IdIntersection<M>),
 	Enum(#[locspan(stripped)] EnumIntersection<M>),
@@ -166,37 +164,40 @@ impl<M> Ord for Description<M> {
 }
 
 impl<M> Description<M> {
-	pub fn new(Meta(desc, meta): Meta<&super::Description, &M>) -> Meta<Self, M>
+	pub fn new(Meta(desc, meta): Meta<super::DescriptionBinding, &M>) -> Meta<Self, M>
 	where
 		M: Clone,
 	{
 		let desc = match desc {
-			super::Description::Alias(id) => {
-				Self::Alias(IdIntersection::new(Meta(*id, meta.clone())))
+			super::DescriptionBinding::Alias(_, id) => {
+				Self::Alias(IdIntersection::new(Meta(id, meta.clone())))
 			}
-			super::Description::Array(id) => {
-				Self::Array(IdIntersection::new(Meta(*id, meta.clone())))
+			super::DescriptionBinding::Array(_, id) => {
+				Self::Array(IdIntersection::new(Meta(id, meta.clone())))
 			}
-			super::Description::Enum(id) => {
-				Self::Enum(EnumIntersection::new(Meta(*id, meta.clone())))
+			super::DescriptionBinding::Enum(_, id) => {
+				Self::Enum(EnumIntersection::new(Meta(id, meta.clone())))
 			}
-			super::Description::Never => Self::Never,
-			super::Description::OneOrMany(id) => {
-				Self::OneOrMany(IdIntersection::new(Meta(*id, meta.clone())))
+			super::DescriptionBinding::OneOrMany(_, id) => {
+				Self::OneOrMany(IdIntersection::new(Meta(id, meta.clone())))
 			}
-			super::Description::Option(id) => {
-				Self::Option(IdIntersection::new(Meta(*id, meta.clone())))
+			super::DescriptionBinding::Option(_, id) => {
+				Self::Option(IdIntersection::new(Meta(id, meta.clone())))
 			}
-			super::Description::Primitive(p) => Self::Primitive(*p),
-			super::Description::Reference(id) => {
-				Self::Reference(IdIntersection::new(Meta(*id, meta.clone())))
+			super::DescriptionBinding::DerivedFrom(_, id) => {
+				Self::DerivedFrom(IdIntersection::new(Meta(id, meta.clone())))
 			}
-			super::Description::Required(id) => {
-				Self::Required(IdIntersection::new(Meta(*id, meta.clone())))
+			super::DescriptionBinding::Reference(_, id) => {
+				Self::Reference(IdIntersection::new(Meta(id, meta.clone())))
 			}
-			super::Description::Set(id) => Self::Set(IdIntersection::new(Meta(*id, meta.clone()))),
-			super::Description::Struct(id) => {
-				Self::Struct(IdIntersection::new(Meta(*id, meta.clone())))
+			super::DescriptionBinding::Required(_, id) => {
+				Self::Required(IdIntersection::new(Meta(id, meta.clone())))
+			}
+			super::DescriptionBinding::Set(_, id) => {
+				Self::Set(IdIntersection::new(Meta(id, meta.clone())))
+			}
+			super::DescriptionBinding::Struct(_, id) => {
+				Self::Struct(IdIntersection::new(Meta(id, meta.clone())))
 			}
 		};
 
@@ -213,7 +214,7 @@ impl<M> Description<M> {
 	{
 		match (self, other) {
 			(Self::Never, Self::Never) => Self::Never,
-			(Self::Primitive(a), Self::Primitive(b)) if a == b => Self::Primitive(a),
+			(Self::DerivedFrom(a), Self::DerivedFrom(b)) if a == b => Self::DerivedFrom(a),
 			(Self::Alias(a), Self::Alias(b)) if a == b => Self::Alias(a),
 			(Self::Struct(a), Self::Struct(b)) => Self::Struct(a.intersected_with(b)),
 			(Self::Reference(a), Self::Reference(b)) => Self::Reference(a.intersected_with(b)),
@@ -253,33 +254,45 @@ impl<M> Description<M> {
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
 		meta: M,
-	) -> Result<FunctionalPropertyValue<super::Description, M>, Error<M>>
+	) -> Result<Single<super::BaseDescriptionBinding, M>, Error<M>>
 	where
 		M: Clone + Merge,
 	{
-		let mut desc = FunctionalPropertyValue::default();
+		let mut desc = Single::default();
 
 		match self {
-			Self::Never => desc.insert(Meta(super::Description::Never, meta)),
-			Self::Primitive(p) => desc.insert(Meta(super::Description::Primitive(p), meta)),
+			Self::Never => (),
+			Self::DerivedFrom(p) => desc.insert(Meta(
+				super::BaseDescriptionBinding::DerivedFrom(p.prepare_layout(
+					vocabulary,
+					generator,
+					context,
+					stack,
+					meta.clone(),
+				)),
+				meta,
+			)),
 			Self::Struct(s) => {
-				for s in struct_intersection(vocabulary, generator, context, stack, &s)? {
-					match s {
-						Some(id) => desc.insert(Meta(super::Description::Struct(id), meta.clone())),
-						None => desc.insert(Meta(super::Description::Never, meta.clone())),
-					}
+				for id in struct_intersection(vocabulary, generator, context, stack, &s)?
+					.into_iter()
+					.flatten()
+				{
+					desc.insert(Meta(
+						super::BaseDescriptionBinding::Struct(id),
+						meta.clone(),
+					))
 				}
 			}
 			Self::Enum(e) => {
-				for s in enum_intersection(vocabulary, generator, context, stack, &e)? {
-					match s {
-						Some(id) => desc.insert(Meta(super::Description::Enum(id), meta.clone())),
-						None => desc.insert(Meta(super::Description::Never, meta.clone())),
-					}
+				for id in enum_intersection(vocabulary, generator, context, stack, &e)?
+					.into_iter()
+					.flatten()
+				{
+					desc.insert(Meta(super::BaseDescriptionBinding::Enum(id), meta.clone()))
 				}
 			}
 			Self::Reference(l) => desc.insert(Meta(
-				super::Description::Reference(l.prepare_layout(
+				super::BaseDescriptionBinding::Reference(l.prepare_layout(
 					vocabulary,
 					generator,
 					context,
@@ -289,7 +302,7 @@ impl<M> Description<M> {
 				meta,
 			)),
 			Self::Required(l) => desc.insert(Meta(
-				super::Description::Required(l.prepare_layout(
+				super::BaseDescriptionBinding::Required(l.prepare_layout(
 					vocabulary,
 					generator,
 					context,
@@ -299,7 +312,7 @@ impl<M> Description<M> {
 				meta,
 			)),
 			Self::Option(l) => desc.insert(Meta(
-				super::Description::Option(l.prepare_layout(
+				super::BaseDescriptionBinding::Option(l.prepare_layout(
 					vocabulary,
 					generator,
 					context,
@@ -309,7 +322,7 @@ impl<M> Description<M> {
 				meta,
 			)),
 			Self::Set(l) => desc.insert(Meta(
-				super::Description::Set(l.prepare_layout(
+				super::BaseDescriptionBinding::Set(l.prepare_layout(
 					vocabulary,
 					generator,
 					context,
@@ -319,7 +332,7 @@ impl<M> Description<M> {
 				meta,
 			)),
 			Self::OneOrMany(l) => desc.insert(Meta(
-				super::Description::OneOrMany(l.prepare_layout(
+				super::BaseDescriptionBinding::OneOrMany(l.prepare_layout(
 					vocabulary,
 					generator,
 					context,
@@ -329,7 +342,7 @@ impl<M> Description<M> {
 				meta,
 			)),
 			Self::Array(l) => desc.insert(Meta(
-				super::Description::Array(l.prepare_layout(
+				super::BaseDescriptionBinding::Array(l.prepare_layout(
 					vocabulary,
 					generator,
 					context,
@@ -339,7 +352,7 @@ impl<M> Description<M> {
 				meta,
 			)),
 			Self::Alias(l) => desc.insert(Meta(
-				super::Description::Alias(l.prepare_layout(
+				super::BaseDescriptionBinding::Alias(l.prepare_layout(
 					vocabulary,
 					generator,
 					context,

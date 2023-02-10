@@ -5,20 +5,20 @@ use crate::{
 	layout,
 	node::BindingValueRef,
 	vocab::{self, Term},
-	Layout, MetaOption, TId,
+	Layout, TId, FunctionalPropertyValue, MetaOption, RequiredFunctionalPropertyValue, property_values, Id,
 };
 
 pub struct Formatted;
 
 #[derive(Debug)]
 pub struct Data<M> {
-	pub format: MetaOption<TId<Layout>, M>,
+	pub format: FunctionalPropertyValue<TId<Layout>, M>,
 }
 
 impl<M> Data<M> {
 	pub fn bindings(&self) -> ClassBindings<M> {
 		ClassBindings {
-			format: self.format.as_ref(),
+			format: self.format.iter(),
 		}
 	}
 }
@@ -43,8 +43,8 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn format(&self) -> &MetaOption<TId<Layout>, M> {
-		&self.data.format
+	pub fn format(&self) -> Option<TId<Layout>> {
+		self.data.format.as_required().map(RequiredFunctionalPropertyValue::value).cloned()
 	}
 
 	pub fn is_layout_field(&self) -> bool {
@@ -133,13 +133,13 @@ impl Property {
 }
 
 pub enum ClassBinding {
-	Format(TId<Layout>),
+	Format(Option<Id>, TId<Layout>),
 }
 
 impl ClassBinding {
 	pub fn into_binding(self) -> Binding {
 		match self {
-			Self::Format(id) => Binding::Format(id),
+			Self::Format(_, id) => Binding::Format(id),
 		}
 	}
 }
@@ -177,7 +177,7 @@ impl Binding {
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
-	format: Option<&'a Meta<TId<Layout>, M>>,
+	format: property_values::functional::Iter<'a, TId<Layout>, M>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
@@ -185,8 +185,8 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.format
-			.take()
-			.map(|m| m.borrow().into_cloned_value().map(ClassBinding::Format))
+			.next()
+			.map(|m| m.into_cloned_class_binding(ClassBinding::Format))
 	}
 }
 

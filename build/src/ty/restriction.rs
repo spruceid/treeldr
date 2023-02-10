@@ -2,11 +2,9 @@ use std::cmp::Ordering;
 
 use crate::{
 	context::{MapIds, MapIdsIn},
-	rdf,
+	functional_property_value, rdf,
 	resource::BindingValueRef,
-	Context, Error,
-	functional_property_value,
-	FunctionalPropertyValue
+	single, Context, Error, FunctionalPropertyValue, Single,
 };
 use locspan::Meta;
 use treeldr::{metadata::Merge, value::NonNegativeInteger, vocab::Object, Id};
@@ -45,14 +43,14 @@ impl MapIds for Restriction {
 #[derive(Clone)]
 pub struct Definition<M> {
 	property: FunctionalPropertyValue<Id, M>,
-	restriction: FunctionalPropertyValue<Restriction, M>,
+	restriction: Single<Restriction, M>,
 }
 
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
 			property: FunctionalPropertyValue::default(),
-			restriction: FunctionalPropertyValue::default(),
+			restriction: Single::default(),
 		}
 	}
 }
@@ -66,11 +64,11 @@ impl<M> Definition<M> {
 		&mut self.property
 	}
 
-	pub fn restriction(&self) -> &FunctionalPropertyValue<Restriction, M> {
+	pub fn restriction(&self) -> &Single<Restriction, M> {
 		&self.restriction
 	}
 
-	pub fn restriction_mut(&mut self) -> &mut FunctionalPropertyValue<Restriction, M> {
+	pub fn restriction_mut(&mut self) -> &mut Single<Restriction, M> {
 		&mut self.restriction
 	}
 
@@ -81,33 +79,35 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::OnProperty => self.property.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			Property::OnProperty => {
+				self.property
+					.insert(None, prop_cmp, rdf::from::expect_id(value)?)
+			}
 			Property::AllValuesFrom => self
 				.restriction
-				.insert(None, prop_cmp, rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::All(id)))),
+				.insert(rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::All(id)))),
 			Property::SomeValuesFrom => self
 				.restriction
-				.insert(None, prop_cmp, rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::Any(id)))),
+				.insert(rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::Any(id)))),
 			Property::MaxCardinality => self.restriction.insert(
-				None,
-				prop_cmp,
 				rdf::from::expect_non_negative_integer(value)?
 					.map(|n| Restriction::Cardinality(Cardinality::AtMost(n))),
 			),
 			Property::MinCardinality => self.restriction.insert(
-				None,
-				prop_cmp,
 				rdf::from::expect_non_negative_integer(value)?
 					.map(|n| Restriction::Cardinality(Cardinality::AtLeast(n))),
 			),
 			Property::Cardinality => self.restriction.insert(
-				None,
-				prop_cmp,
 				rdf::from::expect_non_negative_integer(value)?
 					.map(|n| Restriction::Cardinality(Cardinality::Exactly(n))),
 			),
@@ -134,7 +134,7 @@ impl<M> Definition<M> {
 				Property::OnProperty,
 				meta,
 			)?;
-		let restriction = self
+		let Meta(restriction, restriction_meta) = self
 			.restriction
 			.clone()
 			.try_unwrap()
@@ -143,9 +143,7 @@ impl<M> Definition<M> {
 
 		Ok(treeldr::ty::restriction::Definition::new(
 			prop_ref,
-			restriction
-				.into_value()
-				.build(context, as_resource.id, meta.clone())?,
+			restriction.build(context, as_resource.id, restriction_meta)?,
 		))
 	}
 }
@@ -256,7 +254,7 @@ impl ClassBinding {
 }
 
 pub enum ClassBindingRef<'a> {
-	OnProperty(Id),
+	OnProperty(Option<Id>, Id),
 	SomeValuesFrom(Id),
 	AllValuesFrom(Id),
 	MinCardinality(&'a NonNegativeInteger),
@@ -267,7 +265,7 @@ pub enum ClassBindingRef<'a> {
 impl<'a> ClassBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::OnProperty(_) => Property::OnProperty,
+			Self::OnProperty(_, _) => Property::OnProperty,
 			Self::SomeValuesFrom(_) => Property::SomeValuesFrom,
 			Self::AllValuesFrom(_) => Property::AllValuesFrom,
 			Self::MinCardinality(_) => Property::MinCardinality,
@@ -278,7 +276,7 @@ impl<'a> ClassBindingRef<'a> {
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::OnProperty(v) => BindingValueRef::Id(*v),
+			Self::OnProperty(_, v) => BindingValueRef::Id(*v),
 			Self::SomeValuesFrom(v) => BindingValueRef::Id(*v),
 			Self::AllValuesFrom(v) => BindingValueRef::Id(*v),
 			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
@@ -294,7 +292,7 @@ pub type BindingRef<'a> = ClassBindingRef<'a>;
 
 pub struct ClassBindings<'a, M> {
 	on_property: functional_property_value::Iter<'a, Id, M>,
-	restriction: functional_property_value::Iter<'a, Restriction, M>,
+	restriction: single::Iter<'a, Restriction, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -305,8 +303,7 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.on_property
 			.next()
-			.map(Meta::into_cloned_value)
-			.map(|m| m.map(ClassBindingRef::OnProperty))
+			.map(|m| m.into_cloned_class_binding(ClassBindingRef::OnProperty))
 			.or_else(|| {
 				self.restriction
 					.next()

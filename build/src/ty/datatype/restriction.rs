@@ -1,6 +1,9 @@
-use crate::{context::MapIds, rdf, resource::BindingValueRef, Error, FunctionalPropertyValue, functional_property_value};
+use crate::{
+	context::MapIds, functional_property_value, rdf, resource::BindingValueRef, Error,
+	FunctionalPropertyValue,
+};
 use locspan::Meta;
-use std::{collections::BTreeMap, cmp::Ordering};
+use std::{cmp::Ordering, collections::BTreeMap};
 use treeldr::{
 	metadata::Merge,
 	ty::data::{restriction, RegExp},
@@ -43,7 +46,12 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
@@ -96,12 +104,14 @@ impl<M> Definition<M> {
 
 	pub fn build(&self) -> Result<Meta<Restriction, M>, Error<M>>
 	where
-		M: Clone,
+		M: Clone + Merge,
 	{
 		self.restriction
 			.clone()
 			.try_unwrap()
 			.map_err(|_| todo!())?
+			.into_required()
+			.map(treeldr::RequiredFunctionalPropertyValue::into_meta_value)
 			.ok_or_else(|| todo!())
 	}
 }
@@ -446,6 +456,6 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.restriction
 			.next()
-			.map(|m| m.map(Restriction::as_binding))
+			.map(|m| m.value.map(Restriction::as_binding))
 	}
 }

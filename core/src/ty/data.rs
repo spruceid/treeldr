@@ -1,6 +1,6 @@
 use crate::{
-	node::BindingValueRef, property_values, vocab, FunctionalPropertyValue, Id, IriIndex,
-	PropertyValue, PropertyValues, RequiredFunctionalPropertyValue, TId,
+	node::BindingValueRef, vocab, Id, IriIndex,
+	PropertyValue, RequiredFunctionalPropertyValue, TId, MetaOption,
 };
 
 pub mod regexp;
@@ -64,18 +64,15 @@ impl<M> Definition<M> {
 }
 
 pub struct WithRestrictions<'a, M> {
-	sub_properties: &'a PropertyValues<(), M>,
-	value: Restrictions<'a>,
+	value: Meta<Restrictions<'a>, &'a M>,
 }
 
 impl<'a, M> WithRestrictions<'a, M> {
-	fn new<T>(
-		value: &'a RequiredFunctionalPropertyValue<T, M>,
-		f: impl FnOnce(&'a T) -> Restrictions<'a>,
+	fn new(
+		value: Meta<Restrictions<'a>, &'a M>
 	) -> Self {
 		Self {
-			sub_properties: value.sub_properties(),
-			value: f(value.value()),
+			value
 		}
 	}
 }
@@ -86,24 +83,22 @@ impl<'a, M> IntoIterator for WithRestrictions<'a, M> {
 
 	fn into_iter(self) -> Self::IntoIter {
 		WithRestrictionsIter {
-			sub_properties: self.sub_properties.iter(),
-			value: self.value,
+			value: Some(self.value),
 		}
 	}
 }
 
 pub struct WithRestrictionsIter<'a, M> {
-	sub_properties: property_values::non_functional::Iter<'a, (), M>,
-	value: Restrictions<'a>,
+	value: Option<Meta<Restrictions<'a>, &'a M>>
 }
 
 impl<'a, M> Iterator for WithRestrictionsIter<'a, M> {
 	type Item = PropertyValue<Restrictions<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.sub_properties
-			.next()
-			.map(|s| PropertyValue::new(s.sub_property, Meta(self.value, s.value.into_metadata())))
+		self.value
+			.take()
+			.map(|value| PropertyValue::new(None, value))
 	}
 }
 
@@ -182,19 +177,19 @@ pub enum Derived<M> {
 	Boolean(Meta<TId<crate::ty::DataType<M>>, M>),
 	Real(
 		Meta<TId<crate::ty::DataType<M>>, M>,
-		FunctionalPropertyValue<restriction::real::Restrictions, M>,
+		MetaOption<restriction::real::Restrictions, M>,
 	),
 	Float(
 		Meta<TId<crate::ty::DataType<M>>, M>,
-		FunctionalPropertyValue<restriction::float::Restrictions, M>,
+		MetaOption<restriction::float::Restrictions, M>,
 	),
 	Double(
 		Meta<TId<crate::ty::DataType<M>>, M>,
-		FunctionalPropertyValue<restriction::double::Restrictions, M>,
+		MetaOption<restriction::double::Restrictions, M>,
 	),
 	String(
 		Meta<TId<crate::ty::DataType<M>>, M>,
-		FunctionalPropertyValue<restriction::string::Restrictions, M>,
+		MetaOption<restriction::string::Restrictions, M>,
 	),
 	Date(Meta<TId<crate::ty::DataType<M>>, M>),
 	Time(Meta<TId<crate::ty::DataType<M>>, M>),
@@ -234,17 +229,17 @@ impl<M> Derived<M> {
 	pub fn with_restrictions(&self) -> Option<WithRestrictions<M>> {
 		match self {
 			Self::Real(_, r) => r
-				.as_required()
-				.map(|r| WithRestrictions::new(r, Restrictions::Real)),
+				.as_ref()
+				.map(|r| WithRestrictions::new(r.borrow().map(Restrictions::Real))),
 			Self::Float(_, r) => r
-				.as_required()
-				.map(|r| WithRestrictions::new(r, Restrictions::Float)),
+				.as_ref()
+				.map(|r| WithRestrictions::new(r.borrow().map(Restrictions::Float))),
 			Self::Double(_, r) => r
-				.as_required()
-				.map(|r| WithRestrictions::new(r, Restrictions::Double)),
+				.as_ref()
+				.map(|r| WithRestrictions::new(r.borrow().map(Restrictions::Double))),
 			Self::String(_, r) => r
-				.as_required()
-				.map(|r| WithRestrictions::new(r, Restrictions::String)),
+				.as_ref()
+				.map(|r| WithRestrictions::new(r.borrow().map(Restrictions::String))),
 			_ => None,
 		}
 	}

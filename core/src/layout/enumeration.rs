@@ -37,8 +37,8 @@ impl<M> Enum<M> {
 		model: &crate::MutableModel<M>,
 	) -> bool {
 		for v in &self.variants {
-			if let Some(r) = model.get(**v).unwrap().as_formatted().format().value() {
-				if model.can_be_reference_layout(map, *r) {
+			if let Some(r) = model.get(**v).unwrap().as_formatted().format() {
+				if model.can_be_reference_layout(map, r) {
 					return true;
 				}
 			}
@@ -54,7 +54,7 @@ pub struct ComposingLayouts<'a, M>(
 );
 
 impl<'a, M> Iterator for ComposingLayouts<'a, M> {
-	type Item = &'a Meta<TId<Layout>, M>;
+	type Item = TId<Layout>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		for variant in self.1.by_ref() {
@@ -64,7 +64,6 @@ impl<'a, M> Iterator for ComposingLayouts<'a, M> {
 				.unwrap()
 				.as_formatted()
 				.format()
-				.as_ref()
 			{
 				return Some(layout_ref);
 			}

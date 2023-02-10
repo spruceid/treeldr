@@ -1,10 +1,11 @@
+use std::cmp::Ordering;
+
 use super::Property;
 use crate::{
 	context::{MapIds, MapIdsIn},
-	resource::BindingValueRef,
-	Context, Error,
 	functional_property_value,
-	FunctionalPropertyValue
+	resource::BindingValueRef,
+	Context, Error, FunctionalPropertyValue,
 };
 use derivative::Derivative;
 use locspan::Meta;
@@ -76,13 +77,13 @@ impl<M> Semantics<M> {
 		self.nil.insert_base(id)
 	}
 
-	pub fn unify_with(&mut self, other: Self)
+	pub fn unify_with(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, other: Self)
 	where
 		M: Merge,
 	{
-		self.first.extend(other.first);
-		self.rest.extend(other.rest);
-		self.nil.extend(other.nil);
+		self.first.extend_with(&prop_cmp, other.first);
+		self.rest.extend_with(&prop_cmp, other.rest);
+		self.nil.extend_with(prop_cmp, other.nil);
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
@@ -114,21 +115,17 @@ impl<M> Semantics<M> {
 			.try_unwrap()
 			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListNil))?;
 
-		let first = first.try_map_with_causes(|Meta(id, meta)| {
-			Ok(Meta(
-				model
-					.require_property_id(id)
-					.map_err(|e| e.at_node_property(id, Property::ArrayListFirst, meta.clone()))?,
-				meta,
-			))
+		let first = first.try_map_borrow_metadata(|id, meta| {
+			let meta = meta.first().unwrap().value.into_metadata();
+			model
+				.require_property_id(id)
+				.map_err(|e| e.at_node_property(id, Property::ArrayListFirst, meta.clone()))
 		})?;
-		let rest = rest.try_map_with_causes(|Meta(id, meta)| {
-			Ok(Meta(
-				model
-					.require_property_id(id)
-					.map_err(|e| e.at_node_property(id, Property::ArrayListRest, meta.clone()))?,
-				meta,
-			))
+		let rest = rest.try_map_borrow_metadata(|id, meta| {
+			let meta = meta.first().unwrap().value.into_metadata();
+			model
+				.require_property_id(id)
+				.map_err(|e| e.at_node_property(id, Property::ArrayListRest, meta.clone()))
 		})?;
 
 		if first.is_some() || rest.is_some() || nil.is_some() {
@@ -158,25 +155,25 @@ impl<M> PartialEq for Semantics<M> {
 }
 
 pub enum Binding {
-	ArrayListFirst(Id),
-	ArrayListRest(Id),
-	ArrayListNil(Id),
+	ArrayListFirst(Option<Id>, Id),
+	ArrayListRest(Option<Id>, Id),
+	ArrayListNil(Option<Id>, Id),
 }
 
 impl Binding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::ArrayListFirst(_) => Property::ArrayListFirst,
-			Self::ArrayListRest(_) => Property::ArrayListRest,
-			Self::ArrayListNil(_) => Property::ArrayListNil,
+			Self::ArrayListFirst(_, _) => Property::ArrayListFirst,
+			Self::ArrayListRest(_, _) => Property::ArrayListRest,
+			Self::ArrayListNil(_, _) => Property::ArrayListNil,
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::ArrayListFirst(v) => BindingValueRef::Id(*v),
-			Self::ArrayListRest(v) => BindingValueRef::Id(*v),
-			Self::ArrayListNil(v) => BindingValueRef::Id(*v),
+			Self::ArrayListFirst(_, v) => BindingValueRef::Id(*v),
+			Self::ArrayListRest(_, v) => BindingValueRef::Id(*v),
+			Self::ArrayListNil(_, v) => BindingValueRef::Id(*v),
 		}
 	}
 }
@@ -193,15 +190,15 @@ impl<'a, M> Iterator for Bindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.first
 			.next()
-			.map(|m| m.into_cloned_value().map(Binding::ArrayListFirst))
+			.map(|m| m.into_cloned_class_binding(Binding::ArrayListFirst))
 			.or_else(|| {
 				self.rest
 					.next()
-					.map(|m| m.into_cloned_value().map(Binding::ArrayListRest))
+					.map(|m| m.into_cloned_class_binding(Binding::ArrayListRest))
 					.or_else(|| {
 						self.nil
 							.next()
-							.map(|m| m.into_cloned_value().map(Binding::ArrayListNil))
+							.map(|m| m.into_cloned_class_binding(Binding::ArrayListNil))
 					})
 			})
 	}

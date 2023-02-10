@@ -5,20 +5,20 @@ use crate::{
 	layout,
 	node::BindingValueRef,
 	vocab::{self, Term},
-	MetaOption, Name,
+	MetaOption, Name, FunctionalPropertyValue, property_values, Id,
 };
 
 pub mod formatted;
 
 #[derive(Debug, Clone)]
 pub struct Data<M> {
-	pub name: MetaOption<Name, M>,
+	pub name: FunctionalPropertyValue<Name, M>,
 }
 
 impl<M> Data<M> {
 	pub fn bindings(&self) -> ClassBindings<M> {
 		ClassBindings {
-			name: self.name.as_ref(),
+			name: self.name.iter(),
 		}
 	}
 }
@@ -81,8 +81,8 @@ impl<M> Definition<M> {
 			.and_then(formatted::Definition::as_layout_variant)
 	}
 
-	pub fn name(&self) -> Option<&Meta<Name, M>> {
-		self.data.name.as_ref()
+	pub fn name(&self) -> Option<&Name> {
+		self.data.name.value()
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
@@ -171,13 +171,13 @@ impl Property {
 }
 
 pub enum ClassBindingRef<'a> {
-	Name(&'a Name),
+	Name(Option<Id>, &'a Name),
 }
 
 impl<'a> ClassBindingRef<'a> {
 	pub fn into_binding_ref<M>(self) -> BindingRef<'a, M> {
 		match self {
-			Self::Name(n) => BindingRef::Name(n),
+			Self::Name(_, n) => BindingRef::Name(n),
 		}
 	}
 }
@@ -217,7 +217,7 @@ impl<'a, M> BindingRef<'a, M> {
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
-	name: Option<&'a Meta<Name, M>>,
+	name: property_values::functional::Iter<'a, Name, M>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
@@ -225,8 +225,8 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.name
-			.take()
-			.map(|m| m.borrow().map(ClassBindingRef::Name))
+			.next()
+			.map(|m| m.into_class_binding(ClassBindingRef::Name))
 	}
 }
 

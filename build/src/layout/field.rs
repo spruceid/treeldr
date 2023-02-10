@@ -3,16 +3,16 @@ use std::cmp::Ordering;
 use crate::{
 	component::formatted::AssertFormatted,
 	context::{MapIds, MapIdsIn},
-	prop, rdf,
+	functional_property_value, prop, rdf,
 	resource::{self, BindingValueRef},
-	Context, FunctionalPropertyValue, functional_property_value,
+	Context, FunctionalPropertyValue,
 };
 
 use super::Error;
 use locspan::Meta;
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
 pub use treeldr::layout::field::Property;
-use treeldr::{metadata::Merge, vocab::Object, BlankIdIndex, Id, IriIndex, Name};
+use treeldr::{metadata::Merge, vocab::Object, BlankIdIndex, Id, IriIndex, Name, PropertyValueRef};
 
 /// Layout field definition.
 #[derive(Debug, Clone)]
@@ -83,23 +83,26 @@ impl<M> Definition<M> {
 		other_as_component: &crate::component::Data<M>,
 		other_as_formatted: &crate::component::formatted::Data<M>,
 	) -> bool {
-		let common_prop = self
-			.prop
-			.iter()
-			.any(|Meta(a, _)| other.prop.iter().any(|Meta(b, _)| a == b));
+		let common_prop = self.prop.iter().any(|a| {
+			other
+				.prop
+				.iter()
+				.any(|b| a.value.value() == b.value.value())
+		});
 		let no_prop = self.prop.is_empty() && other.prop.is_empty();
 
-		let common_name = as_component
-			.name
-			.iter()
-			.any(|Meta(a, _)| other_as_component.name.iter().any(|Meta(b, _)| a == b));
+		let common_name = as_component.name.iter().any(|a| {
+			other_as_component
+				.name
+				.iter()
+				.any(|b| a.value.value() == b.value.value())
+		});
 		let no_name = as_component.name.is_empty() && other_as_component.name.is_empty();
 
-		let included_layout = as_formatted.format.iter().all(|Meta(a, _)| {
-			other_as_formatted
-				.format
-				.iter()
-				.all(|Meta(b, _)| crate::layout::is_included_in(context, *a, *b))
+		let included_layout = as_formatted.format.iter().all(|a| {
+			other_as_formatted.format.iter().all(|b| {
+				crate::layout::is_included_in(context, **a.value.value(), **b.value.value())
+			})
 		});
 
 		(common_prop || no_prop) && (common_name || no_name) && included_layout
@@ -125,13 +128,16 @@ impl<M> Definition<M> {
 	where
 		M: Clone,
 	{
-		let Meta(prop_id, _) = self.property().first()?;
+		let PropertyValueRef {
+			value: Meta(prop_id, _),
+			..
+		} = self.property().first()?;
 		let prop = context.get(*prop_id)?;
 		let range_id = prop.as_property().range().first()?;
 		if prop.has_type(context, prop::Type::FunctionalProperty) {
-			Some(DefaultLayout::Functional(range_id.cloned()))
+			Some(DefaultLayout::Functional(range_id.value.cloned()))
 		} else {
-			Some(DefaultLayout::NonFunctional(range_id.cloned()))
+			Some(DefaultLayout::NonFunctional(range_id.value.cloned()))
 		}
 	}
 
@@ -141,12 +147,19 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::For => self.prop.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			Property::For => self
+				.prop
+				.insert(None, prop_cmp, rdf::from::expect_id(value)?),
 		}
 
 		Ok(())
@@ -193,7 +206,7 @@ pub fn is_included_in<M>(context: &Context<M>, a: Id, b: Id) -> bool {
 }
 
 pub enum ClassBinding {
-	For(Id),
+	For(Option<Id>, Id),
 }
 
 pub type Binding = ClassBinding;
@@ -201,13 +214,13 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::For(_) => Property::For,
+			Self::For(_, _) => Property::For,
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::For(v) => BindingValueRef::Id(*v),
+			Self::For(_, v) => BindingValueRef::Id(*v),
 		}
 	}
 }
@@ -224,6 +237,6 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.prop
 			.next()
-			.map(|m| m.into_cloned_value().map(ClassBinding::For))
+			.map(|m| m.into_cloned_class_binding(ClassBinding::For))
 	}
 }

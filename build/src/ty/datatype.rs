@@ -2,10 +2,10 @@ use std::cmp::Ordering;
 
 use crate::{
 	context::{MapIds, MapIdsIn},
-	error::NodeBindingMissing,
+	functional_property_value::{self, FunctionalPropertyValue},
 	rdf,
 	resource::BindingValueRef,
-	Context, Error, ObjectAsRequiredId, functional_property_value::{FunctionalPropertyValue, self},
+	Context, Error, ObjectAsRequiredId,
 };
 use locspan::Meta;
 use treeldr::{metadata::Merge, ty::data::Primitive, vocab::Object, Id};
@@ -58,13 +58,23 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::OnDatatype => self.base.insert(None, prop_cmp, rdf::from::expect_id(value)?),
-			Property::WithRestrictions => self.restrictions.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			Property::OnDatatype => self
+				.base
+				.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			Property::WithRestrictions => {
+				self.restrictions
+					.insert(None, prop_cmp, rdf::from::expect_id(value)?)
+			}
 		}
 
 		Ok(())
@@ -89,7 +99,7 @@ impl<M> Definition<M> {
 		&self,
 		context: &Context<M>,
 		as_resource: &treeldr::node::Data<M>,
-		meta: &M,
+		_meta: &M,
 	) -> Result<treeldr::ty::data::Definition<M>, Error<M>>
 	where
 		M: Clone + Merge,
@@ -104,89 +114,97 @@ impl<M> Definition<M> {
 			.try_unwrap()
 			.map_err(|e| e.at_functional_node_property(as_resource.id, Property::OnDatatype))?;
 
-		let dt = match base.unwrap() {
-			None => match restrictions.unwrap() {
+		let dt = match base.into_required() {
+			None => match restrictions.into_required() {
 				Some(_) => {
 					todo!("restricted primitive datatype error")
 				}
 				None => treeldr::ty::DataType::Primitive(Primitive::from_id(as_resource.id)),
 			},
-			Some(Meta(base_id, base_meta)) => {
-				let base = Meta(
-					context.require_datatype_id(base_id).map_err(|e| {
-						e.at_node_property(as_resource.id, Property::OnDatatype, base_meta.clone())
-					})?,
-					base_meta,
-				);
-
-				let primitive =
-					Primitive::from_id(base.id()).expect("unknown primitive base datatype");
-
-				match restrictions.unwrap() {
-					Some(list_id) => {
-						let list = context.require_list(*list_id).map_err(|e| {
+			Some(base) => treeldr::ty::DataType::Derived(base.try_map_borrow_metadata(
+				|base_id, base_meta| {
+					let base = Meta(
+						context.require_datatype_id(base_id).map_err(|e| {
 							e.at_node_property(
 								as_resource.id,
-								Property::WithRestrictions,
-								list_id.metadata().clone(),
+								Property::OnDatatype,
+								base_meta.first().unwrap().value.into_metadata().clone(),
 							)
-						})?;
+						})?,
+						base_meta.first().unwrap().value.into_metadata().clone(),
+					);
 
-						let mut restrictions = Restrictions::new();
+					let primitive =
+						Primitive::from_id(base.id()).expect("unknown primitive base datatype");
 
-						for item in list.iter(context) {
-							let Meta(object, restriction_meta) = item?.cloned();
-							let restriction_id = object.into_required_id(&restriction_meta)?;
-							let restriction = context
-								.require(restriction_id)
-								.map_err(|e| e.at(restriction_meta.clone()))?
-								.require_datatype_restriction(context)
-								.map_err(|e| e.at(restriction_meta.clone()))?;
-							restrictions.insert(restriction.build()?.into_value(), restriction_meta)
-						}
+					let restrictions = restrictions
+						.into_required()
+						.map(|list_id| {
+							let Meta(list_id, meta) = list_id.into_meta_value();
 
-						let derived = match primitive {
-							Primitive::Boolean => treeldr::ty::data::Derived::Boolean(base),
-							Primitive::Date => treeldr::ty::data::Derived::Date(base),
-							Primitive::DateTime => treeldr::ty::data::Derived::DateTime(base),
-							Primitive::Double => treeldr::ty::data::Derived::Double(
-								base,
-								restrictions
-									.build_double(as_resource.id, list_id.metadata().clone())?,
-							),
-							Primitive::Duration => treeldr::ty::data::Derived::Duration(base),
-							Primitive::Float => treeldr::ty::data::Derived::Float(
-								base,
-								restrictions
-									.build_float(as_resource.id, list_id.metadata().clone())?,
-							),
-							Primitive::Real => treeldr::ty::data::Derived::Real(
-								base,
-								restrictions
-									.build_real(as_resource.id, list_id.metadata().clone())?,
-							),
-							Primitive::String => treeldr::ty::data::Derived::String(
-								base,
-								restrictions
-									.build_string(as_resource.id, list_id.metadata().clone())?,
-							),
-							Primitive::Time => treeldr::ty::data::Derived::Time(base),
-						};
+							let list = context.require_list(list_id).map_err(|e| {
+								e.at_node_property(
+									as_resource.id,
+									Property::WithRestrictions,
+									meta.clone(),
+								)
+							})?;
 
-						treeldr::ty::DataType::Derived(derived)
-					}
-					None => {
-						return Err(Meta(
-							NodeBindingMissing {
-								id: as_resource.id,
-								property: Property::WithRestrictions.into(),
+							let mut restrictions = Restrictions::new();
+
+							for item in list.iter(context) {
+								let Meta(object, restriction_meta) = item?.cloned();
+								let restriction_id = object.into_required_id(&restriction_meta)?;
+								let restriction = context
+									.require(restriction_id)
+									.map_err(|e| e.at(restriction_meta.clone()))?
+									.require_datatype_restriction(context)
+									.map_err(|e| e.at(restriction_meta.clone()))?;
+								restrictions
+									.insert(restriction.build()?.into_value(), restriction_meta)
 							}
-							.into(),
-							meta.clone(),
-						))
-					}
-				}
-			}
+
+							Ok(Meta(restrictions, meta))
+						})
+						.transpose()?;
+
+					Ok(match primitive {
+						Primitive::Boolean => treeldr::ty::data::Derived::Boolean(base),
+						Primitive::Date => treeldr::ty::data::Derived::Date(base),
+						Primitive::DateTime => treeldr::ty::data::Derived::DateTime(base),
+						Primitive::Double => treeldr::ty::data::Derived::Double(
+							base,
+							restrictions
+								.map(|Meta(r, m)| r.build_double(as_resource.id, m))
+								.transpose()?
+								.into(),
+						),
+						Primitive::Duration => treeldr::ty::data::Derived::Duration(base),
+						Primitive::Float => treeldr::ty::data::Derived::Float(
+							base,
+							restrictions
+								.map(|Meta(r, m)| r.build_float(as_resource.id, m))
+								.transpose()?
+								.into(),
+						),
+						Primitive::Real => treeldr::ty::data::Derived::Real(
+							base,
+							restrictions
+								.map(|Meta(r, m)| r.build_real(as_resource.id, m))
+								.transpose()?
+								.into(),
+						),
+						Primitive::String => treeldr::ty::data::Derived::String(
+							base,
+							restrictions
+								.map(|Meta(r, m)| r.build_string(as_resource.id, m))
+								.transpose()?
+								.into(),
+						),
+						Primitive::Time => treeldr::ty::data::Derived::Time(base),
+					})
+				},
+			)?),
 		};
 
 		Ok(treeldr::ty::data::Definition::new(dt))

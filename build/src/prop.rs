@@ -2,13 +2,9 @@ use std::cmp::Ordering;
 
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
-	rdf,
+	functional_property_value, property_values, rdf,
 	resource::BindingValueRef,
-	Error, Multiple,
-	PropertyValues,
-	property_values,
-	functional_property_value,
-	FunctionalPropertyValue
+	Error, FunctionalPropertyValue, PropertyValues,
 };
 use locspan::Meta;
 use treeldr::{metadata::Merge, prop::RdfProperty, vocab::Object, Id};
@@ -75,16 +71,26 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: RdfProperty, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop: RdfProperty,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			RdfProperty::Domain => self.domain.insert(None, prop_cmp, rdf::from::expect_id(value)?),
-			RdfProperty::Range => self.range.insert(None, prop_cmp, rdf::from::expect_id(value)?),
-			RdfProperty::Required => self
-				.required
-				.insert(None, prop_cmp, rdf::from::expect_schema_boolean(value)?),
+			RdfProperty::Domain => self
+				.domain
+				.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			RdfProperty::Range => self
+				.range
+				.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			RdfProperty::Required => {
+				self.required
+					.insert(None, prop_cmp, rdf::from::expect_schema_boolean(value)?)
+			}
 		}
 
 		Ok(())
@@ -99,34 +105,35 @@ impl<M> Definition<M> {
 	where
 		M: Clone + Merge,
 	{
-		let mut range = Multiple::default();
-		for Meta(range_id, range_causes) in &self.range {
-			let range_ref = context.require_type_id(*range_id).map_err(|e| {
-				e.at_node_property(as_resource.id, RdfProperty::Range, range_causes.clone())
-			})?;
-			range.insert(Meta(range_ref, range_causes.clone()))
-		}
+		let range = self
+			.range
+			.try_mapped(|_, Meta(range_id, range_meta)| {
+				let range_ref = context.require_type_id(*range_id).map_err(|e| {
+					e.at_node_property(as_resource.id, RdfProperty::Range, range_meta.clone())
+				})?;
+				Ok(Meta(range_ref, range_meta.clone()))
+			})
+			.map_err(|(Meta(e, _), _)| e)?;
 
-		let required = self
-			.required
-			.clone()
-			.try_unwrap()
-			.map_err(|e| e.at_functional_node_property(as_resource.id, RdfProperty::Required))?
-			.unwrap()
-			.unwrap_or_else(|| Meta(false, meta.clone()));
+		let required =
+			self.required.clone().try_unwrap().map_err(|e| {
+				e.at_functional_node_property(as_resource.id, RdfProperty::Required)
+			})?;
 
 		let functional = match as_resource.type_metadata(context, Type::FunctionalProperty) {
 			Some(meta) => Meta(true, meta.clone()),
 			None => Meta(false, meta.clone()),
 		};
 
-		let mut domain = Multiple::default();
-		for Meta(domain_id, domain_causes) in &self.domain {
-			let domain_ref = context.require_type_id(*domain_id).map_err(|e| {
-				e.at_node_property(as_resource.id, RdfProperty::Domain, domain_causes.clone())
-			})?;
-			domain.insert(Meta(domain_ref, domain_causes.clone()))
-		}
+		let domain = self
+			.domain
+			.try_mapped(|_, Meta(domain_id, domain_meta)| {
+				let domain_ref = context.require_type_id(*domain_id).map_err(|e| {
+					e.at_node_property(as_resource.id, RdfProperty::Domain, domain_meta.clone())
+				})?;
+				Ok(Meta(domain_ref, domain_meta.clone()))
+			})
+			.map_err(|(Meta(e, _), _)| e)?;
 
 		Ok(Meta(
 			treeldr::prop::Definition::new(domain, range, required, functional),
@@ -143,9 +150,9 @@ impl<M: Merge> MapIds for Definition<M> {
 }
 
 pub enum ClassBinding {
-	Domain(Id),
-	Range(Id),
-	Required(bool),
+	Domain(Option<Id>, Id),
+	Range(Option<Id>, Id),
+	Required(Option<Id>, bool),
 }
 
 pub type Binding = ClassBinding;
@@ -153,17 +160,17 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> RdfProperty {
 		match self {
-			Self::Domain(_) => RdfProperty::Domain,
-			Self::Range(_) => RdfProperty::Range,
-			Self::Required(_) => RdfProperty::Required,
+			Self::Domain(_, _) => RdfProperty::Domain,
+			Self::Range(_, _) => RdfProperty::Range,
+			Self::Required(_, _) => RdfProperty::Required,
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Domain(v) => BindingValueRef::Id(*v),
-			Self::Range(v) => BindingValueRef::Id(*v),
-			Self::Required(v) => BindingValueRef::Boolean(*v),
+			Self::Domain(_, v) => BindingValueRef::Id(*v),
+			Self::Range(_, v) => BindingValueRef::Id(*v),
+			Self::Required(_, v) => BindingValueRef::Boolean(*v),
 		}
 	}
 }
@@ -182,18 +189,15 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.domain
 			.next()
-			.map(Meta::into_cloned_value)
-			.map(|m| m.map(ClassBinding::Domain))
+			.map(|m| m.into_cloned_class_binding(ClassBinding::Domain))
 			.or_else(|| {
 				self.range
 					.next()
-					.map(Meta::into_cloned_value)
-					.map(|m| m.map(ClassBinding::Range))
+					.map(|m| m.into_cloned_class_binding(ClassBinding::Range))
 					.or_else(|| {
 						self.required
 							.next()
-							.map(Meta::into_cloned_value)
-							.map(|m| m.map(ClassBinding::Required))
+							.map(|m| m.into_cloned_class_binding(ClassBinding::Required))
 					})
 			})
 	}

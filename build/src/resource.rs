@@ -1,14 +1,15 @@
 use std::cmp::Ordering;
 
 use locspan::Meta;
-use treeldr::{metadata::Merge, ty::data::RegExp, value, vocab::Object, Id, MetaOption, Name};
+use treeldr::{
+	doc::Block, metadata::Merge, ty::data::RegExp, value, vocab::Object, Id, MetaOption, Name,
+};
 
 use crate::{
 	component,
 	context::{HasType, MapIds},
 	error::NodeTypeInvalid,
-	layout, list, prop, rdf, ty, property_values, Error, ObjectAsId,
-	PropertyValues
+	layout, list, prop, property_values, rdf, ty, Error, ObjectAsId, PropertyValues,
 };
 pub use treeldr::node::{Property, Type};
 
@@ -225,29 +226,45 @@ impl<M> Definition<M> {
 
 	pub fn set(
 		&mut self,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
 		prop: impl Into<crate::Property>,
 		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
+		fn no_sub_prop(_: Id, _: Id) -> Option<Ordering> {
+			unreachable!()
+		}
+
 		match prop.into() {
 			crate::Property::Resource(prop) => match prop {
 				Property::Self_ => (),
-				Property::Type => self.type_mut().insert(None, prop_cmp, rdf::from::expect_type(value)?),
-				Property::Label => self.label_mut().insert(None, prop_cmp, rdf::from::expect_string(value)?),
-				Property::Comment => self.comment_mut().insert(None, prop_cmp, rdf::from::expect_string(value)?),
-				Property::Class(prop) => self.as_type_mut().set(prop_cmp, prop, value)?,
+				Property::Type => {
+					self.type_mut()
+						.insert(None, no_sub_prop, rdf::from::expect_type(value)?)
+				}
+				Property::Label => {
+					self.label_mut()
+						.insert(None, no_sub_prop, rdf::from::expect_string(value)?)
+				}
+				Property::Comment => {
+					self.comment_mut()
+						.insert(None, no_sub_prop, rdf::from::expect_string(value)?)
+				}
+				Property::Class(prop) => self.as_type_mut().set(no_sub_prop, prop, value)?,
 				Property::DatatypeRestriction(prop) => {
-					self.as_datatype_restriction_mut().set(prop_cmp, prop, value)?
+					self.as_datatype_restriction_mut()
+						.set(no_sub_prop, prop, value)?
 				}
-				Property::Property(prop) => self.as_property_mut().set(prop_cmp, prop, value)?,
-				Property::Component(prop) => self.as_component_mut().set(prop_cmp, prop, value)?,
+				Property::Property(prop) => self.as_property_mut().set(no_sub_prop, prop, value)?,
+				Property::Component(prop) => {
+					self.as_component_mut().set(no_sub_prop, prop, value)?
+				}
 				Property::LayoutRestriction(prop) => {
-					self.as_layout_restriction_mut().set(prop_cmp, prop, value)?
+					self.as_layout_restriction_mut()
+						.set(no_sub_prop, prop, value)?
 				}
-				Property::List(prop) => self.as_list_mut().set(prop_cmp, prop, value)?,
+				Property::List(prop) => self.as_list_mut().set(no_sub_prop, prop, value)?,
 			},
 			crate::Property::Other(_) => {
 				// Ignore unknown property.
@@ -564,13 +581,23 @@ impl<M: Clone> Definition<M> {
 	where
 		M: Merge,
 	{
-		let type_ = self.data.type_.try_mapped(|_, Meta(ty, m)| {
-			context
-				.require_type_id(ty.id().id())
-				.map(|ty| Meta(ty, m.clone()))
-		}).map_err(|(Meta(e, m), _)| e.at_node_property(self.data.id, Property::Type, m.clone()))?;
+		let type_ = self
+			.data
+			.type_
+			.try_mapped(|_, Meta(ty, m)| {
+				context
+					.require_type_id(ty.id().id())
+					.map(|ty| Meta(ty, m.clone()))
+			})
+			.map_err(|(Meta(e, m), _)| {
+				e.at_node_property(self.data.id, Property::Type, m.clone())
+			})?;
 
-		let doc = treeldr::Documentation::from_comments(self.data.comment.map(From::from));
+		let doc = treeldr::Documentation::from_comments(
+			self.data
+				.comment
+				.mapped(|Meta(t, m)| Meta(Block::new(t.clone()), m.clone())),
+		);
 
 		let data = treeldr::node::Data {
 			id: self.data.id,

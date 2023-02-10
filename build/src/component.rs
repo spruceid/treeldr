@@ -1,15 +1,13 @@
 use std::cmp::Ordering;
 
 use locspan::Meta;
-use treeldr::{metadata::Merge, vocab::Object, Name, Id};
+use treeldr::{metadata::Merge, vocab::Object, Id, Name};
 
 use crate::{
 	context::{HasType, MapIds},
-	error, layout, rdf,
+	error, functional_property_value, layout, rdf,
 	resource::BindingValueRef,
-	Context, Error,
-	functional_property_value,
-	FunctionalPropertyValue
+	Context, Error, FunctionalPropertyValue,
 };
 pub use treeldr::component::{Property, Type};
 
@@ -90,14 +88,22 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::Name => self.name_mut().insert(None, prop_cmp, rdf::from::expect_name(value)?),
-			Property::Formatted(prop) => self.as_formatted_mut().set(prop, value)?,
-			Property::Layout(prop) => self.as_layout_mut().set(prop, value)?,
+			Property::Name => {
+				self.name_mut()
+					.insert(None, prop_cmp, rdf::from::expect_name(value)?)
+			}
+			Property::Formatted(prop) => self.as_formatted_mut().set(prop_cmp, prop, value)?,
+			Property::Layout(prop) => self.as_layout_mut().set(prop_cmp, prop, value)?,
 		}
 
 		Ok(())
@@ -185,7 +191,7 @@ impl<M: Clone> AssertNamed<M> for treeldr::component::Data<M> {
 		as_resource: &treeldr::node::Data<M>,
 		metadata: &M,
 	) -> Result<(), Error<M>> {
-		self.name.as_ref().ok_or_else(|| {
+		self.name.as_required().ok_or_else(|| {
 			Meta(
 				error::NodeBindingMissing {
 					id: as_resource.id,
@@ -200,13 +206,13 @@ impl<M: Clone> AssertNamed<M> for treeldr::component::Data<M> {
 }
 
 pub enum ClassBindingRef<'a> {
-	Name(&'a Name),
+	Name(Option<Id>, &'a Name),
 }
 
 impl<'a> ClassBindingRef<'a> {
 	pub fn into_binding_ref(self) -> BindingRef<'a> {
 		match self {
-			Self::Name(n) => BindingRef::Name(n),
+			Self::Name(_, n) => BindingRef::Name(n),
 		}
 	}
 }
@@ -243,7 +249,9 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	type Item = Meta<ClassBindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.name.next().map(|m| m.map(ClassBindingRef::Name))
+		self.name
+			.next()
+			.map(|m| m.into_class_binding(ClassBindingRef::Name))
 	}
 }
 
