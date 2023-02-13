@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, collections::BTreeMap};
 
-use locspan::Meta;
+use locspan::{Meta, Stripped};
 use treeldr::{
 	doc::Block, metadata::Merge, prop::UnknownProperty, ty::data::RegExp, value, vocab::Object, Id,
 	MetaOption, Name, TId,
@@ -23,7 +23,7 @@ pub struct Data<M> {
 	pub comment: PropertyValues<String, M>,
 
 	/// Other unknown properties.
-	pub other: BTreeMap<Id, PropertyValues<Object<M>, M>>,
+	pub other: BTreeMap<Id, PropertyValues<Stripped<Object<M>>, M>>,
 }
 
 impl<M> Data<M> {
@@ -273,9 +273,12 @@ impl<M> Definition<M> {
 				}
 				Property::List(prop) => self.as_list_mut().set(no_sub_prop, prop, value)?,
 			},
-			crate::Property::Other(_) => {
-				// Ignore unknown property.
-				// TODO store them somewhere.
+			crate::Property::Other(prop) => {
+				self.data.other.entry(prop.id()).or_default().insert(
+					None,
+					no_sub_prop,
+					value.map(Stripped),
+				);
 			}
 		}
 
@@ -670,12 +673,26 @@ impl<'a, M> ClassBindingRef<'a, M> {
 	}
 }
 
+struct CurrentOtherProperty<'a, M> {
+	id: Id,
+	values: property_values::non_functional::Iter<'a, Stripped<Object<M>>, M>,
+}
+
+impl<'a, M> CurrentOtherProperty<'a, M> {
+	fn new(
+		id: Id,
+		values: property_values::non_functional::Iter<'a, Stripped<Object<M>>, M>,
+	) -> Self {
+		Self { id, values }
+	}
+}
+
 pub struct ClassBindings<'a, M> {
 	type_: property_values::non_functional::Iter<'a, crate::Type, M>,
 	label: property_values::non_functional::Iter<'a, String, M>,
 	comment: property_values::non_functional::Iter<'a, String, M>,
-	other: std::collections::btree_map::Iter<'a, Id, PropertyValues<Object<M>, M>>,
-	current_other: Option<(Id, property_values::non_functional::Iter<'a, Object<M>, M>)>,
+	other: std::collections::btree_map::Iter<'a, Id, PropertyValues<Stripped<Object<M>>, M>>,
+	current_other: Option<CurrentOtherProperty<'a, M>>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
@@ -697,16 +714,18 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 			})
 			.or_else(|| loop {
 				match &mut self.current_other {
-					Some((id, current)) => match current.next() {
+					Some(current) => match current.values.next() {
 						Some(v) => {
 							break Some(v.into_class_binding(|sub_id, v| {
-								ClassBindingRef::Other(*id, sub_id, v)
+								ClassBindingRef::Other(current.id, sub_id, v)
 							}))
 						}
 						None => self.current_other = None,
 					},
 					None => match self.other.next() {
-						Some((id, values)) => self.current_other = Some((*id, values.iter())),
+						Some((id, values)) => {
+							self.current_other = Some(CurrentOtherProperty::new(*id, values.iter()))
+						}
 						None => break None,
 					},
 				}
