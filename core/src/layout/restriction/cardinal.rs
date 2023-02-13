@@ -250,6 +250,7 @@ impl Binding {
 	}
 }
 
+#[derive(Debug)]
 pub enum BindingRef<'a> {
 	Min(&'a NonNegativeInteger),
 	Max(&'a NonNegativeInteger),

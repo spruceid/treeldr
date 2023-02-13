@@ -282,6 +282,7 @@ pub enum ListMut<'l, M> {
 	Cons(&'l mut Definition<M>),
 }
 
+#[derive(Debug)]
 pub enum ClassBindingRef<'a, M> {
 	First(Option<Id>, &'a Object<M>),
 	Rest(Option<Id>, Id),

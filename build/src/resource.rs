@@ -711,6 +711,7 @@ impl<'a, M> BindingValueRef<'a, M> {
 	}
 }
 
+#[derive(Debug)]
 pub enum BindingRef<'a, M> {
 	Type(crate::Type),
 	Label(&'a str),

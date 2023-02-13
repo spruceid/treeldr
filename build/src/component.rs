@@ -217,6 +217,7 @@ impl<'a> ClassBindingRef<'a> {
 	}
 }
 
+#[derive(Debug)]
 pub enum BindingRef<'a> {
 	Name(&'a Name),
 	Layout(layout::Binding),

@@ -219,6 +219,7 @@ impl<M: Merge> MapIds for Definition<M> {
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBinding {
 	OnDatatype(Option<Id>, Id),
 	WithRestrictions(Option<Id>, Id),

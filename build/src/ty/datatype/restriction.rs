@@ -370,6 +370,7 @@ impl<M> Restrictions<M> {
 	}
 }
 
+#[derive(Debug)]
 pub enum NumericBindingRef<'a> {
 	MinInclusive(&'a value::Numeric),
 	MinExclusive(&'a value::Numeric),
@@ -397,6 +398,7 @@ impl<'a> NumericBindingRef<'a> {
 	}
 }
 
+#[derive(Debug)]
 pub enum StringBindingRef<'a> {
 	MinLength(&'a value::Integer),
 	MaxLength(&'a value::Integer),
@@ -421,6 +423,7 @@ impl<'a> StringBindingRef<'a> {
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBindingRef<'a> {
 	Numeric(NumericBindingRef<'a>),
 	String(StringBindingRef<'a>),

@@ -27,17 +27,23 @@ impl<M: Merge> Context<M> {
 			}
 		}
 
-		for b in type_map.keys() {
+		for (b, target) in &type_map {
 			let node = self.nodes.get_mut(&Id::Blank(*b)).unwrap();
 			node.as_type_mut().union_of_mut().clear();
 			node.as_type_mut().intersection_of_mut().clear();
-			node.type_mut().remove(&crate::Type::TYPE);
+
+			if *target != Id::Blank(*b) {
+				node.type_mut().remove(&crate::Type::TYPE);
+			}
 		}
 
-		for b in layout_map.keys() {
+		for (b, target) in &layout_map {
 			let node = self.nodes.get_mut(&Id::Blank(*b)).unwrap();
 			node.as_layout_mut().intersection_of_mut().clear();
-			node.type_mut().remove(&treeldr::Layout::TYPE);
+
+			if *target != Id::Blank(*b) {
+				node.type_mut().remove(&treeldr::Layout::TYPE);
+			}
 		}
 
 		self.map_ids(|id, prop| match id {

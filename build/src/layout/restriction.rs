@@ -225,6 +225,7 @@ impl<M> Restrictions<M> {
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBindingRef<'a> {
 	Primitive(primitive::BindingRef<'a>),
 	Container(container::BindingRef<'a>),

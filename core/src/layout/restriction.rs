@@ -243,6 +243,7 @@ impl Binding {
 	}
 }
 
+#[derive(Debug)]
 pub enum BindingRef<'a> {
 	Cardinal(cardinal::BindingRef<'a>),
 }

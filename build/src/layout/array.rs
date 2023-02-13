@@ -154,6 +154,7 @@ impl<M> PartialEq for Semantics<M> {
 	}
 }
 
+#[derive(Debug)]
 pub enum Binding {
 	ArrayListFirst(Option<Id>, Id),
 	ArrayListRest(Option<Id>, Id),

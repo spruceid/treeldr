@@ -149,6 +149,7 @@ impl<M: Merge> MapIds for Definition<M> {
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBinding {
 	Domain(Option<Id>, Id),
 	Range(Option<Id>, Id),

@@ -1413,6 +1413,7 @@ impl<M: Merge> MapIds for Definition<M> {
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBinding {
 	For(Option<Id>, Id),
 	Description(DescriptionBinding),

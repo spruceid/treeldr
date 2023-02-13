@@ -31,10 +31,6 @@ impl<M: Clone> Context<M> {
 		log::debug!("computing layout intersections...");
 		self.compute_layout_intersections(vocabulary, generator)?;
 
-		log::debug!("simplifying composite types and layouts...");
-		self.simplify_composite_types_and_layouts();
-		self.remove_unused_nodes();
-
 		log::debug!("unifying blank nodes...");
 		self.unify(vocabulary, generator);
 

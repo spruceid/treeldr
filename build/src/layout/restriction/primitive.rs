@@ -482,6 +482,7 @@ impl<M: Clone> Restrictions<M> {
 	}
 }
 
+#[derive(Debug)]
 pub enum BindingRef<'a> {
 	Numeric(NumericBindingRef<'a>),
 	String(StringBindingRef<'a>),
@@ -503,6 +504,7 @@ impl<'a> BindingRef<'a> {
 	}
 }
 
+#[derive(Debug)]
 pub enum NumericBindingRef<'a> {
 	InclusiveMinimum(&'a value::Numeric),
 	ExclusiveMinimum(&'a value::Numeric),
@@ -530,6 +532,7 @@ impl<'a> NumericBindingRef<'a> {
 	}
 }
 
+#[derive(Debug)]
 pub enum StringBindingRef<'a> {
 	Pattern(&'a RegExp),
 }

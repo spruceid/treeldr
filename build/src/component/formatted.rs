@@ -208,6 +208,7 @@ impl ClassBinding {
 	}
 }
 
+#[derive(Debug)]
 pub enum Binding {
 	Format(Id),
 	LayoutField(layout::field::ClassBinding),

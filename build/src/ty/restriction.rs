@@ -253,6 +253,7 @@ impl ClassBinding {
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBindingRef<'a> {
 	OnProperty(Option<Id>, Id),
 	SomeValuesFrom(Id),

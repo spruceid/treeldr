@@ -205,6 +205,7 @@ pub fn is_included_in<M>(context: &Context<M>, a: Id, b: Id) -> bool {
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBinding {
 	For(Option<Id>, Id),
 }

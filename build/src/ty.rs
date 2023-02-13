@@ -494,6 +494,7 @@ impl Binding {
 	}
 }
 
+#[derive(Debug)]
 pub enum BindingRef<'a> {
 	UnionOf(Id),
 	IntersectionOf(Id),

@@ -16,7 +16,9 @@ use treeldr::{
 };
 
 use crate::{
+	component,
 	context::MapIds,
+	layout,
 	resource::{self, BindingValueRef},
 	Context,
 };
@@ -28,6 +30,15 @@ pub struct BindingRef<'a, B> {
 }
 
 impl<'a, B> BindingRef<'a, B> {
+	/// Checks if the binding does not participate to the logical value of the
+	/// node and can be ignored.
+	pub fn can_ignore(&self) -> bool {
+		self.property
+			== Property::Resource(treeldr::node::Property::Component(
+				component::Property::Layout(layout::Property::IntersectionOf),
+			))
+	}
+
 	/// Replace any blank node with `()`.
 	fn strip_blank(self) -> BindingRef<'a, ()> {
 		BindingRef {
@@ -189,7 +200,14 @@ impl<M> Context<M> {
 		self.map_ids(|id, _| match id {
 			Id::Blank(b) => *ids.get(&b).unwrap(),
 			Id::Iri(i) => Id::Iri(i),
-		})
+		});
+
+		for (id, node) in self.nodes() {
+			for Meta(binding, _) in node.bindings() {
+				let binding: BindingRef<BlankIdIndex> = binding.into();
+				eprintln!("{id:?} {binding:?}");
+			}
+		}
 	}
 
 	/// Compute the color of each blank nodes.
@@ -225,18 +243,26 @@ impl<M> Context<M> {
 
 						for Meta(binding, _) in node.bindings() {
 							let binding: BindingRef<'a, BlankIdIndex> = binding.into();
+							if !binding.can_ignore() {
+								recursive_color.insert(binding.strip_blank());
 
-							recursive_color.insert(binding.strip_blank());
-
-							if let Some(tc) = &mut tree_color {
-								match binding.color(|b| {
-									color(context, b, colors, result, tree_colors, recursive_colors)
+								if let Some(tc) = &mut tree_color {
+									match binding.color(|b| {
+										color(
+											context,
+											b,
+											colors,
+											result,
+											tree_colors,
+											recursive_colors,
+										)
 										.filter(|c| colors[*c].exact)
-								}) {
-									Some(colored_binding) => {
-										tc.insert(colored_binding);
+									}) {
+										Some(colored_binding) => {
+											tc.insert(colored_binding);
+										}
+										None => tree_color = None,
 									}
-									None => tree_color = None,
 								}
 							}
 						}
@@ -303,8 +329,10 @@ impl<M> Context<M> {
 
 					for Meta(binding, _) in node.bindings() {
 						let binding: BindingRef<BlankIdIndex> = binding.into();
-						if let ValueRef::Blank(b) = binding.value {
-							bindings.entry(binding.property).or_default().insert(b);
+						if !binding.can_ignore() {
+							if let ValueRef::Blank(b) = binding.value {
+								bindings.entry(binding.property).or_default().insert(b);
+							}
 						}
 					}
 
