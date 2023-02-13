@@ -10,7 +10,9 @@ use std::{
 	cmp::Ordering,
 	collections::{HashMap, HashSet},
 };
-use treeldr::{metadata::Merge, utils::SccGraph, vocab::Object, Id, Multiple};
+use treeldr::{
+	metadata::Merge, prop::UnknownProperty, utils::SccGraph, vocab::Object, Id, Multiple, TId,
+};
 
 pub mod datatype;
 pub mod restriction;
@@ -44,9 +46,10 @@ impl<M> Data<M> {
 
 impl<M: Merge> MapIds for Data<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		self.union_of.map_ids_in(Some(Property::UnionOf.into()), &f);
+		self.union_of
+			.map_ids_in(Some(Property::UnionOf(None).into()), &f);
 		self.intersection_of
-			.map_ids_in(Some(Property::IntersectionOf.into()), &f);
+			.map_ids_in(Some(Property::IntersectionOf(None).into()), &f);
 		self.properties.map_ids(f)
 	}
 }
@@ -236,7 +239,7 @@ impl<M> Definition<M> {
 
 	pub fn set(
 		&mut self,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
 		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
@@ -244,17 +247,17 @@ impl<M> Definition<M> {
 		M: Merge,
 	{
 		match prop {
-			Property::SubClassOf => {
+			Property::SubClassOf(p) => {
 				self.sub_class_of_mut()
-					.insert(None, prop_cmp, rdf::from::expect_type(value)?)
+					.insert(p, prop_cmp, rdf::from::expect_type(value)?)
 			}
-			Property::UnionOf => {
+			Property::UnionOf(p) => {
 				self.union_of_mut()
-					.insert(None, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
 			}
-			Property::IntersectionOf => {
+			Property::IntersectionOf(p) => {
 				self.intersection_of_mut()
-					.insert(None, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
 			}
 			Property::Datatype(prop) => self.as_datatype_mut().set(prop_cmp, prop, value)?,
 			Property::Restriction(prop) => self.as_restriction_mut().set(prop_cmp, prop, value)?,
@@ -348,13 +351,13 @@ impl<M> Definition<M> {
 		let union_of = self.data.union_of.clone().into_list_at_node_binding(
 			context,
 			as_resource.id,
-			Property::UnionOf,
+			Property::UnionOf(None),
 		)?;
 		let intersection_of = self
 			.data
 			.intersection_of
 			.clone()
-			.into_list_at_node_binding(context, as_resource.id, Property::IntersectionOf)?;
+			.into_list_at_node_binding(context, as_resource.id, Property::IntersectionOf(None))?;
 
 		let sub_class_of = self
 			.data
@@ -365,7 +368,7 @@ impl<M> Definition<M> {
 					.map(|ty| Meta(ty, m.clone()))
 			})
 			.map_err(|(Meta(e, m), _)| {
-				e.at_node_property(as_resource.id, Property::SubClassOf, m.clone())
+				e.at_node_property(as_resource.id, Property::SubClassOf(None), m.clone())
 			})?;
 
 		let desc = if let Some(m) = as_resource.type_metadata(context, SubClass::DataType) {
@@ -427,22 +430,22 @@ impl<M> Definition<M> {
 }
 
 pub enum ClassBinding {
-	UnionOf(Option<Id>, Id),
-	IntersectionOf(Option<Id>, Id),
+	UnionOf(Option<TId<UnknownProperty>>, Id),
+	IntersectionOf(Option<TId<UnknownProperty>>, Id),
 }
 
 impl ClassBinding {
 	pub fn as_binding_ref<'a>(&self) -> BindingRef<'a> {
 		match self {
-			Self::UnionOf(_, i) => BindingRef::UnionOf(*i),
-			Self::IntersectionOf(_, i) => BindingRef::IntersectionOf(*i),
+			Self::UnionOf(p, i) => BindingRef::UnionOf(*p, *i),
+			Self::IntersectionOf(p, i) => BindingRef::IntersectionOf(*p, *i),
 		}
 	}
 
 	pub fn into_binding_ref<'a>(self) -> BindingRef<'a> {
 		match self {
-			Self::UnionOf(_, i) => BindingRef::UnionOf(i),
-			Self::IntersectionOf(_, i) => BindingRef::IntersectionOf(i),
+			Self::UnionOf(p, i) => BindingRef::UnionOf(p, i),
+			Self::IntersectionOf(p, i) => BindingRef::IntersectionOf(p, i),
 		}
 	}
 }
@@ -468,8 +471,8 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 }
 
 pub enum Binding {
-	UnionOf(Id),
-	IntersectionOf(Id),
+	UnionOf(Option<TId<UnknownProperty>>, Id),
+	IntersectionOf(Option<TId<UnknownProperty>>, Id),
 	Datatype(datatype::Binding),
 	Restriction(restriction::Binding),
 }
@@ -477,8 +480,8 @@ pub enum Binding {
 impl Binding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::UnionOf(_) => Property::UnionOf,
-			Self::IntersectionOf(_) => Property::IntersectionOf,
+			Self::UnionOf(p, _) => Property::UnionOf(*p),
+			Self::IntersectionOf(p, _) => Property::IntersectionOf(*p),
 			Self::Datatype(b) => Property::Datatype(b.property()),
 			Self::Restriction(b) => Property::Restriction(b.property()),
 		}
@@ -486,8 +489,8 @@ impl Binding {
 
 	pub fn value<M>(&self) -> BindingValueRef<M> {
 		match self {
-			Self::UnionOf(v) => BindingValueRef::Id(*v),
-			Self::IntersectionOf(v) => BindingValueRef::Id(*v),
+			Self::UnionOf(_, v) => BindingValueRef::Id(*v),
+			Self::IntersectionOf(_, v) => BindingValueRef::Id(*v),
 			Self::Datatype(b) => b.value(),
 			Self::Restriction(b) => b.value(),
 		}
@@ -496,8 +499,8 @@ impl Binding {
 
 #[derive(Debug)]
 pub enum BindingRef<'a> {
-	UnionOf(Id),
-	IntersectionOf(Id),
+	UnionOf(Option<TId<UnknownProperty>>, Id),
+	IntersectionOf(Option<TId<UnknownProperty>>, Id),
 	Datatype(datatype::Binding),
 	Restriction(restriction::BindingRef<'a>),
 }
@@ -505,8 +508,8 @@ pub enum BindingRef<'a> {
 impl<'a> BindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::UnionOf(_) => Property::UnionOf,
-			Self::IntersectionOf(_) => Property::IntersectionOf,
+			Self::UnionOf(p, _) => Property::UnionOf(*p),
+			Self::IntersectionOf(p, _) => Property::IntersectionOf(*p),
 			Self::Datatype(b) => Property::Datatype(b.property()),
 			Self::Restriction(b) => Property::Restriction(b.property()),
 		}
@@ -514,8 +517,8 @@ impl<'a> BindingRef<'a> {
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::UnionOf(v) => BindingValueRef::Id(*v),
-			Self::IntersectionOf(v) => BindingValueRef::Id(*v),
+			Self::UnionOf(_, v) => BindingValueRef::Id(*v),
+			Self::IntersectionOf(_, v) => BindingValueRef::Id(*v),
 			Self::Datatype(b) => b.value(),
 			Self::Restriction(b) => b.value(),
 		}

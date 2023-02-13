@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, collections::BTreeMap};
 
 use locspan::{ErrAt, Meta, StrippedEq, StrippedPartialEq};
-use treeldr::{metadata::Merge, Id};
+use treeldr::{metadata::Merge, prop::UnknownProperty, Id, TId};
 
 use crate::{
 	error::{self, NodeBindingFunctionalConflict},
@@ -24,7 +24,7 @@ impl<T, M> Conflict<T, M> {
 
 		Meta(
 			NodeBindingFunctionalConflict {
-				id: sub_property.unwrap_or(id),
+				id: sub_property.map(TId::into_id).unwrap_or(id),
 				property: property.into(),
 				values: (a, self.1).into(),
 			}
@@ -104,8 +104,8 @@ impl<T: Ord, M> FunctionalPropertyValue<T, M> {
 
 	pub fn insert(
 		&mut self,
-		id: Option<Id>,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		id: Option<TId<UnknownProperty>>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		value: Meta<T, M>,
 	) where
 		M: Merge,
@@ -127,7 +127,7 @@ impl<T: Ord, M> FunctionalPropertyValue<T, M> {
 
 	pub fn extend_with<I: IntoIterator<Item = PropertyValue<T, M>>>(
 		&mut self,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		iter: I,
 	) where
 		M: Merge,
@@ -152,7 +152,7 @@ impl<T, M> FunctionalPropertyValue<T, M> {
 
 	pub fn map_properties<U>(
 		self,
-		g: impl FnMut(Id) -> Id,
+		g: impl FnMut(TId<UnknownProperty>) -> TId<UnknownProperty>,
 		f: impl FnMut(T) -> U,
 	) -> FunctionalPropertyValue<U, M>
 	where

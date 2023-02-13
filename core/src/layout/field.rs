@@ -4,7 +4,8 @@ use locspan::Meta;
 use crate::{
 	component,
 	node::{self, BindingValueRef},
-	property_values, vocab, FunctionalPropertyValue, Id, Layout, Name,
+	prop::{PropertyName, UnknownProperty},
+	property_values, vocab, FunctionalPropertyValue, Id, IriIndex, Layout, Name,
 	RequiredFunctionalPropertyValue, ResourceType, TId,
 };
 
@@ -49,20 +50,30 @@ impl<'a, M> crate::Ref<'a, Field, M> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
-	For,
+	For(Option<TId<UnknownProperty>>),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::{Term, TreeLdr};
 		match self {
-			Self::For => Term::TreeLdr(TreeLdr::FieldFor),
+			Self::For(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::FieldFor))),
+			Self::For(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::{Term, TreeLdr};
 		match self {
-			Self::For => "field property",
+			Self::For(None) => Some(Term::TreeLdr(TreeLdr::FieldFor)),
+			Self::For(Some(_)) => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::For(None) => PropertyName::Resource("field property"),
+			Self::For(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
@@ -100,7 +111,7 @@ impl<M> Definition<M> {
 }
 
 pub enum ClassBinding {
-	For(Option<Id>, TId<crate::Property>),
+	For(Option<TId<UnknownProperty>>, TId<crate::Property>),
 }
 
 pub type Binding = ClassBinding;
@@ -108,7 +119,7 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::For(_, _) => Property::For,
+			Self::For(p, _) => Property::For(*p),
 		}
 	}
 

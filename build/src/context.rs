@@ -313,7 +313,7 @@ impl<T: MapIdsIn + Ord, M> MapIdsIn for FunctionalPropertyValue<T, M> {
 	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
 		let result = std::mem::take(self);
 		*self = result.map_properties(
-			|id| f(id, None),
+			|id| TId::new(f(id.id(), None)),
 			|mut t| {
 				t.map_ids_in(prop, &f);
 				t
@@ -326,7 +326,7 @@ impl<T: MapIds + Ord, M> MapIds for FunctionalPropertyValue<T, M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id) {
 		let result = std::mem::take(self);
 		*self = result.map_properties(
-			|id| f(id, None),
+			|id| TId::new(f(id.id(), None)),
 			|mut t| {
 				t.map_ids(&f);
 				t
@@ -339,7 +339,7 @@ impl<T: MapIdsIn + Ord, M> MapIdsIn for PropertyValues<T, M> {
 	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
 		let result = std::mem::take(self);
 		*self = result.map_properties(
-			|id| f(id, None),
+			|id| TId::new(f(id.id(), None)),
 			|mut t| {
 				t.map_ids_in(prop, &f);
 				t
@@ -352,7 +352,7 @@ impl<T: MapIds + Ord, M> MapIds for PropertyValues<T, M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id) {
 		let result = std::mem::take(self);
 		*self = result.map_properties(
-			|id| f(id, None),
+			|id| TId::new(f(id.id(), None)),
 			|mut t| {
 				t.map_ids(&f);
 				t

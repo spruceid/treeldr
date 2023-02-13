@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use locspan::Meta;
-use treeldr::{metadata::Merge, vocab::Object, Id};
+use treeldr::{metadata::Merge, prop::UnknownProperty, vocab::Object, TId};
 
 use crate::{
 	context::MapIds, functional_property_value, rdf, resource::BindingValueRef, Error,
@@ -48,7 +48,7 @@ impl<M> Definition<M> {
 
 	pub fn set(
 		&mut self,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
 		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
@@ -56,8 +56,8 @@ impl<M> Definition<M> {
 		M: Merge,
 	{
 		match prop {
-			Property::ExclusiveMaximum => self.restriction.insert(
-				None,
+			Property::ExclusiveMaximum(p) => self.restriction.insert(
+				p,
 				prop_cmp,
 				rdf::from::expect_numeric(value)?.map(|n| {
 					Restriction::Primitive(primitive::Restriction::Numeric(
@@ -65,8 +65,8 @@ impl<M> Definition<M> {
 					))
 				}),
 			),
-			Property::ExclusiveMinimum => self.restriction.insert(
-				None,
+			Property::ExclusiveMinimum(p) => self.restriction.insert(
+				p,
 				prop_cmp,
 				rdf::from::expect_numeric(value)?.map(|n| {
 					Restriction::Primitive(primitive::Restriction::Numeric(
@@ -74,8 +74,8 @@ impl<M> Definition<M> {
 					))
 				}),
 			),
-			Property::InclusiveMaximum => self.restriction.insert(
-				None,
+			Property::InclusiveMaximum(p) => self.restriction.insert(
+				p,
 				prop_cmp,
 				rdf::from::expect_numeric(value)?.map(|n| {
 					Restriction::Primitive(primitive::Restriction::Numeric(
@@ -83,8 +83,8 @@ impl<M> Definition<M> {
 					))
 				}),
 			),
-			Property::InclusiveMinimum => self.restriction.insert(
-				None,
+			Property::InclusiveMinimum(p) => self.restriction.insert(
+				p,
 				prop_cmp,
 				rdf::from::expect_numeric(value)?.map(|n| {
 					Restriction::Primitive(primitive::Restriction::Numeric(
@@ -92,10 +92,10 @@ impl<M> Definition<M> {
 					))
 				}),
 			),
-			Property::MaxLength => todo!(),
-			Property::MinLength => todo!(),
-			Property::Pattern => self.restriction.insert(
-				None,
+			Property::MaxLength(_) => todo!(),
+			Property::MinLength(_) => todo!(),
+			Property::Pattern(p) => self.restriction.insert(
+				p,
 				prop_cmp,
 				rdf::from::expect_regexp(value)?.map(|p| {
 					Restriction::Primitive(primitive::Restriction::String(
@@ -103,8 +103,8 @@ impl<M> Definition<M> {
 					))
 				}),
 			),
-			Property::MaxCardinality => self.restriction.insert(
-				None,
+			Property::MaxCardinality(p) => self.restriction.insert(
+				p,
 				prop_cmp,
 				rdf::from::expect_non_negative_integer(value)?.map(|n| {
 					Restriction::Container(container::ContainerRestriction::Cardinal(
@@ -112,8 +112,8 @@ impl<M> Definition<M> {
 					))
 				}),
 			),
-			Property::MinCardinality => self.restriction.insert(
-				None,
+			Property::MinCardinality(p) => self.restriction.insert(
+				p,
 				prop_cmp,
 				rdf::from::expect_non_negative_integer(value)?.map(|n| {
 					Restriction::Container(container::ContainerRestriction::Cardinal(
@@ -245,10 +245,10 @@ impl<'a> ClassBindingRef<'a> {
 		match self {
 			Self::Primitive(b) => b.value(),
 			Self::Container(container::BindingRef::Cardinal(
-				treeldr::layout::restriction::cardinal::BindingRef::Min(v),
+				treeldr::layout::restriction::cardinal::BindingRef::Min(_, v),
 			)) => BindingValueRef::NonNegativeInteger(v),
 			Self::Container(container::BindingRef::Cardinal(
-				treeldr::layout::restriction::cardinal::BindingRef::Max(v),
+				treeldr::layout::restriction::cardinal::BindingRef::Max(_, v),
 			)) => BindingValueRef::NonNegativeInteger(v),
 		}
 	}

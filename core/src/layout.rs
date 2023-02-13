@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use crate::{
 	component,
 	node::{self, BindingValueRef},
-	property_values, vocab, FunctionalPropertyValue, Id, Multiple, PropertyValue, PropertyValues,
-	RequiredFunctionalPropertyValue, ResourceType, TId, Type,
+	prop::{PropertyName, UnknownProperty},
+	property_values, vocab, FunctionalPropertyValue, Id, IriIndex, Multiple, PropertyValue,
+	PropertyValues, RequiredFunctionalPropertyValue, ResourceType, TId, Type,
 };
 use derivative::Derivative;
 use locspan::Meta;
@@ -517,58 +518,100 @@ impl<'a, M> Iterator for ComposingLayouts<'a, M> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
-	For,
+	For(Option<TId<UnknownProperty>>),
 	Description(DescriptionProperty),
-	IntersectionOf,
-	WithRestrictions,
-	ArrayListFirst,
-	ArrayListRest,
-	ArrayListNil,
+	IntersectionOf(Option<TId<UnknownProperty>>),
+	WithRestrictions(Option<TId<UnknownProperty>>),
+	ArrayListFirst(Option<TId<UnknownProperty>>),
+	ArrayListRest(Option<TId<UnknownProperty>>),
+	ArrayListNil(Option<TId<UnknownProperty>>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DescriptionProperty {
-	DerivedFrom,
-	Fields,
-	Variants,
-	Reference,
-	Required,
-	Option,
-	Set,
-	OneOrMany,
-	Array,
-	Alias,
+	DerivedFrom(Option<TId<UnknownProperty>>),
+	Fields(Option<TId<UnknownProperty>>),
+	Variants(Option<TId<UnknownProperty>>),
+	Reference(Option<TId<UnknownProperty>>),
+	Required(Option<TId<UnknownProperty>>),
+	Option(Option<TId<UnknownProperty>>),
+	Set(Option<TId<UnknownProperty>>),
+	OneOrMany(Option<TId<UnknownProperty>>),
+	Array(Option<TId<UnknownProperty>>),
+	Alias(Option<TId<UnknownProperty>>),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::{Term, TreeLdr};
 		match self {
-			Self::For => Term::TreeLdr(TreeLdr::LayoutFor),
-			Self::Description(p) => p.term(),
-			Self::IntersectionOf => Term::TreeLdr(TreeLdr::IntersectionOf),
-			Self::WithRestrictions => Term::TreeLdr(TreeLdr::WithRestrictions),
-			Self::ArrayListFirst => Term::TreeLdr(TreeLdr::ArrayListFirst),
-			Self::ArrayListRest => Term::TreeLdr(TreeLdr::ArrayListRest),
-			Self::ArrayListNil => Term::TreeLdr(TreeLdr::ArrayListNil),
+			Self::For(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::LayoutFor))),
+			Self::For(Some(p)) => p.id(),
+			Self::Description(p) => p.id(),
+			Self::IntersectionOf(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::IntersectionOf)))
+			}
+			Self::IntersectionOf(Some(p)) => p.id(),
+			Self::WithRestrictions(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::WithRestrictions)))
+			}
+			Self::WithRestrictions(Some(p)) => p.id(),
+			Self::ArrayListFirst(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::ArrayListFirst)))
+			}
+			Self::ArrayListFirst(Some(p)) => p.id(),
+			Self::ArrayListRest(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::ArrayListRest)))
+			}
+			Self::ArrayListRest(Some(p)) => p.id(),
+			Self::ArrayListNil(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::ArrayListNil)))
+			}
+			Self::ArrayListNil(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::{Term, TreeLdr};
 		match self {
-			Self::For => "layout type",
+			Self::For(None) => Some(Term::TreeLdr(TreeLdr::LayoutFor)),
+			Self::Description(p) => p.term(),
+			Self::IntersectionOf(None) => Some(Term::TreeLdr(TreeLdr::IntersectionOf)),
+			Self::WithRestrictions(None) => Some(Term::TreeLdr(TreeLdr::WithRestrictions)),
+			Self::ArrayListFirst(None) => Some(Term::TreeLdr(TreeLdr::ArrayListFirst)),
+			Self::ArrayListRest(None) => Some(Term::TreeLdr(TreeLdr::ArrayListRest)),
+			Self::ArrayListNil(None) => Some(Term::TreeLdr(TreeLdr::ArrayListNil)),
+			_ => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::For(None) => PropertyName::Resource("layout type"),
+			Self::For(Some(p)) => PropertyName::Other(*p),
 			Self::Description(p) => p.name(),
-			Self::IntersectionOf => "intersection",
-			Self::WithRestrictions => "layout restrictions",
-			Self::ArrayListFirst => "\"array as list\" `first` property",
-			Self::ArrayListRest => "\"array as list\" `rest` property",
-			Self::ArrayListNil => "\"array as list\" empty list value",
+			Self::IntersectionOf(None) => PropertyName::Resource("intersection"),
+			Self::IntersectionOf(Some(p)) => PropertyName::Other(*p),
+			Self::WithRestrictions(None) => PropertyName::Resource("layout restrictions"),
+			Self::WithRestrictions(Some(p)) => PropertyName::Other(*p),
+			Self::ArrayListFirst(None) => {
+				PropertyName::Resource("\"array as list\" `first` property")
+			}
+			Self::ArrayListFirst(Some(p)) => PropertyName::Other(*p),
+			Self::ArrayListRest(None) => {
+				PropertyName::Resource("\"array as list\" `rest` property")
+			}
+			Self::ArrayListRest(Some(p)) => PropertyName::Other(*p),
+			Self::ArrayListNil(None) => {
+				PropertyName::Resource("\"array as list\" empty list value")
+			}
+			Self::ArrayListNil(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
 	pub fn expect_type(&self) -> bool {
 		match self {
-			Self::For => true,
+			Self::For(_) => true,
 			Self::Description(p) => p.expect_type(),
 			_ => false,
 		}
@@ -583,45 +626,83 @@ impl Property {
 }
 
 impl DescriptionProperty {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::{Term, TreeLdr};
 		match self {
-			Self::DerivedFrom => Term::TreeLdr(TreeLdr::DerivedFrom),
-			Self::Reference => Term::TreeLdr(TreeLdr::Reference),
-			Self::Fields => Term::TreeLdr(TreeLdr::Fields),
-			Self::Variants => Term::TreeLdr(TreeLdr::Enumeration),
-			Self::Required => Term::TreeLdr(TreeLdr::Required),
-			Self::Option => Term::TreeLdr(TreeLdr::Option),
-			Self::Set => Term::TreeLdr(TreeLdr::Set),
-			Self::OneOrMany => Term::TreeLdr(TreeLdr::OneOrMany),
-			Self::Array => Term::TreeLdr(TreeLdr::Array),
-			Self::Alias => Term::TreeLdr(TreeLdr::Alias),
+			Self::DerivedFrom(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::DerivedFrom))),
+			Self::DerivedFrom(Some(p)) => p.id(),
+			Self::Reference(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Reference))),
+			Self::Reference(Some(p)) => p.id(),
+			Self::Fields(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Fields))),
+			Self::Fields(Some(p)) => p.id(),
+			Self::Variants(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Enumeration))),
+			Self::Variants(Some(p)) => p.id(),
+			Self::Required(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Required))),
+			Self::Required(Some(p)) => p.id(),
+			Self::Option(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Option))),
+			Self::Option(Some(p)) => p.id(),
+			Self::Set(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Set))),
+			Self::Set(Some(p)) => p.id(),
+			Self::OneOrMany(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::OneOrMany))),
+			Self::OneOrMany(Some(p)) => p.id(),
+			Self::Array(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Array))),
+			Self::Array(Some(p)) => p.id(),
+			Self::Alias(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Alias))),
+			Self::Alias(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::{Term, TreeLdr};
 		match self {
-			Self::DerivedFrom => "derived primitive layout",
-			Self::Reference => "referenced type",
-			Self::Fields => "structure fields",
-			Self::Variants => "enum variants",
-			Self::Required => "required item layout",
-			Self::Option => "optional item layout",
-			Self::Set => "set item layout",
-			Self::OneOrMany => "one or many item layout",
-			Self::Array => "array item layout",
-			Self::Alias => "alias layout",
+			Self::DerivedFrom(None) => Some(Term::TreeLdr(TreeLdr::DerivedFrom)),
+			Self::Reference(None) => Some(Term::TreeLdr(TreeLdr::Reference)),
+			Self::Fields(None) => Some(Term::TreeLdr(TreeLdr::Fields)),
+			Self::Variants(None) => Some(Term::TreeLdr(TreeLdr::Enumeration)),
+			Self::Required(None) => Some(Term::TreeLdr(TreeLdr::Required)),
+			Self::Option(None) => Some(Term::TreeLdr(TreeLdr::Option)),
+			Self::Set(None) => Some(Term::TreeLdr(TreeLdr::Set)),
+			Self::OneOrMany(None) => Some(Term::TreeLdr(TreeLdr::OneOrMany)),
+			Self::Array(None) => Some(Term::TreeLdr(TreeLdr::Array)),
+			Self::Alias(None) => Some(Term::TreeLdr(TreeLdr::Alias)),
+			_ => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::DerivedFrom(None) => PropertyName::Resource("derived primitive layout"),
+			Self::DerivedFrom(Some(p)) => PropertyName::Other(*p),
+			Self::Reference(None) => PropertyName::Resource("referenced type"),
+			Self::Reference(Some(p)) => PropertyName::Other(*p),
+			Self::Fields(None) => PropertyName::Resource("structure fields"),
+			Self::Fields(Some(p)) => PropertyName::Other(*p),
+			Self::Variants(None) => PropertyName::Resource("enum variants"),
+			Self::Variants(Some(p)) => PropertyName::Other(*p),
+			Self::Required(None) => PropertyName::Resource("required item layout"),
+			Self::Required(Some(p)) => PropertyName::Other(*p),
+			Self::Option(None) => PropertyName::Resource("optional item layout"),
+			Self::Option(Some(p)) => PropertyName::Other(*p),
+			Self::Set(None) => PropertyName::Resource("set item layout"),
+			Self::Set(Some(p)) => PropertyName::Other(*p),
+			Self::OneOrMany(None) => PropertyName::Resource("one or many item layout"),
+			Self::OneOrMany(Some(p)) => PropertyName::Other(*p),
+			Self::Array(None) => PropertyName::Resource("array item layout"),
+			Self::Array(Some(p)) => PropertyName::Other(*p),
+			Self::Alias(None) => PropertyName::Resource("alias layout"),
+			Self::Alias(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
 	pub fn expect_layout(&self) -> bool {
 		matches!(
 			self,
-			Self::DerivedFrom
-				| Self::Reference
-				| Self::Required | Self::Option
-				| Self::OneOrMany
-				| Self::Array | Self::Alias
+			Self::DerivedFrom(_)
+				| Self::Reference(_)
+				| Self::Required(_)
+				| Self::Option(_)
+				| Self::OneOrMany(_)
+				| Self::Array(_) | Self::Alias(_)
 		)
 	}
 
@@ -633,31 +714,31 @@ impl DescriptionProperty {
 #[derive(Debug, Derivative)]
 #[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub enum DescriptionBindingRef<'a, M> {
-	DerivedFrom(Option<Id>, Primitive),
-	Reference(Option<Id>, TId<Layout>),
-	Struct(Option<Id>, &'a [Meta<TId<Field>, M>]),
-	Enum(Option<Id>, &'a [Meta<TId<Variant>, M>]),
-	Required(Option<Id>, TId<Layout>),
-	Option(Option<Id>, TId<Layout>),
-	Array(Option<Id>, TId<Layout>),
-	Set(Option<Id>, TId<Layout>),
-	OneOrMany(Option<Id>, TId<Layout>),
-	Alias(Option<Id>, TId<Layout>),
+	DerivedFrom(Option<TId<UnknownProperty>>, Primitive),
+	Reference(Option<TId<UnknownProperty>>, TId<Layout>),
+	Struct(Option<TId<UnknownProperty>>, &'a [Meta<TId<Field>, M>]),
+	Enum(Option<TId<UnknownProperty>>, &'a [Meta<TId<Variant>, M>]),
+	Required(Option<TId<UnknownProperty>>, TId<Layout>),
+	Option(Option<TId<UnknownProperty>>, TId<Layout>),
+	Array(Option<TId<UnknownProperty>>, TId<Layout>),
+	Set(Option<TId<UnknownProperty>>, TId<Layout>),
+	OneOrMany(Option<TId<UnknownProperty>>, TId<Layout>),
+	Alias(Option<TId<UnknownProperty>>, TId<Layout>),
 }
 
 impl<'a, M> DescriptionBindingRef<'a, M> {
 	pub fn property(&self) -> DescriptionProperty {
 		match self {
-			Self::DerivedFrom(_, _) => DescriptionProperty::DerivedFrom,
-			Self::Reference(_, _) => DescriptionProperty::Reference,
-			Self::Struct(_, _) => DescriptionProperty::Fields,
-			Self::Enum(_, _) => DescriptionProperty::Variants,
-			Self::Required(_, _) => DescriptionProperty::Required,
-			Self::Option(_, _) => DescriptionProperty::Option,
-			Self::Array(_, _) => DescriptionProperty::Array,
-			Self::Set(_, _) => DescriptionProperty::Set,
-			Self::OneOrMany(_, _) => DescriptionProperty::OneOrMany,
-			Self::Alias(_, _) => DescriptionProperty::Alias,
+			Self::DerivedFrom(p, _) => DescriptionProperty::DerivedFrom(*p),
+			Self::Reference(p, _) => DescriptionProperty::Reference(*p),
+			Self::Struct(p, _) => DescriptionProperty::Fields(*p),
+			Self::Enum(p, _) => DescriptionProperty::Variants(*p),
+			Self::Required(p, _) => DescriptionProperty::Required(*p),
+			Self::Option(p, _) => DescriptionProperty::Option(*p),
+			Self::Array(p, _) => DescriptionProperty::Array(*p),
+			Self::Set(p, _) => DescriptionProperty::Set(*p),
+			Self::OneOrMany(p, _) => DescriptionProperty::OneOrMany(*p),
+			Self::Alias(p, _) => DescriptionProperty::Alias(*p),
 		}
 	}
 
@@ -678,10 +759,10 @@ impl<'a, M> DescriptionBindingRef<'a, M> {
 }
 
 pub enum ClassBindingRef<'a, M> {
-	For(Option<Id>, TId<crate::Type>),
+	For(Option<TId<UnknownProperty>>, TId<crate::Type>),
 	Description(DescriptionBindingRef<'a, M>),
-	IntersectionOf(Option<Id>, &'a Multiple<TId<Layout>, M>),
-	WithRestrictions(Option<Id>, Restrictions<'a, M>),
+	IntersectionOf(Option<TId<UnknownProperty>>, &'a Multiple<TId<Layout>, M>),
+	WithRestrictions(Option<TId<UnknownProperty>>, Restrictions<'a, M>),
 	ArraySemantics(array::Binding),
 }
 
@@ -690,10 +771,10 @@ pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
 impl<'a, M> ClassBindingRef<'a, M> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::For(_, _) => Property::For,
+			Self::For(p, _) => Property::For(*p),
 			Self::Description(d) => Property::Description(d.property()),
-			Self::IntersectionOf(_, _) => Property::IntersectionOf,
-			Self::WithRestrictions(_, _) => Property::WithRestrictions,
+			Self::IntersectionOf(p, _) => Property::IntersectionOf(*p),
+			Self::WithRestrictions(p, _) => Property::WithRestrictions(*p),
 			Self::ArraySemantics(b) => b.property(),
 		}
 	}

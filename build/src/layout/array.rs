@@ -10,7 +10,7 @@ use crate::{
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::StrippedPartialEq;
-use treeldr::{metadata::Merge, vocab, Id, IriIndex};
+use treeldr::{metadata::Merge, prop::UnknownProperty, vocab, Id, IriIndex, TId};
 use vocab::{Rdf, Term};
 
 #[derive(Clone, Debug, Derivative, StrippedPartialEq)]
@@ -56,29 +56,65 @@ impl<M> Semantics<M> {
 		&self.nil
 	}
 
-	pub fn set_first(&mut self, id: Meta<Id, M>)
+	pub fn set_first_base(&mut self, id: Meta<Id, M>)
 	where
 		M: Merge,
 	{
 		self.first.insert_base(id)
 	}
 
-	pub fn set_rest(&mut self, id: Meta<Id, M>)
+	pub fn set_rest_base(&mut self, id: Meta<Id, M>)
 	where
 		M: Merge,
 	{
 		self.rest.insert_base(id)
 	}
 
-	pub fn set_nil(&mut self, id: Meta<Id, M>)
+	pub fn set_nil_base(&mut self, id: Meta<Id, M>)
 	where
 		M: Merge,
 	{
 		self.nil.insert_base(id)
 	}
 
-	pub fn unify_with(&mut self, prop_cmp: impl Fn(Id, Id) -> Option<Ordering>, other: Self)
-	where
+	pub fn set_first(
+		&mut self,
+		prop: Option<TId<UnknownProperty>>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		id: Meta<Id, M>,
+	) where
+		M: Merge,
+	{
+		self.first.insert(prop, prop_cmp, id)
+	}
+
+	pub fn set_rest(
+		&mut self,
+		prop: Option<TId<UnknownProperty>>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		id: Meta<Id, M>,
+	) where
+		M: Merge,
+	{
+		self.rest.insert(prop, prop_cmp, id)
+	}
+
+	pub fn set_nil(
+		&mut self,
+		prop: Option<TId<UnknownProperty>>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		id: Meta<Id, M>,
+	) where
+		M: Merge,
+	{
+		self.nil.insert(prop, prop_cmp, id)
+	}
+
+	pub fn unify_with(
+		&mut self,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		other: Self,
+	) where
 		M: Merge,
 	{
 		self.first.extend_with(&prop_cmp, other.first);
@@ -105,27 +141,27 @@ impl<M> Semantics<M> {
 		let first = self
 			.first
 			.try_unwrap()
-			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListFirst))?;
+			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListFirst(None)))?;
 		let rest = self
 			.rest
 			.try_unwrap()
-			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListRest))?;
+			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListRest(None)))?;
 		let nil = self
 			.nil
 			.try_unwrap()
-			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListNil))?;
+			.map_err(|c| c.at_functional_node_property(id, Property::ArrayListNil(None)))?;
 
 		let first = first.try_map_borrow_metadata(|id, meta| {
 			let meta = meta.first().unwrap().value.into_metadata();
 			model
 				.require_property_id(id)
-				.map_err(|e| e.at_node_property(id, Property::ArrayListFirst, meta.clone()))
+				.map_err(|e| e.at_node_property(id, Property::ArrayListFirst(None), meta.clone()))
 		})?;
 		let rest = rest.try_map_borrow_metadata(|id, meta| {
 			let meta = meta.first().unwrap().value.into_metadata();
 			model
 				.require_property_id(id)
-				.map_err(|e| e.at_node_property(id, Property::ArrayListRest, meta.clone()))
+				.map_err(|e| e.at_node_property(id, Property::ArrayListRest(None), meta.clone()))
 		})?;
 
 		if first.is_some() || rest.is_some() || nil.is_some() {
@@ -141,10 +177,11 @@ impl<M> Semantics<M> {
 impl<M: Merge> MapIds for Semantics<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
 		self.first
-			.map_ids_in(Some(Property::ArrayListFirst.into()), &f);
+			.map_ids_in(Some(Property::ArrayListFirst(None).into()), &f);
 		self.rest
-			.map_ids_in(Some(Property::ArrayListRest.into()), &f);
-		self.nil.map_ids_in(Some(Property::ArrayListNil.into()), f)
+			.map_ids_in(Some(Property::ArrayListRest(None).into()), &f);
+		self.nil
+			.map_ids_in(Some(Property::ArrayListNil(None).into()), f)
 	}
 }
 
@@ -156,17 +193,17 @@ impl<M> PartialEq for Semantics<M> {
 
 #[derive(Debug)]
 pub enum Binding {
-	ArrayListFirst(Option<Id>, Id),
-	ArrayListRest(Option<Id>, Id),
-	ArrayListNil(Option<Id>, Id),
+	ArrayListFirst(Option<TId<UnknownProperty>>, Id),
+	ArrayListRest(Option<TId<UnknownProperty>>, Id),
+	ArrayListNil(Option<TId<UnknownProperty>>, Id),
 }
 
 impl Binding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::ArrayListFirst(_, _) => Property::ArrayListFirst,
-			Self::ArrayListRest(_, _) => Property::ArrayListRest,
-			Self::ArrayListNil(_, _) => Property::ArrayListNil,
+			Self::ArrayListFirst(p, _) => Property::ArrayListFirst(*p),
+			Self::ArrayListRest(p, _) => Property::ArrayListRest(*p),
+			Self::ArrayListNil(p, _) => Property::ArrayListNil(*p),
 		}
 	}
 

@@ -4,9 +4,11 @@ use locspan::Meta;
 use crate::{
 	layout,
 	node::BindingValueRef,
+	prop::{PropertyName, UnknownProperty},
 	property_values,
 	vocab::{self, Term},
-	FunctionalPropertyValue, Id, Layout, MetaOption, RequiredFunctionalPropertyValue, TId,
+	FunctionalPropertyValue, Id, IriIndex, Layout, MetaOption, RequiredFunctionalPropertyValue,
+	TId,
 };
 
 pub struct Formatted;
@@ -102,22 +104,33 @@ impl Type {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
-	Format,
+	Format(Option<TId<UnknownProperty>>),
 	LayoutField(layout::field::Property),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::TreeLdr;
 		match self {
-			Self::Format => Term::TreeLdr(TreeLdr::Format),
+			Self::Format(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Format))),
+			Self::Format(Some(p)) => p.id(),
+			Self::LayoutField(p) => p.id(),
+		}
+	}
+
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::TreeLdr;
+		match self {
+			Self::Format(None) => Some(Term::TreeLdr(TreeLdr::Format)),
+			Self::Format(Some(_)) => None,
 			Self::LayoutField(p) => p.term(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn name(&self) -> PropertyName {
 		match self {
-			Self::Format => "format",
+			Self::Format(None) => PropertyName::Resource("format"),
+			Self::Format(Some(p)) => PropertyName::Other(*p),
 			Self::LayoutField(p) => p.name(),
 		}
 	}
@@ -131,26 +144,26 @@ impl Property {
 
 	pub fn expect_layout(&self) -> bool {
 		match self {
-			Self::Format => true,
+			Self::Format(_) => true,
 			Self::LayoutField(p) => p.expect_layout(),
 		}
 	}
 }
 
 pub enum ClassBinding {
-	Format(Option<Id>, TId<Layout>),
+	Format(Option<TId<UnknownProperty>>, TId<Layout>),
 }
 
 impl ClassBinding {
 	pub fn into_binding(self) -> Binding {
 		match self {
-			Self::Format(_, id) => Binding::Format(id),
+			Self::Format(p, id) => Binding::Format(p, id),
 		}
 	}
 }
 
 pub enum Binding {
-	Format(TId<Layout>),
+	Format(Option<TId<UnknownProperty>>, TId<Layout>),
 	LayoutField(layout::field::ClassBinding),
 }
 
@@ -164,14 +177,14 @@ impl Binding {
 
 	pub fn property(&self) -> Property {
 		match self {
-			Self::Format(_) => Property::Format,
+			Self::Format(p, _) => Property::Format(*p),
 			Self::LayoutField(b) => Property::LayoutField(b.property()),
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Format(v) => BindingValueRef::Layout(*v),
+			Self::Format(_, v) => BindingValueRef::Layout(*v),
 			Self::LayoutField(b) => b.value(),
 		}
 	}

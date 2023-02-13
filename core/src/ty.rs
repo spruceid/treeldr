@@ -4,7 +4,8 @@ use crate::{
 	component,
 	metadata::Merge,
 	node::{self, BindingValueRef},
-	prop, property_values,
+	prop::{self, PropertyName, UnknownProperty},
+	property_values,
 	vocab::{self, Rdfs, Term},
 	BlankIdIndex, Id, IriIndex, Multiple, MutableModel, PropertyValueRef, PropertyValues, Ref,
 	RequiredFunctionalPropertyValue, ResourceType, TId,
@@ -396,30 +397,48 @@ impl<M> Definition<M> {
 pub enum Property {
 	Datatype(data::Property),
 	Restriction(restriction::Property),
-	SubClassOf,
-	UnionOf,
-	IntersectionOf,
+	SubClassOf(Option<TId<UnknownProperty>>),
+	UnionOf(Option<TId<UnknownProperty>>),
+	IntersectionOf(Option<TId<UnknownProperty>>),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
+		use vocab::Owl;
+		match self {
+			Self::Datatype(p) => p.id(),
+			Self::Restriction(p) => p.id(),
+			Self::SubClassOf(None) => Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::SubClassOf))),
+			Self::SubClassOf(Some(p)) => p.id(),
+			Self::UnionOf(None) => Id::Iri(IriIndex::Iri(Term::Owl(Owl::UnionOf))),
+			Self::UnionOf(Some(p)) => p.id(),
+			Self::IntersectionOf(None) => Id::Iri(IriIndex::Iri(Term::Owl(Owl::IntersectionOf))),
+			Self::IntersectionOf(Some(p)) => p.id(),
+		}
+	}
+
+	pub fn term(&self) -> Option<vocab::Term> {
 		use vocab::Owl;
 		match self {
 			Self::Datatype(p) => p.term(),
 			Self::Restriction(p) => p.term(),
-			Self::SubClassOf => Term::Rdfs(Rdfs::SubClassOf),
-			Self::UnionOf => Term::Owl(Owl::UnionOf),
-			Self::IntersectionOf => Term::Owl(Owl::IntersectionOf),
+			Self::SubClassOf(None) => Some(Term::Rdfs(Rdfs::SubClassOf)),
+			Self::UnionOf(None) => Some(Term::Owl(Owl::UnionOf)),
+			Self::IntersectionOf(None) => Some(Term::Owl(Owl::IntersectionOf)),
+			_ => None,
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn name(&self) -> PropertyName {
 		match self {
 			Self::Datatype(p) => p.name(),
 			Self::Restriction(p) => p.name(),
-			Self::SubClassOf => "super class",
-			Self::UnionOf => "type union",
-			Self::IntersectionOf => "type intersection",
+			Self::SubClassOf(None) => PropertyName::Resource("super class"),
+			Self::SubClassOf(Some(p)) => PropertyName::Other(*p),
+			Self::UnionOf(None) => PropertyName::Resource("type union"),
+			Self::UnionOf(Some(p)) => PropertyName::Other(*p),
+			Self::IntersectionOf(None) => PropertyName::Resource("type intersection"),
+			Self::IntersectionOf(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
@@ -441,8 +460,14 @@ impl Property {
 }
 
 pub enum ClassBindingRef<'a, M> {
-	UnionOf(Option<Id>, &'a Multiple<TId<crate::Type>, M>),
-	IntersectionOf(Option<Id>, &'a Multiple<TId<crate::Type>, M>),
+	UnionOf(
+		Option<TId<UnknownProperty>>,
+		&'a Multiple<TId<crate::Type>, M>,
+	),
+	IntersectionOf(
+		Option<TId<UnknownProperty>>,
+		&'a Multiple<TId<crate::Type>, M>,
+	),
 }
 
 impl<'a, M> ClassBindingRef<'a, M> {
@@ -483,8 +508,14 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 }
 
 pub enum BindingRef<'a, M> {
-	UnionOf(Option<Id>, &'a Multiple<TId<crate::Type>, M>),
-	IntersectionOf(Option<Id>, &'a Multiple<TId<crate::Type>, M>),
+	UnionOf(
+		Option<TId<UnknownProperty>>,
+		&'a Multiple<TId<crate::Type>, M>,
+	),
+	IntersectionOf(
+		Option<TId<UnknownProperty>>,
+		&'a Multiple<TId<crate::Type>, M>,
+	),
 	Datatype(data::BindingRef<'a, M>),
 	Restriction(restriction::BindingRef<'a>),
 }
@@ -500,8 +531,8 @@ impl<'a, M> BindingRef<'a, M> {
 
 	pub fn property(&self) -> Property {
 		match self {
-			Self::UnionOf(_, _) => Property::UnionOf,
-			Self::IntersectionOf(_, _) => Property::IntersectionOf,
+			Self::UnionOf(p, _) => Property::UnionOf(*p),
+			Self::IntersectionOf(p, _) => Property::IntersectionOf(*p),
 			Self::Datatype(b) => Property::Datatype(b.property()),
 			Self::Restriction(b) => Property::Restriction(b.property()),
 		}

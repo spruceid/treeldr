@@ -1,4 +1,4 @@
-use crate::Id;
+use crate::{prop::UnknownProperty, TId};
 use locspan::Meta;
 use std::ops::Deref;
 
@@ -12,28 +12,28 @@ pub use required_functional::RequiredFunctionalPropertyValue;
 
 pub enum SubPropertyIn<P> {
 	Known(P),
-	Other(Id),
+	Other(TId<UnknownProperty>),
 }
 
 /// Property value.
 #[derive(Clone, Debug)]
 pub struct PropertyValue<T, M> {
 	/// Sub-property this value is associated to.
-	pub sub_property: Option<Id>,
+	pub sub_property: Option<TId<UnknownProperty>>,
 
 	/// Value itself.
 	pub value: Meta<T, M>,
 }
 
 impl<T, M> PropertyValue<T, M> {
-	pub fn new(sub_property: Option<Id>, value: Meta<T, M>) -> Self {
+	pub fn new(sub_property: Option<TId<UnknownProperty>>, value: Meta<T, M>) -> Self {
 		Self {
 			sub_property,
 			value,
 		}
 	}
 
-	fn for_sub_property(self, id: Id) -> Self {
+	fn for_sub_property(self, id: TId<UnknownProperty>) -> Self {
 		Self {
 			sub_property: self.sub_property.or(Some(id)),
 			value: self.value,
@@ -51,7 +51,10 @@ impl<T, M> PropertyValue<T, M> {
 		self.value.into_value()
 	}
 
-	pub(crate) fn into_class_binding<B>(self, binding: impl Fn(Option<Id>, T) -> B) -> Meta<B, M> {
+	pub(crate) fn into_class_binding<B>(
+		self,
+		binding: impl Fn(Option<TId<UnknownProperty>>, T) -> B,
+	) -> Meta<B, M> {
 		let Meta(v, meta) = self.value;
 		Meta(binding(self.sub_property, v), meta)
 	}
@@ -69,21 +72,21 @@ impl<'a, T, M> PropertyValue<T, &'a M> {
 /// Reference to a property value.
 pub struct PropertyValueRef<'a, T, M> {
 	/// Sub-property this value is associated to.
-	pub sub_property: Option<Id>,
+	pub sub_property: Option<TId<UnknownProperty>>,
 
 	/// Value itself.
 	pub value: Meta<&'a T, &'a M>,
 }
 
 impl<'a, T, M> PropertyValueRef<'a, T, M> {
-	pub fn new(sub_property: Option<Id>, value: Meta<&'a T, &'a M>) -> Self {
+	pub fn new(sub_property: Option<TId<UnknownProperty>>, value: Meta<&'a T, &'a M>) -> Self {
 		Self {
 			sub_property,
 			value,
 		}
 	}
 
-	fn for_sub_property(self, id: Id) -> Self {
+	fn for_sub_property(self, id: TId<UnknownProperty>) -> Self {
 		Self {
 			sub_property: self.sub_property.or(Some(id)),
 			value: self.value,
@@ -101,14 +104,17 @@ impl<'a, T, M> PropertyValueRef<'a, T, M> {
 		PropertyValue::new(self.sub_property, self.value.into_cloned_value())
 	}
 
-	pub fn into_class_binding<B>(self, binding: impl Fn(Option<Id>, &'a T) -> B) -> Meta<B, &'a M> {
+	pub fn into_class_binding<B>(
+		self,
+		binding: impl Fn(Option<TId<UnknownProperty>>, &'a T) -> B,
+	) -> Meta<B, &'a M> {
 		let Meta(v, meta) = self.value;
 		Meta(binding(self.sub_property, v), meta)
 	}
 
 	pub fn into_cloned_class_binding<B>(
 		self,
-		binding: impl Fn(Option<Id>, T) -> B,
+		binding: impl Fn(Option<TId<UnknownProperty>>, T) -> B,
 	) -> Meta<B, &'a M>
 	where
 		T: Clone,
@@ -119,7 +125,7 @@ impl<'a, T, M> PropertyValueRef<'a, T, M> {
 
 	pub fn into_deref_class_binding<B>(
 		self,
-		binding: impl Fn(Option<Id>, &'a T::Target) -> B,
+		binding: impl Fn(Option<TId<UnknownProperty>>, &'a T::Target) -> B,
 	) -> Meta<B, &'a M>
 	where
 		T: Deref,

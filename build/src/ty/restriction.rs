@@ -7,7 +7,9 @@ use crate::{
 	single, Context, Error, FunctionalPropertyValue, Single,
 };
 use locspan::Meta;
-use treeldr::{metadata::Merge, value::NonNegativeInteger, vocab::Object, Id};
+use treeldr::{
+	metadata::Merge, prop::UnknownProperty, value::NonNegativeInteger, vocab::Object, Id, TId,
+};
 
 pub use treeldr::ty::restriction::{Cardinality, Property};
 
@@ -20,8 +22,8 @@ pub enum Range {
 impl MapIds for Range {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
 		match self {
-			Self::Any(id) => id.map_ids_in(Some(Property::SomeValuesFrom.into()), f),
-			Self::All(id) => id.map_ids_in(Some(Property::AllValuesFrom.into()), f),
+			Self::Any(id) => id.map_ids_in(Some(Property::SomeValuesFrom(None).into()), f),
+			Self::All(id) => id.map_ids_in(Some(Property::AllValuesFrom(None).into()), f),
 		}
 	}
 }
@@ -81,7 +83,7 @@ impl<M> Definition<M> {
 
 	pub fn set(
 		&mut self,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
 		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
@@ -89,25 +91,25 @@ impl<M> Definition<M> {
 		M: Merge,
 	{
 		match prop {
-			Property::OnProperty => {
+			Property::OnProperty(p) => {
 				self.property
-					.insert(None, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
 			}
-			Property::AllValuesFrom => self
+			Property::AllValuesFrom(_) => self
 				.restriction
 				.insert(rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::All(id)))),
-			Property::SomeValuesFrom => self
+			Property::SomeValuesFrom(_) => self
 				.restriction
 				.insert(rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::Any(id)))),
-			Property::MaxCardinality => self.restriction.insert(
+			Property::MaxCardinality(_) => self.restriction.insert(
 				rdf::from::expect_non_negative_integer(value)?
 					.map(|n| Restriction::Cardinality(Cardinality::AtMost(n))),
 			),
-			Property::MinCardinality => self.restriction.insert(
+			Property::MinCardinality(_) => self.restriction.insert(
 				rdf::from::expect_non_negative_integer(value)?
 					.map(|n| Restriction::Cardinality(Cardinality::AtLeast(n))),
 			),
-			Property::Cardinality => self.restriction.insert(
+			Property::Cardinality(_) => self.restriction.insert(
 				rdf::from::expect_non_negative_integer(value)?
 					.map(|n| Restriction::Cardinality(Cardinality::Exactly(n))),
 			),
@@ -131,7 +133,7 @@ impl<M> Definition<M> {
 			.into_required_property_at_node_binding(
 				context,
 				as_resource.id,
-				Property::OnProperty,
+				Property::OnProperty(None),
 				meta,
 			)?;
 		let Meta(restriction, restriction_meta) = self
@@ -151,7 +153,7 @@ impl<M> Definition<M> {
 impl<M: Merge> MapIds for Definition<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
 		self.property
-			.map_ids_in(Some(Property::OnProperty.into()), &f);
+			.map_ids_in(Some(Property::OnProperty(None).into()), &f);
 		self.restriction.map_ids(f)
 	}
 }
@@ -178,9 +180,9 @@ impl Restriction {
 		match self {
 			Self::Range(r) => r.as_binding_ref(),
 			Self::Cardinality(r) => match r {
-				Cardinality::AtLeast(v) => ClassBindingRef::MinCardinality(v),
-				Cardinality::AtMost(v) => ClassBindingRef::MaxCardinality(v),
-				Cardinality::Exactly(v) => ClassBindingRef::Cardinality(v),
+				Cardinality::AtLeast(v) => ClassBindingRef::MinCardinality(None, v),
+				Cardinality::AtMost(v) => ClassBindingRef::MaxCardinality(None, v),
+				Cardinality::Exactly(v) => ClassBindingRef::Cardinality(None, v),
 			},
 		}
 	}
@@ -198,15 +200,15 @@ impl Range {
 	{
 		match self {
 			Self::Any(ty_id) => {
-				let ty_ref = context
-					.require_type_id(ty_id)
-					.map_err(|e| e.at_node_property(id, Property::SomeValuesFrom, meta.clone()))?;
+				let ty_ref = context.require_type_id(ty_id).map_err(|e| {
+					e.at_node_property(id, Property::SomeValuesFrom(None), meta.clone())
+				})?;
 				Ok(treeldr::ty::restriction::Range::Any(ty_ref))
 			}
 			Self::All(ty_id) => {
-				let ty_ref = context
-					.require_type_id(ty_id)
-					.map_err(|e| e.at_node_property(id, Property::AllValuesFrom, meta.clone()))?;
+				let ty_ref = context.require_type_id(ty_id).map_err(|e| {
+					e.at_node_property(id, Property::AllValuesFrom(None), meta.clone())
+				})?;
 				Ok(treeldr::ty::restriction::Range::All(ty_ref))
 			}
 		}
@@ -214,75 +216,75 @@ impl Range {
 
 	pub fn as_binding_ref<'a>(&self) -> ClassBindingRef<'a> {
 		match self {
-			Self::Any(v) => ClassBindingRef::SomeValuesFrom(*v),
-			Self::All(v) => ClassBindingRef::AllValuesFrom(*v),
+			Self::Any(v) => ClassBindingRef::SomeValuesFrom(None, *v),
+			Self::All(v) => ClassBindingRef::AllValuesFrom(None, *v),
 		}
 	}
 }
 
 pub enum ClassBinding {
-	OnProperty(Id),
-	SomeValuesFrom(Id),
-	AllValuesFrom(Id),
-	MinCardinality(NonNegativeInteger),
-	MaxCardinality(NonNegativeInteger),
-	Cardinality(NonNegativeInteger),
+	OnProperty(Option<TId<UnknownProperty>>, Id),
+	SomeValuesFrom(Option<TId<UnknownProperty>>, Id),
+	AllValuesFrom(Option<TId<UnknownProperty>>, Id),
+	MinCardinality(Option<TId<UnknownProperty>>, NonNegativeInteger),
+	MaxCardinality(Option<TId<UnknownProperty>>, NonNegativeInteger),
+	Cardinality(Option<TId<UnknownProperty>>, NonNegativeInteger),
 }
 
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::OnProperty(_) => Property::OnProperty,
-			Self::SomeValuesFrom(_) => Property::SomeValuesFrom,
-			Self::AllValuesFrom(_) => Property::AllValuesFrom,
-			Self::MinCardinality(_) => Property::MinCardinality,
-			Self::MaxCardinality(_) => Property::MaxCardinality,
-			Self::Cardinality(_) => Property::Cardinality,
+			Self::OnProperty(p, _) => Property::OnProperty(*p),
+			Self::SomeValuesFrom(p, _) => Property::SomeValuesFrom(*p),
+			Self::AllValuesFrom(p, _) => Property::AllValuesFrom(*p),
+			Self::MinCardinality(p, _) => Property::MinCardinality(*p),
+			Self::MaxCardinality(p, _) => Property::MaxCardinality(*p),
+			Self::Cardinality(p, _) => Property::Cardinality(*p),
 		}
 	}
 
 	pub fn value<M>(&self) -> BindingValueRef<M> {
 		match self {
-			Self::OnProperty(v) => BindingValueRef::Id(*v),
-			Self::SomeValuesFrom(v) => BindingValueRef::Id(*v),
-			Self::AllValuesFrom(v) => BindingValueRef::Id(*v),
-			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
-			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
-			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::OnProperty(_, v) => BindingValueRef::Id(*v),
+			Self::SomeValuesFrom(_, v) => BindingValueRef::Id(*v),
+			Self::AllValuesFrom(_, v) => BindingValueRef::Id(*v),
+			Self::MinCardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
+			Self::MaxCardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
+			Self::Cardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
 		}
 	}
 }
 
 #[derive(Debug)]
 pub enum ClassBindingRef<'a> {
-	OnProperty(Option<Id>, Id),
-	SomeValuesFrom(Id),
-	AllValuesFrom(Id),
-	MinCardinality(&'a NonNegativeInteger),
-	MaxCardinality(&'a NonNegativeInteger),
-	Cardinality(&'a NonNegativeInteger),
+	OnProperty(Option<TId<UnknownProperty>>, Id),
+	SomeValuesFrom(Option<TId<UnknownProperty>>, Id),
+	AllValuesFrom(Option<TId<UnknownProperty>>, Id),
+	MinCardinality(Option<TId<UnknownProperty>>, &'a NonNegativeInteger),
+	MaxCardinality(Option<TId<UnknownProperty>>, &'a NonNegativeInteger),
+	Cardinality(Option<TId<UnknownProperty>>, &'a NonNegativeInteger),
 }
 
 impl<'a> ClassBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::OnProperty(_, _) => Property::OnProperty,
-			Self::SomeValuesFrom(_) => Property::SomeValuesFrom,
-			Self::AllValuesFrom(_) => Property::AllValuesFrom,
-			Self::MinCardinality(_) => Property::MinCardinality,
-			Self::MaxCardinality(_) => Property::MaxCardinality,
-			Self::Cardinality(_) => Property::Cardinality,
+			Self::OnProperty(p, _) => Property::OnProperty(*p),
+			Self::SomeValuesFrom(p, _) => Property::SomeValuesFrom(*p),
+			Self::AllValuesFrom(p, _) => Property::AllValuesFrom(*p),
+			Self::MinCardinality(p, _) => Property::MinCardinality(*p),
+			Self::MaxCardinality(p, _) => Property::MaxCardinality(*p),
+			Self::Cardinality(p, _) => Property::Cardinality(*p),
 		}
 	}
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::OnProperty(_, v) => BindingValueRef::Id(*v),
-			Self::SomeValuesFrom(v) => BindingValueRef::Id(*v),
-			Self::AllValuesFrom(v) => BindingValueRef::Id(*v),
-			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
-			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
-			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::SomeValuesFrom(_, v) => BindingValueRef::Id(*v),
+			Self::AllValuesFrom(_, v) => BindingValueRef::Id(*v),
+			Self::MinCardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
+			Self::MaxCardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
+			Self::Cardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
 		}
 	}
 }

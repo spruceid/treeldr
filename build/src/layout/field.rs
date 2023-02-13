@@ -12,7 +12,10 @@ use super::Error;
 use locspan::Meta;
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
 pub use treeldr::layout::field::Property;
-use treeldr::{metadata::Merge, vocab::Object, BlankIdIndex, Id, IriIndex, Name, PropertyValueRef};
+use treeldr::{
+	metadata::Merge, prop::UnknownProperty, vocab::Object, BlankIdIndex, Id, IriIndex, Name,
+	PropertyValueRef, TId,
+};
 
 /// Layout field definition.
 #[derive(Debug, Clone)]
@@ -22,7 +25,7 @@ pub struct Definition<M> {
 
 impl<M: Merge> MapIds for Definition<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		self.prop.map_ids_in(Some(Property::For.into()), f)
+		self.prop.map_ids_in(Some(Property::For(None).into()), f)
 	}
 }
 
@@ -149,7 +152,7 @@ impl<M> Definition<M> {
 
 	pub fn set(
 		&mut self,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
 		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
@@ -157,9 +160,7 @@ impl<M> Definition<M> {
 		M: Merge,
 	{
 		match prop {
-			Property::For => self
-				.prop
-				.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			Property::For(p) => self.prop.insert(p, prop_cmp, rdf::from::expect_id(value)?),
 		}
 
 		Ok(())
@@ -181,7 +182,7 @@ impl<M> Definition<M> {
 		let prop = self.prop.clone().into_property_at_node_binding(
 			context,
 			as_resource.id,
-			Property::For,
+			Property::For(None),
 		)?;
 
 		Ok(Meta(treeldr::layout::field::Definition::new(prop), meta))
@@ -207,7 +208,7 @@ pub fn is_included_in<M>(context: &Context<M>, a: Id, b: Id) -> bool {
 
 #[derive(Debug)]
 pub enum ClassBinding {
-	For(Option<Id>, Id),
+	For(Option<TId<UnknownProperty>>, Id),
 }
 
 pub type Binding = ClassBinding;
@@ -215,7 +216,7 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::For(_, _) => Property::For,
+			Self::For(p, _) => Property::For(*p),
 		}
 	}
 

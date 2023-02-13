@@ -35,7 +35,7 @@ impl<'a, B> BindingRef<'a, B> {
 	pub fn can_ignore(&self) -> bool {
 		self.property
 			== Property::Resource(treeldr::node::Property::Component(
-				component::Property::Layout(layout::Property::IntersectionOf),
+				component::Property::Layout(layout::Property::IntersectionOf(None)),
 			))
 	}
 

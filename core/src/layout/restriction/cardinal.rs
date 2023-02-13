@@ -1,5 +1,5 @@
 use super::Property;
-use crate::{metadata::Merge, MetaOption};
+use crate::{metadata::Merge, prop::UnknownProperty, MetaOption, TId};
 use derivative::Derivative;
 use locspan::Meta;
 use locspan_derive::{StrippedEq, StrippedPartialEq};
@@ -15,8 +15,8 @@ pub enum Restriction {
 impl Restriction {
 	pub fn as_binding_ref(&self) -> BindingRef {
 		match self {
-			Self::Min(v) => BindingRef::Min(v),
-			Self::Max(v) => BindingRef::Max(v),
+			Self::Min(v) => BindingRef::Min(None, v),
+			Self::Max(v) => BindingRef::Max(None, v),
 		}
 	}
 }
@@ -31,8 +31,8 @@ pub enum RestrictionRef<'a> {
 impl<'a> RestrictionRef<'a> {
 	pub fn as_binding_ref(&self) -> BindingRef<'a> {
 		match self {
-			Self::Min(v) => BindingRef::Min(v),
-			Self::Max(v) => BindingRef::Max(v),
+			Self::Min(v) => BindingRef::Min(None, v),
+			Self::Max(v) => BindingRef::Max(None, v),
 		}
 	}
 }
@@ -237,30 +237,30 @@ impl<'a, M> DoubleEndedIterator for RestrictionsIter<'a, M> {
 }
 
 pub enum Binding {
-	Min(NonNegativeInteger),
-	Max(NonNegativeInteger),
+	Min(Option<TId<UnknownProperty>>, NonNegativeInteger),
+	Max(Option<TId<UnknownProperty>>, NonNegativeInteger),
 }
 
 impl Binding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::Min(_) => Property::MinCardinality,
-			Self::Max(_) => Property::MaxCardinality,
+			Self::Min(p, _) => Property::MinCardinality(*p),
+			Self::Max(p, _) => Property::MaxCardinality(*p),
 		}
 	}
 }
 
 #[derive(Debug)]
 pub enum BindingRef<'a> {
-	Min(&'a NonNegativeInteger),
-	Max(&'a NonNegativeInteger),
+	Min(Option<TId<UnknownProperty>>, &'a NonNegativeInteger),
+	Max(Option<TId<UnknownProperty>>, &'a NonNegativeInteger),
 }
 
 impl<'a> BindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::Min(_) => Property::MinCardinality,
-			Self::Max(_) => Property::MaxCardinality,
+			Self::Min(p, _) => Property::MinCardinality(*p),
+			Self::Max(p, _) => Property::MaxCardinality(*p),
 		}
 	}
 }

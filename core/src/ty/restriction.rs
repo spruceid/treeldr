@@ -1,6 +1,10 @@
 use crate::{
-	metadata::Merge, multiple, node::BindingValueRef, property_values, vocab, Id, MetaOption,
-	Multiple, RequiredFunctionalPropertyValue, TId, Type,
+	metadata::Merge,
+	multiple,
+	node::BindingValueRef,
+	prop::{PropertyName, UnknownProperty},
+	property_values, vocab, Id, IriIndex, MetaOption, Multiple, RequiredFunctionalPropertyValue,
+	TId, Type,
 };
 use derivative::Derivative;
 use locspan::Meta;
@@ -57,15 +61,15 @@ pub enum Range {
 impl Range {
 	pub fn as_binding(&self) -> ClassBinding {
 		match self {
-			Self::Any(v) => ClassBinding::SomeValuesFrom(*v),
-			Self::All(v) => ClassBinding::AllValuesFrom(*v),
+			Self::Any(v) => ClassBinding::SomeValuesFrom(None, *v),
+			Self::All(v) => ClassBinding::AllValuesFrom(None, *v),
 		}
 	}
 
 	pub fn as_binding_ref<'a>(&self) -> ClassBindingRef<'a> {
 		match self {
-			Self::Any(v) => ClassBindingRef::SomeValuesFrom(*v),
-			Self::All(v) => ClassBindingRef::AllValuesFrom(*v),
+			Self::Any(v) => ClassBindingRef::SomeValuesFrom(None, *v),
+			Self::All(v) => ClassBindingRef::AllValuesFrom(None, *v),
 		}
 	}
 }
@@ -86,9 +90,9 @@ pub enum Cardinality {
 impl Cardinality {
 	pub fn as_binding_ref(&self) -> ClassBindingRef {
 		match self {
-			Self::AtLeast(v) => ClassBindingRef::MinCardinality(v),
-			Self::AtMost(v) => ClassBindingRef::MaxCardinality(v),
-			Self::Exactly(v) => ClassBindingRef::Cardinality(v),
+			Self::AtLeast(v) => ClassBindingRef::MinCardinality(None, v),
+			Self::AtMost(v) => ClassBindingRef::MaxCardinality(None, v),
+			Self::Exactly(v) => ClassBindingRef::Cardinality(None, v),
 		}
 	}
 }
@@ -109,9 +113,9 @@ pub enum CardinalityRef<'a> {
 impl<'a> CardinalityRef<'a> {
 	pub fn as_binding_ref(&self) -> ClassBindingRef<'a> {
 		match self {
-			Self::AtLeast(v) => ClassBindingRef::MinCardinality(v),
-			Self::AtMost(v) => ClassBindingRef::MaxCardinality(v),
-			Self::Exactly(v) => ClassBindingRef::Cardinality(v),
+			Self::AtLeast(v) => ClassBindingRef::MinCardinality(None, v),
+			Self::AtMost(v) => ClassBindingRef::MaxCardinality(None, v),
+			Self::Exactly(v) => ClassBindingRef::Cardinality(None, v),
 		}
 	}
 }
@@ -544,40 +548,65 @@ impl<'a, M> Iterator for CardinalityRestrictionsIter<'a, M> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
-	OnProperty,
-	AllValuesFrom,
-	SomeValuesFrom,
-	MinCardinality,
-	MaxCardinality,
-	Cardinality,
+	OnProperty(Option<TId<UnknownProperty>>),
+	AllValuesFrom(Option<TId<UnknownProperty>>),
+	SomeValuesFrom(Option<TId<UnknownProperty>>),
+	MinCardinality(Option<TId<UnknownProperty>>),
+	MaxCardinality(Option<TId<UnknownProperty>>),
+	Cardinality(Option<TId<UnknownProperty>>),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::{Owl, Term};
 		match self {
-			Self::OnProperty => Term::Owl(Owl::OnProperty),
-			Self::AllValuesFrom => Term::Owl(Owl::AllValuesFrom),
-			Self::SomeValuesFrom => Term::Owl(Owl::SomeValuesFrom),
-			Self::MinCardinality => Term::Owl(Owl::MinCardinality),
-			Self::MaxCardinality => Term::Owl(Owl::MaxCardinality),
-			Self::Cardinality => Term::Owl(Owl::Cardinality),
+			Self::OnProperty(None) => Id::Iri(IriIndex::Iri(Term::Owl(Owl::OnProperty))),
+			Self::OnProperty(Some(p)) => p.id(),
+			Self::AllValuesFrom(None) => Id::Iri(IriIndex::Iri(Term::Owl(Owl::AllValuesFrom))),
+			Self::AllValuesFrom(Some(p)) => p.id(),
+			Self::SomeValuesFrom(None) => Id::Iri(IriIndex::Iri(Term::Owl(Owl::SomeValuesFrom))),
+			Self::SomeValuesFrom(Some(p)) => p.id(),
+			Self::MinCardinality(None) => Id::Iri(IriIndex::Iri(Term::Owl(Owl::MinCardinality))),
+			Self::MinCardinality(Some(p)) => p.id(),
+			Self::MaxCardinality(None) => Id::Iri(IriIndex::Iri(Term::Owl(Owl::MaxCardinality))),
+			Self::MaxCardinality(Some(p)) => p.id(),
+			Self::Cardinality(None) => Id::Iri(IriIndex::Iri(Term::Owl(Owl::Cardinality))),
+			Self::Cardinality(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::{Owl, Term};
 		match self {
-			Self::OnProperty => "restricted property",
-			Self::AllValuesFrom => "all values from range",
-			Self::SomeValuesFrom => "some values from range",
-			Self::MinCardinality => "minimum cardinality",
-			Self::MaxCardinality => "maximum cardinality",
-			Self::Cardinality => "cardinality",
+			Self::OnProperty(None) => Some(Term::Owl(Owl::OnProperty)),
+			Self::AllValuesFrom(None) => Some(Term::Owl(Owl::AllValuesFrom)),
+			Self::SomeValuesFrom(None) => Some(Term::Owl(Owl::SomeValuesFrom)),
+			Self::MinCardinality(None) => Some(Term::Owl(Owl::MinCardinality)),
+			Self::MaxCardinality(None) => Some(Term::Owl(Owl::MaxCardinality)),
+			Self::Cardinality(None) => Some(Term::Owl(Owl::Cardinality)),
+			_ => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::OnProperty(None) => PropertyName::Resource("restricted property"),
+			Self::OnProperty(Some(p)) => PropertyName::Other(*p),
+			Self::AllValuesFrom(None) => PropertyName::Resource("all values from range"),
+			Self::AllValuesFrom(Some(p)) => PropertyName::Other(*p),
+			Self::SomeValuesFrom(None) => PropertyName::Resource("some values from range"),
+			Self::SomeValuesFrom(Some(p)) => PropertyName::Other(*p),
+			Self::MinCardinality(None) => PropertyName::Resource("minimum cardinality"),
+			Self::MinCardinality(Some(p)) => PropertyName::Other(*p),
+			Self::MaxCardinality(None) => PropertyName::Resource("maximum cardinality"),
+			Self::MaxCardinality(Some(p)) => PropertyName::Other(*p),
+			Self::Cardinality(None) => PropertyName::Resource("cardinality"),
+			Self::Cardinality(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
 	pub fn expect_type(&self) -> bool {
-		matches!(self, Self::AllValuesFrom | Self::SomeValuesFrom)
+		matches!(self, Self::AllValuesFrom(_) | Self::SomeValuesFrom(_))
 	}
 
 	pub fn expect_layout(&self) -> bool {
@@ -586,67 +615,67 @@ impl Property {
 }
 
 pub enum ClassBinding {
-	OnProperty(TId<crate::Property>),
-	SomeValuesFrom(TId<Type>),
-	AllValuesFrom(TId<Type>),
-	MinCardinality(NonNegativeInteger),
-	MaxCardinality(NonNegativeInteger),
-	Cardinality(NonNegativeInteger),
+	OnProperty(Option<TId<UnknownProperty>>, TId<crate::Property>),
+	SomeValuesFrom(Option<TId<UnknownProperty>>, TId<Type>),
+	AllValuesFrom(Option<TId<UnknownProperty>>, TId<Type>),
+	MinCardinality(Option<TId<UnknownProperty>>, NonNegativeInteger),
+	MaxCardinality(Option<TId<UnknownProperty>>, NonNegativeInteger),
+	Cardinality(Option<TId<UnknownProperty>>, NonNegativeInteger),
 }
 
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::OnProperty(_) => Property::OnProperty,
-			Self::SomeValuesFrom(_) => Property::SomeValuesFrom,
-			Self::AllValuesFrom(_) => Property::AllValuesFrom,
-			Self::MinCardinality(_) => Property::MinCardinality,
-			Self::MaxCardinality(_) => Property::MaxCardinality,
-			Self::Cardinality(_) => Property::Cardinality,
+			Self::OnProperty(p, _) => Property::OnProperty(*p),
+			Self::SomeValuesFrom(p, _) => Property::SomeValuesFrom(*p),
+			Self::AllValuesFrom(p, _) => Property::AllValuesFrom(*p),
+			Self::MinCardinality(p, _) => Property::MinCardinality(*p),
+			Self::MaxCardinality(p, _) => Property::MaxCardinality(*p),
+			Self::Cardinality(p, _) => Property::Cardinality(*p),
 		}
 	}
 
 	pub fn value<M>(&self) -> BindingValueRef<M> {
 		match self {
-			Self::OnProperty(v) => BindingValueRef::Property(*v),
-			Self::SomeValuesFrom(v) => BindingValueRef::Type(*v),
-			Self::AllValuesFrom(v) => BindingValueRef::Type(*v),
-			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
-			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
-			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::OnProperty(_, v) => BindingValueRef::Property(*v),
+			Self::SomeValuesFrom(_, v) => BindingValueRef::Type(*v),
+			Self::AllValuesFrom(_, v) => BindingValueRef::Type(*v),
+			Self::MinCardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
+			Self::MaxCardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
+			Self::Cardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
 		}
 	}
 }
 
 pub enum ClassBindingRef<'a> {
-	OnProperty(Option<Id>, TId<crate::Property>),
-	SomeValuesFrom(TId<Type>),
-	AllValuesFrom(TId<Type>),
-	MinCardinality(&'a NonNegativeInteger),
-	MaxCardinality(&'a NonNegativeInteger),
-	Cardinality(&'a NonNegativeInteger),
+	OnProperty(Option<TId<UnknownProperty>>, TId<crate::Property>),
+	SomeValuesFrom(Option<TId<UnknownProperty>>, TId<Type>),
+	AllValuesFrom(Option<TId<UnknownProperty>>, TId<Type>),
+	MinCardinality(Option<TId<UnknownProperty>>, &'a NonNegativeInteger),
+	MaxCardinality(Option<TId<UnknownProperty>>, &'a NonNegativeInteger),
+	Cardinality(Option<TId<UnknownProperty>>, &'a NonNegativeInteger),
 }
 
 impl<'a> ClassBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::OnProperty(_, _) => Property::OnProperty,
-			Self::SomeValuesFrom(_) => Property::SomeValuesFrom,
-			Self::AllValuesFrom(_) => Property::AllValuesFrom,
-			Self::MinCardinality(_) => Property::MinCardinality,
-			Self::MaxCardinality(_) => Property::MaxCardinality,
-			Self::Cardinality(_) => Property::Cardinality,
+			Self::OnProperty(p, _) => Property::OnProperty(*p),
+			Self::SomeValuesFrom(p, _) => Property::SomeValuesFrom(*p),
+			Self::AllValuesFrom(p, _) => Property::AllValuesFrom(*p),
+			Self::MinCardinality(p, _) => Property::MinCardinality(*p),
+			Self::MaxCardinality(p, _) => Property::MaxCardinality(*p),
+			Self::Cardinality(p, _) => Property::Cardinality(*p),
 		}
 	}
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::OnProperty(_, v) => BindingValueRef::Property(*v),
-			Self::SomeValuesFrom(v) => BindingValueRef::Type(*v),
-			Self::AllValuesFrom(v) => BindingValueRef::Type(*v),
-			Self::MinCardinality(v) => BindingValueRef::NonNegativeInteger(v),
-			Self::MaxCardinality(v) => BindingValueRef::NonNegativeInteger(v),
-			Self::Cardinality(v) => BindingValueRef::NonNegativeInteger(v),
+			Self::SomeValuesFrom(_, v) => BindingValueRef::Type(*v),
+			Self::AllValuesFrom(_, v) => BindingValueRef::Type(*v),
+			Self::MinCardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
+			Self::MaxCardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
+			Self::Cardinality(_, v) => BindingValueRef::NonNegativeInteger(v),
 		}
 	}
 }

@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use locspan::Meta;
-use treeldr::{metadata::Merge, vocab::Object, Id};
+use treeldr::{metadata::Merge, prop::UnknownProperty, vocab::Object, Id, TId};
 
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
@@ -72,7 +72,7 @@ impl<M> Definition<M> {
 
 	pub fn set(
 		&mut self,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
 		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
@@ -80,9 +80,9 @@ impl<M> Definition<M> {
 		M: Merge,
 	{
 		match prop {
-			Property::Format => {
+			Property::Format(p) => {
 				self.format_mut()
-					.insert(None, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
 			}
 			Property::LayoutField(prop) => self.as_layout_field_mut().set(prop_cmp, prop, value)?,
 		}
@@ -104,7 +104,7 @@ impl<M> Definition<M> {
 			format: self.data.format.clone().into_layout_at_node_binding(
 				context,
 				as_resource.id,
-				Property::Format,
+				Property::Format(None),
 			)?,
 		};
 
@@ -156,7 +156,8 @@ impl<M> Data<M> {
 
 impl<M: Merge> MapIds for Data<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		self.format.map_ids_in(Some(Property::Format.into()), f)
+		self.format
+			.map_ids_in(Some(Property::Format(None).into()), f)
 	}
 }
 
@@ -186,7 +187,7 @@ impl<M: Clone> AssertFormatted<M> for treeldr::component::formatted::Data<M> {
 			Meta(
 				error::NodeBindingMissing {
 					id: as_resource.id,
-					property: Property::Format.into(),
+					property: Property::Format(None).into(),
 				}
 				.into(),
 				metadata.clone(),
@@ -197,34 +198,34 @@ impl<M: Clone> AssertFormatted<M> for treeldr::component::formatted::Data<M> {
 }
 
 pub enum ClassBinding {
-	Format(Option<Id>, Id),
+	Format(Option<TId<UnknownProperty>>, Id),
 }
 
 impl ClassBinding {
 	pub fn into_binding(self) -> Binding {
 		match self {
-			Self::Format(_, id) => Binding::Format(id),
+			Self::Format(p, id) => Binding::Format(p, id),
 		}
 	}
 }
 
 #[derive(Debug)]
 pub enum Binding {
-	Format(Id),
+	Format(Option<TId<UnknownProperty>>, Id),
 	LayoutField(layout::field::ClassBinding),
 }
 
 impl Binding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::Format(_) => Property::Format,
+			Self::Format(p, _) => Property::Format(*p),
 			Self::LayoutField(b) => Property::LayoutField(b.property()),
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Format(v) => BindingValueRef::Id(*v),
+			Self::Format(_, v) => BindingValueRef::Id(*v),
 			Self::LayoutField(b) => b.value(),
 		}
 	}

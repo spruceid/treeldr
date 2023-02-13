@@ -8,7 +8,7 @@ use crate::{
 };
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
-use treeldr::{metadata::Merge, vocab::Object, Id, PropertyValueRef};
+use treeldr::{metadata::Merge, prop::UnknownProperty, vocab::Object, Id, PropertyValueRef, TId};
 
 pub use treeldr::list::Property;
 
@@ -50,7 +50,7 @@ impl<M> Definition<M> {
 
 	pub fn set(
 		&mut self,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
 		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
@@ -58,10 +58,8 @@ impl<M> Definition<M> {
 		M: Merge,
 	{
 		match prop {
-			Property::First => self.first.insert(None, prop_cmp, value.map(Stripped)),
-			Property::Rest => self
-				.rest
-				.insert(None, prop_cmp, rdf::from::expect_id(value)?),
+			Property::First(p) => self.first.insert(p, prop_cmp, value.map(Stripped)),
+			Property::Rest(p) => self.rest.insert(p, prop_cmp, rdf::from::expect_id(value)?),
 		}
 
 		Ok(())
@@ -77,8 +75,9 @@ impl<M> Definition<M> {
 
 impl<M: Merge> MapIds for Definition<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		self.first.map_ids_in(Some(Property::First.into()), &f);
-		self.rest.map_ids_in(Some(Property::Rest.into()), f)
+		self.first
+			.map_ids_in(Some(Property::First(None).into()), &f);
+		self.rest.map_ids_in(Some(Property::Rest(None).into()), f)
 	}
 }
 
@@ -143,7 +142,7 @@ where
 							break Some(Err(Meta(
 								error::NodeBindingMissing {
 									id,
-									property: Property::Rest.into(),
+									property: Property::Rest(None).into(),
 								}
 								.into(),
 								meta.clone(),
@@ -214,12 +213,12 @@ impl<'l, M: Clone> Iterator for Iter<'l, M> {
 			Self::Cons(nodes, id, d, meta) => {
 				match d
 					.first
-					.as_required_at_node_binding(*id, Property::First, meta)
+					.as_required_at_node_binding(*id, Property::First(None), meta)
 				{
 					Ok(item) => {
 						match d
 							.rest
-							.as_required_at_node_binding(*id, Property::Rest, meta)
+							.as_required_at_node_binding(*id, Property::Rest(None), meta)
 						{
 							Ok(rest_id) => {
 								match nodes.require_list(**rest_id.value()) {
@@ -230,7 +229,7 @@ impl<'l, M: Clone> Iterator for Iter<'l, M> {
 									Err(e) => {
 										return Some(Err(e.at_node_property(
 											*id,
-											Property::Rest,
+											Property::Rest(None),
 											meta.clone(),
 										)))
 									}
@@ -284,8 +283,8 @@ pub enum ListMut<'l, M> {
 
 #[derive(Debug)]
 pub enum ClassBindingRef<'a, M> {
-	First(Option<Id>, &'a Object<M>),
-	Rest(Option<Id>, Id),
+	First(Option<TId<UnknownProperty>>, &'a Object<M>),
+	Rest(Option<TId<UnknownProperty>>, Id),
 }
 
 pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
@@ -293,8 +292,8 @@ pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
 impl<'a, M> ClassBindingRef<'a, M> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::First(_, _) => Property::First,
-			Self::Rest(_, _) => Property::Rest,
+			Self::First(p, _) => Property::First(*p),
+			Self::Rest(p, _) => Property::Rest(*p),
 		}
 	}
 

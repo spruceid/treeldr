@@ -5,7 +5,7 @@ use std::{
 
 use locspan::{Meta, StrippedPartialEq};
 
-use crate::{metadata::Merge, Id, Multiple};
+use crate::{metadata::Merge, prop::UnknownProperty, Multiple, TId};
 
 use super::{PropertyValue, PropertyValueRef};
 
@@ -16,7 +16,7 @@ pub struct PropertyValues<T, M> {
 	base: BTreeMap<T, M>,
 
 	/// Sub-properties values.
-	sub_properties: BTreeMap<Id, Self>,
+	sub_properties: BTreeMap<TId<UnknownProperty>, Self>,
 }
 
 impl<T, M> Default for PropertyValues<T, M> {
@@ -187,7 +187,7 @@ impl<T, M> PropertyValues<T, M> {
 
 	pub fn map_properties<U>(
 		self,
-		mut g: impl FnMut(Id) -> Id,
+		mut g: impl FnMut(TId<UnknownProperty>) -> TId<UnknownProperty>,
 		mut f: impl FnMut(T) -> U,
 	) -> PropertyValues<U, M>
 	where
@@ -198,7 +198,7 @@ impl<T, M> PropertyValues<T, M> {
 
 	fn map_properties_with<U>(
 		self,
-		g: &mut impl FnMut(Id) -> Id,
+		g: &mut impl FnMut(TId<UnknownProperty>) -> TId<UnknownProperty>,
 		f: &mut impl FnMut(T) -> U,
 	) -> PropertyValues<U, M>
 	where
@@ -219,7 +219,7 @@ impl<T, M> PropertyValues<T, M> {
 
 	pub fn try_map<U, E>(
 		self,
-		mut f: impl FnMut(Option<Id>, T) -> Result<U, E>,
+		mut f: impl FnMut(Option<TId<UnknownProperty>>, T) -> Result<U, E>,
 	) -> Result<PropertyValues<U, M>, TryMapError<M, U, E>>
 	where
 		U: Ord,
@@ -229,8 +229,8 @@ impl<T, M> PropertyValues<T, M> {
 
 	fn try_map_with<U, E>(
 		self,
-		id: Option<Id>,
-		f: &mut impl FnMut(Option<Id>, T) -> Result<U, E>,
+		id: Option<TId<UnknownProperty>>,
+		f: &mut impl FnMut(Option<TId<UnknownProperty>>, T) -> Result<U, E>,
 	) -> Result<PropertyValues<U, M>, TryMapError<M, U, E>>
 	where
 		U: Ord,
@@ -280,7 +280,7 @@ impl<T, M> PropertyValues<T, M> {
 
 	pub fn try_mapped<'a, U, N, E>(
 		&'a self,
-		mut f: impl FnMut(Option<Id>, Meta<&'a T, &'a M>) -> Result<Meta<U, N>, E>,
+		mut f: impl FnMut(Option<TId<UnknownProperty>>, Meta<&'a T, &'a M>) -> Result<Meta<U, N>, E>,
 	) -> Result<PropertyValues<U, N>, TryMappedError<'a, M, U, N, E>>
 	where
 		U: Ord,
@@ -290,8 +290,8 @@ impl<T, M> PropertyValues<T, M> {
 
 	fn try_mapped_with<'a, U, N, E>(
 		&'a self,
-		id: Option<Id>,
-		f: &mut impl FnMut(Option<Id>, Meta<&'a T, &'a M>) -> Result<Meta<U, N>, E>,
+		id: Option<TId<UnknownProperty>>,
+		f: &mut impl FnMut(Option<TId<UnknownProperty>>, Meta<&'a T, &'a M>) -> Result<Meta<U, N>, E>,
 	) -> Result<PropertyValues<U, N>, TryMappedError<'a, M, U, N, E>>
 	where
 		U: Ord,
@@ -371,8 +371,8 @@ impl<T: Ord, M> PropertyValues<T, M> {
 	/// order defined by the `rdfs:subPropertyOf` relation.
 	pub fn insert(
 		&mut self,
-		id: Option<Id>,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		id: Option<TId<UnknownProperty>>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		v: Meta<T, M>,
 	) where
 		M: Merge,
@@ -567,9 +567,10 @@ impl<'a, T, M> IntoIterator for &'a PropertyValues<T, M> {
 pub struct Iter<'a, T, M> {
 	len: usize,
 	base: std::collections::btree_map::Iter<'a, T, M>,
-	sub_properties: std::collections::btree_map::Iter<'a, Id, PropertyValues<T, M>>,
-	sub_property: Option<(Id, Box<Self>)>,
-	back_sub_property: Option<(Id, Box<Self>)>,
+	sub_properties:
+		std::collections::btree_map::Iter<'a, TId<UnknownProperty>, PropertyValues<T, M>>,
+	sub_property: Option<(TId<UnknownProperty>, Box<Self>)>,
+	back_sub_property: Option<(TId<UnknownProperty>, Box<Self>)>,
 }
 
 impl<'a, T, M> Iterator for Iter<'a, T, M> {
@@ -657,9 +658,10 @@ impl<'a, T, M> DoubleEndedIterator for Iter<'a, T, M> {
 pub struct IntoIter<T, M> {
 	len: usize,
 	base: std::collections::btree_map::IntoIter<T, M>,
-	sub_properties: std::collections::btree_map::IntoIter<Id, PropertyValues<T, M>>,
-	sub_property: Option<(Id, Box<Self>)>,
-	back_sub_property: Option<(Id, Box<Self>)>,
+	sub_properties:
+		std::collections::btree_map::IntoIter<TId<UnknownProperty>, PropertyValues<T, M>>,
+	sub_property: Option<(TId<UnknownProperty>, Box<Self>)>,
+	back_sub_property: Option<(TId<UnknownProperty>, Box<Self>)>,
 }
 
 impl<T, M> Iterator for IntoIter<T, M> {

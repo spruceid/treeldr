@@ -1,8 +1,9 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::BTreeMap};
 
 use locspan::Meta;
 use treeldr::{
-	doc::Block, metadata::Merge, ty::data::RegExp, value, vocab::Object, Id, MetaOption, Name,
+	doc::Block, metadata::Merge, prop::UnknownProperty, ty::data::RegExp, value, vocab::Object, Id,
+	MetaOption, Name, TId,
 };
 
 use crate::{
@@ -20,6 +21,9 @@ pub struct Data<M> {
 	pub type_: PropertyValues<crate::Type, M>,
 	pub label: PropertyValues<String, M>,
 	pub comment: PropertyValues<String, M>,
+
+	/// Other unknown properties.
+	pub other: BTreeMap<Id, PropertyValues<Object<M>, M>>,
 }
 
 impl<M> Data<M> {
@@ -30,6 +34,7 @@ impl<M> Data<M> {
 			type_: PropertyValues::default(),
 			label: PropertyValues::default(),
 			comment: PropertyValues::default(),
+			other: BTreeMap::new(),
 		}
 	}
 
@@ -38,13 +43,15 @@ impl<M> Data<M> {
 			type_: self.type_.iter(),
 			label: self.label.iter(),
 			comment: self.comment.iter(),
+			other: self.other.iter(),
+			current_other: None,
 		}
 	}
 }
 
 impl<M> MapIds for Data<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		self.id = f(self.id, Some(Property::Self_.into()))
+		self.id = f(self.id, Some(Property::Self_(None).into()))
 	}
 }
 
@@ -232,24 +239,24 @@ impl<M> Definition<M> {
 	where
 		M: Merge,
 	{
-		fn no_sub_prop(_: Id, _: Id) -> Option<Ordering> {
+		fn no_sub_prop(_: TId<UnknownProperty>, _: TId<UnknownProperty>) -> Option<Ordering> {
 			unreachable!()
 		}
 
 		match prop.into() {
 			crate::Property::Resource(prop) => match prop {
-				Property::Self_ => (),
-				Property::Type => {
+				Property::Self_(_) => (),
+				Property::Type(p) => {
 					self.type_mut()
-						.insert(None, no_sub_prop, rdf::from::expect_type(value)?)
+						.insert(p, no_sub_prop, rdf::from::expect_type(value)?)
 				}
-				Property::Label => {
+				Property::Label(p) => {
 					self.label_mut()
-						.insert(None, no_sub_prop, rdf::from::expect_string(value)?)
+						.insert(p, no_sub_prop, rdf::from::expect_string(value)?)
 				}
-				Property::Comment => {
+				Property::Comment(p) => {
 					self.comment_mut()
-						.insert(None, no_sub_prop, rdf::from::expect_string(value)?)
+						.insert(p, no_sub_prop, rdf::from::expect_string(value)?)
 				}
 				Property::Class(prop) => self.as_type_mut().set(no_sub_prop, prop, value)?,
 				Property::DatatypeRestriction(prop) => {
@@ -590,7 +597,7 @@ impl<M: Clone> Definition<M> {
 					.map(|ty| Meta(ty, m.clone()))
 			})
 			.map_err(|(Meta(e, m), _)| {
-				e.at_node_property(self.data.id, Property::Type, m.clone())
+				e.at_node_property(self.data.id, Property::Type(None), m.clone())
 			})?;
 
 		let doc = treeldr::Documentation::from_comments(
@@ -645,18 +652,20 @@ impl<M: Clone> Definition<M> {
 	}
 }
 
-pub enum ClassBindingRef<'a> {
-	Type(Option<Id>, crate::Type),
-	Label(Option<Id>, &'a str),
-	Comment(Option<Id>, &'a str),
+pub enum ClassBindingRef<'a, M> {
+	Type(Option<TId<UnknownProperty>>, crate::Type),
+	Label(Option<TId<UnknownProperty>>, &'a str),
+	Comment(Option<TId<UnknownProperty>>, &'a str),
+	Other(Id, Option<TId<UnknownProperty>>, &'a Object<M>),
 }
 
-impl<'a> ClassBindingRef<'a> {
-	pub fn into_binding_ref<M>(self) -> BindingRef<'a, M> {
+impl<'a, M> ClassBindingRef<'a, M> {
+	pub fn into_binding_ref(self) -> BindingRef<'a, M> {
 		match self {
-			Self::Type(_, t) => BindingRef::Type(t),
-			Self::Label(_, l) => BindingRef::Label(l),
-			Self::Comment(_, c) => BindingRef::Comment(c),
+			Self::Type(p, t) => BindingRef::Type(p, t),
+			Self::Label(p, l) => BindingRef::Label(p, l),
+			Self::Comment(p, c) => BindingRef::Comment(p, c),
+			Self::Other(p, s, v) => BindingRef::Other(p, s, v),
 		}
 	}
 }
@@ -665,10 +674,12 @@ pub struct ClassBindings<'a, M> {
 	type_: property_values::non_functional::Iter<'a, crate::Type, M>,
 	label: property_values::non_functional::Iter<'a, String, M>,
 	comment: property_values::non_functional::Iter<'a, String, M>,
+	other: std::collections::btree_map::Iter<'a, Id, PropertyValues<Object<M>, M>>,
+	current_other: Option<(Id, property_values::non_functional::Iter<'a, Object<M>, M>)>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
-	type Item = Meta<ClassBindingRef<'a>, &'a M>;
+	type Item = Meta<ClassBindingRef<'a, M>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.type_
@@ -678,11 +689,27 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 				self.label
 					.next()
 					.map(|m| m.into_deref_class_binding(ClassBindingRef::Label))
-					.or_else(|| {
-						self.comment
-							.next()
-							.map(|m| m.into_deref_class_binding(ClassBindingRef::Comment))
-					})
+			})
+			.or_else(|| {
+				self.comment
+					.next()
+					.map(|m| m.into_deref_class_binding(ClassBindingRef::Comment))
+			})
+			.or_else(|| loop {
+				match &mut self.current_other {
+					Some((id, current)) => match current.next() {
+						Some(v) => {
+							break Some(v.into_class_binding(|sub_id, v| {
+								ClassBindingRef::Other(*id, sub_id, v)
+							}))
+						}
+						None => self.current_other = None,
+					},
+					None => match self.other.next() {
+						Some((id, values)) => self.current_other = Some((*id, values.iter())),
+						None => break None,
+					},
+				}
 			})
 	}
 }
@@ -713,47 +740,53 @@ impl<'a, M> BindingValueRef<'a, M> {
 
 #[derive(Debug)]
 pub enum BindingRef<'a, M> {
-	Type(crate::Type),
-	Label(&'a str),
-	Comment(&'a str),
+	Type(Option<TId<UnknownProperty>>, crate::Type),
+	Label(Option<TId<UnknownProperty>>, &'a str),
+	Comment(Option<TId<UnknownProperty>>, &'a str),
 	Class(crate::ty::BindingRef<'a>),
 	DatatypeRestriction(crate::ty::datatype::restriction::BindingRef<'a>),
 	Property(crate::prop::Binding),
 	Component(crate::component::BindingRef<'a>),
 	LayoutRestriction(crate::layout::restriction::BindingRef<'a>),
 	List(crate::list::BindingRef<'a, M>),
+	Other(Id, Option<TId<UnknownProperty>>, &'a Object<M>),
 }
 
 impl<'a, M> BindingRef<'a, M> {
-	pub fn resource_property(&self) -> Property {
+	pub fn resource_property(&self) -> Result<Property, Id> {
 		match self {
-			Self::Type(_) => Property::Type,
-			Self::Label(_) => Property::Label,
-			Self::Comment(_) => Property::Comment,
-			Self::Class(b) => Property::Class(b.property()),
-			Self::DatatypeRestriction(b) => Property::DatatypeRestriction(b.property()),
-			Self::Property(b) => Property::Property(b.property()),
-			Self::Component(b) => Property::Component(b.property()),
-			Self::LayoutRestriction(b) => Property::LayoutRestriction(b.property()),
-			Self::List(b) => Property::List(b.property()),
+			Self::Type(p, _) => Ok(Property::Type(*p)),
+			Self::Label(p, _) => Ok(Property::Label(*p)),
+			Self::Comment(p, _) => Ok(Property::Comment(*p)),
+			Self::Class(b) => Ok(Property::Class(b.property())),
+			Self::DatatypeRestriction(b) => Ok(Property::DatatypeRestriction(b.property())),
+			Self::Property(b) => Ok(Property::Property(b.property())),
+			Self::Component(b) => Ok(Property::Component(b.property())),
+			Self::LayoutRestriction(b) => Ok(Property::LayoutRestriction(b.property())),
+			Self::List(b) => Ok(Property::List(b.property())),
+			Self::Other(id, sub_prop, _) => Err(sub_prop.map(TId::into_id).unwrap_or(*id)),
 		}
 	}
 
 	pub fn property(&self) -> crate::Property {
-		crate::Property::Resource(self.resource_property())
+		match self.resource_property() {
+			Ok(p) => crate::Property::Resource(p),
+			Err(id) => crate::Property::Other(TId::new(id)),
+		}
 	}
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Type(v) => BindingValueRef::Type(*v),
-			Self::Label(v) => BindingValueRef::String(v),
-			Self::Comment(v) => BindingValueRef::String(v),
+			Self::Type(_, v) => BindingValueRef::Type(*v),
+			Self::Label(_, v) => BindingValueRef::String(v),
+			Self::Comment(_, v) => BindingValueRef::String(v),
 			Self::Class(b) => b.value(),
 			Self::DatatypeRestriction(b) => b.value(),
 			Self::Property(b) => b.value(),
 			Self::Component(b) => b.value(),
 			Self::LayoutRestriction(b) => b.value(),
 			Self::List(b) => b.value(),
+			Self::Other(_, _, v) => BindingValueRef::Object(v),
 		}
 	}
 }

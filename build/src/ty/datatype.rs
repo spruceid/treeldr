@@ -8,7 +8,9 @@ use crate::{
 	Context, Error, ObjectAsRequiredId,
 };
 use locspan::Meta;
-use treeldr::{metadata::Merge, ty::data::Primitive, vocab::Object, Id};
+use treeldr::{
+	metadata::Merge, prop::UnknownProperty, ty::data::Primitive, vocab::Object, Id, TId,
+};
 
 pub use treeldr::ty::data::Property;
 
@@ -60,7 +62,7 @@ impl<M> Definition<M> {
 
 	pub fn set(
 		&mut self,
-		prop_cmp: impl Fn(Id, Id) -> Option<Ordering>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
 		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
@@ -68,12 +70,10 @@ impl<M> Definition<M> {
 		M: Merge,
 	{
 		match prop {
-			Property::OnDatatype => self
-				.base
-				.insert(None, prop_cmp, rdf::from::expect_id(value)?),
-			Property::WithRestrictions => {
+			Property::OnDatatype(p) => self.base.insert(p, prop_cmp, rdf::from::expect_id(value)?),
+			Property::WithRestrictions(p) => {
 				self.restrictions
-					.insert(None, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
 			}
 		}
 
@@ -105,14 +105,12 @@ impl<M> Definition<M> {
 		M: Clone + Merge,
 	{
 		let restrictions = self.restrictions.clone().try_unwrap().map_err(|e| {
-			e.at_functional_node_property(as_resource.id, Property::WithRestrictions)
+			e.at_functional_node_property(as_resource.id, Property::WithRestrictions(None))
 		})?;
 
-		let base = self
-			.base
-			.clone()
-			.try_unwrap()
-			.map_err(|e| e.at_functional_node_property(as_resource.id, Property::OnDatatype))?;
+		let base = self.base.clone().try_unwrap().map_err(|e| {
+			e.at_functional_node_property(as_resource.id, Property::OnDatatype(None))
+		})?;
 
 		let dt = match base.into_required() {
 			None => match restrictions.into_required() {
@@ -127,7 +125,7 @@ impl<M> Definition<M> {
 						context.require_datatype_id(base_id).map_err(|e| {
 							e.at_node_property(
 								as_resource.id,
-								Property::OnDatatype,
+								Property::OnDatatype(None),
 								base_meta.first().unwrap().value.into_metadata().clone(),
 							)
 						})?,
@@ -145,7 +143,7 @@ impl<M> Definition<M> {
 							let list = context.require_list(list_id).map_err(|e| {
 								e.at_node_property(
 									as_resource.id,
-									Property::WithRestrictions,
+									Property::WithRestrictions(None),
 									meta.clone(),
 								)
 							})?;
@@ -213,16 +211,17 @@ impl<M> Definition<M> {
 
 impl<M: Merge> MapIds for Definition<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		self.base.map_ids_in(Some(Property::OnDatatype.into()), &f);
+		self.base
+			.map_ids_in(Some(Property::OnDatatype(None).into()), &f);
 		self.restrictions
-			.map_ids_in(Some(Property::WithRestrictions.into()), f)
+			.map_ids_in(Some(Property::WithRestrictions(None).into()), f)
 	}
 }
 
 #[derive(Debug)]
 pub enum ClassBinding {
-	OnDatatype(Option<Id>, Id),
-	WithRestrictions(Option<Id>, Id),
+	OnDatatype(Option<TId<UnknownProperty>>, Id),
+	WithRestrictions(Option<TId<UnknownProperty>>, Id),
 }
 
 pub type Binding = ClassBinding;
@@ -230,8 +229,8 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::OnDatatype(_, _) => Property::OnDatatype,
-			Self::WithRestrictions(_, _) => Property::WithRestrictions,
+			Self::OnDatatype(p, _) => Property::OnDatatype(*p),
+			Self::WithRestrictions(p, _) => Property::WithRestrictions(*p),
 		}
 	}
 

@@ -1,6 +1,7 @@
 use super::{ContainerRestrictions, Layout};
 use crate::{
-	node::BindingValueRef, property_values, FunctionalPropertyValue, Id, MetaOption, Property, TId,
+	node::BindingValueRef, prop::UnknownProperty, property_values, FunctionalPropertyValue, Id,
+	MetaOption, Property, TId,
 };
 use derivative::Derivative;
 use locspan::Meta;
@@ -98,17 +99,17 @@ impl<M> Semantics<M> {
 }
 
 pub enum Binding {
-	ArrayListFirst(Option<Id>, TId<Property>),
-	ArrayListRest(Option<Id>, TId<Property>),
-	ArrayListNil(Option<Id>, Id),
+	ArrayListFirst(Option<TId<UnknownProperty>>, TId<Property>),
+	ArrayListRest(Option<TId<UnknownProperty>>, TId<Property>),
+	ArrayListNil(Option<TId<UnknownProperty>>, Id),
 }
 
 impl Binding {
 	pub fn property(&self) -> super::Property {
 		match self {
-			Self::ArrayListFirst(_, _) => super::Property::ArrayListFirst,
-			Self::ArrayListRest(_, _) => super::Property::ArrayListRest,
-			Self::ArrayListNil(_, _) => super::Property::ArrayListNil,
+			Self::ArrayListFirst(p, _) => super::Property::ArrayListFirst(*p),
+			Self::ArrayListRest(p, _) => super::Property::ArrayListRest(*p),
+			Self::ArrayListNil(p, _) => super::Property::ArrayListNil(*p),
 		}
 	}
 

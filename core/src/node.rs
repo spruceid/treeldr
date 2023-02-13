@@ -1,7 +1,9 @@
 use crate::{
-	component, doc, error, layout, list, multiple, prop, property_values, ty,
+	component, doc, error, layout, list, multiple,
+	prop::{self, PropertyName, UnknownProperty},
+	property_values, ty,
 	vocab::{self, Term},
-	Documentation, Error, Id, MetaOption, Multiple, MutableModel, Name, PropertyValues,
+	Documentation, Error, Id, IriIndex, MetaOption, Multiple, MutableModel, Name, PropertyValues,
 	ResourceType, TId,
 };
 use locspan::Meta;
@@ -238,10 +240,10 @@ impl Type {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
-	Self_,
-	Type,
-	Label,
-	Comment,
+	Self_(Option<TId<UnknownProperty>>),
+	Type(Option<TId<UnknownProperty>>),
+	Label(Option<TId<UnknownProperty>>),
+	Comment(Option<TId<UnknownProperty>>),
 	Class(ty::Property),
 	DatatypeRestriction(ty::data::restriction::Property),
 	Property(prop::RdfProperty),
@@ -251,28 +253,53 @@ pub enum Property {
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::{Rdf, Rdfs};
 		match self {
-			Self::Self_ => Term::TreeLdr(vocab::TreeLdr::Self_),
-			Self::Type => Term::Rdf(Rdf::Type),
-			Self::Label => Term::Rdfs(Rdfs::Label),
-			Self::Comment => Term::Rdfs(Rdfs::Comment),
+			Self::Self_(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Self_))),
+			Self::Self_(Some(p)) => p.id(),
+			Self::Type(None) => Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Type))),
+			Self::Type(Some(p)) => p.id(),
+			Self::Label(None) => Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Label))),
+			Self::Label(Some(p)) => p.id(),
+			Self::Comment(None) => Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Comment))),
+			Self::Comment(Some(p)) => p.id(),
+			Self::Class(p) => p.id(),
+			Self::DatatypeRestriction(p) => p.id(),
+			Self::Property(p) => p.id(),
+			Self::Component(p) => p.id(),
+			Self::LayoutRestriction(p) => p.id(),
+			Self::List(p) => p.id(),
+		}
+	}
+
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::{Rdf, Rdfs};
+		match self {
+			Self::Self_(None) => Some(Term::TreeLdr(vocab::TreeLdr::Self_)),
+			Self::Type(None) => Some(Term::Rdf(Rdf::Type)),
+			Self::Label(None) => Some(Term::Rdfs(Rdfs::Label)),
+			Self::Comment(None) => Some(Term::Rdfs(Rdfs::Comment)),
 			Self::Class(p) => p.term(),
 			Self::DatatypeRestriction(p) => p.term(),
 			Self::Property(p) => p.term(),
 			Self::Component(p) => p.term(),
 			Self::LayoutRestriction(p) => p.term(),
 			Self::List(p) => p.term(),
+			_ => None,
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn name(&self) -> PropertyName {
 		match self {
-			Self::Self_ => "self reference",
-			Self::Type => "type",
-			Self::Label => "label",
-			Self::Comment => "comment",
+			Self::Self_(None) => PropertyName::Resource("self reference"),
+			Self::Self_(Some(p)) => PropertyName::Other(*p),
+			Self::Type(None) => PropertyName::Resource("type"),
+			Self::Type(Some(p)) => PropertyName::Other(*p),
+			Self::Label(None) => PropertyName::Resource("label"),
+			Self::Label(Some(p)) => PropertyName::Other(*p),
+			Self::Comment(None) => PropertyName::Resource("comment"),
+			Self::Comment(Some(p)) => PropertyName::Other(*p),
 			Self::Class(p) => p.name(),
 			Self::DatatypeRestriction(p) => p.name(),
 			Self::Property(p) => p.name(),
@@ -284,7 +311,7 @@ impl Property {
 
 	pub fn expect_type(&self) -> bool {
 		match self {
-			Self::Type => true,
+			Self::Type(_) => true,
 			Self::Class(p) => p.expect_type(),
 			Self::DatatypeRestriction(p) => p.expect_type(),
 			Self::Property(p) => p.expect_type(),
@@ -309,9 +336,9 @@ impl Property {
 }
 
 pub enum ClassBindingRef<'a> {
-	Type(Option<Id>, TId<crate::Type>),
-	Label(Option<Id>, &'a str),
-	Comment(Option<Id>, &'a str),
+	Type(Option<TId<UnknownProperty>>, TId<crate::Type>),
+	Label(Option<TId<UnknownProperty>>, &'a str),
+	Comment(Option<TId<UnknownProperty>>, &'a str),
 }
 
 impl<'a> ClassBindingRef<'a> {
@@ -473,9 +500,9 @@ impl<'a, M> Iterator for BindingValueIds<'a, M> {
 }
 
 pub enum BindingRef<'a, M> {
-	Type(Option<Id>, TId<crate::Type>),
-	Label(Option<Id>, &'a str),
-	Comment(Option<Id>, &'a str),
+	Type(Option<TId<UnknownProperty>>, TId<crate::Type>),
+	Label(Option<TId<UnknownProperty>>, &'a str),
+	Comment(Option<TId<UnknownProperty>>, &'a str),
 	Class(crate::ty::BindingRef<'a, M>),
 	Property(crate::prop::Binding),
 	Component(crate::component::BindingRef<'a, M>),
@@ -493,9 +520,9 @@ impl<'a, M> BindingRef<'a, M> {
 
 	pub fn resource_property(&self) -> Property {
 		match self {
-			Self::Type(_, _) => Property::Type,
-			Self::Label(_, _) => Property::Label,
-			Self::Comment(_, _) => Property::Comment,
+			Self::Type(p, _) => Property::Type(*p),
+			Self::Label(p, _) => Property::Label(*p),
+			Self::Comment(p, _) => Property::Comment(*p),
 			Self::Class(b) => Property::Class(b.property()),
 			Self::Property(b) => Property::Property(b.property()),
 			Self::Component(b) => Property::Component(b.property()),

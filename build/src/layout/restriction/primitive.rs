@@ -7,8 +7,9 @@ pub use treeldr::{
 };
 use treeldr::{
 	metadata::Merge,
+	prop::UnknownProperty,
 	vocab::{Term, Xsd},
-	IriIndex,
+	IriIndex, TId,
 };
 
 pub use treeldr::layout::restriction::Property;
@@ -40,10 +41,10 @@ pub enum Numeric {
 impl Numeric {
 	pub fn as_binding(&self) -> NumericBindingRef {
 		match self {
-			Self::InclusiveMinimum(v) => NumericBindingRef::InclusiveMinimum(v),
-			Self::ExclusiveMinimum(v) => NumericBindingRef::ExclusiveMinimum(v),
-			Self::InclusiveMaximum(v) => NumericBindingRef::InclusiveMaximum(v),
-			Self::ExclusiveMaximum(v) => NumericBindingRef::ExclusiveMaximum(v),
+			Self::InclusiveMinimum(v) => NumericBindingRef::InclusiveMinimum(None, v),
+			Self::ExclusiveMinimum(v) => NumericBindingRef::ExclusiveMinimum(None, v),
+			Self::InclusiveMaximum(v) => NumericBindingRef::InclusiveMaximum(None, v),
+			Self::ExclusiveMaximum(v) => NumericBindingRef::ExclusiveMaximum(None, v),
 		}
 	}
 }
@@ -79,7 +80,7 @@ pub enum String {
 impl String {
 	pub fn as_binding(&self) -> StringBindingRef {
 		match self {
-			Self::Pattern(v) => StringBindingRef::Pattern(v),
+			Self::Pattern(v) => StringBindingRef::Pattern(None, v),
 		}
 	}
 }
@@ -506,47 +507,47 @@ impl<'a> BindingRef<'a> {
 
 #[derive(Debug)]
 pub enum NumericBindingRef<'a> {
-	InclusiveMinimum(&'a value::Numeric),
-	ExclusiveMinimum(&'a value::Numeric),
-	InclusiveMaximum(&'a value::Numeric),
-	ExclusiveMaximum(&'a value::Numeric),
+	InclusiveMinimum(Option<TId<UnknownProperty>>, &'a value::Numeric),
+	ExclusiveMinimum(Option<TId<UnknownProperty>>, &'a value::Numeric),
+	InclusiveMaximum(Option<TId<UnknownProperty>>, &'a value::Numeric),
+	ExclusiveMaximum(Option<TId<UnknownProperty>>, &'a value::Numeric),
 }
 
 impl<'a> NumericBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::InclusiveMinimum(_) => Property::InclusiveMinimum,
-			Self::ExclusiveMinimum(_) => Property::ExclusiveMinimum,
-			Self::InclusiveMaximum(_) => Property::InclusiveMaximum,
-			Self::ExclusiveMaximum(_) => Property::ExclusiveMaximum,
+			Self::InclusiveMinimum(p, _) => Property::InclusiveMinimum(*p),
+			Self::ExclusiveMinimum(p, _) => Property::ExclusiveMinimum(*p),
+			Self::InclusiveMaximum(p, _) => Property::InclusiveMaximum(*p),
+			Self::ExclusiveMaximum(p, _) => Property::ExclusiveMaximum(*p),
 		}
 	}
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::InclusiveMinimum(v) => BindingValueRef::Numeric(v),
-			Self::ExclusiveMinimum(v) => BindingValueRef::Numeric(v),
-			Self::InclusiveMaximum(v) => BindingValueRef::Numeric(v),
-			Self::ExclusiveMaximum(v) => BindingValueRef::Numeric(v),
+			Self::InclusiveMinimum(_, v) => BindingValueRef::Numeric(v),
+			Self::ExclusiveMinimum(_, v) => BindingValueRef::Numeric(v),
+			Self::InclusiveMaximum(_, v) => BindingValueRef::Numeric(v),
+			Self::ExclusiveMaximum(_, v) => BindingValueRef::Numeric(v),
 		}
 	}
 }
 
 #[derive(Debug)]
 pub enum StringBindingRef<'a> {
-	Pattern(&'a RegExp),
+	Pattern(Option<TId<UnknownProperty>>, &'a RegExp),
 }
 
 impl<'a> StringBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::Pattern(_) => Property::Pattern,
+			Self::Pattern(p, _) => Property::Pattern(*p),
 		}
 	}
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Pattern(v) => BindingValueRef::RegExp(v),
+			Self::Pattern(_, v) => BindingValueRef::RegExp(v),
 		}
 	}
 }
