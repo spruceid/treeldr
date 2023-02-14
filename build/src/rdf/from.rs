@@ -1,13 +1,16 @@
+use std::cmp::Ordering;
+
 use crate::{Context, Document, Error};
 use grdf::{Dataset, Quad};
 use locspan::Meta;
 use rdf_types::{Generator, VocabularyMut};
 use treeldr::{
 	metadata::Merge,
+	prop::UnknownProperty,
 	ty::data::RegExp,
 	value::{self, NonNegativeInteger},
 	vocab::{self, GraphLabel, Object, Term},
-	BlankIdIndex, Id, IriIndex, Name,
+	BlankIdIndex, Id, IriIndex, Name, TId,
 };
 
 pub(crate) fn expect_id<M>(
@@ -148,6 +151,10 @@ impl<M: Clone + Ord + Merge> Document<M>
 		_vocabulary: &mut V,
 		_generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
+		fn no_sub_prop(_: TId<UnknownProperty>, _: TId<UnknownProperty>) -> Option<Ordering> {
+			unreachable!()
+		}
+
 		// Step 2: find out the properties of each node.
 		for Meta(
 			rdf_types::Quad(Meta(subject, subject_meta), predicate, object, _graph),
@@ -158,7 +165,7 @@ impl<M: Clone + Ord + Merge> Document<M>
 				let node = context
 					.require_mut(subject)
 					.map_err(|e| Meta(e.into(), subject_meta))?;
-				node.set(predicate.into_value(), object)?
+				node.set(predicate.into_value(), no_sub_prop, object)?
 			}
 		}
 

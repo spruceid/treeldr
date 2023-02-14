@@ -253,6 +253,320 @@ pub enum Property {
 }
 
 impl Property {
+	pub const ALL: [Self; 56] = [
+		Self::Self_(None),
+		Self::Type(None),
+		Self::Label(None),
+		Self::Comment(None),
+		Self::Class(ty::Property::UnionOf(None)),
+		Self::Class(ty::Property::IntersectionOf(None)),
+		Self::Class(ty::Property::SubClassOf(None)),
+		Self::Class(ty::Property::Datatype(ty::data::Property::OnDatatype(None))),
+		Self::Class(ty::Property::Datatype(
+			ty::data::Property::WithRestrictions(None),
+		)),
+		Self::Class(ty::Property::Restriction(
+			ty::restriction::Property::AllValuesFrom(None),
+		)),
+		Self::Class(ty::Property::Restriction(
+			ty::restriction::Property::Cardinality(None),
+		)),
+		Self::Class(ty::Property::Restriction(
+			ty::restriction::Property::MaxCardinality(None),
+		)),
+		Self::Class(ty::Property::Restriction(
+			ty::restriction::Property::MinCardinality(None),
+		)),
+		Self::Class(ty::Property::Restriction(
+			ty::restriction::Property::OnProperty(None),
+		)),
+		Self::Class(ty::Property::Restriction(
+			ty::restriction::Property::SomeValuesFrom(None),
+		)),
+		Self::Property(prop::RdfProperty::Domain(None)),
+		Self::Property(prop::RdfProperty::Range(None)),
+		Self::Property(prop::RdfProperty::Required(None)),
+		Self::Property(prop::RdfProperty::SubPropertyOf(None)),
+		Self::DatatypeRestriction(ty::data::restriction::Property::MaxExclusive(None)),
+		Self::DatatypeRestriction(ty::data::restriction::Property::MaxInclusive(None)),
+		Self::DatatypeRestriction(ty::data::restriction::Property::MaxLength(None)),
+		Self::DatatypeRestriction(ty::data::restriction::Property::MinExclusive(None)),
+		Self::DatatypeRestriction(ty::data::restriction::Property::MinInclusive(None)),
+		Self::DatatypeRestriction(ty::data::restriction::Property::MinLength(None)),
+		Self::DatatypeRestriction(ty::data::restriction::Property::Pattern(None)),
+		Self::List(list::Property::First(None)),
+		Self::List(list::Property::Rest(None)),
+		Self::Component(component::Property::Name(None)),
+		Self::Component(component::Property::Formatted(
+			component::formatted::Property::Format(None),
+		)),
+		Self::Component(component::Property::Formatted(
+			component::formatted::Property::LayoutField(layout::field::Property::For(None)),
+		)),
+		Self::Component(component::Property::Layout(
+			layout::Property::ArrayListFirst(None),
+		)),
+		Self::Component(component::Property::Layout(layout::Property::ArrayListNil(
+			None,
+		))),
+		Self::Component(component::Property::Layout(
+			layout::Property::ArrayListRest(None),
+		)),
+		Self::Component(component::Property::Layout(layout::Property::For(None))),
+		Self::Component(component::Property::Layout(
+			layout::Property::IntersectionOf(None),
+		)),
+		Self::Component(component::Property::Layout(
+			layout::Property::WithRestrictions(None),
+		)),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::Alias(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::Array(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::DerivedFrom(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::Fields(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::OneOrMany(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::Option(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::Reference(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::Required(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::Set(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::Variants(None),
+		))),
+		Self::LayoutRestriction(layout::restriction::Property::ExclusiveMaximum(None)),
+		Self::LayoutRestriction(layout::restriction::Property::ExclusiveMinimum(None)),
+		Self::LayoutRestriction(layout::restriction::Property::InclusiveMaximum(None)),
+		Self::LayoutRestriction(layout::restriction::Property::InclusiveMinimum(None)),
+		Self::LayoutRestriction(layout::restriction::Property::MaxCardinality(None)),
+		Self::LayoutRestriction(layout::restriction::Property::MaxLength(None)),
+		Self::LayoutRestriction(layout::restriction::Property::MinCardinality(None)),
+		Self::LayoutRestriction(layout::restriction::Property::MinLength(None)),
+		Self::LayoutRestriction(layout::restriction::Property::Pattern(None)),
+	];
+
+	pub fn into_sub_property(self, sub_prop: Option<TId<UnknownProperty>>) -> Self {
+		match self {
+			Self::Self_(_) => Self::Self_(sub_prop),
+			Self::Type(_) => Self::Type(sub_prop),
+			Self::Label(_) => Self::Label(sub_prop),
+			Self::Comment(_) => Self::Comment(sub_prop),
+			Self::Class(ty::Property::UnionOf(_)) => Self::Class(ty::Property::UnionOf(sub_prop)),
+			Self::Class(ty::Property::IntersectionOf(_)) => {
+				Self::Class(ty::Property::IntersectionOf(sub_prop))
+			}
+			Self::Class(ty::Property::SubClassOf(_)) => {
+				Self::Class(ty::Property::SubClassOf(sub_prop))
+			}
+			Self::Class(ty::Property::Datatype(ty::data::Property::OnDatatype(_))) => Self::Class(
+				ty::Property::Datatype(ty::data::Property::OnDatatype(sub_prop)),
+			),
+			Self::Class(ty::Property::Datatype(ty::data::Property::WithRestrictions(_))) => {
+				Self::Class(ty::Property::Datatype(
+					ty::data::Property::WithRestrictions(sub_prop),
+				))
+			}
+			Self::Class(ty::Property::Restriction(ty::restriction::Property::AllValuesFrom(_))) => {
+				Self::Class(ty::Property::Restriction(
+					ty::restriction::Property::AllValuesFrom(sub_prop),
+				))
+			}
+			Self::Class(ty::Property::Restriction(ty::restriction::Property::Cardinality(_))) => {
+				Self::Class(ty::Property::Restriction(
+					ty::restriction::Property::Cardinality(sub_prop),
+				))
+			}
+			Self::Class(ty::Property::Restriction(ty::restriction::Property::MaxCardinality(
+				_,
+			))) => Self::Class(ty::Property::Restriction(
+				ty::restriction::Property::MaxCardinality(sub_prop),
+			)),
+			Self::Class(ty::Property::Restriction(ty::restriction::Property::MinCardinality(
+				_,
+			))) => Self::Class(ty::Property::Restriction(
+				ty::restriction::Property::MinCardinality(sub_prop),
+			)),
+			Self::Class(ty::Property::Restriction(ty::restriction::Property::OnProperty(_))) => {
+				Self::Class(ty::Property::Restriction(
+					ty::restriction::Property::OnProperty(sub_prop),
+				))
+			}
+			Self::Class(ty::Property::Restriction(ty::restriction::Property::SomeValuesFrom(
+				_,
+			))) => Self::Class(ty::Property::Restriction(
+				ty::restriction::Property::SomeValuesFrom(sub_prop),
+			)),
+			Self::Property(prop::RdfProperty::Domain(_)) => {
+				Self::Property(prop::RdfProperty::Domain(sub_prop))
+			}
+			Self::Property(prop::RdfProperty::Range(_)) => {
+				Self::Property(prop::RdfProperty::Range(sub_prop))
+			}
+			Self::Property(prop::RdfProperty::Required(_)) => {
+				Self::Property(prop::RdfProperty::Required(sub_prop))
+			}
+			Self::Property(prop::RdfProperty::SubPropertyOf(_)) => {
+				Self::Property(prop::RdfProperty::SubPropertyOf(sub_prop))
+			}
+			Self::DatatypeRestriction(ty::data::restriction::Property::MaxExclusive(_)) => {
+				Self::DatatypeRestriction(ty::data::restriction::Property::MaxExclusive(sub_prop))
+			}
+			Self::DatatypeRestriction(ty::data::restriction::Property::MaxInclusive(_)) => {
+				Self::DatatypeRestriction(ty::data::restriction::Property::MaxInclusive(sub_prop))
+			}
+			Self::DatatypeRestriction(ty::data::restriction::Property::MaxLength(_)) => {
+				Self::DatatypeRestriction(ty::data::restriction::Property::MaxLength(sub_prop))
+			}
+			Self::DatatypeRestriction(ty::data::restriction::Property::MinExclusive(_)) => {
+				Self::DatatypeRestriction(ty::data::restriction::Property::MinExclusive(sub_prop))
+			}
+			Self::DatatypeRestriction(ty::data::restriction::Property::MinInclusive(_)) => {
+				Self::DatatypeRestriction(ty::data::restriction::Property::MinInclusive(sub_prop))
+			}
+			Self::DatatypeRestriction(ty::data::restriction::Property::MinLength(_)) => {
+				Self::DatatypeRestriction(ty::data::restriction::Property::MinLength(sub_prop))
+			}
+			Self::DatatypeRestriction(ty::data::restriction::Property::Pattern(_)) => {
+				Self::DatatypeRestriction(ty::data::restriction::Property::Pattern(sub_prop))
+			}
+			Self::List(list::Property::First(_)) => Self::List(list::Property::First(sub_prop)),
+			Self::List(list::Property::Rest(_)) => Self::List(list::Property::Rest(sub_prop)),
+			Self::Component(component::Property::Name(_)) => {
+				Self::Component(component::Property::Name(sub_prop))
+			}
+			Self::Component(component::Property::Formatted(
+				component::formatted::Property::Format(_),
+			)) => Self::Component(component::Property::Formatted(
+				component::formatted::Property::Format(sub_prop),
+			)),
+			Self::Component(component::Property::Formatted(
+				component::formatted::Property::LayoutField(layout::field::Property::For(_)),
+			)) => Self::Component(component::Property::Formatted(
+				component::formatted::Property::LayoutField(layout::field::Property::For(sub_prop)),
+			)),
+			Self::Component(component::Property::Layout(layout::Property::ArrayListFirst(_))) => {
+				Self::Component(component::Property::Layout(
+					layout::Property::ArrayListFirst(sub_prop),
+				))
+			}
+			Self::Component(component::Property::Layout(layout::Property::ArrayListNil(_))) => {
+				Self::Component(component::Property::Layout(layout::Property::ArrayListNil(
+					sub_prop,
+				)))
+			}
+			Self::Component(component::Property::Layout(layout::Property::ArrayListRest(_))) => {
+				Self::Component(component::Property::Layout(
+					layout::Property::ArrayListRest(sub_prop),
+				))
+			}
+			Self::Component(component::Property::Layout(layout::Property::For(_))) => {
+				Self::Component(component::Property::Layout(layout::Property::For(sub_prop)))
+			}
+			Self::Component(component::Property::Layout(layout::Property::IntersectionOf(_))) => {
+				Self::Component(component::Property::Layout(
+					layout::Property::IntersectionOf(sub_prop),
+				))
+			}
+			Self::Component(component::Property::Layout(layout::Property::WithRestrictions(_))) => {
+				Self::Component(component::Property::Layout(
+					layout::Property::WithRestrictions(sub_prop),
+				))
+			}
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Alias(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Alias(sub_prop),
+			))),
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Array(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Array(sub_prop),
+			))),
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::DerivedFrom(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::DerivedFrom(sub_prop),
+			))),
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Fields(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Fields(sub_prop),
+			))),
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::OneOrMany(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::OneOrMany(sub_prop),
+			))),
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Option(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Option(sub_prop),
+			))),
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Reference(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Reference(sub_prop),
+			))),
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Required(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Required(sub_prop),
+			))),
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Set(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Set(sub_prop),
+			))),
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Variants(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Variants(sub_prop),
+			))),
+			Self::LayoutRestriction(layout::restriction::Property::ExclusiveMaximum(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::ExclusiveMaximum(sub_prop))
+			}
+			Self::LayoutRestriction(layout::restriction::Property::ExclusiveMinimum(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::ExclusiveMinimum(sub_prop))
+			}
+			Self::LayoutRestriction(layout::restriction::Property::InclusiveMaximum(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::InclusiveMaximum(sub_prop))
+			}
+			Self::LayoutRestriction(layout::restriction::Property::InclusiveMinimum(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::InclusiveMinimum(sub_prop))
+			}
+			Self::LayoutRestriction(layout::restriction::Property::MaxCardinality(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::MaxCardinality(sub_prop))
+			}
+			Self::LayoutRestriction(layout::restriction::Property::MaxLength(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::MaxLength(sub_prop))
+			}
+			Self::LayoutRestriction(layout::restriction::Property::MinCardinality(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::MinCardinality(sub_prop))
+			}
+			Self::LayoutRestriction(layout::restriction::Property::MinLength(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::MinLength(sub_prop))
+			}
+			Self::LayoutRestriction(layout::restriction::Property::Pattern(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::Pattern(sub_prop))
+			}
+		}
+	}
+
 	pub fn id(&self) -> Id {
 		use vocab::{Rdf, Rdfs};
 		match self {

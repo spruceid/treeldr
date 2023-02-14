@@ -18,3 +18,4 @@ contextual.workspace = true
 shelves.workspace = true
 nquads-syntax.workspace = true
 langtag = "0.3.2"
+const-vec = "1.1.0"

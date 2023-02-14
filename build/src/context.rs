@@ -207,6 +207,14 @@ impl<M> Context<M> {
 		}
 	}
 
+	pub fn len(&self) -> usize {
+		self.nodes.len()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.nodes.is_empty()
+	}
+
 	/// Returns the node associated to the given `Id`, if any.
 	pub fn get(&self, id: Id) -> Option<&resource::Definition<M>> {
 		self.nodes.get(&id)

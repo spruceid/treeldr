@@ -23,7 +23,7 @@ pub struct Data<M> {
 	pub comment: PropertyValues<String, M>,
 
 	/// Other unknown properties.
-	pub other: BTreeMap<Id, PropertyValues<Stripped<Object<M>>, M>>,
+	pub other_properties: BTreeMap<Id, PropertyValues<Stripped<Object<M>>, M>>,
 }
 
 impl<M> Data<M> {
@@ -34,7 +34,7 @@ impl<M> Data<M> {
 			type_: PropertyValues::default(),
 			label: PropertyValues::default(),
 			comment: PropertyValues::default(),
-			other: BTreeMap::new(),
+			other_properties: BTreeMap::new(),
 		}
 	}
 
@@ -43,7 +43,7 @@ impl<M> Data<M> {
 			type_: self.type_.iter(),
 			label: self.label.iter(),
 			comment: self.comment.iter(),
-			other: self.other.iter(),
+			other: self.other_properties.iter(),
 			current_other: None,
 		}
 	}
@@ -109,6 +109,16 @@ impl<M> Definition<M> {
 
 	pub fn label_mut(&mut self) -> &mut PropertyValues<String, M> {
 		&mut self.data.label
+	}
+
+	pub fn other_properties(&self) -> &BTreeMap<Id, PropertyValues<Stripped<Object<M>>, M>> {
+		&self.data.other_properties
+	}
+
+	pub fn other_properties_mut(
+		&mut self,
+	) -> &mut BTreeMap<Id, PropertyValues<Stripped<Object<M>>, M>> {
+		&mut self.data.other_properties
 	}
 
 	pub fn comment(&self) -> &PropertyValues<String, M> {
@@ -234,51 +244,44 @@ impl<M> Definition<M> {
 	pub fn set(
 		&mut self,
 		prop: impl Into<crate::Property>,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		value: Meta<Object<M>, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
-		fn no_sub_prop(_: TId<UnknownProperty>, _: TId<UnknownProperty>) -> Option<Ordering> {
-			unreachable!()
-		}
-
 		match prop.into() {
 			crate::Property::Resource(prop) => match prop {
 				Property::Self_(_) => (),
 				Property::Type(p) => {
 					self.type_mut()
-						.insert(p, no_sub_prop, rdf::from::expect_type(value)?)
+						.insert(p, prop_cmp, rdf::from::expect_type(value)?)
 				}
 				Property::Label(p) => {
 					self.label_mut()
-						.insert(p, no_sub_prop, rdf::from::expect_string(value)?)
+						.insert(p, prop_cmp, rdf::from::expect_string(value)?)
 				}
 				Property::Comment(p) => {
 					self.comment_mut()
-						.insert(p, no_sub_prop, rdf::from::expect_string(value)?)
+						.insert(p, prop_cmp, rdf::from::expect_string(value)?)
 				}
-				Property::Class(prop) => self.as_type_mut().set(no_sub_prop, prop, value)?,
-				Property::DatatypeRestriction(prop) => {
-					self.as_datatype_restriction_mut()
-						.set(no_sub_prop, prop, value)?
-				}
-				Property::Property(prop) => self.as_property_mut().set(no_sub_prop, prop, value)?,
-				Property::Component(prop) => {
-					self.as_component_mut().set(no_sub_prop, prop, value)?
-				}
-				Property::LayoutRestriction(prop) => {
-					self.as_layout_restriction_mut()
-						.set(no_sub_prop, prop, value)?
-				}
-				Property::List(prop) => self.as_list_mut().set(no_sub_prop, prop, value)?,
+				Property::Class(prop) => self.as_type_mut().set(prop_cmp, prop, value)?,
+				Property::DatatypeRestriction(prop) => self
+					.as_datatype_restriction_mut()
+					.set(prop_cmp, prop, value)?,
+				Property::Property(prop) => self.as_property_mut().set(prop_cmp, prop, value)?,
+				Property::Component(prop) => self.as_component_mut().set(prop_cmp, prop, value)?,
+				Property::LayoutRestriction(prop) => self
+					.as_layout_restriction_mut()
+					.set(prop_cmp, prop, value)?,
+				Property::List(prop) => self.as_list_mut().set(prop_cmp, prop, value)?,
 			},
 			crate::Property::Other(prop) => {
-				self.data.other.entry(prop.id()).or_default().insert(
-					None,
-					no_sub_prop,
-					value.map(Stripped),
-				);
+				self.data
+					.other_properties
+					.entry(prop.id())
+					.or_default()
+					.insert(None, prop_cmp, value.map(Stripped));
 			}
 		}
 

@@ -111,5 +111,6 @@ errors! {
 	regexp_invalid::RegExpInvalid,
 	name_invalid::NameInvalid,
 	literal_unexpected::LiteralUnexpected<M>,
-	subclass_cycle::SubClassCycle<M>
+	subclass_cycle::SubClassCycle<M>,
+	subproperty_cycle::SubPropertyCycle<M>
 }

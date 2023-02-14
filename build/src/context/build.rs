@@ -10,6 +10,7 @@ mod assign_default_layouts;
 mod assign_default_names;
 mod compute_layout_intersections;
 mod compute_layouts_relations;
+mod dispatch_sub_properties;
 mod minimize;
 mod remove_unused_nodes;
 mod simplify_composite_types_and_layouts;
@@ -27,6 +28,9 @@ impl<M: Clone> Context<M> {
 		M: Clone + Merge,
 	{
 		// TODO check for infinite values (lists).
+
+		log::debug!("dispatch sub properties...");
+		self.dispatch_sub_properties()?;
 
 		log::debug!("computing layout intersections...");
 		self.compute_layout_intersections(vocabulary, generator)?;

@@ -1,17 +1,23 @@
-use std::cmp::Ordering;
+use std::{
+	cell::RefCell,
+	cmp::Ordering,
+	collections::{HashMap, HashSet},
+};
 
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
 	functional_property_value, property_values, rdf,
 	resource::BindingValueRef,
-	Error, FunctionalPropertyValue, PropertyValues,
+	Context, Error, FunctionalPropertyValue, PropertyValues,
 };
-use locspan::Meta;
+use const_vec::ConstVec;
+use locspan::{Meta, Stripped};
 use treeldr::{
 	metadata::Merge,
 	prop::{RdfProperty, UnknownProperty},
-	vocab::Object,
-	Id, TId,
+	utils::SccGraph,
+	vocab::{self, Object},
+	Id, Multiple, TId,
 };
 
 pub use treeldr::prop::{Property, Type};
@@ -27,6 +33,9 @@ pub struct Definition<M> {
 
 	/// Is the property required.
 	required: FunctionalPropertyValue<bool, M>,
+
+	/// Super properties.
+	sub_property_of: PropertyValues<Id, M>,
 }
 
 impl<M> Default for Definition<M> {
@@ -35,7 +44,275 @@ impl<M> Default for Definition<M> {
 			domain: PropertyValues::default(),
 			range: PropertyValues::default(),
 			required: FunctionalPropertyValue::default(),
+			sub_property_of: PropertyValues::default(),
 		}
+	}
+}
+
+#[derive(Debug)]
+pub struct SubPropertyCycle<M>(pub Id, pub Vec<Meta<Id, M>>, pub M);
+
+/// Computes the explicitly defined super properties for each properties.
+pub struct ExplicitSuperProperties<M> {
+	computed: ConstVec<Multiple<Id, M>>,
+	indexes: RefCell<HashMap<Id, Option<usize>>>,
+}
+
+impl<M> ExplicitSuperProperties<M> {
+	const SUB_PROPERTY_OF_ID: Id = Id::Iri(treeldr::IriIndex::Iri(treeldr::vocab::Term::Rdfs(
+		treeldr::vocab::Rdfs::SubPropertyOf,
+	)));
+
+	pub fn new(context: &crate::Context<M>) -> Self {
+		Self {
+			computed: ConstVec::new(context.len()),
+			indexes: RefCell::new(HashMap::new()),
+		}
+	}
+}
+
+impl<M: Clone + Merge> ExplicitSuperProperties<M> {
+	/// Checks if `b` is a sub property of `a`.
+	pub fn is_sub_property_of(&self, context: &crate::Context<M>, a: Id, b: Id) -> bool {
+		if let Some(super_properties) = self.get_recursive(context, b) {
+			for Meta(s, _) in super_properties {
+				if *s == a || self.is_sub_property_of(context, a, *s) {
+					return true;
+				}
+			}
+		}
+
+		false
+	}
+
+	/// Returns the super properties of the property `id`.
+	pub fn get(&self, context: &crate::Context<M>, id: Id) -> &Multiple<Id, M> {
+		self.get_recursive(context, id).unwrap()
+	}
+
+	/// Returns the super properties of the property `id`.
+	///
+	/// This is the recursive version of `get`, that may return `None` if
+	/// recursively called on the same `id`.
+	fn get_recursive(&self, context: &crate::Context<M>, id: Id) -> Option<&Multiple<Id, M>> {
+		let indexes = self.indexes.borrow();
+		let i: usize = match indexes.get(&id) {
+			Some(Some(i)) => *i,
+			Some(None) => return None,
+			None => {
+				std::mem::drop(indexes);
+
+				{
+					let mut indexes = self.indexes.borrow_mut();
+					indexes.insert(id, None);
+				}
+
+				let node = context.get(id).unwrap();
+
+				let mut result = Multiple::default();
+
+				for v in node.as_property().sub_property_of() {
+					result.insert(v.value.cloned())
+				}
+
+				for (prop, values) in node.other_properties() {
+					if self.is_sub_property_of(context, Self::SUB_PROPERTY_OF_ID, *prop) {
+						for v in values {
+							let id = match v.value.cloned().map(Stripped::unwrap) {
+								Meta(vocab::Object::Literal(_), _) => None,
+								Meta(vocab::Object::Blank(id), meta) => {
+									Some(Meta(Id::Blank(id), meta))
+								}
+								Meta(vocab::Object::Iri(id), meta) => Some(Meta(Id::Iri(id), meta)),
+							};
+
+							if let Some(id) = id {
+								result.insert(id);
+							}
+						}
+					}
+				}
+
+				let i = self.computed.len();
+				self.computed.push(result);
+
+				let mut indexes = self.indexes.borrow_mut();
+				indexes.insert(id, Some(i));
+				i
+			}
+		};
+
+		Some(&self.computed[i])
+	}
+
+	pub fn find_cycle(
+		&self,
+		context: &crate::Context<M>,
+		id: Id,
+		component: &[Id],
+	) -> Option<(Vec<Meta<Id, M>>, M)> {
+		self.find_cycle_from(context, id, component, &HashSet::new())
+	}
+
+	fn find_cycle_from(
+		&self,
+		context: &Context<M>,
+		id: Id,
+		component: &[Id],
+		visited: &HashSet<Id>,
+	) -> Option<(Vec<Meta<Id, M>>, M)>
+	where
+		M: Clone,
+	{
+		for Meta(super_id, meta) in self.get(context, id) {
+			if *super_id == id {
+				return Some((Vec::new(), meta.clone()));
+			}
+
+			if !visited.contains(super_id) && component.contains(super_id) {
+				let mut visited = visited.clone();
+				visited.insert(*super_id);
+				if let Some((mut path, end)) =
+					self.find_cycle_from(context, *super_id, component, &visited)
+				{
+					path.push(Meta(*super_id, meta.clone()));
+					return Some((path, end));
+				}
+			}
+		}
+
+		None
+	}
+}
+
+pub struct Hierarchy<M> {
+	map: HashMap<Id, Multiple<Id, M>>,
+}
+
+impl<M> Hierarchy<M> {
+	pub fn super_properties(&self, id: Id) -> Option<&Multiple<Id, M>> {
+		self.map.get(&id)
+	}
+
+	/// Checks if `b` is a sub property of `a`.
+	pub fn is_sub_property_of(&self, a: Id, b: Id) -> bool {
+		if let Some(super_properties) = self.super_properties(b) {
+			for Meta(s, _) in super_properties {
+				if *s == a || self.is_sub_property_of(a, *s) {
+					return true;
+				}
+			}
+		}
+
+		false
+	}
+
+	/// Checks if `b` is a sub property of `a` or equal to `a`.
+	pub fn is_sub_property_of_or_eq(&self, a: Id, b: Id) -> bool {
+		a == b || self.is_sub_property_of(a, b)
+	}
+
+	pub fn cmp(&self, a: Id, b: Id) -> Option<Ordering> {
+		if a == b {
+			Some(Ordering::Equal)
+		} else if self.is_sub_property_of(a, b) {
+			Some(Ordering::Greater)
+		} else if self.is_sub_property_of(b, a) {
+			Some(Ordering::Less)
+		} else {
+			None
+		}
+	}
+}
+
+impl<M: Clone + Merge> Hierarchy<M> {
+	pub fn new(context: &Context<M>) -> Result<Self, Meta<SubPropertyCycle<M>, M>> {
+		let all_super_properties = ExplicitSuperProperties::new(context);
+
+		struct Graph {
+			map: HashMap<Id, HashSet<Id>>,
+		}
+
+		impl SccGraph for Graph {
+			type Vertex = Id;
+
+			type Vertices<'a> = std::iter::Copied<std::collections::hash_map::Keys<'a, Id, HashSet<Id>>> where Self: 'a;
+
+			type Successors<'a> = std::iter::Copied<std::collections::hash_set::Iter<'a, Id>> where Self: 'a;
+
+			fn vertices(&self) -> Self::Vertices<'_> {
+				self.map.keys().copied()
+			}
+
+			fn successors(&self, v: Self::Vertex) -> Self::Successors<'_> {
+				self.map[&v].iter().copied()
+			}
+		}
+
+		let mut graph = Graph {
+			map: HashMap::new(),
+		};
+
+		for (id, node) in context.nodes() {
+			let super_properties = all_super_properties.get(context, id);
+
+			// Detect cycles of size 1.
+			if let Some(meta) = super_properties.get_metadata(&id) {
+				return Err(Meta(
+					SubPropertyCycle(node.id(), Vec::new(), meta.clone()),
+					node.metadata().clone(),
+				));
+			}
+
+			graph.map.insert(
+				id,
+				super_properties
+					.into_iter()
+					.map(Meta::into_value)
+					.cloned()
+					.collect(),
+			);
+		}
+
+		let components = graph.strongly_connected_components();
+
+		for component in components.iter() {
+			// Detect cycles greater than 1.
+			if component.len() > 1 {
+				let node = context.get(component[0]).unwrap();
+				let (mut path, end) = all_super_properties
+					.find_cycle(context, component[0], component)
+					.unwrap();
+				path.reverse();
+				return Err(Meta(
+					SubPropertyCycle(node.id(), path, end),
+					node.metadata().clone(),
+				));
+			}
+		}
+
+		let mut map = HashMap::new();
+
+		for (i, component) in components.iter().enumerate() {
+			let id = component[0];
+
+			let direct_successors: HashSet<Id> = components
+				.direct_successors(i)
+				.unwrap()
+				.into_iter()
+				.map(|j| components.get(j).unwrap()[0])
+				.collect();
+			let super_properties = all_super_properties
+				.get(context, id)
+				.iter()
+				.map(|Meta(v, m)| Meta(*v, m.clone()))
+				.filter(|Meta(super_id, _)| direct_successors.contains(super_id))
+				.collect();
+
+			map.insert(id, super_properties);
+		}
+
+		Ok(Self { map })
 	}
 }
 
@@ -68,11 +345,20 @@ impl<M> Definition<M> {
 		&mut self.required
 	}
 
+	pub fn sub_property_of(&self) -> &PropertyValues<Id, M> {
+		&self.sub_property_of
+	}
+
+	pub fn sub_property_of_mut(&mut self) -> &mut PropertyValues<Id, M> {
+		&mut self.sub_property_of
+	}
+
 	pub fn bindings(&self) -> Bindings<M> {
 		ClassBindings {
 			domain: self.domain.iter(),
 			range: self.range.iter(),
 			required: self.required.iter(),
+			sub_property_of: self.sub_property_of.iter(),
 		}
 	}
 
@@ -90,6 +376,10 @@ impl<M> Definition<M> {
 				.domain
 				.insert(p, prop_cmp, rdf::from::expect_id(value)?),
 			RdfProperty::Range(p) => self.range.insert(p, prop_cmp, rdf::from::expect_id(value)?),
+			RdfProperty::SubPropertyOf(p) => {
+				self.sub_property_of
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
 			RdfProperty::Required(p) => {
 				self.required
 					.insert(p, prop_cmp, rdf::from::expect_schema_boolean(value)?)
@@ -161,6 +451,7 @@ impl<M: Merge> MapIds for Definition<M> {
 pub enum ClassBinding {
 	Domain(Option<TId<UnknownProperty>>, Id),
 	Range(Option<TId<UnknownProperty>>, Id),
+	SubPropertyOf(Option<TId<UnknownProperty>>, Id),
 	Required(Option<TId<UnknownProperty>>, bool),
 }
 
@@ -171,6 +462,7 @@ impl ClassBinding {
 		match self {
 			Self::Domain(p, _) => RdfProperty::Domain(*p),
 			Self::Range(p, _) => RdfProperty::Range(*p),
+			Self::SubPropertyOf(p, _) => RdfProperty::SubPropertyOf(*p),
 			Self::Required(p, _) => RdfProperty::Required(*p),
 		}
 	}
@@ -179,6 +471,7 @@ impl ClassBinding {
 		match self {
 			Self::Domain(_, v) => BindingValueRef::Id(*v),
 			Self::Range(_, v) => BindingValueRef::Id(*v),
+			Self::SubPropertyOf(_, v) => BindingValueRef::Id(*v),
 			Self::Required(_, v) => BindingValueRef::Boolean(*v),
 		}
 	}
@@ -188,6 +481,7 @@ pub struct ClassBindings<'a, M> {
 	domain: property_values::non_functional::Iter<'a, Id, M>,
 	range: property_values::non_functional::Iter<'a, Id, M>,
 	required: functional_property_value::Iter<'a, bool, M>,
+	sub_property_of: property_values::non_functional::Iter<'a, Id, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -203,11 +497,16 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 				self.range
 					.next()
 					.map(|m| m.into_cloned_class_binding(ClassBinding::Range))
-					.or_else(|| {
-						self.required
-							.next()
-							.map(|m| m.into_cloned_class_binding(ClassBinding::Required))
-					})
+			})
+			.or_else(|| {
+				self.required
+					.next()
+					.map(|m| m.into_cloned_class_binding(ClassBinding::Required))
+			})
+			.or_else(|| {
+				self.sub_property_of
+					.next()
+					.map(|m| m.into_cloned_class_binding(ClassBinding::SubPropertyOf))
 			})
 	}
 }

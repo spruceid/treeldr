@@ -349,6 +349,7 @@ impl From<Id> for Property {
 pub enum RdfProperty {
 	Domain(Option<TId<UnknownProperty>>),
 	Range(Option<TId<UnknownProperty>>),
+	SubPropertyOf(Option<TId<UnknownProperty>>),
 	Required(Option<TId<UnknownProperty>>),
 }
 
@@ -359,6 +360,8 @@ impl RdfProperty {
 			Self::Domain(Some(p)) => p.id(),
 			Self::Range(None) => Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Range))),
 			Self::Range(Some(p)) => p.id(),
+			Self::SubPropertyOf(None) => Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::SubPropertyOf))),
+			Self::SubPropertyOf(Some(p)) => p.id(),
 			Self::Required(None) => Id::Iri(IriIndex::Iri(Term::Schema(Schema::ValueRequired))),
 			Self::Required(Some(p)) => p.id(),
 		}
@@ -368,6 +371,7 @@ impl RdfProperty {
 		match self {
 			Self::Domain(None) => Some(Term::Rdfs(Rdfs::Domain)),
 			Self::Range(None) => Some(Term::Rdfs(Rdfs::Range)),
+			Self::SubPropertyOf(None) => Some(Term::Rdfs(Rdfs::SubPropertyOf)),
 			Self::Required(None) => Some(Term::Schema(Schema::ValueRequired)),
 			_ => None,
 		}
@@ -379,6 +383,8 @@ impl RdfProperty {
 			Self::Domain(Some(p)) => PropertyName::Other(*p),
 			Self::Range(None) => PropertyName::Resource("range"),
 			Self::Range(Some(p)) => PropertyName::Other(*p),
+			Self::SubPropertyOf(None) => PropertyName::Resource("super property"),
+			Self::SubPropertyOf(Some(p)) => PropertyName::Other(*p),
 			Self::Required(None) => PropertyName::Resource("value requirement"),
 			Self::Required(Some(p)) => PropertyName::Other(*p),
 		}
