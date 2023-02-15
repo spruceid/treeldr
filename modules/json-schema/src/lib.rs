@@ -1,6 +1,6 @@
 use contextual::WithContext;
 use rdf_types::Vocabulary;
-use treeldr::{layout, BlankIdIndex, IriIndex, Name, TId};
+use treeldr::{layout, BlankIdIndex, IriIndex, MetaOption, Name, TId};
 
 mod command;
 pub mod embedding;
@@ -158,12 +158,14 @@ fn generate_layout_schema<F>(
 	layout: treeldr::Ref<treeldr::Layout, F>,
 ) -> Result<serde_json::Value, Error> {
 	if let Some(required) = required.as_mut() {
-		**required = layout.as_layout().description().value().is_required()
+		**required = layout.as_layout().description().is_required()
 	}
 
 	use treeldr::layout::Description;
-	match layout.as_layout().description().value() {
+	match layout.as_layout().description() {
 		Description::Never => Ok(serde_json::Value::Bool(false)),
+		Description::Primitive(n) => Ok(generate_primitive_type(*n)),
+		Description::Derived(d) => Ok(generate_derived_type(d.value())),
 		Description::Reference(_) => {
 			let mut json = serde_json::Map::new();
 			json.insert("type".into(), "string".into());
@@ -176,7 +178,6 @@ fn generate_layout_schema<F>(
 		Description::Enum(enm) => {
 			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
-		Description::Primitive(n) => Ok(generate_primitive_type(n)),
 		Description::Required(r) => {
 			let item_layout = model.get(**r.item_layout()).unwrap();
 			generate_layout_schema(
@@ -235,7 +236,7 @@ fn generate_layout_schema<F>(
 		),
 		Description::Alias(alias_ref) => {
 			let mut json = serde_json::Map::new();
-			let alias = model.get(*alias_ref).unwrap();
+			let alias = model.get(*alias_ref.value()).unwrap();
 			json.insert(
 				"$ref".into(),
 				alias.id().with(vocabulary).to_string().into(),
@@ -269,11 +270,7 @@ fn generate_struct<F>(
 
 	for field_id in s.fields() {
 		let field = model.get(**field_id).unwrap();
-		let field_layout_ref = **field
-			.as_formatted()
-			.format()
-			.as_ref()
-			.expect("missing field layout");
+		let field_layout_ref = field.as_formatted().format().expect("missing field layout");
 
 		let mut required = true;
 		let mut layout_schema = embed_layout(
@@ -381,11 +378,11 @@ fn generate_layout_ref<F>(
 	let layout = model.get(layout_ref).unwrap();
 
 	if let Some(required) = required.as_mut() {
-		**required = layout.as_layout().description().value().is_required()
+		**required = layout.as_layout().description().is_required()
 	}
 
 	use treeldr::layout::Description;
-	match layout.as_layout().description().value() {
+	match layout.as_layout().description() {
 		Description::Never => Ok(serde_json::Value::Bool(false)),
 		Description::Reference(_) => {
 			let mut json = serde_json::Map::new();
@@ -395,7 +392,8 @@ fn generate_layout_ref<F>(
 		Description::Enum(enm) => {
 			generate_enum_type(vocabulary, model, embedding, type_property, enm)
 		}
-		Description::Primitive(n) => Ok(generate_primitive_type(n)),
+		Description::Primitive(n) => Ok(generate_primitive_type(*n)),
+		Description::Derived(d) => Ok(generate_derived_type(d.value())),
 		Description::Required(r) => generate_layout_ref(
 			vocabulary,
 			model,
@@ -491,7 +489,7 @@ fn generate_set_type<F>(
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	item_layout_ref: TId<treeldr::Layout>,
-	restrictions: &treeldr::layout::ContainerRestrictions<F>,
+	restrictions: &MetaOption<treeldr::layout::ContainerRestrictions<F>, F>,
 ) -> Result<serde_json::Value, Error> {
 	let mut def = serde_json::Map::new();
 	let item_schema = generate_layout_ref(
@@ -506,18 +504,20 @@ fn generate_set_type<F>(
 	def.insert("items".into(), item_schema);
 	def.insert("uniqueItems".into(), true.into());
 
-	if !restrictions.cardinal().min().is_zero() {
-		let m: u64 = restrictions
-			.cardinal()
-			.min()
-			.try_into()
-			.expect("minimum is too large");
-		def.insert("minItems".into(), m.into());
-	}
+	if let Some(restrictions) = restrictions.as_ref() {
+		if !restrictions.cardinal().min().is_zero() {
+			let m: u64 = restrictions
+				.cardinal()
+				.min()
+				.try_into()
+				.expect("minimum is too large");
+			def.insert("minItems".into(), m.into());
+		}
 
-	if let Some(m) = restrictions.cardinal().max() {
-		let m: u64 = m.clone().try_into().expect("maximum is too large");
-		def.insert("maxItems".into(), m.into());
+		if let Some(m) = restrictions.cardinal().max() {
+			let m: u64 = m.clone().try_into().expect("maximum is too large");
+			def.insert("maxItems".into(), m.into());
+		}
 	}
 
 	Ok(def.into())
@@ -529,7 +529,7 @@ fn generate_one_or_many_type<F>(
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	item_layout_ref: TId<treeldr::Layout>,
-	restrictions: &treeldr::layout::ContainerRestrictions<F>,
+	restrictions: &MetaOption<treeldr::layout::ContainerRestrictions<F>, F>,
 ) -> Result<serde_json::Value, Error> {
 	let mut def = serde_json::Map::new();
 
@@ -567,7 +567,7 @@ fn generate_list_type<F>(
 	embedding: &embedding::Configuration,
 	type_property: Option<&str>,
 	item_layout_ref: TId<treeldr::Layout>,
-	restrictions: &treeldr::layout::ContainerRestrictions<F>,
+	restrictions: &MetaOption<treeldr::layout::ContainerRestrictions<F>, F>,
 ) -> Result<serde_json::Value, Error> {
 	let mut def = serde_json::Map::new();
 	let item_schema = generate_layout_ref(
@@ -581,18 +581,20 @@ fn generate_list_type<F>(
 	def.insert("type".into(), "array".into());
 	def.insert("items".into(), item_schema);
 
-	if !restrictions.cardinal().min().is_zero() {
-		let m: u64 = restrictions
-			.cardinal()
-			.min()
-			.try_into()
-			.expect("minimum is too large");
-		def.insert("minItems".into(), m.into());
-	}
+	if let Some(restrictions) = restrictions.as_ref() {
+		if !restrictions.cardinal().min().is_zero() {
+			let m: u64 = restrictions
+				.cardinal()
+				.min()
+				.try_into()
+				.expect("minimum is too large");
+			def.insert("minItems".into(), m.into());
+		}
 
-	if let Some(m) = restrictions.cardinal().max() {
-		let m: u64 = m.clone().try_into().expect("maximum is too large");
-		def.insert("maxItems".into(), m.into());
+		if let Some(m) = restrictions.cardinal().max() {
+			let m: u64 = m.clone().try_into().expect("maximum is too large");
+			def.insert("maxItems".into(), m.into());
+		}
 	}
 
 	Ok(def.into())
@@ -609,10 +611,9 @@ fn generate_enum_type<F>(
 	let mut variants = Vec::with_capacity(enm.variants().len());
 	for variant_id in enm.variants() {
 		let variant = model.get(**variant_id).unwrap();
-		let layout_ref = **variant
+		let layout_ref = variant
 			.as_formatted()
 			.format()
-			.as_ref()
 			.expect("missing variant layout");
 		let variant_json = embed_layout(
 			vocabulary,
@@ -630,7 +631,60 @@ fn generate_enum_type<F>(
 	Ok(def.into())
 }
 
-fn generate_primitive_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> serde_json::Value {
+fn generate_primitive_type(p: treeldr::layout::Primitive) -> serde_json::Value {
+	use treeldr::layout::Primitive;
+	let mut def = serde_json::Map::new();
+
+	match p {
+		Primitive::Boolean => {
+			def.insert("type".into(), "bool".into());
+		}
+		Primitive::Integer => {
+			def.insert("type".into(), "integer".into());
+		}
+		Primitive::UnsignedInteger => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), 0.into());
+		}
+		Primitive::Float => {
+			def.insert("type".into(), "number".into());
+		}
+		Primitive::Double => {
+			def.insert("type".into(), "number".into());
+		}
+		Primitive::String => {
+			def.insert("type".into(), "string".into());
+		}
+		Primitive::Time => {
+			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "time".into());
+		}
+		Primitive::Date => {
+			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "date".into());
+		}
+		Primitive::DateTime => {
+			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "date-time".into());
+		}
+		Primitive::Iri => {
+			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "iri".into());
+		}
+		Primitive::Uri => {
+			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "uri".into());
+		}
+		Primitive::Url => {
+			def.insert("type".into(), "string".into());
+			def.insert("format".into(), "uri".into());
+		}
+	}
+
+	def.into()
+}
+
+fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> serde_json::Value {
 	use treeldr::layout::RestrictedPrimitive;
 	let mut def = serde_json::Map::new();
 
@@ -651,15 +705,17 @@ fn generate_primitive_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> 
 		RestrictedPrimitive::Double(_) => {
 			def.insert("type".into(), "number".into());
 		}
-		RestrictedPrimitive::String(s) => {
+		RestrictedPrimitive::String(restrictions) => {
 			def.insert("type".into(), "string".into());
-			if let Some(pattern) = s.pattern() {
-				match pattern.as_singleton() {
-					Some(singleton) => {
-						def.insert("const".into(), singleton.into());
-					}
-					None => {
-						def.insert("pattern".into(), pattern.to_string().into());
+			if let Some(r) = restrictions.as_ref() {
+				if let Some(pattern) = r.pattern() {
+					match pattern.as_singleton() {
+						Some(singleton) => {
+							def.insert("const".into(), singleton.into());
+						}
+						None => {
+							def.insert("pattern".into(), pattern.to_string().into());
+						}
 					}
 				}
 			}

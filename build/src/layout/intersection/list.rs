@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use locspan::Meta;
 use rdf_types::{Generator, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
+use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, PropertyValueRef};
 
 use crate::{utils::TryCollect, Context, Error, ObjectAsRequiredId};
 
@@ -42,7 +42,11 @@ pub fn list_intersection<T: IntersectionListItem<M>, M: Clone + Merge>(
 		let structs = list.try_fold(context, Vec::new(), |struct_, item| {
 			let mut structs = Vec::new();
 
-			for Meta(object, field_meta) in item {
+			for PropertyValueRef {
+				value: Meta(object, field_meta),
+				..
+			} in item
+			{
 				let mut struct_ = struct_.clone();
 				let field_id = object.as_required_id(field_meta)?;
 				struct_.push(T::get(context, Meta(field_id, field_meta.clone()))?);

@@ -69,17 +69,17 @@ impl<M> Field<M> {
 
 		Ok(Self {
 			id: Some(id),
-			name: node.as_component().name().clone(),
+			name: node.as_component().name().clone_into_single(),
 			layout: node
 				.as_formatted()
 				.format()
 				.iter()
 				.map(|id| {
-					let meta = id.into_metadata().clone();
-					Meta(IdIntersection::new(id.cloned()), meta)
+					let meta = id.value.into_metadata().clone();
+					Meta(IdIntersection::new(id.value.cloned()), meta)
 				})
 				.collect(),
-			prop: field.property().clone(),
+			prop: field.property().clone_into_single(),
 		})
 	}
 }
@@ -215,9 +215,10 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Field<M> {
 				let id = generator.next(vocabulary);
 
 				let node = context.declare_layout_field(id, meta);
-				*node.as_component_mut().name_mut() = self.name;
-				*node.as_formatted_mut().format_mut() = layout;
-				*node.as_layout_field_mut().property_mut() = self.prop;
+				*node.as_component_mut().name_mut() = self.name.into_functional_property_value();
+				*node.as_formatted_mut().format_mut() = layout.into_functional_property_value();
+				*node.as_layout_field_mut().property_mut() =
+					self.prop.into_functional_property_value();
 
 				id
 			}

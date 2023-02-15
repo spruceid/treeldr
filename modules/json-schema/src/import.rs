@@ -33,7 +33,7 @@ where
 	) -> String {
 		match self {
 			Self::UnsupportedType => "unsupported schema `type` value.".to_string(),
-			Self::InvalidPropertyName(name) => format!("invalid property name `{}`", name),
+			Self::InvalidPropertyName(name) => format!("invalid property name `{name}`"),
 			Self::Build(e) => e.message(vocabulary),
 		}
 	}
@@ -173,7 +173,7 @@ pub fn import_regular_schema<
 		generator,
 	)?;
 
-	if let treeldr_build::layout::Description::Primitive(primitive) = &desc {
+	if let treeldr_build::layout::BaseDescriptionBinding::DerivedFrom(id) = &desc {
 		if schema.is_primitive()
 			&& schema.id.is_none()
 			&& schema.meta_schema.is_empty()
@@ -181,7 +181,7 @@ pub fn import_regular_schema<
 			&& schema.anchor.is_none()
 			&& schema.dynamic_anchor.is_none()
 		{
-			return Ok(primitive.id());
+			return Ok(*id);
 		}
 	}
 
@@ -213,24 +213,25 @@ pub fn import_regular_schema<
 	let node = context.get_mut(id).unwrap();
 	if let Some(title) = &schema.meta_data.title {
 		// The title of a schema is translated in an rdfs:label.
-		node.label_mut().insert(Meta(title.clone(), M::default()));
+		node.label_mut()
+			.insert_base(Meta(title.clone(), M::default()));
 	}
 
 	if let Some(description) = &schema.meta_data.description {
 		// The title of a schema is translated in an rdfs:comment.
 		node.comment_mut()
-			.insert(Meta(description.clone(), M::default()));
+			.insert_base(Meta(description.clone(), M::default()));
 	}
 
 	if let Some(name) = name {
 		node.as_component_mut()
 			.name_mut()
-			.insert(Meta(name, M::default()));
+			.insert_base(Meta(name, M::default()));
 	}
 
 	node.as_layout_mut()
 		.description_mut()
-		.insert(Meta(desc, M::default()));
+		.insert_base(Meta(desc, M::default()));
 
 	if !restrictions.is_empty() {
 		let list_id = context.create_list_with(
@@ -242,7 +243,7 @@ pub fn import_regular_schema<
 				let node = context.declare_layout_restriction(id, meta.clone());
 				node.as_layout_restriction_mut()
 					.restriction_mut()
-					.insert(Meta(restriction, meta.clone()));
+					.insert_base(Meta(restriction, meta.clone()));
 				Meta(id.into_term(), meta)
 			},
 		);
@@ -250,7 +251,7 @@ pub fn import_regular_schema<
 		let node = context.get_mut(id).unwrap();
 		node.as_layout_mut()
 			.restrictions_mut()
-			.insert(Meta(list_id, M::default()));
+			.insert_base(Meta(list_id, M::default()));
 	}
 
 	Ok(id)
@@ -303,7 +304,13 @@ fn import_layout_description<
 	context: &mut Context<M>,
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
-) -> Result<(treeldr_build::layout::Description, Restrictions<M>), Error<M>> {
+) -> Result<
+	(
+		treeldr_build::layout::BaseDescriptionBinding,
+		Restrictions<M>,
+	),
+	Error<M>,
+> {
 	let mut kind = LayoutKind::Unknown;
 	if let Some(types) = &schema.validation.any.ty {
 		for ty in types {
@@ -337,7 +344,7 @@ fn import_layout_description<
 	if let Some(layout) = primitive_layout {
 		if schema.is_primitive() {
 			return Ok((
-				treeldr_build::layout::Description::Primitive(layout),
+				treeldr_build::layout::BaseDescriptionBinding::DerivedFrom(layout.id()),
 				Restrictions::default(),
 			));
 		}
@@ -369,8 +376,8 @@ fn import_layout_description<
 				LayoutKind::Number | LayoutKind::Integer => {
 					if schema.validation.numeric.is_empty() {
 						Ok((
-							treeldr_build::layout::Description::Primitive(
-								primitive_layout.unwrap(),
+							treeldr_build::layout::BaseDescriptionBinding::DerivedFrom(
+								primitive_layout.unwrap().id(),
 							),
 							Restrictions::default(),
 						))
@@ -417,7 +424,9 @@ fn import_layout_description<
 						}
 
 						Ok((
-							treeldr_build::layout::Description::Primitive(primitive),
+							treeldr_build::layout::BaseDescriptionBinding::DerivedFrom(
+								primitive.id(),
+							),
 							restrictions,
 						))
 					}
@@ -443,8 +452,8 @@ fn import_layout_description<
 
 					// TODO: for now, most string constraints are ignored.
 					Ok((
-						treeldr_build::layout::Description::Primitive(
-							treeldr::layout::Primitive::String,
+						treeldr_build::layout::BaseDescriptionBinding::DerivedFrom(
+							treeldr::layout::Primitive::String.id(),
 						),
 						restrictions,
 					))
@@ -476,7 +485,13 @@ fn import_array_schema<
 	context: &mut Context<M>,
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
-) -> Result<(treeldr_build::layout::Description, Restrictions<M>), Error<M>> {
+) -> Result<
+	(
+		treeldr_build::layout::BaseDescriptionBinding,
+		Restrictions<M>,
+	),
+	Error<M>,
+> {
 	let item_type = match &array.items {
 		Some(items) => import_sub_schema(items, base_iri, context, vocabulary, generator)?,
 		None => todo!(),
@@ -485,13 +500,13 @@ fn import_array_schema<
 	if matches!(schema.validation.array.unique_items, Some(true)) {
 		kind.refine(LayoutKind::Set)?;
 		Ok((
-			treeldr_build::layout::Description::Set(item_type),
+			treeldr_build::layout::BaseDescriptionBinding::Set(item_type),
 			Restrictions::default(),
 		))
 	} else {
 		kind.refine(LayoutKind::Array)?;
 		Ok((
-			treeldr_build::layout::Description::Array(item_type),
+			treeldr_build::layout::BaseDescriptionBinding::Array(item_type),
 			Restrictions::default(),
 		))
 	}
@@ -508,7 +523,13 @@ fn import_object_schema<
 	context: &mut Context<M>,
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
-) -> Result<(treeldr_build::layout::Description, Restrictions<M>), Error<M>> {
+) -> Result<
+	(
+		treeldr_build::layout::BaseDescriptionBinding,
+		Restrictions<M>,
+	),
+	Error<M>,
+> {
 	let mut fields: Vec<Meta<Object<M>, M>> = Vec::new();
 
 	if let Some(properties) = &object.properties {
@@ -544,7 +565,7 @@ fn import_object_schema<
 				if let Some(doc) = &meta.description {
 					field_node
 						.label_mut()
-						.insert(Meta(doc.clone(), M::default()))
+						.insert_base(Meta(doc.clone(), M::default()))
 				}
 			}
 
@@ -552,14 +573,14 @@ fn import_object_schema<
 				Ok(name) => field_node
 					.as_component_mut()
 					.name_mut()
-					.insert(Meta(name, M::default())),
+					.insert_base(Meta(name, M::default())),
 				Err(_) => return Err(Error::InvalidPropertyName(prop.to_string())),
 			}
 
 			field_node
 				.as_formatted_mut()
 				.format_mut()
-				.insert(Meta(layout_id, M::default()));
+				.insert_base(Meta(layout_id, M::default()));
 
 			fields.push(Meta(field_id.into_term(), M::default()));
 		}
@@ -567,7 +588,7 @@ fn import_object_schema<
 
 	let fields_id = context.create_list(vocabulary, generator, fields);
 	Ok((
-		treeldr_build::layout::Description::Struct(fields_id),
+		treeldr_build::layout::BaseDescriptionBinding::Struct(fields_id),
 		Restrictions::default(),
 	))
 }

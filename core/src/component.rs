@@ -4,21 +4,23 @@ use locspan::Meta;
 use crate::{
 	layout,
 	node::BindingValueRef,
+	prop::{PropertyName, UnknownProperty},
+	property_values,
 	vocab::{self, Term},
-	MetaOption, Name,
+	FunctionalPropertyValue, Id, IriIndex, MetaOption, Name, TId,
 };
 
 pub mod formatted;
 
 #[derive(Debug, Clone)]
 pub struct Data<M> {
-	pub name: MetaOption<Name, M>,
+	pub name: FunctionalPropertyValue<Name, M>,
 }
 
 impl<M> Data<M> {
 	pub fn bindings(&self) -> ClassBindings<M> {
 		ClassBindings {
-			name: self.name.as_ref(),
+			name: self.name.iter(),
 		}
 	}
 }
@@ -81,8 +83,8 @@ impl<M> Definition<M> {
 			.and_then(formatted::Definition::as_layout_variant)
 	}
 
-	pub fn name(&self) -> Option<&Meta<Name, M>> {
-		self.data.name.as_ref()
+	pub fn name(&self) -> Option<&Name> {
+		self.data.name.value()
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
@@ -130,24 +132,36 @@ impl Type {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 
 pub enum Property {
-	Name,
+	Name(Option<TId<UnknownProperty>>),
 	Layout(layout::Property),
 	Formatted(formatted::Property),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::TreeLdr;
 		match self {
-			Self::Name => Term::TreeLdr(TreeLdr::Name),
+			Self::Name(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Name))),
+			Self::Name(Some(p)) => p.id(),
+			Self::Layout(p) => p.id(),
+			Self::Formatted(p) => p.id(),
+		}
+	}
+
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::TreeLdr;
+		match self {
+			Self::Name(None) => Some(Term::TreeLdr(TreeLdr::Name)),
+			Self::Name(Some(_)) => None,
 			Self::Layout(p) => p.term(),
 			Self::Formatted(p) => p.term(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn name(&self) -> PropertyName {
 		match self {
-			Self::Name => "name",
+			Self::Name(None) => PropertyName::Resource("name"),
+			Self::Name(Some(p)) => PropertyName::Other(*p),
 			Self::Layout(p) => p.name(),
 			Self::Formatted(p) => p.name(),
 		}
@@ -171,19 +185,19 @@ impl Property {
 }
 
 pub enum ClassBindingRef<'a> {
-	Name(&'a Name),
+	Name(Option<TId<UnknownProperty>>, &'a Name),
 }
 
 impl<'a> ClassBindingRef<'a> {
 	pub fn into_binding_ref<M>(self) -> BindingRef<'a, M> {
 		match self {
-			Self::Name(n) => BindingRef::Name(n),
+			Self::Name(id, n) => BindingRef::Name(id, n),
 		}
 	}
 }
 
 pub enum BindingRef<'a, M> {
-	Name(&'a Name),
+	Name(Option<TId<UnknownProperty>>, &'a Name),
 	Layout(layout::BindingRef<'a, M>),
 	Formatted(formatted::Binding),
 }
@@ -199,7 +213,7 @@ impl<'a, M> BindingRef<'a, M> {
 
 	pub fn property(&self) -> Property {
 		match self {
-			Self::Name(_) => Property::Name,
+			Self::Name(p, _) => Property::Name(*p),
 			Self::Layout(b) => Property::Layout(b.property()),
 			Self::Formatted(b) => Property::Formatted(b.property()),
 		}
@@ -207,7 +221,7 @@ impl<'a, M> BindingRef<'a, M> {
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Name(v) => BindingValueRef::Name(v),
+			Self::Name(_, v) => BindingValueRef::Name(v),
 			Self::Layout(b) => b.value(),
 			Self::Formatted(b) => b.value(),
 		}
@@ -217,7 +231,7 @@ impl<'a, M> BindingRef<'a, M> {
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
-	name: Option<&'a Meta<Name, M>>,
+	name: property_values::functional::Iter<'a, Name, M>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
@@ -225,8 +239,8 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.name
-			.take()
-			.map(|m| m.borrow().map(ClassBindingRef::Name))
+			.next()
+			.map(|m| m.into_class_binding(ClassBindingRef::Name))
 	}
 }
 

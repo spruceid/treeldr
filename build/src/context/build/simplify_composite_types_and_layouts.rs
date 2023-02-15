@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use treeldr::{metadata::Merge, Id, ResourceType};
 
-use crate::{context::MapIds, Context, ListRef, ObjectAsId, Single};
+use crate::{context::MapIds, Context, FunctionalPropertyValue, ListRef, ObjectAsId};
 
 impl<M: Merge> Context<M> {
 	pub fn simplify_composite_types_and_layouts(&mut self) {
@@ -27,17 +27,23 @@ impl<M: Merge> Context<M> {
 			}
 		}
 
-		for b in type_map.keys() {
+		for (b, target) in &type_map {
 			let node = self.nodes.get_mut(&Id::Blank(*b)).unwrap();
 			node.as_type_mut().union_of_mut().clear();
 			node.as_type_mut().intersection_of_mut().clear();
-			node.type_mut().remove(&crate::Type::TYPE);
+
+			if *target != Id::Blank(*b) {
+				node.type_mut().remove(&crate::Type::TYPE);
+			}
 		}
 
-		for b in layout_map.keys() {
+		for (b, target) in &layout_map {
 			let node = self.nodes.get_mut(&Id::Blank(*b)).unwrap();
 			node.as_layout_mut().intersection_of_mut().clear();
-			node.type_mut().remove(&treeldr::Layout::TYPE);
+
+			if *target != Id::Blank(*b) {
+				node.type_mut().remove(&treeldr::Layout::TYPE);
+			}
 		}
 
 		self.map_ids(|id, prop| match id {
@@ -55,18 +61,18 @@ impl<M: Merge> Context<M> {
 	}
 }
 
-fn get_singleton<M>(context: &Context<M>, list: &Single<Id, M>) -> Option<Id> {
+fn get_singleton<M>(context: &Context<M>, list: &FunctionalPropertyValue<Id, M>) -> Option<Id> {
 	if list.len() == 1 {
 		let mut result = None;
-		let mut list_id = **list.first().unwrap();
+		let mut list_id = **list.first().unwrap().value;
 
 		loop {
 			match context.get_list(list_id) {
 				Some(ListRef::Nil) => break result,
 				Some(ListRef::Cons(_, d, _)) => {
 					if d.first().len() == 1 && d.rest().len() == 1 {
-						list_id = **d.rest().first().unwrap();
-						if let Some(first) = d.first().first().unwrap().as_id() {
+						list_id = **d.rest().first().unwrap().value;
+						if let Some(first) = d.first().first().unwrap().value.as_id() {
 							if result.is_none() || result == Some(first) {
 								result = Some(first)
 							} else {

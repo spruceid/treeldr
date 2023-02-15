@@ -7,7 +7,7 @@ use shelves::Ref;
 use treeldr::{
 	layout::Description,
 	vocab::{self, Term, TreeLdr},
-	BlankIdIndex, IriIndex, MutableModel, TId,
+	BlankIdIndex, IriIndex, MutableModel, PropertyValueRef, TId,
 };
 use unresolved::Unresolved;
 
@@ -69,11 +69,13 @@ impl IncludedLayout {
 		if result.insert(*self) {
 			let layout = model.get(self.id).unwrap();
 
-			match layout.as_layout().description().value() {
-				Description::Never | Description::Primitive(_) | Description::Reference(_) => (),
-				Description::Alias(id) => {
-					IncludedLayout::new(*id, self.type_scoped).flatten(model, options, result)
-				}
+			match layout.as_layout().description() {
+				Description::Never
+				| Description::Primitive(_)
+				| Description::Derived(_)
+				| Description::Reference(_) => (),
+				Description::Alias(id) => IncludedLayout::new(*id.value(), self.type_scoped)
+					.flatten(model, options, result),
 				Description::Required(r) => {
 					IncludedLayout::new(**r.item_layout(), self.type_scoped)
 						.flatten(model, options, result)
@@ -92,7 +94,7 @@ impl IncludedLayout {
 					for vid in e.variants() {
 						let v = model.get(**vid).unwrap();
 						if let Some(layout_id) = v.as_formatted().format().as_ref() {
-							IncludedLayout::new(**layout_id, self.type_scoped)
+							IncludedLayout::new(*layout_id, self.type_scoped)
 								.flatten(model, options, result)
 						}
 					}
@@ -102,7 +104,7 @@ impl IncludedLayout {
 						for fid in s.fields() {
 							let field = model.get(**fid).unwrap();
 							if let Some(layout_id) = field.as_formatted().format().as_ref() {
-								IncludedLayout::new(**layout_id, self.type_scoped)
+								IncludedLayout::new(*layout_id, self.type_scoped)
 									.flatten(model, options, result)
 							}
 						}
@@ -122,7 +124,7 @@ impl IncludedLayout {
 	) {
 		let layout = builder.model.get(self.id).unwrap();
 
-		if let Description::Struct(s) = layout.as_layout().description().value() {
+		if let Description::Struct(s) = layout.as_layout().description() {
 			if !self.type_scoped && builder.options.rdf_type_to_layout_name {
 				// check if there is a `rdf:type` property field.
 				for fid in s.fields() {
@@ -178,8 +180,8 @@ impl unresolved::Bindings {
 
 		if term == "@type" {
 			match f.as_layout_field().property() {
-				Some(property_ref) if builder.is_type_property(**property_ref) => {
-					let layout_id = **f.as_formatted().format().as_ref().unwrap();
+				Some(property_ref) if builder.is_type_property(*property_ref) => {
+					let layout_id = f.as_formatted().format().unwrap();
 
 					match builder.generate_property_definition_container(layout_id) {
 						Some(Nullable::Some(json_ld::Container::Set)) => {
@@ -201,9 +203,9 @@ impl unresolved::Bindings {
 				}
 			}
 		} else if let Some(property_ref) = f.as_layout_field().property() {
-			let property = builder.model.get(**property_ref).unwrap();
-			let is_type = builder.is_type_property(**property_ref);
-			let is_id = builder.is_id_property(**property_ref);
+			let property = builder.model.get(*property_ref).unwrap();
+			let is_type = builder.is_type_property(*property_ref);
+			let is_id = builder.is_id_property(*property_ref);
 
 			let id = if is_type {
 				json_ld::Term::Keyword(Keyword::Type)
@@ -213,14 +215,21 @@ impl unresolved::Bindings {
 				json_ld::Term::Ref(property.id().into())
 			};
 
-			let layout_id = **f.as_formatted().format().as_ref().unwrap();
+			let layout_id = f.as_formatted().format().unwrap();
 
 			let datatype = property
 				.as_property()
 				.range()
 				.iter()
-				.find(|Meta(id, _)| builder.model.get(**id).unwrap().is_datatype(builder.model))
+				.find(|v| {
+					builder
+						.model
+						.get(*v.value.into_value())
+						.unwrap()
+						.is_datatype(builder.model)
+				})
 				.or_else(|| property.as_property().range().first())
+				.map(PropertyValueRef::into_value)
 				.map(Meta::into_value)
 				.cloned()
 				.unwrap();
@@ -411,9 +420,9 @@ impl<'a, V, M> Builder<'a, V, M> {
 		generate_id_type: bool,
 	) -> Option<json_ld::Type<IriIndex>> {
 		let layout = self.model.get(layout_ref).unwrap();
-		match layout.as_layout().description().value() {
+		match layout.as_layout().description() {
 			Description::Alias(a) => {
-				self.generate_property_definition_type(*a, type_ref, generate_id_type)
+				self.generate_property_definition_type(*a.value(), type_ref, generate_id_type)
 			}
 			Description::Required(r) => self.generate_property_definition_type(
 				**r.item_layout(),
@@ -440,7 +449,17 @@ impl<'a, V, M> Builder<'a, V, M> {
 				type_ref,
 				generate_id_type,
 			),
-			Description::Primitive(p) => match p.primitive() {
+			Description::Primitive(p) => match p {
+				vocab::Primitive::Iri | vocab::Primitive::Uri | vocab::Primitive::Url => {
+					Some(json_ld::Type::Id)
+				}
+				_ => match type_ref.id() {
+					treeldr::Id::Iri(IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String))) => None,
+					treeldr::Id::Iri(iri) => Some(json_ld::Type::Ref(iri)),
+					_ => None,
+				},
+			},
+			Description::Derived(p) => match p.primitive() {
 				vocab::Primitive::Iri | vocab::Primitive::Uri | vocab::Primitive::Url => {
 					Some(json_ld::Type::Id)
 				}
@@ -470,7 +489,7 @@ impl<'a, V, M> Builder<'a, V, M> {
 		layout_ref: TId<treeldr::Layout>,
 	) -> Option<Nullable<json_ld::Container>> {
 		let layout = self.model.get(layout_ref).unwrap();
-		match layout.as_layout().description().value() {
+		match layout.as_layout().description() {
 			Description::Set(_) => Some(Nullable::Some(json_ld::Container::Set)),
 			Description::Array(_) => Some(Nullable::Some(json_ld::Container::List)),
 			_ => None,
@@ -490,7 +509,7 @@ impl<'a, V: IriVocabulary<Iri = IriIndex>, M> Builder<'a, V, M> {
 	pub fn is_type_field(&self, field_id: TId<treeldr::layout::Field>) -> bool {
 		let field = self.model.get(field_id).unwrap();
 		match field.as_layout_field().property() {
-			Some(property_ref) => self.is_type_property(**property_ref),
+			Some(property_ref) => self.is_type_property(*property_ref),
 			None => false,
 		}
 	}

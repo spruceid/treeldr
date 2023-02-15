@@ -1,11 +1,13 @@
+use std::cmp::Ordering;
+
 use locspan::Meta;
-use treeldr::{metadata::Merge, vocab::Object, Id};
+use treeldr::{metadata::Merge, prop::UnknownProperty, vocab::Object, Id, TId};
 
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
-	error, layout, rdf,
+	error, functional_property_value, layout, rdf,
 	resource::BindingValueRef,
-	single, Context, Error, Single,
+	Context, Error, FunctionalPropertyValue,
 };
 
 pub use treeldr::component::formatted::{Property, Type};
@@ -37,11 +39,11 @@ impl<M> Definition<M> {
 		&self.data
 	}
 
-	pub fn format(&self) -> &Single<Id, M> {
+	pub fn format(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.data.format
 	}
 
-	pub fn format_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn format_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.data.format
 	}
 
@@ -68,13 +70,21 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::Format => self.format_mut().insert(rdf::from::expect_id(value)?),
-			Property::LayoutField(prop) => self.as_layout_field_mut().set(prop, value)?,
+			Property::Format(p) => {
+				self.format_mut()
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			Property::LayoutField(prop) => self.as_layout_field_mut().set(prop_cmp, prop, value)?,
 		}
 
 		Ok(())
@@ -94,7 +104,7 @@ impl<M> Definition<M> {
 			format: self.data.format.clone().into_layout_at_node_binding(
 				context,
 				as_resource.id,
-				Property::Format,
+				Property::Format(None),
 			)?,
 		};
 
@@ -133,7 +143,7 @@ impl<M: Merge> MapIds for Definition<M> {
 
 #[derive(Debug, Clone)]
 pub struct Data<M> {
-	pub format: Single<Id, M>,
+	pub format: FunctionalPropertyValue<Id, M>,
 }
 
 impl<M> Data<M> {
@@ -146,14 +156,15 @@ impl<M> Data<M> {
 
 impl<M: Merge> MapIds for Data<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		self.format.map_ids_in(Some(Property::Format.into()), f)
+		self.format
+			.map_ids_in(Some(Property::Format(None).into()), f)
 	}
 }
 
 impl<M> Default for Data<M> {
 	fn default() -> Self {
 		Self {
-			format: Single::default(),
+			format: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -172,11 +183,11 @@ impl<M: Clone> AssertFormatted<M> for treeldr::component::formatted::Data<M> {
 		as_resource: &treeldr::node::Data<M>,
 		metadata: &M,
 	) -> Result<(), Error<M>> {
-		self.format.as_ref().ok_or_else(|| {
+		self.format.as_required().ok_or_else(|| {
 			Meta(
 				error::NodeBindingMissing {
 					id: as_resource.id,
-					property: Property::Format.into(),
+					property: Property::Format(None).into(),
 				}
 				.into(),
 				metadata.clone(),
@@ -187,40 +198,41 @@ impl<M: Clone> AssertFormatted<M> for treeldr::component::formatted::Data<M> {
 }
 
 pub enum ClassBinding {
-	Format(Id),
+	Format(Option<TId<UnknownProperty>>, Id),
 }
 
 impl ClassBinding {
 	pub fn into_binding(self) -> Binding {
 		match self {
-			Self::Format(id) => Binding::Format(id),
+			Self::Format(p, id) => Binding::Format(p, id),
 		}
 	}
 }
 
+#[derive(Debug)]
 pub enum Binding {
-	Format(Id),
+	Format(Option<TId<UnknownProperty>>, Id),
 	LayoutField(layout::field::ClassBinding),
 }
 
 impl Binding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::Format(_) => Property::Format,
+			Self::Format(p, _) => Property::Format(*p),
 			Self::LayoutField(b) => Property::LayoutField(b.property()),
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Format(v) => BindingValueRef::Id(*v),
+			Self::Format(_, v) => BindingValueRef::Id(*v),
 			Self::LayoutField(b) => b.value(),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
-	format: single::Iter<'a, Id, M>,
+	format: functional_property_value::Iter<'a, Id, M>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
@@ -229,7 +241,7 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.format
 			.next()
-			.map(|m| m.into_cloned_value().map(ClassBinding::Format))
+			.map(|m| m.into_cloned_class_binding(ClassBinding::Format))
 	}
 }
 

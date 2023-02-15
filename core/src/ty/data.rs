@@ -1,4 +1,9 @@
-use crate::{node::BindingValueRef, vocab, Id, IriIndex, TId};
+use crate::{
+	node::BindingValueRef,
+	prop::{PropertyName, UnknownProperty},
+	property_values, vocab, Id, IriIndex, MetaOption, PropertyValue, PropertyValueRef,
+	RequiredFunctionalPropertyValue, TId,
+};
 
 pub mod regexp;
 pub mod restriction;
@@ -8,17 +13,18 @@ use locspan::Meta;
 pub use regexp::RegExp;
 pub use restriction::{Restriction, Restrictions};
 
+/// DataType.
 #[derive(Debug, Clone)]
 pub enum DataType<M> {
 	Primitive(Option<Primitive>),
-	Derived(Derived<M>),
+	Derived(RequiredFunctionalPropertyValue<Derived<M>, M>),
 }
 
 impl<M> DataType<M> {
 	pub fn primitive(&self) -> Option<Primitive> {
 		match self {
 			Self::Primitive(p) => *p,
-			Self::Derived(d) => Some(d.primitive()),
+			Self::Derived(d) => Some(d.value().primitive()),
 		}
 	}
 }
@@ -37,25 +43,90 @@ impl<M> Definition<M> {
 		&self.desc
 	}
 
-	pub fn on_datatype(&self) -> Option<&Meta<TId<crate::ty::DataType<M>>, M>> {
+	pub fn on_datatype(&self) -> Option<OnDatatype<M>> {
 		match &self.desc {
-			DataType::Derived(d) => Some(d.base()),
+			DataType::Derived(d) => Some(OnDatatype(d)),
 			_ => None,
 		}
 	}
 
-	pub fn with_restrictions(&self) -> Option<Meta<Restrictions, &M>> {
+	pub fn with_restrictions(&self) -> Option<WithRestrictions<M>> {
 		match &self.desc {
-			DataType::Derived(d) => d.restrictions(),
+			DataType::Derived(d) => d.value().with_restrictions(),
 			_ => None,
 		}
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
 		ClassBindings {
-			on_datatype: self.on_datatype(),
-			with_restrictions: self.with_restrictions(),
+			on_datatype: self.on_datatype().map(OnDatatype::into_iter),
+			with_restrictions: self.with_restrictions().map(WithRestrictions::into_iter),
 		}
+	}
+}
+
+pub struct OnDatatype<'a, M>(&'a RequiredFunctionalPropertyValue<Derived<M>, M>);
+
+impl<'a, M> OnDatatype<'a, M> {
+	pub fn iter(&self) -> OnDatatypeIter<'a, M> {
+		OnDatatypeIter(self.0.iter())
+	}
+}
+
+impl<'a, M> IntoIterator for OnDatatype<'a, M> {
+	type IntoIter = OnDatatypeIter<'a, M>;
+	type Item = Meta<ClassBindingRef<'a, M>, &'a M>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter()
+	}
+}
+
+pub struct OnDatatypeIter<'a, M>(property_values::required_functional::Iter<'a, Derived<M>, M>);
+
+impl<'a, M> Iterator for OnDatatypeIter<'a, M> {
+	type Item = Meta<ClassBindingRef<'a, M>, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.0.next().map(|v| {
+			PropertyValueRef::new(v.sub_property, v.value.base().borrow())
+				.into_cloned_class_binding(ClassBindingRef::OnDatatype)
+		})
+	}
+}
+
+pub struct WithRestrictions<'a, M> {
+	value: Meta<Restrictions<'a>, &'a M>,
+}
+
+impl<'a, M> WithRestrictions<'a, M> {
+	fn new(value: Meta<Restrictions<'a>, &'a M>) -> Self {
+		Self { value }
+	}
+}
+
+impl<'a, M> IntoIterator for WithRestrictions<'a, M> {
+	type IntoIter = WithRestrictionsIter<'a, M>;
+	type Item = PropertyValue<Restrictions<'a>, &'a M>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		WithRestrictionsIter {
+			value: Some(self.value),
+		}
+	}
+}
+
+pub struct WithRestrictionsIter<'a, M> {
+	value: Option<Meta<Restrictions<'a>, &'a M>>,
+}
+
+impl<'a, M> Iterator for WithRestrictionsIter<'a, M> {
+	type Item = PropertyValue<Restrictions<'a>, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.value
+			.take()
+			.map(|value| PropertyValue::new(None, value))
 	}
 }
 
@@ -134,19 +205,19 @@ pub enum Derived<M> {
 	Boolean(Meta<TId<crate::ty::DataType<M>>, M>),
 	Real(
 		Meta<TId<crate::ty::DataType<M>>, M>,
-		Meta<restriction::real::Restrictions, M>,
+		MetaOption<restriction::real::Restrictions, M>,
 	),
 	Float(
 		Meta<TId<crate::ty::DataType<M>>, M>,
-		Meta<restriction::float::Restrictions, M>,
+		MetaOption<restriction::float::Restrictions, M>,
 	),
 	Double(
 		Meta<TId<crate::ty::DataType<M>>, M>,
-		Meta<restriction::double::Restrictions, M>,
+		MetaOption<restriction::double::Restrictions, M>,
 	),
 	String(
 		Meta<TId<crate::ty::DataType<M>>, M>,
-		Meta<restriction::string::Restrictions, M>,
+		MetaOption<restriction::string::Restrictions, M>,
 	),
 	Date(Meta<TId<crate::ty::DataType<M>>, M>),
 	Time(Meta<TId<crate::ty::DataType<M>>, M>),
@@ -183,12 +254,30 @@ impl<M> Derived<M> {
 		}
 	}
 
-	pub fn restrictions(&self) -> Option<Meta<Restrictions, &M>> {
+	pub fn with_restrictions(&self) -> Option<WithRestrictions<M>> {
 		match self {
-			Self::Real(_, Meta(r, m)) => Some(Meta(Restrictions::Real(r), m)),
-			Self::Float(_, Meta(r, m)) => Some(Meta(Restrictions::Float(r), m)),
-			Self::Double(_, Meta(r, m)) => Some(Meta(Restrictions::Double(r), m)),
-			Self::String(_, Meta(r, m)) => Some(Meta(Restrictions::String(r), m)),
+			Self::Real(_, r) => r
+				.as_ref()
+				.map(|r| WithRestrictions::new(r.borrow().map(Restrictions::Real))),
+			Self::Float(_, r) => r
+				.as_ref()
+				.map(|r| WithRestrictions::new(r.borrow().map(Restrictions::Float))),
+			Self::Double(_, r) => r
+				.as_ref()
+				.map(|r| WithRestrictions::new(r.borrow().map(Restrictions::Double))),
+			Self::String(_, r) => r
+				.as_ref()
+				.map(|r| WithRestrictions::new(r.borrow().map(Restrictions::String))),
+			_ => None,
+		}
+	}
+
+	pub fn restrictions(&self) -> Option<Restrictions> {
+		match self {
+			Self::Real(_, r) => r.value().map(Restrictions::Real),
+			Self::Float(_, r) => r.value().map(Restrictions::Float),
+			Self::Double(_, r) => r.value().map(Restrictions::Double),
+			Self::String(_, r) => r.value().map(Restrictions::String),
 			_ => None,
 		}
 	}
@@ -196,28 +285,43 @@ impl<M> Derived<M> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
-	OnDatatype,
-	WithRestrictions,
+	OnDatatype(Option<TId<UnknownProperty>>),
+	WithRestrictions(Option<TId<UnknownProperty>>),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::{Owl, Term};
 		match self {
-			Self::OnDatatype => Term::Owl(Owl::OnDatatype),
-			Self::WithRestrictions => Term::Owl(Owl::WithRestrictions),
+			Self::OnDatatype(None) => Id::Iri(IriIndex::Iri(Term::Owl(Owl::OnDatatype))),
+			Self::OnDatatype(Some(p)) => p.id(),
+			Self::WithRestrictions(None) => {
+				Id::Iri(IriIndex::Iri(Term::Owl(Owl::WithRestrictions)))
+			}
+			Self::WithRestrictions(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::{Owl, Term};
 		match self {
-			Self::OnDatatype => "restricted datatype",
-			Self::WithRestrictions => "datatype restrictions",
+			Self::OnDatatype(None) => Some(Term::Owl(Owl::OnDatatype)),
+			Self::WithRestrictions(None) => Some(Term::Owl(Owl::WithRestrictions)),
+			_ => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::OnDatatype(None) => PropertyName::Resource("restricted datatype"),
+			Self::OnDatatype(Some(p)) => PropertyName::Other(*p),
+			Self::WithRestrictions(None) => PropertyName::Resource("datatype restrictions"),
+			Self::WithRestrictions(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
 	pub fn expect_type(&self) -> bool {
-		matches!(self, Self::OnDatatype)
+		matches!(self, Self::OnDatatype(_))
 	}
 
 	pub fn expect_layout(&self) -> bool {
@@ -226,8 +330,8 @@ impl Property {
 }
 
 pub enum ClassBindingRef<'a, M> {
-	OnDatatype(TId<crate::ty::DataType<M>>),
-	WithRestrictions(Restrictions<'a>),
+	OnDatatype(Option<TId<UnknownProperty>>, TId<crate::ty::DataType<M>>),
+	WithRestrictions(Option<TId<UnknownProperty>>, Restrictions<'a>),
 }
 
 pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
@@ -235,15 +339,15 @@ pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
 impl<'a, M> ClassBindingRef<'a, M> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::OnDatatype(_) => Property::OnDatatype,
-			Self::WithRestrictions(_) => Property::WithRestrictions,
+			Self::OnDatatype(p, _) => Property::OnDatatype(*p),
+			Self::WithRestrictions(p, _) => Property::WithRestrictions(*p),
 		}
 	}
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::OnDatatype(v) => BindingValueRef::DataType(*v),
-			Self::WithRestrictions(v) => BindingValueRef::DatatypeRestrictions(*v),
+			Self::OnDatatype(_, v) => BindingValueRef::DataType(*v),
+			Self::WithRestrictions(_, v) => BindingValueRef::DatatypeRestrictions(*v),
 		}
 	}
 }
@@ -251,8 +355,8 @@ impl<'a, M> ClassBindingRef<'a, M> {
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
-	on_datatype: Option<&'a Meta<TId<crate::ty::DataType<M>>, M>>,
-	with_restrictions: Option<Meta<Restrictions<'a>, &'a M>>,
+	on_datatype: Option<OnDatatypeIter<'a, M>>,
+	with_restrictions: Option<WithRestrictionsIter<'a, M>>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -262,16 +366,13 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.on_datatype
-			.take()
-			.map(|m| {
-				m.borrow()
-					.into_cloned_value()
-					.map(ClassBindingRef::OnDatatype)
-			})
+			.as_mut()
+			.and_then(OnDatatypeIter::next)
 			.or_else(|| {
-				self.with_restrictions
-					.take()
-					.map(|m| m.map(ClassBindingRef::WithRestrictions))
+				self.with_restrictions.as_mut().and_then(|r| {
+					r.next()
+						.map(|m| m.into_class_binding(ClassBindingRef::WithRestrictions))
+				})
 			})
 	}
 }

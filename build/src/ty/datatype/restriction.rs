@@ -1,25 +1,29 @@
-use crate::{context::MapIds, rdf, resource::BindingValueRef, single, Error, Single};
+use crate::{
+	context::MapIds, functional_property_value, rdf, resource::BindingValueRef, Error,
+	FunctionalPropertyValue,
+};
 use locspan::Meta;
-use std::collections::BTreeMap;
+use std::{cmp::Ordering, collections::BTreeMap};
 use treeldr::{
 	metadata::Merge,
+	prop::UnknownProperty,
 	ty::data::{restriction, RegExp},
 	value,
 	vocab::Object,
-	Id,
+	Id, TId,
 };
 
 pub use treeldr::ty::data::restriction::Property;
 
 #[derive(Clone)]
 pub struct Definition<M> {
-	restriction: Single<Restriction, M>,
+	restriction: FunctionalPropertyValue<Restriction, M>,
 }
 
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			restriction: Single::default(),
+			restriction: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -29,11 +33,11 @@ impl<M> Definition<M> {
 		Self::default()
 	}
 
-	pub fn restriction(&self) -> &Single<Restriction, M> {
+	pub fn restriction(&self) -> &FunctionalPropertyValue<Restriction, M> {
 		&self.restriction
 	}
 
-	pub fn restriction_mut(&mut self) -> &mut Single<Restriction, M> {
+	pub fn restriction_mut(&mut self) -> &mut FunctionalPropertyValue<Restriction, M> {
 		&mut self.restriction
 	}
 
@@ -43,36 +47,55 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::MaxExclusive => self.restriction.insert(
+			Property::MaxExclusive(p) => self.restriction.insert(
+				p,
+				prop_cmp,
 				rdf::from::expect_numeric(value)?
 					.map(|n| Restriction::Numeric(Numeric::MaxExclusive(n))),
 			),
-			Property::MaxInclusive => self.restriction.insert(
+			Property::MaxInclusive(p) => self.restriction.insert(
+				p,
+				prop_cmp,
 				rdf::from::expect_numeric(value)?
 					.map(|n| Restriction::Numeric(Numeric::MaxInclusive(n))),
 			),
-			Property::MaxLength => self.restriction.insert(
+			Property::MaxLength(p) => self.restriction.insert(
+				p,
+				prop_cmp,
 				rdf::from::expect_integer(value)?
 					.map(|n| Restriction::String(String::MaxLength(n))),
 			),
-			Property::MinExclusive => self.restriction.insert(
+			Property::MinExclusive(p) => self.restriction.insert(
+				p,
+				prop_cmp,
 				rdf::from::expect_numeric(value)?
 					.map(|n| Restriction::Numeric(Numeric::MinExclusive(n))),
 			),
-			Property::MinInclusive => self.restriction.insert(
+			Property::MinInclusive(p) => self.restriction.insert(
+				p,
+				prop_cmp,
 				rdf::from::expect_numeric(value)?
 					.map(|n| Restriction::Numeric(Numeric::MinInclusive(n))),
 			),
-			Property::MinLength => self.restriction.insert(
+			Property::MinLength(p) => self.restriction.insert(
+				p,
+				prop_cmp,
 				rdf::from::expect_integer(value)?
 					.map(|n| Restriction::String(String::MinLength(n))),
 			),
-			Property::Pattern => self.restriction.insert(
+			Property::Pattern(p) => self.restriction.insert(
+				p,
+				prop_cmp,
 				rdf::from::expect_regexp(value)?.map(|p| Restriction::String(String::Pattern(p))),
 			),
 		}
@@ -82,12 +105,14 @@ impl<M> Definition<M> {
 
 	pub fn build(&self) -> Result<Meta<Restriction, M>, Error<M>>
 	where
-		M: Clone,
+		M: Clone + Merge,
 	{
 		self.restriction
 			.clone()
 			.try_unwrap()
 			.map_err(|_| todo!())?
+			.into_required()
+			.map(treeldr::RequiredFunctionalPropertyValue::into_meta_value)
 			.ok_or_else(|| todo!())
 	}
 }
@@ -124,10 +149,10 @@ pub enum Numeric {
 impl Numeric {
 	pub fn as_binding(&self) -> NumericBindingRef {
 		match self {
-			Self::MinInclusive(v) => NumericBindingRef::MinInclusive(v),
-			Self::MinExclusive(v) => NumericBindingRef::MinExclusive(v),
-			Self::MaxInclusive(v) => NumericBindingRef::MaxInclusive(v),
-			Self::MaxExclusive(v) => NumericBindingRef::MaxExclusive(v),
+			Self::MinInclusive(v) => NumericBindingRef::MinInclusive(None, v),
+			Self::MinExclusive(v) => NumericBindingRef::MinExclusive(None, v),
+			Self::MaxInclusive(v) => NumericBindingRef::MaxInclusive(None, v),
+			Self::MaxExclusive(v) => NumericBindingRef::MaxExclusive(None, v),
 		}
 	}
 }
@@ -142,9 +167,9 @@ pub enum String {
 impl String {
 	pub fn as_binding(&self) -> StringBindingRef {
 		match self {
-			Self::MinLength(v) => StringBindingRef::MinLength(v),
-			Self::MaxLength(v) => StringBindingRef::MaxLength(v),
-			Self::Pattern(v) => StringBindingRef::Pattern(v),
+			Self::MinLength(v) => StringBindingRef::MinLength(None, v),
+			Self::MaxLength(v) => StringBindingRef::MaxLength(None, v),
+			Self::Pattern(v) => StringBindingRef::Pattern(None, v),
 		}
 	}
 }
@@ -346,57 +371,60 @@ impl<M> Restrictions<M> {
 	}
 }
 
+#[derive(Debug)]
 pub enum NumericBindingRef<'a> {
-	MinInclusive(&'a value::Numeric),
-	MinExclusive(&'a value::Numeric),
-	MaxInclusive(&'a value::Numeric),
-	MaxExclusive(&'a value::Numeric),
+	MinInclusive(Option<TId<UnknownProperty>>, &'a value::Numeric),
+	MinExclusive(Option<TId<UnknownProperty>>, &'a value::Numeric),
+	MaxInclusive(Option<TId<UnknownProperty>>, &'a value::Numeric),
+	MaxExclusive(Option<TId<UnknownProperty>>, &'a value::Numeric),
 }
 
 impl<'a> NumericBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::MinInclusive(_) => Property::MinInclusive,
-			Self::MinExclusive(_) => Property::MinExclusive,
-			Self::MaxInclusive(_) => Property::MaxInclusive,
-			Self::MaxExclusive(_) => Property::MaxExclusive,
+			Self::MinInclusive(p, _) => Property::MinInclusive(*p),
+			Self::MinExclusive(p, _) => Property::MinExclusive(*p),
+			Self::MaxInclusive(p, _) => Property::MaxInclusive(*p),
+			Self::MaxExclusive(p, _) => Property::MaxExclusive(*p),
 		}
 	}
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::MinInclusive(v) => BindingValueRef::Numeric(v),
-			Self::MinExclusive(v) => BindingValueRef::Numeric(v),
-			Self::MaxInclusive(v) => BindingValueRef::Numeric(v),
-			Self::MaxExclusive(v) => BindingValueRef::Numeric(v),
+			Self::MinInclusive(_, v) => BindingValueRef::Numeric(v),
+			Self::MinExclusive(_, v) => BindingValueRef::Numeric(v),
+			Self::MaxInclusive(_, v) => BindingValueRef::Numeric(v),
+			Self::MaxExclusive(_, v) => BindingValueRef::Numeric(v),
 		}
 	}
 }
 
+#[derive(Debug)]
 pub enum StringBindingRef<'a> {
-	MinLength(&'a value::Integer),
-	MaxLength(&'a value::Integer),
-	Pattern(&'a RegExp),
+	MinLength(Option<TId<UnknownProperty>>, &'a value::Integer),
+	MaxLength(Option<TId<UnknownProperty>>, &'a value::Integer),
+	Pattern(Option<TId<UnknownProperty>>, &'a RegExp),
 }
 
 impl<'a> StringBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::MinLength(_) => Property::MinLength,
-			Self::MaxLength(_) => Property::MaxLength,
-			Self::Pattern(_) => Property::Pattern,
+			Self::MinLength(p, _) => Property::MinLength(*p),
+			Self::MaxLength(p, _) => Property::MaxLength(*p),
+			Self::Pattern(p, _) => Property::Pattern(*p),
 		}
 	}
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::MinLength(v) => BindingValueRef::Integer(v),
-			Self::MaxLength(v) => BindingValueRef::Integer(v),
-			Self::Pattern(v) => BindingValueRef::RegExp(v),
+			Self::MinLength(_, v) => BindingValueRef::Integer(v),
+			Self::MaxLength(_, v) => BindingValueRef::Integer(v),
+			Self::Pattern(_, v) => BindingValueRef::RegExp(v),
 		}
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBindingRef<'a> {
 	Numeric(NumericBindingRef<'a>),
 	String(StringBindingRef<'a>),
@@ -421,7 +449,7 @@ impl<'a> ClassBindingRef<'a> {
 }
 
 pub struct ClassBindings<'a, M> {
-	restriction: single::Iter<'a, Restriction, M>,
+	restriction: functional_property_value::Iter<'a, Restriction, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -432,6 +460,6 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.restriction
 			.next()
-			.map(|m| m.map(Restriction::as_binding))
+			.map(|m| m.value.map(Restriction::as_binding))
 	}
 }

@@ -1,5 +1,3 @@
-mod list;
-
 pub trait TryFromIterator<T>: Sized {
 	fn try_from_iterator<E, I: IntoIterator<Item = Result<T, E>>>(iter: I) -> Result<Self, E>;
 

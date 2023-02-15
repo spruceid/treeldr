@@ -4,7 +4,9 @@ use locspan::Meta;
 use crate::{
 	component,
 	node::{self, BindingValueRef},
-	vocab, Layout, MetaOption, Name, ResourceType, TId,
+	prop::{PropertyName, UnknownProperty},
+	property_values, vocab, FunctionalPropertyValue, Id, IriIndex, Layout, Name,
+	RequiredFunctionalPropertyValue, ResourceType, TId,
 };
 
 pub struct Field;
@@ -32,36 +34,46 @@ impl<'a, M> crate::Ref<'a, Field, M> {
 		self.as_resource().as_layout_field().unwrap()
 	}
 
-	pub fn name(&self) -> Option<&'a Meta<Name, M>> {
+	pub fn name(&self) -> Option<&'a Name> {
 		self.as_component().name()
 	}
 
-	pub fn format(&self) -> &'a Meta<TId<Layout>, M> {
-		self.as_formatted().format().as_ref().unwrap()
+	pub fn format(&self) -> TId<Layout> {
+		self.as_formatted().format().unwrap()
 	}
 
 	pub fn is_required(&self, model: &crate::MutableModel<M>) -> bool {
-		let layout = model.get(**self.format()).unwrap().as_layout();
+		let layout = model.get(self.format()).unwrap().as_layout();
 		layout.is_required()
 	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
-	For,
+	For(Option<TId<UnknownProperty>>),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::{Term, TreeLdr};
 		match self {
-			Self::For => Term::TreeLdr(TreeLdr::FieldFor),
+			Self::For(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::FieldFor))),
+			Self::For(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::{Term, TreeLdr};
 		match self {
-			Self::For => "field property",
+			Self::For(None) => Some(Term::TreeLdr(TreeLdr::FieldFor)),
+			Self::For(Some(_)) => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::For(None) => PropertyName::Resource("field property"),
+			Self::For(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
@@ -77,27 +89,29 @@ impl Property {
 /// Layout field.
 #[derive(Debug, Clone)]
 pub struct Definition<M> {
-	prop: MetaOption<TId<crate::Property>, M>,
+	prop: FunctionalPropertyValue<TId<crate::Property>, M>,
 }
 
 impl<M> Definition<M> {
-	pub fn new(prop: MetaOption<TId<crate::Property>, M>) -> Self {
+	pub fn new(prop: FunctionalPropertyValue<TId<crate::Property>, M>) -> Self {
 		Self { prop }
 	}
 
-	pub fn property(&self) -> Option<&Meta<TId<crate::Property>, M>> {
-		self.prop.as_ref()
+	pub fn property(&self) -> Option<&TId<crate::Property>> {
+		self.prop
+			.as_required()
+			.map(RequiredFunctionalPropertyValue::value)
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
 		ClassBindings {
-			prop: self.prop.as_ref(),
+			prop: self.prop.iter(),
 		}
 	}
 }
 
 pub enum ClassBinding {
-	For(TId<crate::Property>),
+	For(Option<TId<UnknownProperty>>, TId<crate::Property>),
 }
 
 pub type Binding = ClassBinding;
@@ -105,13 +119,13 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::For(_) => Property::For,
+			Self::For(p, _) => Property::For(*p),
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::For(v) => BindingValueRef::Property(*v),
+			Self::For(_, v) => BindingValueRef::Property(*v),
 		}
 	}
 }
@@ -119,7 +133,7 @@ impl ClassBinding {
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
-	prop: Option<&'a Meta<TId<crate::Property>, M>>,
+	prop: property_values::functional::Iter<'a, TId<crate::Property>, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -129,7 +143,7 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.prop
-			.take()
-			.map(|m| m.borrow().into_cloned_value().map(ClassBinding::For))
+			.next()
+			.map(|m| m.into_cloned_class_binding(ClassBinding::For))
 	}
 }

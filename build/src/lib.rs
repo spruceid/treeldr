@@ -1,25 +1,28 @@
 use rdf_types::{Generator, VocabularyMut};
-pub use treeldr::multiple;
+pub use treeldr::{multiple, property_values};
 use treeldr::{vocab, BlankIdIndex, IriIndex};
 
 pub mod component;
 pub mod context;
 pub mod error;
+pub mod functional_property_value;
 pub mod layout;
 pub mod list;
 pub mod prop;
 pub mod rdf;
 pub mod resource;
-mod single;
+pub mod single;
 pub mod ty;
 pub mod utils;
 
 pub use context::Context;
 pub use error::Error;
+pub use functional_property_value::FunctionalPropertyValue;
 pub use layout::{ParentLayout, SubLayout};
 pub use list::{ListMut, ListRef};
 pub use multiple::Multiple;
 pub use prop::Property;
+pub use property_values::{PropertyValue, PropertyValueRef, PropertyValues};
 pub use single::Single;
 pub use ty::Type;
 

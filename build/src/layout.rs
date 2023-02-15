@@ -1,15 +1,22 @@
+use std::cmp::Ordering;
+
 use crate::{
 	context::{MapIds, MapIdsIn},
-	error, rdf,
+	error,
+	functional_property_value::{self, FunctionalPropertyValue},
+	rdf,
 	resource::{self, BindingValueRef},
-	single::{self, Conflict},
 	utils::TryCollect,
-	Context, Error, ObjectAsId, ObjectAsRequiredId, Single,
+	Context, Error, ObjectAsId, ObjectAsRequiredId,
 };
+use derivative::Derivative;
 use locspan::Meta;
 use rdf_types::IriVocabulary;
 pub use treeldr::layout::{DescriptionProperty, Property};
-use treeldr::{metadata::Merge, vocab::Object, Id, IriIndex, Multiple, Name};
+use treeldr::{
+	metadata::Merge, prop::UnknownProperty, vocab::Object, Id, IriIndex, MetaOption, Multiple,
+	Name, PropertyValueRef, TId,
+};
 
 pub mod array;
 pub mod field;
@@ -23,152 +30,586 @@ pub use restriction::{Restriction, Restrictions};
 
 use primitive::BuildPrimitive;
 
-/// Layout description.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Description {
-	Never,
-	Primitive(Primitive),
-	Struct(Id),
-	Reference(Id),
-	Enum(Id),
-	Required(Id),
-	Option(Id),
-	Set(Id),
-	OneOrMany(Id),
-	Array(Id),
-	Alias(Id),
+#[derive(Debug)]
+pub enum SingleDescriptionProperty<M> {
+	DerivedFrom(FunctionalPropertyValue<Id, M>),
+	Struct(FunctionalPropertyValue<Id, M>),
+	Reference(FunctionalPropertyValue<Id, M>),
+	Enum(FunctionalPropertyValue<Id, M>),
+	Required(FunctionalPropertyValue<Id, M>),
+	Option(FunctionalPropertyValue<Id, M>),
+	Set(FunctionalPropertyValue<Id, M>),
+	OneOrMany(FunctionalPropertyValue<Id, M>),
+	Array(FunctionalPropertyValue<Id, M>),
+	Alias(FunctionalPropertyValue<Id, M>),
 }
 
-impl Description {
-	pub fn kind(&self) -> Kind {
+#[derive(Debug, Derivative)]
+#[derivative(Clone(bound = ""), Copy(bound = ""))]
+pub enum SingleDescriptionPropertyRef<'a, M> {
+	DerivedFrom(&'a FunctionalPropertyValue<Id, M>),
+	Struct(&'a FunctionalPropertyValue<Id, M>),
+	Reference(&'a FunctionalPropertyValue<Id, M>),
+	Enum(&'a FunctionalPropertyValue<Id, M>),
+	Required(&'a FunctionalPropertyValue<Id, M>),
+	Option(&'a FunctionalPropertyValue<Id, M>),
+	Set(&'a FunctionalPropertyValue<Id, M>),
+	OneOrMany(&'a FunctionalPropertyValue<Id, M>),
+	Array(&'a FunctionalPropertyValue<Id, M>),
+	Alias(&'a FunctionalPropertyValue<Id, M>),
+}
+
+impl<'a, M> SingleDescriptionPropertyRef<'a, M> {
+	pub fn metadata(&self) -> &M {
 		match self {
-			Self::Never => Kind::Never,
-			Self::Reference(_) => Kind::Reference,
-			Self::Struct(_) => Kind::Struct,
-			Self::Primitive(n) => Kind::Primitive(*n),
-			Self::Enum(_) => Kind::Enum,
-			Self::Required(_) => Kind::Required,
-			Self::Option(_) => Kind::Option,
-			Self::Set(_) => Kind::Set,
-			Self::OneOrMany(_) => Kind::OneOrMany,
-			Self::Array(_) => Kind::Array,
-			Self::Alias(_) => Kind::Alias,
+			Self::DerivedFrom(p) => p.first().unwrap().value.into_metadata(),
+			Self::Struct(p) => p.first().unwrap().value.into_metadata(),
+			Self::Reference(p) => p.first().unwrap().value.into_metadata(),
+			Self::Enum(p) => p.first().unwrap().value.into_metadata(),
+			Self::Required(p) => p.first().unwrap().value.into_metadata(),
+			Self::Option(p) => p.first().unwrap().value.into_metadata(),
+			Self::Set(p) => p.first().unwrap().value.into_metadata(),
+			Self::OneOrMany(p) => p.first().unwrap().value.into_metadata(),
+			Self::Array(p) => p.first().unwrap().value.into_metadata(),
+			Self::Alias(p) => p.first().unwrap().value.into_metadata(),
 		}
 	}
 
-	pub fn into_binding(self) -> Option<DescriptionBinding> {
-		match self {
-			Self::Never | Self::Primitive(_) => None,
-			Self::Struct(id) => Some(DescriptionBinding::Struct(id)),
-			Self::Reference(id) => Some(DescriptionBinding::Reference(id)),
-			Self::Enum(id) => Some(DescriptionBinding::Enum(id)),
-			Self::Required(id) => Some(DescriptionBinding::Required(id)),
-			Self::Option(id) => Some(DescriptionBinding::Option(id)),
-			Self::Set(id) => Some(DescriptionBinding::Set(id)),
-			Self::OneOrMany(id) => Some(DescriptionBinding::OneOrMany(id)),
-			Self::Array(id) => Some(DescriptionBinding::Array(id)),
-			Self::Alias(id) => Some(DescriptionBinding::Alias(id)),
-		}
-	}
-
-	pub fn is_included_in<M>(&self, context: &Context<M>, other: &Self) -> bool {
-		match (self, other) {
-			(Self::Primitive(a), Self::Primitive(b)) => a == b,
-			(Self::Alias(a), Self::Alias(b)) => a == b,
-			(Self::Reference(a), Self::Reference(b)) => is_included_in(context, *a, *b),
-			(Self::Struct(a), Self::Struct(b)) => {
-				// all fields in `b` must include a field of `a`.
-				match (context.get_list(*a), context.get_list(*b)) {
-					(Some(a), Some(b)) => b.lenient_iter(context).all(|Meta(b, _)| {
-						b.as_id()
-							.map(|b| {
-								a.lenient_iter(context).any(|Meta(a, _)| {
-									a.as_id()
-										.map(|a| field::is_included_in(context, a, b))
-										.unwrap_or(false)
-								})
-							})
-							.unwrap_or(false)
-					}),
-					_ => false,
-				}
-			}
-			(Self::Enum(a), Self::Enum(b)) => {
-				// all variants in `a` must be included in a variant in `b`.
-				match (context.get_list(*a), context.get_list(*b)) {
-					(Some(a), Some(b)) => a.lenient_iter(context).all(|Meta(a, _)| {
-						a.as_id()
-							.map(|a| {
-								b.lenient_iter(context).any(|Meta(b, _)| {
-									b.as_id()
-										.map(|b| variant::is_included_in(context, a, b))
-										.unwrap_or(false)
-								})
-							})
-							.unwrap_or(false)
-					}),
-					_ => false,
-				}
-			}
-			(Self::Required(a), Self::Required(b) | Self::Option(b) | Self::OneOrMany(b)) => {
-				is_included_in(context, *a, *b)
-			}
-			(Self::Option(a), Self::Option(b) | Self::OneOrMany(b)) => {
-				is_included_in(context, *a, *b)
-			}
-			(Self::OneOrMany(a), Self::OneOrMany(b)) => is_included_in(context, *a, *b),
-			(Self::Array(a), Self::Array(b)) => is_included_in(context, *a, *b),
-			(Self::Set(a), Self::Set(b)) => is_included_in(context, *a, *b),
-			_ => false,
-		}
-	}
-
-	pub fn collect_sub_layouts<M>(
-		&self,
-		context: &Context<M>,
-		sub_layouts: &mut Vec<SubLayout<M>>,
-		metadata: &M,
-	) where
+	pub fn cloned(&self) -> SingleDescriptionProperty<M>
+	where
 		M: Clone,
 	{
-		match self {
-			Self::Struct(fields_id) => {
-				if let Some(fields) = context.get_list(*fields_id) {
-					for Meta(object, _) in fields.lenient_iter(context) {
-						if let Some(field_id) = object.as_id() {
-							if let Some(field) = context
-								.get(field_id)
-								.map(resource::Definition::as_formatted)
-							{
-								for field_layout_id in field.format() {
-									if let Some(field_layout) = context
-										.get(**field_layout_id)
-										.map(resource::Definition::as_layout)
-									{
+		match *self {
+			Self::DerivedFrom(p) => SingleDescriptionProperty::DerivedFrom(p.clone()),
+			Self::Struct(p) => SingleDescriptionProperty::Struct(p.clone()),
+			Self::Reference(p) => SingleDescriptionProperty::Reference(p.clone()),
+			Self::Enum(p) => SingleDescriptionProperty::Enum(p.clone()),
+			Self::Required(p) => SingleDescriptionProperty::Required(p.clone()),
+			Self::Option(p) => SingleDescriptionProperty::Option(p.clone()),
+			Self::Set(p) => SingleDescriptionProperty::Set(p.clone()),
+			Self::OneOrMany(p) => SingleDescriptionProperty::OneOrMany(p.clone()),
+			Self::Array(p) => SingleDescriptionProperty::Array(p.clone()),
+			Self::Alias(p) => SingleDescriptionProperty::Alias(p.clone()),
+		}
+	}
+
+	pub fn build(
+		&self,
+		context: &Context<M>,
+		id: Id,
+		restrictions: MetaOption<Restrictions<M>, M>,
+		array_semantics: &array::Semantics<M>,
+	) -> Result<treeldr::layout::Description<M>, Error<M>>
+	where
+		M: Clone + Merge,
+	{
+		match *self {
+			Self::DerivedFrom(p) => {
+				let value = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::DerivedFrom(None))
+				})?;
+				let derived =
+					value
+						.into_required()
+						.unwrap()
+						.try_map_borrow_metadata(|id, meta| match Primitive::from_id(id) {
+							Some(p) => p.build(id, restrictions.map(Restrictions::into_primitive)),
+							None => {
+								let meta = meta.first().unwrap().value.into_metadata();
+								Err(Meta(error::LayoutNotPrimitive(id).into(), meta.clone()))
+							}
+						})?;
+				Ok(treeldr::layout::Description::Derived(derived))
+			}
+			Self::Struct(p) => {
+				let value = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::Fields(None))
+				})?;
+				Ok(treeldr::layout::Description::Struct(
+					value
+						.into_required()
+						.unwrap()
+						.try_map_borrow_metadata(|fields_id, meta| {
+							let fields = context
+								.require_list(fields_id)
+								.map_err(|e| {
+									e.at_node_property(
+										id,
+										DescriptionProperty::Fields(None),
+										meta.first().unwrap().value.into_metadata().clone(),
+									)
+								})?
+								.iter(context)
+								.map(|item| {
+									let Meta(object, field_metadata) = item?.cloned();
+									let field_id = object.into_required_id(&field_metadata)?;
+									Ok(Meta(
+										context
+											.require_layout_field_id(field_id)
+											.map_err(|e| e.at(field_metadata.clone()))?,
+										field_metadata,
+									))
+								})
+								.try_collect()?;
+
+							Ok(treeldr::layout::Struct::new(fields))
+						})?,
+				))
+			}
+			Self::Enum(p) => {
+				let value = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::Variants(None))
+				})?;
+				Ok(treeldr::layout::Description::Enum(
+					value.into_required().unwrap().try_map_borrow_metadata(
+						|options_id, meta| {
+							let variants: Vec<_> = context
+								.require_list(options_id)
+								.map_err(|e| {
+									e.at_node_property(
+										id,
+										DescriptionProperty::Variants(None),
+										meta.first().unwrap().value.into_metadata().clone(),
+									)
+								})?
+								.iter(context)
+								.map(|item| {
+									let Meta(object, variant_metadata) = item?.cloned();
+									let variant_id = object.into_required_id(&variant_metadata)?;
+									Ok(Meta(
+										context
+											.require_layout_variant_id(variant_id)
+											.map_err(|e| e.at(variant_metadata.clone()))?,
+										variant_metadata,
+									))
+								})
+								.try_collect()?;
+
+							Ok(treeldr::layout::Enum::new(variants))
+						},
+					)?,
+				))
+			}
+			Self::Reference(p) => {
+				let value = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::Reference(None))
+				})?;
+				Ok(treeldr::layout::Description::Reference(
+					value
+						.into_required()
+						.unwrap()
+						.try_map_borrow_metadata(|layout_id, meta| {
+							let layout_ref = context.require_layout_id(layout_id).map_err(|e| {
+								e.at_node_property(
+									id,
+									DescriptionProperty::Reference(None),
+									meta.first().unwrap().value.into_metadata().clone(),
+								)
+							})?;
+							Ok(treeldr::layout::Reference::new(Meta(
+								layout_ref,
+								meta.first().unwrap().value.into_metadata().clone(),
+							)))
+						})?,
+				))
+			}
+			Self::Required(p) => {
+				let value = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::Required(None))
+				})?;
+				Ok(treeldr::layout::Description::Required(
+					value.into_required().unwrap().try_map_borrow_metadata(
+						|item_layout_id, meta| {
+							let item_layout_ref =
+								context.require_layout_id(item_layout_id).map_err(|e| {
+									e.at_node_property(
+										id,
+										DescriptionProperty::Required(None),
+										meta.first().unwrap().value.into_metadata().clone(),
+									)
+								})?;
+							Ok(treeldr::layout::Required::new(Meta(
+								item_layout_ref,
+								meta.first().unwrap().value.into_metadata().clone(),
+							)))
+						},
+					)?,
+				))
+			}
+			Self::Option(p) => {
+				let value = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::Option(None))
+				})?;
+				Ok(treeldr::layout::Description::Option(
+					value.into_required().unwrap().try_map_borrow_metadata(
+						|item_layout_id, meta| {
+							let item_layout_ref =
+								context.require_layout_id(item_layout_id).map_err(|e| {
+									e.at_node_property(
+										id,
+										DescriptionProperty::Option(None),
+										meta.first().unwrap().value.into_metadata().clone(),
+									)
+								})?;
+							Ok(treeldr::layout::Optional::new(Meta(
+								item_layout_ref,
+								meta.first().unwrap().value.into_metadata().clone(),
+							)))
+						},
+					)?,
+				))
+			}
+			Self::Set(p) => {
+				let value = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::Set(None))
+				})?;
+				Ok(treeldr::layout::Description::Set(
+					value.into_required().unwrap().try_map_borrow_metadata(
+						|item_layout_id, meta| {
+							let meta = meta.first().unwrap().value.into_metadata();
+							let item_layout_ref =
+								context.require_layout_id(item_layout_id).map_err(|e| {
+									e.at_node_property(
+										id,
+										DescriptionProperty::Set(None),
+										meta.clone(),
+									)
+								})?;
+							Ok(treeldr::layout::Set::new(
+								Meta(item_layout_ref, meta.clone()),
+								restrictions.map(Restrictions::into_container),
+							))
+						},
+					)?,
+				))
+			}
+			Self::OneOrMany(p) => {
+				let value = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::OneOrMany(None))
+				})?;
+				Ok(treeldr::layout::Description::OneOrMany(
+					value.into_required().unwrap().try_map_borrow_metadata(
+						|item_layout_id, meta| {
+							let meta = meta.first().unwrap().value.into_metadata();
+							let item_layout_ref =
+								context.require_layout_id(item_layout_id).map_err(|e| {
+									e.at_node_property(
+										id,
+										DescriptionProperty::OneOrMany(None),
+										meta.clone(),
+									)
+								})?;
+							Ok(treeldr::layout::OneOrMany::new(
+								Meta(item_layout_ref, meta.clone()),
+								restrictions.map(Restrictions::into_container),
+							))
+						},
+					)?,
+				))
+			}
+			Self::Array(p) => {
+				let value = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::Array(None))
+				})?;
+				Ok(treeldr::layout::Description::Array(
+					value.into_required().unwrap().try_map_borrow_metadata(
+						|item_layout_id, meta| {
+							let meta = meta.first().unwrap().value.into_metadata();
+							let item_layout_ref =
+								context.require_layout_id(item_layout_id).map_err(|e| {
+									e.at_node_property(
+										id,
+										DescriptionProperty::Array(None),
+										meta.clone(),
+									)
+								})?;
+							let semantics = array_semantics.clone().build(context, id)?;
+							Ok(treeldr::layout::Array::new(
+								Meta(item_layout_ref, meta.clone()),
+								restrictions.map(Restrictions::into_container),
+								semantics,
+							))
+						},
+					)?,
+				))
+			}
+			Self::Alias(p) => {
+				let value = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::Alias(None))
+				})?;
+				Ok(treeldr::layout::Description::Alias(
+					value.into_required().unwrap().try_map_borrow_metadata(
+						|alias_layout_id, meta| {
+							let meta = meta.first().unwrap().value.into_metadata();
+							let alias_layout_ref =
+								context.require_layout_id(alias_layout_id).map_err(|e| {
+									e.at_node_property(
+										id,
+										DescriptionProperty::Alias(None),
+										meta.clone(),
+									)
+								})?;
+							Ok(alias_layout_ref)
+						},
+					)?,
+				))
+			}
+		}
+	}
+}
+
+pub struct NoSingleDescription<'a, M> {
+	a: SingleDescriptionPropertyRef<'a, M>,
+	b: SingleDescriptionPropertyRef<'a, M>,
+}
+
+/// Layout description properties.
+#[derive(Debug, Clone, Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct DescriptionProperties<M> {
+	derived_from: FunctionalPropertyValue<Id, M>,
+	struct_: FunctionalPropertyValue<Id, M>,
+	reference: FunctionalPropertyValue<Id, M>,
+	enum_: FunctionalPropertyValue<Id, M>,
+	required: FunctionalPropertyValue<Id, M>,
+	option: FunctionalPropertyValue<Id, M>,
+	set: FunctionalPropertyValue<Id, M>,
+	one_or_many: FunctionalPropertyValue<Id, M>,
+	array: FunctionalPropertyValue<Id, M>,
+	alias: FunctionalPropertyValue<Id, M>,
+}
+
+impl<M> DescriptionProperties<M> {
+	pub fn is_empty(&self) -> bool {
+		self.derived_from.is_empty()
+			&& self.struct_.is_empty()
+			&& self.reference.is_empty()
+			&& self.enum_.is_empty()
+			&& self.required.is_empty()
+			&& self.option.is_empty()
+			&& self.set.is_empty()
+			&& self.one_or_many.is_empty()
+			&& self.array.is_empty()
+			&& self.alias.is_empty()
+	}
+
+	pub fn insert_base(&mut self, Meta(b, m): Meta<BaseDescriptionBinding, M>)
+	where
+		M: Merge,
+	{
+		match b {
+			BaseDescriptionBinding::DerivedFrom(id) => self.derived_from.insert_base(Meta(id, m)),
+			BaseDescriptionBinding::Struct(id) => self.struct_.insert_base(Meta(id, m)),
+			BaseDescriptionBinding::Reference(id) => self.reference.insert_base(Meta(id, m)),
+			BaseDescriptionBinding::Enum(id) => self.enum_.insert_base(Meta(id, m)),
+			BaseDescriptionBinding::Required(id) => self.required.insert_base(Meta(id, m)),
+			BaseDescriptionBinding::Option(id) => self.option.insert_base(Meta(id, m)),
+			BaseDescriptionBinding::Set(id) => self.set.insert_base(Meta(id, m)),
+			BaseDescriptionBinding::OneOrMany(id) => self.one_or_many.insert_base(Meta(id, m)),
+			BaseDescriptionBinding::Array(id) => self.array.insert_base(Meta(id, m)),
+			BaseDescriptionBinding::Alias(id) => self.alias.insert_base(Meta(id, m)),
+		}
+	}
+
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		prop: DescriptionProperty,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
+	where
+		M: Merge,
+	{
+		match prop {
+			DescriptionProperty::Alias(p) => {
+				self.alias.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			DescriptionProperty::Array(p) => {
+				self.array.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			DescriptionProperty::DerivedFrom(p) => {
+				self.derived_from
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			DescriptionProperty::Fields(p) => {
+				self.struct_
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			DescriptionProperty::OneOrMany(p) => {
+				self.one_or_many
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			DescriptionProperty::Option(p) => {
+				self.option
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			DescriptionProperty::Reference(p) => {
+				self.reference
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			DescriptionProperty::Required(p) => {
+				self.required
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			DescriptionProperty::Set(p) => {
+				self.set.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			DescriptionProperty::Variants(p) => {
+				self.enum_.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+		}
+
+		Ok(())
+	}
+
+	pub fn is_included_in(&self, context: &Context<M>, other: &Self) -> bool {
+		fn is_struct_included<M>(context: &Context<M>, a: Id, b: Id) -> bool {
+			// all fields in `b` must include a field of `a`.
+			match (context.get_list(a), context.get_list(b)) {
+				(Some(a), Some(b)) => b.lenient_iter(context).all(|Meta(b, _)| {
+					b.as_id()
+						.map(|b| {
+							a.lenient_iter(context).any(|Meta(a, _)| {
+								a.as_id()
+									.map(|a| field::is_included_in(context, a, b))
+									.unwrap_or(false)
+							})
+						})
+						.unwrap_or(false)
+				}),
+				_ => false,
+			}
+		}
+
+		fn is_enum_included<M>(context: &Context<M>, a: Id, b: Id) -> bool {
+			// all variants in `a` must be included in a variant in `b`.
+			match (context.get_list(a), context.get_list(b)) {
+				(Some(a), Some(b)) => a.lenient_iter(context).all(|Meta(a, _)| {
+					a.as_id()
+						.map(|a| {
+							b.lenient_iter(context).any(|Meta(b, _)| {
+								b.as_id()
+									.map(|b| variant::is_included_in(context, a, b))
+									.unwrap_or(false)
+							})
+						})
+						.unwrap_or(false)
+				}),
+				_ => false,
+			}
+		}
+
+		fn is_eq<M>(_context: &Context<M>, a: Id, b: Id) -> bool {
+			a == b
+		}
+
+		fn check<M, const N: usize>(
+			context: &Context<M>,
+			is_included: impl Fn(&Context<M>, Id, Id) -> bool,
+			a: &FunctionalPropertyValue<Id, M>,
+			bs: [&FunctionalPropertyValue<Id, M>; N],
+		) -> bool {
+			if a.is_empty() ^ bs.iter().all(|b| b.is_empty()) {
+				for b in bs {
+					for a in a {
+						for b in b {
+							if !is_included(context, **a.value, **b.value) {
+								return false;
+							}
+						}
+					}
+				}
+
+				true
+			} else {
+				false
+			}
+		}
+
+		check(context, is_eq, &self.alias, [&other.alias])
+			&& check(context, is_included_in, &self.reference, [&other.reference])
+			&& check(
+				context,
+				is_included_in,
+				&self.required,
+				[&other.required, &other.option, &other.one_or_many],
+			) && check(
+			context,
+			is_included_in,
+			&self.option,
+			[&other.option, &other.one_or_many],
+		) && check(
+			context,
+			is_included_in,
+			&self.one_or_many,
+			[&other.one_or_many],
+		) && check(context, is_included_in, &self.array, [&other.array])
+			&& check(context, is_included_in, &self.set, [&other.set])
+			&& check(context, is_struct_included, &self.struct_, [&other.struct_])
+			&& check(context, is_enum_included, &self.enum_, [&other.enum_])
+	}
+
+	pub fn collect_sub_layouts(&self, context: &Context<M>, sub_layouts: &mut Vec<SubLayout<M>>)
+	where
+		M: Clone,
+	{
+		for PropertyValueRef {
+			value: Meta(fields_id, _),
+			..
+		} in &self.struct_
+		{
+			if let Some(fields) = context.get_list(*fields_id) {
+				for Meta(object, _) in fields.lenient_iter(context) {
+					if let Some(field_id) = object.as_id() {
+						if let Some(field) = context
+							.get(field_id)
+							.map(resource::Definition::as_formatted)
+						{
+							for field_layout_id in field.format() {
+								if let Some(field_layout) = context
+									.get(**field_layout_id.value)
+									.map(resource::Definition::as_layout)
+								{
+									sub_layouts.push(SubLayout {
+										layout: field_layout_id.value.cloned(),
+										connection: LayoutConnection::FieldContainer(field_id),
+									});
+
+									let field_desc = field_layout.description();
+
+									for id in &field_desc.required {
 										sub_layouts.push(SubLayout {
-											layout: field_layout_id.cloned(),
-											connection: LayoutConnection::FieldContainer(field_id),
-										});
+											layout: id.value.cloned(),
+											connection: LayoutConnection::FieldItem(field_id),
+										})
+									}
 
-										for Meta(container_desc, meta) in field_layout.description()
-										{
-											let item_layout_id = match container_desc {
-												Description::Required(id) => *id,
-												Description::Option(id) => *id,
-												Description::Set(id) => *id,
-												Description::OneOrMany(id) => *id,
-												Description::Array(id) => *id,
-												_ => panic!(
-													"invalid field layout: not a container: {:?}",
-													container_desc
-												),
-											};
+									for id in &field_desc.option {
+										sub_layouts.push(SubLayout {
+											layout: id.value.cloned(),
+											connection: LayoutConnection::FieldItem(field_id),
+										})
+									}
 
-											sub_layouts.push(SubLayout {
-												layout: Meta(item_layout_id, meta.clone()),
-												connection: LayoutConnection::FieldItem(field_id),
-											});
-										}
+									for id in &field_desc.set {
+										sub_layouts.push(SubLayout {
+											layout: id.value.cloned(),
+											connection: LayoutConnection::FieldItem(field_id),
+										})
+									}
+
+									for id in &field_desc.one_or_many {
+										sub_layouts.push(SubLayout {
+											layout: id.value.cloned(),
+											connection: LayoutConnection::FieldItem(field_id),
+										})
+									}
+
+									for id in &field_desc.array {
+										sub_layouts.push(SubLayout {
+											layout: id.value.cloned(),
+											connection: LayoutConnection::FieldItem(field_id),
+										})
 									}
 								}
 							}
@@ -176,41 +617,263 @@ impl Description {
 					}
 				}
 			}
-			Self::Set(item_layout_id) => sub_layouts.push(SubLayout {
-				layout: Meta(*item_layout_id, metadata.clone()),
+		}
+
+		for PropertyValueRef { value, .. } in &self.set {
+			sub_layouts.push(SubLayout {
+				layout: value.cloned(),
 				connection: LayoutConnection::Item,
-			}),
-			Self::OneOrMany(item_layout_id) => sub_layouts.push(SubLayout {
-				layout: Meta(*item_layout_id, metadata.clone()),
+			})
+		}
+
+		for PropertyValueRef { value, .. } in &self.one_or_many {
+			sub_layouts.push(SubLayout {
+				layout: value.cloned(),
 				connection: LayoutConnection::Item,
-			}),
-			Self::Array(item_layout_id) => sub_layouts.push(SubLayout {
-				layout: Meta(*item_layout_id, metadata.clone()),
+			})
+		}
+
+		for PropertyValueRef { value, .. } in &self.array {
+			sub_layouts.push(SubLayout {
+				layout: value.cloned(),
 				connection: LayoutConnection::Item,
-			}),
-			_ => (),
+			})
+		}
+	}
+
+	pub fn single_description(
+		&self,
+	) -> Result<Option<SingleDescriptionPropertyRef<M>>, NoSingleDescription<M>> {
+		let mut result = None;
+
+		if !self.derived_from.is_empty() {
+			let a = SingleDescriptionPropertyRef::DerivedFrom(&self.derived_from);
+			match result {
+				Some(b) => return Err(NoSingleDescription { a, b }),
+				None => result = Some(a),
+			}
+		}
+
+		if !self.struct_.is_empty() {
+			let a = SingleDescriptionPropertyRef::Struct(&self.struct_);
+			match result {
+				Some(b) => return Err(NoSingleDescription { a, b }),
+				None => result = Some(a),
+			}
+		}
+
+		if !self.reference.is_empty() {
+			let a = SingleDescriptionPropertyRef::Reference(&self.reference);
+			match result {
+				Some(b) => return Err(NoSingleDescription { a, b }),
+				None => result = Some(a),
+			}
+		}
+
+		if !self.enum_.is_empty() {
+			let a = SingleDescriptionPropertyRef::Enum(&self.enum_);
+			match result {
+				Some(b) => return Err(NoSingleDescription { a, b }),
+				None => result = Some(a),
+			}
+		}
+
+		if !self.required.is_empty() {
+			let a = SingleDescriptionPropertyRef::Required(&self.required);
+			match result {
+				Some(b) => return Err(NoSingleDescription { a, b }),
+				None => result = Some(a),
+			}
+		}
+
+		if !self.option.is_empty() {
+			let a = SingleDescriptionPropertyRef::Option(&self.option);
+			match result {
+				Some(b) => return Err(NoSingleDescription { a, b }),
+				None => result = Some(a),
+			}
+		}
+
+		if !self.one_or_many.is_empty() {
+			let a = SingleDescriptionPropertyRef::OneOrMany(&self.one_or_many);
+			match result {
+				Some(b) => return Err(NoSingleDescription { a, b }),
+				None => result = Some(a),
+			}
+		}
+
+		if !self.array.is_empty() {
+			let a = SingleDescriptionPropertyRef::Array(&self.array);
+			match result {
+				Some(b) => return Err(NoSingleDescription { a, b }),
+				None => result = Some(a),
+			}
+		}
+
+		if !self.set.is_empty() {
+			let a = SingleDescriptionPropertyRef::Set(&self.set);
+			match result {
+				Some(b) => return Err(NoSingleDescription { a, b }),
+				None => result = Some(a),
+			}
+		}
+
+		if !self.alias.is_empty() {
+			let a = SingleDescriptionPropertyRef::Alias(&self.alias);
+			match result {
+				Some(b) => return Err(NoSingleDescription { a, b }),
+				None => result = Some(a),
+			}
+		}
+
+		Ok(result)
+	}
+
+	pub fn build(
+		&self,
+		context: &Context<M>,
+		id: Id,
+		restrictions: MetaOption<Restrictions<M>, M>,
+		array_semantics: &array::Semantics<M>,
+	) -> Result<treeldr::layout::Description<M>, Error<M>>
+	where
+		M: Clone + Merge,
+	{
+		match self.single_description() {
+			Ok(Some(desc)) => desc.build(context, id, restrictions, array_semantics),
+			Ok(None) => match Primitive::from_id(id) {
+				Some(p) => Ok(treeldr::layout::Description::Primitive(p)),
+				None => Ok(treeldr::layout::Description::Never),
+			},
+			Err(NoSingleDescription { a, b }) => Err(Meta(
+				error::LayoutDescriptionMismatch {
+					id,
+					desc1: a.cloned(),
+					desc2: b.cloned(),
+				}
+				.into(),
+				a.metadata().clone(),
+			)),
+		}
+	}
+
+	pub fn iter(&self) -> DescriptionPropertiesIter<M> {
+		DescriptionPropertiesIter {
+			derived_from: self.derived_from.iter(),
+			struct_: self.struct_.iter(),
+			reference: self.reference.iter(),
+			enum_: self.enum_.iter(),
+			required: self.required.iter(),
+			option: self.option.iter(),
+			set: self.set.iter(),
+			one_or_many: self.one_or_many.iter(),
+			array: self.array.iter(),
+			alias: self.alias.iter(),
 		}
 	}
 }
 
-impl MapIds for Description {
+impl<M: Merge> Extend<Meta<BaseDescriptionBinding, M>> for DescriptionProperties<M> {
+	fn extend<T: IntoIterator<Item = Meta<BaseDescriptionBinding, M>>>(&mut self, iter: T) {
+		for b in iter {
+			self.insert_base(b)
+		}
+	}
+}
+pub struct DescriptionPropertiesIter<'a, M> {
+	derived_from: functional_property_value::Iter<'a, Id, M>,
+	struct_: functional_property_value::Iter<'a, Id, M>,
+	reference: functional_property_value::Iter<'a, Id, M>,
+	enum_: functional_property_value::Iter<'a, Id, M>,
+	required: functional_property_value::Iter<'a, Id, M>,
+	option: functional_property_value::Iter<'a, Id, M>,
+	set: functional_property_value::Iter<'a, Id, M>,
+	one_or_many: functional_property_value::Iter<'a, Id, M>,
+	array: functional_property_value::Iter<'a, Id, M>,
+	alias: functional_property_value::Iter<'a, Id, M>,
+}
+
+impl<'a, M> Iterator for DescriptionPropertiesIter<'a, M> {
+	type Item = Meta<DescriptionBinding, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.derived_from
+			.next()
+			.map(|p| p.into_cloned_class_binding(DescriptionBinding::DerivedFrom))
+			.or_else(|| {
+				self.struct_
+					.next()
+					.map(|p| p.into_cloned_class_binding(DescriptionBinding::Struct))
+			})
+			.or_else(|| {
+				self.reference
+					.next()
+					.map(|p| p.into_cloned_class_binding(DescriptionBinding::Reference))
+			})
+			.or_else(|| {
+				self.enum_
+					.next()
+					.map(|p| p.into_cloned_class_binding(DescriptionBinding::Enum))
+			})
+			.or_else(|| {
+				self.required
+					.next()
+					.map(|p| p.into_cloned_class_binding(DescriptionBinding::Required))
+			})
+			.or_else(|| {
+				self.option
+					.next()
+					.map(|p| p.into_cloned_class_binding(DescriptionBinding::Option))
+			})
+			.or_else(|| {
+				self.set
+					.next()
+					.map(|p| p.into_cloned_class_binding(DescriptionBinding::Set))
+			})
+			.or_else(|| {
+				self.one_or_many
+					.next()
+					.map(|p| p.into_cloned_class_binding(DescriptionBinding::OneOrMany))
+			})
+			.or_else(|| {
+				self.array
+					.next()
+					.map(|p| p.into_cloned_class_binding(DescriptionBinding::Array))
+			})
+			.or_else(|| {
+				self.alias
+					.next()
+					.map(|p| p.into_cloned_class_binding(DescriptionBinding::Alias))
+			})
+	}
+}
+
+impl<M> MapIds for DescriptionProperties<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		match self {
-			Self::Never | Self::Primitive(_) => (),
-			Self::Struct(id) => id.map_ids_in(Some(DescriptionProperty::Fields.into()), f),
-			Self::Reference(id) => id.map_ids_in(Some(DescriptionProperty::Reference.into()), f),
-			Self::Enum(id) => id.map_ids_in(Some(DescriptionProperty::Variants.into()), f),
-			Self::Required(id) => id.map_ids_in(Some(DescriptionProperty::Required.into()), f),
-			Self::Option(id) => id.map_ids_in(Some(DescriptionProperty::Option.into()), f),
-			Self::Set(id) => id.map_ids_in(Some(DescriptionProperty::Set.into()), f),
-			Self::OneOrMany(id) => id.map_ids_in(Some(DescriptionProperty::OneOrMany.into()), f),
-			Self::Array(id) => id.map_ids_in(Some(DescriptionProperty::Array.into()), f),
-			Self::Alias(id) => id.map_ids_in(Some(DescriptionProperty::Alias.into()), f),
-		}
+		self.struct_
+			.map_ids_in(Some(DescriptionProperty::Fields(None).into()), &f);
+		self.reference
+			.map_ids_in(Some(DescriptionProperty::Reference(None).into()), &f);
+		self.enum_
+			.map_ids_in(Some(DescriptionProperty::Variants(None).into()), &f);
+		self.required
+			.map_ids_in(Some(DescriptionProperty::Required(None).into()), &f);
+		self.option
+			.map_ids_in(Some(DescriptionProperty::Option(None).into()), &f);
+		self.set
+			.map_ids_in(Some(DescriptionProperty::Set(None).into()), &f);
+		self.one_or_many
+			.map_ids_in(Some(DescriptionProperty::OneOrMany(None).into()), &f);
+		self.array
+			.map_ids_in(Some(DescriptionProperty::Array(None).into()), &f);
+		self.alias
+			.map_ids_in(Some(DescriptionProperty::Alias(None).into()), f);
 	}
 }
 
-pub enum DescriptionBinding {
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BaseDescriptionBinding {
+	DerivedFrom(Id),
 	Struct(Id),
 	Reference(Id),
 	Enum(Id),
@@ -222,32 +885,48 @@ pub enum DescriptionBinding {
 	Alias(Id),
 }
 
+#[derive(Debug, Clone)]
+pub enum DescriptionBinding {
+	DerivedFrom(Option<TId<UnknownProperty>>, Id),
+	Struct(Option<TId<UnknownProperty>>, Id),
+	Reference(Option<TId<UnknownProperty>>, Id),
+	Enum(Option<TId<UnknownProperty>>, Id),
+	Required(Option<TId<UnknownProperty>>, Id),
+	Option(Option<TId<UnknownProperty>>, Id),
+	Set(Option<TId<UnknownProperty>>, Id),
+	OneOrMany(Option<TId<UnknownProperty>>, Id),
+	Array(Option<TId<UnknownProperty>>, Id),
+	Alias(Option<TId<UnknownProperty>>, Id),
+}
+
 impl DescriptionBinding {
 	pub fn property(&self) -> DescriptionProperty {
 		match self {
-			Self::Reference(_) => DescriptionProperty::Reference,
-			Self::Struct(_) => DescriptionProperty::Fields,
-			Self::Enum(_) => DescriptionProperty::Variants,
-			Self::Required(_) => DescriptionProperty::Required,
-			Self::Option(_) => DescriptionProperty::Option,
-			Self::Set(_) => DescriptionProperty::Set,
-			Self::OneOrMany(_) => DescriptionProperty::OneOrMany,
-			Self::Array(_) => DescriptionProperty::Array,
-			Self::Alias(_) => DescriptionProperty::Alias,
+			Self::DerivedFrom(p, _) => DescriptionProperty::DerivedFrom(*p),
+			Self::Reference(p, _) => DescriptionProperty::Reference(*p),
+			Self::Struct(p, _) => DescriptionProperty::Fields(*p),
+			Self::Enum(p, _) => DescriptionProperty::Variants(*p),
+			Self::Required(p, _) => DescriptionProperty::Required(*p),
+			Self::Option(p, _) => DescriptionProperty::Option(*p),
+			Self::Set(p, _) => DescriptionProperty::Set(*p),
+			Self::OneOrMany(p, _) => DescriptionProperty::OneOrMany(*p),
+			Self::Array(p, _) => DescriptionProperty::Array(*p),
+			Self::Alias(p, _) => DescriptionProperty::Alias(*p),
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Reference(v) => BindingValueRef::Id(*v),
-			Self::Struct(v) => BindingValueRef::Id(*v),
-			Self::Enum(v) => BindingValueRef::Id(*v),
-			Self::Required(v) => BindingValueRef::Id(*v),
-			Self::Option(v) => BindingValueRef::Id(*v),
-			Self::Set(v) => BindingValueRef::Id(*v),
-			Self::OneOrMany(v) => BindingValueRef::Id(*v),
-			Self::Array(v) => BindingValueRef::Id(*v),
-			Self::Alias(v) => BindingValueRef::Id(*v),
+			Self::DerivedFrom(_, v) => BindingValueRef::Id(*v),
+			Self::Reference(_, v) => BindingValueRef::Id(*v),
+			Self::Struct(_, v) => BindingValueRef::Id(*v),
+			Self::Enum(_, v) => BindingValueRef::Id(*v),
+			Self::Required(_, v) => BindingValueRef::Id(*v),
+			Self::Option(_, v) => BindingValueRef::Id(*v),
+			Self::Set(_, v) => BindingValueRef::Id(*v),
+			Self::OneOrMany(_, v) => BindingValueRef::Id(*v),
+			Self::Array(_, v) => BindingValueRef::Id(*v),
+			Self::Alias(_, v) => BindingValueRef::Id(*v),
 		}
 	}
 }
@@ -272,15 +951,15 @@ pub enum Kind {
 #[derive(Clone)]
 pub struct Definition<M> {
 	/// Type for which this layout is defined.
-	ty: Single<Id, M>,
+	ty: FunctionalPropertyValue<Id, M>,
 
 	/// Layout description.
-	desc: Single<Description, M>,
+	desc: DescriptionProperties<M>,
 
-	intersection_of: Single<Id, M>,
+	intersection_of: FunctionalPropertyValue<Id, M>,
 
 	/// List of restrictions.
-	restrictions: Single<Id, M>,
+	restrictions: FunctionalPropertyValue<Id, M>,
 
 	/// List semantics.
 	array_semantics: array::Semantics<M>,
@@ -307,10 +986,10 @@ pub struct ParentLayout {
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			ty: Single::default(),
-			desc: Single::default(),
-			intersection_of: Single::default(),
-			restrictions: Single::default(),
+			ty: FunctionalPropertyValue::default(),
+			desc: DescriptionProperties::default(),
+			intersection_of: FunctionalPropertyValue::default(),
+			restrictions: FunctionalPropertyValue::default(),
 			array_semantics: array::Semantics::default(),
 		}
 	}
@@ -322,100 +1001,76 @@ impl<M> Definition<M> {
 	}
 
 	/// Type for which the layout is defined.
-	pub fn ty(&self) -> &Single<Id, M> {
+	pub fn ty(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.ty
 	}
 
-	pub fn ty_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn ty_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.ty
 	}
 
-	pub fn description(&self) -> &Single<Description, M> {
+	pub fn description(&self) -> &DescriptionProperties<M> {
 		&self.desc
 	}
 
-	pub fn description_mut(&mut self) -> &mut Single<Description, M> {
+	pub fn description_mut(&mut self) -> &mut DescriptionProperties<M> {
 		&mut self.desc
 	}
 
-	pub fn intersection_of(&self) -> &Single<Id, M> {
+	pub fn intersection_of(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.intersection_of
 	}
 
-	pub fn intersection_of_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn intersection_of_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.intersection_of
 	}
 
-	pub fn restrictions(&self) -> &Single<Id, M> {
+	pub fn restrictions(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.restrictions
 	}
 
-	pub fn restrictions_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn restrictions_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.restrictions
 	}
 
 	pub fn is_included_in(&self, context: &Context<M>, other: &Self) -> bool {
-		self.desc.iter().all(|Meta(a, _)| {
-			other
-				.desc
-				.iter()
-				.all(|Meta(b, _)| a.is_included_in(context, b))
-		})
+		self.desc.is_included_in(context, &other.desc)
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::For => self.ty_mut().insert(rdf::from::expect_id(value)?),
-			Property::Description(DescriptionProperty::Alias) => self
-				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(Description::Alias)),
-			Property::Description(DescriptionProperty::Array) => self
-				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(Description::Array)),
-			Property::Description(DescriptionProperty::DerivedFrom) => {
-				let Meta(id, meta) = rdf::from::expect_id(value)?;
-				match Primitive::from_id(id) {
-					Some(p) => self
-						.description_mut()
-						.insert(Meta(Description::Primitive(p), meta)),
-					None => panic!("invalid primitive layout"),
-				}
+			Property::For(p) => self
+				.ty_mut()
+				.insert(p, prop_cmp, rdf::from::expect_id(value)?),
+			Property::Description(prop) => self.desc.set(prop_cmp, prop, value)?,
+			Property::WithRestrictions(p) => {
+				self.restrictions_mut()
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
 			}
-			Property::Description(DescriptionProperty::Fields) => self
-				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(Description::Struct)),
-			Property::Description(DescriptionProperty::OneOrMany) => self
-				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(Description::OneOrMany)),
-			Property::Description(DescriptionProperty::Option) => self
-				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(Description::Option)),
-			Property::Description(DescriptionProperty::Reference) => self
-				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(Description::Reference)),
-			Property::Description(DescriptionProperty::Required) => self
-				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(Description::Required)),
-			Property::Description(DescriptionProperty::Set) => self
-				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(Description::Set)),
-			Property::Description(DescriptionProperty::Variants) => self
-				.description_mut()
-				.insert(rdf::from::expect_id(value)?.map(Description::Enum)),
-			Property::WithRestrictions => {
-				self.restrictions_mut().insert(rdf::from::expect_id(value)?)
+			Property::IntersectionOf(p) => {
+				self.intersection_of_mut()
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
 			}
-			Property::IntersectionOf => self
-				.intersection_of_mut()
-				.insert(rdf::from::expect_id(value)?),
-			Property::ArrayListFirst => {
-				self.array_semantics.set_first(rdf::from::expect_id(value)?)
+			Property::ArrayListFirst(p) => {
+				self.array_semantics
+					.set_first(p, prop_cmp, rdf::from::expect_id(value)?)
 			}
-			Property::ArrayListRest => self.array_semantics.set_rest(rdf::from::expect_id(value)?),
-			Property::ArrayListNil => self.array_semantics.set_nil(rdf::from::expect_id(value)?),
+			Property::ArrayListRest(p) => {
+				self.array_semantics
+					.set_rest(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
+			Property::ArrayListNil(p) => {
+				self.array_semantics
+					.set_nil(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
 		}
 
 		Ok(())
@@ -433,60 +1088,64 @@ impl<M> Definition<M> {
 }
 
 impl<M: Merge> Definition<M> {
-	pub fn set_primitive(&mut self, primitive: Meta<Primitive, M>) {
-		self.desc.insert(primitive.map(Description::Primitive))
+	pub fn set_derived_from(&mut self, primitive: Meta<Primitive, M>) {
+		self.desc.derived_from.insert_base(primitive.cast())
 	}
 
 	pub fn set_alias(&mut self, alias: Meta<Id, M>) {
-		self.desc.insert(alias.map(Description::Alias))
+		self.desc.alias.insert_base(alias)
 	}
 
 	pub fn set_fields(&mut self, fields: Meta<Id, M>) {
-		self.desc.insert(fields.map(Description::Struct))
+		self.desc.struct_.insert_base(fields)
 	}
 
 	pub fn set_reference(&mut self, ty: Meta<Id, M>) {
-		self.desc.insert(ty.map(Description::Reference))
+		self.desc.reference.insert_base(ty)
 	}
 
 	pub fn set_enum(&mut self, variants: Meta<Id, M>) {
-		self.desc.insert(variants.map(Description::Enum))
+		self.desc.enum_.insert_base(variants)
 	}
 
 	pub fn set_required(&mut self, item: Meta<Id, M>) {
-		self.desc.insert(item.map(Description::Required))
+		self.desc.required.insert_base(item)
 	}
 
 	pub fn set_option(&mut self, item: Meta<Id, M>) {
-		self.desc.insert(item.map(Description::Option))
+		self.desc.option.insert_base(item)
 	}
 
 	pub fn set_set(&mut self, item: Meta<Id, M>) {
-		self.desc.insert(item.map(Description::Set))
+		self.desc.set.insert_base(item)
 	}
 
 	pub fn set_one_or_many(&mut self, item: Meta<Id, M>) {
-		self.desc.insert(item.map(Description::OneOrMany))
+		self.desc.one_or_many.insert_base(item)
 	}
 
 	pub fn set_array(&mut self, item: Meta<Id, M>) {
-		self.desc.insert(item.map(Description::Array))
+		self.desc.array.insert_base(item)
 	}
 
 	pub fn set_array_list_first(&mut self, first_prop: Meta<Id, M>) {
-		self.array_semantics.set_first(first_prop)
+		self.array_semantics.set_first_base(first_prop)
 	}
 
 	pub fn set_array_list_rest(&mut self, value: Meta<Id, M>) {
-		self.array_semantics.set_rest(value)
+		self.array_semantics.set_rest_base(value)
 	}
 
 	pub fn set_array_list_nil(&mut self, value: Meta<Id, M>) {
-		self.array_semantics.set_nil(value)
+		self.array_semantics.set_nil_base(value)
 	}
 
-	pub fn set_array_semantics(&mut self, value: array::Semantics<M>) {
-		self.array_semantics.unify_with(value)
+	pub fn set_array_semantics(
+		&mut self,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		value: array::Semantics<M>,
+	) {
+		self.array_semantics.unify_with(prop_cmp, value)
 	}
 }
 
@@ -494,9 +1153,7 @@ impl<M: Clone> Definition<M> {
 	pub fn sub_layouts(&self, context: &Context<M>) -> Vec<SubLayout<M>> {
 		let mut sub_layouts = Vec::new();
 
-		for Meta(desc, metadata) in &self.desc {
-			desc.collect_sub_layouts(context, &mut sub_layouts, metadata)
-		}
+		self.desc.collect_sub_layouts(context, &mut sub_layouts);
 
 		sub_layouts
 	}
@@ -516,10 +1173,10 @@ impl<M: Clone> Definition<M> {
 		}
 
 		// if let Some(Description::Literal(regexp)) = self.desc.value() {
-		// 	if let Some(singleton) = regexp.as_singleton() {
-		// 		if let Ok(singleton_name) = Name::new(singleton) {
+		// 	if let Some(functional_property_valueton) = regexp.as_functional_property_valueton() {
+		// 		if let Ok(functional_property_valueton_name) = Name::new(functional_property_valueton) {
 		// 			let mut name = Name::new("const").unwrap();
-		// 			name.push_name(&singleton_name);
+		// 			name.push_name(&functional_property_valueton_name);
 		// 			return Ok(Some(Meta(name, metadata)));
 		// 		}
 		// 	}
@@ -535,14 +1192,14 @@ impl<M: Clone> Definition<M> {
 						let field = context.get(field_id).unwrap().as_component();
 
 						if let Some(field_name) = field.name().first() {
-							let mut name = parent_layout_name.into_value().clone();
-							name.push_name(field_name.value());
+							let mut name = parent_layout_name.value.into_value().clone();
+							name.push_name(field_name.value.value());
 
 							return Some(Meta(name, as_resource.metadata.clone()));
 						}
 					}
 					LayoutConnection::Item => {
-						let mut name = parent_layout_name.into_value().clone();
+						let mut name = parent_layout_name.value.into_value().clone();
 						name.push_name(&Name::new("item").unwrap());
 
 						return Some(Meta(name, as_resource.metadata.clone()));
@@ -573,9 +1230,13 @@ impl<M: Clone> Definition<M> {
 		#[derive(Debug, Clone, Copy)]
 		struct Incomplete;
 
-		for Meta(list_id, meta) in &self.intersection_of {
+		for PropertyValueRef {
+			value: Meta(list_id, meta),
+			..
+		} in &self.intersection_of
+		{
 			let list = context.require_list(*list_id).map_err(|e| {
-				e.at_node_property(as_resource.id, Property::IntersectionOf, meta.clone())
+				e.at_node_property(as_resource.id, Property::IntersectionOf(None), meta.clone())
 			})?;
 
 			let intersections = list.try_fold(
@@ -586,7 +1247,11 @@ impl<M: Clone> Definition<M> {
 						Ok(intersection) => {
 							let mut result = Vec::new();
 
-							for Meta(object, layout_metadata) in items {
+							for PropertyValueRef {
+								value: Meta(object, layout_metadata),
+								..
+							} in items
+							{
 								let layout_id = object.as_required_id(layout_metadata)?;
 
 								let new_intersection = match intersection::Definition::from_id(
@@ -638,21 +1303,26 @@ impl<M: Clone> Definition<M> {
 		context: &crate::Context<M>,
 		as_resource: &treeldr::node::Data<M>,
 		_as_component: &treeldr::component::Data<M>,
-		metadata: &M,
-	) -> Result<Meta<treeldr::layout::Description<M>, M>, Error<M>>
+		_metadata: &M,
+	) -> Result<treeldr::layout::Description<M>, Error<M>>
 	where
 		M: Merge,
 	{
 		let restrictions_id = self.restrictions.clone().try_unwrap().map_err(|e| {
-			e.at_functional_node_property(as_resource.id, Property::WithRestrictions)
+			e.at_functional_node_property(as_resource.id, Property::WithRestrictions(None))
 		})?;
 
 		let restrictions = restrictions_id
-			.as_ref()
-			.map(|Meta(list_id, meta)| {
+			.as_required()
+			.map(|restrictions_id| {
+				let list_id = restrictions_id.value();
 				let mut restrictions = Restrictions::default();
 				let list = context.require_list(*list_id).map_err(|e| {
-					e.at_node_property(as_resource.id, Property::WithRestrictions, meta.clone())
+					e.at_node_property(
+						as_resource.id,
+						Property::WithRestrictions(None),
+						restrictions_id.sub_property_metadata().clone(),
+					)
 				})?;
 				for restriction_value in list.iter(context) {
 					let Meta(restriction_value, meta) = restriction_value?;
@@ -666,202 +1336,16 @@ impl<M: Clone> Definition<M> {
 					restrictions.insert(restriction)?
 				}
 
-				Ok(restrictions)
+				Ok(Meta(
+					restrictions,
+					restrictions_id.sub_property_metadata().clone(),
+				))
 			})
 			.transpose()?
-			.unwrap_or_default();
+			.into();
 
-		let desc =
-			self.desc
-				.clone()
-				.try_unwrap()
-				.map_err(|Conflict(Meta(desc1, meta), desc2)| {
-					Meta(
-						error::LayoutDescriptionMismatch {
-							id: as_resource.id,
-							desc1,
-							desc2,
-						}
-						.into(),
-						meta,
-					)
-				})?;
-
-		match desc.unwrap() {
-			Some(Meta(desc, desc_metadata)) => {
-				let desc = match desc {
-					Description::Never => treeldr::layout::Description::Never,
-					Description::Primitive(n) => treeldr::layout::Description::Primitive(n.build(
-						as_resource.id,
-						restrictions.into_primitive(),
-						&desc_metadata,
-					)?),
-					Description::Reference(layout_id) => {
-						let layout_ref = context.require_layout_id(layout_id).map_err(|e| {
-							e.at_node_property(
-								as_resource.id,
-								DescriptionProperty::Reference,
-								desc_metadata.clone(),
-							)
-						})?;
-						let r = treeldr::layout::Reference::new(Meta(
-							layout_ref,
-							desc_metadata.clone(),
-						));
-						treeldr::layout::Description::Reference(r)
-					}
-					Description::Struct(fields_id) => {
-						let fields = context
-							.require_list(fields_id)
-							.map_err(|e| {
-								e.at_node_property(
-									as_resource.id,
-									DescriptionProperty::Fields,
-									desc_metadata.clone(),
-								)
-							})?
-							.iter(context)
-							.map(|item| {
-								let Meta(object, field_metadata) = item?.cloned();
-								let field_id = object.into_required_id(&field_metadata)?;
-								Ok(Meta(
-									context
-										.require_layout_field_id(field_id)
-										.map_err(|e| e.at(field_metadata.clone()))?,
-									field_metadata,
-								))
-							})
-							.try_collect()?;
-
-						let strct = treeldr::layout::Struct::new(fields);
-						treeldr::layout::Description::Struct(strct)
-					}
-					Description::Enum(options_id) => {
-						let variants: Vec<_> = context
-							.require_list(options_id)
-							.map_err(|e| {
-								e.at_node_property(
-									as_resource.id,
-									DescriptionProperty::Variants,
-									desc_metadata.clone(),
-								)
-							})?
-							.iter(context)
-							.map(|item| {
-								let Meta(object, variant_metadata) = item?.cloned();
-								let variant_id = object.into_required_id(&variant_metadata)?;
-								Ok(Meta(
-									context
-										.require_layout_variant_id(variant_id)
-										.map_err(|e| e.at(variant_metadata.clone()))?,
-									variant_metadata,
-								))
-							})
-							.try_collect()?;
-
-						let enm = treeldr::layout::Enum::new(variants);
-						treeldr::layout::Description::Enum(enm)
-					}
-					Description::Required(item_layout_id) => {
-						let item_layout_ref =
-							context.require_layout_id(item_layout_id).map_err(|e| {
-								e.at_node_property(
-									as_resource.id,
-									DescriptionProperty::Required,
-									desc_metadata.clone(),
-								)
-							})?;
-						treeldr::layout::Description::Required(treeldr::layout::Required::new(
-							Meta(item_layout_ref, desc_metadata.clone()),
-						))
-					}
-					Description::Option(item_layout_id) => {
-						let item_layout_ref =
-							context.require_layout_id(item_layout_id).map_err(|e| {
-								e.at_node_property(
-									as_resource.id,
-									DescriptionProperty::Option,
-									desc_metadata.clone(),
-								)
-							})?;
-						treeldr::layout::Description::Option(treeldr::layout::Optional::new(Meta(
-							item_layout_ref,
-							desc_metadata.clone(),
-						)))
-					}
-					Description::Set(item_layout_id) => {
-						let item_layout_ref =
-							context.require_layout_id(item_layout_id).map_err(|e| {
-								e.at_node_property(
-									as_resource.id,
-									DescriptionProperty::Set,
-									desc_metadata.clone(),
-								)
-							})?;
-						treeldr::layout::Description::Set(treeldr::layout::Set::new(
-							Meta(item_layout_ref, desc_metadata.clone()),
-							restrictions.into_container(),
-						))
-					}
-					Description::OneOrMany(item_layout_id) => {
-						let item_layout_ref =
-							context.require_layout_id(item_layout_id).map_err(|e| {
-								e.at_node_property(
-									as_resource.id,
-									DescriptionProperty::OneOrMany,
-									desc_metadata.clone(),
-								)
-							})?;
-						treeldr::layout::Description::OneOrMany(treeldr::layout::OneOrMany::new(
-							Meta(item_layout_ref, desc_metadata.clone()),
-							restrictions.into_container(),
-						))
-					}
-					Description::Array(item_layout_id) => {
-						let item_layout_ref =
-							context.require_layout_id(item_layout_id).map_err(|e| {
-								e.at_node_property(
-									as_resource.id,
-									DescriptionProperty::Array,
-									desc_metadata.clone(),
-								)
-							})?;
-						let semantics = self
-							.array_semantics
-							.clone()
-							.build(context, as_resource.id)?;
-						treeldr::layout::Description::Array(treeldr::layout::Array::new(
-							Meta(item_layout_ref, desc_metadata.clone()),
-							restrictions.into_container(),
-							semantics,
-						))
-					}
-					Description::Alias(alias_layout_id) => {
-						let alias_layout_ref =
-							context.require_layout_id(alias_layout_id).map_err(|e| {
-								e.at_node_property(
-									as_resource.id,
-									DescriptionProperty::Alias,
-									desc_metadata.clone(),
-								)
-							})?;
-						treeldr::layout::Description::Alias(alias_layout_ref)
-					}
-				};
-
-				Ok(Meta(desc, desc_metadata))
-			}
-			None => match Primitive::from_id(as_resource.id) {
-				Some(p) => Ok(Meta(
-					treeldr::layout::Description::Primitive(p.into()),
-					metadata.clone(),
-				)),
-				None => Err(Meta(
-					error::LayoutDescriptionMissing(as_resource.id).into(),
-					metadata.clone(),
-				)),
-			},
-		}
+		self.desc
+			.build(context, as_resource.id, restrictions, &self.array_semantics)
 	}
 
 	pub(crate) fn build(
@@ -878,10 +1362,16 @@ impl<M: Clone> Definition<M> {
 			.intersection_of
 			.clone()
 			.try_unwrap()
-			.map_err(|e| e.at_functional_node_property(as_resource.id, Property::IntersectionOf))?
+			.map_err(|e| {
+				e.at_functional_node_property(as_resource.id, Property::IntersectionOf(None))
+			})?
 			.try_map_borrow_metadata(|id, meta| {
 				let list = context.require_list(id).map_err(|e| {
-					e.at_node_property(as_resource.id, Property::IntersectionOf, meta.clone())
+					e.at_node_property(
+						as_resource.id,
+						Property::IntersectionOf(None),
+						meta.first().unwrap().value.into_metadata().clone(),
+					)
 				})?;
 				let mut intersection = Multiple::default();
 				for item in list.iter(context) {
@@ -897,10 +1387,11 @@ impl<M: Clone> Definition<M> {
 			})?;
 
 		let desc = self.build_description(context, as_resource, as_component, &metadata)?;
-		let ty =
-			self.ty
-				.clone()
-				.into_type_at_node_binding(context, as_resource.id, Property::For)?;
+		let ty = self.ty.clone().into_type_at_node_binding(
+			context,
+			as_resource.id,
+			Property::For(None),
+		)?;
 
 		Ok(Meta(
 			treeldr::layout::Definition::new(ty, desc, intersection_of),
@@ -926,21 +1417,22 @@ pub fn is_included_in<M>(context: &Context<M>, a: Id, b: Id) -> bool {
 
 impl<M: Merge> MapIds for Definition<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		self.ty.map_ids_in(Some(Property::For.into()), &f);
+		self.ty.map_ids_in(Some(Property::For(None).into()), &f);
 		self.desc.map_ids(&f);
 		self.intersection_of
-			.map_ids_in(Some(Property::IntersectionOf.into()), &f);
+			.map_ids_in(Some(Property::IntersectionOf(None).into()), &f);
 		self.restrictions
-			.map_ids_in(Some(Property::WithRestrictions.into()), &f);
+			.map_ids_in(Some(Property::WithRestrictions(None).into()), &f);
 		self.array_semantics.map_ids(f)
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBinding {
-	For(Id),
+	For(Option<TId<UnknownProperty>>, Id),
 	Description(DescriptionBinding),
-	IntersectionOf(Id),
-	WithRestrictions(Id),
+	IntersectionOf(Option<TId<UnknownProperty>>, Id),
+	WithRestrictions(Option<TId<UnknownProperty>>, Id),
 	ArraySemantics(array::Binding),
 }
 
@@ -949,30 +1441,30 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::For(_) => Property::For,
+			Self::For(p, _) => Property::For(*p),
 			Self::Description(d) => Property::Description(d.property()),
-			Self::IntersectionOf(_) => Property::IntersectionOf,
-			Self::WithRestrictions(_) => Property::WithRestrictions,
+			Self::IntersectionOf(p, _) => Property::IntersectionOf(*p),
+			Self::WithRestrictions(p, _) => Property::WithRestrictions(*p),
 			Self::ArraySemantics(b) => b.property(),
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::For(v) => BindingValueRef::Id(*v),
+			Self::For(_, v) => BindingValueRef::Id(*v),
 			Self::Description(d) => d.value(),
-			Self::IntersectionOf(v) => BindingValueRef::Id(*v),
-			Self::WithRestrictions(v) => BindingValueRef::Id(*v),
+			Self::IntersectionOf(_, v) => BindingValueRef::Id(*v),
+			Self::WithRestrictions(_, v) => BindingValueRef::Id(*v),
 			Self::ArraySemantics(b) => b.value(),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
-	ty: single::Iter<'a, Id, M>,
-	desc: single::Iter<'a, Description, M>,
-	intersection_of: single::Iter<'a, Id, M>,
-	restrictions: single::Iter<'a, Id, M>,
+	ty: functional_property_value::Iter<'a, Id, M>,
+	desc: DescriptionPropertiesIter<'a, M>,
+	intersection_of: functional_property_value::Iter<'a, Id, M>,
+	restrictions: functional_property_value::Iter<'a, Id, M>,
 	array_semantics: array::Bindings<'a, M>,
 }
 
@@ -984,23 +1476,20 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.ty
 			.next()
-			.map(|v| v.into_cloned_value().map(ClassBinding::For))
+			.map(|v| v.into_cloned_class_binding(ClassBinding::For))
 			.or_else(|| {
 				self.desc
 					.next()
-					.and_then(|Meta(v, meta)| {
-						v.into_binding()
-							.map(|b| Meta(ClassBinding::Description(b), meta))
-					})
+					.map(|m| m.map(ClassBinding::Description))
 					.or_else(|| {
 						self.intersection_of
 							.next()
-							.map(|v| v.into_cloned_value().map(ClassBinding::IntersectionOf))
+							.map(|v| v.into_cloned_class_binding(ClassBinding::IntersectionOf))
 							.or_else(|| {
 								self.restrictions
 									.next()
 									.map(|v| {
-										v.into_cloned_value().map(ClassBinding::WithRestrictions)
+										v.into_cloned_class_binding(ClassBinding::WithRestrictions)
 									})
 									.or_else(|| {
 										self.array_semantics

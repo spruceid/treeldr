@@ -1,12 +1,16 @@
+use std::cmp::Ordering;
+
 use crate::{
 	context::{MapIds, MapIdsIn},
-	error::NodeBindingMissing,
+	functional_property_value::{self, FunctionalPropertyValue},
 	rdf,
 	resource::BindingValueRef,
-	single, Context, Error, ObjectAsRequiredId, Single,
+	Context, Error, ObjectAsRequiredId,
 };
 use locspan::Meta;
-use treeldr::{metadata::Merge, ty::data::Primitive, vocab::Object, Id};
+use treeldr::{
+	metadata::Merge, prop::UnknownProperty, ty::data::Primitive, vocab::Object, Id, TId,
+};
 
 pub use treeldr::ty::data::Property;
 
@@ -17,35 +21,35 @@ pub use restriction::{Restriction, Restrictions};
 #[derive(Clone)]
 pub struct Definition<M> {
 	/// Derived Datatype.
-	base: Single<Id, M>,
+	base: FunctionalPropertyValue<Id, M>,
 
 	/// List of restrictions.
-	restrictions: Single<Id, M>,
+	restrictions: FunctionalPropertyValue<Id, M>,
 }
 
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			base: Single::default(),
-			restrictions: Single::default(),
+			base: FunctionalPropertyValue::default(),
+			restrictions: FunctionalPropertyValue::default(),
 		}
 	}
 }
 
 impl<M> Definition<M> {
-	pub fn base(&self) -> &Single<Id, M> {
+	pub fn base(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.base
 	}
 
-	pub fn base_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn base_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.base
 	}
 
-	pub fn restrictions(&self) -> &Single<Id, M> {
+	pub fn restrictions(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.restrictions
 	}
 
-	pub fn restrictions_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn restrictions_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.restrictions
 	}
 
@@ -56,13 +60,21 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::OnDatatype => self.base.insert(rdf::from::expect_id(value)?),
-			Property::WithRestrictions => self.restrictions.insert(rdf::from::expect_id(value)?),
+			Property::OnDatatype(p) => self.base.insert(p, prop_cmp, rdf::from::expect_id(value)?),
+			Property::WithRestrictions(p) => {
+				self.restrictions
+					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+			}
 		}
 
 		Ok(())
@@ -87,104 +99,110 @@ impl<M> Definition<M> {
 		&self,
 		context: &Context<M>,
 		as_resource: &treeldr::node::Data<M>,
-		meta: &M,
+		_meta: &M,
 	) -> Result<treeldr::ty::data::Definition<M>, Error<M>>
 	where
 		M: Clone + Merge,
 	{
 		let restrictions = self.restrictions.clone().try_unwrap().map_err(|e| {
-			e.at_functional_node_property(as_resource.id, Property::WithRestrictions)
+			e.at_functional_node_property(as_resource.id, Property::WithRestrictions(None))
 		})?;
 
-		let base = self
-			.base
-			.clone()
-			.try_unwrap()
-			.map_err(|e| e.at_functional_node_property(as_resource.id, Property::OnDatatype))?;
+		let base = self.base.clone().try_unwrap().map_err(|e| {
+			e.at_functional_node_property(as_resource.id, Property::OnDatatype(None))
+		})?;
 
-		let dt = match base.unwrap() {
-			None => match restrictions.unwrap() {
+		let dt = match base.into_required() {
+			None => match restrictions.into_required() {
 				Some(_) => {
 					todo!("restricted primitive datatype error")
 				}
 				None => treeldr::ty::DataType::Primitive(Primitive::from_id(as_resource.id)),
 			},
-			Some(Meta(base_id, base_meta)) => {
-				let base = Meta(
-					context.require_datatype_id(base_id).map_err(|e| {
-						e.at_node_property(as_resource.id, Property::OnDatatype, base_meta.clone())
-					})?,
-					base_meta,
-				);
-
-				let primitive =
-					Primitive::from_id(base.id()).expect("unknown primitive base datatype");
-
-				match restrictions.unwrap() {
-					Some(list_id) => {
-						let list = context.require_list(*list_id).map_err(|e| {
+			Some(base) => treeldr::ty::DataType::Derived(base.try_map_borrow_metadata(
+				|base_id, base_meta| {
+					let base = Meta(
+						context.require_datatype_id(base_id).map_err(|e| {
 							e.at_node_property(
 								as_resource.id,
-								Property::WithRestrictions,
-								list_id.metadata().clone(),
+								Property::OnDatatype(None),
+								base_meta.first().unwrap().value.into_metadata().clone(),
 							)
-						})?;
+						})?,
+						base_meta.first().unwrap().value.into_metadata().clone(),
+					);
 
-						let mut restrictions = Restrictions::new();
+					let primitive =
+						Primitive::from_id(base.id()).expect("unknown primitive base datatype");
 
-						for item in list.iter(context) {
-							let Meta(object, restriction_meta) = item?.cloned();
-							let restriction_id = object.into_required_id(&restriction_meta)?;
-							let restriction = context
-								.require(restriction_id)
-								.map_err(|e| e.at(restriction_meta.clone()))?
-								.require_datatype_restriction(context)
-								.map_err(|e| e.at(restriction_meta.clone()))?;
-							restrictions.insert(restriction.build()?.into_value(), restriction_meta)
-						}
+					let restrictions = restrictions
+						.into_required()
+						.map(|list_id| {
+							let Meta(list_id, meta) = list_id.into_meta_value();
 
-						let derived = match primitive {
-							Primitive::Boolean => treeldr::ty::data::Derived::Boolean(base),
-							Primitive::Date => treeldr::ty::data::Derived::Date(base),
-							Primitive::DateTime => treeldr::ty::data::Derived::DateTime(base),
-							Primitive::Double => treeldr::ty::data::Derived::Double(
-								base,
-								restrictions
-									.build_double(as_resource.id, list_id.metadata().clone())?,
-							),
-							Primitive::Duration => treeldr::ty::data::Derived::Duration(base),
-							Primitive::Float => treeldr::ty::data::Derived::Float(
-								base,
-								restrictions
-									.build_float(as_resource.id, list_id.metadata().clone())?,
-							),
-							Primitive::Real => treeldr::ty::data::Derived::Real(
-								base,
-								restrictions
-									.build_real(as_resource.id, list_id.metadata().clone())?,
-							),
-							Primitive::String => treeldr::ty::data::Derived::String(
-								base,
-								restrictions
-									.build_string(as_resource.id, list_id.metadata().clone())?,
-							),
-							Primitive::Time => treeldr::ty::data::Derived::Time(base),
-						};
+							let list = context.require_list(list_id).map_err(|e| {
+								e.at_node_property(
+									as_resource.id,
+									Property::WithRestrictions(None),
+									meta.clone(),
+								)
+							})?;
 
-						treeldr::ty::DataType::Derived(derived)
-					}
-					None => {
-						return Err(Meta(
-							NodeBindingMissing {
-								id: as_resource.id,
-								property: Property::WithRestrictions.into(),
+							let mut restrictions = Restrictions::new();
+
+							for item in list.iter(context) {
+								let Meta(object, restriction_meta) = item?.cloned();
+								let restriction_id = object.into_required_id(&restriction_meta)?;
+								let restriction = context
+									.require(restriction_id)
+									.map_err(|e| e.at(restriction_meta.clone()))?
+									.require_datatype_restriction(context)
+									.map_err(|e| e.at(restriction_meta.clone()))?;
+								restrictions
+									.insert(restriction.build()?.into_value(), restriction_meta)
 							}
-							.into(),
-							meta.clone(),
-						))
-					}
-				}
-			}
+
+							Ok(Meta(restrictions, meta))
+						})
+						.transpose()?;
+
+					Ok(match primitive {
+						Primitive::Boolean => treeldr::ty::data::Derived::Boolean(base),
+						Primitive::Date => treeldr::ty::data::Derived::Date(base),
+						Primitive::DateTime => treeldr::ty::data::Derived::DateTime(base),
+						Primitive::Double => treeldr::ty::data::Derived::Double(
+							base,
+							restrictions
+								.map(|Meta(r, m)| r.build_double(as_resource.id, m))
+								.transpose()?
+								.into(),
+						),
+						Primitive::Duration => treeldr::ty::data::Derived::Duration(base),
+						Primitive::Float => treeldr::ty::data::Derived::Float(
+							base,
+							restrictions
+								.map(|Meta(r, m)| r.build_float(as_resource.id, m))
+								.transpose()?
+								.into(),
+						),
+						Primitive::Real => treeldr::ty::data::Derived::Real(
+							base,
+							restrictions
+								.map(|Meta(r, m)| r.build_real(as_resource.id, m))
+								.transpose()?
+								.into(),
+						),
+						Primitive::String => treeldr::ty::data::Derived::String(
+							base,
+							restrictions
+								.map(|Meta(r, m)| r.build_string(as_resource.id, m))
+								.transpose()?
+								.into(),
+						),
+						Primitive::Time => treeldr::ty::data::Derived::Time(base),
+					})
+				},
+			)?),
 		};
 
 		Ok(treeldr::ty::data::Definition::new(dt))
@@ -193,15 +211,17 @@ impl<M> Definition<M> {
 
 impl<M: Merge> MapIds for Definition<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		self.base.map_ids_in(Some(Property::OnDatatype.into()), &f);
+		self.base
+			.map_ids_in(Some(Property::OnDatatype(None).into()), &f);
 		self.restrictions
-			.map_ids_in(Some(Property::WithRestrictions.into()), f)
+			.map_ids_in(Some(Property::WithRestrictions(None).into()), f)
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBinding {
-	OnDatatype(Id),
-	WithRestrictions(Id),
+	OnDatatype(Option<TId<UnknownProperty>>, Id),
+	WithRestrictions(Option<TId<UnknownProperty>>, Id),
 }
 
 pub type Binding = ClassBinding;
@@ -209,22 +229,22 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::OnDatatype(_) => Property::OnDatatype,
-			Self::WithRestrictions(_) => Property::WithRestrictions,
+			Self::OnDatatype(p, _) => Property::OnDatatype(*p),
+			Self::WithRestrictions(p, _) => Property::WithRestrictions(*p),
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::OnDatatype(v) => BindingValueRef::Id(*v),
-			Self::WithRestrictions(v) => BindingValueRef::Id(*v),
+			Self::OnDatatype(_, v) => BindingValueRef::Id(*v),
+			Self::WithRestrictions(_, v) => BindingValueRef::Id(*v),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
-	on_datatype: single::Iter<'a, Id, M>,
-	with_restrictions: single::Iter<'a, Id, M>,
+	on_datatype: functional_property_value::Iter<'a, Id, M>,
+	with_restrictions: functional_property_value::Iter<'a, Id, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -235,13 +255,11 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.on_datatype
 			.next()
-			.map(Meta::into_cloned_value)
-			.map(|m| m.map(ClassBinding::OnDatatype))
+			.map(|m| m.into_cloned_class_binding(ClassBinding::OnDatatype))
 			.or_else(|| {
 				self.with_restrictions
 					.next()
-					.map(Meta::into_cloned_value)
-					.map(|m| m.map(ClassBinding::WithRestrictions))
+					.map(|m| m.into_cloned_class_binding(ClassBinding::WithRestrictions))
 			})
 	}
 }

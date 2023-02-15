@@ -1,5 +1,5 @@
 use super::ContainerRestrictions;
-use crate::{Layout, TId};
+use crate::{Layout, MetaOption, TId};
 use locspan::Meta;
 
 /// Set layout.
@@ -9,11 +9,14 @@ pub struct Set<M> {
 	item: Meta<TId<Layout>, M>,
 
 	/// Restrictions.
-	restrictions: ContainerRestrictions<M>,
+	restrictions: MetaOption<ContainerRestrictions<M>, M>,
 }
 
 impl<M> Set<M> {
-	pub fn new(item: Meta<TId<Layout>, M>, restrictions: ContainerRestrictions<M>) -> Self {
+	pub fn new(
+		item: Meta<TId<Layout>, M>,
+		restrictions: MetaOption<ContainerRestrictions<M>, M>,
+	) -> Self {
 		Self { item, restrictions }
 	}
 
@@ -25,11 +28,12 @@ impl<M> Set<M> {
 		self.item = item
 	}
 
-	pub fn restrictions(&self) -> &ContainerRestrictions<M> {
+	pub fn restrictions(&self) -> &MetaOption<ContainerRestrictions<M>, M> {
 		&self.restrictions
 	}
 
 	pub fn is_required(&self) -> bool {
-		self.restrictions.is_required()
+		self.restrictions
+			.is_some_and(ContainerRestrictions::is_required)
 	}
 }

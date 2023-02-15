@@ -1,7 +1,8 @@
 use crate::{
 	component,
 	error::{NodeTypeInvalid, NodeUnknown},
-	layout, prop, resource, Error, IriIndex, ListRef, Property, Single,
+	layout, prop, resource, Error, FunctionalPropertyValue, IriIndex, ListRef, Property,
+	PropertyValues, Single,
 };
 use derivative::Derivative;
 use locspan::{Meta, Stripped};
@@ -15,7 +16,7 @@ use treeldr::{
 	node::Type,
 	ty::SubClass,
 	vocab::{self, Object},
-	BlankIdIndex, Id, Multiple, TId,
+	BlankIdIndex, Id, Multiple, PropertyValueRef, TId,
 };
 
 pub mod build;
@@ -61,7 +62,7 @@ impl<M> Context<M> {
 		M: Clone + Merge,
 	{
 		let node = self.declare(id, metadata.clone());
-		node.type_mut().insert(Meta(type_.into(), metadata));
+		node.type_mut().insert_base(Meta(type_.into(), metadata));
 		node
 	}
 
@@ -206,6 +207,14 @@ impl<M> Context<M> {
 		}
 	}
 
+	pub fn len(&self) -> usize {
+		self.nodes.len()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.nodes.is_empty()
+	}
+
 	/// Returns the node associated to the given `Id`, if any.
 	pub fn get(&self, id: Id) -> Option<&resource::Definition<M>> {
 		self.nodes.get(&id)
@@ -305,6 +314,58 @@ impl<T: MapIds + Ord, M: Merge> MapIds for Single<T, M> {
 			t.map_ids(&f);
 			self.insert(Meta(t, m))
 		}
+	}
+}
+
+impl<T: MapIdsIn + Ord, M> MapIdsIn for FunctionalPropertyValue<T, M> {
+	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
+		let result = std::mem::take(self);
+		*self = result.map_properties(
+			|id| TId::new(f(id.id(), None)),
+			|mut t| {
+				t.map_ids_in(prop, &f);
+				t
+			},
+		)
+	}
+}
+
+impl<T: MapIds + Ord, M> MapIds for FunctionalPropertyValue<T, M> {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id) {
+		let result = std::mem::take(self);
+		*self = result.map_properties(
+			|id| TId::new(f(id.id(), None)),
+			|mut t| {
+				t.map_ids(&f);
+				t
+			},
+		)
+	}
+}
+
+impl<T: MapIdsIn + Ord, M> MapIdsIn for PropertyValues<T, M> {
+	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
+		let result = std::mem::take(self);
+		*self = result.map_properties(
+			|id| TId::new(f(id.id(), None)),
+			|mut t| {
+				t.map_ids_in(prop, &f);
+				t
+			},
+		)
+	}
+}
+
+impl<T: MapIds + Ord, M> MapIds for PropertyValues<T, M> {
+	fn map_ids(&mut self, f: impl Fn(Id, Option<Property>) -> Id) {
+		let result = std::mem::take(self);
+		*self = result.map_properties(
+			|id| TId::new(f(id.id(), None)),
+			|mut t| {
+				t.map_ids(&f);
+				t
+			},
+		)
 	}
 }
 
@@ -467,7 +528,7 @@ impl<M: Clone + Merge> Context<M> {
 		deref_cause: M,
 	) -> Id {
 		let layout = self.declare_layout(id, cause.clone()).as_layout_mut();
-		layout.ty_mut().insert(Meta(target_ty, deref_cause));
+		layout.ty_mut().insert_base(Meta(target_ty, deref_cause));
 		layout.set_reference(Meta(
 			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
 				vocab::TreeLdr::Primitive(treeldr::layout::Primitive::Iri),
@@ -497,8 +558,9 @@ impl<M: Clone + Merge> Context<M> {
 			let node = self
 				.declare_with(id, Type::List, cause.clone())
 				.as_list_mut();
-			node.first_mut().insert(Meta(Stripped(item), cause.clone()));
-			node.rest_mut().insert(Meta(head, cause));
+			node.first_mut()
+				.insert_base(Meta(Stripped(item), cause.clone()));
+			node.rest_mut().insert_base(Meta(head, cause));
 			head = id;
 		}
 
@@ -527,8 +589,9 @@ impl<M: Clone + Merge> Context<M> {
 			let node = self
 				.declare_with(id, Type::List, cause.clone())
 				.as_list_mut();
-			node.first_mut().insert(Meta(Stripped(item), cause.clone()));
-			node.rest_mut().insert(Meta(head, cause));
+			node.first_mut()
+				.insert_base(Meta(Stripped(item), cause.clone()));
+			node.rest_mut().insert_base(Meta(head, cause));
 			head = id;
 		}
 
@@ -558,8 +621,9 @@ impl<M: Clone + Merge> Context<M> {
 			let node = self
 				.declare_with(id, Type::List, cause.clone())
 				.as_list_mut();
-			node.first_mut().insert(Meta(Stripped(item), cause.clone()));
-			node.rest_mut().insert(Meta(head, cause));
+			node.first_mut()
+				.insert_base(Meta(Stripped(item), cause.clone()));
+			node.rest_mut().insert_base(Meta(head, cause));
 			head = id;
 		}
 
@@ -602,7 +666,7 @@ impl<M> RequireError<M> {
 
 pub trait HasType<M> {
 	type Type: Copy + Into<crate::Type>;
-	type Types<'a>: 'a + IntoIterator<Item = Meta<&'a Self::Type, &'a M>>
+	type Types<'a>: 'a + IntoIterator<Item = PropertyValueRef<'a, Self::Type, M>>
 	where
 		Self: 'a,
 		M: 'a;
@@ -611,26 +675,33 @@ pub trait HasType<M> {
 
 	fn type_metadata(&self, context: &Context<M>, type_: impl Into<crate::Type>) -> Option<&M> {
 		let a = type_.into();
-		self.types().into_iter().find_map(|Meta(b, meta)| {
-			if context.is_subclass_of_or_eq(a, (*b).into()) {
-				Some(meta)
-			} else {
-				None
-			}
-		})
+		self.types().into_iter().find_map(
+			|PropertyValueRef {
+			     value: Meta(b, meta),
+			     ..
+			 }| {
+				if context.is_subclass_of_or_eq(a, (*b).into()) {
+					Some(meta)
+				} else {
+					None
+				}
+			},
+		)
 	}
 
 	fn has_type(&self, context: &Context<M>, type_: impl Into<crate::Type>) -> bool {
 		let a = type_.into();
-		self.types()
-			.into_iter()
-			.any(|Meta(b, _)| context.is_subclass_of_or_eq(a, (*b).into()))
+		self.types().into_iter().any(
+			|PropertyValueRef {
+			     value: Meta(b, _), ..
+			 }| { context.is_subclass_of_or_eq(a, (*b).into()) },
+		)
 	}
 }
 
 impl<M> HasType<M> for treeldr::node::Data<M> {
 	type Type = TId<crate::Type>;
-	type Types<'a> = &'a Multiple<TId<crate::Type>, M> where Self: 'a, M: 'a;
+	type Types<'a> = &'a PropertyValues<TId<crate::Type>, M> where Self: 'a, M: 'a;
 
 	fn types(&self) -> Self::Types<'_> {
 		&self.type_
@@ -639,9 +710,9 @@ impl<M> HasType<M> for treeldr::node::Data<M> {
 
 impl<M> HasType<M> for resource::Data<M> {
 	type Type = crate::Type;
-	type Types<'a> = &'a Multiple<crate::Type, M> where Self: 'a, M: 'a;
+	type Types<'a> = &'a PropertyValues<crate::Type, M> where Self: 'a, M: 'a;
 
-	fn types(&self) -> &Multiple<crate::Type, M> {
+	fn types(&self) -> Self::Types<'_> {
 		&self.type_
 	}
 }

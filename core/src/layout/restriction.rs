@@ -1,4 +1,8 @@
-use crate::{metadata::Merge, vocab};
+use crate::{
+	metadata::Merge,
+	prop::{PropertyName, UnknownProperty},
+	vocab, Id, IriIndex, TId,
+};
 use derivative::Derivative;
 use locspan::{MapLocErr, Meta};
 use locspan_derive::{StrippedEq, StrippedPartialEq};
@@ -56,6 +60,18 @@ impl<'a, M> Restrictions<'a, M> {
 			primitive: None,
 			container: Some(container),
 		}
+	}
+
+	pub fn is_restricted(&self) -> bool {
+		self.primitive
+			.as_ref()
+			.map(|p| p.is_restricted())
+			.unwrap_or(false)
+			|| self
+				.container
+				.as_ref()
+				.map(|c| c.is_restricted())
+				.unwrap_or(false)
 	}
 
 	pub fn iter(&self) -> RestrictionsIter<'a, M> {
@@ -231,6 +247,7 @@ impl Binding {
 	}
 }
 
+#[derive(Debug)]
 pub enum BindingRef<'a> {
 	Cardinal(cardinal::BindingRef<'a>),
 }
@@ -245,44 +262,90 @@ impl<'a> BindingRef<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
-	MinCardinality,
-	MaxCardinality,
-	InclusiveMinimum,
-	ExclusiveMinimum,
-	InclusiveMaximum,
-	ExclusiveMaximum,
-	MinLength,
-	MaxLength,
-	Pattern,
+	MinCardinality(Option<TId<UnknownProperty>>),
+	MaxCardinality(Option<TId<UnknownProperty>>),
+	InclusiveMinimum(Option<TId<UnknownProperty>>),
+	ExclusiveMinimum(Option<TId<UnknownProperty>>),
+	InclusiveMaximum(Option<TId<UnknownProperty>>),
+	ExclusiveMaximum(Option<TId<UnknownProperty>>),
+	MinLength(Option<TId<UnknownProperty>>),
+	MaxLength(Option<TId<UnknownProperty>>),
+	Pattern(Option<TId<UnknownProperty>>),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::{Term, TreeLdr};
 		match self {
-			Self::MinCardinality => Term::TreeLdr(TreeLdr::MinCardinality),
-			Self::MaxCardinality => Term::TreeLdr(TreeLdr::MaxCardinality),
-			Self::InclusiveMinimum => Term::TreeLdr(TreeLdr::InclusiveMinimum),
-			Self::ExclusiveMinimum => Term::TreeLdr(TreeLdr::ExclusiveMinimum),
-			Self::InclusiveMaximum => Term::TreeLdr(TreeLdr::InclusiveMaximum),
-			Self::ExclusiveMaximum => Term::TreeLdr(TreeLdr::ExclusiveMaximum),
-			Self::MinLength => Term::TreeLdr(TreeLdr::MinLength),
-			Self::MaxLength => Term::TreeLdr(TreeLdr::MaxLength),
-			Self::Pattern => Term::TreeLdr(TreeLdr::Pattern),
+			Self::MinCardinality(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::MinCardinality)))
+			}
+			Self::MinCardinality(Some(p)) => p.id(),
+			Self::MaxCardinality(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::MaxCardinality)))
+			}
+			Self::MaxCardinality(Some(p)) => p.id(),
+			Self::InclusiveMinimum(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::InclusiveMinimum)))
+			}
+			Self::InclusiveMinimum(Some(p)) => p.id(),
+			Self::ExclusiveMinimum(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::ExclusiveMinimum)))
+			}
+			Self::ExclusiveMinimum(Some(p)) => p.id(),
+			Self::InclusiveMaximum(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::InclusiveMaximum)))
+			}
+			Self::InclusiveMaximum(Some(p)) => p.id(),
+			Self::ExclusiveMaximum(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::ExclusiveMaximum)))
+			}
+			Self::ExclusiveMaximum(Some(p)) => p.id(),
+			Self::MinLength(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::MinLength))),
+			Self::MinLength(Some(p)) => p.id(),
+			Self::MaxLength(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::MaxLength))),
+			Self::MaxLength(Some(p)) => p.id(),
+			Self::Pattern(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Pattern))),
+			Self::Pattern(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::{Term, TreeLdr};
 		match self {
-			Self::MinCardinality => "minimum cardinality",
-			Self::MaxCardinality => "maximum cardinality",
-			Self::InclusiveMinimum => "inclusive minimum",
-			Self::ExclusiveMinimum => "exclusive minimum",
-			Self::InclusiveMaximum => "inclusive maximum",
-			Self::ExclusiveMaximum => "exclusive maximum",
-			Self::MinLength => "minimum length",
-			Self::MaxLength => "maximum length",
-			Self::Pattern => "pattern",
+			Self::MinCardinality(None) => Some(Term::TreeLdr(TreeLdr::MinCardinality)),
+			Self::MaxCardinality(None) => Some(Term::TreeLdr(TreeLdr::MaxCardinality)),
+			Self::InclusiveMinimum(None) => Some(Term::TreeLdr(TreeLdr::InclusiveMinimum)),
+			Self::ExclusiveMinimum(None) => Some(Term::TreeLdr(TreeLdr::ExclusiveMinimum)),
+			Self::InclusiveMaximum(None) => Some(Term::TreeLdr(TreeLdr::InclusiveMaximum)),
+			Self::ExclusiveMaximum(None) => Some(Term::TreeLdr(TreeLdr::ExclusiveMaximum)),
+			Self::MinLength(None) => Some(Term::TreeLdr(TreeLdr::MinLength)),
+			Self::MaxLength(None) => Some(Term::TreeLdr(TreeLdr::MaxLength)),
+			Self::Pattern(None) => Some(Term::TreeLdr(TreeLdr::Pattern)),
+			_ => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::MinCardinality(None) => PropertyName::Resource("minimum cardinality"),
+			Self::MinCardinality(Some(p)) => PropertyName::Other(*p),
+			Self::MaxCardinality(None) => PropertyName::Resource("maximum cardinality"),
+			Self::MaxCardinality(Some(p)) => PropertyName::Other(*p),
+			Self::InclusiveMinimum(None) => PropertyName::Resource("inclusive minimum"),
+			Self::InclusiveMinimum(Some(p)) => PropertyName::Other(*p),
+			Self::ExclusiveMinimum(None) => PropertyName::Resource("exclusive minimum"),
+			Self::ExclusiveMinimum(Some(p)) => PropertyName::Other(*p),
+			Self::InclusiveMaximum(None) => PropertyName::Resource("inclusive maximum"),
+			Self::InclusiveMaximum(Some(p)) => PropertyName::Other(*p),
+			Self::ExclusiveMaximum(None) => PropertyName::Resource("exclusive maximum"),
+			Self::ExclusiveMaximum(Some(p)) => PropertyName::Other(*p),
+			Self::MinLength(None) => PropertyName::Resource("minimum length"),
+			Self::MinLength(Some(p)) => PropertyName::Other(*p),
+			Self::MaxLength(None) => PropertyName::Resource("maximum length"),
+			Self::MaxLength(Some(p)) => PropertyName::Other(*p),
+			Self::Pattern(None) => PropertyName::Resource("pattern"),
+			Self::Pattern(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 

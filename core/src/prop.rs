@@ -1,55 +1,39 @@
 use crate::{
-	component, layout, list, multiple,
+	component, layout, list,
 	node::{self, BindingValueRef},
-	ty,
+	property_values, ty,
 	vocab::{self, Owl, Rdf, Rdfs, Schema, Term, TreeLdr, Xsd},
-	BlankIdIndex, Id, IriIndex, Multiple, Ref, ResourceType, TId,
+	BlankIdIndex, FunctionalPropertyValue, Id, IriIndex, PropertyValues, Ref, ResourceType, TId,
 };
 use contextual::DisplayWithContext;
-use derivative::Derivative;
 use locspan::Meta;
 use rdf_types::Vocabulary;
 use std::fmt;
 
+/// Non built-in property.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub struct OtherPropertyId(TId<Property>);
+pub struct UnknownProperty;
 
-impl OtherPropertyId {
-	pub fn id(&self) -> TId<Property> {
-		self.0
-	}
-
-	pub fn raw_id(&self) -> Id {
-		self.0.id()
-	}
-}
-
-impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V>
-	for OtherPropertyId
-{
-	fn fmt_with(&self, context: &V, f: &mut fmt::Formatter) -> fmt::Result {
-		self.raw_id().fmt_with(context, f)
-	}
-}
+pub type SubPropertyId = UnknownProperty;
 
 /// Node property.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
 	Resource(node::Property),
-	Other(OtherPropertyId),
+	Other(TId<UnknownProperty>),
 }
 
 impl Property {
 	pub fn id(&self) -> Id {
 		match self {
-			Self::Resource(p) => Id::Iri(IriIndex::Iri(p.term())),
-			Self::Other(id) => id.raw_id(),
+			Self::Resource(p) => p.id(),
+			Self::Other(id) => id.id(),
 		}
 	}
 
 	pub fn name(&self) -> PropertyName {
 		match self {
-			Self::Resource(b) => PropertyName::Resource(b.name()),
+			Self::Resource(b) => b.name(),
 			Self::Other(id) => PropertyName::Other(*id),
 		}
 	}
@@ -156,178 +140,201 @@ impl From<list::Property> for Property {
 impl From<Term> for Property {
 	fn from(t: Term) -> Self {
 		match t {
-			Term::TreeLdr(TreeLdr::Self_) => Self::Resource(node::Property::Self_),
-			Term::Rdf(Rdf::Type) => Self::Resource(node::Property::Type),
-			Term::Rdfs(Rdfs::Label) => Self::Resource(node::Property::Label),
-			Term::Rdfs(Rdfs::Comment) => Self::Resource(node::Property::Comment),
+			Term::TreeLdr(TreeLdr::Self_) => Self::Resource(node::Property::Self_(None)),
+			Term::Rdf(Rdf::Type) => Self::Resource(node::Property::Type(None)),
+			Term::Rdfs(Rdfs::Label) => Self::Resource(node::Property::Label(None)),
+			Term::Rdfs(Rdfs::Comment) => Self::Resource(node::Property::Comment(None)),
 			Term::Rdfs(Rdfs::SubClassOf) => {
-				Self::Resource(node::Property::Class(ty::Property::SubClassOf))
+				Self::Resource(node::Property::Class(ty::Property::SubClassOf(None)))
 			}
-			Term::Owl(Owl::UnionOf) => Self::Resource(node::Property::Class(ty::Property::UnionOf)),
+			Term::Rdfs(Rdfs::SubPropertyOf) => {
+				Self::Resource(node::Property::Property(RdfProperty::SubPropertyOf(None)))
+			}
+			Term::Owl(Owl::UnionOf) => {
+				Self::Resource(node::Property::Class(ty::Property::UnionOf(None)))
+			}
 			Term::Owl(Owl::IntersectionOf) => {
-				Self::Resource(node::Property::Class(ty::Property::IntersectionOf))
+				Self::Resource(node::Property::Class(ty::Property::IntersectionOf(None)))
 			}
 			Term::Owl(Owl::OnDatatype) => Self::Resource(node::Property::Class(
-				ty::Property::Datatype(ty::data::Property::OnDatatype),
+				ty::Property::Datatype(ty::data::Property::OnDatatype(None)),
 			)),
 			Term::Owl(Owl::WithRestrictions) => Self::Resource(node::Property::Class(
-				ty::Property::Datatype(ty::data::Property::WithRestrictions),
+				ty::Property::Datatype(ty::data::Property::WithRestrictions(None)),
 			)),
 			Term::Owl(Owl::OnProperty) => Self::Resource(node::Property::Class(
-				ty::Property::Restriction(ty::restriction::Property::OnProperty),
+				ty::Property::Restriction(ty::restriction::Property::OnProperty(None)),
 			)),
 			Term::Owl(Owl::AllValuesFrom) => Self::Resource(node::Property::Class(
-				ty::Property::Restriction(ty::restriction::Property::AllValuesFrom),
+				ty::Property::Restriction(ty::restriction::Property::AllValuesFrom(None)),
 			)),
 			Term::Owl(Owl::SomeValuesFrom) => Self::Resource(node::Property::Class(
-				ty::Property::Restriction(ty::restriction::Property::SomeValuesFrom),
+				ty::Property::Restriction(ty::restriction::Property::SomeValuesFrom(None)),
 			)),
 			Term::Owl(Owl::MinCardinality) => Self::Resource(node::Property::Class(
-				ty::Property::Restriction(ty::restriction::Property::MinCardinality),
+				ty::Property::Restriction(ty::restriction::Property::MinCardinality(None)),
 			)),
 			Term::Owl(Owl::MaxCardinality) => Self::Resource(node::Property::Class(
-				ty::Property::Restriction(ty::restriction::Property::MaxCardinality),
+				ty::Property::Restriction(ty::restriction::Property::MaxCardinality(None)),
 			)),
 			Term::Owl(Owl::Cardinality) => Self::Resource(node::Property::Class(
-				ty::Property::Restriction(ty::restriction::Property::Cardinality),
+				ty::Property::Restriction(ty::restriction::Property::Cardinality(None)),
 			)),
 			Term::Xsd(Xsd::MinInclusive) => Self::Resource(node::Property::DatatypeRestriction(
-				ty::data::restriction::Property::MinInclusive,
+				ty::data::restriction::Property::MinInclusive(None),
 			)),
 			Term::Xsd(Xsd::MinExclusive) => Self::Resource(node::Property::DatatypeRestriction(
-				ty::data::restriction::Property::MinExclusive,
+				ty::data::restriction::Property::MinExclusive(None),
 			)),
 			Term::Xsd(Xsd::MaxInclusive) => Self::Resource(node::Property::DatatypeRestriction(
-				ty::data::restriction::Property::MaxInclusive,
+				ty::data::restriction::Property::MaxInclusive(None),
 			)),
 			Term::Xsd(Xsd::MaxExclusive) => Self::Resource(node::Property::DatatypeRestriction(
-				ty::data::restriction::Property::MaxExclusive,
+				ty::data::restriction::Property::MaxExclusive(None),
 			)),
 			Term::Xsd(Xsd::MinLength) => Self::Resource(node::Property::DatatypeRestriction(
-				ty::data::restriction::Property::MinLength,
+				ty::data::restriction::Property::MinLength(None),
 			)),
 			Term::Xsd(Xsd::MaxLength) => Self::Resource(node::Property::DatatypeRestriction(
-				ty::data::restriction::Property::MaxLength,
+				ty::data::restriction::Property::MaxLength(None),
 			)),
 			Term::Xsd(Xsd::Pattern) => Self::Resource(node::Property::DatatypeRestriction(
-				ty::data::restriction::Property::Pattern,
+				ty::data::restriction::Property::Pattern(None),
 			)),
 			Term::Rdfs(Rdfs::Domain) => {
-				Self::Resource(node::Property::Property(RdfProperty::Domain))
+				Self::Resource(node::Property::Property(RdfProperty::Domain(None)))
 			}
-			Term::Rdfs(Rdfs::Range) => Self::Resource(node::Property::Property(RdfProperty::Range)),
+			Term::Rdfs(Rdfs::Range) => {
+				Self::Resource(node::Property::Property(RdfProperty::Range(None)))
+			}
 			Term::Schema(Schema::ValueRequired) => {
-				Self::Resource(node::Property::Property(RdfProperty::Required))
+				Self::Resource(node::Property::Property(RdfProperty::Required(None)))
 			}
 			Term::TreeLdr(TreeLdr::Name) => {
-				Self::Resource(node::Property::Component(component::Property::Name))
+				Self::Resource(node::Property::Component(component::Property::Name(None)))
 			}
 			Term::TreeLdr(TreeLdr::LayoutFor) => Self::Resource(node::Property::Component(
-				component::Property::Layout(layout::Property::For),
+				component::Property::Layout(layout::Property::For(None)),
 			)),
 			Term::TreeLdr(TreeLdr::Alias) => {
 				Self::Resource(node::Property::Component(component::Property::Layout(
-					layout::Property::Description(layout::DescriptionProperty::Alias),
+					layout::Property::Description(layout::DescriptionProperty::Alias(None)),
 				)))
 			}
 			Term::TreeLdr(TreeLdr::Array) => {
 				Self::Resource(node::Property::Component(component::Property::Layout(
-					layout::Property::Description(layout::DescriptionProperty::Array),
+					layout::Property::Description(layout::DescriptionProperty::Array(None)),
 				)))
 			}
 			Term::TreeLdr(TreeLdr::DerivedFrom) => {
 				Self::Resource(node::Property::Component(component::Property::Layout(
-					layout::Property::Description(layout::DescriptionProperty::DerivedFrom),
+					layout::Property::Description(layout::DescriptionProperty::DerivedFrom(None)),
 				)))
 			}
 			Term::TreeLdr(TreeLdr::Fields) => {
 				Self::Resource(node::Property::Component(component::Property::Layout(
-					layout::Property::Description(layout::DescriptionProperty::Fields),
+					layout::Property::Description(layout::DescriptionProperty::Fields(None)),
 				)))
 			}
 			Term::TreeLdr(TreeLdr::OneOrMany) => {
 				Self::Resource(node::Property::Component(component::Property::Layout(
-					layout::Property::Description(layout::DescriptionProperty::OneOrMany),
+					layout::Property::Description(layout::DescriptionProperty::OneOrMany(None)),
 				)))
 			}
 			Term::TreeLdr(TreeLdr::Option) => {
 				Self::Resource(node::Property::Component(component::Property::Layout(
-					layout::Property::Description(layout::DescriptionProperty::Option),
+					layout::Property::Description(layout::DescriptionProperty::Option(None)),
 				)))
 			}
 			Term::TreeLdr(TreeLdr::Reference) => {
 				Self::Resource(node::Property::Component(component::Property::Layout(
-					layout::Property::Description(layout::DescriptionProperty::Reference),
+					layout::Property::Description(layout::DescriptionProperty::Reference(None)),
 				)))
 			}
 			Term::TreeLdr(TreeLdr::Required) => {
 				Self::Resource(node::Property::Component(component::Property::Layout(
-					layout::Property::Description(layout::DescriptionProperty::Required),
+					layout::Property::Description(layout::DescriptionProperty::Required(None)),
 				)))
 			}
 			Term::TreeLdr(TreeLdr::Set) => {
 				Self::Resource(node::Property::Component(component::Property::Layout(
-					layout::Property::Description(layout::DescriptionProperty::Set),
+					layout::Property::Description(layout::DescriptionProperty::Set(None)),
 				)))
 			}
 			Term::TreeLdr(TreeLdr::Enumeration) => {
 				Self::Resource(node::Property::Component(component::Property::Layout(
-					layout::Property::Description(layout::DescriptionProperty::Variants),
+					layout::Property::Description(layout::DescriptionProperty::Variants(None)),
 				)))
 			}
 			Term::TreeLdr(TreeLdr::IntersectionOf) => Self::Resource(node::Property::Component(
-				component::Property::Layout(layout::Property::IntersectionOf),
+				component::Property::Layout(layout::Property::IntersectionOf(None)),
 			)),
 			Term::TreeLdr(TreeLdr::WithRestrictions) => Self::Resource(node::Property::Component(
-				component::Property::Layout(layout::Property::WithRestrictions),
+				component::Property::Layout(layout::Property::WithRestrictions(None)),
 			)),
 			Term::TreeLdr(TreeLdr::ArrayListFirst) => Self::Resource(node::Property::Component(
-				component::Property::Layout(layout::Property::ArrayListFirst),
+				component::Property::Layout(layout::Property::ArrayListFirst(None)),
 			)),
 			Term::TreeLdr(TreeLdr::ArrayListRest) => Self::Resource(node::Property::Component(
-				component::Property::Layout(layout::Property::ArrayListRest),
+				component::Property::Layout(layout::Property::ArrayListRest(None)),
 			)),
 			Term::TreeLdr(TreeLdr::ArrayListNil) => Self::Resource(node::Property::Component(
-				component::Property::Layout(layout::Property::ArrayListNil),
+				component::Property::Layout(layout::Property::ArrayListNil(None)),
 			)),
 			Term::TreeLdr(TreeLdr::Format) => Self::Resource(node::Property::Component(
-				component::Property::Formatted(component::formatted::Property::Format),
+				component::Property::Formatted(component::formatted::Property::Format(None)),
 			)),
 			Term::TreeLdr(TreeLdr::FieldFor) => {
 				Self::Resource(node::Property::Component(component::Property::Formatted(
-					component::formatted::Property::LayoutField(layout::field::Property::For),
+					component::formatted::Property::LayoutField(layout::field::Property::For(None)),
 				)))
 			}
-			Term::TreeLdr(TreeLdr::ExclusiveMaximum) => Self::Resource(
-				node::Property::LayoutRestriction(layout::restriction::Property::ExclusiveMaximum),
-			),
-			Term::TreeLdr(TreeLdr::ExclusiveMinimum) => Self::Resource(
-				node::Property::LayoutRestriction(layout::restriction::Property::ExclusiveMinimum),
-			),
-			Term::TreeLdr(TreeLdr::InclusiveMaximum) => Self::Resource(
-				node::Property::LayoutRestriction(layout::restriction::Property::InclusiveMaximum),
-			),
-			Term::TreeLdr(TreeLdr::InclusiveMinimum) => Self::Resource(
-				node::Property::LayoutRestriction(layout::restriction::Property::InclusiveMinimum),
-			),
-			Term::TreeLdr(TreeLdr::MaxCardinality) => Self::Resource(
-				node::Property::LayoutRestriction(layout::restriction::Property::MaxCardinality),
-			),
+			Term::TreeLdr(TreeLdr::ExclusiveMaximum) => {
+				Self::Resource(node::Property::LayoutRestriction(
+					layout::restriction::Property::ExclusiveMaximum(None),
+				))
+			}
+			Term::TreeLdr(TreeLdr::ExclusiveMinimum) => {
+				Self::Resource(node::Property::LayoutRestriction(
+					layout::restriction::Property::ExclusiveMinimum(None),
+				))
+			}
+			Term::TreeLdr(TreeLdr::InclusiveMaximum) => {
+				Self::Resource(node::Property::LayoutRestriction(
+					layout::restriction::Property::InclusiveMaximum(None),
+				))
+			}
+			Term::TreeLdr(TreeLdr::InclusiveMinimum) => {
+				Self::Resource(node::Property::LayoutRestriction(
+					layout::restriction::Property::InclusiveMinimum(None),
+				))
+			}
+			Term::TreeLdr(TreeLdr::MaxCardinality) => {
+				Self::Resource(node::Property::LayoutRestriction(
+					layout::restriction::Property::MaxCardinality(None),
+				))
+			}
 			Term::TreeLdr(TreeLdr::MaxLength) => Self::Resource(node::Property::LayoutRestriction(
-				layout::restriction::Property::MaxLength,
+				layout::restriction::Property::MaxLength(None),
 			)),
-			Term::TreeLdr(TreeLdr::MinCardinality) => Self::Resource(
-				node::Property::LayoutRestriction(layout::restriction::Property::MinCardinality),
-			),
+			Term::TreeLdr(TreeLdr::MinCardinality) => {
+				Self::Resource(node::Property::LayoutRestriction(
+					layout::restriction::Property::MinCardinality(None),
+				))
+			}
 			Term::TreeLdr(TreeLdr::MinLength) => Self::Resource(node::Property::LayoutRestriction(
-				layout::restriction::Property::MinLength,
+				layout::restriction::Property::MinLength(None),
 			)),
 			Term::TreeLdr(TreeLdr::Pattern) => Self::Resource(node::Property::LayoutRestriction(
-				layout::restriction::Property::Pattern,
+				layout::restriction::Property::Pattern(None),
 			)),
-			Term::Rdf(Rdf::First) => Self::Resource(node::Property::List(list::Property::First)),
-			Term::Rdf(Rdf::Rest) => Self::Resource(node::Property::List(list::Property::Rest)),
-			t => Self::Other(OtherPropertyId(TId::new(Id::Iri(IriIndex::Iri(t))))),
+			Term::Rdf(Rdf::First) => {
+				Self::Resource(node::Property::List(list::Property::First(None)))
+			}
+			Term::Rdf(Rdf::Rest) => {
+				Self::Resource(node::Property::List(list::Property::Rest(None)))
+			}
+			t => Self::Other(TId::new(Id::Iri(IriIndex::Iri(t)))),
 		}
 	}
 }
@@ -336,37 +343,58 @@ impl From<Id> for Property {
 	fn from(id: Id) -> Self {
 		match id {
 			Id::Iri(IriIndex::Iri(t)) => t.into(),
-			id => Self::Other(OtherPropertyId(TId::new(id))),
+			id => Self::Other(TId::new(id)),
 		}
 	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RdfProperty {
-	Domain,
-	Range,
-	Required,
+	Domain(Option<TId<UnknownProperty>>),
+	Range(Option<TId<UnknownProperty>>),
+	SubPropertyOf(Option<TId<UnknownProperty>>),
+	Required(Option<TId<UnknownProperty>>),
 }
 
 impl RdfProperty {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		match self {
-			Self::Domain => Term::Rdfs(Rdfs::Domain),
-			Self::Range => Term::Rdfs(Rdfs::Range),
-			Self::Required => Term::Schema(Schema::ValueRequired),
+			Self::Domain(None) => Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Domain))),
+			Self::Domain(Some(p)) => p.id(),
+			Self::Range(None) => Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::Range))),
+			Self::Range(Some(p)) => p.id(),
+			Self::SubPropertyOf(None) => Id::Iri(IriIndex::Iri(Term::Rdfs(Rdfs::SubPropertyOf))),
+			Self::SubPropertyOf(Some(p)) => p.id(),
+			Self::Required(None) => Id::Iri(IriIndex::Iri(Term::Schema(Schema::ValueRequired))),
+			Self::Required(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
 		match self {
-			Self::Domain => "domain",
-			Self::Range => "range",
-			Self::Required => "value requirement",
+			Self::Domain(None) => Some(Term::Rdfs(Rdfs::Domain)),
+			Self::Range(None) => Some(Term::Rdfs(Rdfs::Range)),
+			Self::SubPropertyOf(None) => Some(Term::Rdfs(Rdfs::SubPropertyOf)),
+			Self::Required(None) => Some(Term::Schema(Schema::ValueRequired)),
+			_ => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::Domain(None) => PropertyName::Resource("domain"),
+			Self::Domain(Some(p)) => PropertyName::Other(*p),
+			Self::Range(None) => PropertyName::Resource("range"),
+			Self::Range(Some(p)) => PropertyName::Other(*p),
+			Self::SubPropertyOf(None) => PropertyName::Resource("super property"),
+			Self::SubPropertyOf(Some(p)) => PropertyName::Other(*p),
+			Self::Required(None) => PropertyName::Resource("value requirement"),
+			Self::Required(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
 	pub fn expect_type(&self) -> bool {
-		matches!(self, Self::Domain | Self::Range)
+		matches!(self, Self::Domain(_) | Self::Range(_))
 	}
 
 	pub fn expect_layout(&self) -> bool {
@@ -395,37 +423,40 @@ impl Type {
 /// Property definition.
 #[derive(Debug)]
 pub struct Definition<M> {
-	domain: Multiple<TId<crate::Type>, M>,
-	range: Multiple<TId<crate::Type>, M>,
-	required: Meta<bool, M>,
+	domain: PropertyValues<TId<crate::Type>, M>,
+	range: PropertyValues<TId<crate::Type>, M>,
+	sub_property_of: PropertyValues<TId<Property>, M>,
+	required: FunctionalPropertyValue<bool, M>,
 	functional: Meta<bool, M>,
 }
 
 impl<M> Definition<M> {
 	pub fn new(
-		domain: Multiple<TId<crate::Type>, M>,
-		range: Multiple<TId<crate::Type>, M>,
-		required: Meta<bool, M>,
+		domain: PropertyValues<TId<crate::Type>, M>,
+		range: PropertyValues<TId<crate::Type>, M>,
+		sub_property_of: PropertyValues<TId<Property>, M>,
+		required: FunctionalPropertyValue<bool, M>,
 		functional: Meta<bool, M>,
 	) -> Self {
 		Self {
 			domain,
 			range,
+			sub_property_of,
 			required,
 			functional,
 		}
 	}
 
-	pub fn range(&self) -> &Multiple<TId<crate::Type>, M> {
+	pub fn range(&self) -> &PropertyValues<TId<crate::Type>, M> {
 		&self.range
 	}
 
-	pub fn domain(&self) -> &Multiple<TId<crate::Type>, M> {
+	pub fn domain(&self) -> &PropertyValues<TId<crate::Type>, M> {
 		&self.domain
 	}
 
 	pub fn is_required(&self) -> bool {
-		*self.required
+		self.required.is_some_and(|v| *v)
 	}
 
 	/// Checks if this property is functional,
@@ -438,18 +469,15 @@ impl<M> Definition<M> {
 		ClassBindings {
 			domain: self.domain.iter(),
 			range: self.range.iter(),
-			required: if self.is_required() {
-				Some(&self.required)
-			} else {
-				None
-			},
+			sub_property_of: self.sub_property_of.iter(),
+			required: self.required.iter(),
 		}
 	}
 }
 
 pub enum PropertyName {
 	Resource(&'static str),
-	Other(OtherPropertyId),
+	Other(TId<UnknownProperty>),
 }
 
 impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V> for PropertyName {
@@ -462,9 +490,10 @@ impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V
 }
 
 pub enum ClassBinding {
-	Domain(TId<crate::Type>),
-	Range(TId<crate::Type>),
-	Required(bool),
+	Domain(Option<TId<UnknownProperty>>, TId<crate::Type>),
+	Range(Option<TId<UnknownProperty>>, TId<crate::Type>),
+	SubPropertyOf(Option<TId<UnknownProperty>>, TId<Property>),
+	Required(Option<TId<UnknownProperty>>, bool),
 }
 
 pub type Binding = ClassBinding;
@@ -476,27 +505,28 @@ impl ClassBinding {
 
 	pub fn property(&self) -> RdfProperty {
 		match self {
-			Self::Domain(_) => RdfProperty::Domain,
-			Self::Range(_) => RdfProperty::Range,
-			Self::Required(_) => RdfProperty::Required,
+			Self::Domain(p, _) => RdfProperty::Domain(*p),
+			Self::Range(p, _) => RdfProperty::Range(*p),
+			Self::SubPropertyOf(p, _) => RdfProperty::SubPropertyOf(*p),
+			Self::Required(p, _) => RdfProperty::Required(*p),
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Domain(v) => BindingValueRef::Type(*v),
-			Self::Range(v) => BindingValueRef::Type(*v),
-			Self::Required(v) => BindingValueRef::SchemaBoolean(*v),
+			Self::Domain(_, v) => BindingValueRef::Type(*v),
+			Self::Range(_, v) => BindingValueRef::Type(*v),
+			Self::SubPropertyOf(_, v) => BindingValueRef::Property(*v),
+			Self::Required(_, v) => BindingValueRef::SchemaBoolean(*v),
 		}
 	}
 }
 
-#[derive(Derivative)]
-#[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
-	domain: multiple::Iter<'a, TId<crate::Type>, M>,
-	range: multiple::Iter<'a, TId<crate::Type>, M>,
-	required: Option<&'a Meta<bool, M>>,
+	domain: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
+	range: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
+	sub_property_of: property_values::non_functional::Iter<'a, TId<Property>, M>,
+	required: property_values::functional::Iter<'a, bool, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -507,16 +537,21 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.domain
 			.next()
-			.map(|m| m.into_cloned_value().map(ClassBinding::Domain))
+			.map(|m| m.into_cloned_class_binding(ClassBinding::Domain))
 			.or_else(|| {
 				self.range
 					.next()
-					.map(|m| m.into_cloned_value().map(ClassBinding::Range))
-					.or_else(|| {
-						self.required
-							.take()
-							.map(|m| m.borrow().into_cloned_value().map(ClassBinding::Required))
-					})
+					.map(|m| m.into_cloned_class_binding(ClassBinding::Range))
+			})
+			.or_else(|| {
+				self.sub_property_of
+					.next()
+					.map(|m| m.into_cloned_class_binding(ClassBinding::SubPropertyOf))
+			})
+			.or_else(|| {
+				self.required
+					.next()
+					.map(|m| m.into_cloned_class_binding(ClassBinding::Required))
 			})
 	}
 }

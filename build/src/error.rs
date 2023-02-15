@@ -101,6 +101,7 @@ errors! {
 	node_unknown::NodeUnknown,
 	layout_description_missing::LayoutDescriptionMissing,
 	layout_description_mismatch::LayoutDescriptionMismatch<M>,
+	layout_not_primitive::LayoutNotPrimitive,
 	layout_datatype_restriction_invalid::LayoutDatatypeRestrictionInvalid,
 	layout_datatype_restriction_integer_conflict::LayoutDatatypeRestrictionIntegerConflict<M>,
 	layout_datatype_restriction_unsigned_conflict::LayoutDatatypeRestrictionUnsignedConflict<M>,
@@ -110,5 +111,6 @@ errors! {
 	regexp_invalid::RegExpInvalid,
 	name_invalid::NameInvalid,
 	literal_unexpected::LiteralUnexpected<M>,
-	subclass_cycle::SubClassCycle<M>
+	subclass_cycle::SubClassCycle<M>,
+	subproperty_cycle::SubPropertyCycle<M>
 }

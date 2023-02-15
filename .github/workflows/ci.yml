@@ -2,11 +2,14 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
 
 env:
   CARGO_TERM_COLORS: always
@@ -15,6 +18,7 @@ jobs:
   tests:
     name: Tests
     runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -49,6 +53,7 @@ jobs:
   clippy:
     name: Warnings
     runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2

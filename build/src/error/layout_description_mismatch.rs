@@ -1,15 +1,15 @@
 use treeldr::{Id, IriIndex, BlankIdIndex};
 use rdf_types::Vocabulary;
-use locspan::{Span, MaybeLocated, Meta};
+use locspan::{Span, MaybeLocated};
 use contextual::WithContext;
 
-use crate::layout::Description;
+use crate::layout::SingleDescriptionProperty;
 
 #[derive(Debug)]
 pub struct LayoutDescriptionMismatch<M> {
 	pub id: Id,
-	pub desc1: Description,
-	pub desc2: Meta<Description, M>
+	pub desc1: SingleDescriptionProperty<M>,
+	pub desc2: SingleDescriptionProperty<M>
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutDescriptionMismatch<M> {

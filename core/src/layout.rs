@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use crate::{
 	component,
 	node::{self, BindingValueRef},
-	vocab, MetaOption, Multiple, ResourceType, TId, Type,
+	prop::{PropertyName, UnknownProperty},
+	property_values, vocab, FunctionalPropertyValue, Id, IriIndex, Multiple, PropertyValue,
+	PropertyValues, RequiredFunctionalPropertyValue, ResourceType, TId, Type,
 };
 use derivative::Derivative;
 use locspan::Meta;
@@ -66,6 +68,7 @@ impl<'a, M> crate::Ref<'a, Layout, M> {
 pub enum Kind {
 	Never,
 	Primitive(Primitive),
+	Derived(Primitive),
 	Struct,
 	Enum,
 	Reference,
@@ -82,13 +85,13 @@ pub enum Kind {
 #[derive(Debug)]
 pub struct Definition<M> {
 	/// Type represented by this layout.
-	ty: MetaOption<TId<Type>, M>,
+	ty: FunctionalPropertyValue<TId<Type>, M>,
 
 	/// Layout description.
-	desc: Meta<Description<M>, M>,
+	desc: Description<M>,
 
 	/// Intersection.
-	intersection_of: MetaOption<Multiple<TId<Layout>, M>, M>,
+	intersection_of: FunctionalPropertyValue<Multiple<TId<Layout>, M>, M>,
 }
 
 /// Layout description.
@@ -97,42 +100,46 @@ pub enum Description<M> {
 	/// Never layout.
 	Never,
 
-	/// Primitive layout, such as a number, a string, etc.
-	Primitive(RestrictedPrimitive<M>),
+	/// Primitive layout such as a number, a string, etc.
+	Primitive(Primitive),
+
+	/// Derived primitive layout.
+	Derived(RequiredFunctionalPropertyValue<RestrictedPrimitive<M>, M>),
 
 	/// Reference.
-	Reference(Reference<M>),
+	Reference(RequiredFunctionalPropertyValue<Reference<M>, M>),
 
 	/// Structure.
-	Struct(Struct<M>),
+	Struct(RequiredFunctionalPropertyValue<Struct<M>, M>),
 
 	/// Enumeration.
-	Enum(Enum<M>),
+	Enum(RequiredFunctionalPropertyValue<Enum<M>, M>),
 
 	/// Required.
-	Required(Required<M>),
+	Required(RequiredFunctionalPropertyValue<Required<M>, M>),
 
 	/// Option.
-	Option(Optional<M>),
+	Option(RequiredFunctionalPropertyValue<Optional<M>, M>),
 
 	/// Array.
-	Array(Array<M>),
+	Array(RequiredFunctionalPropertyValue<Array<M>, M>),
 
 	/// Set.
-	Set(Set<M>),
+	Set(RequiredFunctionalPropertyValue<Set<M>, M>),
 
 	/// One or many.
-	OneOrMany(OneOrMany<M>),
+	OneOrMany(RequiredFunctionalPropertyValue<OneOrMany<M>, M>),
 
 	/// Alias.
-	Alias(TId<Layout>),
+	Alias(RequiredFunctionalPropertyValue<TId<Layout>, M>),
 }
 
 impl<M> Description<M> {
 	pub fn kind(&self) -> Kind {
 		match self {
 			Self::Never => Kind::Never,
-			Self::Primitive(n) => Kind::Primitive(n.primitive()),
+			Self::Primitive(p) => Kind::Primitive(*p),
+			Self::Derived(d) => Kind::Derived(d.primitive()),
 			Self::Reference(_) => Kind::Reference,
 			Self::Struct(_) => Kind::Struct,
 			Self::Enum(_) => Kind::Enum,
@@ -166,38 +173,224 @@ impl<M> Description<M> {
 		}
 	}
 
-	pub fn as_binding_ref(&self) -> Option<DescriptionBindingRef<M>> {
+	pub fn property_value(&self) -> Option<DescriptionPropertyValue<M>> {
 		match self {
-			Self::Never => None,
-			Self::Primitive(p) => p.as_binding_ref(),
-			Self::Reference(r) => Some(DescriptionBindingRef::Reference(**r.id_layout())),
-			Self::Struct(s) => Some(DescriptionBindingRef::Struct(s.fields())),
-			Self::Enum(e) => Some(DescriptionBindingRef::Enum(e.variants())),
-			Self::Required(r) => Some(DescriptionBindingRef::Required(**r.item_layout())),
-			Self::Option(o) => Some(DescriptionBindingRef::Option(**o.item_layout())),
-			Self::Array(a) => Some(DescriptionBindingRef::Array(**a.item_layout())),
-			Self::Set(s) => Some(DescriptionBindingRef::Set(**s.item_layout())),
-			Self::OneOrMany(o) => Some(DescriptionBindingRef::OneOrMany(**o.item_layout())),
-			Self::Alias(l) => Some(DescriptionBindingRef::Alias(*l)),
+			Self::Never | Self::Primitive(_) => None,
+			Self::Derived(p) => Some(DescriptionPropertyValue::DerivedFrom(DerivedFrom::new(
+				p.sub_properties(),
+				p.primitive(),
+			))),
+			Self::Reference(r) => Some(DescriptionPropertyValue::Reference(r)),
+			Self::Struct(s) => Some(DescriptionPropertyValue::Struct(s)),
+			Self::Enum(e) => Some(DescriptionPropertyValue::Enum(e)),
+			Self::Required(r) => Some(DescriptionPropertyValue::Required(r)),
+			Self::Option(o) => Some(DescriptionPropertyValue::Option(o)),
+			Self::Array(a) => Some(DescriptionPropertyValue::Array(a)),
+			Self::Set(s) => Some(DescriptionPropertyValue::Set(s)),
+			Self::OneOrMany(o) => Some(DescriptionPropertyValue::OneOrMany(o)),
+			Self::Alias(l) => Some(DescriptionPropertyValue::Alias(l)),
 		}
 	}
 
-	pub fn restrictions(&self) -> Option<Restrictions<M>> {
+	pub fn restrictions(&self) -> Option<Meta<Restrictions<M>, &M>> {
 		match self {
-			Self::Primitive(p) => p.restrictions().map(Restrictions::new_primitive),
+			Self::Derived(d) => d.restrictions().map(|m| m.map(Restrictions::new_primitive)),
 			Self::Array(a) => a
 				.restrictions()
-				.as_restricted()
-				.map(Restrictions::new_container),
+				.as_ref()
+				.map(|m| m.borrow().map(Restrictions::new_container)),
 			Self::Set(s) => s
 				.restrictions()
-				.as_restricted()
-				.map(Restrictions::new_container),
+				.as_ref()
+				.map(|m| m.borrow().map(Restrictions::new_container)),
 			Self::OneOrMany(o) => o
 				.restrictions()
-				.as_restricted()
-				.map(Restrictions::new_container),
+				.as_ref()
+				.map(|m| m.borrow().map(Restrictions::new_container)),
 			_ => None,
+		}
+	}
+
+	pub fn with_restrictions(&self) -> Option<WithRestrictions<M>> {
+		self.restrictions().and_then(WithRestrictions::new)
+	}
+}
+
+/// Values of the `tldr:withRestrictions` property.
+pub struct WithRestrictions<'a, M> {
+	restrictions: Meta<Restrictions<'a, M>, &'a M>,
+}
+
+impl<'a, M> WithRestrictions<'a, M> {
+	fn new(restrictions: Meta<Restrictions<'a, M>, &'a M>) -> Option<Self> {
+		if restrictions.is_restricted() {
+			Some(Self { restrictions })
+		} else {
+			None
+		}
+	}
+
+	pub fn iter(&self) -> WithRestrictionsIter<'a, M> {
+		WithRestrictionsIter {
+			restrictions: Some(self.restrictions),
+		}
+	}
+}
+
+impl<'a, M> IntoIterator for WithRestrictions<'a, M> {
+	type IntoIter = WithRestrictionsIter<'a, M>;
+	type Item = PropertyValue<Restrictions<'a, M>, &'a M>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter()
+	}
+}
+
+/// Iterator over the values of the `tldr:withRestrictions` property.
+pub struct WithRestrictionsIter<'a, M> {
+	restrictions: Option<Meta<Restrictions<'a, M>, &'a M>>,
+}
+
+impl<'a, M> Iterator for WithRestrictionsIter<'a, M> {
+	type Item = PropertyValue<Restrictions<'a, M>, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.restrictions
+			.take()
+			.map(|r| PropertyValue::new(None, r))
+	}
+}
+
+/// Iterator over the values of the `owl:derivedFrom` property.
+pub struct DerivedFrom<'a, M> {
+	sub_properties: &'a PropertyValues<(), M>,
+	primitive: Primitive,
+}
+
+impl<'a, M> DerivedFrom<'a, M> {
+	fn new(sub_properties: &'a PropertyValues<(), M>, primitive: Primitive) -> Self {
+		Self {
+			sub_properties,
+			primitive,
+		}
+	}
+
+	pub fn iter(&self) -> DerivedFromIter<'a, M> {
+		DerivedFromIter {
+			sub_properties: self.sub_properties.iter(),
+			primitive: self.primitive,
+		}
+	}
+}
+
+/// Iterator over the values of the `owl:derivedFrom` property.
+pub struct DerivedFromIter<'a, M> {
+	sub_properties: property_values::non_functional::Iter<'a, (), M>,
+	primitive: Primitive,
+}
+
+impl<'a, M> Iterator for DerivedFromIter<'a, M> {
+	type Item = PropertyValue<Primitive, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.sub_properties.next().map(|s| {
+			PropertyValue::new(
+				s.sub_property,
+				Meta(self.primitive, s.value.into_metadata()),
+			)
+		})
+	}
+}
+
+pub enum DescriptionPropertyValue<'a, M> {
+	DerivedFrom(DerivedFrom<'a, M>),
+	Reference(&'a RequiredFunctionalPropertyValue<Reference<M>, M>),
+	Struct(&'a RequiredFunctionalPropertyValue<Struct<M>, M>),
+	Enum(&'a RequiredFunctionalPropertyValue<Enum<M>, M>),
+	Required(&'a RequiredFunctionalPropertyValue<Required<M>, M>),
+	Option(&'a RequiredFunctionalPropertyValue<Optional<M>, M>),
+	Array(&'a RequiredFunctionalPropertyValue<Array<M>, M>),
+	Set(&'a RequiredFunctionalPropertyValue<Set<M>, M>),
+	OneOrMany(&'a RequiredFunctionalPropertyValue<OneOrMany<M>, M>),
+	Alias(&'a RequiredFunctionalPropertyValue<TId<Layout>, M>),
+}
+
+impl<'a, M> DescriptionPropertyValue<'a, M> {
+	pub fn iter(&self) -> DescriptionPropertyValueIter<'a, M> {
+		match self {
+			Self::DerivedFrom(i) => DescriptionPropertyValueIter::DerivedFrom(i.iter()),
+			Self::Reference(i) => DescriptionPropertyValueIter::Reference(i.iter()),
+			Self::Struct(i) => DescriptionPropertyValueIter::Struct(i.iter()),
+			Self::Enum(i) => DescriptionPropertyValueIter::Enum(i.iter()),
+			Self::Required(i) => DescriptionPropertyValueIter::Required(i.iter()),
+			Self::Option(i) => DescriptionPropertyValueIter::Option(i.iter()),
+			Self::Array(i) => DescriptionPropertyValueIter::Array(i.iter()),
+			Self::Set(i) => DescriptionPropertyValueIter::Set(i.iter()),
+			Self::OneOrMany(i) => DescriptionPropertyValueIter::OneOrMany(i.iter()),
+			Self::Alias(i) => DescriptionPropertyValueIter::Alias(i.iter()),
+		}
+	}
+}
+
+impl<'a, M> IntoIterator for DescriptionPropertyValue<'a, M> {
+	type IntoIter = DescriptionPropertyValueIter<'a, M>;
+	type Item = Meta<DescriptionBindingRef<'a, M>, &'a M>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter()
+	}
+}
+
+pub enum DescriptionPropertyValueIter<'a, M> {
+	DerivedFrom(DerivedFromIter<'a, M>),
+	Reference(property_values::required_functional::Iter<'a, Reference<M>, M>),
+	Struct(property_values::required_functional::Iter<'a, Struct<M>, M>),
+	Enum(property_values::required_functional::Iter<'a, Enum<M>, M>),
+	Required(property_values::required_functional::Iter<'a, Required<M>, M>),
+	Option(property_values::required_functional::Iter<'a, Optional<M>, M>),
+	Array(property_values::required_functional::Iter<'a, Array<M>, M>),
+	Set(property_values::required_functional::Iter<'a, Set<M>, M>),
+	OneOrMany(property_values::required_functional::Iter<'a, OneOrMany<M>, M>),
+	Alias(property_values::required_functional::Iter<'a, TId<Layout>, M>),
+}
+
+impl<'a, M> Iterator for DescriptionPropertyValueIter<'a, M> {
+	type Item = Meta<DescriptionBindingRef<'a, M>, &'a M>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			Self::DerivedFrom(v) => v
+				.next()
+				.map(|s| s.into_class_binding(DescriptionBindingRef::DerivedFrom)),
+			Self::Reference(v) => v.next().map(|s| {
+				s.into_class_binding(|id, r| DescriptionBindingRef::Reference(id, **r.id_layout()))
+			}),
+			Self::Struct(v) => v.next().map(|s| {
+				s.into_class_binding(|id, s| DescriptionBindingRef::Struct(id, s.fields()))
+			}),
+			Self::Enum(v) => v.next().map(|s| {
+				s.into_class_binding(|id, e| DescriptionBindingRef::Enum(id, e.variants()))
+			}),
+			Self::Required(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| DescriptionBindingRef::Required(id, **c.item_layout()))
+			}),
+			Self::Option(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| DescriptionBindingRef::Option(id, **c.item_layout()))
+			}),
+			Self::Array(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| DescriptionBindingRef::Array(id, **c.item_layout()))
+			}),
+			Self::Set(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| DescriptionBindingRef::Set(id, **c.item_layout()))
+			}),
+			Self::OneOrMany(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| {
+					DescriptionBindingRef::OneOrMany(id, **c.item_layout())
+				})
+			}),
+			Self::Alias(v) => v
+				.next()
+				.map(|s| s.into_cloned_class_binding(DescriptionBindingRef::Alias)),
 		}
 	}
 }
@@ -205,9 +398,9 @@ impl<M> Description<M> {
 impl<M> Definition<M> {
 	/// Creates a new layout definition.
 	pub fn new(
-		ty: MetaOption<TId<Type>, M>,
-		desc: Meta<Description<M>, M>,
-		intersection_of: MetaOption<Multiple<TId<Layout>, M>, M>,
+		ty: FunctionalPropertyValue<TId<Type>, M>,
+		desc: Description<M>,
+		intersection_of: FunctionalPropertyValue<Multiple<TId<Layout>, M>, M>,
 	) -> Self {
 		Self {
 			ty,
@@ -222,7 +415,7 @@ impl<M> Definition<M> {
 	}
 
 	/// Returns the layout description.
-	pub fn description(&self) -> &Meta<Description<M>, M> {
+	pub fn description(&self) -> &Description<M> {
 		&self.desc
 	}
 
@@ -238,17 +431,17 @@ impl<M> Definition<M> {
 		&'a self,
 		model: &'a crate::MutableModel<M>,
 	) -> ComposingLayouts<'a, M> {
-		match self.description().value() {
-			Description::Never => ComposingLayouts::None,
+		match self.description() {
+			Description::Never | Description::Primitive(_) => ComposingLayouts::None,
 			Description::Struct(s) => ComposingLayouts::Fields(model, s.fields().iter()),
 			Description::Enum(e) => ComposingLayouts::Enum(e.composing_layouts(model)),
-			Description::Reference(r) => ComposingLayouts::One(Some(r.id_layout())),
-			Description::Primitive(_) => ComposingLayouts::None,
-			Description::Option(o) => ComposingLayouts::One(Some(o.item_layout())),
-			Description::Required(r) => ComposingLayouts::One(Some(r.item_layout())),
-			Description::Array(a) => ComposingLayouts::One(Some(a.item_layout())),
-			Description::Set(s) => ComposingLayouts::One(Some(s.item_layout())),
-			Description::OneOrMany(s) => ComposingLayouts::One(Some(s.item_layout())),
+			Description::Reference(r) => ComposingLayouts::One(Some(*r.id_layout().value())),
+			Description::Derived(_) => ComposingLayouts::None,
+			Description::Option(o) => ComposingLayouts::One(Some(*o.item_layout().value())),
+			Description::Required(r) => ComposingLayouts::One(Some(*r.item_layout().value())),
+			Description::Array(a) => ComposingLayouts::One(Some(*a.item_layout().value())),
+			Description::Set(s) => ComposingLayouts::One(Some(*s.item_layout().value())),
+			Description::OneOrMany(s) => ComposingLayouts::One(Some(*s.item_layout().value())),
 			Description::Alias(_) => ComposingLayouts::None,
 		}
 	}
@@ -268,29 +461,29 @@ impl<M> Definition<M> {
 		map: &mut HashMap<TId<Layout>, bool>,
 		model: &crate::MutableModel<M>,
 	) -> bool {
-		match self.description().value() {
+		match self.description() {
 			Description::Reference(_) => true,
 			Description::Enum(e) => e.can_be_reference(map, model),
 			Description::Option(o) => model.can_be_reference_layout(map, **o.item_layout()),
 			Description::Required(r) => model.can_be_reference_layout(map, **r.item_layout()),
 			Description::OneOrMany(o) => model.can_be_reference_layout(map, **o.item_layout()),
-			Description::Alias(r) => model.can_be_reference_layout(map, *r),
+			Description::Alias(r) => model.can_be_reference_layout(map, **r),
 			_ => false,
 		}
 	}
 
 	pub fn bindings(&self) -> Bindings<M> {
 		ClassBindings {
-			ty: self.ty.as_ref(),
+			ty: self.ty.iter(),
 			desc: self
 				.desc
-				.as_binding_ref()
-				.map(|b| Meta(b, self.desc.metadata())),
-			intersection_of: self.intersection_of.as_ref(),
+				.property_value()
+				.map(DescriptionPropertyValue::into_iter),
+			intersection_of: self.intersection_of.iter(),
 			restrictions: self
 				.desc
-				.restrictions()
-				.map(|r| Meta(r, self.desc.metadata())),
+				.with_restrictions()
+				.map(WithRestrictions::into_iter),
 			array_semantics: self
 				.desc
 				.array_semantics()
@@ -306,12 +499,12 @@ pub enum ComposingLayouts<'a, M> {
 		std::slice::Iter<'a, Meta<TId<Field>, M>>,
 	),
 	Enum(enumeration::ComposingLayouts<'a, M>),
-	One(Option<&'a Meta<TId<Layout>, M>>),
+	One(Option<TId<Layout>>),
 	None,
 }
 
 impl<'a, M> Iterator for ComposingLayouts<'a, M> {
-	type Item = &'a Meta<TId<Layout>, M>;
+	type Item = TId<Layout>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
@@ -325,58 +518,100 @@ impl<'a, M> Iterator for ComposingLayouts<'a, M> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
-	For,
+	For(Option<TId<UnknownProperty>>),
 	Description(DescriptionProperty),
-	IntersectionOf,
-	WithRestrictions,
-	ArrayListFirst,
-	ArrayListRest,
-	ArrayListNil,
+	IntersectionOf(Option<TId<UnknownProperty>>),
+	WithRestrictions(Option<TId<UnknownProperty>>),
+	ArrayListFirst(Option<TId<UnknownProperty>>),
+	ArrayListRest(Option<TId<UnknownProperty>>),
+	ArrayListNil(Option<TId<UnknownProperty>>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DescriptionProperty {
-	DerivedFrom,
-	Fields,
-	Variants,
-	Reference,
-	Required,
-	Option,
-	Set,
-	OneOrMany,
-	Array,
-	Alias,
+	DerivedFrom(Option<TId<UnknownProperty>>),
+	Fields(Option<TId<UnknownProperty>>),
+	Variants(Option<TId<UnknownProperty>>),
+	Reference(Option<TId<UnknownProperty>>),
+	Required(Option<TId<UnknownProperty>>),
+	Option(Option<TId<UnknownProperty>>),
+	Set(Option<TId<UnknownProperty>>),
+	OneOrMany(Option<TId<UnknownProperty>>),
+	Array(Option<TId<UnknownProperty>>),
+	Alias(Option<TId<UnknownProperty>>),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::{Term, TreeLdr};
 		match self {
-			Self::For => Term::TreeLdr(TreeLdr::LayoutFor),
-			Self::Description(p) => p.term(),
-			Self::IntersectionOf => Term::TreeLdr(TreeLdr::IntersectionOf),
-			Self::WithRestrictions => Term::TreeLdr(TreeLdr::WithRestrictions),
-			Self::ArrayListFirst => Term::TreeLdr(TreeLdr::ArrayListFirst),
-			Self::ArrayListRest => Term::TreeLdr(TreeLdr::ArrayListRest),
-			Self::ArrayListNil => Term::TreeLdr(TreeLdr::ArrayListNil),
+			Self::For(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::LayoutFor))),
+			Self::For(Some(p)) => p.id(),
+			Self::Description(p) => p.id(),
+			Self::IntersectionOf(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::IntersectionOf)))
+			}
+			Self::IntersectionOf(Some(p)) => p.id(),
+			Self::WithRestrictions(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::WithRestrictions)))
+			}
+			Self::WithRestrictions(Some(p)) => p.id(),
+			Self::ArrayListFirst(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::ArrayListFirst)))
+			}
+			Self::ArrayListFirst(Some(p)) => p.id(),
+			Self::ArrayListRest(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::ArrayListRest)))
+			}
+			Self::ArrayListRest(Some(p)) => p.id(),
+			Self::ArrayListNil(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::ArrayListNil)))
+			}
+			Self::ArrayListNil(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::{Term, TreeLdr};
 		match self {
-			Self::For => "layout type",
+			Self::For(None) => Some(Term::TreeLdr(TreeLdr::LayoutFor)),
+			Self::Description(p) => p.term(),
+			Self::IntersectionOf(None) => Some(Term::TreeLdr(TreeLdr::IntersectionOf)),
+			Self::WithRestrictions(None) => Some(Term::TreeLdr(TreeLdr::WithRestrictions)),
+			Self::ArrayListFirst(None) => Some(Term::TreeLdr(TreeLdr::ArrayListFirst)),
+			Self::ArrayListRest(None) => Some(Term::TreeLdr(TreeLdr::ArrayListRest)),
+			Self::ArrayListNil(None) => Some(Term::TreeLdr(TreeLdr::ArrayListNil)),
+			_ => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::For(None) => PropertyName::Resource("layout type"),
+			Self::For(Some(p)) => PropertyName::Other(*p),
 			Self::Description(p) => p.name(),
-			Self::IntersectionOf => "intersection",
-			Self::WithRestrictions => "layout restrictions",
-			Self::ArrayListFirst => "\"array as list\" `first` property",
-			Self::ArrayListRest => "\"array as list\" `rest` property",
-			Self::ArrayListNil => "\"array as list\" empty list value",
+			Self::IntersectionOf(None) => PropertyName::Resource("intersection"),
+			Self::IntersectionOf(Some(p)) => PropertyName::Other(*p),
+			Self::WithRestrictions(None) => PropertyName::Resource("layout restrictions"),
+			Self::WithRestrictions(Some(p)) => PropertyName::Other(*p),
+			Self::ArrayListFirst(None) => {
+				PropertyName::Resource("\"array as list\" `first` property")
+			}
+			Self::ArrayListFirst(Some(p)) => PropertyName::Other(*p),
+			Self::ArrayListRest(None) => {
+				PropertyName::Resource("\"array as list\" `rest` property")
+			}
+			Self::ArrayListRest(Some(p)) => PropertyName::Other(*p),
+			Self::ArrayListNil(None) => {
+				PropertyName::Resource("\"array as list\" empty list value")
+			}
+			Self::ArrayListNil(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
 	pub fn expect_type(&self) -> bool {
 		match self {
-			Self::For => true,
+			Self::For(_) => true,
 			Self::Description(p) => p.expect_type(),
 			_ => false,
 		}
@@ -391,45 +626,83 @@ impl Property {
 }
 
 impl DescriptionProperty {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		use vocab::{Term, TreeLdr};
 		match self {
-			Self::DerivedFrom => Term::TreeLdr(TreeLdr::DerivedFrom),
-			Self::Reference => Term::TreeLdr(TreeLdr::Reference),
-			Self::Fields => Term::TreeLdr(TreeLdr::Fields),
-			Self::Variants => Term::TreeLdr(TreeLdr::Enumeration),
-			Self::Required => Term::TreeLdr(TreeLdr::Required),
-			Self::Option => Term::TreeLdr(TreeLdr::Option),
-			Self::Set => Term::TreeLdr(TreeLdr::Set),
-			Self::OneOrMany => Term::TreeLdr(TreeLdr::OneOrMany),
-			Self::Array => Term::TreeLdr(TreeLdr::Array),
-			Self::Alias => Term::TreeLdr(TreeLdr::Alias),
+			Self::DerivedFrom(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::DerivedFrom))),
+			Self::DerivedFrom(Some(p)) => p.id(),
+			Self::Reference(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Reference))),
+			Self::Reference(Some(p)) => p.id(),
+			Self::Fields(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Fields))),
+			Self::Fields(Some(p)) => p.id(),
+			Self::Variants(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Enumeration))),
+			Self::Variants(Some(p)) => p.id(),
+			Self::Required(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Required))),
+			Self::Required(Some(p)) => p.id(),
+			Self::Option(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Option))),
+			Self::Option(Some(p)) => p.id(),
+			Self::Set(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Set))),
+			Self::Set(Some(p)) => p.id(),
+			Self::OneOrMany(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::OneOrMany))),
+			Self::OneOrMany(Some(p)) => p.id(),
+			Self::Array(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Array))),
+			Self::Array(Some(p)) => p.id(),
+			Self::Alias(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Alias))),
+			Self::Alias(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
+		use vocab::{Term, TreeLdr};
 		match self {
-			Self::DerivedFrom => "derived primitive layout",
-			Self::Reference => "referenced type",
-			Self::Fields => "structure fields",
-			Self::Variants => "enum variants",
-			Self::Required => "required item layout",
-			Self::Option => "optional item layout",
-			Self::Set => "set item layout",
-			Self::OneOrMany => "one or many item layout",
-			Self::Array => "array item layout",
-			Self::Alias => "alias layout",
+			Self::DerivedFrom(None) => Some(Term::TreeLdr(TreeLdr::DerivedFrom)),
+			Self::Reference(None) => Some(Term::TreeLdr(TreeLdr::Reference)),
+			Self::Fields(None) => Some(Term::TreeLdr(TreeLdr::Fields)),
+			Self::Variants(None) => Some(Term::TreeLdr(TreeLdr::Enumeration)),
+			Self::Required(None) => Some(Term::TreeLdr(TreeLdr::Required)),
+			Self::Option(None) => Some(Term::TreeLdr(TreeLdr::Option)),
+			Self::Set(None) => Some(Term::TreeLdr(TreeLdr::Set)),
+			Self::OneOrMany(None) => Some(Term::TreeLdr(TreeLdr::OneOrMany)),
+			Self::Array(None) => Some(Term::TreeLdr(TreeLdr::Array)),
+			Self::Alias(None) => Some(Term::TreeLdr(TreeLdr::Alias)),
+			_ => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::DerivedFrom(None) => PropertyName::Resource("derived primitive layout"),
+			Self::DerivedFrom(Some(p)) => PropertyName::Other(*p),
+			Self::Reference(None) => PropertyName::Resource("referenced type"),
+			Self::Reference(Some(p)) => PropertyName::Other(*p),
+			Self::Fields(None) => PropertyName::Resource("structure fields"),
+			Self::Fields(Some(p)) => PropertyName::Other(*p),
+			Self::Variants(None) => PropertyName::Resource("enum variants"),
+			Self::Variants(Some(p)) => PropertyName::Other(*p),
+			Self::Required(None) => PropertyName::Resource("required item layout"),
+			Self::Required(Some(p)) => PropertyName::Other(*p),
+			Self::Option(None) => PropertyName::Resource("optional item layout"),
+			Self::Option(Some(p)) => PropertyName::Other(*p),
+			Self::Set(None) => PropertyName::Resource("set item layout"),
+			Self::Set(Some(p)) => PropertyName::Other(*p),
+			Self::OneOrMany(None) => PropertyName::Resource("one or many item layout"),
+			Self::OneOrMany(Some(p)) => PropertyName::Other(*p),
+			Self::Array(None) => PropertyName::Resource("array item layout"),
+			Self::Array(Some(p)) => PropertyName::Other(*p),
+			Self::Alias(None) => PropertyName::Resource("alias layout"),
+			Self::Alias(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
 	pub fn expect_layout(&self) -> bool {
 		matches!(
 			self,
-			Self::DerivedFrom
-				| Self::Reference
-				| Self::Required | Self::Option
-				| Self::OneOrMany
-				| Self::Array | Self::Alias
+			Self::DerivedFrom(_)
+				| Self::Reference(_)
+				| Self::Required(_)
+				| Self::Option(_)
+				| Self::OneOrMany(_)
+				| Self::Array(_) | Self::Alias(_)
 		)
 	}
 
@@ -441,55 +714,55 @@ impl DescriptionProperty {
 #[derive(Debug, Derivative)]
 #[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub enum DescriptionBindingRef<'a, M> {
-	DerivedFrom(Primitive),
-	Reference(TId<Layout>),
-	Struct(&'a [Meta<TId<Field>, M>]),
-	Enum(&'a [Meta<TId<Variant>, M>]),
-	Required(TId<Layout>),
-	Option(TId<Layout>),
-	Array(TId<Layout>),
-	Set(TId<Layout>),
-	OneOrMany(TId<Layout>),
-	Alias(TId<Layout>),
+	DerivedFrom(Option<TId<UnknownProperty>>, Primitive),
+	Reference(Option<TId<UnknownProperty>>, TId<Layout>),
+	Struct(Option<TId<UnknownProperty>>, &'a [Meta<TId<Field>, M>]),
+	Enum(Option<TId<UnknownProperty>>, &'a [Meta<TId<Variant>, M>]),
+	Required(Option<TId<UnknownProperty>>, TId<Layout>),
+	Option(Option<TId<UnknownProperty>>, TId<Layout>),
+	Array(Option<TId<UnknownProperty>>, TId<Layout>),
+	Set(Option<TId<UnknownProperty>>, TId<Layout>),
+	OneOrMany(Option<TId<UnknownProperty>>, TId<Layout>),
+	Alias(Option<TId<UnknownProperty>>, TId<Layout>),
 }
 
 impl<'a, M> DescriptionBindingRef<'a, M> {
 	pub fn property(&self) -> DescriptionProperty {
 		match self {
-			Self::DerivedFrom(_) => DescriptionProperty::DerivedFrom,
-			Self::Reference(_) => DescriptionProperty::Reference,
-			Self::Struct(_) => DescriptionProperty::Fields,
-			Self::Enum(_) => DescriptionProperty::Variants,
-			Self::Required(_) => DescriptionProperty::Required,
-			Self::Option(_) => DescriptionProperty::Option,
-			Self::Array(_) => DescriptionProperty::Array,
-			Self::Set(_) => DescriptionProperty::Set,
-			Self::OneOrMany(_) => DescriptionProperty::OneOrMany,
-			Self::Alias(_) => DescriptionProperty::Alias,
+			Self::DerivedFrom(p, _) => DescriptionProperty::DerivedFrom(*p),
+			Self::Reference(p, _) => DescriptionProperty::Reference(*p),
+			Self::Struct(p, _) => DescriptionProperty::Fields(*p),
+			Self::Enum(p, _) => DescriptionProperty::Variants(*p),
+			Self::Required(p, _) => DescriptionProperty::Required(*p),
+			Self::Option(p, _) => DescriptionProperty::Option(*p),
+			Self::Array(p, _) => DescriptionProperty::Array(*p),
+			Self::Set(p, _) => DescriptionProperty::Set(*p),
+			Self::OneOrMany(p, _) => DescriptionProperty::OneOrMany(*p),
+			Self::Alias(p, _) => DescriptionProperty::Alias(*p),
 		}
 	}
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::DerivedFrom(p) => BindingValueRef::Type(p.ty()),
-			Self::Reference(v) => BindingValueRef::Layout(*v),
-			Self::Struct(v) => BindingValueRef::Fields(v),
-			Self::Enum(v) => BindingValueRef::Variants(v),
-			Self::Required(v) => BindingValueRef::Layout(*v),
-			Self::Option(v) => BindingValueRef::Layout(*v),
-			Self::Array(v) => BindingValueRef::Layout(*v),
-			Self::Set(v) => BindingValueRef::Layout(*v),
-			Self::OneOrMany(v) => BindingValueRef::Layout(*v),
-			Self::Alias(v) => BindingValueRef::Layout(*v),
+			Self::DerivedFrom(_, p) => BindingValueRef::Type(p.ty()),
+			Self::Reference(_, v) => BindingValueRef::Layout(*v),
+			Self::Struct(_, v) => BindingValueRef::Fields(v),
+			Self::Enum(_, v) => BindingValueRef::Variants(v),
+			Self::Required(_, v) => BindingValueRef::Layout(*v),
+			Self::Option(_, v) => BindingValueRef::Layout(*v),
+			Self::Array(_, v) => BindingValueRef::Layout(*v),
+			Self::Set(_, v) => BindingValueRef::Layout(*v),
+			Self::OneOrMany(_, v) => BindingValueRef::Layout(*v),
+			Self::Alias(_, v) => BindingValueRef::Layout(*v),
 		}
 	}
 }
 
 pub enum ClassBindingRef<'a, M> {
-	For(TId<crate::Type>),
+	For(Option<TId<UnknownProperty>>, TId<crate::Type>),
 	Description(DescriptionBindingRef<'a, M>),
-	IntersectionOf(&'a Multiple<TId<Layout>, M>),
-	WithRestrictions(Restrictions<'a, M>),
+	IntersectionOf(Option<TId<UnknownProperty>>, &'a Multiple<TId<Layout>, M>),
+	WithRestrictions(Option<TId<UnknownProperty>>, Restrictions<'a, M>),
 	ArraySemantics(array::Binding),
 }
 
@@ -498,20 +771,22 @@ pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
 impl<'a, M> ClassBindingRef<'a, M> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::For(_) => Property::For,
+			Self::For(p, _) => Property::For(*p),
 			Self::Description(d) => Property::Description(d.property()),
-			Self::IntersectionOf(_) => Property::IntersectionOf,
-			Self::WithRestrictions(_) => Property::WithRestrictions,
+			Self::IntersectionOf(p, _) => Property::IntersectionOf(*p),
+			Self::WithRestrictions(p, _) => Property::WithRestrictions(*p),
 			Self::ArraySemantics(b) => b.property(),
 		}
 	}
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::For(v) => BindingValueRef::Type(*v),
+			Self::For(_, v) => BindingValueRef::Type(*v),
 			Self::Description(d) => d.value(),
-			Self::IntersectionOf(v) => BindingValueRef::Layouts(v),
-			Self::WithRestrictions(v) => BindingValueRef::LayoutRestrictions(*v),
+			Self::IntersectionOf(_, v) => {
+				BindingValueRef::LayoutList(node::MultipleIdValueRef::Multiple(*v))
+			}
+			Self::WithRestrictions(_, v) => BindingValueRef::LayoutRestrictions(*v),
 			Self::ArraySemantics(b) => b.value(),
 		}
 	}
@@ -520,10 +795,10 @@ impl<'a, M> ClassBindingRef<'a, M> {
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
-	ty: Option<&'a Meta<TId<crate::Type>, M>>,
-	desc: Option<Meta<DescriptionBindingRef<'a, M>, &'a M>>,
-	intersection_of: Option<&'a Meta<Multiple<TId<Layout>, M>, M>>,
-	restrictions: Option<Meta<Restrictions<'a, M>, &'a M>>,
+	ty: property_values::functional::Iter<'a, TId<crate::Type>, M>,
+	desc: Option<DescriptionPropertyValueIter<'a, M>>,
+	intersection_of: property_values::functional::Iter<'a, Multiple<TId<crate::Layout>, M>, M>,
+	restrictions: Option<WithRestrictionsIter<'a, M>>,
 	array_semantics: array::Bindings<'a, M>,
 }
 
@@ -534,20 +809,25 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.ty
-			.take()
-			.map(|v| v.borrow().into_cloned_value().map(ClassBindingRef::For))
+			.next()
+			.map(|v| v.into_cloned_class_binding(ClassBindingRef::For))
 			.or_else(|| {
 				self.desc
-					.take()
-					.map(|v| v.map(ClassBindingRef::Description))
+					.as_mut()
+					.and_then(DescriptionPropertyValueIter::next)
+					.map(|d| d.map(ClassBindingRef::Description))
 					.or_else(|| {
 						self.intersection_of
-							.take()
-							.map(|v| v.borrow().map(ClassBindingRef::IntersectionOf))
+							.next()
+							.map(|v| v.into_class_binding(ClassBindingRef::IntersectionOf))
 							.or_else(|| {
 								self.restrictions
-									.take()
-									.map(|v| v.map(ClassBindingRef::WithRestrictions))
+									.as_mut()
+									.and_then(|v| {
+										v.next().map(|v| {
+											v.into_class_binding(ClassBindingRef::WithRestrictions)
+										})
+									})
 									.or_else(|| {
 										self.array_semantics
 											.next()

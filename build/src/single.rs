@@ -1,10 +1,10 @@
 use locspan::{ErrAt, Meta, StrippedEq, StrippedOrd, StrippedPartialEq, StrippedPartialOrd};
 use std::collections::{btree_map::Entry, BTreeMap};
-use treeldr::{metadata::Merge, Id, MetaOption};
+use treeldr::{metadata::Merge, Id, MetaOption, PropertyValue};
 
 use crate::{
 	error::{self, NodeBindingFunctionalConflict},
-	Context, Error, ListRef, Property,
+	Context, Error, FunctionalPropertyValue, ListRef, Property,
 };
 
 #[derive(Debug, Clone)]
@@ -13,7 +13,8 @@ pub struct Conflict<T, M>(pub Meta<T, M>, pub Meta<T, M>);
 impl<T, M> Conflict<T, M> {
 	pub fn at_functional_node_property(self, id: Id, property: impl Into<Property>) -> Error<M>
 	where
-		(T, Meta<T, M>): Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
+		(T, PropertyValue<T, M>):
+			Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
 	{
 		let Meta(a, meta) = self.0;
 
@@ -21,7 +22,7 @@ impl<T, M> Conflict<T, M> {
 			NodeBindingFunctionalConflict {
 				id,
 				property: property.into(),
-				values: (a, self.1).into(),
+				values: (a, PropertyValue::new(None, self.1)).into(),
 			}
 			.into(),
 			meta,
@@ -68,6 +69,10 @@ impl<T, M> Single<T, M> {
 
 	pub fn iter(&self) -> Iter<T, M> {
 		Iter(self.0.iter())
+	}
+
+	pub fn into_functional_property_value(self) -> FunctionalPropertyValue<T, M> {
+		FunctionalPropertyValue::from_base(self.0)
 	}
 }
 
@@ -132,7 +137,8 @@ impl<T, M> Single<T, M> {
 		meta: &M,
 	) -> Result<Meta<&T, &M>, Error<M>>
 	where
-		(T, Meta<T, M>): Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
+		(T, PropertyValue<T, M>):
+			Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
 		T: Clone,
 		M: Clone,
 	{
@@ -149,7 +155,8 @@ impl<T, M> Single<T, M> {
 		meta: &M,
 	) -> Result<Meta<T, M>, Error<M>>
 	where
-		(T, Meta<T, M>): Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
+		(T, PropertyValue<T, M>):
+			Into<crate::error::node_binding_functional_conflict::ConflictValues<M>>,
 		M: Clone,
 	{
 		self.try_unwrap()

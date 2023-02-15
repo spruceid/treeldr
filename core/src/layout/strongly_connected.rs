@@ -89,7 +89,7 @@ impl<'l, M> StronglyConnectedLayouts<'l, M> {
 		let component = self.component(layout_ref)?;
 
 		for sub_layout_ref in layout.as_layout().composing_layouts(model) {
-			if filter(**sub_layout_ref) && self.component(**sub_layout_ref)? == component {
+			if filter(sub_layout_ref) && self.component(sub_layout_ref)? == component {
 				return Some(true);
 			}
 		}
@@ -104,9 +104,9 @@ struct Data {
 	on_stack: bool,
 }
 
-fn strong_connect<'l, F>(
+fn strong_connect<F>(
 	model: &MutableModel<F>,
-	components: &mut StronglyConnectedLayouts<'l, F>,
+	components: &mut StronglyConnectedLayouts<'_, F>,
 	map: &mut HashMap<TId<Layout>, Data>,
 	stack: &mut Vec<TId<Layout>>,
 	layout_ref: TId<Layout>,
@@ -125,15 +125,15 @@ fn strong_connect<'l, F>(
 
 	let layout = components.model.get(layout_ref).unwrap().as_layout();
 	for sub_layout_ref in layout.composing_layouts(model) {
-		if filter(layout_ref, **sub_layout_ref) {
-			let new_layout_low_link = match map.get(sub_layout_ref) {
+		if filter(layout_ref, sub_layout_ref) {
+			let new_layout_low_link = match map.get(&sub_layout_ref) {
 				None => {
 					let sub_layout_low_link = strong_connect(
 						model,
 						components,
 						map,
 						stack,
-						**sub_layout_ref,
+						sub_layout_ref,
 						filter.clone(),
 					);
 					Some(std::cmp::min(

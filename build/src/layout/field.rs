@@ -1,26 +1,31 @@
+use std::cmp::Ordering;
+
 use crate::{
 	component::formatted::AssertFormatted,
 	context::{MapIds, MapIdsIn},
-	prop, rdf,
+	functional_property_value, prop, rdf,
 	resource::{self, BindingValueRef},
-	single, Context, Single,
+	Context, FunctionalPropertyValue,
 };
 
 use super::Error;
 use locspan::Meta;
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
 pub use treeldr::layout::field::Property;
-use treeldr::{metadata::Merge, vocab::Object, BlankIdIndex, Id, IriIndex, Name};
+use treeldr::{
+	metadata::Merge, prop::UnknownProperty, vocab::Object, BlankIdIndex, Id, IriIndex, Name,
+	PropertyValueRef, TId,
+};
 
 /// Layout field definition.
 #[derive(Debug, Clone)]
 pub struct Definition<M> {
-	prop: Single<Id, M>,
+	prop: FunctionalPropertyValue<Id, M>,
 }
 
 impl<M: Merge> MapIds for Definition<M> {
 	fn map_ids(&mut self, f: impl Fn(Id, Option<crate::Property>) -> Id) {
-		self.prop.map_ids_in(Some(Property::For.into()), f)
+		self.prop.map_ids_in(Some(Property::For(None).into()), f)
 	}
 }
 
@@ -54,7 +59,7 @@ impl<M> DefaultLayout<M> {
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			prop: Single::default(),
+			prop: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -64,11 +69,11 @@ impl<M> Definition<M> {
 		Self::default()
 	}
 
-	pub fn property(&self) -> &Single<Id, M> {
+	pub fn property(&self) -> &FunctionalPropertyValue<Id, M> {
 		&self.prop
 	}
 
-	pub fn property_mut(&mut self) -> &mut Single<Id, M> {
+	pub fn property_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
 		&mut self.prop
 	}
 
@@ -81,23 +86,26 @@ impl<M> Definition<M> {
 		other_as_component: &crate::component::Data<M>,
 		other_as_formatted: &crate::component::formatted::Data<M>,
 	) -> bool {
-		let common_prop = self
-			.prop
-			.iter()
-			.any(|Meta(a, _)| other.prop.iter().any(|Meta(b, _)| a == b));
+		let common_prop = self.prop.iter().any(|a| {
+			other
+				.prop
+				.iter()
+				.any(|b| a.value.value() == b.value.value())
+		});
 		let no_prop = self.prop.is_empty() && other.prop.is_empty();
 
-		let common_name = as_component
-			.name
-			.iter()
-			.any(|Meta(a, _)| other_as_component.name.iter().any(|Meta(b, _)| a == b));
+		let common_name = as_component.name.iter().any(|a| {
+			other_as_component
+				.name
+				.iter()
+				.any(|b| a.value.value() == b.value.value())
+		});
 		let no_name = as_component.name.is_empty() && other_as_component.name.is_empty();
 
-		let included_layout = as_formatted.format.iter().all(|Meta(a, _)| {
-			other_as_formatted
-				.format
-				.iter()
-				.all(|Meta(b, _)| crate::layout::is_included_in(context, *a, *b))
+		let included_layout = as_formatted.format.iter().all(|a| {
+			other_as_formatted.format.iter().all(|b| {
+				crate::layout::is_included_in(context, **a.value.value(), **b.value.value())
+			})
 		});
 
 		(common_prop || no_prop) && (common_name || no_name) && included_layout
@@ -123,13 +131,16 @@ impl<M> Definition<M> {
 	where
 		M: Clone,
 	{
-		let Meta(prop_id, _) = self.property().first()?;
+		let PropertyValueRef {
+			value: Meta(prop_id, _),
+			..
+		} = self.property().first()?;
 		let prop = context.get(*prop_id)?;
 		let range_id = prop.as_property().range().first()?;
 		if prop.has_type(context, prop::Type::FunctionalProperty) {
-			Some(DefaultLayout::Functional(range_id.cloned()))
+			Some(DefaultLayout::Functional(range_id.value.cloned()))
 		} else {
-			Some(DefaultLayout::NonFunctional(range_id.cloned()))
+			Some(DefaultLayout::NonFunctional(range_id.value.cloned()))
 		}
 	}
 
@@ -139,12 +150,17 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::For => self.prop.insert(rdf::from::expect_id(value)?),
+			Property::For(p) => self.prop.insert(p, prop_cmp, rdf::from::expect_id(value)?),
 		}
 
 		Ok(())
@@ -166,7 +182,7 @@ impl<M> Definition<M> {
 		let prop = self.prop.clone().into_property_at_node_binding(
 			context,
 			as_resource.id,
-			Property::For,
+			Property::For(None),
 		)?;
 
 		Ok(Meta(treeldr::layout::field::Definition::new(prop), meta))
@@ -190,8 +206,9 @@ pub fn is_included_in<M>(context: &Context<M>, a: Id, b: Id) -> bool {
 	}
 }
 
+#[derive(Debug)]
 pub enum ClassBinding {
-	For(Id),
+	For(Option<TId<UnknownProperty>>, Id),
 }
 
 pub type Binding = ClassBinding;
@@ -199,19 +216,19 @@ pub type Binding = ClassBinding;
 impl ClassBinding {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::For(_) => Property::For,
+			Self::For(p, _) => Property::For(*p),
 		}
 	}
 
 	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::For(v) => BindingValueRef::Id(*v),
+			Self::For(_, v) => BindingValueRef::Id(*v),
 		}
 	}
 }
 
 pub struct ClassBindings<'a, M> {
-	prop: single::Iter<'a, Id, M>,
+	prop: functional_property_value::Iter<'a, Id, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -222,6 +239,6 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	fn next(&mut self) -> Option<Self::Item> {
 		self.prop
 			.next()
-			.map(|m| m.into_cloned_value().map(ClassBinding::For))
+			.map(|m| m.into_cloned_class_binding(ClassBinding::For))
 	}
 }

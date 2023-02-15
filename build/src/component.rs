@@ -1,11 +1,13 @@
+use std::cmp::Ordering;
+
 use locspan::Meta;
-use treeldr::{metadata::Merge, vocab::Object, Name};
+use treeldr::{metadata::Merge, prop::UnknownProperty, vocab::Object, Name, TId};
 
 use crate::{
 	context::{HasType, MapIds},
-	error, layout, rdf,
+	error, functional_property_value, layout, rdf,
 	resource::BindingValueRef,
-	single, Context, Error, Single,
+	Context, Error, FunctionalPropertyValue,
 };
 pub use treeldr::component::{Property, Type};
 
@@ -38,11 +40,11 @@ impl<M> Definition<M> {
 		&self.data
 	}
 
-	pub fn name(&self) -> &Single<Name, M> {
+	pub fn name(&self) -> &FunctionalPropertyValue<Name, M> {
 		&self.data.name
 	}
 
-	pub fn name_mut(&mut self) -> &mut Single<Name, M> {
+	pub fn name_mut(&mut self) -> &mut FunctionalPropertyValue<Name, M> {
 		&mut self.data.name
 	}
 
@@ -86,14 +88,22 @@ impl<M> Definition<M> {
 		}
 	}
 
-	pub fn set(&mut self, prop: Property, value: Meta<Object<M>, M>) -> Result<(), Error<M>>
+	pub fn set(
+		&mut self,
+		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
+		prop: Property,
+		value: Meta<Object<M>, M>,
+	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::Name => self.name_mut().insert(rdf::from::expect_name(value)?),
-			Property::Formatted(prop) => self.as_formatted_mut().set(prop, value)?,
-			Property::Layout(prop) => self.as_layout_mut().set(prop, value)?,
+			Property::Name(p) => {
+				self.name_mut()
+					.insert(p, prop_cmp, rdf::from::expect_name(value)?)
+			}
+			Property::Formatted(prop) => self.as_formatted_mut().set(prop_cmp, prop, value)?,
+			Property::Layout(prop) => self.as_layout_mut().set(prop_cmp, prop, value)?,
 		}
 
 		Ok(())
@@ -108,14 +118,12 @@ impl<M> Definition<M> {
 	where
 		M: Clone + Merge,
 	{
-		let data = treeldr::component::Data {
-			name: self
-				.data
-				.name
-				.clone()
-				.try_unwrap()
-				.map_err(|e| e.at_functional_node_property(as_resource.id, Property::Name))?,
-		};
+		let data =
+			treeldr::component::Data {
+				name: self.data.name.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(as_resource.id, Property::Name(None))
+				})?,
+			};
 
 		let layout = as_resource
 			.type_metadata(context, Type::Layout)
@@ -148,7 +156,7 @@ impl<M: Merge> MapIds for Definition<M> {
 
 #[derive(Debug, Clone)]
 pub struct Data<M> {
-	pub name: Single<Name, M>,
+	pub name: FunctionalPropertyValue<Name, M>,
 }
 
 impl<M> Data<M> {
@@ -162,7 +170,7 @@ impl<M> Data<M> {
 impl<M> Default for Data<M> {
 	fn default() -> Self {
 		Self {
-			name: Single::default(),
+			name: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -181,11 +189,11 @@ impl<M: Clone> AssertNamed<M> for treeldr::component::Data<M> {
 		as_resource: &treeldr::node::Data<M>,
 		metadata: &M,
 	) -> Result<(), Error<M>> {
-		self.name.as_ref().ok_or_else(|| {
+		self.name.as_required().ok_or_else(|| {
 			Meta(
 				error::NodeBindingMissing {
 					id: as_resource.id,
-					property: Property::Name.into(),
+					property: Property::Name(None).into(),
 				}
 				.into(),
 				metadata.clone(),
@@ -196,19 +204,20 @@ impl<M: Clone> AssertNamed<M> for treeldr::component::Data<M> {
 }
 
 pub enum ClassBindingRef<'a> {
-	Name(&'a Name),
+	Name(Option<TId<UnknownProperty>>, &'a Name),
 }
 
 impl<'a> ClassBindingRef<'a> {
 	pub fn into_binding_ref(self) -> BindingRef<'a> {
 		match self {
-			Self::Name(n) => BindingRef::Name(n),
+			Self::Name(p, n) => BindingRef::Name(p, n),
 		}
 	}
 }
 
+#[derive(Debug)]
 pub enum BindingRef<'a> {
-	Name(&'a Name),
+	Name(Option<TId<UnknownProperty>>, &'a Name),
 	Layout(layout::Binding),
 	Formatted(formatted::Binding),
 }
@@ -216,7 +225,7 @@ pub enum BindingRef<'a> {
 impl<'a> BindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
-			Self::Name(_) => Property::Name,
+			Self::Name(p, _) => Property::Name(*p),
 			Self::Layout(b) => Property::Layout(b.property()),
 			Self::Formatted(b) => Property::Formatted(b.property()),
 		}
@@ -224,7 +233,7 @@ impl<'a> BindingRef<'a> {
 
 	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::Name(v) => BindingValueRef::Name(v),
+			Self::Name(_, v) => BindingValueRef::Name(v),
 			Self::Layout(b) => b.value(),
 			Self::Formatted(b) => b.value(),
 		}
@@ -232,14 +241,16 @@ impl<'a> BindingRef<'a> {
 }
 
 pub struct ClassBindings<'a, M> {
-	name: single::Iter<'a, Name, M>,
+	name: functional_property_value::Iter<'a, Name, M>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
 	type Item = Meta<ClassBindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.name.next().map(|m| m.map(ClassBindingRef::Name))
+		self.name
+			.next()
+			.map(|m| m.into_class_binding(ClassBindingRef::Name))
 	}
 }
 

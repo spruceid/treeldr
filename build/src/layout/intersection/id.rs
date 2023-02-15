@@ -105,7 +105,7 @@ impl<M: Merge> IdIntersection<M> {
 				let node = context.declare_layout(id, meta.clone());
 				node.as_layout_mut()
 					.intersection_of_mut()
-					.insert(Meta(list_id, meta));
+					.insert_base(Meta(list_id, meta));
 
 				stack.push_back(id);
 				id

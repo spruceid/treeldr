@@ -17,7 +17,7 @@ impl Usages {
 			}
 
 			for sub_layout_ref in layout.as_layout().composing_layouts(model) {
-				match map.entry(**sub_layout_ref) {
+				match map.entry(sub_layout_ref) {
 					Entry::Occupied(mut entry) => {
 						entry.get_mut().insert(layout_ref);
 					}

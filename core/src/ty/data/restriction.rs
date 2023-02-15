@@ -1,4 +1,8 @@
-use crate::vocab::{self, Xsd};
+use crate::{
+	prop::{PropertyName, UnknownProperty},
+	vocab::{self, Xsd},
+	Id, IriIndex, TId,
+};
 
 pub mod double;
 pub mod float;
@@ -90,37 +94,64 @@ impl<'a> DoubleEndedIterator for RestrictionsIter<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Property {
-	MinInclusive,
-	MinExclusive,
-	MaxInclusive,
-	MaxExclusive,
-	MinLength,
-	MaxLength,
-	Pattern,
+	MinInclusive(Option<TId<UnknownProperty>>),
+	MinExclusive(Option<TId<UnknownProperty>>),
+	MaxInclusive(Option<TId<UnknownProperty>>),
+	MaxExclusive(Option<TId<UnknownProperty>>),
+	MinLength(Option<TId<UnknownProperty>>),
+	MaxLength(Option<TId<UnknownProperty>>),
+	Pattern(Option<TId<UnknownProperty>>),
 }
 
 impl Property {
-	pub fn term(&self) -> vocab::Term {
+	pub fn id(&self) -> Id {
 		match self {
-			Self::MinInclusive => vocab::Term::Xsd(Xsd::MinInclusive),
-			Self::MinExclusive => vocab::Term::Xsd(Xsd::MinExclusive),
-			Self::MaxInclusive => vocab::Term::Xsd(Xsd::MaxInclusive),
-			Self::MaxExclusive => vocab::Term::Xsd(Xsd::MaxExclusive),
-			Self::MinLength => vocab::Term::Xsd(Xsd::MinLength),
-			Self::MaxLength => vocab::Term::Xsd(Xsd::MaxLength),
-			Self::Pattern => vocab::Term::Xsd(Xsd::Pattern),
+			Self::MinInclusive(None) => Id::Iri(IriIndex::Iri(vocab::Term::Xsd(Xsd::MinInclusive))),
+			Self::MinInclusive(Some(p)) => p.id(),
+			Self::MinExclusive(None) => Id::Iri(IriIndex::Iri(vocab::Term::Xsd(Xsd::MinExclusive))),
+			Self::MinExclusive(Some(p)) => p.id(),
+			Self::MaxInclusive(None) => Id::Iri(IriIndex::Iri(vocab::Term::Xsd(Xsd::MaxInclusive))),
+			Self::MaxInclusive(Some(p)) => p.id(),
+			Self::MaxExclusive(None) => Id::Iri(IriIndex::Iri(vocab::Term::Xsd(Xsd::MaxExclusive))),
+			Self::MaxExclusive(Some(p)) => p.id(),
+			Self::MinLength(None) => Id::Iri(IriIndex::Iri(vocab::Term::Xsd(Xsd::MinLength))),
+			Self::MinLength(Some(p)) => p.id(),
+			Self::MaxLength(None) => Id::Iri(IriIndex::Iri(vocab::Term::Xsd(Xsd::MaxLength))),
+			Self::MaxLength(Some(p)) => p.id(),
+			Self::Pattern(None) => Id::Iri(IriIndex::Iri(vocab::Term::Xsd(Xsd::Pattern))),
+			Self::Pattern(Some(p)) => p.id(),
 		}
 	}
 
-	pub fn name(&self) -> &'static str {
+	pub fn term(&self) -> Option<vocab::Term> {
 		match self {
-			Self::MinInclusive => "inclusive minimum",
-			Self::MinExclusive => "exclusive minimum",
-			Self::MaxInclusive => "inclusive maximum",
-			Self::MaxExclusive => "exclusive maximum",
-			Self::MinLength => "minimum length",
-			Self::MaxLength => "maximum length",
-			Self::Pattern => "pattern",
+			Self::MinInclusive(None) => Some(vocab::Term::Xsd(Xsd::MinInclusive)),
+			Self::MinExclusive(None) => Some(vocab::Term::Xsd(Xsd::MinExclusive)),
+			Self::MaxInclusive(None) => Some(vocab::Term::Xsd(Xsd::MaxInclusive)),
+			Self::MaxExclusive(None) => Some(vocab::Term::Xsd(Xsd::MaxExclusive)),
+			Self::MinLength(None) => Some(vocab::Term::Xsd(Xsd::MinLength)),
+			Self::MaxLength(None) => Some(vocab::Term::Xsd(Xsd::MaxLength)),
+			Self::Pattern(None) => Some(vocab::Term::Xsd(Xsd::Pattern)),
+			_ => None,
+		}
+	}
+
+	pub fn name(&self) -> PropertyName {
+		match self {
+			Self::MinInclusive(None) => PropertyName::Resource("inclusive minimum"),
+			Self::MinInclusive(Some(p)) => PropertyName::Other(*p),
+			Self::MinExclusive(None) => PropertyName::Resource("exclusive minimum"),
+			Self::MinExclusive(Some(p)) => PropertyName::Other(*p),
+			Self::MaxInclusive(None) => PropertyName::Resource("inclusive maximum"),
+			Self::MaxInclusive(Some(p)) => PropertyName::Other(*p),
+			Self::MaxExclusive(None) => PropertyName::Resource("exclusive maximum"),
+			Self::MaxExclusive(Some(p)) => PropertyName::Other(*p),
+			Self::MinLength(None) => PropertyName::Resource("minimum length"),
+			Self::MinLength(Some(p)) => PropertyName::Other(*p),
+			Self::MaxLength(None) => PropertyName::Resource("maximum length"),
+			Self::MaxLength(Some(p)) => PropertyName::Other(*p),
+			Self::Pattern(None) => PropertyName::Resource("pattern"),
+			Self::Pattern(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 

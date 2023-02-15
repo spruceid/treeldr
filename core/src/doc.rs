@@ -1,8 +1,8 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, ops::Deref};
 
 use locspan::Meta;
 
-use crate::{metadata::Merge, multiple, Multiple};
+use crate::{metadata::Merge, property_values, PropertyValueRef, PropertyValues};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Block {
@@ -95,15 +95,35 @@ impl Block {
 	}
 }
 
+impl Deref for Block {
+	type Target = str;
+
+	fn deref(&self) -> &Self::Target {
+		self.as_str()
+	}
+}
+
+impl From<String> for Block {
+	fn from(value: String) -> Self {
+		Self::new(value)
+	}
+}
+
+impl<'a> From<&'a str> for Block {
+	fn from(value: &'a str) -> Self {
+		Self::new(value.to_owned())
+	}
+}
+
 #[derive(Clone, Debug)]
 pub struct Documentation<M> {
-	blocks: Multiple<Block, M>,
+	blocks: PropertyValues<Block, M>,
 }
 
 impl<M> Default for Documentation<M> {
 	fn default() -> Self {
 		Self {
-			blocks: Multiple::default(),
+			blocks: PropertyValues::default(),
 		}
 	}
 }
@@ -113,13 +133,17 @@ impl<M> Documentation<M> {
 		Self::default()
 	}
 
+	pub fn from_comments(comments: PropertyValues<Block, M>) -> Self {
+		Self { blocks: comments }
+	}
+
 	pub fn is_empty(&self) -> bool {
 		self.blocks.is_empty()
 	}
 
 	pub fn short_description(&self) -> Option<&str> {
 		for block in &self.blocks {
-			if let Some(s) = block.short_description() {
+			if let Some(s) = block.value.short_description() {
 				return Some(s);
 			}
 		}
@@ -129,7 +153,7 @@ impl<M> Documentation<M> {
 
 	pub fn long_description(&self) -> Option<&str> {
 		for block in &self.blocks {
-			if let Some(s) = block.long_description() {
+			if let Some(s) = block.value.long_description() {
 				return Some(s);
 			}
 		}
@@ -141,11 +165,11 @@ impl<M> Documentation<M> {
 	where
 		M: Merge,
 	{
-		self.blocks.insert(Meta(Block::new(comment), meta));
+		self.blocks.insert_base(Meta(Block::new(comment), meta));
 	}
 
 	pub fn as_str(&self) -> Option<&str> {
-		self.blocks.iter().next().map(|b| b.as_str())
+		self.blocks.iter().next().map(|b| b.value.as_str())
 	}
 
 	pub fn iter(&self) -> Iter<M> {
@@ -155,7 +179,10 @@ impl<M> Documentation<M> {
 	pub fn clone_stripped(&self) -> StrippedDocumentation {
 		let mut result = StrippedDocumentation::new();
 
-		for Meta(b, _) in self.iter() {
+		for PropertyValueRef {
+			value: Meta(b, _), ..
+		} in self.iter()
+		{
 			result.blocks.insert(b.clone());
 		}
 
@@ -163,10 +190,10 @@ impl<M> Documentation<M> {
 	}
 }
 
-pub type Iter<'a, M> = multiple::Iter<'a, Block, M>;
+pub type Iter<'a, M> = property_values::non_functional::Iter<'a, Block, M>;
 
 impl<'a, M> IntoIterator for &'a Documentation<M> {
-	type Item = Meta<&'a Block, &'a M>;
+	type Item = PropertyValueRef<'a, Block, M>;
 	type IntoIter = Iter<'a, M>;
 
 	fn into_iter(self) -> Self::IntoIter {

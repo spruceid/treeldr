@@ -23,7 +23,10 @@ pub struct Command {
 	type_property: Option<String>,
 }
 
-pub struct NotALayoutError<M>(pub IriBuf, pub treeldr::Multiple<TId<treeldr::Type>, M>);
+pub struct NotALayoutError<M>(
+	pub IriBuf,
+	pub treeldr::PropertyValues<TId<treeldr::Type>, M>,
+);
 
 pub enum Error<M> {
 	NoLayoutName(String),
@@ -36,11 +39,11 @@ pub enum Error<M> {
 impl<F> fmt::Display for Error<F> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			Self::NoLayoutName(iri) => write!(f, "layout `{}` has no name", iri),
-			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{}`", iri),
+			Self::NoLayoutName(iri) => write!(f, "layout `{iri}` has no name"),
+			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{iri}`"),
 			Self::NotALayout(e) => write!(f, "node `{}` is not a layout", e.0),
-			Self::InfiniteSchema(iri) => write!(f, "infinite schema `{}`", iri),
-			Self::Serialization(e) => write!(f, "JSON serialization failed: {}", e),
+			Self::InfiniteSchema(iri) => write!(f, "infinite schema `{iri}`"),
+			Self::Serialization(e) => write!(f, "JSON serialization failed: {e}"),
 		}
 	}
 }

@@ -300,8 +300,7 @@ impl BuiltDefinitions {
 									}
 									_ => {
 										panic!(
-											"protected term redefinition: {:?}, {:?}",
-											parent_def, def
+											"protected term redefinition: {parent_def:?}, {def:?}"
 										)
 									}
 								}

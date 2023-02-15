@@ -1,13 +1,16 @@
+use std::cmp::Ordering;
+
 use crate::{Context, Document, Error};
 use grdf::{Dataset, Quad};
 use locspan::Meta;
 use rdf_types::{Generator, VocabularyMut};
 use treeldr::{
 	metadata::Merge,
+	prop::UnknownProperty,
 	ty::data::RegExp,
 	value::{self, NonNegativeInteger},
 	vocab::{self, GraphLabel, Object, Term},
-	BlankIdIndex, Id, IriIndex, Name,
+	BlankIdIndex, Id, IriIndex, Name, TId,
 };
 
 pub(crate) fn expect_id<M>(
@@ -148,6 +151,10 @@ impl<M: Clone + Ord + Merge> Document<M>
 		_vocabulary: &mut V,
 		_generator: &mut impl Generator<V>,
 	) -> Result<(), Error<M>> {
+		fn no_sub_prop(_: TId<UnknownProperty>, _: TId<UnknownProperty>) -> Option<Ordering> {
+			unreachable!()
+		}
+
 		// Step 2: find out the properties of each node.
 		for Meta(
 			rdf_types::Quad(Meta(subject, subject_meta), predicate, object, _graph),
@@ -158,7 +165,69 @@ impl<M: Clone + Ord + Merge> Document<M>
 				let node = context
 					.require_mut(subject)
 					.map_err(|e| Meta(e.into(), subject_meta))?;
-				node.set(predicate.into_value(), object)?
+				node.set(predicate.into_value(), no_sub_prop, object)?
+			}
+		}
+
+		Ok(())
+	}
+}
+
+impl<M: Clone + Ord + Merge> Document<M>
+	for grdf::meta::BTreeDataset<Id, IriIndex, Object<M>, GraphLabel, M>
+{
+	type LocalContext = ();
+	type Error = Error<M>;
+
+	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		_: &mut (),
+		context: &mut Context<M>,
+		_vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
+	) -> Result<(), Error<M>> {
+		for Quad(id, _, ty, _) in self.pattern_matching(Quad(
+			None,
+			Some(&IriIndex::Iri(Term::Rdf(vocab::Rdf::Type))),
+			None,
+			None,
+		)) {
+			let Meta(_, metadata) = &ty.metadata;
+
+			let ty = match &ty.value {
+				rdf_types::Term::Iri(i) => Id::Iri(*i),
+				rdf_types::Term::Blank(b) => Id::Blank(*b),
+				_ => panic!("invalid type"),
+			};
+
+			context.declare_with(*id, ty, metadata.clone());
+		}
+
+		Ok(())
+	}
+
+	fn define<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		_: &mut (),
+		context: &mut Context<M>,
+		_vocabulary: &mut V,
+		_generator: &mut impl Generator<V>,
+	) -> Result<(), Error<M>> {
+		fn no_sub_prop(_: TId<UnknownProperty>, _: TId<UnknownProperty>) -> Option<Ordering> {
+			unreachable!()
+		}
+
+		// Step 2: find out the properties of each node.
+		for Meta(
+			rdf_types::Quad(Meta(subject, subject_meta), predicate, object, _graph),
+			_metadata,
+		) in self.into_meta_quads()
+		{
+			if *predicate.value() != IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)) {
+				let node = context
+					.require_mut(subject)
+					.map_err(|e| Meta(e.into(), subject_meta))?;
+				node.set(Id::Iri(predicate.into_value()), no_sub_prop, object)?
 			}
 		}
 

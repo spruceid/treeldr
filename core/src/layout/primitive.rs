@@ -5,7 +5,9 @@ use std::fmt;
 pub mod restriction;
 
 pub use crate::ty::data::RegExp;
-pub use restriction::{Restricted, RestrictionRef, Restrictions};
+pub use restriction::{
+	Restricted, RestrictionRef, Restrictions, WithRestrictions, WithRestrictionsIter,
+};
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]
@@ -116,5 +118,11 @@ impl Primitive {
 impl fmt::Display for Primitive {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.name().fmt(f)
+	}
+}
+
+impl From<Primitive> for Id {
+	fn from(value: Primitive) -> Self {
+		value.id()
 	}
 }

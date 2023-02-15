@@ -471,7 +471,7 @@ impl<M> NamedInnerLayoutExpr<M> {
 		} else {
 			let Meta(e, loc) = self.expr;
 			e.into_restriction().map_err(|other| Self {
-				expr: Meta(other, loc),
+				expr: Meta(*other, loc),
 				name: None,
 			})
 		}
@@ -512,10 +512,10 @@ impl<M> InnerLayoutExpr<M> {
 		}
 	}
 
-	pub fn into_restriction(self) -> Result<LayoutRestrictedField<M>, Self> {
+	pub fn into_restriction(self) -> Result<LayoutRestrictedField<M>, Box<Self>> {
 		match self {
 			Self::FieldRestriction(r) => Ok(r),
-			other => Err(other),
+			other => Err(Box::new(other)),
 		}
 	}
 }
