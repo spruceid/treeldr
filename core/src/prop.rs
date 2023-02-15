@@ -147,6 +147,9 @@ impl From<Term> for Property {
 			Term::Rdfs(Rdfs::SubClassOf) => {
 				Self::Resource(node::Property::Class(ty::Property::SubClassOf(None)))
 			}
+			Term::Rdfs(Rdfs::SubPropertyOf) => {
+				Self::Resource(node::Property::Property(RdfProperty::SubPropertyOf(None)))
+			}
 			Term::Owl(Owl::UnionOf) => {
 				Self::Resource(node::Property::Class(ty::Property::UnionOf(None)))
 			}
@@ -422,6 +425,7 @@ impl Type {
 pub struct Definition<M> {
 	domain: PropertyValues<TId<crate::Type>, M>,
 	range: PropertyValues<TId<crate::Type>, M>,
+	sub_property_of: PropertyValues<TId<Property>, M>,
 	required: FunctionalPropertyValue<bool, M>,
 	functional: Meta<bool, M>,
 }
@@ -430,12 +434,14 @@ impl<M> Definition<M> {
 	pub fn new(
 		domain: PropertyValues<TId<crate::Type>, M>,
 		range: PropertyValues<TId<crate::Type>, M>,
+		sub_property_of: PropertyValues<TId<Property>, M>,
 		required: FunctionalPropertyValue<bool, M>,
 		functional: Meta<bool, M>,
 	) -> Self {
 		Self {
 			domain,
 			range,
+			sub_property_of,
 			required,
 			functional,
 		}
@@ -463,6 +469,7 @@ impl<M> Definition<M> {
 		ClassBindings {
 			domain: self.domain.iter(),
 			range: self.range.iter(),
+			sub_property_of: self.sub_property_of.iter(),
 			required: self.required.iter(),
 		}
 	}
@@ -485,6 +492,7 @@ impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V
 pub enum ClassBinding {
 	Domain(Option<TId<UnknownProperty>>, TId<crate::Type>),
 	Range(Option<TId<UnknownProperty>>, TId<crate::Type>),
+	SubPropertyOf(Option<TId<UnknownProperty>>, TId<Property>),
 	Required(Option<TId<UnknownProperty>>, bool),
 }
 
@@ -499,6 +507,7 @@ impl ClassBinding {
 		match self {
 			Self::Domain(p, _) => RdfProperty::Domain(*p),
 			Self::Range(p, _) => RdfProperty::Range(*p),
+			Self::SubPropertyOf(p, _) => RdfProperty::SubPropertyOf(*p),
 			Self::Required(p, _) => RdfProperty::Required(*p),
 		}
 	}
@@ -507,6 +516,7 @@ impl ClassBinding {
 		match self {
 			Self::Domain(_, v) => BindingValueRef::Type(*v),
 			Self::Range(_, v) => BindingValueRef::Type(*v),
+			Self::SubPropertyOf(_, v) => BindingValueRef::Property(*v),
 			Self::Required(_, v) => BindingValueRef::SchemaBoolean(*v),
 		}
 	}
@@ -515,6 +525,7 @@ impl ClassBinding {
 pub struct ClassBindings<'a, M> {
 	domain: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
 	range: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
+	sub_property_of: property_values::non_functional::Iter<'a, TId<Property>, M>,
 	required: property_values::functional::Iter<'a, bool, M>,
 }
 
@@ -531,11 +542,16 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 				self.range
 					.next()
 					.map(|m| m.into_cloned_class_binding(ClassBinding::Range))
-					.or_else(|| {
-						self.required
-							.next()
-							.map(|m| m.into_cloned_class_binding(ClassBinding::Required))
-					})
+			})
+			.or_else(|| {
+				self.sub_property_of
+					.next()
+					.map(|m| m.into_cloned_class_binding(ClassBinding::SubPropertyOf))
+			})
+			.or_else(|| {
+				self.required
+					.next()
+					.map(|m| m.into_cloned_class_binding(ClassBinding::Required))
 			})
 	}
 }

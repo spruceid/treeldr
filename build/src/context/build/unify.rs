@@ -201,13 +201,6 @@ impl<M> Context<M> {
 			Id::Blank(b) => *ids.get(&b).unwrap(),
 			Id::Iri(i) => Id::Iri(i),
 		});
-
-		for (id, node) in self.nodes() {
-			for Meta(binding, _) in node.bindings() {
-				let binding: BindingRef<BlankIdIndex> = binding.into();
-				eprintln!("{id:?} {binding:?}");
-			}
-		}
 	}
 
 	/// Compute the color of each blank nodes.

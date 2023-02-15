@@ -19,3 +19,9 @@ shelves.workspace = true
 nquads-syntax.workspace = true
 langtag = "0.3.2"
 const-vec = "1.1.0"
+
+[dev-dependencies]
+grdf.workspace = true
+nquads-syntax.workspace = true
+env_logger.workspace = true
+test-log.workspace = true

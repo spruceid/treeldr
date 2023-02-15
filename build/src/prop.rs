@@ -398,25 +398,6 @@ impl<M> Definition<M> {
 	where
 		M: Clone + Merge,
 	{
-		let range = self
-			.range
-			.try_mapped(|_, Meta(range_id, range_meta)| {
-				let range_ref = context.require_type_id(*range_id).map_err(|e| {
-					e.at_node_property(as_resource.id, RdfProperty::Range(None), range_meta.clone())
-				})?;
-				Ok(Meta(range_ref, range_meta.clone()))
-			})
-			.map_err(|(Meta(e, _), _)| e)?;
-
-		let required = self.required.clone().try_unwrap().map_err(|e| {
-			e.at_functional_node_property(as_resource.id, RdfProperty::Required(None))
-		})?;
-
-		let functional = match as_resource.type_metadata(context, Type::FunctionalProperty) {
-			Some(meta) => Meta(true, meta.clone()),
-			None => Meta(false, meta.clone()),
-		};
-
 		let domain = self
 			.domain
 			.try_mapped(|_, Meta(domain_id, domain_meta)| {
@@ -431,8 +412,41 @@ impl<M> Definition<M> {
 			})
 			.map_err(|(Meta(e, _), _)| e)?;
 
+		let range = self
+			.range
+			.try_mapped(|_, Meta(range_id, range_meta)| {
+				let range_ref = context.require_type_id(*range_id).map_err(|e| {
+					e.at_node_property(as_resource.id, RdfProperty::Range(None), range_meta.clone())
+				})?;
+				Ok(Meta(range_ref, range_meta.clone()))
+			})
+			.map_err(|(Meta(e, _), _)| e)?;
+
+		let sub_property_of = self
+			.sub_property_of
+			.try_mapped(|_, Meta(prop_id, prop_meta)| {
+				let prop_ref = context.require_property_id(*prop_id).map_err(|e| {
+					e.at_node_property(
+						as_resource.id,
+						RdfProperty::SubPropertyOf(None),
+						prop_meta.clone(),
+					)
+				})?;
+				Ok(Meta(prop_ref, prop_meta.clone()))
+			})
+			.map_err(|(Meta(e, _), _)| e)?;
+
+		let required = self.required.clone().try_unwrap().map_err(|e| {
+			e.at_functional_node_property(as_resource.id, RdfProperty::Required(None))
+		})?;
+
+		let functional = match as_resource.type_metadata(context, Type::FunctionalProperty) {
+			Some(meta) => Meta(true, meta.clone()),
+			None => Meta(false, meta.clone()),
+		};
+
 		Ok(Meta(
-			treeldr::prop::Definition::new(domain, range, required, functional),
+			treeldr::prop::Definition::new(domain, range, sub_property_of, required, functional),
 			meta,
 		))
 	}
