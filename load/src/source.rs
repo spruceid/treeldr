@@ -59,6 +59,9 @@ pub enum MimeType {
 	/// application/n-quads
 	NQuads,
 
+	/// text/turtle
+	Turtle,
+
 	/// application/schema+json
 	JsonSchema,
 }
@@ -68,6 +71,7 @@ impl MimeType {
 		match self {
 			Self::TreeLdr => "application/treeldr",
 			Self::NQuads => "application/n-quads",
+			Self::Turtle => "text/turtle",
 			Self::JsonSchema => "application/schema+json",
 		}
 	}
@@ -79,6 +83,7 @@ impl MimeType {
 			.and_then(|ext| match ext {
 				"tldr" => Some(MimeType::TreeLdr),
 				"nq" => Some(MimeType::NQuads),
+				"ttl" => Some(MimeType::Turtle),
 				"json" => Some(MimeType::JsonSchema),
 				_ => None,
 			})

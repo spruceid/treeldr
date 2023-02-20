@@ -132,6 +132,8 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllEr
 pub enum LangError {
 	TreeLdr(syntax::build::Error<source::Metadata>),
 	NQuads(treeldr_build::Error<source::Metadata>),
+	#[cfg(feature = "turtle")]
+	Turtle(turtle_syntax::build::MetaError<source::Metadata>),
 	#[cfg(feature = "json-schema")]
 	JsonSchema(treeldr_json_schema::import::Error<source::Metadata>),
 }
@@ -139,6 +141,13 @@ pub enum LangError {
 impl From<syntax::build::Error<source::Metadata>> for LangError {
 	fn from(e: syntax::build::Error<source::Metadata>) -> Self {
 		Self::TreeLdr(e)
+	}
+}
+
+#[cfg(feature = "turtle")]
+impl From<turtle_syntax::build::MetaError<source::Metadata>> for LangError {
+	fn from(e: turtle_syntax::build::MetaError<source::Metadata>) -> Self {
+		Self::Turtle(e)
 	}
 }
 
@@ -157,6 +166,8 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 		match self {
 			Self::TreeLdr(e) => e.message(vocabulary),
 			Self::NQuads(e) => e.message(vocabulary),
+			#[cfg(feature = "turtle")]
+			Self::Turtle(e) => e.to_string(),
 			#[cfg(feature = "json-schema")]
 			Self::JsonSchema(e) => e.message(vocabulary),
 		}
@@ -169,6 +180,8 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 		match self {
 			Self::TreeLdr(e) => e.labels(vocabulary),
 			Self::NQuads(e) => e.labels(vocabulary),
+			#[cfg(feature = "turtle")]
+			Self::Turtle(_) => Vec::new(),
 			#[cfg(feature = "json-schema")]
 			Self::JsonSchema(e) => e.labels(vocabulary),
 		}
@@ -181,6 +194,8 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 		match self {
 			Self::TreeLdr(e) => e.notes(vocabulary),
 			Self::NQuads(e) => e.notes(vocabulary),
+			#[cfg(feature = "turtle")]
+			Self::Turtle(_) => Vec::new(),
 			#[cfg(feature = "json-schema")]
 			Self::JsonSchema(e) => e.notes(vocabulary),
 		}
@@ -192,6 +207,9 @@ pub enum Document {
 
 	NQuads(nquads_syntax::Document<source::Metadata>),
 
+	#[cfg(feature = "turtle")]
+	Turtle(turtle_syntax::Document<source::Metadata>),
+
 	#[cfg(feature = "json-schema")]
 	JsonSchema(Box<treeldr_json_schema::Schema>),
 }
@@ -200,6 +218,9 @@ pub enum DeclaredDocument {
 	TreeLdr(Box<TreeLdrDocument>),
 
 	NQuads(Dataset),
+
+	#[cfg(feature = "turtle")]
+	Turtle(Dataset),
 
 	#[cfg(feature = "json-schema")]
 	JsonSchema(Box<treeldr_json_schema::Schema>),
@@ -267,6 +288,27 @@ impl Document {
 					.map_err(LangError::NQuads)?;
 				Ok(DeclaredDocument::NQuads(dataset))
 			}
+			#[cfg(feature = "turtle")]
+			Self::Turtle(d) => {
+				let dataset: Dataset = d
+					.build_triples_with(None, vocabulary, &mut *generator)?
+					.into_iter()
+					.map(|Meta(triple, meta)| {
+						Meta(
+							triple
+								.map_predicate(|Meta(p, m)| Meta(Id::Iri(p), m))
+								.into_quad(None),
+							meta,
+						)
+					})
+					.collect();
+
+				use treeldr_build::Document;
+				dataset
+					.declare(&mut (), context, vocabulary, generator)
+					.map_err(LangError::NQuads)?;
+				Ok(DeclaredDocument::NQuads(dataset))
+			}
 			#[cfg(feature = "json-schema")]
 			Self::JsonSchema(s) => {
 				treeldr_json_schema::import_schema(&s, None, context, vocabulary, generator)?;
@@ -289,6 +331,13 @@ impl DeclaredDocument {
 				Ok(())
 			}
 			Self::NQuads(d) => {
+				use treeldr_build::Document;
+				d.define(&mut (), context, vocabulary, generator)
+					.map_err(LangError::NQuads)?;
+				Ok(())
+			}
+			#[cfg(feature = "turtle")]
+			Self::Turtle(d) => {
 				use treeldr_build::Document;
 				d.define(&mut (), context, vocabulary, generator)
 					.map_err(LangError::NQuads)?;
