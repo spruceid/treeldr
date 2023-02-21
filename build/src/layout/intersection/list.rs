@@ -4,7 +4,7 @@ use locspan::Meta;
 use rdf_types::{Generator, VocabularyMut};
 use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, PropertyValueRef};
 
-use crate::{utils::TryCollect, Context, Error, ObjectAsRequiredId};
+use crate::{utils::TryCollect, Context, Error, MetaValueExt};
 
 use super::IdIntersection;
 
@@ -42,13 +42,9 @@ pub fn list_intersection<T: IntersectionListItem<M>, M: Clone + Merge>(
 		let structs = list.try_fold(context, Vec::new(), |struct_, item| {
 			let mut structs = Vec::new();
 
-			for PropertyValueRef {
-				value: Meta(object, field_meta),
-				..
-			} in item
-			{
+			for PropertyValueRef { value, .. } in item {
 				let mut struct_ = struct_.clone();
-				let field_id = object.as_required_id(field_meta)?;
+				let Meta(field_id, field_meta) = value.cloned().into_expected_id()?;
 				struct_.push(T::get(context, Meta(field_id, field_meta.clone()))?);
 				structs.push(struct_);
 			}

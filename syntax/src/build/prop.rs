@@ -77,7 +77,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 
 		let node = context.get_mut(id).unwrap();
 		if let Some(comment) = doc {
-			node.comment_mut().insert_base(comment)
+			node.comment_mut().insert_base(comment.cast())
 		}
 
 		if let Some(functional_loc) = functional_loc {

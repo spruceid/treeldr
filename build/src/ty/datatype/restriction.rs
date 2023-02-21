@@ -1,6 +1,6 @@
 use crate::{
-	context::MapIds, functional_property_value, rdf, resource::BindingValueRef, Error,
-	FunctionalPropertyValue,
+	context::MapIds, functional_property_value, resource::BindingValueRef, Error,
+	FunctionalPropertyValue, MetaValueExt,
 };
 use locspan::Meta;
 use std::{cmp::Ordering, collections::BTreeMap};
@@ -8,9 +8,7 @@ use treeldr::{
 	metadata::Merge,
 	prop::UnknownProperty,
 	ty::data::{restriction, RegExp},
-	value,
-	vocab::Object,
-	Id, TId,
+	value, Id, TId, Value,
 };
 
 pub use treeldr::ty::data::restriction::Property;
@@ -51,7 +49,7 @@ impl<M> Definition<M> {
 		&mut self,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
@@ -60,43 +58,51 @@ impl<M> Definition<M> {
 			Property::MaxExclusive(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_numeric(value)?
+				value
+					.into_expected_numeric()?
 					.map(|n| Restriction::Numeric(Numeric::MaxExclusive(n))),
 			),
 			Property::MaxInclusive(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_numeric(value)?
+				value
+					.into_expected_numeric()?
 					.map(|n| Restriction::Numeric(Numeric::MaxInclusive(n))),
 			),
 			Property::MaxLength(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_integer(value)?
+				value
+					.into_expected_integer()?
 					.map(|n| Restriction::String(String::MaxLength(n))),
 			),
 			Property::MinExclusive(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_numeric(value)?
+				value
+					.into_expected_numeric()?
 					.map(|n| Restriction::Numeric(Numeric::MinExclusive(n))),
 			),
 			Property::MinInclusive(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_numeric(value)?
+				value
+					.into_expected_numeric()?
 					.map(|n| Restriction::Numeric(Numeric::MinInclusive(n))),
 			),
 			Property::MinLength(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_integer(value)?
+				value
+					.into_expected_integer()?
 					.map(|n| Restriction::String(String::MinLength(n))),
 			),
 			Property::Pattern(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_regexp(value)?.map(|p| Restriction::String(String::Pattern(p))),
+				value
+					.into_expected_regexp()?
+					.map(|p| Restriction::String(String::Pattern(p))),
 			),
 		}
 
@@ -389,7 +395,7 @@ impl<'a> NumericBindingRef<'a> {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::MinInclusive(_, v) => BindingValueRef::Numeric(v),
 			Self::MinExclusive(_, v) => BindingValueRef::Numeric(v),
@@ -415,7 +421,7 @@ impl<'a> StringBindingRef<'a> {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::MinLength(_, v) => BindingValueRef::Integer(v),
 			Self::MaxLength(_, v) => BindingValueRef::Integer(v),
@@ -440,7 +446,7 @@ impl<'a> ClassBindingRef<'a> {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::Numeric(b) => b.value(),
 			Self::String(b) => b.value(),

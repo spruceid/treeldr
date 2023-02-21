@@ -473,6 +473,9 @@ pub enum Rdf {
 
 	#[iri("rdf:rest")]
 	Rest,
+
+	#[iri("rdf:langString")]
+	LangString,
 }
 
 /// IRI index.

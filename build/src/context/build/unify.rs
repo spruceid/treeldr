@@ -3,16 +3,11 @@ use std::{
 	hash::Hash,
 };
 
-use langtag::LanguageTag;
 use locspan::Meta;
 use rdf_types::{Generator, VocabularyMut};
 use treeldr::{
-	metadata::Merge,
-	ty::data::RegExp,
-	utils::UnionFind,
-	value,
-	vocab::{Literal, Object},
-	BlankIdIndex, Id, IriIndex, Name, Property,
+	metadata::Merge, ty::data::RegExp, utils::UnionFind, value, BlankIdIndex, Id, IriIndex, Name,
+	Property, Value,
 };
 
 use crate::{
@@ -57,8 +52,8 @@ impl<'a, B> BindingRef<'a, B> {
 	}
 }
 
-impl<'a, M> From<resource::BindingRef<'a, M>> for BindingRef<'a, BlankIdIndex> {
-	fn from(b: resource::BindingRef<'a, M>) -> Self {
+impl<'a> From<resource::BindingRef<'a>> for BindingRef<'a, BlankIdIndex> {
+	fn from(b: resource::BindingRef<'a>) -> Self {
 		Self {
 			property: b.property(),
 			value: b.value().into(),
@@ -74,9 +69,7 @@ pub enum ValueRef<'a, B> {
 	Numeric(&'a value::Numeric),
 	Integer(&'a value::Integer),
 	NonNegativeInteger(&'a value::NonNegativeInteger),
-	String(&'a str),
-	LangString(&'a str, LanguageTag<'a>),
-	TypedString(&'a str, IriIndex),
+	Literal(&'a treeldr::value::Literal),
 	Name(&'a Name),
 	RegExp(&'a RegExp),
 }
@@ -90,9 +83,7 @@ impl<'a, B> ValueRef<'a, B> {
 			Self::Numeric(n) => ValueRef::Numeric(n),
 			Self::Integer(i) => ValueRef::Integer(i),
 			Self::NonNegativeInteger(n) => ValueRef::NonNegativeInteger(n),
-			Self::String(s) => ValueRef::String(s),
-			Self::LangString(s, t) => ValueRef::LangString(s, t),
-			Self::TypedString(s, t) => ValueRef::TypedString(s, t),
+			Self::Literal(s) => ValueRef::Literal(s),
 			Self::Name(n) => ValueRef::Name(n),
 			Self::RegExp(e) => ValueRef::RegExp(e),
 		}
@@ -106,17 +97,15 @@ impl<'a, B> ValueRef<'a, B> {
 			Self::Numeric(n) => ValueRef::Numeric(n),
 			Self::Integer(i) => ValueRef::Integer(i),
 			Self::NonNegativeInteger(n) => ValueRef::NonNegativeInteger(n),
-			Self::String(s) => ValueRef::String(s),
-			Self::LangString(s, t) => ValueRef::LangString(s, t),
-			Self::TypedString(s, t) => ValueRef::TypedString(s, t),
+			Self::Literal(s) => ValueRef::Literal(s),
 			Self::Name(n) => ValueRef::Name(n),
 			Self::RegExp(e) => ValueRef::RegExp(e),
 		})
 	}
 }
 
-impl<'a, M> From<BindingValueRef<'a, M>> for ValueRef<'a, BlankIdIndex> {
-	fn from(v: BindingValueRef<'a, M>) -> Self {
+impl<'a> From<BindingValueRef<'a>> for ValueRef<'a, BlankIdIndex> {
+	fn from(v: BindingValueRef<'a>) -> Self {
 		match v {
 			BindingValueRef::Id(Id::Blank(b)) => Self::Blank(b),
 			BindingValueRef::Id(Id::Iri(iri)) => Self::Iri(iri),
@@ -128,19 +117,13 @@ impl<'a, M> From<BindingValueRef<'a, M>> for ValueRef<'a, BlankIdIndex> {
 			BindingValueRef::NonNegativeInteger(u) => Self::NonNegativeInteger(u),
 			BindingValueRef::Integer(i) => Self::Integer(i),
 			BindingValueRef::Numeric(n) => Self::Numeric(n),
-			BindingValueRef::String(s) => Self::String(s),
+			BindingValueRef::Literal(s) => Self::Literal(s),
 			BindingValueRef::Name(n) => Self::Name(n),
 			BindingValueRef::RegExp(e) => Self::RegExp(e),
 			BindingValueRef::Object(o) => match o {
-				Object::Blank(b) => Self::Blank(*b),
-				Object::Iri(i) => Self::Iri(*i),
-				Object::Literal(l) => match l {
-					Literal::String(s) => Self::String(s),
-					Literal::LangString(Meta(s, _), Meta(tag, _)) => {
-						Self::LangString(s, tag.as_ref())
-					}
-					Literal::TypedString(Meta(s, _), Meta(ty, _)) => Self::TypedString(s, *ty),
-				},
+				Value::Node(Id::Blank(b)) => Self::Blank(*b),
+				Value::Node(Id::Iri(i)) => Self::Iri(*i),
+				Value::Literal(l) => Self::Literal(l),
 			},
 		}
 	}

@@ -497,7 +497,7 @@ impl<'a> BindingRef<'a> {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::Numeric(b) => b.value(),
 			Self::String(b) => b.value(),
@@ -523,7 +523,7 @@ impl<'a> NumericBindingRef<'a> {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::InclusiveMinimum(_, v) => BindingValueRef::Numeric(v),
 			Self::ExclusiveMinimum(_, v) => BindingValueRef::Numeric(v),
@@ -545,7 +545,7 @@ impl<'a> StringBindingRef<'a> {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::Pattern(_, v) => BindingValueRef::RegExp(v),
 		}

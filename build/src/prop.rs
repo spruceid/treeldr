@@ -6,18 +6,17 @@ use std::{
 
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
-	functional_property_value, property_values, rdf,
+	functional_property_value, property_values,
 	resource::BindingValueRef,
-	Context, Error, FunctionalPropertyValue, PropertyValues,
+	Context, Error, FunctionalPropertyValue, MetaValueExt, PropertyValues,
 };
 use const_vec::ConstVec;
-use locspan::{Meta, Stripped};
+use locspan::Meta;
 use treeldr::{
 	metadata::Merge,
 	prop::{RdfProperty, UnknownProperty},
 	utils::SccGraph,
-	vocab::{self, Object},
-	Id, Multiple, TId,
+	Id, Multiple, TId, Value,
 };
 
 pub use treeldr::prop::{Property, Type};
@@ -118,12 +117,9 @@ impl<M: Clone + Merge> ExplicitSuperProperties<M> {
 				for (prop, values) in node.other_properties() {
 					if self.is_sub_property_of(context, Self::SUB_PROPERTY_OF_ID, *prop) {
 						for v in values {
-							let id = match v.value.cloned().map(Stripped::unwrap) {
-								Meta(vocab::Object::Literal(_), _) => None,
-								Meta(vocab::Object::Blank(id), meta) => {
-									Some(Meta(Id::Blank(id), meta))
-								}
-								Meta(vocab::Object::Iri(id), meta) => Some(Meta(Id::Iri(id), meta)),
+							let id = match v.value.cloned() {
+								Meta(Value::Literal(_), _) => None,
+								Meta(Value::Node(id), meta) => Some(Meta(id, meta)),
 							};
 
 							if let Some(id) = id {
@@ -366,23 +362,21 @@ impl<M> Definition<M> {
 		&mut self,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: RdfProperty,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			RdfProperty::Domain(p) => self
-				.domain
-				.insert(p, prop_cmp, rdf::from::expect_id(value)?),
-			RdfProperty::Range(p) => self.range.insert(p, prop_cmp, rdf::from::expect_id(value)?),
+			RdfProperty::Domain(p) => self.domain.insert(p, prop_cmp, value.into_expected_id()?),
+			RdfProperty::Range(p) => self.range.insert(p, prop_cmp, value.into_expected_id()?),
 			RdfProperty::SubPropertyOf(p) => {
 				self.sub_property_of
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			RdfProperty::Required(p) => {
 				self.required
-					.insert(p, prop_cmp, rdf::from::expect_schema_boolean(value)?)
+					.insert(p, prop_cmp, value.into_expected_schema_boolean()?)
 			}
 		}
 
@@ -481,7 +475,7 @@ impl ClassBinding {
 		}
 	}
 
-	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value<'a>(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::Domain(_, v) => BindingValueRef::Id(*v),
 			Self::Range(_, v) => BindingValueRef::Id(*v),

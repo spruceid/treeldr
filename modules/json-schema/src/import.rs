@@ -214,13 +214,13 @@ pub fn import_regular_schema<
 	if let Some(title) = &schema.meta_data.title {
 		// The title of a schema is translated in an rdfs:label.
 		node.label_mut()
-			.insert_base(Meta(title.clone(), M::default()));
+			.insert_base(Meta(title.clone().into(), M::default()));
 	}
 
 	if let Some(description) = &schema.meta_data.description {
 		// The title of a schema is translated in an rdfs:comment.
 		node.comment_mut()
-			.insert_base(Meta(description.clone(), M::default()));
+			.insert_base(Meta(description.clone().into(), M::default()));
 	}
 
 	if let Some(name) = name {
@@ -565,7 +565,7 @@ fn import_object_schema<
 				if let Some(doc) = &meta.description {
 					field_node
 						.label_mut()
-						.insert_base(Meta(doc.clone(), M::default()))
+						.insert_base(Meta(doc.clone().into(), M::default()))
 				}
 			}
 

@@ -2,9 +2,10 @@ use crate::{
 	component, doc, error, layout, list, multiple,
 	prop::{self, PropertyName, UnknownProperty},
 	property_values, ty,
+	value::Literal,
 	vocab::{self, Term},
-	Documentation, Error, Id, IriIndex, MetaOption, Multiple, MutableModel, Name, PropertyValues,
-	ResourceType, TId,
+	Documentation, Error, Id, IriIndex, MetaOption, Multiple, MutableModel, Name, PropertyValueRef,
+	PropertyValues, ResourceType, TId,
 };
 use locspan::Meta;
 use xsd_types::NonNegativeInteger;
@@ -15,7 +16,7 @@ pub struct Data<M> {
 	pub id: Id,
 	pub metadata: M,
 	pub type_: PropertyValues<TId<crate::Type>, M>,
-	pub label: PropertyValues<String, M>,
+	pub label: PropertyValues<Literal, M>,
 	pub comment: Documentation<M>,
 }
 
@@ -82,12 +83,16 @@ impl<M> Definition<M> {
 		&self.data.type_
 	}
 
-	pub fn label(&self) -> &PropertyValues<String, M> {
+	pub fn label(&self) -> &PropertyValues<Literal, M> {
 		&self.data.label
 	}
 
-	pub fn preferred_label(&self) -> Option<&str> {
-		self.data.label.first().map(|m| m.value.as_str())
+	pub fn preferred_label(&self) -> Option<&Literal> {
+		self.data
+			.label
+			.first()
+			.map(PropertyValueRef::into_value)
+			.map(Meta::into_value)
 	}
 
 	pub fn comment(&self) -> &Documentation<M> {
@@ -651,8 +656,8 @@ impl Property {
 
 pub enum ClassBindingRef<'a> {
 	Type(Option<TId<UnknownProperty>>, TId<crate::Type>),
-	Label(Option<TId<UnknownProperty>>, &'a str),
-	Comment(Option<TId<UnknownProperty>>, &'a str),
+	Label(Option<TId<UnknownProperty>>, &'a Literal),
+	Comment(Option<TId<UnknownProperty>>, &'a Literal),
 }
 
 impl<'a> ClassBindingRef<'a> {
@@ -667,7 +672,7 @@ impl<'a> ClassBindingRef<'a> {
 
 pub struct ClassBindings<'a, M> {
 	type_: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
-	label: property_values::non_functional::Iter<'a, String, M>,
+	label: property_values::non_functional::Iter<'a, Literal, M>,
 	comment: doc::Iter<'a, M>,
 }
 
@@ -681,7 +686,7 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 			.or_else(|| {
 				self.label
 					.next()
-					.map(|v| v.into_deref_class_binding(ClassBindingRef::Label))
+					.map(|v| v.into_class_binding(ClassBindingRef::Label))
 					.or_else(|| {
 						self.comment
 							.next()
@@ -749,7 +754,7 @@ impl<'a, T, M> DoubleEndedIterator for MultipleIdValueIter<'a, T, M> {
 pub enum BindingValueRef<'a, M> {
 	SchemaBoolean(bool),
 	NonNegativeInteger(&'a NonNegativeInteger),
-	String(&'a str),
+	Literal(&'a Literal),
 	Name(&'a Name),
 	Id(Id),
 	Type(TId<crate::Type>),
@@ -815,8 +820,8 @@ impl<'a, M> Iterator for BindingValueIds<'a, M> {
 
 pub enum BindingRef<'a, M> {
 	Type(Option<TId<UnknownProperty>>, TId<crate::Type>),
-	Label(Option<TId<UnknownProperty>>, &'a str),
-	Comment(Option<TId<UnknownProperty>>, &'a str),
+	Label(Option<TId<UnknownProperty>>, &'a Literal),
+	Comment(Option<TId<UnknownProperty>>, &'a Literal),
 	Class(crate::ty::BindingRef<'a, M>),
 	Property(crate::prop::Binding),
 	Component(crate::component::BindingRef<'a, M>),
@@ -850,8 +855,8 @@ impl<'a, M> BindingRef<'a, M> {
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
 			Self::Type(_, v) => BindingValueRef::Type(*v),
-			Self::Label(_, v) => BindingValueRef::String(v),
-			Self::Comment(_, v) => BindingValueRef::String(v),
+			Self::Label(_, v) => BindingValueRef::Literal(v),
+			Self::Comment(_, v) => BindingValueRef::Literal(v),
 			Self::Class(b) => b.value(),
 			Self::Property(b) => b.value(),
 			Self::Component(b) => b.value(),

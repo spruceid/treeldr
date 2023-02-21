@@ -165,7 +165,7 @@ impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 				Object::Iri(IriIndex::Iri(term))
 			}
 			Self::NonNegativeInteger(u) => Object::Literal(u.as_rdf_literal()),
-			Self::String(s) => Object::Literal(Literal::String(s.to_string().into())),
+			Self::Literal(l) => Object::Literal(l.as_rdf_literal()),
 			Self::Name(n) => Object::Literal(Literal::String(n.to_string().into())),
 			Self::Id(id) => id.into_term(),
 			Self::Type(t) => t.id().into_term(),

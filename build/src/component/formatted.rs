@@ -1,13 +1,13 @@
 use std::cmp::Ordering;
 
 use locspan::Meta;
-use treeldr::{metadata::Merge, prop::UnknownProperty, vocab::Object, Id, TId};
+use treeldr::{metadata::Merge, prop::UnknownProperty, Id, TId, Value};
 
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
-	error, functional_property_value, layout, rdf,
+	error, functional_property_value, layout,
 	resource::BindingValueRef,
-	Context, Error, FunctionalPropertyValue,
+	Context, Error, FunctionalPropertyValue, MetaValueExt,
 };
 
 pub use treeldr::component::formatted::{Property, Type};
@@ -74,16 +74,15 @@ impl<M> Definition<M> {
 		&mut self,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::Format(p) => {
-				self.format_mut()
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
-			}
+			Property::Format(p) => self
+				.format_mut()
+				.insert(p, prop_cmp, value.into_expected_id()?),
 			Property::LayoutField(prop) => self.as_layout_field_mut().set(prop_cmp, prop, value)?,
 		}
 
@@ -223,7 +222,7 @@ impl Binding {
 		}
 	}
 
-	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value<'a>(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::Format(_, v) => BindingValueRef::Id(*v),
 			Self::LayoutField(b) => b.value(),

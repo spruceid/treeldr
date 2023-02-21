@@ -3,9 +3,9 @@ use std::cmp::Ordering;
 use crate::{
 	component::formatted::AssertFormatted,
 	context::{MapIds, MapIdsIn},
-	functional_property_value, prop, rdf,
+	functional_property_value, prop,
 	resource::{self, BindingValueRef},
-	Context, FunctionalPropertyValue,
+	Context, FunctionalPropertyValue, MetaValueExt,
 };
 
 use super::Error;
@@ -13,8 +13,8 @@ use locspan::Meta;
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
 pub use treeldr::layout::field::Property;
 use treeldr::{
-	metadata::Merge, prop::UnknownProperty, vocab::Object, BlankIdIndex, Id, IriIndex, Name,
-	PropertyValueRef, TId,
+	metadata::Merge, prop::UnknownProperty, BlankIdIndex, Id, IriIndex, Name, PropertyValueRef,
+	TId, Value,
 };
 
 /// Layout field definition.
@@ -154,13 +154,13 @@ impl<M> Definition<M> {
 		&mut self,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::For(p) => self.prop.insert(p, prop_cmp, rdf::from::expect_id(value)?),
+			Property::For(p) => self.prop.insert(p, prop_cmp, value.into_expected_id()?),
 		}
 
 		Ok(())
@@ -220,7 +220,7 @@ impl ClassBinding {
 		}
 	}
 
-	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value<'a>(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::For(_, v) => BindingValueRef::Id(*v),
 		}

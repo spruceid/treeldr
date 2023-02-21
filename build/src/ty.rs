@@ -1,8 +1,8 @@
 use crate::{
 	context::{HasType, MapIds, MapIdsIn},
-	functional_property_value, property_values, rdf,
+	functional_property_value, property_values,
 	resource::{self, BindingValueRef},
-	Context, Error, FunctionalPropertyValue, ObjectAsRequiredId, PropertyValue, PropertyValueRef,
+	Context, Error, FunctionalPropertyValue, MetaValueExt, PropertyValue, PropertyValueRef,
 	PropertyValues,
 };
 use locspan::Meta;
@@ -10,9 +10,7 @@ use std::{
 	cmp::Ordering,
 	collections::{HashMap, HashSet},
 };
-use treeldr::{
-	metadata::Merge, prop::UnknownProperty, utils::SccGraph, vocab::Object, Id, Multiple, TId,
-};
+use treeldr::{metadata::Merge, prop::UnknownProperty, utils::SccGraph, Id, Multiple, TId, Value};
 
 pub mod datatype;
 pub mod restriction;
@@ -241,7 +239,7 @@ impl<M> Definition<M> {
 		&mut self,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
@@ -249,15 +247,15 @@ impl<M> Definition<M> {
 		match prop {
 			Property::SubClassOf(p) => {
 				self.sub_class_of_mut()
-					.insert(p, prop_cmp, rdf::from::expect_type(value)?)
+					.insert(p, prop_cmp, value.into_expected_type()?)
 			}
 			Property::UnionOf(p) => {
 				self.union_of_mut()
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			Property::IntersectionOf(p) => {
 				self.intersection_of_mut()
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			Property::Datatype(prop) => self.as_datatype_mut().set(prop_cmp, prop, value)?,
 			Property::Restriction(prop) => self.as_restriction_mut().set(prop_cmp, prop, value)?,
@@ -383,8 +381,7 @@ impl<M> Definition<M> {
 			let mut options = Multiple::default();
 
 			for item in union_of.value().iter(context) {
-				let Meta(object, option_causes) = item?.cloned();
-				let option_id = object.into_required_id(&option_causes)?;
+				let Meta(option_id, option_causes) = item?.cloned().into_expected_id()?;
 				let option_ty = context
 					.require_type_id(option_id)
 					.map_err(|e| e.at(option_causes.clone()))?;
@@ -402,8 +399,7 @@ impl<M> Definition<M> {
 			let mut factors = Multiple::default();
 
 			for item in intersection_of.value().iter(context) {
-				let Meta(object, factor_causes) = item?.cloned();
-				let factor_id = object.into_required_id(&factor_causes)?;
+				let Meta(factor_id, factor_causes) = item?.cloned().into_expected_id()?;
 				let factor_ty = context
 					.require_type_id(factor_id)
 					.map_err(|e| e.at(factor_causes.clone()))?;
@@ -487,7 +483,7 @@ impl Binding {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<M> {
+	pub fn value(&self) -> BindingValueRef {
 		match self {
 			Self::UnionOf(_, v) => BindingValueRef::Id(*v),
 			Self::IntersectionOf(_, v) => BindingValueRef::Id(*v),
@@ -515,7 +511,7 @@ impl<'a> BindingRef<'a> {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::UnionOf(_, v) => BindingValueRef::Id(*v),
 			Self::IntersectionOf(_, v) => BindingValueRef::Id(*v),

@@ -4,7 +4,7 @@ use quote::quote;
 use rdf_types::Vocabulary;
 use shelves::{Ref, Shelf};
 use std::collections::BTreeMap;
-use treeldr::{BlankIdIndex, IriIndex, TId};
+use treeldr::{value::Literal, BlankIdIndex, IriIndex, TId};
 
 #[derive(Clone, Copy)]
 pub enum IdentType {
@@ -141,7 +141,7 @@ impl<'a, V, M> Context<'a, V, M> {
 			.model()
 			.get(layout_ref)
 			.expect("undefined described layout");
-		let label = layout.preferred_label().map(String::from);
+		let label = layout.preferred_label().map(Literal::to_string);
 		let doc = layout.comment().clone_stripped();
 
 		self.layouts.insert(

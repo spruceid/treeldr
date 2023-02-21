@@ -1,7 +1,14 @@
 mod real;
 
+use std::fmt;
+
+use rdf_types::{IriVocabulary, RdfDisplayWithContext};
 pub use real::*;
 use xsd_types::{Double, Float, Integer, NonNegativeInteger};
+
+use crate::IriIndex;
+
+use super::AsRdfLiteral;
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Numeric {
@@ -36,6 +43,26 @@ impl Numeric {
 		match self {
 			Self::Double(d) => Ok(d),
 			other => Err(other),
+		}
+	}
+}
+
+impl<V: IriVocabulary<Iri = IriIndex>> RdfDisplayWithContext<V> for Numeric {
+	fn rdf_fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::Real(v) => write!(f, "{v}^^{}", vocabulary.iri(&self.rdf_type()).unwrap()),
+			Self::Double(v) => write!(f, "{v}^^{}", vocabulary.iri(&self.rdf_type()).unwrap()),
+			Self::Float(v) => write!(f, "{v}^^{}", vocabulary.iri(&self.rdf_type()).unwrap()),
+		}
+	}
+}
+
+impl fmt::Display for Numeric {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Real(r) => r.fmt(f),
+			Self::Float(d) => d.fmt(f),
+			Self::Double(d) => d.fmt(f),
 		}
 	}
 }
