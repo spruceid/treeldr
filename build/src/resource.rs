@@ -1,16 +1,20 @@
 use std::{cmp::Ordering, collections::BTreeMap};
 
-use locspan::{Meta, Stripped};
+use locspan::Meta;
 use treeldr::{
-	doc::Block, metadata::Merge, prop::UnknownProperty, ty::data::RegExp, value, vocab::Object, Id,
-	MetaOption, Name, TId,
+	doc::Block,
+	metadata::Merge,
+	prop::UnknownProperty,
+	ty::data::RegExp,
+	value::{self, Literal},
+	Id, MetaOption, Name, TId, Value,
 };
 
 use crate::{
 	component,
 	context::{HasType, MapIds},
 	error::NodeTypeInvalid,
-	layout, list, prop, property_values, rdf, ty, Error, ObjectAsId, PropertyValues,
+	layout, list, prop, property_values, ty, Error, MetaValueExt, PropertyValues,
 };
 pub use treeldr::node::{Property, Type};
 
@@ -19,11 +23,11 @@ pub struct Data<M> {
 	pub id: Id,
 	pub metadata: M,
 	pub type_: PropertyValues<crate::Type, M>,
-	pub label: PropertyValues<String, M>,
-	pub comment: PropertyValues<String, M>,
+	pub label: PropertyValues<Literal, M>,
+	pub comment: PropertyValues<Literal, M>,
 
 	/// Other unknown properties.
-	pub other_properties: BTreeMap<Id, PropertyValues<Stripped<Object<M>>, M>>,
+	pub other_properties: BTreeMap<Id, PropertyValues<Value, M>>,
 }
 
 impl<M> Data<M> {
@@ -103,29 +107,27 @@ impl<M> Definition<M> {
 		self.data.has_type(context, type_)
 	}
 
-	pub fn label(&self) -> &PropertyValues<String, M> {
+	pub fn label(&self) -> &PropertyValues<Literal, M> {
 		&self.data.label
 	}
 
-	pub fn label_mut(&mut self) -> &mut PropertyValues<String, M> {
+	pub fn label_mut(&mut self) -> &mut PropertyValues<Literal, M> {
 		&mut self.data.label
 	}
 
-	pub fn other_properties(&self) -> &BTreeMap<Id, PropertyValues<Stripped<Object<M>>, M>> {
+	pub fn other_properties(&self) -> &BTreeMap<Id, PropertyValues<Value, M>> {
 		&self.data.other_properties
 	}
 
-	pub fn other_properties_mut(
-		&mut self,
-	) -> &mut BTreeMap<Id, PropertyValues<Stripped<Object<M>>, M>> {
+	pub fn other_properties_mut(&mut self) -> &mut BTreeMap<Id, PropertyValues<Value, M>> {
 		&mut self.data.other_properties
 	}
 
-	pub fn comment(&self) -> &PropertyValues<String, M> {
+	pub fn comment(&self) -> &PropertyValues<Literal, M> {
 		&self.data.comment
 	}
 
-	pub fn comment_mut(&mut self) -> &mut PropertyValues<String, M> {
+	pub fn comment_mut(&mut self) -> &mut PropertyValues<Literal, M> {
 		&mut self.data.comment
 	}
 
@@ -245,7 +247,7 @@ impl<M> Definition<M> {
 		&mut self,
 		prop: impl Into<crate::Property>,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
@@ -255,15 +257,15 @@ impl<M> Definition<M> {
 				Property::Self_(_) => (),
 				Property::Type(p) => {
 					self.type_mut()
-						.insert(p, prop_cmp, rdf::from::expect_type(value)?)
+						.insert(p, prop_cmp, value.into_expected_type()?)
 				}
 				Property::Label(p) => {
 					self.label_mut()
-						.insert(p, prop_cmp, rdf::from::expect_string(value)?)
+						.insert(p, prop_cmp, value.into_expected_literal()?)
 				}
 				Property::Comment(p) => {
 					self.comment_mut()
-						.insert(p, prop_cmp, rdf::from::expect_string(value)?)
+						.insert(p, prop_cmp, value.into_expected_literal()?)
 				}
 				Property::Class(prop) => self.as_type_mut().set(prop_cmp, prop, value)?,
 				Property::DatatypeRestriction(prop) => self
@@ -281,7 +283,7 @@ impl<M> Definition<M> {
 					.other_properties
 					.entry(prop.id())
 					.or_default()
-					.insert(None, prop_cmp, value.map(Stripped));
+					.insert(None, prop_cmp, value);
 			}
 		}
 
@@ -658,15 +660,15 @@ impl<M: Clone> Definition<M> {
 	}
 }
 
-pub enum ClassBindingRef<'a, M> {
+pub enum ClassBindingRef<'a> {
 	Type(Option<TId<UnknownProperty>>, crate::Type),
-	Label(Option<TId<UnknownProperty>>, &'a str),
-	Comment(Option<TId<UnknownProperty>>, &'a str),
-	Other(Id, Option<TId<UnknownProperty>>, &'a Object<M>),
+	Label(Option<TId<UnknownProperty>>, &'a Literal),
+	Comment(Option<TId<UnknownProperty>>, &'a Literal),
+	Other(Id, Option<TId<UnknownProperty>>, &'a Value),
 }
 
-impl<'a, M> ClassBindingRef<'a, M> {
-	pub fn into_binding_ref(self) -> BindingRef<'a, M> {
+impl<'a> ClassBindingRef<'a> {
+	pub fn into_binding_ref(self) -> BindingRef<'a> {
 		match self {
 			Self::Type(p, t) => BindingRef::Type(p, t),
 			Self::Label(p, l) => BindingRef::Label(p, l),
@@ -678,28 +680,25 @@ impl<'a, M> ClassBindingRef<'a, M> {
 
 struct CurrentOtherProperty<'a, M> {
 	id: Id,
-	values: property_values::non_functional::Iter<'a, Stripped<Object<M>>, M>,
+	values: property_values::non_functional::Iter<'a, Value, M>,
 }
 
 impl<'a, M> CurrentOtherProperty<'a, M> {
-	fn new(
-		id: Id,
-		values: property_values::non_functional::Iter<'a, Stripped<Object<M>>, M>,
-	) -> Self {
+	fn new(id: Id, values: property_values::non_functional::Iter<'a, Value, M>) -> Self {
 		Self { id, values }
 	}
 }
 
 pub struct ClassBindings<'a, M> {
 	type_: property_values::non_functional::Iter<'a, crate::Type, M>,
-	label: property_values::non_functional::Iter<'a, String, M>,
-	comment: property_values::non_functional::Iter<'a, String, M>,
-	other: std::collections::btree_map::Iter<'a, Id, PropertyValues<Stripped<Object<M>>, M>>,
+	label: property_values::non_functional::Iter<'a, Literal, M>,
+	comment: property_values::non_functional::Iter<'a, Literal, M>,
+	other: std::collections::btree_map::Iter<'a, Id, PropertyValues<Value, M>>,
 	current_other: Option<CurrentOtherProperty<'a, M>>,
 }
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
-	type Item = Meta<ClassBindingRef<'a, M>, &'a M>;
+	type Item = Meta<ClassBindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.type_
@@ -708,12 +707,12 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 			.or_else(|| {
 				self.label
 					.next()
-					.map(|m| m.into_deref_class_binding(ClassBindingRef::Label))
+					.map(|m| m.into_class_binding(ClassBindingRef::Label))
 			})
 			.or_else(|| {
 				self.comment
 					.next()
-					.map(|m| m.into_deref_class_binding(ClassBindingRef::Comment))
+					.map(|m| m.into_class_binding(ClassBindingRef::Comment))
 			})
 			.or_else(|| loop {
 				match &mut self.current_other {
@@ -736,20 +735,20 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 	}
 }
 
-pub enum BindingValueRef<'a, M> {
+pub enum BindingValueRef<'a> {
 	Type(crate::Type),
 	Id(Id),
 	Boolean(bool),
-	String(&'a str),
+	Literal(&'a Literal),
 	Name(&'a Name),
-	Object(&'a Object<M>),
+	Object(&'a Value),
 	Numeric(&'a value::Numeric),
 	Integer(&'a value::Integer),
 	NonNegativeInteger(&'a value::NonNegativeInteger),
 	RegExp(&'a RegExp),
 }
 
-impl<'a, M> BindingValueRef<'a, M> {
+impl<'a> BindingValueRef<'a> {
 	pub fn into_id(self) -> Option<Id> {
 		match self {
 			Self::Type(ty) => Some(ty.id().id()),
@@ -761,20 +760,20 @@ impl<'a, M> BindingValueRef<'a, M> {
 }
 
 #[derive(Debug)]
-pub enum BindingRef<'a, M> {
+pub enum BindingRef<'a> {
 	Type(Option<TId<UnknownProperty>>, crate::Type),
-	Label(Option<TId<UnknownProperty>>, &'a str),
-	Comment(Option<TId<UnknownProperty>>, &'a str),
+	Label(Option<TId<UnknownProperty>>, &'a Literal),
+	Comment(Option<TId<UnknownProperty>>, &'a Literal),
 	Class(crate::ty::BindingRef<'a>),
 	DatatypeRestriction(crate::ty::datatype::restriction::BindingRef<'a>),
 	Property(crate::prop::Binding),
 	Component(crate::component::BindingRef<'a>),
 	LayoutRestriction(crate::layout::restriction::BindingRef<'a>),
-	List(crate::list::BindingRef<'a, M>),
-	Other(Id, Option<TId<UnknownProperty>>, &'a Object<M>),
+	List(crate::list::BindingRef<'a>),
+	Other(Id, Option<TId<UnknownProperty>>, &'a Value),
 }
 
-impl<'a, M> BindingRef<'a, M> {
+impl<'a> BindingRef<'a> {
 	pub fn resource_property(&self) -> Result<Property, Id> {
 		match self {
 			Self::Type(p, _) => Ok(Property::Type(*p)),
@@ -797,11 +796,11 @@ impl<'a, M> BindingRef<'a, M> {
 		}
 	}
 
-	pub fn value(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::Type(_, v) => BindingValueRef::Type(*v),
-			Self::Label(_, v) => BindingValueRef::String(v),
-			Self::Comment(_, v) => BindingValueRef::String(v),
+			Self::Label(_, v) => BindingValueRef::Literal(v),
+			Self::Comment(_, v) => BindingValueRef::Literal(v),
 			Self::Class(b) => b.value(),
 			Self::DatatypeRestriction(b) => b.value(),
 			Self::Property(b) => b.value(),
@@ -825,7 +824,7 @@ pub struct Bindings<'a, M> {
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {
-	type Item = Meta<BindingRef<'a, M>, &'a M>;
+	type Item = Meta<BindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.data

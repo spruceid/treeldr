@@ -1,6 +1,7 @@
+use locspan::Meta;
 use rdf_types::{Generator, VocabularyMut};
 pub use treeldr::{multiple, property_values};
-use treeldr::{vocab, BlankIdIndex, IriIndex};
+use treeldr::{vocab, BlankIdIndex, IriIndex, Value};
 
 pub mod component;
 pub mod context;
@@ -63,32 +64,94 @@ impl<M> ObjectAsId<M> for vocab::Object<M> {
 	}
 }
 
-pub trait ObjectAsRequiredId<M> {
-	fn as_required_id(&self, cause: &M) -> Result<vocab::Id, Error<M>>;
+pub trait MetaValueExt<M>: Sized {
+	fn into_expected_id(self) -> Result<Meta<vocab::Id, M>, Error<M>>;
 
-	fn into_required_id(self, cause: &M) -> Result<vocab::Id, Error<M>>;
-}
+	fn into_expected_literal(self) -> Result<Meta<treeldr::value::Literal, M>, Error<M>>;
 
-impl<M: Clone> ObjectAsRequiredId<M> for vocab::Object<M> {
-	fn as_required_id(&self, cause: &M) -> Result<vocab::Id, Error<M>> {
-		match self {
-			vocab::Object::Literal(lit) => Err(Error::new(
-				error::LiteralUnexpected(lit.clone()).into(),
-				cause.clone(),
-			)),
-			vocab::Object::Iri(id) => Ok(vocab::Id::Iri(*id)),
-			vocab::Object::Blank(id) => Ok(vocab::Id::Blank(*id)),
+	fn into_expected_type(self) -> Result<Meta<Type, M>, Error<M>> {
+		Ok(self.into_expected_id()?.map(Type::from))
+	}
+
+	fn into_expected_numeric(self) -> Result<Meta<treeldr::value::Numeric, M>, Error<M>> {
+		match self.into_expected_literal()? {
+			Meta(treeldr::value::Literal::Numeric(n), meta) => Ok(Meta(n, meta)),
+			_ => panic!("expected number"),
 		}
 	}
 
-	fn into_required_id(self, cause: &M) -> Result<vocab::Id, Error<M>> {
+	fn into_expected_integer(self) -> Result<Meta<treeldr::value::Integer, M>, Error<M>> {
+		match self.into_expected_literal()? {
+			Meta(treeldr::value::Literal::Numeric(n), meta) => match n.into_integer() {
+				Ok(i) => Ok(Meta(i, meta)),
+				Err(_) => panic!("expected integer"),
+			},
+			_ => panic!("expected integer"),
+		}
+	}
+
+	fn into_expected_non_negative_integer(
+		self,
+	) -> Result<Meta<treeldr::value::NonNegativeInteger, M>, Error<M>> {
+		match self.into_expected_literal()? {
+			Meta(treeldr::value::Literal::Numeric(n), meta) => {
+				match n.into_non_negative_integer() {
+					Ok(n) => Ok(Meta(n, meta)),
+					Err(_) => panic!("expected non negative integer"),
+				}
+			}
+			_ => panic!("expected non negative integer"),
+		}
+	}
+
+	fn into_expected_regexp(self) -> Result<Meta<treeldr::ty::data::RegExp, M>, Error<M>> {
+		match self.into_expected_literal()? {
+			Meta(treeldr::value::Literal::Other(_, _), _meta) => {
+				todo!("regexp")
+			}
+			_ => panic!("expected regular expression"),
+		}
+	}
+
+	fn into_expected_schema_boolean(self) -> Result<Meta<bool, M>, Error<M>> {
+		match self.into_expected_id()? {
+			Meta(
+				treeldr::Id::Iri(IriIndex::Iri(vocab::Term::Schema(vocab::Schema::True))),
+				meta,
+			) => Ok(Meta(true, meta)),
+			Meta(
+				treeldr::Id::Iri(IriIndex::Iri(vocab::Term::Schema(vocab::Schema::False))),
+				meta,
+			) => Ok(Meta(false, meta)),
+			_ => panic!("expected boolean"),
+		}
+	}
+
+	fn into_expected_name(self) -> Result<Meta<treeldr::Name, M>, Error<M>> {
+		match self.into_expected_literal()? {
+			Meta(treeldr::value::Literal::String(s), meta) => match treeldr::Name::new(s) {
+				Ok(name) => Ok(Meta(name, meta)),
+				Err(_) => panic!("invalid name"),
+			},
+			_ => panic!("expected regular expression"),
+		}
+	}
+}
+
+impl<M> MetaValueExt<M> for Meta<Value, M> {
+	fn into_expected_id(self) -> Result<Meta<vocab::Id, M>, Error<M>> {
 		match self {
-			vocab::Object::Literal(lit) => Err(Error::new(
-				error::LiteralUnexpected(lit).into(),
-				cause.clone(),
-			)),
-			vocab::Object::Iri(id) => Ok(vocab::Id::Iri(id)),
-			vocab::Object::Blank(id) => Ok(vocab::Id::Blank(id)),
+			Meta(Value::Node(id), meta) => Ok(Meta(id, meta)),
+			Meta(Value::Literal(lit), meta) => {
+				Err(Error::new(error::LiteralUnexpected(lit).into(), meta))
+			}
+		}
+	}
+
+	fn into_expected_literal(self) -> Result<Meta<treeldr::value::Literal, M>, Error<M>> {
+		match self {
+			Meta(Value::Node(id), meta) => Err(Error::new(error::LiteralExpected(id).into(), meta)),
+			Meta(Value::Literal(lit), meta) => Ok(Meta(lit, meta)),
 		}
 	}
 }

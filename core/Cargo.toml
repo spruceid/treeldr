@@ -15,8 +15,10 @@ locspan-derive.workspace = true
 codespan-reporting.workspace = true
 rdf-types = { workspace = true, features = ["meta", "contextual"] }
 xsd-types.workspace = true
+langtag.workspace = true
 grdf = { workspace = true, features = ["meta"] }
 contextual.workspace = true
+thiserror.workspace = true
 btree-range-map = { version = "0.5", features = ["ordered-float"] }
 iref-enum = "2.1"
 num = "0.4.0"

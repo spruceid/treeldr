@@ -1,6 +1,6 @@
-use locspan::{MaybeLocated, Span, Stripped};
+use locspan::{MaybeLocated, Span};
 use rdf_types::Vocabulary;
-use treeldr::{Id, IriIndex, BlankIdIndex, Name, vocab::Object, PropertyValue};
+use treeldr::{Id, IriIndex, BlankIdIndex, Name, PropertyValue, Value};
 use contextual::WithContext;
 use crate::Property;
 
@@ -18,7 +18,7 @@ pub struct NodeBindingFunctionalConflict<M> {
 #[derive(Debug)]
 pub enum ConflictValues<M> {
 	Id(Id, PropertyValue<Id, M>),
-	Object(Object<M>, PropertyValue<Object<M>, M>),
+	Value(Value, PropertyValue<Value, M>),
 	Name(Name, PropertyValue<Name, M>),
 	Boolean(bool, PropertyValue<bool, M>)
 }
@@ -29,15 +29,9 @@ impl<M> From<(Id, PropertyValue<Id, M>)> for ConflictValues<M> {
 	}
 }
 
-impl<M> From<(Object<M>, PropertyValue<Object<M>, M>)> for ConflictValues<M> {
-	fn from((a, b): (Object<M>, PropertyValue<Object<M>, M>)) -> Self {
-		Self::Object(a, b)
-	}
-}
-
-impl<M> From<(Stripped<Object<M>>, PropertyValue<Stripped<Object<M>>, M>)> for ConflictValues<M> {
-	fn from((a, b): (Stripped<Object<M>>, PropertyValue<Stripped<Object<M>>, M>)) -> Self {
-		Self::Object(a.unwrap(), b.map(Stripped::unwrap))
+impl<M> From<(Value, PropertyValue<Value, M>)> for ConflictValues<M> {
+	fn from((a, b): (Value, PropertyValue<Value, M>)) -> Self {
+		Self::Value(a, b)
 	}
 }
 

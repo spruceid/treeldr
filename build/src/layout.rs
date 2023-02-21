@@ -4,18 +4,17 @@ use crate::{
 	context::{MapIds, MapIdsIn},
 	error,
 	functional_property_value::{self, FunctionalPropertyValue},
-	rdf,
 	resource::{self, BindingValueRef},
 	utils::TryCollect,
-	Context, Error, ObjectAsId, ObjectAsRequiredId,
+	Context, Error, MetaValueExt,
 };
 use derivative::Derivative;
 use locspan::Meta;
 use rdf_types::IriVocabulary;
 pub use treeldr::layout::{DescriptionProperty, Property};
 use treeldr::{
-	metadata::Merge, prop::UnknownProperty, vocab::Object, Id, IriIndex, MetaOption, Multiple,
-	Name, PropertyValueRef, TId,
+	metadata::Merge, prop::UnknownProperty, Id, IriIndex, MetaOption, Multiple, Name,
+	PropertyValueRef, TId, Value,
 };
 
 pub mod array;
@@ -141,8 +140,9 @@ impl<'a, M> SingleDescriptionPropertyRef<'a, M> {
 								})?
 								.iter(context)
 								.map(|item| {
-									let Meta(object, field_metadata) = item?.cloned();
-									let field_id = object.into_required_id(&field_metadata)?;
+									let object: Meta<Value, M> = item?.cloned();
+									let Meta(field_id, field_metadata) =
+										object.into_expected_id()?;
 									Ok(Meta(
 										context
 											.require_layout_field_id(field_id)
@@ -174,8 +174,9 @@ impl<'a, M> SingleDescriptionPropertyRef<'a, M> {
 								})?
 								.iter(context)
 								.map(|item| {
-									let Meta(object, variant_metadata) = item?.cloned();
-									let variant_id = object.into_required_id(&variant_metadata)?;
+									let object = item?.cloned();
+									let Meta(variant_id, variant_metadata) =
+										object.into_expected_id()?;
 									Ok(Meta(
 										context
 											.require_layout_variant_id(variant_id)
@@ -415,47 +416,42 @@ impl<M> DescriptionProperties<M> {
 		&mut self,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: DescriptionProperty,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
 			DescriptionProperty::Alias(p) => {
-				self.alias.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+				self.alias.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			DescriptionProperty::Array(p) => {
-				self.array.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+				self.array.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			DescriptionProperty::DerivedFrom(p) => {
 				self.derived_from
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			DescriptionProperty::Fields(p) => {
-				self.struct_
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+				self.struct_.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			DescriptionProperty::OneOrMany(p) => {
 				self.one_or_many
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			DescriptionProperty::Option(p) => {
-				self.option
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+				self.option.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			DescriptionProperty::Reference(p) => {
 				self.reference
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			DescriptionProperty::Required(p) => {
-				self.required
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+				self.required.insert(p, prop_cmp, value.into_expected_id()?)
 			}
-			DescriptionProperty::Set(p) => {
-				self.set.insert(p, prop_cmp, rdf::from::expect_id(value)?)
-			}
+			DescriptionProperty::Set(p) => self.set.insert(p, prop_cmp, value.into_expected_id()?),
 			DescriptionProperty::Variants(p) => {
-				self.enum_.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+				self.enum_.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 		}
 
@@ -915,7 +911,7 @@ impl DescriptionBinding {
 		}
 	}
 
-	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value<'a>(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::DerivedFrom(_, v) => BindingValueRef::Id(*v),
 			Self::Reference(_, v) => BindingValueRef::Id(*v),
@@ -1041,35 +1037,33 @@ impl<M> Definition<M> {
 		&mut self,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::For(p) => self
-				.ty_mut()
-				.insert(p, prop_cmp, rdf::from::expect_id(value)?),
+			Property::For(p) => self.ty_mut().insert(p, prop_cmp, value.into_expected_id()?),
 			Property::Description(prop) => self.desc.set(prop_cmp, prop, value)?,
 			Property::WithRestrictions(p) => {
 				self.restrictions_mut()
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			Property::IntersectionOf(p) => {
 				self.intersection_of_mut()
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
+					.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			Property::ArrayListFirst(p) => {
 				self.array_semantics
-					.set_first(p, prop_cmp, rdf::from::expect_id(value)?)
+					.set_first(p, prop_cmp, value.into_expected_id()?)
 			}
 			Property::ArrayListRest(p) => {
 				self.array_semantics
-					.set_rest(p, prop_cmp, rdf::from::expect_id(value)?)
+					.set_rest(p, prop_cmp, value.into_expected_id()?)
 			}
 			Property::ArrayListNil(p) => {
 				self.array_semantics
-					.set_nil(p, prop_cmp, rdf::from::expect_id(value)?)
+					.set_nil(p, prop_cmp, value.into_expected_id()?)
 			}
 		}
 
@@ -1247,16 +1241,13 @@ impl<M: Clone> Definition<M> {
 						Ok(intersection) => {
 							let mut result = Vec::new();
 
-							for PropertyValueRef {
-								value: Meta(object, layout_metadata),
-								..
-							} in items
-							{
-								let layout_id = object.as_required_id(layout_metadata)?;
+							for PropertyValueRef { value, .. } in items {
+								let Meta(layout_id, layout_metadata) =
+									value.cloned().into_expected_id()?;
 
 								let new_intersection = match intersection::Definition::from_id(
 									context,
-									Meta(layout_id, layout_metadata.clone()),
+									Meta(layout_id, layout_metadata),
 								)? {
 									Some(desc) => Some(match &intersection {
 										Some(intersection) => {
@@ -1325,8 +1316,8 @@ impl<M: Clone> Definition<M> {
 					)
 				})?;
 				for restriction_value in list.iter(context) {
-					let Meta(restriction_value, meta) = restriction_value?;
-					let restriction_id = restriction_value.as_required_id(meta)?;
+					let Meta(restriction_id, meta) =
+						restriction_value?.cloned().into_expected_id()?;
 					let restriction_definition = context
 						.require(restriction_id)
 						.map_err(|e| e.at(meta.clone()))?
@@ -1375,12 +1366,11 @@ impl<M: Clone> Definition<M> {
 				})?;
 				let mut intersection = Multiple::default();
 				for item in list.iter(context) {
-					let Meta(object, layout_meta) = item?;
-					let layout_id = object.as_required_id(layout_meta)?;
+					let Meta(layout_id, layout_meta) = item?.cloned().into_expected_id()?;
 					let layout_tid = context
 						.require_layout_id(layout_id)
 						.map_err(|e| e.at(layout_meta.clone()))?;
-					intersection.insert(Meta(layout_tid, layout_meta.clone()))
+					intersection.insert(Meta(layout_tid, layout_meta))
 				}
 
 				Ok(intersection)
@@ -1449,7 +1439,7 @@ impl ClassBinding {
 		}
 	}
 
-	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value<'a>(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::For(_, v) => BindingValueRef::Id(*v),
 			Self::Description(d) => d.value(),

@@ -12,11 +12,8 @@ use std::{
 	collections::{btree_map::Entry, BTreeMap, HashMap, HashSet},
 };
 use treeldr::{
-	metadata::Merge,
-	node::Type,
-	ty::SubClass,
-	vocab::{self, Object},
-	BlankIdIndex, Id, Multiple, PropertyValueRef, TId,
+	metadata::Merge, node::Type, ty::SubClass, vocab, BlankIdIndex, Id, Multiple, PropertyValueRef,
+	TId, Value,
 };
 
 pub mod build;
@@ -277,17 +274,10 @@ impl MapIdsIn for Id {
 	}
 }
 
-impl<M> MapIdsIn for Object<M> {
+impl MapIdsIn for Value {
 	fn map_ids_in(&mut self, prop: Option<Property>, f: impl Fn(Id, Option<Property>) -> Id) {
 		match self {
-			Self::Blank(b) => match f(Id::Blank(*b), prop) {
-				Id::Blank(b) => *self = Self::Blank(b),
-				Id::Iri(i) => *self = Self::Iri(i),
-			},
-			Self::Iri(i) => match f(Id::Iri(*i), prop) {
-				Id::Blank(b) => *self = Self::Blank(b),
-				Id::Iri(i) => *self = Self::Iri(i),
-			},
+			Self::Node(id) => *id = f(*id, prop),
 			Self::Literal(_) => (),
 		}
 	}
@@ -559,7 +549,7 @@ impl<M: Clone + Merge> Context<M> {
 				.declare_with(id, Type::List, cause.clone())
 				.as_list_mut();
 			node.first_mut()
-				.insert_base(Meta(Stripped(item), cause.clone()));
+				.insert_base(Meta(item.try_into().unwrap(), cause.clone()));
 			node.rest_mut().insert_base(Meta(head, cause));
 			head = id;
 		}
@@ -590,7 +580,7 @@ impl<M: Clone + Merge> Context<M> {
 				.declare_with(id, Type::List, cause.clone())
 				.as_list_mut();
 			node.first_mut()
-				.insert_base(Meta(Stripped(item), cause.clone()));
+				.insert_base(Meta(item.try_into().unwrap(), cause.clone()));
 			node.rest_mut().insert_base(Meta(head, cause));
 			head = id;
 		}
@@ -622,7 +612,7 @@ impl<M: Clone + Merge> Context<M> {
 				.declare_with(id, Type::List, cause.clone())
 				.as_list_mut();
 			node.first_mut()
-				.insert_base(Meta(Stripped(item), cause.clone()));
+				.insert_base(Meta(item.try_into().unwrap(), cause.clone()));
 			node.rest_mut().insert_base(Meta(head, cause));
 			head = id;
 		}

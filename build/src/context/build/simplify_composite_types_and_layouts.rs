@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use treeldr::{metadata::Merge, Id, ResourceType};
 
-use crate::{context::MapIds, Context, FunctionalPropertyValue, ListRef, ObjectAsId};
+use crate::{context::MapIds, Context, FunctionalPropertyValue, ListRef};
 
 impl<M: Merge> Context<M> {
 	pub fn simplify_composite_types_and_layouts(&mut self) {

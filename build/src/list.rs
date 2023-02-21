@@ -2,19 +2,19 @@ use std::cmp::Ordering;
 
 use crate::{
 	context::{MapIds, MapIdsIn},
-	error, functional_property_value, rdf,
+	error, functional_property_value,
 	resource::BindingValueRef,
-	Context, Error, FunctionalPropertyValue,
+	Context, Error, FunctionalPropertyValue, MetaValueExt,
 };
 use derivative::Derivative;
-use locspan::{Meta, Stripped};
-use treeldr::{metadata::Merge, prop::UnknownProperty, vocab::Object, Id, PropertyValueRef, TId};
+use locspan::Meta;
+use treeldr::{metadata::Merge, prop::UnknownProperty, Id, PropertyValueRef, TId, Value};
 
 pub use treeldr::list::Property;
 
 #[derive(Clone)]
 pub struct Definition<M> {
-	first: FunctionalPropertyValue<Stripped<Object<M>>, M>,
+	first: FunctionalPropertyValue<Value, M>,
 	rest: FunctionalPropertyValue<Id, M>,
 }
 
@@ -32,11 +32,11 @@ impl<M> Definition<M> {
 		Self::default()
 	}
 
-	pub fn first(&self) -> &FunctionalPropertyValue<Stripped<Object<M>>, M> {
+	pub fn first(&self) -> &FunctionalPropertyValue<Value, M> {
 		&self.first
 	}
 
-	pub fn first_mut(&mut self) -> &mut FunctionalPropertyValue<Stripped<Object<M>>, M> {
+	pub fn first_mut(&mut self) -> &mut FunctionalPropertyValue<Value, M> {
 		&mut self.first
 	}
 
@@ -52,14 +52,14 @@ impl<M> Definition<M> {
 		&mut self,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::First(p) => self.first.insert(p, prop_cmp, value.map(Stripped)),
-			Property::Rest(p) => self.rest.insert(p, prop_cmp, rdf::from::expect_id(value)?),
+			Property::First(p) => self.first.insert(p, prop_cmp, value),
+			Property::Rest(p) => self.rest.insert(p, prop_cmp, value.into_expected_id()?),
 		}
 
 		Ok(())
@@ -91,7 +91,7 @@ pub enum ListRef<'l, M> {
 impl<'l, M> ListRef<'l, M> {
 	pub fn try_fold<T, F>(&self, context: &'l Context<M>, first: T, f: F) -> TryFold<'l, T, M, F>
 	where
-		F: Fn(T, &FunctionalPropertyValue<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>>,
+		F: Fn(T, &FunctionalPropertyValue<Value, M>) -> Result<Vec<T>, Error<M>>,
 	{
 		TryFold {
 			context,
@@ -127,7 +127,7 @@ impl<'l, T, M, F> Iterator for TryFold<'l, T, M, F>
 where
 	T: Clone,
 	M: Clone,
-	F: Fn(T, &FunctionalPropertyValue<Stripped<Object<M>>, M>) -> Result<Vec<T>, Error<M>>,
+	F: Fn(T, &FunctionalPropertyValue<Value, M>) -> Result<Vec<T>, Error<M>>,
 {
 	type Item = Result<T, Error<M>>;
 
@@ -205,7 +205,7 @@ pub enum Iter<'l, M> {
 }
 
 impl<'l, M: Clone> Iterator for Iter<'l, M> {
-	type Item = Result<Meta<&'l Object<M>, &'l M>, Error<M>>;
+	type Item = Result<Meta<&'l Value, &'l M>, Error<M>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
@@ -235,7 +235,7 @@ impl<'l, M: Clone> Iterator for Iter<'l, M> {
 									}
 								}
 
-								Some(Ok(item.as_meta_value().cloned().map(Stripped::as_ref)))
+								Some(Ok(item.as_meta_value().cloned()))
 							}
 							Err(e) => Some(Err(e)),
 						}
@@ -253,7 +253,7 @@ pub enum LenientIter<'l, M> {
 }
 
 impl<'l, M> Iterator for LenientIter<'l, M> {
-	type Item = Meta<&'l Object<M>, &'l M>;
+	type Item = Meta<&'l Value, &'l M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		loop {
@@ -268,7 +268,7 @@ impl<'l, M> Iterator for LenientIter<'l, M> {
 					}
 
 					if let Some(item) = item {
-						break Some(item.value.map(Stripped::as_ref));
+						break Some(item.value);
 					}
 				}
 			}
@@ -282,14 +282,14 @@ pub enum ListMut<'l, M> {
 }
 
 #[derive(Debug)]
-pub enum ClassBindingRef<'a, M> {
-	First(Option<TId<UnknownProperty>>, &'a Object<M>),
+pub enum ClassBindingRef<'a> {
+	First(Option<TId<UnknownProperty>>, &'a Value),
 	Rest(Option<TId<UnknownProperty>>, Id),
 }
 
-pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
+pub type BindingRef<'a> = ClassBindingRef<'a>;
 
-impl<'a, M> ClassBindingRef<'a, M> {
+impl<'a> ClassBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
 			Self::First(p, _) => Property::First(*p),
@@ -297,7 +297,7 @@ impl<'a, M> ClassBindingRef<'a, M> {
 		}
 	}
 
-	pub fn value(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::First(_, v) => BindingValueRef::Object(v),
 			Self::Rest(_, v) => BindingValueRef::Id(*v),
@@ -307,19 +307,19 @@ impl<'a, M> ClassBindingRef<'a, M> {
 
 /// Iterator over the bindings of a given list.
 pub struct ClassBindings<'a, M> {
-	first: functional_property_value::Iter<'a, Stripped<Object<M>>, M>,
+	first: functional_property_value::Iter<'a, Value, M>,
 	rest: functional_property_value::Iter<'a, Id, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
 
 impl<'a, M> Iterator for ClassBindings<'a, M> {
-	type Item = Meta<ClassBindingRef<'a, M>, &'a M>;
+	type Item = Meta<ClassBindingRef<'a>, &'a M>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.first
 			.next()
-			.map(|m| m.into_class_binding(|id, o| ClassBindingRef::First(id, &o.0)))
+			.map(|m| m.into_class_binding(ClassBindingRef::First))
 			.or_else(|| {
 				self.rest
 					.next()

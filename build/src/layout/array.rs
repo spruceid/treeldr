@@ -207,7 +207,7 @@ impl Binding {
 		}
 	}
 
-	pub fn value<'a, M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value<'a>(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::ArrayListFirst(_, v) => BindingValueRef::Id(*v),
 			Self::ArrayListRest(_, v) => BindingValueRef::Id(*v),

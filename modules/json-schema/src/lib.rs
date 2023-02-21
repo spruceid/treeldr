@@ -286,7 +286,7 @@ fn generate_struct<F>(
 			if let Some(description) = field.preferred_label() {
 				obj.insert(
 					"description".into(),
-					remove_newlines(description.trim()).into(),
+					remove_newlines(description.lexical_form().trim()).into(),
 				);
 			}
 		}

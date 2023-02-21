@@ -50,7 +50,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 			.flatten()
 		{
 			let node = context.get_mut(id).unwrap();
-			node.comment_mut().insert_base(comment)
+			node.comment_mut().insert_base(comment.cast())
 		}
 
 		let ty_id = match def.ty_id {
@@ -570,7 +570,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 		context.declare_layout_field(id, loc.clone());
 		let node = context.get_mut(id).unwrap();
 		if let Some(comment) = doc {
-			node.comment_mut().insert_base(comment)
+			node.comment_mut().insert_base(comment.cast())
 		}
 
 		node.as_component_mut()

@@ -78,7 +78,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 			.flatten()
 		{
 			let node = context.get_mut(id).unwrap();
-			node.comment_mut().insert_base(comment)
+			node.comment_mut().insert_base(comment.cast())
 		}
 
 		local_context.implicit_definition = true;

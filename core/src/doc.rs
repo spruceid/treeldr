@@ -1,13 +1,16 @@
-use std::{collections::BTreeSet, ops::Deref};
+use std::{borrow::Cow, collections::BTreeSet, ops::Deref};
 
 use locspan::Meta;
 
-use crate::{metadata::Merge, property_values, PropertyValueRef, PropertyValues};
+use crate::{metadata::Merge, property_values, value::Literal, PropertyValueRef, PropertyValues};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Block {
 	/// Block content.
-	data: String,
+	data: Literal,
+
+	/// Lexical form (if not stored in `data`).
+	lexical_form: Option<String>,
 
 	/// Byte index of the end of the short description.
 	short_end: usize,
@@ -17,7 +20,17 @@ pub struct Block {
 }
 
 impl Block {
-	pub fn new(s: String) -> Self {
+	pub fn new(literal: Literal) -> Self {
+		let mut lexical_form = None;
+
+		let s = match literal.lexical_form() {
+			Cow::Borrowed(s) => s,
+			Cow::Owned(s) => {
+				lexical_form = Some(s);
+				lexical_form.as_ref().unwrap().as_str()
+			}
+		};
+
 		let mut short_end = 0;
 		let mut long_start = 0;
 
@@ -66,14 +79,15 @@ impl Block {
 		}
 
 		Self {
-			data: s,
+			data: literal,
+			lexical_form,
 			short_end,
 			long_start,
 		}
 	}
 
 	pub fn short_description(&self) -> Option<&str> {
-		let s = &self.data[..self.short_end];
+		let s = &self.as_str()[..self.short_end];
 		if s.trim().is_empty() {
 			None
 		} else {
@@ -82,7 +96,7 @@ impl Block {
 	}
 
 	pub fn long_description(&self) -> Option<&str> {
-		let s = &self.data[self.long_start..];
+		let s = &self.as_str()[self.long_start..];
 		if s.trim().is_empty() {
 			None
 		} else {
@@ -90,28 +104,37 @@ impl Block {
 		}
 	}
 
-	pub fn as_str(&self) -> &str {
+	pub fn literal(&self) -> &Literal {
 		&self.data
+	}
+
+	pub fn as_str(&self) -> &str {
+		self.lexical_form
+			.as_deref()
+			.unwrap_or_else(|| match self.data.lexical_form() {
+				Cow::Borrowed(s) => s,
+				Cow::Owned(_) => panic!("no lexical form found"),
+			})
 	}
 }
 
 impl Deref for Block {
-	type Target = str;
+	type Target = Literal;
 
 	fn deref(&self) -> &Self::Target {
-		self.as_str()
+		&self.data
 	}
 }
 
 impl From<String> for Block {
 	fn from(value: String) -> Self {
-		Self::new(value)
+		Self::new(Literal::String(value))
 	}
 }
 
 impl<'a> From<&'a str> for Block {
 	fn from(value: &'a str) -> Self {
-		Self::new(value.to_owned())
+		Self::new(Literal::String(value.to_owned()))
 	}
 }
 
@@ -161,7 +184,7 @@ impl<M> Documentation<M> {
 		None
 	}
 
-	pub fn insert(&mut self, Meta(comment, meta): Meta<String, M>)
+	pub fn insert(&mut self, Meta(comment, meta): Meta<Literal, M>)
 	where
 		M: Merge,
 	{
@@ -235,7 +258,7 @@ impl StrippedDocumentation {
 		None
 	}
 
-	pub fn insert(&mut self, comment: String) {
+	pub fn insert(&mut self, comment: Literal) {
 		self.blocks.insert(Block::new(comment));
 	}
 

@@ -2,7 +2,7 @@ use crate::{module, path, Context, Path};
 use derivative::Derivative;
 
 pub use treeldr::layout::Primitive;
-use treeldr::TId;
+use treeldr::{value::Literal, TId};
 
 pub mod enumeration;
 mod generate;
@@ -148,7 +148,7 @@ impl Description {
 						ident,
 						field.as_formatted().format().expect("missing field layout"),
 						field.as_layout_field().property().copied(),
-						field.preferred_label().map(String::from),
+						field.preferred_label().map(Literal::to_string),
 						field.comment().clone_stripped(),
 					))
 				}

@@ -2,14 +2,12 @@ use std::cmp::Ordering;
 
 use crate::{
 	context::{MapIds, MapIdsIn},
-	functional_property_value, rdf,
+	functional_property_value,
 	resource::BindingValueRef,
-	single, Context, Error, FunctionalPropertyValue, Single,
+	single, Context, Error, FunctionalPropertyValue, MetaValueExt, Single,
 };
 use locspan::Meta;
-use treeldr::{
-	metadata::Merge, prop::UnknownProperty, value::NonNegativeInteger, vocab::Object, Id, TId,
-};
+use treeldr::{metadata::Merge, prop::UnknownProperty, value::NonNegativeInteger, Id, TId, Value};
 
 pub use treeldr::ty::restriction::{Cardinality, Property};
 
@@ -85,32 +83,36 @@ impl<M> Definition<M> {
 		&mut self,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
 	{
 		match prop {
-			Property::OnProperty(p) => {
-				self.property
-					.insert(p, prop_cmp, rdf::from::expect_id(value)?)
-			}
-			Property::AllValuesFrom(_) => self
-				.restriction
-				.insert(rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::All(id)))),
-			Property::SomeValuesFrom(_) => self
-				.restriction
-				.insert(rdf::from::expect_id(value)?.map(|id| Restriction::Range(Range::Any(id)))),
+			Property::OnProperty(p) => self.property.insert(p, prop_cmp, value.into_expected_id()?),
+			Property::AllValuesFrom(_) => self.restriction.insert(
+				value
+					.into_expected_id()?
+					.map(|id| Restriction::Range(Range::All(id))),
+			),
+			Property::SomeValuesFrom(_) => self.restriction.insert(
+				value
+					.into_expected_id()?
+					.map(|id| Restriction::Range(Range::Any(id))),
+			),
 			Property::MaxCardinality(_) => self.restriction.insert(
-				rdf::from::expect_non_negative_integer(value)?
+				value
+					.into_expected_non_negative_integer()?
 					.map(|n| Restriction::Cardinality(Cardinality::AtMost(n))),
 			),
 			Property::MinCardinality(_) => self.restriction.insert(
-				rdf::from::expect_non_negative_integer(value)?
+				value
+					.into_expected_non_negative_integer()?
 					.map(|n| Restriction::Cardinality(Cardinality::AtLeast(n))),
 			),
 			Property::Cardinality(_) => self.restriction.insert(
-				rdf::from::expect_non_negative_integer(value)?
+				value
+					.into_expected_non_negative_integer()?
 					.map(|n| Restriction::Cardinality(Cardinality::Exactly(n))),
 			),
 		}
@@ -243,7 +245,7 @@ impl ClassBinding {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<M> {
+	pub fn value(&self) -> BindingValueRef {
 		match self {
 			Self::OnProperty(_, v) => BindingValueRef::Id(*v),
 			Self::SomeValuesFrom(_, v) => BindingValueRef::Id(*v),
@@ -277,7 +279,7 @@ impl<'a> ClassBindingRef<'a> {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::OnProperty(_, v) => BindingValueRef::Id(*v),
 			Self::SomeValuesFrom(_, v) => BindingValueRef::Id(*v),

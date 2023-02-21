@@ -1,4 +1,4 @@
-use locspan::{MapLocErr, Stripped};
+use locspan::MapLocErr;
 use std::cmp::Ordering;
 use treeldr::{metadata::Merge, node, Id, Property, TId};
 
@@ -57,11 +57,7 @@ impl<M> Context<M> {
 			.zip(dispatched_nodes_other_properties)
 		{
 			for (prop, value) in other_properties {
-				node.set(
-					prop,
-					|a, b| hierarchy.cmp(a.id(), b.id()),
-					value.map(Stripped::unwrap),
-				)?;
+				node.set(prop, |a, b| hierarchy.cmp(a.id(), b.id()), value)?;
 			}
 		}
 

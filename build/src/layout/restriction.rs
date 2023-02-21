@@ -1,11 +1,11 @@
 use std::cmp::Ordering;
 
 use locspan::Meta;
-use treeldr::{metadata::Merge, prop::UnknownProperty, vocab::Object, TId};
+use treeldr::{metadata::Merge, prop::UnknownProperty, TId, Value};
 
 use crate::{
-	context::MapIds, functional_property_value, rdf, resource::BindingValueRef, Error,
-	FunctionalPropertyValue,
+	context::MapIds, functional_property_value, resource::BindingValueRef, Error,
+	FunctionalPropertyValue, MetaValueExt,
 };
 
 pub use treeldr::layout::restriction::Property;
@@ -50,7 +50,7 @@ impl<M> Definition<M> {
 		&mut self,
 		prop_cmp: impl Fn(TId<UnknownProperty>, TId<UnknownProperty>) -> Option<Ordering>,
 		prop: Property,
-		value: Meta<Object<M>, M>,
+		value: Meta<Value, M>,
 	) -> Result<(), Error<M>>
 	where
 		M: Merge,
@@ -59,7 +59,7 @@ impl<M> Definition<M> {
 			Property::ExclusiveMaximum(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_numeric(value)?.map(|n| {
+				value.into_expected_numeric()?.map(|n| {
 					Restriction::Primitive(primitive::Restriction::Numeric(
 						primitive::Numeric::ExclusiveMaximum(n),
 					))
@@ -68,7 +68,7 @@ impl<M> Definition<M> {
 			Property::ExclusiveMinimum(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_numeric(value)?.map(|n| {
+				value.into_expected_numeric()?.map(|n| {
 					Restriction::Primitive(primitive::Restriction::Numeric(
 						primitive::Numeric::ExclusiveMinimum(n),
 					))
@@ -77,7 +77,7 @@ impl<M> Definition<M> {
 			Property::InclusiveMaximum(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_numeric(value)?.map(|n| {
+				value.into_expected_numeric()?.map(|n| {
 					Restriction::Primitive(primitive::Restriction::Numeric(
 						primitive::Numeric::InclusiveMaximum(n),
 					))
@@ -86,7 +86,7 @@ impl<M> Definition<M> {
 			Property::InclusiveMinimum(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_numeric(value)?.map(|n| {
+				value.into_expected_numeric()?.map(|n| {
 					Restriction::Primitive(primitive::Restriction::Numeric(
 						primitive::Numeric::InclusiveMinimum(n),
 					))
@@ -97,7 +97,7 @@ impl<M> Definition<M> {
 			Property::Pattern(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_regexp(value)?.map(|p| {
+				value.into_expected_regexp()?.map(|p| {
 					Restriction::Primitive(primitive::Restriction::String(
 						primitive::String::Pattern(p),
 					))
@@ -106,7 +106,7 @@ impl<M> Definition<M> {
 			Property::MaxCardinality(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_non_negative_integer(value)?.map(|n| {
+				value.into_expected_non_negative_integer()?.map(|n| {
 					Restriction::Container(container::ContainerRestriction::Cardinal(
 						container::cardinal::Restriction::Max(n),
 					))
@@ -115,7 +115,7 @@ impl<M> Definition<M> {
 			Property::MinCardinality(p) => self.restriction.insert(
 				p,
 				prop_cmp,
-				rdf::from::expect_non_negative_integer(value)?.map(|n| {
+				value.into_expected_non_negative_integer()?.map(|n| {
 					Restriction::Container(container::ContainerRestriction::Cardinal(
 						container::cardinal::Restriction::Min(n),
 					))
@@ -241,7 +241,7 @@ impl<'a> ClassBindingRef<'a> {
 		}
 	}
 
-	pub fn value<M>(&self) -> BindingValueRef<'a, M> {
+	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
 			Self::Primitive(b) => b.value(),
 			Self::Container(container::BindingRef::Cardinal(
