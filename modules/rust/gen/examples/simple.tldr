@@ -4,3 +4,7 @@ use <http://www.w3.org/2001/XMLSchema#> as xs;
 type Foo {
 	a: xs:string
 }
+
+type Bar {
+	a: Foo
+}

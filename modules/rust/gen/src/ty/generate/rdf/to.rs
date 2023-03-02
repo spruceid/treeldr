@@ -15,8 +15,7 @@ pub struct RdfTriplesImpl;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Bound {
 	/// The given primitive must implement `AsLiteral`.
-	AsLiteral(Primitive),
-	TriplesAndValues(TId<treeldr::Layout>)
+	AsLiteral(Primitive)
 }
 
 impl<M> Generate<M> for Bound {
@@ -32,13 +31,13 @@ impl<M> Generate<M> for Bound {
 				tokens.extend(quote!(#ty: ::treeldr_rust_prelude::rdf::AsLiteral<N, V>));
 				Ok(())
 			}
-			Self::TriplesAndValues(layout_ref) => {
-				let ty = context.layout_type(*layout_ref).unwrap();
-				let mut path = context.module_path(scope).to(&context.parent_module_path(ty.module()).unwrap());
-				path.push(ty.ident());
-				tokens.extend(quote!(#path: ::treeldr_rust_prelude::rdf::TriplesAndValues<N, V>));
-				Ok(())
-			}
+			// Self::TriplesAndValues(layout_ref) => {
+			// 	let ty = context.layout_type(*layout_ref).unwrap();
+			// 	let mut path = context.module_path(scope).to(&context.parent_module_path(ty.module()).unwrap());
+			// 	path.push(ty.ident());
+			// 	tokens.extend(quote!(#path: ::treeldr_rust_prelude::rdf::TriplesAndValues<N, V>));
+			// 	Ok(())
+			// }
 		}
 	}
 }
@@ -57,22 +56,19 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 	scope: Option<shelves::Ref<crate::Module>>,
 	layout: TId<treeldr::Layout>,
 	lifetime: TokenStream
-) -> Result<(TokenStream, Option<Bound>), Error> {
+) -> Result<TokenStream, Error> {
 	let ty = context.layout_type(layout).unwrap();
 
 	match ty.description() {
 		ty::Description::Never => {
-			Ok((quote!(::treeldr_rust_prelude::rdf::iter::Empty<V>), None))
+			Ok(quote!(::treeldr_rust_prelude::rdf::iter::Empty<V>))
 		}
 		ty::Description::Alias(_, target) => {
 			triples_and_values_iterator_of(context, scope, *target, lifetime)
 		}
 		ty::Description::Primitive(p) => {
 			let p_ty = p.generate_with(context, scope).into_tokens()?;
-			Ok((
-				quote!(::treeldr_rust_prelude::rdf::iter::ValuesOnly<::treeldr_rust_prelude::rdf::iter::LiteralValue<'a, #p_ty, I, V>>),
-				Some(Bound::AsLiteral(*p))
-			))
+			Ok(quote!(::treeldr_rust_prelude::rdf::iter::ValuesOnly<::treeldr_rust_prelude::rdf::iter::LiteralValue<'a, #p_ty, I, V>>))
 		}
 		ty::Description::BuiltIn(b) => {
 			match b {
@@ -80,17 +76,14 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 					let item_ty = context.layout_type(*item_layout).unwrap();
 					let mut path = context.module_path(scope).to(&context.parent_module_path(item_ty.module()).unwrap());
 					path.push(item_ty.ident());
-					Ok((
-						quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::collection::btree_set::Iter<#lifetime, #path>>),
-						None
-					))
+					Ok(quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::collection::btree_set::Iter<#lifetime, #path>>))
 				}
 				ty::BuiltIn::OneOrMany(_) => {
 					todo!()
 				}
 				ty::BuiltIn::Option(item_layout) => {
-					let (inner, bound) = triples_and_values_iterator_of(context, scope, *item_layout, lifetime)?;
-					Ok((quote!(::treeldr_rust_prelude::rdf::iter::Optional<#inner>), bound))
+					let inner = triples_and_values_iterator_of(context, scope, *item_layout, lifetime)?;
+					Ok(quote!(::treeldr_rust_prelude::rdf::iter::Optional<#inner>))
 				}
 				ty::BuiltIn::Required(item_layout) => {
 					triples_and_values_iterator_of(context, scope, *item_layout, lifetime)
@@ -99,22 +92,82 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 					let item_ty = context.layout_type(*item_layout).unwrap();
 					let mut path = context.module_path(scope).to(&context.parent_module_path(item_ty.module()).unwrap());
 					path.push(item_ty.ident());
-					Ok((quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::slice::Iter<#lifetime, #path>>), None))
+					Ok(quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::slice::Iter<#lifetime, #path>>))
 				}
 			}
 		}
 		ty::Description::Struct(s) => {
 			let mut path = context.module_path(scope).to(&context.parent_module_path(ty.module()).unwrap());
 			path.push(triples_and_values_iterator_name_from(s.ident()));
-			Ok((quote!(#path), Some(Bound::TriplesAndValues(layout))))
+			Ok(quote!(#path<#lifetime, I, V>))
 		}
 		ty::Description::Enum(e) => {
 			let mut path = context.module_path(scope).to(&context.parent_module_path(ty.module()).unwrap());
 			path.push(triples_and_values_iterator_name_from(e.ident()));
-			Ok((quote!(#path), Some(Bound::TriplesAndValues(layout))))
+			Ok(quote!(#path<#lifetime, I, V>))
 		}
 		ty::Description::Reference => {
 			todo!("reference iterator")
 		}
 	}
+}
+
+/// Collect the bounds necessary for the `Triples` or `TriplesAndValues`
+/// implementations.
+fn collect_bounds<V, M>(
+	context: &crate::Context<V, M>,
+	layout: TId<treeldr::Layout>,
+	mut bound: impl FnMut(Bound)
+) {
+	fn collect<V, M>(
+		context: &crate::Context<V, M>,
+		layout: TId<treeldr::Layout>,
+		bound: &mut impl FnMut(Bound)
+	) {
+		let ty = context.layout_type(layout).unwrap();
+
+		match ty.description() {
+			ty::Description::Never => (),
+			ty::Description::Alias(_, target) => {
+				collect(context, *target, bound)
+			}
+			ty::Description::Primitive(p) => {
+				bound(Bound::AsLiteral(*p))
+			}
+			ty::Description::BuiltIn(b) => {
+				match b {
+					ty::BuiltIn::BTreeSet(item_layout) => {
+						collect(context, *item_layout, bound)
+					}
+					ty::BuiltIn::OneOrMany(item_layout) => {
+						collect(context, *item_layout, bound)
+					}
+					ty::BuiltIn::Option(item_layout) => {
+						collect(context, *item_layout, bound)
+					}
+					ty::BuiltIn::Required(item_layout) => {
+						collect(context, *item_layout, bound)
+					}
+					ty::BuiltIn::Vec(item_layout) => {
+						collect(context, *item_layout, bound)
+					}
+				}
+			}
+			ty::Description::Struct(s) => {
+				for field in s.fields() {
+					collect(context, field.layout(), bound)
+				}
+			}
+			ty::Description::Enum(e) => {
+				for variant in e.variants() {
+					if let Some(layout_ref) = variant.ty() {
+						collect(context, layout_ref, bound)
+					}
+				}
+			}
+			ty::Description::Reference => ()
+		}
+	}
+
+	collect(context, layout, &mut bound)
 }

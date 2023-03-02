@@ -5,7 +5,7 @@ use treeldr::Id;
 
 use crate::{ty::{generate::GenerateFor, structure::Struct, params::ParametersValues}, GenerateList, Generate};
 
-use super::{RdfTriplesImpl, triples_and_values_iterator_name_from, triples_and_values_iterator_of};
+use super::{RdfTriplesImpl, triples_and_values_iterator_name_from, triples_and_values_iterator_of, collect_bounds};
 
 impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 	fn generate<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
@@ -32,8 +32,8 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 					self.#field_ident.clone()
 				})
 			} else {
-				let (iter_ty, bound) = triples_and_values_iterator_of(context, scope, field.layout(), quote!('a))?;
-				bounds.extend(bound);
+				let iter_ty = triples_and_values_iterator_of(context, scope, field.layout(), quote!('a))?;
+				collect_bounds(context, field.layout(), |b| { bounds.insert(b); });
 				iterator_fields.push(quote! {
 					#field_ident: #iter_ty
 				});

@@ -1,206 +1,14 @@
-use std::collections::BTreeSet;
-
-use crate::{ty::{BuiltIn, Context, Description, Enum, Primitive, Struct, Type, generate::GenerateFor, params::ParametersValues}, Error, Generate, GenerateList};
+use crate::{ty::{BuiltIn, Context, Description, Primitive, Type, self}, Error, Generate};
 use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
-use treeldr::{BlankIdIndex, IriIndex, Id};
+use treeldr::{BlankIdIndex, IriIndex, TId};
+
+mod r#struct;
+mod r#enum;
 
 /// `FromRdf` trait implementation.
 pub struct FromRdfImpl;
-
-impl<M> GenerateFor<Struct, M>for FromRdfImpl {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		context: &Context<V, M>,
-		scope: Option<shelves::Ref<crate::Module>>,
-		ty: &Struct,
-		tokens: &mut TokenStream,
-	) -> Result<(), crate::Error> {
-		let mut fields_init = Vec::with_capacity(ty.fields().len());
-		let mut bounds = BTreeSet::new();
-
-		for field in ty.fields() {
-			let id = field.ident();
-
-			let init = match field.property() {
-				Some(prop_ref) => {
-					let prop = context.model().get(prop_ref).unwrap();
-
-					let layout_ref = field.layout();
-					let layout = context.model().get(layout_ref).unwrap();
-
-					if prop.id()
-						== treeldr::Id::Iri(IriIndex::Iri(treeldr::vocab::Term::TreeLdr(
-							treeldr::vocab::TreeLdr::Self_,
-						))) {
-						match layout.as_layout().description() {
-							treeldr::layout::Description::Required(_) => {
-								quote! {
-									::treeldr_rust_prelude::Id::from_ref(id)
-								}
-							}
-							treeldr::layout::Description::Option(_) => {
-								quote! {
-									Some(::treeldr_rust_prelude::Id::from_ref(id))
-								}
-							}
-							_ => {
-								quote! {
-									Some(::treeldr_rust_prelude::Id::from_ref(id)).into_iter().collect()
-								}
-							}
-						}
-					} else {
-						let prop_id = match prop_ref.id() {
-							Id::Iri(i) => {
-								let iri = context.vocabulary().iri(&i).unwrap().into_str();
-								quote! {
-									::treeldr_rust_prelude::rdf_types::FromIri::from_iri(
-										namespace.insert(::treeldr_rust_prelude::static_iref::iri!(
-											#iri
-										))
-									)
-								}
-							}
-							Id::Blank(_) => return Err(Error::BlankProperty(prop_ref))
-						};
-
-						let objects = quote! { graph.objects(&id, &#prop_id) };
-
-						match layout.as_layout().description() {
-							treeldr::layout::Description::Required(_) => {
-								let object = quote! { object };
-								let from_object =
-									from_object(context, field.ty(context), object.clone(), |b| { bounds.insert(b); });
-
-								quote! {
-									let mut objects = #objects;
-
-									match objects.next() {
-										Some(object) => {
-											if objects.next().is_some() {
-												panic!("multiples values on functional property")
-											}
-
-											#from_object
-										}
-										None => {
-											return Err(::treeldr_rust_prelude::FromRdfError::MissingRequiredPropertyValue)
-										}
-									}
-								}
-							}
-							treeldr::layout::Description::Option(_) => {
-								match field.ty(context).description() {
-									Description::BuiltIn(BuiltIn::Option(item_layout)) => {
-										let item_ty = context.layout_type(*item_layout).unwrap();
-										let object = quote! { object };
-										let from_object = from_object(context, item_ty, object.clone(), |b| { bounds.insert(b); });
-
-										quote! {
-											let mut objects = #objects;
-											let object = objects.next();
-											if objects.next().is_some() {
-												panic!("multiples values on functional property")
-											}
-
-											match object {
-												Some(#object) => Some({
-													#from_object
-												}),
-												None => None
-											}
-										}
-									}
-									_ => panic!("not an option"),
-								}
-							}
-							_ => from_objects(context, field.ty(context), objects, |b| { bounds.insert(b); }),
-						}
-					}
-				}
-				None => {
-					if field.ty(context).impl_default(context) {
-						quote! { ::core::default::Default::default() }
-					} else {
-						return Err(Error::MissingDefaultImpl);
-					}
-				}
-			};
-
-			fields_init.push(quote! { #id: { #init } })
-		}
-
-		let ident = ty.ident();
-		let params_values = ParametersValues::new(quote!(N::Id));
-		let params = ty.params().instantiate(&params_values);
-
-		let bounds = bounds
-			.separated_by(&quote!(,))
-			.generate_with(context, scope)
-			.into_tokens()?;
-
-		tokens.extend(quote! {
-			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::FromRdf<N, V> for #ident #params
-			where
-				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: ::treeldr_rust_prelude::rdf_types::FromIri<Iri=N::Iri>,
-				#bounds
-			{
-				fn from_rdf<G>(
-					namespace: &mut N,
-					id: &N::Id,
-					graph: &G
-				) -> Result<Self, ::treeldr_rust_prelude::FromRdfError>
-				where
-					G: ::treeldr_rust_prelude::grdf::Graph<
-						Subject=N::Id,
-						Predicate=N::Id,
-						Object=::treeldr_rust_prelude::rdf_types::Object<N::Id, V>
-					>
-				{
-					Ok(Self {
-						#(#fields_init),*
-					})
-				}
-			}
-		});
-
-		Ok(())
-	}
-}
-
-impl<M> GenerateFor<Enum, M>for FromRdfImpl {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		_context: &Context<V, M>,
-		_scope: Option<shelves::Ref<crate::Module>>,
-		ty: &Enum,
-		tokens: &mut TokenStream,
-	) -> Result<(), crate::Error> {
-		let ident = ty.ident();
-		let params_values = ParametersValues::default();
-		let params = ty.params().instantiate(&params_values);
-
-		tokens.extend(quote! {
-			impl<I, V, N> ::treeldr_rust_prelude::FromRdf<I, V, N> for #ident #params {
-				fn from_rdf<G>(
-					namespace: &N,
-					id: &I,
-					graph: &G
-				) -> Result<Self, ::treeldr_rust_prelude::FromRdfError>
-				where
-					G: ::grdf::Graph<Subject=I, Predicate=I, Object=::treeldr_rust_prelude::rdf_types::Object<I, V>>
-				{
-					todo!()
-				}
-			}
-		});
-
-		Ok(())
-	}
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Bound {
@@ -222,6 +30,66 @@ impl<M> Generate<M> for Bound {
 			}
 		}
 	}
+}
+
+/// Collect the bounds necessary for the `FromRdf` implementation of the given
+/// layout.
+fn collect_bounds<V, M>(
+	context: &crate::Context<V, M>,
+	layout: TId<treeldr::Layout>,
+	mut bound: impl FnMut(Bound)
+) {
+	fn collect<V, M>(
+		context: &crate::Context<V, M>,
+		layout: TId<treeldr::Layout>,
+		bound: &mut impl FnMut(Bound)
+	) {
+		let ty = context.layout_type(layout).unwrap();
+
+		match ty.description() {
+			ty::Description::Never => (),
+			ty::Description::Alias(_, target) => {
+				collect(context, *target, bound)
+			}
+			ty::Description::Primitive(p) => {
+				bound(Bound::FromLiteral(*p))
+			}
+			ty::Description::BuiltIn(b) => {
+				match b {
+					ty::BuiltIn::BTreeSet(item_layout) => {
+						collect(context, *item_layout, bound)
+					}
+					ty::BuiltIn::OneOrMany(item_layout) => {
+						collect(context, *item_layout, bound)
+					}
+					ty::BuiltIn::Option(item_layout) => {
+						collect(context, *item_layout, bound)
+					}
+					ty::BuiltIn::Required(item_layout) => {
+						collect(context, *item_layout, bound)
+					}
+					ty::BuiltIn::Vec(item_layout) => {
+						collect(context, *item_layout, bound)
+					}
+				}
+			}
+			ty::Description::Struct(s) => {
+				for field in s.fields() {
+					collect(context, field.layout(), bound)
+				}
+			}
+			ty::Description::Enum(e) => {
+				for variant in e.variants() {
+					if let Some(layout_ref) = variant.ty() {
+						collect(context, layout_ref, bound)
+					}
+				}
+			}
+			ty::Description::Reference => ()
+		}
+	}
+
+	collect(context, layout, &mut bound)
 }
 
 fn primitive_from_literal<V, M>(
@@ -284,13 +152,12 @@ fn primitive_from_literal<V, M>(
 fn from_object<V, M>(
 	context: &Context<V, M>,
 	ty: &Type,
-	object: TokenStream,
-	mut bounds: impl FnMut(Bound)
+	object: TokenStream
 ) -> TokenStream {
 	match ty.description() {
 		Description::BuiltIn(BuiltIn::Required(item)) => {
 			let ty = context.layout_type(*item).unwrap();
-			from_object(context, ty, object, bounds)
+			from_object(context, ty, object)
 		}
 		Description::BuiltIn(BuiltIn::Option(_item)) => {
 			todo!("option")
@@ -311,7 +178,7 @@ fn from_object<V, M>(
 		}
 		Description::Alias(_, layout) => {
 			let ty = context.layout_type(*layout).unwrap();
-			from_object(context, ty, object, bounds)
+			from_object(context, ty, object)
 		}
 		Description::Reference => {
 			quote! {
@@ -322,7 +189,6 @@ fn from_object<V, M>(
 			}
 		}
 		Description::Primitive(p) => {
-			bounds(Bound::FromLiteral(*p));
 			let lit = quote! { lit };
 			let from_literal = primitive_from_literal(context, *p, lit.clone());
 
@@ -337,7 +203,7 @@ fn from_object<V, M>(
 			quote! {
 				match #object {
 					::treeldr_rust_prelude::rdf::Object::Id(id) => {
-						::treeldr_rust_prelude::FromRdf::from_rdf(::treeldr_rust_prelude::Id::as_ref(id), graph)?
+						::treeldr_rust_prelude::FromRdf::from_rdf(namespace, id, graph)?
 					},
 					_ => return Err(::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue)
 				}
@@ -349,14 +215,13 @@ fn from_object<V, M>(
 fn from_objects<V, M>(
 	context: &Context<V, M>,
 	ty: &Type,
-	objects: TokenStream,
-	bounds: impl FnMut(Bound)
+	objects: TokenStream
 ) -> TokenStream {
 	match ty.description() {
 		Description::BuiltIn(BuiltIn::Vec(item)) => {
 			let object = quote! { object };
 			let from_object =
-				from_object(context, context.layout_type(*item).unwrap(), object.clone(), bounds);
+				from_object(context, context.layout_type(*item).unwrap(), object.clone());
 			quote! {
 				let mut result = ::std::vec::Vec::new();
 				for #object in #objects {
@@ -368,7 +233,7 @@ fn from_objects<V, M>(
 		Description::BuiltIn(BuiltIn::BTreeSet(item)) => {
 			let object = quote! { object };
 			let from_object =
-				from_object(context, context.layout_type(*item).unwrap(), object.clone(), bounds);
+				from_object(context, context.layout_type(*item).unwrap(), object.clone());
 			quote! {
 				let mut result = ::std::collections::btree_set::BTreeSet::new();
 				for #object in #objects {

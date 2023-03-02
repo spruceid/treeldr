@@ -4,7 +4,7 @@ use quote::quote;
 
 use crate::{ty::{generate::GenerateFor, enumeration::Enum, params::ParametersValues}, GenerateList, Generate};
 
-use super::{RdfTriplesImpl, triples_and_values_iterator_name_from, triples_and_values_iterator_of};
+use super::{RdfTriplesImpl, triples_and_values_iterator_name_from, triples_and_values_iterator_of, collect_bounds};
 
 impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 	fn generate<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
@@ -25,8 +25,8 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 			let variant_ident = variant.ident();
 			match variant.ty() {
 				Some(variant_type) => {
-					let (variant_iterator_type, bound) = triples_and_values_iterator_of(context, scope, variant_type, quote!('a))?;
-					bounds.extend(bound);
+					let variant_iterator_type = triples_and_values_iterator_of(context, scope, variant_type, quote!('a))?;
+					collect_bounds(context, variant_type, |b| { bounds.insert(b); });
 					iterator_variants.push(quote! {
 						#variant_ident ( #variant_iterator_type )
 					});
