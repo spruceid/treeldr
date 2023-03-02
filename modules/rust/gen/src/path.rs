@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Path(Vec<Segment>);
 
 impl Path {

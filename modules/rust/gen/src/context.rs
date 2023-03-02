@@ -1,10 +1,7 @@
-use crate::{module, ty, Module, Path, Referenced, Type};
-use proc_macro2::TokenStream;
-use quote::quote;
-use rdf_types::Vocabulary;
+use crate::{module, ty, Module, Path, Type};
 use shelves::{Ref, Shelf};
 use std::collections::BTreeMap;
-use treeldr::{value::Literal, BlankIdIndex, IriIndex, TId};
+use treeldr::{value::Literal, TId};
 
 /// Rust context.
 pub struct Context<'a, V, M> {

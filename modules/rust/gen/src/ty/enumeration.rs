@@ -1,5 +1,5 @@
 use crate::{Context, Error, Generate, Module};
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, Ident};
 use quote::quote;
 use rdf_types::Vocabulary;
 use shelves::Ref;
@@ -9,17 +9,17 @@ use super::Parameters;
 
 /// Rust `enum` type.
 pub struct Enum {
-	ident: proc_macro2::Ident,
+	ident: Ident,
 	variants: Vec<Variant>,
 	params: Parameters
 }
 
 impl Enum {
-	pub fn new(ident: proc_macro2::Ident, variants: Vec<Variant>) -> Self {
+	pub fn new(ident: Ident, variants: Vec<Variant>) -> Self {
 		Self { ident, variants, params: Parameters::default() }
 	}
 
-	pub fn ident(&self) -> &proc_macro2::Ident {
+	pub fn ident(&self) -> &Ident {
 		&self.ident
 	}
 
@@ -33,13 +33,21 @@ impl Enum {
 }
 
 pub struct Variant {
-	ident: proc_macro2::Ident,
+	ident: Ident,
 	ty: Option<TId<treeldr::Layout>>,
 }
 
 impl Variant {
-	pub fn new(ident: proc_macro2::Ident, ty: Option<TId<treeldr::Layout>>) -> Self {
+	pub fn new(ident: Ident, ty: Option<TId<treeldr::Layout>>) -> Self {
 		Self { ident, ty }
+	}
+
+	pub fn ident(&self) -> &Ident {
+		&self.ident
+	}
+
+	pub fn ty(&self) -> Option<TId<treeldr::Layout>> {
+		self.ty
 	}
 }
 

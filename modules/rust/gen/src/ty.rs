@@ -10,7 +10,7 @@ pub mod enumeration;
 mod generate;
 pub mod structure;
 
-use params::{Parameter, Parameters, ParametersValues};
+use params::{Parameters, ParametersValues};
 use enumeration::Enum;
 use structure::Struct;
 
@@ -50,7 +50,7 @@ impl Type {
 			Description::Alias(ident, _) => ident.clone(),
 			Description::Struct(s) => s.ident().clone(),
 			Description::Enum(e) => e.ident().clone(),
-			Description::Primitive(p) => {
+			Description::Primitive(_) => {
 				todo!()
 			}
 			Description::BuiltIn(_) => {
