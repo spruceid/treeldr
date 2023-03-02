@@ -80,7 +80,7 @@ impl<M> Generate<M> for Ref<Module> {
 	) -> Result<(), Error> {
 		let module = context.module(*self).expect("undefined module");
 		let ident = module.ident();
-		let content = module.with(context, Some(*self)).into_tokens()?;
+		let content = module.generate_with(context, Some(*self)).into_tokens()?;
 
 		tokens.extend(quote! {
 			pub mod #ident {

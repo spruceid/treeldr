@@ -5,18 +5,26 @@ use rdf_types::Vocabulary;
 use shelves::Ref;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
+use super::Parameters;
+
+/// Rust `enum` type.
 pub struct Enum {
 	ident: proc_macro2::Ident,
 	variants: Vec<Variant>,
+	params: Parameters
 }
 
 impl Enum {
 	pub fn new(ident: proc_macro2::Ident, variants: Vec<Variant>) -> Self {
-		Self { ident, variants }
+		Self { ident, variants, params: Parameters::default() }
 	}
 
 	pub fn ident(&self) -> &proc_macro2::Ident {
 		&self.ident
+	}
+
+	pub fn params(&self) -> Parameters {
+		self.params
 	}
 
 	pub fn variants(&self) -> &[Variant] {
@@ -46,7 +54,7 @@ impl<M> Generate<M> for Variant {
 
 		match self.ty.as_ref() {
 			Some(ty) => {
-				let ty = ty.with(context, scope).into_tokens()?;
+				let ty = ty.generate_with(context, scope).into_tokens()?;
 
 				tokens.extend(quote! {
 					#ident(#ty)

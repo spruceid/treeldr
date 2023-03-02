@@ -87,7 +87,7 @@ impl TermDefinition {
 		let syntax_id = match self.id.clone()? {
 			json_ld::Term::Null => Nullable::Null,
 			json_ld::Term::Keyword(k) => Nullable::Some(term_definition::Id::Keyword(k)),
-			json_ld::Term::Ref(r) => {
+			json_ld::Term::Id(r) => {
 				Nullable::Some(term_definition::Id::Term(prefixes.compact(vocabulary, r)))
 			}
 		};
@@ -111,7 +111,7 @@ impl TermDefinition {
 			json_ld::Type::Vocab => {
 				term_definition::Type::Keyword(term_definition::TypeKeyword::Vocab)
 			}
-			json_ld::Type::Ref(i) => {
+			json_ld::Type::Iri(i) => {
 				term_definition::Type::Term(prefixes.compact(vocabulary, i.into()))
 			}
 		});

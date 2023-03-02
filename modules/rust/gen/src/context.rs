@@ -6,65 +6,19 @@ use shelves::{Ref, Shelf};
 use std::collections::BTreeMap;
 use treeldr::{value::Literal, BlankIdIndex, IriIndex, TId};
 
-#[derive(Clone, Copy)]
-pub enum IdentType {
-	RdfSubject,
-}
-
-impl IdentType {
-	pub fn for_property<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
-		&self,
-		context: &Context<V, M>,
-		prop_ref: TId<treeldr::Property>,
-	) -> TokenStream {
-		match self {
-			Self::RdfSubject => {
-				let prop = context.model().get(prop_ref).unwrap();
-				match prop.id() {
-					treeldr::Id::Iri(id) => {
-						let iri = context.vocabulary().iri(&id).unwrap();
-						let iri_literal = iri.as_str();
-						quote! { ::treeldr_rust_prelude::rdf::SubjectRef::Iri(::treeldr_rust_prelude::static_iref::iri!(#iri_literal)) }
-					}
-					treeldr::Id::Blank(_) => panic!("cannot generate static id for blank property"),
-				}
-			}
-		}
-	}
-
-	pub fn path(&self) -> TokenStream {
-		quote! {
-			::treeldr_rust_prelude::rdf::Subject
-		}
-	}
-}
-
-impl Referenced<IdentType> {
-	pub fn path(&self) -> TokenStream {
-		quote! {
-			::treeldr_rust_prelude::rdf::SubjectRef
-		}
-	}
-}
-
-impl quote::ToTokens for IdentType {
-	fn to_tokens(&self, tokens: &mut TokenStream) {
-		tokens.extend(self.path())
-	}
-}
-
-impl quote::ToTokens for Referenced<IdentType> {
-	fn to_tokens(&self, tokens: &mut TokenStream) {
-		tokens.extend(self.path())
-	}
-}
-
+/// Rust context.
 pub struct Context<'a, V, M> {
+	/// TreeLDR model.
 	model: &'a treeldr::MutableModel<M>,
+
+	/// Vocabulary.
 	vocabulary: &'a V,
+
+	/// Rust modules.
 	modules: Shelf<Vec<Module>>,
-	layouts: BTreeMap<TId<treeldr::Layout>, Type>,
-	ident_type: IdentType,
+
+	/// Maps each TreeLDR layout to its Rust type.
+	layouts: BTreeMap<TId<treeldr::Layout>, Type>
 }
 
 impl<'a, V, M> Context<'a, V, M> {
@@ -73,17 +27,12 @@ impl<'a, V, M> Context<'a, V, M> {
 			model,
 			vocabulary,
 			modules: Shelf::default(),
-			layouts: BTreeMap::default(),
-			ident_type: IdentType::RdfSubject,
+			layouts: BTreeMap::default()
 		}
 	}
 
 	pub fn model(&self) -> &'a treeldr::MutableModel<M> {
 		self.model
-	}
-
-	pub fn ident_type(&self) -> IdentType {
-		self.ident_type
 	}
 
 	pub fn vocabulary(&self) -> &'a V {

@@ -88,6 +88,7 @@ impl TreeLdrDocument {
 	}
 }
 
+#[derive(Debug)]
 pub enum BuildAllError {
 	Declaration(LangError),
 	Link(LangError),
@@ -129,6 +130,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllEr
 	}
 }
 
+#[derive(Debug)]
 pub enum LangError {
 	TreeLdr(syntax::build::Error<source::Metadata>),
 	NQuads(treeldr_build::Error<source::Metadata>),

@@ -1,13 +1,19 @@
 pub use static_iref;
+pub use rdf_types;
+pub use grdf;
 
-pub mod id;
+#[cfg(feature = "json-ld")]
+pub use json_ld;
+
+#[cfg(feature = "json-ld")]
+pub use locspan;
+
 pub mod rdf;
 
 #[cfg(feature = "json-ld")]
-pub mod json_ld;
+pub mod ld;
 
-pub use id::Id;
-pub use rdf::{FromRdf, FromRdfError};
+pub use rdf::{FromRdf, FromRdfError, RdfIterator};
 
 #[cfg(feature = "json-ld")]
-pub use crate::json_ld::IntoJsonLd;
+pub use crate::ld::IntoJsonLd;

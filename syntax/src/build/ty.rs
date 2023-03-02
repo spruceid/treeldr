@@ -328,7 +328,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 					generator,
 					[
 						Meta(
-							Object::Iri(IriIndex::Iri(Term::Rdf(Rdf::List))),
+							Object::Id(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List)))),
 							loc.clone(),
 						),
 						Meta(first_restriction_id.into_term(), loc.clone()),

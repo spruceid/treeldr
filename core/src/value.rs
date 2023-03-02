@@ -35,8 +35,7 @@ impl<M> TryFrom<vocab::Object<M>> for Value {
 	fn try_from(value: vocab::Object<M>) -> Result<Self, Self::Error> {
 		match value {
 			vocab::Object::Literal(l) => Ok(Value::Literal(l.try_into()?)),
-			vocab::Object::Iri(i) => Ok(Value::Node(Id::Iri(i))),
-			vocab::Object::Blank(b) => Ok(Value::Node(Id::Blank(b))),
+			vocab::Object::Id(id) => Ok(Value::Node(id))
 		}
 	}
 }
@@ -127,18 +126,18 @@ pub trait AsRdfLiteral: Sized + fmt::Display {
 		None
 	}
 
-	fn as_rdf_literal(&self) -> rdf_types::Literal<rdf_types::StringLiteral, IriIndex> {
+	fn as_rdf_literal(&self) -> rdf_types::Literal<String, IriIndex> {
 		match self.rdf_type() {
 			IriIndex::Iri(crate::vocab::Term::Xsd(crate::vocab::Xsd::String)) => {
-				rdf_types::Literal::String(self.to_string().into())
+				rdf_types::Literal::String(self.to_string())
 			}
 			IriIndex::Iri(crate::vocab::Term::Rdf(crate::vocab::Rdf::LangString)) => {
 				rdf_types::Literal::LangString(
-					self.to_string().into(),
+					self.to_string(),
 					self.language().unwrap().cloned(),
 				)
 			}
-			ty => rdf_types::Literal::TypedString(self.to_string().into(), ty),
+			ty => rdf_types::Literal::TypedString(self.to_string(), ty),
 		}
 	}
 }

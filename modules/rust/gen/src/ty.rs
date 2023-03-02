@@ -1,13 +1,16 @@
 use crate::{module, path, Context, Path};
 use derivative::Derivative;
 
+use quote::format_ident;
 pub use treeldr::layout::Primitive;
 use treeldr::{value::Literal, TId};
 
+pub mod params;
 pub mod enumeration;
 mod generate;
 pub mod structure;
 
+use params::{Parameter, Parameters, ParametersValues};
 use enumeration::Enum;
 use structure::Struct;
 
@@ -39,6 +42,32 @@ impl Type {
 
 	pub fn documentation(&self) -> &treeldr::StrippedDocumentation {
 		&self.doc
+	}
+
+	pub fn ident(&self) -> proc_macro2::Ident {
+		match self.description() {
+			Description::Never => format_ident!("!"),
+			Description::Alias(ident, _) => ident.clone(),
+			Description::Struct(s) => s.ident().clone(),
+			Description::Enum(e) => e.ident().clone(),
+			Description::Primitive(p) => {
+				todo!()
+			}
+			Description::BuiltIn(_) => {
+				todo!()
+			}
+			Description::Reference => {
+				format_ident!("I")
+			}
+		}
+	}
+
+	pub fn params(&self) -> Parameters {
+		match self.description() {
+			Description::Struct(s) => s.params(),
+			Description::Enum(e) => e.params(),
+			_ => Parameters::default()
+		}
 	}
 
 	pub fn path<V, M>(&self, context: &Context<V, M>, ident: proc_macro2::Ident) -> Option<Path> {

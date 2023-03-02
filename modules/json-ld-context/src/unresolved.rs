@@ -150,14 +150,14 @@ impl Resolve for String {
 		base_iri: Option<IriIndex>,
 	) -> Self::Target {
 		match prefixes.resolve(vocabulary, self) {
-			Ok(id) => json_ld::Term::Ref(json_ld::Id::Valid(id)),
+			Ok(id) => json_ld::Term::Id(json_ld::Id::Valid(id)),
 			Err(this) => match json_ld::syntax::Keyword::try_from(this.as_str()) {
 				Ok(kw) => json_ld::Term::Keyword(kw),
 				Err(_) => match IriRefBuf::from_string(this) {
-					Ok(iri_ref) => json_ld::Term::Ref(json_ld::Id::Valid(treeldr::Id::Iri(
+					Ok(iri_ref) => json_ld::Term::Id(json_ld::Id::Valid(treeldr::Id::Iri(
 						iri_ref.resolve(vocabulary, prefixes, base_iri),
 					))),
-					Err((_, s)) => json_ld::Term::Ref(json_ld::Id::Invalid(s)),
+					Err((_, s)) => json_ld::Term::Id(json_ld::Id::Invalid(s)),
 				},
 			},
 		}
@@ -192,7 +192,7 @@ impl Resolve for json_ld::syntax::context::term_definition::Type {
 					},
 				};
 
-				json_ld::Type::Ref(iri)
+				json_ld::Type::Iri(iri)
 			}
 		}
 	}
@@ -470,7 +470,7 @@ impl LocalContexts {
 				(
 					prefix.clone(),
 					Nullable::Some(TermDefinition {
-						id: Some(Unresolved::Resolved(json_ld::Term::Ref(
+						id: Some(Unresolved::Resolved(json_ld::Term::Id(
 							json_ld::Id::Valid(Id::Iri(*value)),
 						))),
 						context: self.empty_context(),
@@ -683,7 +683,7 @@ impl LocalContexts {
 
 				for def in &defs.added {
 					let def_value = match &def.id {
-						Some(Unresolved::Resolved(json_ld::Term::Ref(r))) => {
+						Some(Unresolved::Resolved(json_ld::Term::Id(r))) => {
 							r.with(vocabulary).as_str()
 						}
 						Some(Unresolved::Unresolved(r)) => r.as_str(),

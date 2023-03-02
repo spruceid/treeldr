@@ -50,20 +50,6 @@ pub trait Document<M> {
 	) -> Result<(), Self::Error>;
 }
 
-pub trait ObjectAsId<M> {
-	fn as_id(&self) -> Option<vocab::Id>;
-}
-
-impl<M> ObjectAsId<M> for vocab::Object<M> {
-	fn as_id(&self) -> Option<vocab::Id> {
-		match self {
-			vocab::Object::Literal(_) => None,
-			vocab::Object::Iri(id) => Some(vocab::Id::Iri(*id)),
-			vocab::Object::Blank(id) => Some(vocab::Id::Blank(*id)),
-		}
-	}
-}
-
 pub trait MetaValueExt<M>: Sized {
 	fn into_expected_id(self) -> Result<Meta<vocab::Id, M>, Error<M>>;
 

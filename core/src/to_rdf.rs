@@ -162,7 +162,7 @@ impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 					Term::Schema(crate::vocab::Schema::False)
 				};
 
-				Object::Iri(IriIndex::Iri(term))
+				Object::Id(Id::Iri(IriIndex::Iri(term)))
 			}
 			Self::NonNegativeInteger(u) => Object::Literal(u.as_rdf_literal()),
 			Self::Literal(l) => Object::Literal(l.as_rdf_literal()),
@@ -260,7 +260,7 @@ where
 			quads.push(Quad(
 				id,
 				IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
-				StrippedObject::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::List))),
+				StrippedObject::Id(Id::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::List)))),
 				None,
 			));
 

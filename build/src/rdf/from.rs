@@ -31,13 +31,7 @@ impl<M: Clone + Ord + Merge> Document<M>
 			None,
 		)) {
 			let Meta(_, metadata) = &ty.metadata;
-
-			let ty = match &ty.value {
-				rdf_types::Term::Iri(i) => Id::Iri(*i),
-				rdf_types::Term::Blank(b) => Id::Blank(*b),
-				_ => panic!("invalid type"),
-			};
-
+			let ty = ty.value.as_id().copied().expect("invalid type");
 			context.declare_with(*id, ty, metadata.clone());
 		}
 
@@ -101,13 +95,7 @@ impl<M: Clone + Ord + Merge> Document<M>
 			None,
 		)) {
 			let Meta(_, metadata) = &ty.metadata;
-
-			let ty = match &ty.value {
-				rdf_types::Term::Iri(i) => Id::Iri(*i),
-				rdf_types::Term::Blank(b) => Id::Blank(*b),
-				_ => panic!("invalid type"),
-			};
-
+			let ty = ty.value.as_id().copied().expect("invalid type");
 			context.declare_with(*id, ty, metadata.clone());
 		}
 

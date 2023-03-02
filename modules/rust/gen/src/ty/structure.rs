@@ -3,24 +3,35 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
 use shelves::Ref;
-use treeldr::{BlankIdIndex, IriIndex, Name, TId};
+use treeldr::{BlankIdIndex, IriIndex, Name, TId, Id, vocab};
+
+use super::Parameters;
 
 pub struct Struct {
 	ident: proc_macro2::Ident,
 	fields: Vec<Field>,
+	params: Parameters
 }
 
 impl Struct {
 	pub fn new(ident: proc_macro2::Ident, fields: Vec<Field>) -> Self {
-		Self { ident, fields }
+		Self { ident, fields, params: Parameters::default() }
 	}
 
 	pub fn ident(&self) -> &proc_macro2::Ident {
 		&self.ident
 	}
 
+	pub fn params(&self) -> Parameters {
+		self.params
+	}
+
 	pub fn fields(&self) -> &[Field] {
 		&self.fields
+	}
+
+	pub fn self_field(&self) -> Option<&Field> {
+		self.fields.iter().find(|f| f.is_self())
 	}
 
 	pub fn impl_default<V, M>(&self, context: &Context<V, M>) -> bool {
@@ -97,6 +108,10 @@ impl Field {
 		}
 	}
 
+	pub fn is_self(&self) -> bool {
+		self.prop.map(|p| p.id() == Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)))).unwrap_or(false)
+	}
+
 	pub fn name(&self) -> &Name {
 		&self.name
 	}
@@ -134,7 +149,7 @@ impl<M> Generate<M> for Field {
 		tokens: &mut TokenStream,
 	) -> Result<(), Error> {
 		let ident = &self.ident;
-		let ty = self.layout.with(context, scope).into_tokens()?;
+		let ty = self.layout.generate_with(context, scope).into_tokens()?;
 		let doc = super::generate::doc_attribute(self.label(), self.documentation());
 
 		tokens.extend(quote! {

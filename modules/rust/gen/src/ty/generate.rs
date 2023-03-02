@@ -1,4 +1,4 @@
-use super::{BuiltIn, Description, Primitive, Type};
+use super::{BuiltIn, Description, Primitive, Type, structure::Struct, enumeration::Enum, ParametersValues};
 use crate::{Context, Error, Generate, Module, Referenced};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
@@ -8,59 +8,6 @@ use treeldr::{BlankIdIndex, IriIndex, TId};
 
 mod json_ld;
 mod rdf;
-
-pub fn type_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
-	quote::format_ident!("{}", name.to_pascal_case())
-}
-
-pub fn field_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
-	let mut name = name.to_snake_case();
-	if matches!(name.as_str(), "type") {
-		name.push('_')
-	}
-
-	quote::format_ident!("{}", name)
-}
-
-pub fn variant_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
-	quote::format_ident!("{}", name.to_pascal_case())
-}
-
-pub fn doc_attribute(
-	label: Option<&str>,
-	doc: &treeldr::StrippedDocumentation,
-) -> Vec<TokenStream> {
-	let mut content = String::new();
-
-	if let Some(label) = label {
-		content.push_str(label)
-	}
-
-	if let Some(short) = doc.short_description() {
-		if !content.is_empty() {
-			content.push_str("\n\n");
-		}
-
-		content.push_str(short)
-	}
-
-	if let Some(long) = doc.long_description() {
-		if !content.is_empty() {
-			content.push_str("\n\n");
-		}
-
-		content.push_str(long)
-	}
-
-	content
-		.lines()
-		.map(|line| {
-			quote::quote! {
-				#[doc = #line]
-			}
-		})
-		.collect()
-}
 
 impl<M> Generate<M> for BuiltIn {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -74,19 +21,19 @@ impl<M> Generate<M> for BuiltIn {
 				item.generate(context, scope, tokens)?;
 			}
 			Self::Option(item) => {
-				let item = item.with(context, scope).into_tokens()?;
+				let item = item.generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote! { Option<#item> })
 			}
 			Self::Vec(item) => {
-				let item = item.with(context, scope).into_tokens()?;
+				let item = item.generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote! { Vec<#item> })
 			}
 			Self::BTreeSet(item) => {
-				let item = item.with(context, scope).into_tokens()?;
+				let item = item.generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote! { std::collections::BTreeSet<#item> })
 			}
 			Self::OneOrMany(item) => {
-				let item = item.with(context, scope).into_tokens()?;
+				let item = item.generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote! { ::treeldr_rust_prelude::OneOrMany<#item> })
 			}
 		}
@@ -107,19 +54,19 @@ impl<M> Generate<M> for Referenced<BuiltIn> {
 				Referenced(item).generate(context, scope, tokens)?;
 			}
 			BuiltIn::Option(item) => {
-				let item_ref = Referenced(item).with(context, scope).into_tokens()?;
+				let item_ref = Referenced(item).generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote! { Option<#item_ref> })
 			}
 			BuiltIn::Vec(item) => {
-				let item = item.with(context, scope).into_tokens()?;
+				let item = item.generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote! { &[#item] })
 			}
 			BuiltIn::BTreeSet(item) => {
-				let item = item.with(context, scope).into_tokens()?;
+				let item = item.generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote! { &std::collections::BTreeSet<#item> })
 			}
 			BuiltIn::OneOrMany(item) => {
-				let item = item.with(context, scope).into_tokens()?;
+				let item = item.generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote! { &::treeldr_rust_prelude::OneOrMany<#item> })
 			}
 		}
@@ -136,100 +83,128 @@ impl<M> Generate<M> for Type {
 		tokens: &mut TokenStream,
 	) -> Result<(), Error> {
 		let doc = doc_attribute(self.label(), self.documentation());
-
+		tokens.extend(doc);
 		match &self.desc {
 			Description::Alias(ident, alias_ref) => {
-				let alias = alias_ref.with(context, scope).into_tokens()?;
-
+				let alias = alias_ref.generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote! {
-					#(#doc)*
 					pub type #ident = #alias;
-				})
+				});
+
+				Ok(())
 			}
 			Description::Struct(s) => {
-				let ident = s.ident();
-				let mut fields = Vec::with_capacity(s.fields().len());
-				let mut required_inputs = Vec::new();
-				let mut fields_init = Vec::new();
-				let mut derives = vec![
-					quote! { Clone },
-					quote! { PartialEq },
-					quote! { Eq },
-					quote! { PartialOrd },
-					quote! { Ord },
-					quote! { Debug },
-				];
-
-				for field in s.fields() {
-					fields.push(field.with(context, scope).into_tokens()?);
-
-					let field_ident = field.ident();
-					let init = if field.ty(context).impl_default(context) {
-						quote! {
-							Default::default()
-						}
-					} else {
-						let ty = field.layout().with(context, scope).into_tokens()?;
-						required_inputs.push(quote! {
-							#field_ident : #ty,
-						});
-
-						quote! {
-							#field_ident
-						}
-					};
-
-					fields_init.extend(quote! { #field_ident : #init, })
-				}
-
-				if required_inputs.is_empty() {
-					derives.push(quote! { Default });
-				}
-
-				tokens.extend(quote! {
-					#(#doc)*
-					#[derive(#(#derives),*)]
-					pub struct #ident {
-						#(#fields),*
-					}
-				});
-
-				if !required_inputs.is_empty() {
-					tokens.extend(quote! {
-						impl #ident {
-							pub fn new(#(#required_inputs)*) -> Self {
-								Self {
-									#(#fields_init)*
-								}
-							}
-						}
-					})
-				}
-
-				tokens.extend(rdf::structure_reader(context, s, ident));
-				tokens.extend(json_ld::structure_builder(context, s, ident))
+				s.generate(context, scope, tokens)
 			}
 			Description::Enum(e) => {
-				let ident = e.ident();
-				let mut variants = Vec::with_capacity(e.variants().len());
+				e.generate(context, scope, tokens)
+			}
+			_ => Ok(()),
+		}
+	}
+}
 
-				for variant in e.variants() {
-					variants.push(variant.with(context, scope).into_tokens()?)
+impl<M> Generate<M> for Struct {
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+			&self,
+			context: &Context<V, M>,
+			scope: Option<Ref<Module>>,
+			tokens: &mut TokenStream,
+		) -> Result<(), Error>
+	{
+		let ident = self.ident();
+		let params_values = ParametersValues::default();
+		let params = self.params().instantiate(&params_values);
+
+		let mut fields = Vec::with_capacity(self.fields().len());
+		let mut required_inputs = Vec::new();
+		let mut fields_init = Vec::new();
+		let mut derives = vec![
+			quote! { Clone },
+			quote! { PartialEq },
+			quote! { Eq },
+			quote! { PartialOrd },
+			quote! { Ord },
+			quote! { Debug },
+		];
+
+		for field in self.fields() {
+			fields.push(field.generate_with(context, scope).into_tokens()?);
+
+			let field_ident = field.ident();
+			let init = if field.ty(context).impl_default(context) {
+				quote! {
+					Default::default()
 				}
-
-				tokens.extend(quote! {
-					#(#doc)*
-					#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
-					pub enum #ident {
-						#(#variants),*
-					}
+			} else {
+				let ty = field.layout().generate_with(context, scope).into_tokens()?;
+				required_inputs.push(quote! {
+					#field_ident : #ty,
 				});
 
-				tokens.extend(rdf::enum_reader(context, e, ident));
-				tokens.extend(json_ld::enum_builder(context, e, ident))
-			}
-			_ => (),
+				quote! {
+					#field_ident
+				}
+			};
+
+			fields_init.extend(quote! { #field_ident : #init, })
 		}
+
+		if required_inputs.is_empty() {
+			derives.push(quote! { Default });
+		}
+
+		tokens.extend(quote! {
+			#[derive(#(#derives),*)]
+			pub struct #ident #params {
+				#(#fields),*
+			}
+		});
+
+		if !required_inputs.is_empty() {
+			tokens.extend(quote! {
+				impl #params #ident #params {
+					pub fn new(#(#required_inputs)*) -> Self {
+						Self {
+							#(#fields_init)*
+						}
+					}
+				}
+			})
+		}
+
+		rdf::from::FromRdfImpl.generate(context, scope, self, tokens)?;
+		rdf::to::RdfTriplesImpl.generate(context, scope, self, tokens)?;
+		json_ld::IntoJsonLdImpl.generate(context, scope, self, tokens)?;
+
+		Ok(())
+	}
+}
+
+impl<M> Generate<M> for Enum {
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: Option<Ref<Module>>,
+		tokens: &mut TokenStream,
+	) -> Result<(), Error> {
+		let ident = self.ident();
+		let mut variants = Vec::with_capacity(self.variants().len());
+
+		for variant in self.variants() {
+			variants.push(variant.generate_with(context, scope).into_tokens()?)
+		}
+
+		tokens.extend(quote! {
+			#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+			pub enum #ident {
+				#(#variants),*
+			}
+		});
+
+		rdf::from::FromRdfImpl.generate(context, scope, self, tokens)?;
+		rdf::to::RdfTriplesImpl.generate(context, scope, self, tokens)?;
+		json_ld::IntoJsonLdImpl.generate(context, scope, self, tokens)?;
 
 		Ok(())
 	}
@@ -273,8 +248,7 @@ impl<M> Generate<M> for TId<treeldr::Layout> {
 				Ok(())
 			}
 			Description::Reference => {
-				let id_ty = context.ident_type();
-				tokens.extend(quote! { #id_ty });
+				tokens.extend(quote! { I });
 				Ok(())
 			}
 			Description::BuiltIn(b) => b.generate(context, scope, tokens),
@@ -381,4 +355,67 @@ impl<M> Generate<M> for Referenced<treeldr::layout::Primitive> {
 
 		Ok(())
 	}
+}
+
+pub trait GenerateFor<T, M> {
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: Option<Ref<Module>>,
+		ty: &T,
+		tokens: &mut TokenStream,
+	) -> Result<(), Error>;
+}
+
+pub fn type_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
+	quote::format_ident!("{}", name.to_pascal_case())
+}
+
+pub fn field_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
+	let mut name = name.to_snake_case();
+	if matches!(name.as_str(), "type") {
+		name.push('_')
+	}
+
+	quote::format_ident!("{}", name)
+}
+
+pub fn variant_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
+	quote::format_ident!("{}", name.to_pascal_case())
+}
+
+pub fn doc_attribute(
+	label: Option<&str>,
+	doc: &treeldr::StrippedDocumentation,
+) -> Vec<TokenStream> {
+	let mut content = String::new();
+
+	if let Some(label) = label {
+		content.push_str(label)
+	}
+
+	if let Some(short) = doc.short_description() {
+		if !content.is_empty() {
+			content.push_str("\n\n");
+		}
+
+		content.push_str(short)
+	}
+
+	if let Some(long) = doc.long_description() {
+		if !content.is_empty() {
+			content.push_str("\n\n");
+		}
+
+		content.push_str(long)
+	}
+
+	content
+		.lines()
+		.map(|line| {
+			quote::quote! {
+				#[doc = #line]
+			}
+		})
+		.collect()
 }
