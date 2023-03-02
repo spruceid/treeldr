@@ -91,15 +91,16 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 				N::Id: Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
 				#bounds
 			{
-				type TriplesAndValues<'a> = #iterator_ident<'a, N::Id, V> where Self: 'a;
+				type TriplesAndValues<'a> = #iterator_ident<'a, N::Id, V> where Self: 'a, N::Id: 'a, V: 'a;
 
 				fn unbound_rdf_triples_and_values<
+					'a,
 					G: ::treeldr_rust_prelude::rdf_types::Generator<N>
 				>(
-					&self,
+					&'a self,
 					namespace: &mut N,
 					generator: &mut G
-				) -> Self::TriplesAndValues<'_> {
+				) -> Self::TriplesAndValues<'a> where N::Id: 'a, V: 'a {
 					match self {
 						#(#variants_init),*
 					}
