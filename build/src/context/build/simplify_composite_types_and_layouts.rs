@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
-use treeldr::{metadata::Merge, Id, ResourceType};
+use locspan::Meta;
+use treeldr::{metadata::Merge, Id, ResourceType, Value};
 
-use crate::{context::MapIds, Context, FunctionalPropertyValue, ListRef};
+use crate::{context::MapIds, layout, Context, FunctionalPropertyValue, ListRef};
 
 impl<M: Merge> Context<M> {
-	pub fn simplify_composite_types_and_layouts(&mut self) {
+	pub fn simplify_composite_types_and_layouts(&mut self) -> bool {
 		let mut layout_map = HashMap::new();
 		let mut type_map = HashMap::new();
 
@@ -21,11 +22,24 @@ impl<M: Merge> Context<M> {
 					}
 				}
 
-				if let Some(s) = get_singleton(self, node.as_layout().intersection_of()) {
-					layout_map.insert(*id, s);
+				match get_singleton(self, node.as_layout().intersection_of()) {
+					Some(s) => {
+						layout_map.insert(*id, s);
+					}
+					None => {
+						if let Some(b) = get_best_intersection_id(
+							self,
+							node.as_layout().description(),
+							node.as_layout().intersection_of(),
+						) {
+							layout_map.insert(*id, b);
+						}
+					}
 				}
 			}
 		}
+
+		let changed = !type_map.is_empty() || !layout_map.is_empty();
 
 		for (b, target) in &type_map {
 			let node = self.nodes.get_mut(&Id::Blank(*b)).unwrap();
@@ -57,7 +71,9 @@ impl<M: Merge> Context<M> {
 				}
 				_ => Id::Blank(b),
 			},
-		})
+		});
+
+		changed
 	}
 }
 
@@ -81,6 +97,8 @@ fn get_singleton<M>(context: &Context<M>, list: &FunctionalPropertyValue<Id, M>)
 						} else {
 							break None;
 						}
+					} else {
+						break None;
 					}
 				}
 				None => break None,
@@ -89,4 +107,40 @@ fn get_singleton<M>(context: &Context<M>, list: &FunctionalPropertyValue<Id, M>)
 	} else {
 		None
 	}
+}
+
+fn get_best_intersection_id<M>(
+	context: &Context<M>,
+	desc: &layout::DescriptionProperties<M>,
+	list_value: &FunctionalPropertyValue<Id, M>,
+) -> Option<Id> {
+	let mut candidate = None;
+
+	for list_id in list_value {
+		let list = context.get_list(**list_id.value).unwrap();
+
+		for item in list.lenient_iter(context) {
+			match item {
+				Meta(Value::Node(id), _) => {
+					let item = context.get(*id).unwrap();
+					if item
+						.as_layout()
+						.description()
+						.is_equivalent_to(context, desc)
+					{
+						if let Some(old_candidate) = candidate.replace(*id) {
+							if old_candidate != *id {
+								return None;
+							}
+						}
+					}
+				}
+				Meta(Value::Literal(_), _) => {
+					return None;
+				}
+			}
+		}
+	}
+
+	candidate
 }

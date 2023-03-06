@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Path(Vec<Segment>);
 
 impl Path {
@@ -45,8 +45,8 @@ impl Path {
 		path
 	}
 
-	pub fn push(&mut self, segment: Segment) {
-		self.0.push(segment)
+	pub fn push(&mut self, segment: impl Into<Segment>) {
+		self.0.push(segment.into())
 	}
 }
 
@@ -72,6 +72,12 @@ impl ToTokens for Path {
 pub enum Segment {
 	Super,
 	Ident(proc_macro2::Ident),
+}
+
+impl From<proc_macro2::Ident> for Segment {
+	fn from(value: proc_macro2::Ident) -> Self {
+		Self::Ident(value)
+	}
 }
 
 impl quote::ToTokens for Segment {

@@ -212,7 +212,7 @@ impl unresolved::Bindings {
 			} else if is_id {
 				json_ld::Term::Keyword(Keyword::Id)
 			} else {
-				json_ld::Term::Ref(property.id().into())
+				json_ld::Term::Id(property.id().into())
 			};
 
 			let layout_id = f.as_formatted().format().unwrap();
@@ -271,7 +271,7 @@ impl unresolved::Bindings {
 			id: layout
 				.as_layout()
 				.ty()
-				.map(|id| Unresolved::Resolved(json_ld::Term::Ref(id.id().into()))),
+				.map(|id| Unresolved::Resolved(json_ld::Term::Id(id.id().into()))),
 			context: layout_contexts.insert(builder, local_contexts, parent, [layout_id], true),
 			..Default::default()
 		};
@@ -455,7 +455,7 @@ impl<'a, V, M> Builder<'a, V, M> {
 				}
 				_ => match type_ref.id() {
 					treeldr::Id::Iri(IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String))) => None,
-					treeldr::Id::Iri(iri) => Some(json_ld::Type::Ref(iri)),
+					treeldr::Id::Iri(iri) => Some(json_ld::Type::Iri(iri)),
 					_ => None,
 				},
 			},
@@ -465,7 +465,7 @@ impl<'a, V, M> Builder<'a, V, M> {
 				}
 				_ => match type_ref.id() {
 					treeldr::Id::Iri(IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String))) => None,
-					treeldr::Id::Iri(iri) => Some(json_ld::Type::Ref(iri)),
+					treeldr::Id::Iri(iri) => Some(json_ld::Type::Iri(iri)),
 					_ => None,
 				},
 			},

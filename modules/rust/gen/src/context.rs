@@ -1,70 +1,29 @@
-use crate::{module, ty, Module, Path, Referenced, Type};
-use proc_macro2::TokenStream;
-use quote::quote;
-use rdf_types::Vocabulary;
+use crate::{
+	module,
+	ty::{self, params::Parameters},
+	Module, Path, Type,
+};
+use proc_macro2::Ident;
+use quote::format_ident;
 use shelves::{Ref, Shelf};
-use std::collections::BTreeMap;
-use treeldr::{value::Literal, BlankIdIndex, IriIndex, TId};
+use std::collections::{BTreeMap, HashMap};
+use treeldr::{value::Literal, TId};
 
-#[derive(Clone, Copy)]
-pub enum IdentType {
-	RdfSubject,
-}
-
-impl IdentType {
-	pub fn for_property<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
-		&self,
-		context: &Context<V, M>,
-		prop_ref: TId<treeldr::Property>,
-	) -> TokenStream {
-		match self {
-			Self::RdfSubject => {
-				let prop = context.model().get(prop_ref).unwrap();
-				match prop.id() {
-					treeldr::Id::Iri(id) => {
-						let iri = context.vocabulary().iri(&id).unwrap();
-						let iri_literal = iri.as_str();
-						quote! { ::treeldr_rust_prelude::rdf::SubjectRef::Iri(::treeldr_rust_prelude::static_iref::iri!(#iri_literal)) }
-					}
-					treeldr::Id::Blank(_) => panic!("cannot generate static id for blank property"),
-				}
-			}
-		}
-	}
-
-	pub fn path(&self) -> TokenStream {
-		quote! {
-			::treeldr_rust_prelude::rdf::Subject
-		}
-	}
-}
-
-impl Referenced<IdentType> {
-	pub fn path(&self) -> TokenStream {
-		quote! {
-			::treeldr_rust_prelude::rdf::SubjectRef
-		}
-	}
-}
-
-impl quote::ToTokens for IdentType {
-	fn to_tokens(&self, tokens: &mut TokenStream) {
-		tokens.extend(self.path())
-	}
-}
-
-impl quote::ToTokens for Referenced<IdentType> {
-	fn to_tokens(&self, tokens: &mut TokenStream) {
-		tokens.extend(self.path())
-	}
-}
-
+/// Rust context.
 pub struct Context<'a, V, M> {
+	/// TreeLDR model.
 	model: &'a treeldr::MutableModel<M>,
+
+	/// Vocabulary.
 	vocabulary: &'a V,
+
+	/// Rust modules.
 	modules: Shelf<Vec<Module>>,
+
+	/// Maps each TreeLDR layout to its Rust type.
 	layouts: BTreeMap<TId<treeldr::Layout>, Type>,
-	ident_type: IdentType,
+
+	anonymous_types: usize,
 }
 
 impl<'a, V, M> Context<'a, V, M> {
@@ -74,16 +33,18 @@ impl<'a, V, M> Context<'a, V, M> {
 			vocabulary,
 			modules: Shelf::default(),
 			layouts: BTreeMap::default(),
-			ident_type: IdentType::RdfSubject,
+			anonymous_types: 0,
 		}
+	}
+
+	pub fn next_anonymous_type_ident(&mut self) -> Ident {
+		let i = self.anonymous_types;
+		self.anonymous_types += 1;
+		format_ident!("Anonymous{i}")
 	}
 
 	pub fn model(&self) -> &'a treeldr::MutableModel<M> {
 		self.model
-	}
-
-	pub fn ident_type(&self) -> IdentType {
-		self.ident_type
 	}
 
 	pub fn vocabulary(&self) -> &'a V {
@@ -144,16 +105,48 @@ impl<'a, V, M> Context<'a, V, M> {
 		let label = layout.preferred_label().map(Literal::to_string);
 		let doc = layout.comment().clone_stripped();
 
-		self.layouts.insert(
-			layout_ref,
-			Type::new(module, ty::Description::new(self, layout_ref), label, doc),
-		);
+		let desc = ty::Description::new(self, layout_ref);
+		self.layouts
+			.insert(layout_ref, Type::new(module, desc, label, doc));
 		if let Some(module::Parent::Ref(module)) = module {
 			self.modules
 				.get_mut(module)
 				.expect("undefined module")
 				.layouts_mut()
 				.insert(layout_ref);
+		}
+	}
+
+	pub fn run_pre_computations(&mut self) {
+		self.compute_type_params()
+	}
+
+	pub fn compute_type_params(&mut self) {
+		let mut map = HashMap::new();
+
+		fn compute(
+			layouts: &BTreeMap<TId<treeldr::Layout>, Type>,
+			map: &mut HashMap<TId<treeldr::Layout>, Option<Parameters>>,
+			layout_ref: TId<treeldr::Layout>,
+		) -> Parameters {
+			match map.get(&layout_ref).copied() {
+				Some(p) => p.unwrap_or_default(),
+				None => {
+					map.insert(layout_ref, None);
+					let ty = layouts.get(&layout_ref).unwrap();
+					let p = ty.compute_params(|d| compute(layouts, map, d));
+					map.insert(layout_ref, Some(p));
+					p
+				}
+			}
+		}
+
+		for layout_ref in self.layouts.keys().copied() {
+			compute(&self.layouts, &mut map, layout_ref);
+		}
+
+		for (layout_ref, ty) in &mut self.layouts {
+			ty.set_params(map.get(layout_ref).unwrap().as_ref().copied().unwrap())
 		}
 	}
 }

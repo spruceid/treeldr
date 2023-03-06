@@ -1,13 +1,35 @@
+pub use contextual;
+pub use grdf;
+pub use rdf_types;
 pub use static_iref;
 
-pub mod id;
+#[cfg(feature = "json-ld")]
+pub use json_ld;
+
+#[cfg(feature = "json-ld")]
+pub use locspan;
+
 pub mod rdf;
 
 #[cfg(feature = "json-ld")]
-pub mod json_ld;
+pub mod ld;
 
-pub use id::Id;
-pub use rdf::{FromRdf, FromRdfError};
+pub use rdf::{FromRdf, FromRdfError, RdfIterator};
 
 #[cfg(feature = "json-ld")]
-pub use crate::json_ld::IntoJsonLd;
+pub use crate::ld::IntoJsonLd;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Id<I>(pub I);
+
+impl<I> Id<I> {
+	pub fn unwrap(self) -> I {
+		self.0
+	}
+}
+
+impl<I> From<I> for Id<I> {
+	fn from(value: I) -> Self {
+		Id(value)
+	}
+}

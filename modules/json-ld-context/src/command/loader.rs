@@ -2,7 +2,7 @@ use futures::future::{BoxFuture, FutureExt};
 use json_ld::syntax::Parse;
 use json_ld::{Loader, RemoteDocument};
 use locspan::Meta;
-use rdf_types::IriVocabulary;
+use rdf_types::{IriVocabulary, IriVocabularyMut};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -73,7 +73,7 @@ impl<'f, F: Files> Loader<IriIndex, F::Metadata> for FsLoader<'f, F> {
 
 	fn load_with<'a>(
 		&'a mut self,
-		vocabulary: &'a (impl Sync + IriVocabulary<Iri = IriIndex>),
+		vocabulary: &'a mut (impl Sync + Send + IriVocabularyMut<Iri = IriIndex>),
 		url: IriIndex,
 	) -> BoxFuture<'a, Result<RemoteDocument<IriIndex, F::Metadata>, Self::Error>>
 	where
@@ -94,7 +94,7 @@ impl<'f, F: Files> Loader<IriIndex, F::Metadata> for FsLoader<'f, F> {
 								self.files.build_metadata(id.clone(), span)
 							})
 							.map_err(Error::Parse)?;
-							let doc = RemoteDocument::new(Some(url), json);
+							let doc = RemoteDocument::new(Some(url), None, json);
 							entry.insert(doc.clone());
 							Ok(doc)
 						}

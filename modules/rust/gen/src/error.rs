@@ -4,18 +4,37 @@ use rdf_types::Vocabulary;
 use std::fmt;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
+	#[error("unreachable type")]
 	UnreachableType(TId<treeldr::Layout>),
+
+	#[error("missing required `Default` implementation")]
+	MissingDefaultImpl,
+
+	#[error("blank property")]
+	BlankProperty(TId<treeldr::Property>),
 }
 
 impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> crate::fmt::Display<V, M> for Error {
 	fn fmt(&self, context: &Context<V, M>, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::UnreachableType(layout_ref) => {
-				let layout = context.model().get(*layout_ref).unwrap();
-				let id = layout.id();
-
-				write!(f, "unbound layout `{}`", id.with(context.vocabulary()))
+				write!(
+					f,
+					"unbound layout `{}`",
+					layout_ref.id().with(context.vocabulary())
+				)
+			}
+			Self::MissingDefaultImpl => {
+				write!(f, "missing `Default` implementation")
+			}
+			Self::BlankProperty(prop_ref) => {
+				write!(
+					f,
+					"blank property `{}`",
+					prop_ref.id().with(context.vocabulary())
+				)
 			}
 		}
 	}

@@ -35,8 +35,7 @@ impl<M> TryFrom<vocab::Object<M>> for Value {
 	fn try_from(value: vocab::Object<M>) -> Result<Self, Self::Error> {
 		match value {
 			vocab::Object::Literal(l) => Ok(Value::Literal(l.try_into()?)),
-			vocab::Object::Iri(i) => Ok(Value::Node(Id::Iri(i))),
-			vocab::Object::Blank(b) => Ok(Value::Node(Id::Blank(b))),
+			vocab::Object::Id(id) => Ok(Value::Node(id)),
 		}
 	}
 }
@@ -102,18 +101,18 @@ impl<M> TryFrom<vocab::Literal<M>> for Literal {
 
 	fn try_from(value: vocab::Literal<M>) -> Result<Self, Self::Error> {
 		match value {
-			vocab::Literal::String(s) => Ok(Literal::String(s.into_value().into())),
+			vocab::Literal::String(s) => Ok(Literal::String(s.into_value())),
 			vocab::Literal::TypedString(s, Meta(ty, _)) => match ty {
 				IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String)) => {
-					Ok(Literal::String(s.into_value().into()))
+					Ok(Literal::String(s.into_value()))
 				}
 				IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::LangString)) => {
 					Err(InvalidLiteral::MissingLanguageTag)
 				}
-				ty => Ok(Literal::Other(s.into_value().into(), ty)),
+				ty => Ok(Literal::Other(s.into_value(), ty)),
 			},
 			vocab::Literal::LangString(s, tag) => Ok(Literal::LangString(LangString::new(
-				s.into_value().into(),
+				s.into_value(),
 				tag.into_value(),
 			))),
 		}
@@ -127,18 +126,15 @@ pub trait AsRdfLiteral: Sized + fmt::Display {
 		None
 	}
 
-	fn as_rdf_literal(&self) -> rdf_types::Literal<rdf_types::StringLiteral, IriIndex> {
+	fn as_rdf_literal(&self) -> rdf_types::Literal<String, IriIndex> {
 		match self.rdf_type() {
 			IriIndex::Iri(crate::vocab::Term::Xsd(crate::vocab::Xsd::String)) => {
-				rdf_types::Literal::String(self.to_string().into())
+				rdf_types::Literal::String(self.to_string())
 			}
 			IriIndex::Iri(crate::vocab::Term::Rdf(crate::vocab::Rdf::LangString)) => {
-				rdf_types::Literal::LangString(
-					self.to_string().into(),
-					self.language().unwrap().cloned(),
-				)
+				rdf_types::Literal::LangString(self.to_string(), self.language().unwrap().cloned())
 			}
-			ty => rdf_types::Literal::TypedString(self.to_string().into(), ty),
+			ty => rdf_types::Literal::TypedString(self.to_string(), ty),
 		}
 	}
 }

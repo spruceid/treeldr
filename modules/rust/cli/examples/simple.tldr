@@ -1,0 +1,10 @@
+base <https://example.com/>;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+
+type Foo {
+	a: xs:string
+}
+
+type Bar {
+	foo: Foo
+}

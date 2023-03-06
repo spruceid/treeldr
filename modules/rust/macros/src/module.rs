@@ -330,7 +330,9 @@ impl Prefix {
 		let ident = &self.ident;
 		let module_ref = self.module.unwrap();
 		let module = context.module(module_ref).unwrap();
-		let generated = module.with(context, Some(module_ref)).into_tokens()?;
+		let generated = module
+			.generate_with(context, Some(module_ref))
+			.into_tokens()?;
 		let rest = &self.content;
 
 		Ok(quote! {

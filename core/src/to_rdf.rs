@@ -162,11 +162,11 @@ impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 					Term::Schema(crate::vocab::Schema::False)
 				};
 
-				Object::Iri(IriIndex::Iri(term))
+				Object::Id(Id::Iri(IriIndex::Iri(term)))
 			}
 			Self::NonNegativeInteger(u) => Object::Literal(u.as_rdf_literal()),
 			Self::Literal(l) => Object::Literal(l.as_rdf_literal()),
-			Self::Name(n) => Object::Literal(Literal::String(n.to_string().into())),
+			Self::Name(n) => Object::Literal(Literal::String(n.to_string())),
 			Self::Id(id) => id.into_term(),
 			Self::Type(t) => t.id().into_term(),
 			Self::TypeList(types) => types
@@ -260,7 +260,7 @@ where
 			quads.push(Quad(
 				id,
 				IriIndex::Iri(Term::Rdf(vocab::Rdf::Type)),
-				StrippedObject::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::List))),
+				StrippedObject::Id(Id::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::List)))),
 				None,
 			));
 
@@ -478,7 +478,7 @@ impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinLength)),
 					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
+						min.to_string(),
 						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
@@ -489,7 +489,7 @@ impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxLength)),
 					Object::Literal(Literal::TypedString(
-						max.to_string().into(),
+						max.to_string(),
 						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
@@ -499,7 +499,7 @@ impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::Pattern)),
-					Object::Literal(Literal::String(regexp.to_string().into())),
+					Object::Literal(Literal::String(regexp.to_string())),
 					None,
 				));
 			}
@@ -580,7 +580,7 @@ impl<'a> IntoRdf for layout::restriction::cardinal::RestrictionRef<'a> {
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinCardinality)),
 					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
+						min.to_string(),
 						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
@@ -591,7 +591,7 @@ impl<'a> IntoRdf for layout::restriction::cardinal::RestrictionRef<'a> {
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxCardinality)),
 					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
+						min.to_string(),
 						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
@@ -621,7 +621,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::integer::RestrictionRef<'a>
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
 					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
+						min.to_string(),
 						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
@@ -632,7 +632,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::integer::RestrictionRef<'a>
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
 					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
+						min.to_string(),
 						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
@@ -662,7 +662,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::unsigned::RestrictionRef<'a
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
 					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
+						min.to_string(),
 						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
@@ -673,7 +673,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::unsigned::RestrictionRef<'a
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
 					Object::Literal(Literal::TypedString(
-						min.to_string().into(),
+						min.to_string(),
 						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
 					)),
 					None,
@@ -822,7 +822,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> 
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Pattern)),
-					Object::Literal(Literal::String(regexp.to_string().into())),
+					Object::Literal(Literal::String(regexp.to_string())),
 					None,
 				));
 			}

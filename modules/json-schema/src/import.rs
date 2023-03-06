@@ -659,7 +659,7 @@ impl<M: Clone + Merge, C, I: DoubleEndedIterator> TryIntoRdfList<M, C, I::Item> 
 	{
 		use vocab::Rdf;
 		let mut head = Meta(
-			Object::Iri(IriIndex::Iri(Term::Rdf(Rdf::Nil))),
+			Object::Id(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Nil)))),
 			meta.clone(),
 		);
 		for item in self.rev() {
@@ -672,7 +672,7 @@ impl<M: Clone + Merge, C, I: DoubleEndedIterator> TryIntoRdfList<M, C, I::Item> 
 					Meta(item_label, item_loc.clone()),
 					Meta(IriIndex::Iri(Term::Rdf(Rdf::Type)), item_loc.clone()),
 					Meta(
-						Object::Iri(IriIndex::Iri(Term::Rdf(Rdf::List))),
+						Object::Id(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List)))),
 						item_loc.clone(),
 					),
 					None,

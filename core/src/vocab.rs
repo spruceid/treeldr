@@ -520,23 +520,9 @@ impl<V: rdf_types::IriVocabulary<Iri = IriIndex>> rdf_types::RdfDisplayWithConte
 	}
 }
 
-impl rdf_types::AsTerm for IriIndex {
-	type Iri = Self;
-	type BlankId = BlankIdIndex;
-	type Literal = StrippedLiteral;
-
-	fn as_term(&self) -> rdf_types::Term<&Self, &Self::BlankId, &Self::Literal> {
-		rdf_types::Term::Iri(self)
-	}
-}
-
-impl rdf_types::IntoTerm for IriIndex {
-	type Iri = Self;
-	type BlankId = BlankIdIndex;
-	type Literal = rdf_types::Literal;
-
-	fn into_term(self) -> rdf_types::Term<Self, Self::BlankId, Self::Literal> {
-		rdf_types::Term::Iri(self)
+impl<B, L> rdf_types::AsRdfTerm<IriIndex, B, L> for IriIndex {
+	fn as_rdf_term(&self) -> rdf_types::Term<rdf_types::Id<&Self, &B>, &L> {
+		rdf_types::Term::Id(rdf_types::Id::Iri(self))
 	}
 }
 
@@ -610,19 +596,21 @@ impl<'a> TryFrom<Iri<'a>> for Term {
 	}
 }
 
-pub type Literal<M> = rdf_types::meta::Literal<M, rdf_types::StringLiteral, IriIndex>;
+pub type Literal<M> = rdf_types::meta::Literal<M, String, IriIndex>;
 
 pub type Id = rdf_types::Subject<IriIndex, BlankIdIndex>;
 
 pub type GraphLabel = rdf_types::GraphLabel<IriIndex, BlankIdIndex>;
 
-pub type Object<M> = rdf_types::Object<IriIndex, BlankIdIndex, Literal<M>>;
+pub type Object<M> = rdf_types::Object<Id, Literal<M>>;
 
 pub type LocQuad<M> = rdf_types::meta::MetaQuad<Id, IriIndex, Object<M>, GraphLabel, M>;
 
-pub type StrippedLiteral = rdf_types::Literal<rdf_types::StringLiteral, IriIndex>;
+pub type StrippedLiteral = rdf_types::Literal<String, IriIndex>;
 
-pub type StrippedObject = rdf_types::Object<IriIndex, BlankIdIndex, StrippedLiteral>;
+pub type StrippedSubject = rdf_types::Subject<IriIndex, BlankIdIndex>;
+
+pub type StrippedObject = rdf_types::Object<Id, StrippedLiteral>;
 
 pub type StrippedQuad = rdf_types::Quad<Id, IriIndex, StrippedObject, GraphLabel>;
 
@@ -663,11 +651,10 @@ pub fn subject_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
 pub fn object_from_rdf<M, V: IriVocabularyMut<Iri = IriIndex>>(
 	object: rdf_types::meta::Object<M>,
 	ns: &mut V,
-	mut blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
+	blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
 ) -> Object<M> {
 	match object {
-		rdf_types::Object::Iri(iri) => Object::Iri(ns.insert(iri.as_iri())),
-		rdf_types::Object::Blank(label) => Object::Blank(blank_label(ns, label)),
+		rdf_types::Object::Id(id) => Object::Id(subject_from_rdf(id, ns, blank_label)),
 		rdf_types::Object::Literal(lit) => Object::Literal(literal_from_rdf(lit, ns)),
 	}
 }
@@ -685,14 +672,26 @@ pub fn stripped_literal_from_rdf(
 	}
 }
 
+pub fn stripped_subject_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
+	object: rdf_types::Subject,
+	ns: &mut V,
+	mut blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
+) -> StrippedSubject {
+	match object {
+		rdf_types::Subject::Iri(iri) => StrippedSubject::Iri(ns.insert(iri.as_iri())),
+		rdf_types::Subject::Blank(label) => StrippedSubject::Blank(blank_label(ns, label)),
+	}
+}
+
 pub fn stripped_object_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
 	object: rdf_types::Object,
 	ns: &mut V,
-	mut blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
+	blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
 ) -> StrippedObject {
 	match object {
-		rdf_types::Object::Iri(iri) => StrippedObject::Iri(ns.insert(iri.as_iri())),
-		rdf_types::Object::Blank(label) => StrippedObject::Blank(blank_label(ns, label)),
+		rdf_types::Object::Id(id) => {
+			StrippedObject::Id(stripped_subject_from_rdf(id, ns, blank_label))
+		}
 		rdf_types::Object::Literal(lit) => {
 			StrippedObject::Literal(stripped_literal_from_rdf(lit, ns))
 		}
