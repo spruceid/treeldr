@@ -28,10 +28,15 @@ impl<'a, B> BindingRef<'a, B> {
 	/// Checks if the binding does not participate to the logical value of the
 	/// node and can be ignored.
 	pub fn can_ignore(&self) -> bool {
-		self.property
-			== Property::Resource(treeldr::node::Property::Component(
-				component::Property::Layout(layout::Property::IntersectionOf(None)),
-			))
+		matches!(
+			self.property,
+			Property::Resource(
+				treeldr::node::Property::Comment(None)
+					| treeldr::node::Property::Component(component::Property::Layout(
+						layout::Property::IntersectionOf(None)
+					),)
+			)
+		)
 	}
 
 	/// Replace any blank node with `()`.

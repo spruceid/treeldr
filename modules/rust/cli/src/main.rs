@@ -1,13 +1,14 @@
 use clap::Parser;
-use codespan_reporting::term::{termcolor::StandardStream, self};
+use codespan_reporting::term::{self, termcolor::StandardStream};
 use iref::IriBuf;
+use proc_macro2::{Ident, Span};
 use quote::format_ident;
 use rdf_types::IriVocabulary;
+use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr};
 use stderrlog::ColorChoice;
-use treeldr::{TId, Id};
-use treeldr_rust_gen::Generate;
-use std::{path::PathBuf, collections::HashMap};
+use treeldr::{Id, TId};
 use treeldr_load as load;
+use treeldr_rust_gen::Generate;
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -22,6 +23,49 @@ struct Args {
 
 	/// Layouts to generate.
 	layouts: Vec<IriBuf>,
+
+	#[clap(short = 'm', multiple_occurrences = true)]
+	modules: Vec<ModuleBinding>,
+}
+
+pub struct ModuleBinding {
+	pub ident: Ident,
+	pub iri: IriBuf,
+}
+
+impl FromStr for ModuleBinding {
+	type Err = InvalidPrefixBinding;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s.split_once('=') {
+			Some((prefix, iri)) => {
+				let iri = IriBuf::new(iri)
+					.map_err(|e| InvalidPrefixBinding::InvalidIri(iri.to_string(), e))?;
+				Ok(Self {
+					ident: Ident::new(prefix, Span::call_site()),
+					iri,
+				})
+			}
+			None => Err(InvalidPrefixBinding::MissingSeparator(s.to_string())),
+		}
+	}
+}
+
+#[derive(Debug)]
+pub enum InvalidPrefixBinding {
+	MissingSeparator(String),
+	InvalidIri(String, iref::Error),
+}
+
+impl std::error::Error for InvalidPrefixBinding {}
+
+impl fmt::Display for InvalidPrefixBinding {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::MissingSeparator(s) => write!(f, "missing separator `=` in `{s}`"),
+			Self::InvalidIri(i, e) => write!(f, "invalid IRI `{i}`: {e}"),
+		}
+	}
 }
 
 pub fn main() {
@@ -36,9 +80,7 @@ pub fn main() {
 
 	for filename in args.filenames {
 		match load::Document::load(&mut files, &filename) {
-			Ok((doc, _)) => {
-				documents.push(doc)
-			}
+			Ok((doc, _)) => documents.push(doc),
 			Err(e) => {
 				eprintln!("error: {e}")
 			}
@@ -56,15 +98,47 @@ pub fn main() {
 		documents,
 	) {
 		Ok(model) => {
-			let mut gen_context =
-				treeldr_rust_gen::Context::new(&model, &vocabulary);
+			// let mut quads = Vec::new();
+			// model.to_rdf_with(
+			// 	&mut vocabulary,
+			// 	&mut generator,
+			// 	&mut quads,
+			// 	treeldr::to_rdf::Options {
+			// 		ignore_standard_vocabulary: true
+			// 	}
+			// );
 
-			let module_ref = gen_context.add_module(None, format_ident!("example"));
+			// quads.sort();
+
+			// for quad in quads {
+			// 	println!("{} .", quad.with(&vocabulary))
+			// }
+
+			let mut gen_context = treeldr_rust_gen::Context::new(&model, &vocabulary);
+
+			let root_ref = gen_context.add_module(None, format_ident!("example"));
 
 			let mut map = HashMap::new();
+
+			for prefix in args.modules {
+				let module_ref = gen_context.add_module(Some(root_ref), prefix.ident);
+				for (layout_ref, layout) in model.layouts() {
+					if let treeldr::Id::Iri(term) = layout.id() {
+						let iri = vocabulary.iri(&term).unwrap();
+
+						if iri.as_str().strip_prefix(prefix.iri.as_str()).is_some() {
+							map.insert(
+								layout_ref,
+								treeldr_rust_gen::module::Parent::Ref(module_ref),
+							);
+						}
+					}
+				}
+			}
+
 			for layout_iri in args.layouts {
 				let layout_ref = TId::new(Id::Iri(vocabulary.get(layout_iri.as_iri()).unwrap()));
-				map.insert(layout_ref, treeldr_rust_gen::module::Parent::Ref(module_ref));
+				map.insert(layout_ref, treeldr_rust_gen::module::Parent::Ref(root_ref));
 			}
 
 			for (layout_ref, _) in model.layouts() {
@@ -76,9 +150,24 @@ pub fn main() {
 				)
 			}
 
-			let module = gen_context.module(module_ref).unwrap();
-			let generated = module.generate_with(&gen_context, Some(module_ref)).into_tokens().unwrap();
-			println!("{generated}")
+			gen_context.run_pre_computations();
+			let module = gen_context.module(root_ref).unwrap();
+			match module
+				.generate_with(&gen_context, Some(root_ref))
+				.into_tokens()
+			{
+				Ok(generated) => {
+					println!("{generated}")
+				}
+				Err(e) => {
+					if let treeldr_rust_gen::Error::UnreachableType(layout_ref) = &e {
+						let ty = gen_context.layout_type(*layout_ref);
+						eprintln!("unreachable {ty:?}")
+					}
+
+					eprintln!("error: {e:?}")
+				}
+			}
 		}
 		Err(e) => {
 			use load::reporting::Diagnose;

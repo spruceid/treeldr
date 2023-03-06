@@ -1,13 +1,16 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
-use treeldr::{IriIndex, BlankIdIndex};
+use treeldr::{BlankIdIndex, IriIndex};
 
-use crate::{ty::{enumeration::Enum, generate::GenerateFor, params::ParametersValues}, Context};
+use crate::{
+	ty::{enumeration::Enum, generate::GenerateFor, params::ParametersValues},
+	Context,
+};
 
 use super::FromRdfImpl;
 
-impl<M> GenerateFor<Enum, M>for FromRdfImpl {
+impl<M> GenerateFor<Enum, M> for FromRdfImpl {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		_context: &Context<V, M>,
@@ -16,18 +19,26 @@ impl<M> GenerateFor<Enum, M>for FromRdfImpl {
 		tokens: &mut TokenStream,
 	) -> Result<(), crate::Error> {
 		let ident = ty.ident();
-		let params_values = ParametersValues::default();
+		let params_values = ParametersValues::new(quote!(N::Id));
 		let params = ty.params().instantiate(&params_values);
 
 		tokens.extend(quote! {
-			impl<I, V, N> ::treeldr_rust_prelude::FromRdf<I, V, N> for #ident #params {
+			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::FromRdf<N, V> for #ident #params
+			where
+				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
+				N::Id: Clone + Ord + ::treeldr_rust_prelude::rdf_types::FromIri<Iri=N::Iri>
+			{
 				fn from_rdf<G>(
-					namespace: &N,
-					id: &I,
+					namespace: &mut N,
+					id: &N::Id,
 					graph: &G
 				) -> Result<Self, ::treeldr_rust_prelude::FromRdfError>
 				where
-					G: ::grdf::Graph<Subject=I, Predicate=I, Object=::treeldr_rust_prelude::rdf_types::Object<I, V>>
+					G: ::treeldr_rust_prelude::grdf::Graph<
+						Subject=N::Id,
+						Predicate=N::Id,
+						Object=::treeldr_rust_prelude::rdf_types::Object<N::Id, V>
+					>
 				{
 					todo!()
 				}

@@ -4,17 +4,21 @@ use quote::{quote, ToTokens};
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Parameters {
 	/// Identifier type parameter.
-	pub identifier: bool
+	pub identifier: bool,
 }
 
 impl Parameters {
+	pub fn identifier_parameter() -> Self {
+		Self { identifier: true }
+	}
+
 	pub fn len(&self) -> usize {
 		let mut l = 0;
-		
+
 		if self.identifier {
 			l += 1
 		}
-		
+
 		l
 	}
 
@@ -23,11 +27,20 @@ impl Parameters {
 	}
 
 	pub fn iter(&self) -> Iter {
-		Iter { identifier: self.identifier }
+		Iter {
+			identifier: self.identifier,
+		}
 	}
 
 	pub fn instantiate(self, values: &ParametersValues) -> InstantiatedParameters {
-		InstantiatedParameters { params: self, values }
+		InstantiatedParameters {
+			params: self,
+			values,
+		}
+	}
+
+	pub fn append(&mut self, other: Self) {
+		self.identifier |= other.identifier
 	}
 }
 
@@ -41,7 +54,7 @@ impl IntoIterator for Parameters {
 }
 
 pub struct Iter {
-	identifier: bool
+	identifier: bool,
 }
 
 impl Iterator for Iter {
@@ -49,7 +62,7 @@ impl Iterator for Iter {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		if std::mem::take(&mut self.identifier) {
-			return Some(Parameter::Identifier)
+			return Some(Parameter::Identifier);
 		}
 
 		None
@@ -58,19 +71,19 @@ impl Iterator for Iter {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Parameter {
-	Identifier
+	Identifier,
 }
 
 impl Parameter {
 	pub fn default_value(&self) -> TokenStream {
 		match self {
-			Self::Identifier => quote!("I")
+			Self::Identifier => quote!(I),
 		}
 	}
 }
 
 pub struct ParametersValues {
-	identifier: TokenStream
+	identifier: TokenStream,
 }
 
 impl Default for ParametersValues {
@@ -80,24 +93,20 @@ impl Default for ParametersValues {
 }
 
 impl ParametersValues {
-	pub fn new(
-		identifier: TokenStream
-	) -> Self {
-		Self {
-			identifier
-		}
+	pub fn new(identifier: TokenStream) -> Self {
+		Self { identifier }
 	}
 
 	pub fn get(&self, p: Parameter) -> &TokenStream {
 		match p {
-			Parameter::Identifier => &self.identifier
+			Parameter::Identifier => &self.identifier,
 		}
 	}
 }
 
 pub struct InstantiatedParameters<'a> {
 	params: Parameters,
-	values: &'a ParametersValues
+	values: &'a ParametersValues,
 }
 
 impl<'a> ToTokens for InstantiatedParameters<'a> {

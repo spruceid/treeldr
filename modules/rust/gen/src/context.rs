@@ -1,6 +1,12 @@
-use crate::{module, ty, Module, Path, Type};
+use crate::{
+	module,
+	ty::{self, params::Parameters},
+	Module, Path, Type,
+};
+use proc_macro2::Ident;
+use quote::format_ident;
 use shelves::{Ref, Shelf};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use treeldr::{value::Literal, TId};
 
 /// Rust context.
@@ -15,7 +21,9 @@ pub struct Context<'a, V, M> {
 	modules: Shelf<Vec<Module>>,
 
 	/// Maps each TreeLDR layout to its Rust type.
-	layouts: BTreeMap<TId<treeldr::Layout>, Type>
+	layouts: BTreeMap<TId<treeldr::Layout>, Type>,
+
+	anonymous_types: usize,
 }
 
 impl<'a, V, M> Context<'a, V, M> {
@@ -24,8 +32,15 @@ impl<'a, V, M> Context<'a, V, M> {
 			model,
 			vocabulary,
 			modules: Shelf::default(),
-			layouts: BTreeMap::default()
+			layouts: BTreeMap::default(),
+			anonymous_types: 0,
 		}
+	}
+
+	pub fn next_anonymous_type_ident(&mut self) -> Ident {
+		let i = self.anonymous_types;
+		self.anonymous_types += 1;
+		format_ident!("Anonymous{i}")
 	}
 
 	pub fn model(&self) -> &'a treeldr::MutableModel<M> {
@@ -90,16 +105,48 @@ impl<'a, V, M> Context<'a, V, M> {
 		let label = layout.preferred_label().map(Literal::to_string);
 		let doc = layout.comment().clone_stripped();
 
-		self.layouts.insert(
-			layout_ref,
-			Type::new(module, ty::Description::new(self, layout_ref), label, doc),
-		);
+		let desc = ty::Description::new(self, layout_ref);
+		self.layouts
+			.insert(layout_ref, Type::new(module, desc, label, doc));
 		if let Some(module::Parent::Ref(module)) = module {
 			self.modules
 				.get_mut(module)
 				.expect("undefined module")
 				.layouts_mut()
 				.insert(layout_ref);
+		}
+	}
+
+	pub fn run_pre_computations(&mut self) {
+		self.compute_type_params()
+	}
+
+	pub fn compute_type_params(&mut self) {
+		let mut map = HashMap::new();
+
+		fn compute(
+			layouts: &BTreeMap<TId<treeldr::Layout>, Type>,
+			map: &mut HashMap<TId<treeldr::Layout>, Option<Parameters>>,
+			layout_ref: TId<treeldr::Layout>,
+		) -> Parameters {
+			match map.get(&layout_ref).copied() {
+				Some(p) => p.unwrap_or_default(),
+				None => {
+					map.insert(layout_ref, None);
+					let ty = layouts.get(&layout_ref).unwrap();
+					let p = ty.compute_params(|d| compute(layouts, map, d));
+					map.insert(layout_ref, Some(p));
+					p
+				}
+			}
+		}
+
+		for layout_ref in self.layouts.keys().copied() {
+			compute(&self.layouts, &mut map, layout_ref);
+		}
+
+		for (layout_ref, ty) in &mut self.layouts {
+			ty.set_params(map.get(layout_ref).unwrap().as_ref().copied().unwrap())
 		}
 	}
 }

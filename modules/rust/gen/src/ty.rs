@@ -1,19 +1,21 @@
 use crate::{module, path, Context, Path};
-use derivative::Derivative;
 
 use quote::format_ident;
 pub use treeldr::layout::Primitive;
-use treeldr::{value::Literal, TId};
+use treeldr::{value::Literal, Name, TId};
 
-pub mod params;
+pub mod alias;
 pub mod enumeration;
 mod generate;
+pub mod params;
 pub mod structure;
 
-use params::{Parameters, ParametersValues};
+use alias::Alias;
 use enumeration::Enum;
+use params::{Parameters, ParametersValues};
 use structure::Struct;
 
+#[derive(Debug)]
 pub struct Type {
 	module: Option<module::Parent>,
 	desc: Description,
@@ -47,7 +49,7 @@ impl Type {
 	pub fn ident(&self) -> proc_macro2::Ident {
 		match self.description() {
 			Description::Never => format_ident!("!"),
-			Description::Alias(ident, _) => ident.clone(),
+			Description::Alias(a) => a.ident().clone(),
 			Description::Struct(s) => s.ident().clone(),
 			Description::Enum(e) => e.ident().clone(),
 			Description::Primitive(_) => {
@@ -56,9 +58,32 @@ impl Type {
 			Description::BuiltIn(_) => {
 				todo!()
 			}
-			Description::Reference => {
+			Description::IdentifierParameter => {
 				format_ident!("I")
 			}
+		}
+	}
+
+	pub(crate) fn compute_params(
+		&self,
+		dependency_params: impl FnMut(TId<treeldr::Layout>) -> Parameters,
+	) -> Parameters {
+		match self.description() {
+			Description::Alias(a) => a.compute_params(dependency_params),
+			Description::IdentifierParameter => Parameters::identifier_parameter(),
+			Description::Struct(s) => s.compute_params(dependency_params),
+			Description::Enum(e) => e.compute_params(dependency_params),
+			Description::BuiltIn(p) => p.compute_params(dependency_params),
+			Description::Never | Description::Primitive(_) => Parameters::default(),
+		}
+	}
+
+	pub(crate) fn set_params(&mut self, p: Parameters) {
+		match &mut self.desc {
+			Description::Alias(a) => a.set_params(p),
+			Description::Struct(s) => s.set_params(p),
+			Description::Enum(e) => e.set_params(p),
+			_ => (),
 		}
 	}
 
@@ -66,7 +91,7 @@ impl Type {
 		match self.description() {
 			Description::Struct(s) => s.params(),
 			Description::Enum(e) => e.params(),
-			_ => Parameters::default()
+			_ => Parameters::default(),
 		}
 	}
 
@@ -89,11 +114,12 @@ impl Type {
 	}
 }
 
+#[derive(Debug)]
 pub enum Description {
 	BuiltIn(BuiltIn),
 	Never,
-	Alias(proc_macro2::Ident, TId<treeldr::Layout>),
-	Reference,
+	Alias(Alias),
+	IdentifierParameter,
 	Primitive(Primitive),
 	Struct(Struct),
 	Enum(Enum),
@@ -104,11 +130,11 @@ impl Description {
 		match self {
 			Self::BuiltIn(b) => b.impl_default(),
 			Self::Never => false,
-			Self::Alias(_, other) => {
-				let ty = context.layout_type(*other).unwrap();
+			Self::Alias(a) => {
+				let ty = context.layout_type(a.target()).unwrap();
 				ty.impl_default(context)
 			}
-			Self::Reference => false,
+			Self::IdentifierParameter => false,
 			Self::Primitive(_) => false,
 			Self::Struct(s) => s.impl_default(context),
 			Self::Enum(_) => false,
@@ -116,8 +142,7 @@ impl Description {
 	}
 }
 
-#[derive(Derivative)]
-#[derivative(Clone(bound = ""), Copy(bound = ""))]
+#[derive(Debug, Clone, Copy)]
 pub enum BuiltIn {
 	/// Required type, erased.
 	Required(TId<treeldr::Layout>),
@@ -139,10 +164,23 @@ impl BuiltIn {
 	pub fn impl_default(&self) -> bool {
 		!matches!(self, Self::Required(_))
 	}
+
+	pub(crate) fn compute_params(
+		&self,
+		mut dependency_params: impl FnMut(TId<treeldr::Layout>) -> Parameters,
+	) -> Parameters {
+		match self {
+			Self::BTreeSet(i) => dependency_params(*i),
+			Self::OneOrMany(i) => dependency_params(*i),
+			Self::Option(i) => dependency_params(*i),
+			Self::Required(i) => dependency_params(*i),
+			Self::Vec(i) => dependency_params(*i),
+		}
+	}
 }
 
 impl Description {
-	pub fn new<V, M>(context: &Context<V, M>, layout_ref: TId<treeldr::Layout>) -> Self {
+	pub fn new<V, M>(context: &mut Context<V, M>, layout_ref: TId<treeldr::Layout>) -> Self {
 		let layout = context
 			.model()
 			.get(layout_ref)
@@ -153,7 +191,7 @@ impl Description {
 			treeldr::layout::Description::Alias(alias_ref) => {
 				let name = layout.as_component().name().expect("unnamed alias");
 				let ident = generate::type_ident_of_name(name);
-				Self::Alias(ident, *alias_ref.value())
+				Self::Alias(Alias::new(ident, *alias_ref.value()))
 			}
 			treeldr::layout::Description::Primitive(p) => Self::Primitive(*p),
 			treeldr::layout::Description::Derived(p) => {
@@ -163,18 +201,25 @@ impl Description {
 					Self::Primitive(p.primitive())
 				}
 			}
-			treeldr::layout::Description::Reference(_) => Self::Reference,
+			treeldr::layout::Description::Reference(_) => Self::IdentifierParameter,
 			treeldr::layout::Description::Struct(s) => {
-				let name = layout.as_component().name().expect("unnamed struct");
-				let ident = generate::type_ident_of_name(name);
+				let ident = layout
+					.as_component()
+					.name()
+					.map(|name| generate::type_ident_of_name(name))
+					.unwrap_or_else(|| context.next_anonymous_type_ident());
 				let mut fields = Vec::with_capacity(s.fields().len());
-				for field_id in s.fields() {
+				for (i, field_id) in s.fields().iter().enumerate() {
 					let field = context.model().get(**field_id).unwrap();
-					let field_name = field.as_component().name().expect("unnamed field");
-					let ident = generate::field_ident_of_name(field_name);
+					let field_name = field
+						.as_component()
+						.name()
+						.cloned()
+						.unwrap_or_else(|| Name::new(format!("field_{i}_")).unwrap());
+					let field_ident = generate::field_ident_of_name(&field_name);
 					fields.push(structure::Field::new(
-						field_name.clone(),
-						ident,
+						field_name,
+						field_ident,
 						field.as_formatted().format().expect("missing field layout"),
 						field.as_layout_field().property().copied(),
 						field.preferred_label().map(Literal::to_string),

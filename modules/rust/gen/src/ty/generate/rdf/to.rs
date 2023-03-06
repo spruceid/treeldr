@@ -1,12 +1,15 @@
 use proc_macro2::{Ident, TokenStream};
-use quote::{quote, format_ident};
+use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
-use treeldr::{TId, IriIndex, BlankIdIndex, vocab::Primitive};
+use treeldr::{vocab::Primitive, BlankIdIndex, IriIndex, TId};
 
-use crate::{ty, Generate, Error};
+use crate::{
+	ty::{self, params::ParametersValues},
+	Error, Generate, GenerateIn,
+};
 
-mod r#struct;
 mod r#enum;
+mod r#struct;
 
 /// `RdfTriples` trait implementation.
 pub struct RdfTriplesImpl;
@@ -15,7 +18,7 @@ pub struct RdfTriplesImpl;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Bound {
 	/// The given primitive must implement `AsLiteral`.
-	AsLiteral(Primitive)
+	AsLiteral(Primitive),
 }
 
 impl<M> Generate<M> for Bound {
@@ -30,23 +33,20 @@ impl<M> Generate<M> for Bound {
 				let ty = p.generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote!(#ty: ::treeldr_rust_prelude::rdf::AsLiteral<N, V>));
 				Ok(())
-			}
-			// Self::TriplesAndValues(layout_ref) => {
-			// 	let ty = context.layout_type(*layout_ref).unwrap();
-			// 	let mut path = context.module_path(scope).to(&context.parent_module_path(ty.module()).unwrap());
-			// 	path.push(ty.ident());
-			// 	tokens.extend(quote!(#path: ::treeldr_rust_prelude::rdf::TriplesAndValues<N, V>));
-			// 	Ok(())
-			// }
+			} // Self::TriplesAndValues(layout_ref) => {
+			  // 	let ty = context.layout_type(*layout_ref).unwrap();
+			  // 	let mut path = context.module_path(scope).to(&context.parent_module_path(ty.module()).unwrap());
+			  // 	path.push(ty.ident());
+			  // 	tokens.extend(quote!(#path: ::treeldr_rust_prelude::rdf::TriplesAndValues<N, V>));
+			  // 	Ok(())
+			  // }
 		}
 	}
 }
 
 /// Returns the name of the triples and values iterator derived from the given
 /// layout name.
-fn triples_and_values_iterator_name_from(
-	ident: &Ident
-) -> Ident {
+fn triples_and_values_iterator_name_from(ident: &Ident) -> Ident {
 	format_ident!("{ident}TriplesAndValues")
 }
 
@@ -54,61 +54,87 @@ fn triples_and_values_iterator_name_from(
 fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
 	context: &crate::Context<V, M>,
 	scope: Option<shelves::Ref<crate::Module>>,
+	params_values: &ParametersValues,
 	layout: TId<treeldr::Layout>,
-	lifetime: TokenStream
+	lifetime: TokenStream,
 ) -> Result<TokenStream, Error> {
 	let ty = context.layout_type(layout).unwrap();
 
 	match ty.description() {
-		ty::Description::Never => {
-			Ok(quote!(::treeldr_rust_prelude::rdf::iter::Empty<V>))
-		}
-		ty::Description::Alias(_, target) => {
-			triples_and_values_iterator_of(context, scope, *target, lifetime)
+		ty::Description::Never => Ok(quote!(::treeldr_rust_prelude::rdf::iter::Empty<V>)),
+		ty::Description::Alias(a) => {
+			triples_and_values_iterator_of(context, scope, params_values, a.target(), lifetime)
 		}
 		ty::Description::Primitive(p) => {
 			let p_ty = p.generate_with(context, scope).into_tokens()?;
-			Ok(quote!(::treeldr_rust_prelude::rdf::iter::ValuesOnly<::treeldr_rust_prelude::rdf::iter::LiteralValue<'a, #p_ty, I, V>>))
+			Ok(
+				quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'a, #p_ty, I, V>>),
+			)
 		}
-		ty::Description::BuiltIn(b) => {
-			match b {
-				ty::BuiltIn::BTreeSet(item_layout) => {
-					let item_ty = context.layout_type(*item_layout).unwrap();
-					let mut path = context.module_path(scope).to(&context.parent_module_path(item_ty.module()).unwrap());
-					path.push(item_ty.ident());
-					Ok(quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::collection::btree_set::Iter<#lifetime, #path>>))
-				}
-				ty::BuiltIn::OneOrMany(_) => {
-					todo!()
-				}
-				ty::BuiltIn::Option(item_layout) => {
-					let inner = triples_and_values_iterator_of(context, scope, *item_layout, lifetime)?;
-					Ok(quote!(::treeldr_rust_prelude::rdf::iter::Optional<#inner>))
-				}
-				ty::BuiltIn::Required(item_layout) => {
-					triples_and_values_iterator_of(context, scope, *item_layout, lifetime)
-				}
-				ty::BuiltIn::Vec(item_layout) => {
-					let item_ty = context.layout_type(*item_layout).unwrap();
-					let mut path = context.module_path(scope).to(&context.parent_module_path(item_ty.module()).unwrap());
-					path.push(item_ty.ident());
-					Ok(quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::slice::Iter<#lifetime, #path>>))
-				}
+		ty::Description::BuiltIn(b) => match b {
+			ty::BuiltIn::BTreeSet(item_layout) => {
+				let item_ty_expr = item_layout
+					.generate_in_with(context, scope, params_values)
+					.into_tokens()?;
+				let inner = triples_and_values_iterator_of(
+					context,
+					scope,
+					params_values,
+					*item_layout,
+					lifetime.clone(),
+				)?;
+				Ok(quote!(::treeldr_rust_prelude::rdf::FlattenTriplesAndValues<
+						::std::collections::btree_set::Iter<#lifetime, #item_ty_expr>,
+						#inner,
+						V
+					>))
 			}
-		}
+			ty::BuiltIn::OneOrMany(_) => {
+				todo!()
+			}
+			ty::BuiltIn::Option(item_layout) => {
+				let inner = triples_and_values_iterator_of(
+					context,
+					scope,
+					params_values,
+					*item_layout,
+					lifetime,
+				)?;
+				Ok(quote!(::treeldr_rust_prelude::rdf::iter::Optional<#inner>))
+			}
+			ty::BuiltIn::Required(item_layout) => triples_and_values_iterator_of(
+				context,
+				scope,
+				params_values,
+				*item_layout,
+				lifetime,
+			),
+			ty::BuiltIn::Vec(item_layout) => {
+				let item_ty_expr = item_layout
+					.generate_in_with(context, scope, params_values)
+					.into_tokens()?;
+				Ok(
+					quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::slice::Iter<#lifetime, #item_ty_expr>>),
+				)
+			}
+		},
 		ty::Description::Struct(s) => {
-			let mut path = context.module_path(scope).to(&context.parent_module_path(ty.module()).unwrap());
+			let mut path = context
+				.module_path(scope)
+				.to(&context.parent_module_path(ty.module()).unwrap());
 			path.push(triples_and_values_iterator_name_from(s.ident()));
 			Ok(quote!(#path<#lifetime, I, V>))
 		}
 		ty::Description::Enum(e) => {
-			let mut path = context.module_path(scope).to(&context.parent_module_path(ty.module()).unwrap());
+			let mut path = context
+				.module_path(scope)
+				.to(&context.parent_module_path(ty.module()).unwrap());
 			path.push(triples_and_values_iterator_name_from(e.ident()));
 			Ok(quote!(#path<#lifetime, I, V>))
 		}
-		ty::Description::Reference => {
-			todo!("reference iterator")
-		}
+		ty::Description::IdentifierParameter => Ok(quote!(
+			::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::IdValue<'a, I, V>>
+		)),
 	}
 }
 
@@ -117,42 +143,26 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 fn collect_bounds<V, M>(
 	context: &crate::Context<V, M>,
 	layout: TId<treeldr::Layout>,
-	mut bound: impl FnMut(Bound)
+	mut bound: impl FnMut(Bound),
 ) {
 	fn collect<V, M>(
 		context: &crate::Context<V, M>,
 		layout: TId<treeldr::Layout>,
-		bound: &mut impl FnMut(Bound)
+		bound: &mut impl FnMut(Bound),
 	) {
 		let ty = context.layout_type(layout).unwrap();
 
 		match ty.description() {
 			ty::Description::Never => (),
-			ty::Description::Alias(_, target) => {
-				collect(context, *target, bound)
-			}
-			ty::Description::Primitive(p) => {
-				bound(Bound::AsLiteral(*p))
-			}
-			ty::Description::BuiltIn(b) => {
-				match b {
-					ty::BuiltIn::BTreeSet(item_layout) => {
-						collect(context, *item_layout, bound)
-					}
-					ty::BuiltIn::OneOrMany(item_layout) => {
-						collect(context, *item_layout, bound)
-					}
-					ty::BuiltIn::Option(item_layout) => {
-						collect(context, *item_layout, bound)
-					}
-					ty::BuiltIn::Required(item_layout) => {
-						collect(context, *item_layout, bound)
-					}
-					ty::BuiltIn::Vec(item_layout) => {
-						collect(context, *item_layout, bound)
-					}
-				}
-			}
+			ty::Description::Alias(a) => collect(context, a.target(), bound),
+			ty::Description::Primitive(p) => bound(Bound::AsLiteral(*p)),
+			ty::Description::BuiltIn(b) => match b {
+				ty::BuiltIn::BTreeSet(item_layout) => collect(context, *item_layout, bound),
+				ty::BuiltIn::OneOrMany(item_layout) => collect(context, *item_layout, bound),
+				ty::BuiltIn::Option(item_layout) => collect(context, *item_layout, bound),
+				ty::BuiltIn::Required(item_layout) => collect(context, *item_layout, bound),
+				ty::BuiltIn::Vec(item_layout) => collect(context, *item_layout, bound),
+			},
 			ty::Description::Struct(s) => {
 				for field in s.fields() {
 					collect(context, field.layout(), bound)
@@ -165,7 +175,7 @@ fn collect_bounds<V, M>(
 					}
 				}
 			}
-			ty::Description::Reference => ()
+			ty::Description::IdentifierParameter => (),
 		}
 	}
 

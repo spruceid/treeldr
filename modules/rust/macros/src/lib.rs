@@ -50,6 +50,7 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 								treeldr_rust_gen::Context::new(&model, &vocabulary);
 							module.bind(&vocabulary, &mut gen_context);
 
+							gen_context.run_pre_computations();
 							match module.generate(&gen_context) {
 								Ok(tokens) => tokens.into(),
 								Err(e) => {

@@ -80,11 +80,11 @@ impl Rational {
 		use crate::vocab::{Owl, Term, Xsd};
 		match xsd_types::decimal_lexical_representation(&self.0) {
 			Some(decimal) => StrippedLiteral::TypedString(
-				decimal.into_string().into(),
+				decimal.into_string(),
 				IriIndex::Iri(Term::Xsd(Xsd::Decimal)),
 			),
 			None => StrippedLiteral::TypedString(
-				self.0.to_string().into(),
+				self.0.to_string(),
 				IriIndex::Iri(Term::Owl(Owl::Rational)),
 			),
 		}

@@ -1,5 +1,7 @@
-use super::{BuiltIn, Description, Primitive, Type, structure::Struct, enumeration::Enum, ParametersValues};
-use crate::{Context, Error, Generate, Module, Referenced};
+use super::{
+	enumeration::Enum, structure::Struct, BuiltIn, Description, ParametersValues, Primitive, Type,
+};
+use crate::{Context, Error, Generate, GenerateIn, Module, Referenced};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use rdf_types::Vocabulary;
@@ -9,31 +11,40 @@ use treeldr::{BlankIdIndex, IriIndex, TId};
 mod json_ld;
 mod rdf;
 
-impl<M> Generate<M> for BuiltIn {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateIn<M> for BuiltIn {
+	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
 		scope: Option<Ref<Module>>,
+		params: &ParametersValues,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error> {
 		match self {
 			Self::Required(item) => {
-				item.generate(context, scope, tokens)?;
+				item.generate_in(context, scope, params, tokens)?;
 			}
 			Self::Option(item) => {
-				let item = item.generate_with(context, scope).into_tokens()?;
+				let item = item
+					.generate_in_with(context, scope, params)
+					.into_tokens()?;
 				tokens.extend(quote! { Option<#item> })
 			}
 			Self::Vec(item) => {
-				let item = item.generate_with(context, scope).into_tokens()?;
+				let item = item
+					.generate_in_with(context, scope, params)
+					.into_tokens()?;
 				tokens.extend(quote! { Vec<#item> })
 			}
 			Self::BTreeSet(item) => {
-				let item = item.generate_with(context, scope).into_tokens()?;
+				let item = item
+					.generate_in_with(context, scope, params)
+					.into_tokens()?;
 				tokens.extend(quote! { std::collections::BTreeSet<#item> })
 			}
 			Self::OneOrMany(item) => {
-				let item = item.generate_with(context, scope).into_tokens()?;
+				let item = item
+					.generate_in_with(context, scope, params)
+					.into_tokens()?;
 				tokens.extend(quote! { ::treeldr_rust_prelude::OneOrMany<#item> })
 			}
 		}
@@ -42,31 +53,40 @@ impl<M> Generate<M> for BuiltIn {
 	}
 }
 
-impl<M> Generate<M> for Referenced<BuiltIn> {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateIn<M> for Referenced<BuiltIn> {
+	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
 		scope: Option<Ref<Module>>,
+		params: &ParametersValues,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error> {
 		match self.0 {
 			BuiltIn::Required(item) => {
-				Referenced(item).generate(context, scope, tokens)?;
+				Referenced(item).generate_in(context, scope, params, tokens)?;
 			}
 			BuiltIn::Option(item) => {
-				let item_ref = Referenced(item).generate_with(context, scope).into_tokens()?;
+				let item_ref = Referenced(item)
+					.generate_in_with(context, scope, params)
+					.into_tokens()?;
 				tokens.extend(quote! { Option<#item_ref> })
 			}
 			BuiltIn::Vec(item) => {
-				let item = item.generate_with(context, scope).into_tokens()?;
+				let item = item
+					.generate_in_with(context, scope, params)
+					.into_tokens()?;
 				tokens.extend(quote! { &[#item] })
 			}
 			BuiltIn::BTreeSet(item) => {
-				let item = item.generate_with(context, scope).into_tokens()?;
+				let item = item
+					.generate_in_with(context, scope, params)
+					.into_tokens()?;
 				tokens.extend(quote! { &std::collections::BTreeSet<#item> })
 			}
 			BuiltIn::OneOrMany(item) => {
-				let item = item.generate_with(context, scope).into_tokens()?;
+				let item = item
+					.generate_in_with(context, scope, params)
+					.into_tokens()?;
 				tokens.extend(quote! { &::treeldr_rust_prelude::OneOrMany<#item> })
 			}
 		}
@@ -85,20 +105,22 @@ impl<M> Generate<M> for Type {
 		let doc = doc_attribute(self.label(), self.documentation());
 		tokens.extend(doc);
 		match &self.desc {
-			Description::Alias(ident, alias_ref) => {
-				let alias = alias_ref.generate_with(context, scope).into_tokens()?;
+			Description::Alias(a) => {
+				let param_values = ParametersValues::default();
+				let alias = a
+					.target()
+					.generate_in_with(context, scope, &param_values)
+					.into_tokens()?;
+				let ident = a.ident();
+				let params = a.params().instantiate(&param_values);
 				tokens.extend(quote! {
-					pub type #ident = #alias;
+					pub type #ident #params = #alias #params;
 				});
 
 				Ok(())
 			}
-			Description::Struct(s) => {
-				s.generate(context, scope, tokens)
-			}
-			Description::Enum(e) => {
-				e.generate(context, scope, tokens)
-			}
+			Description::Struct(s) => s.generate(context, scope, tokens),
+			Description::Enum(e) => e.generate(context, scope, tokens),
 			_ => Ok(()),
 		}
 	}
@@ -106,12 +128,11 @@ impl<M> Generate<M> for Type {
 
 impl<M> Generate<M> for Struct {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-			&self,
-			context: &Context<V, M>,
-			scope: Option<Ref<Module>>,
-			tokens: &mut TokenStream,
-		) -> Result<(), Error>
-	{
+		&self,
+		context: &Context<V, M>,
+		scope: Option<Ref<Module>>,
+		tokens: &mut TokenStream,
+	) -> Result<(), Error> {
 		let ident = self.ident();
 		let params_values = ParametersValues::default();
 		let params = self.params().instantiate(&params_values);
@@ -129,7 +150,11 @@ impl<M> Generate<M> for Struct {
 		];
 
 		for field in self.fields() {
-			fields.push(field.generate_with(context, scope).into_tokens()?);
+			fields.push(
+				field
+					.generate_in_with(context, scope, &params_values)
+					.into_tokens()?,
+			);
 
 			let field_ident = field.ident();
 			let init = if field.ty(context).impl_default(context) {
@@ -137,7 +162,10 @@ impl<M> Generate<M> for Struct {
 					Default::default()
 				}
 			} else {
-				let ty = field.layout().generate_with(context, scope).into_tokens()?;
+				let ty = field
+					.layout()
+					.generate_in_with(context, scope, &params_values)
+					.into_tokens()?;
 				required_inputs.push(quote! {
 					#field_ident : #ty,
 				});
@@ -189,15 +217,22 @@ impl<M> Generate<M> for Enum {
 		tokens: &mut TokenStream,
 	) -> Result<(), Error> {
 		let ident = self.ident();
+		let params_values = ParametersValues::default();
+		let params = self.params().instantiate(&params_values);
+
 		let mut variants = Vec::with_capacity(self.variants().len());
 
 		for variant in self.variants() {
-			variants.push(variant.generate_with(context, scope).into_tokens()?)
+			variants.push(
+				variant
+					.generate_in_with(context, scope, &params_values)
+					.into_tokens()?,
+			)
 		}
 
 		tokens.extend(quote! {
 			#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
-			pub enum #ident {
+			pub enum #ident #params {
 				#(#variants),*
 			}
 		});
@@ -210,11 +245,12 @@ impl<M> Generate<M> for Enum {
 	}
 }
 
-impl<M> Generate<M> for TId<treeldr::Layout> {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateIn<M> for TId<treeldr::Layout> {
+	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
 		scope: Option<Ref<Module>>,
+		params_values: &ParametersValues,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error> {
 		let ty = context
@@ -226,11 +262,12 @@ impl<M> Generate<M> for TId<treeldr::Layout> {
 				Ok(())
 			}
 			Description::Primitive(p) => p.generate(context, scope, tokens),
-			Description::Alias(ident, _) => {
+			Description::Alias(a) => {
 				let path = ty
-					.path(context, ident.clone())
+					.path(context, a.ident().clone())
 					.ok_or(Error::UnreachableType(*self))?;
 				context.module_path(scope).to(&path).to_tokens(tokens);
+				a.params().instantiate(params_values).to_tokens(tokens);
 				Ok(())
 			}
 			Description::Struct(s) => {
@@ -238,6 +275,7 @@ impl<M> Generate<M> for TId<treeldr::Layout> {
 					.path(context, s.ident().clone())
 					.ok_or(Error::UnreachableType(*self))?;
 				context.module_path(scope).to(&path).to_tokens(tokens);
+				s.params().instantiate(params_values).to_tokens(tokens);
 				Ok(())
 			}
 			Description::Enum(e) => {
@@ -245,22 +283,24 @@ impl<M> Generate<M> for TId<treeldr::Layout> {
 					.path(context, e.ident().clone())
 					.ok_or(Error::UnreachableType(*self))?;
 				context.module_path(scope).to(&path).to_tokens(tokens);
+				e.params().instantiate(params_values).to_tokens(tokens);
 				Ok(())
 			}
-			Description::Reference => {
-				tokens.extend(quote! { I });
+			Description::IdentifierParameter => {
+				tokens.extend(quote! { ::treeldr_rust_prelude::Id<I> });
 				Ok(())
 			}
-			Description::BuiltIn(b) => b.generate(context, scope, tokens),
+			Description::BuiltIn(b) => b.generate_in(context, scope, params_values, tokens),
 		}
 	}
 }
 
-impl<M> Generate<M> for Referenced<TId<treeldr::Layout>> {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateIn<M> for Referenced<TId<treeldr::Layout>> {
+	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
 		scope: Option<Ref<Module>>,
+		params_values: &ParametersValues,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error> {
 		let ty = context
@@ -272,12 +312,13 @@ impl<M> Generate<M> for Referenced<TId<treeldr::Layout>> {
 				Ok(())
 			}
 			Description::Primitive(p) => Referenced(*p).generate(context, scope, tokens),
-			Description::Alias(ident, _) => {
+			Description::Alias(a) => {
 				let abs_path = ty
-					.path(context, ident.clone())
+					.path(context, a.ident().clone())
 					.ok_or(Error::UnreachableType(self.0))?;
 				let path = context.module_path(scope).to(&abs_path);
-				tokens.extend(quote! { &#path });
+				let params = a.params().instantiate(params_values);
+				tokens.extend(quote! { &#path #params });
 				Ok(())
 			}
 			Description::Struct(s) => {
@@ -285,7 +326,8 @@ impl<M> Generate<M> for Referenced<TId<treeldr::Layout>> {
 					.path(context, s.ident().clone())
 					.ok_or(Error::UnreachableType(self.0))?;
 				let path = context.module_path(scope).to(&abs_path);
-				tokens.extend(quote! { &#path });
+				let params = s.params().instantiate(params_values);
+				tokens.extend(quote! { &#path #params });
 				Ok(())
 			}
 			Description::Enum(e) => {
@@ -293,14 +335,17 @@ impl<M> Generate<M> for Referenced<TId<treeldr::Layout>> {
 					.path(context, e.ident().clone())
 					.ok_or(Error::UnreachableType(self.0))?;
 				let path = context.module_path(scope).to(&abs_path);
-				tokens.extend(quote! { &#path });
+				let params = e.params().instantiate(params_values);
+				tokens.extend(quote! { &#path #params });
 				Ok(())
 			}
-			Description::Reference => {
-				tokens.extend(quote! { ::iref::Iri });
+			Description::IdentifierParameter => {
+				tokens.extend(quote! { &::treeldr_rust_prelude::Id<I> });
 				Ok(())
 			}
-			Description::BuiltIn(b) => Referenced(*b).generate(context, scope, tokens),
+			Description::BuiltIn(b) => {
+				Referenced(*b).generate_in(context, scope, params_values, tokens)
+			}
 		}
 	}
 }
@@ -319,7 +364,7 @@ impl<M> Generate<M> for treeldr::layout::Primitive {
 			Self::Float => quote! { f32 },
 			Self::Double => quote! { f64 },
 			Self::String => quote! { ::std::string::String },
-			Self::Date => quote! { ::chrono::Date<::chrono::Utc> },
+			Self::Date => quote! { ::chrono::NaiveDate },
 			Self::DateTime => quote! { ::chrono::DateTime<::chrono::Utc> },
 			Self::Time => quote! { ::chrono::NaiveTime },
 			Self::Url => quote! { ::iref::IriBuf },
@@ -345,7 +390,7 @@ impl<M> Generate<M> for Referenced<treeldr::layout::Primitive> {
 			Primitive::Float => quote! { f32 },
 			Primitive::Double => quote! { f64 },
 			Primitive::String => quote! { &str },
-			Primitive::Date => quote! { ::chrono::Date },
+			Primitive::Date => quote! { ::chrono::NaiveDate },
 			Primitive::DateTime => quote! { ::chrono::DateTime },
 			Primitive::Time => quote! { ::chrono::NaiveTime },
 			Primitive::Url => quote! { ::iref::Iri },

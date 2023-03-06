@@ -2,12 +2,20 @@ use std::collections::BTreeSet;
 
 use quote::quote;
 
-use crate::{ty::{generate::GenerateFor, enumeration::Enum, params::ParametersValues}, GenerateList, Generate};
+use crate::{
+	ty::{enumeration::Enum, generate::GenerateFor, params::ParametersValues},
+	Generate, GenerateList,
+};
 
-use super::{RdfTriplesImpl, triples_and_values_iterator_name_from, triples_and_values_iterator_of, collect_bounds};
+use super::{
+	collect_bounds, triples_and_values_iterator_name_from, triples_and_values_iterator_of,
+	RdfTriplesImpl,
+};
 
 impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
-	fn generate<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &crate::Context<V, M>,
 		scope: Option<shelves::Ref<crate::Module>>,
@@ -15,6 +23,8 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 		tokens: &mut proc_macro2::TokenStream,
 	) -> Result<(), crate::Error> {
 		let ident = ty.ident();
+		let def_params_values = ParametersValues::default();
+		let impl_params_values = ParametersValues::new(quote!(N::Id));
 
 		let iterator_ident = triples_and_values_iterator_name_from(ident);
 		let mut iterator_variants = Vec::with_capacity(ty.variants().len());
@@ -25,8 +35,16 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 			let variant_ident = variant.ident();
 			match variant.ty() {
 				Some(variant_type) => {
-					let variant_iterator_type = triples_and_values_iterator_of(context, scope, variant_type, quote!('a))?;
-					collect_bounds(context, variant_type, |b| { bounds.insert(b); });
+					let variant_iterator_type = triples_and_values_iterator_of(
+						context,
+						scope,
+						&def_params_values,
+						variant_type,
+						quote!('a),
+					)?;
+					collect_bounds(context, variant_type, |b| {
+						bounds.insert(b);
+					});
 					iterator_variants.push(quote! {
 						#variant_ident ( #variant_iterator_type )
 					});
@@ -51,8 +69,7 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 			}
 		}
 
-		let params_values = ParametersValues::new(quote!(N::Id));
-		let params = ty.params().instantiate(&params_values);
+		let params = ty.params().instantiate(&impl_params_values);
 
 		let bounds = bounds
 			.separated_by(&quote!(,))
@@ -64,10 +81,10 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 				#(#iterator_variants),*
 			}
 
-			impl<'a, N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::RdfIterator<N> for #iterator_ident<'a, N::Id, V>
+			impl<'a, N: ::treeldr_rust_prelude::rdf_types::Namespace, V: 'a> ::treeldr_rust_prelude::RdfIterator<N> for #iterator_ident<'a, N::Id, V>
 			where
 				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
+				N::Id: 'a + Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
 				#bounds
 			{
 				type Item = ::treeldr_rust_prelude::rdf::TripleOrValue<N::Id, V>;
@@ -76,7 +93,7 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 					G: ::treeldr_rust_prelude::rdf_types::Generator<N>
 				>(
 					&mut self,
-					vocabulary: &mut N,
+					namespace: &mut N,
 					generator: &mut G
 				) -> Option<Self::Item> {
 					match self {
@@ -100,7 +117,11 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 					&'a self,
 					namespace: &mut N,
 					generator: &mut G
-				) -> Self::TriplesAndValues<'a> where N::Id: 'a, V: 'a {
+				) -> Self::TriplesAndValues<'a>
+				where
+					N::Id: 'a,
+					V: 'a
+				{
 					match self {
 						#(#variants_init),*
 					}

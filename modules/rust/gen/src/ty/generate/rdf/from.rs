@@ -1,18 +1,21 @@
-use crate::{ty::{BuiltIn, Context, Description, Primitive, Type, self}, Error, Generate};
+use crate::{
+	ty::{self, BuiltIn, Context, Description, Primitive, Type},
+	Error, Generate,
+};
 use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
-mod r#struct;
 mod r#enum;
+mod r#struct;
 
 /// `FromRdf` trait implementation.
 pub struct FromRdfImpl;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Bound {
-	FromLiteral(Primitive)
+	FromLiteral(Primitive),
 }
 
 impl<M> Generate<M> for Bound {
@@ -37,42 +40,26 @@ impl<M> Generate<M> for Bound {
 fn collect_bounds<V, M>(
 	context: &crate::Context<V, M>,
 	layout: TId<treeldr::Layout>,
-	mut bound: impl FnMut(Bound)
+	mut bound: impl FnMut(Bound),
 ) {
 	fn collect<V, M>(
 		context: &crate::Context<V, M>,
 		layout: TId<treeldr::Layout>,
-		bound: &mut impl FnMut(Bound)
+		bound: &mut impl FnMut(Bound),
 	) {
 		let ty = context.layout_type(layout).unwrap();
 
 		match ty.description() {
 			ty::Description::Never => (),
-			ty::Description::Alias(_, target) => {
-				collect(context, *target, bound)
-			}
-			ty::Description::Primitive(p) => {
-				bound(Bound::FromLiteral(*p))
-			}
-			ty::Description::BuiltIn(b) => {
-				match b {
-					ty::BuiltIn::BTreeSet(item_layout) => {
-						collect(context, *item_layout, bound)
-					}
-					ty::BuiltIn::OneOrMany(item_layout) => {
-						collect(context, *item_layout, bound)
-					}
-					ty::BuiltIn::Option(item_layout) => {
-						collect(context, *item_layout, bound)
-					}
-					ty::BuiltIn::Required(item_layout) => {
-						collect(context, *item_layout, bound)
-					}
-					ty::BuiltIn::Vec(item_layout) => {
-						collect(context, *item_layout, bound)
-					}
-				}
-			}
+			ty::Description::Alias(a) => collect(context, a.target(), bound),
+			ty::Description::Primitive(p) => bound(Bound::FromLiteral(*p)),
+			ty::Description::BuiltIn(b) => match b {
+				ty::BuiltIn::BTreeSet(item_layout) => collect(context, *item_layout, bound),
+				ty::BuiltIn::OneOrMany(item_layout) => collect(context, *item_layout, bound),
+				ty::BuiltIn::Option(item_layout) => collect(context, *item_layout, bound),
+				ty::BuiltIn::Required(item_layout) => collect(context, *item_layout, bound),
+				ty::BuiltIn::Vec(item_layout) => collect(context, *item_layout, bound),
+			},
 			ty::Description::Struct(s) => {
 				for field in s.fields() {
 					collect(context, field.layout(), bound)
@@ -85,7 +72,7 @@ fn collect_bounds<V, M>(
 					}
 				}
 			}
-			ty::Description::Reference => ()
+			ty::Description::IdentifierParameter => (),
 		}
 	}
 
@@ -95,7 +82,7 @@ fn collect_bounds<V, M>(
 fn primitive_from_literal<V, M>(
 	_context: &Context<V, M>,
 	p: Primitive,
-	lit: TokenStream
+	lit: TokenStream,
 ) -> TokenStream {
 	match p {
 		Primitive::Boolean => quote! {
@@ -149,11 +136,7 @@ fn primitive_from_literal<V, M>(
 	}
 }
 
-fn from_object<V, M>(
-	context: &Context<V, M>,
-	ty: &Type,
-	object: TokenStream
-) -> TokenStream {
+fn from_object<V, M>(context: &Context<V, M>, ty: &Type, object: TokenStream) -> TokenStream {
 	match ty.description() {
 		Description::BuiltIn(BuiltIn::Required(item)) => {
 			let ty = context.layout_type(*item).unwrap();
@@ -176,14 +159,14 @@ fn from_object<V, M>(
 				return Err(::treeldr_rust_prelude::FromRdfError::Never)
 			}
 		}
-		Description::Alias(_, layout) => {
-			let ty = context.layout_type(*layout).unwrap();
+		Description::Alias(a) => {
+			let ty = context.layout_type(a.target()).unwrap();
 			from_object(context, ty, object)
 		}
-		Description::Reference => {
+		Description::IdentifierParameter => {
 			quote! {
 				match #object {
-					::treeldr_rust_prelude::rdf::Object::Id(id) => id.clone(),
+					::treeldr_rust_prelude::rdf::Object::Id(id) => ::treeldr_rust_prelude::Id(id.clone()),
 					_ => return Err(::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue)
 				}
 			}
@@ -212,11 +195,7 @@ fn from_object<V, M>(
 	}
 }
 
-fn from_objects<V, M>(
-	context: &Context<V, M>,
-	ty: &Type,
-	objects: TokenStream
-) -> TokenStream {
+fn from_objects<V, M>(context: &Context<V, M>, ty: &Type, objects: TokenStream) -> TokenStream {
 	match ty.description() {
 		Description::BuiltIn(BuiltIn::Vec(item)) => {
 			let object = quote! { object };
@@ -242,7 +221,7 @@ fn from_objects<V, M>(
 				result
 			}
 		}
-		Description::Alias(_, _layout) => {
+		Description::Alias(_) => {
 			quote! {
 				todo!("alias from RDF")
 			}

@@ -1,6 +1,6 @@
 //! JSON-LD × Rust code generation.
 use crate::{
-	ty::{Enum, Struct, ParametersValues},
+	ty::{Enum, ParametersValues, Struct},
 	Context, Error,
 };
 use proc_macro2::TokenStream;
@@ -12,7 +12,9 @@ use super::GenerateFor;
 pub struct IntoJsonLdImpl;
 
 impl<M> GenerateFor<Struct, M> for IntoJsonLdImpl {
-	fn generate<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &Context<V, M>,
 		_scope: Option<shelves::Ref<crate::Module>>,
@@ -24,16 +26,16 @@ impl<M> GenerateFor<Struct, M> for IntoJsonLdImpl {
 		for field in ty.fields() {
 			let key = field.name().as_str();
 			let id = field.ident();
-	
+
 			let layout_ref = field.layout();
 			let layout = context.model().get(layout_ref).unwrap();
-	
+
 			insert_field.push(match layout.as_layout().description() {
 				treeldr::layout::Description::Required(_) => {
 					quote! {
 						result.insert(
 							::treeldr_rust_prelude::locspan::Meta(#key.into(), ()),
-							::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::IntoJsonLd::into_json_ld(self.#id), ())
+							::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::IntoJsonLd::into_json_ld(self.#id, namespace), ())
 						);
 					}
 				}
@@ -42,7 +44,7 @@ impl<M> GenerateFor<Struct, M> for IntoJsonLdImpl {
 						if let Some(value) = self.#id {
 							result.insert(
 								::treeldr_rust_prelude::locspan::Meta(#key.into(), ()),
-								::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::IntoJsonLd::into_json_ld(value), ())
+								::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::IntoJsonLd::into_json_ld(value, namespace), ())
 							);
 						}
 					}
@@ -54,7 +56,7 @@ impl<M> GenerateFor<Struct, M> for IntoJsonLdImpl {
 								::treeldr_rust_prelude::locspan::Meta(#key.into(), ()),
 								::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::json_ld::syntax::Value::Array(
 									self.#id.into_iter()
-										.map(|v| ::locspan::Meta(::treeldr_rust_prelude::IntoJsonLd::into_json_ld(v), ())).collect()
+										.map(|v| ::locspan::Meta(::treeldr_rust_prelude::IntoJsonLd::into_json_ld(v, namespace), ())).collect()
 								), ())
 							);
 						}
@@ -64,26 +66,29 @@ impl<M> GenerateFor<Struct, M> for IntoJsonLdImpl {
 		}
 
 		let ident = ty.ident();
-		let params_values = ParametersValues::default();
+		let params_values = ParametersValues::new(quote!(N::Id));
 		let params = ty.params().instantiate(&params_values);
 		tokens.extend(quote! {
-			impl #params ::treeldr_rust_prelude::IntoJsonLd<()> for #ident #params {
-				fn into_json_ld(self) -> ::treeldr_rust_prelude::json_ld::syntax::Value<()> {
+			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace> ::treeldr_rust_prelude::IntoJsonLd<N> for #ident #params where N::Id: ::treeldr_rust_prelude::contextual::DisplayWithContext<N> {
+				fn into_json_ld(
+					self,
+					namespace: &N
+				) -> ::treeldr_rust_prelude::json_ld::syntax::Value {
 					let mut result = ::treeldr_rust_prelude::json_ld::syntax::Object::new();
-	
 					#(#insert_field)*
-	
 					result.into()
 				}
 			}
 		});
-	
+
 		Ok(())
 	}
 }
 
 impl<M> GenerateFor<Enum, M> for IntoJsonLdImpl {
-	fn generate<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		_context: &Context<V, M>,
 		_scope: Option<shelves::Ref<crate::Module>>,
@@ -91,14 +96,19 @@ impl<M> GenerateFor<Enum, M> for IntoJsonLdImpl {
 		tokens: &mut TokenStream,
 	) -> Result<(), Error> {
 		let ident = ty.ident();
+		let params_values = ParametersValues::new(quote!(N::Id));
+		let params = ty.params().instantiate(&params_values);
 		tokens.extend(quote! {
-			impl ::treeldr_rust_prelude::IntoJsonLd<()> for #ident {
-				fn into_json_ld(self) -> ::treeldr_rust_prelude::json_ld::syntax::Value<()> {
+			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace> ::treeldr_rust_prelude::IntoJsonLd<N> for #ident #params where N::Id: ::treeldr_rust_prelude::contextual::DisplayWithContext<N> {
+				fn into_json_ld(
+					self,
+					namespace: &N
+				) -> ::treeldr_rust_prelude::json_ld::syntax::Value {
 					todo!()
 				}
 			}
 		});
-		
+
 		Ok(())
 	}
 }

@@ -1,7 +1,7 @@
 mod from;
-mod to;
 pub mod iter;
+mod to;
 
 pub use from::*;
-pub use to::*;
 pub use iter::RdfIterator;
+pub use to::*;

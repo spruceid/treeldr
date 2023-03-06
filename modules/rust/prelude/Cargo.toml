@@ -18,3 +18,4 @@ static-iref.workspace = true
 json-ld = { workspace = true, optional = true }
 locspan = { workspace = true, optional = true }
 chrono.workspace = true
+contextual.workspace = true

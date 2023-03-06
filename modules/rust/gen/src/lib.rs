@@ -19,6 +19,7 @@ pub use error::Error;
 pub use module::Module;
 pub use path::Path;
 use treeldr::{BlankIdIndex, IriIndex};
+use ty::params::ParametersValues;
 pub use ty::Type;
 
 pub trait Generate<M> {
@@ -40,12 +41,43 @@ pub trait Generate<M> {
 
 impl<'a, T: Generate<M>, M> Generate<M> for &'a T {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-			&self,
-			context: &Context<V, M>,
-			scope: Option<Ref<Module>>,
-			tokens: &mut TokenStream,
-		) -> Result<(), Error> {
+		&self,
+		context: &Context<V, M>,
+		scope: Option<Ref<Module>>,
+		tokens: &mut TokenStream,
+	) -> Result<(), Error> {
 		(*self).generate(context, scope, tokens)
+	}
+}
+
+pub trait GenerateIn<M> {
+	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: Option<Ref<Module>>,
+		params: &ParametersValues,
+		tokens: &mut TokenStream,
+	) -> Result<(), Error>;
+
+	fn generate_in_with<'a, 'c, 'p, V>(
+		&self,
+		context: &'c Context<'a, V, M>,
+		scope: Option<Ref<Module>>,
+		params: &'p ParametersValues,
+	) -> InWith<'a, 'c, 'p, '_, V, M, Self> {
+		InWith(context, scope, params, self)
+	}
+}
+
+impl<'a, T: GenerateIn<M>, M> GenerateIn<M> for &'a T {
+	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: Option<Ref<Module>>,
+		params: &ParametersValues,
+		tokens: &mut TokenStream,
+	) -> Result<(), Error> {
+		(*self).generate_in(context, scope, params, tokens)
 	}
 }
 
@@ -67,6 +99,30 @@ impl<
 	}
 }
 
+pub struct InWith<'a, 'c, 'p, 't, V, M, T: ?Sized>(
+	&'c Context<'a, V, M>,
+	Option<Ref<Module>>,
+	&'p ParametersValues,
+	&'t T,
+);
+
+impl<
+		'a,
+		'c,
+		'p,
+		't,
+		V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		M,
+		T: ?Sized + GenerateIn<M>,
+	> InWith<'a, 'c, 'p, 't, V, M, T>
+{
+	pub fn into_tokens(self) -> Result<TokenStream, Error> {
+		let mut tokens = TokenStream::new();
+		self.3.generate_in(self.0, self.1, self.2, &mut tokens)?;
+		Ok(tokens)
+	}
+}
+
 pub struct Referenced<T>(T);
 
 pub trait GenerateList {
@@ -80,14 +136,14 @@ impl<T> GenerateList for BTreeSet<T> {}
 
 pub struct SeparatedBy<'a, T: ?Sized, S: ?Sized> {
 	value: &'a T,
-	sep: &'a S
+	sep: &'a S,
 }
 
 impl<'a, T, S, M> Generate<M> for SeparatedBy<'a, T, S>
 where
 	&'a T: IntoIterator,
 	<&'a T as IntoIterator>::Item: Generate<M>,
-	S: ToTokens
+	S: ToTokens,
 {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,

@@ -679,7 +679,7 @@ pub fn stripped_subject_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
 ) -> StrippedSubject {
 	match object {
 		rdf_types::Subject::Iri(iri) => StrippedSubject::Iri(ns.insert(iri.as_iri())),
-		rdf_types::Subject::Blank(label) => StrippedSubject::Blank(blank_label(ns, label))
+		rdf_types::Subject::Blank(label) => StrippedSubject::Blank(blank_label(ns, label)),
 	}
 }
 
@@ -689,7 +689,9 @@ pub fn stripped_object_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
 	blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
 ) -> StrippedObject {
 	match object {
-		rdf_types::Object::Id(id) => StrippedObject::Id(stripped_subject_from_rdf(id, ns, blank_label)),
+		rdf_types::Object::Id(id) => {
+			StrippedObject::Id(stripped_subject_from_rdf(id, ns, blank_label))
+		}
 		rdf_types::Object::Literal(lit) => {
 			StrippedObject::Literal(stripped_literal_from_rdf(lit, ns))
 		}

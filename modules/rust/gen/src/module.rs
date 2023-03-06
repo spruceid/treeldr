@@ -1,5 +1,4 @@
 use crate::{path::Segment, Context, Error, Generate, Path};
-use derivative::Derivative;
 use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
@@ -92,8 +91,7 @@ impl<M> Generate<M> for Ref<Module> {
 	}
 }
 
-#[derive(Derivative)]
-#[derivative(Clone(bound = ""), Copy(bound = ""))]
+#[derive(Debug, Clone, Copy)]
 pub enum Parent {
 	/// The parent module is unreachable.
 	Extern,

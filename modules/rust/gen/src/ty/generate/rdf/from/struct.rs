@@ -3,11 +3,16 @@ use std::collections::BTreeSet;
 use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
-use treeldr::{IriIndex, BlankIdIndex, Id};
+use treeldr::{BlankIdIndex, Id, IriIndex};
 
-use crate::{ty::{generate::GenerateFor, params::ParametersValues, structure::Struct, Description, BuiltIn}, Context, Error, GenerateList, Generate};
+use crate::{
+	ty::{
+		generate::GenerateFor, params::ParametersValues, structure::Struct, BuiltIn, Description,
+	},
+	Context, Error, Generate, GenerateList,
+};
 
-use super::{FromRdfImpl, from_object, from_objects, collect_bounds};
+use super::{collect_bounds, from_object, from_objects, FromRdfImpl};
 
 impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -29,7 +34,9 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 
 					let field_layout_ref = field.layout();
 					let field_layout = context.model().get(field_layout_ref).unwrap();
-					collect_bounds(context, field_layout_ref, |b| { bounds.insert(b); });
+					collect_bounds(context, field_layout_ref, |b| {
+						bounds.insert(b);
+					});
 
 					if prop.id()
 						== treeldr::Id::Iri(IriIndex::Iri(treeldr::vocab::Term::TreeLdr(
@@ -38,17 +45,17 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 						match field_layout.as_layout().description() {
 							treeldr::layout::Description::Required(_) => {
 								quote! {
-									::treeldr_rust_prelude::Id::from_ref(id)
+									::treeldr_rust_prelude::Id(id.clone())
 								}
 							}
 							treeldr::layout::Description::Option(_) => {
 								quote! {
-									Some(::treeldr_rust_prelude::Id::from_ref(id))
+									Some(::treeldr_rust_prelude::Id(id.clone()))
 								}
 							}
 							_ => {
 								quote! {
-									Some(::treeldr_rust_prelude::Id::from_ref(id)).into_iter().collect()
+									Some(::treeldr_rust_prelude::Id(id.clone())).into_iter().collect()
 								}
 							}
 						}
@@ -64,7 +71,7 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 									)
 								}
 							}
-							Id::Blank(_) => return Err(Error::BlankProperty(prop_ref))
+							Id::Blank(_) => return Err(Error::BlankProperty(prop_ref)),
 						};
 
 						let objects = quote! { graph.objects(&id, &#prop_id) };
@@ -97,7 +104,8 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 									Description::BuiltIn(BuiltIn::Option(item_layout)) => {
 										let item_ty = context.layout_type(*item_layout).unwrap();
 										let object = quote! { object };
-										let from_object = from_object(context, item_ty, object.clone());
+										let from_object =
+											from_object(context, item_ty, object.clone());
 
 										quote! {
 											let mut objects = #objects;
@@ -117,9 +125,7 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 									_ => panic!("not an option"),
 								}
 							}
-							_ => {
-								from_objects(context, field.ty(context), objects)
-							},
+							_ => from_objects(context, field.ty(context), objects),
 						}
 					}
 				}
@@ -148,7 +154,7 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::FromRdf<N, V> for #ident #params
 			where
 				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: ::treeldr_rust_prelude::rdf_types::FromIri<Iri=N::Iri>,
+				N::Id: Clone + Ord + ::treeldr_rust_prelude::rdf_types::FromIri<Iri=N::Iri>,
 				#bounds
 			{
 				fn from_rdf<G>(

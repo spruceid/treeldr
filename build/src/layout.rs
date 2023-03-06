@@ -458,6 +458,10 @@ impl<M> DescriptionProperties<M> {
 		Ok(())
 	}
 
+	pub fn is_equivalent_to(&self, context: &Context<M>, other: &Self) -> bool {
+		self.is_included_in(context, other) && other.is_included_in(context, self)
+	}
+
 	pub fn is_included_in(&self, context: &Context<M>, other: &Self) -> bool {
 		fn is_struct_included<M>(context: &Context<M>, a: Id, b: Id) -> bool {
 			// all fields in `b` must include a field of `a`.
@@ -505,7 +509,9 @@ impl<M> DescriptionProperties<M> {
 			a: &FunctionalPropertyValue<Id, M>,
 			bs: [&FunctionalPropertyValue<Id, M>; N],
 		) -> bool {
-			if a.is_empty() ^ bs.iter().all(|b| b.is_empty()) {
+			if bs.iter().all(|b| b.is_empty()) && !a.is_empty() {
+				false
+			} else {
 				for b in bs {
 					for a in a {
 						for b in b {
@@ -517,8 +523,6 @@ impl<M> DescriptionProperties<M> {
 				}
 
 				true
-			} else {
-				false
 			}
 		}
 

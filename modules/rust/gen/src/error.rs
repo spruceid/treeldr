@@ -13,20 +13,28 @@ pub enum Error {
 	MissingDefaultImpl,
 
 	#[error("blank property")]
-	BlankProperty(TId<treeldr::Property>)
+	BlankProperty(TId<treeldr::Property>),
 }
 
 impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> crate::fmt::Display<V, M> for Error {
 	fn fmt(&self, context: &Context<V, M>, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::UnreachableType(layout_ref) => {
-				write!(f, "unbound layout `{}`", layout_ref.id().with(context.vocabulary()))
+				write!(
+					f,
+					"unbound layout `{}`",
+					layout_ref.id().with(context.vocabulary())
+				)
 			}
 			Self::MissingDefaultImpl => {
 				write!(f, "missing `Default` implementation")
 			}
 			Self::BlankProperty(prop_ref) => {
-				write!(f, "blank property `{}`", prop_ref.id().with(context.vocabulary()))
+				write!(
+					f,
+					"blank property `{}`",
+					prop_ref.id().with(context.vocabulary())
+				)
 			}
 		}
 	}

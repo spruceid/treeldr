@@ -1,21 +1,26 @@
-use crate::{Context, Error, Generate, Module};
+use crate::{Context, Error, GenerateIn, Module};
 use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
 use shelves::Ref;
-use treeldr::{BlankIdIndex, IriIndex, Name, TId, Id, vocab};
+use treeldr::{vocab, BlankIdIndex, Id, IriIndex, Name, TId};
 
-use super::Parameters;
+use super::{params::ParametersValues, Parameters};
 
+#[derive(Debug)]
 pub struct Struct {
 	ident: proc_macro2::Ident,
 	fields: Vec<Field>,
-	params: Parameters
+	params: Parameters,
 }
 
 impl Struct {
 	pub fn new(ident: proc_macro2::Ident, fields: Vec<Field>) -> Self {
-		Self { ident, fields, params: Parameters::default() }
+		Self {
+			ident,
+			fields,
+			params: Parameters::default(),
+		}
 	}
 
 	pub fn ident(&self) -> &proc_macro2::Ident {
@@ -24,6 +29,10 @@ impl Struct {
 
 	pub fn params(&self) -> Parameters {
 		self.params
+	}
+
+	pub(crate) fn set_params(&mut self, p: Parameters) {
+		self.params = p
 	}
 
 	pub fn fields(&self) -> &[Field] {
@@ -38,6 +47,19 @@ impl Struct {
 		self.fields
 			.iter()
 			.all(|f| f.ty(context).impl_default(context))
+	}
+
+	pub(crate) fn compute_params(
+		&self,
+		mut dependency_params: impl FnMut(TId<treeldr::Layout>) -> Parameters,
+	) -> Parameters {
+		let mut result = Parameters::default();
+
+		for f in &self.fields {
+			result.append(dependency_params(f.layout))
+		}
+
+		result
 	}
 }
 
@@ -80,6 +102,7 @@ impl Struct {
 // 	}
 // }
 
+#[derive(Debug)]
 pub struct Field {
 	name: Name,
 	ident: proc_macro2::Ident,
@@ -109,7 +132,9 @@ impl Field {
 	}
 
 	pub fn is_self(&self) -> bool {
-		self.prop.map(|p| p.id() == Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_)))).unwrap_or(false)
+		self.prop
+			.map(|p| p.id() == Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::Self_))))
+			.unwrap_or(false)
 	}
 
 	pub fn name(&self) -> &Name {
@@ -141,15 +166,19 @@ impl Field {
 	}
 }
 
-impl<M> Generate<M> for Field {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateIn<M> for Field {
+	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
 		scope: Option<Ref<Module>>,
+		params: &ParametersValues,
 		tokens: &mut TokenStream,
 	) -> Result<(), Error> {
 		let ident = &self.ident;
-		let ty = self.layout.generate_with(context, scope).into_tokens()?;
+		let ty = self
+			.layout
+			.generate_in_with(context, scope, params)
+			.into_tokens()?;
 		let doc = super::generate::doc_attribute(self.label(), self.documentation());
 
 		tokens.extend(quote! {

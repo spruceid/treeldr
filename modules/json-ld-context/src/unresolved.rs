@@ -470,9 +470,9 @@ impl LocalContexts {
 				(
 					prefix.clone(),
 					Nullable::Some(TermDefinition {
-						id: Some(Unresolved::Resolved(json_ld::Term::Id(
-							json_ld::Id::Valid(Id::Iri(*value)),
-						))),
+						id: Some(Unresolved::Resolved(json_ld::Term::Id(json_ld::Id::Valid(
+							Id::Iri(*value),
+						)))),
 						context: self.empty_context(),
 						..Default::default()
 					}),
