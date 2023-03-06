@@ -206,7 +206,7 @@ impl Description {
 				let ident = layout
 					.as_component()
 					.name()
-					.map(|name| generate::type_ident_of_name(name))
+					.map(generate::type_ident_of_name)
 					.unwrap_or_else(|| context.next_anonymous_type_ident());
 				let mut fields = Vec::with_capacity(s.fields().len());
 				for (i, field_id) in s.fields().iter().enumerate() {
