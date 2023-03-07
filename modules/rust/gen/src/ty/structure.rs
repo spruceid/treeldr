@@ -1,4 +1,4 @@
-use crate::{Context, Error, GenerateIn, Module};
+use crate::{doc_attribute, Context, Error, GenerateIn, Module};
 use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
@@ -179,7 +179,7 @@ impl<M> GenerateIn<M> for Field {
 			.layout
 			.generate_in_with(context, scope, params)
 			.into_tokens()?;
-		let doc = super::generate::doc_attribute(self.label(), self.documentation());
+		let doc = doc_attribute(self.label(), self.documentation());
 
 		tokens.extend(quote! {
 			#(#doc)*

@@ -118,19 +118,30 @@ pub fn main() {
 
 			let root_ref = gen_context.add_module(None, format_ident!("example"));
 
-			let mut map = HashMap::new();
+			let mut layout_map = HashMap::new();
+			let mut type_map = HashMap::new();
 
 			for prefix in args.modules {
 				let module_ref = gen_context.add_module(Some(root_ref), prefix.ident);
-				for (layout_ref, layout) in model.layouts() {
-					if let treeldr::Id::Iri(term) = layout.id() {
+
+				for (id, node) in model.nodes() {
+					if let treeldr::Id::Iri(term) = id {
 						let iri = vocabulary.iri(&term).unwrap();
 
 						if iri.as_str().strip_prefix(prefix.iri.as_str()).is_some() {
-							map.insert(
-								layout_ref,
-								treeldr_rust_gen::module::Parent::Ref(module_ref),
-							);
+							if node.is_type() {
+								type_map.insert(
+									TId::new(id),
+									treeldr_rust_gen::module::Parent::Ref(module_ref),
+								);
+							}
+
+							if node.is_layout() {
+								layout_map.insert(
+									TId::new(id),
+									treeldr_rust_gen::module::Parent::Ref(module_ref),
+								);
+							}
 						}
 					}
 				}
@@ -138,16 +149,31 @@ pub fn main() {
 
 			for layout_iri in args.layouts {
 				let layout_ref = TId::new(Id::Iri(vocabulary.get(layout_iri.as_iri()).unwrap()));
-				map.insert(layout_ref, treeldr_rust_gen::module::Parent::Ref(root_ref));
+				layout_map.insert(layout_ref, treeldr_rust_gen::module::Parent::Ref(root_ref));
 			}
 
-			for (layout_ref, _) in model.layouts() {
-				gen_context.add_layout(
-					map.get(&layout_ref)
-						.cloned()
-						.or(Some(treeldr_rust_gen::module::Parent::Extern)),
-					layout_ref,
-				)
+			for (id, node) in model.nodes() {
+				if node.is_type() {
+					let type_ref = TId::new(id);
+					gen_context.add_type(
+						type_map
+							.get(&type_ref)
+							.cloned()
+							.or(Some(treeldr_rust_gen::module::Parent::Extern)),
+						type_ref,
+					);
+				}
+
+				if node.is_layout() {
+					let layout_ref = TId::new(id);
+					gen_context.add_layout(
+						layout_map
+							.get(&layout_ref)
+							.cloned()
+							.or(Some(treeldr_rust_gen::module::Parent::Extern)),
+						layout_ref,
+					)
+				}
 			}
 
 			gen_context.run_pre_computations();

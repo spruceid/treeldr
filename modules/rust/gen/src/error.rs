@@ -9,6 +9,9 @@ pub enum Error {
 	#[error("unreachable type")]
 	UnreachableType(TId<treeldr::Layout>),
 
+	#[error("unreachable trait")]
+	UnreachableTrait(TId<treeldr::Type>),
+
 	#[error("missing required `Default` implementation")]
 	MissingDefaultImpl,
 
@@ -24,6 +27,13 @@ impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> crate::fmt::Displ
 					f,
 					"unbound layout `{}`",
 					layout_ref.id().with(context.vocabulary())
+				)
+			}
+			Self::UnreachableTrait(type_ref) => {
+				write!(
+					f,
+					"unbound type `{}`",
+					type_ref.id().with(context.vocabulary())
 				)
 			}
 			Self::MissingDefaultImpl => {

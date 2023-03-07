@@ -11,6 +11,7 @@ pub struct Module {
 	ident: proc_macro2::Ident,
 	sub_modules: HashSet<Ref<Self>>,
 	layouts: HashSet<TId<treeldr::Layout>>,
+	types: HashSet<TId<treeldr::Type>>,
 }
 
 impl Module {
@@ -20,6 +21,7 @@ impl Module {
 			ident,
 			sub_modules: HashSet::new(),
 			layouts: HashSet::new(),
+			types: HashSet::new(),
 		}
 	}
 
@@ -48,6 +50,14 @@ impl Module {
 	pub fn layouts_mut(&mut self) -> &mut HashSet<TId<treeldr::Layout>> {
 		&mut self.layouts
 	}
+
+	pub fn types(&self) -> &HashSet<TId<treeldr::Type>> {
+		&self.types
+	}
+
+	pub fn types_mut(&mut self) -> &mut HashSet<TId<treeldr::Type>> {
+		&mut self.types
+	}
 }
 
 impl<M> Generate<M> for Module {
@@ -59,6 +69,11 @@ impl<M> Generate<M> for Module {
 	) -> Result<(), Error> {
 		for module_ref in &self.sub_modules {
 			module_ref.generate(context, scope, tokens)?;
+		}
+
+		for type_ref in &self.types {
+			let ty = context.type_trait(*type_ref).expect("undefined type");
+			ty.generate(context, scope, tokens)?
 		}
 
 		for layout_ref in &self.layouts {

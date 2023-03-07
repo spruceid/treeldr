@@ -1,7 +1,7 @@
 use super::{
 	enumeration::Enum, structure::Struct, BuiltIn, Description, ParametersValues, Primitive, Type,
 };
-use crate::{Context, Error, Generate, GenerateIn, Module, Referenced};
+use crate::{doc_attribute, Context, Error, Generate, GenerateIn, Module, Referenced};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use rdf_types::Vocabulary;
@@ -427,40 +427,4 @@ pub fn field_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
 
 pub fn variant_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
 	quote::format_ident!("{}", name.to_pascal_case())
-}
-
-pub fn doc_attribute(
-	label: Option<&str>,
-	doc: &treeldr::StrippedDocumentation,
-) -> Vec<TokenStream> {
-	let mut content = String::new();
-
-	if let Some(label) = label {
-		content.push_str(label)
-	}
-
-	if let Some(short) = doc.short_description() {
-		if !content.is_empty() {
-			content.push_str("\n\n");
-		}
-
-		content.push_str(short)
-	}
-
-	if let Some(long) = doc.long_description() {
-		if !content.is_empty() {
-			content.push_str("\n\n");
-		}
-
-		content.push_str(long)
-	}
-
-	content
-		.lines()
-		.map(|line| {
-			quote::quote! {
-				#[doc = #line]
-			}
-		})
-		.collect()
 }

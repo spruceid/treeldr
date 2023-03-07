@@ -1,18 +1,20 @@
 use crate::{
 	module,
+	tr::Trait,
 	ty::{self, params::Parameters},
 	Module, Path, Type,
 };
 use proc_macro2::Ident;
 use quote::format_ident;
+use rdf_types::Vocabulary;
 use shelves::{Ref, Shelf};
 use std::collections::{BTreeMap, HashMap};
-use treeldr::{value::Literal, TId};
+use treeldr::{value::Literal, IriIndex, TId};
 
 /// Rust context.
 pub struct Context<'a, V, M> {
 	/// TreeLDR model.
-	model: &'a treeldr::MutableModel<M>,
+	model: &'a treeldr::Model<M>,
 
 	/// Vocabulary.
 	vocabulary: &'a V,
@@ -23,16 +25,19 @@ pub struct Context<'a, V, M> {
 	/// Maps each TreeLDR layout to its Rust type.
 	layouts: BTreeMap<TId<treeldr::Layout>, Type>,
 
+	types: BTreeMap<TId<treeldr::Type>, Trait>,
+
 	anonymous_types: usize,
 }
 
 impl<'a, V, M> Context<'a, V, M> {
-	pub fn new(model: &'a treeldr::MutableModel<M>, vocabulary: &'a V) -> Self {
+	pub fn new(model: &'a treeldr::Model<M>, vocabulary: &'a V) -> Self {
 		Self {
 			model,
 			vocabulary,
 			modules: Shelf::default(),
 			layouts: BTreeMap::default(),
+			types: BTreeMap::default(),
 			anonymous_types: 0,
 		}
 	}
@@ -43,7 +48,7 @@ impl<'a, V, M> Context<'a, V, M> {
 		format_ident!("Anonymous{i}")
 	}
 
-	pub fn model(&self) -> &'a treeldr::MutableModel<M> {
+	pub fn model(&self) -> &'a treeldr::Model<M> {
 		self.model
 	}
 
@@ -81,6 +86,10 @@ impl<'a, V, M> Context<'a, V, M> {
 		self.layouts.get(&r)
 	}
 
+	pub fn type_trait(&self, r: TId<treeldr::Type>) -> Option<&Trait> {
+		self.types.get(&r)
+	}
+
 	pub fn add_module(
 		&mut self,
 		parent: Option<Ref<Module>>,
@@ -98,10 +107,7 @@ impl<'a, V, M> Context<'a, V, M> {
 	}
 
 	pub fn add_layout(&mut self, module: Option<module::Parent>, layout_ref: TId<treeldr::Layout>) {
-		let layout = self
-			.model()
-			.get(layout_ref)
-			.expect("undefined described layout");
+		let layout = self.model().get(layout_ref).expect("undefined layout");
 		let label = layout.preferred_label().map(Literal::to_string);
 		let doc = layout.comment().clone_stripped();
 
@@ -114,6 +120,26 @@ impl<'a, V, M> Context<'a, V, M> {
 				.expect("undefined module")
 				.layouts_mut()
 				.insert(layout_ref);
+		}
+	}
+
+	pub fn add_type(&mut self, module: Option<module::Parent>, type_ref: TId<treeldr::Type>) -> bool
+	where
+		V: Vocabulary<Iri = IriIndex>,
+	{
+		match Trait::build(self, module, type_ref) {
+			Some(tr) => {
+				self.types.insert(type_ref, tr);
+				if let Some(module::Parent::Ref(module)) = module {
+					self.modules
+						.get_mut(module)
+						.expect("undefined module")
+						.types_mut()
+						.insert(type_ref);
+				}
+				true
+			}
+			None => false,
 		}
 	}
 
