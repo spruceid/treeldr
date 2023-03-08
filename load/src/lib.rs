@@ -2,6 +2,7 @@ use codespan_reporting::term::{
 	self,
 	termcolor::{ColorChoice, StandardStream},
 };
+use iref::IriBuf;
 use locspan::{Location, MaybeLocated, Meta};
 use rdf_types::{Generator, Vocabulary, VocabularyMut};
 use std::hash::Hash;
@@ -240,24 +241,49 @@ impl Document {
 		match files.load(&filename, None, None) {
 			Ok(file_id) => {
 				let document = match files.get(file_id).unwrap().mime_type() {
-					Some(source::MimeType::TreeLdr) => {
-						Document::TreeLdr(Box::new(import_treeldr(files, file_id)))
-					}
-					Some(source::MimeType::NQuads) => {
-						Document::NQuads(import_nquads(files, file_id))
-					}
-					#[cfg(feature = "json-schema")]
-					Some(source::MimeType::JsonSchema) => {
-						Document::JsonSchema(Box::new(import_json_schema(files, file_id)))
-					}
-					#[allow(unreachable_patterns)]
-					Some(mime_type) => return Err(LoadError::UnsupportedMimeType(mime_type)),
+					Some(type_) => Self::from_file_id(files, file_id, type_)?,
 					None => return Err(LoadError::UnrecognizedFormat(filename.to_owned())),
 				};
 
 				Ok((document, file_id))
 			}
 			Err(e) => Err(LoadError::UnableToRead(filename.to_owned(), e)),
+		}
+	}
+
+	/// Lead a document from its content.
+	pub fn load_content<'f, P>(
+		files: &'f mut source::Files<P>,
+		source: P,
+		content: String,
+		base_iri: Option<IriBuf>,
+		type_: MimeType,
+	) -> Result<(Self, source::FileId), LoadError>
+	where
+		P: Clone + Eq + Hash + DisplayPath<'f>,
+	{
+		let file_id = files.load_content(source, base_iri, Some(type_), content);
+		let document = Self::from_file_id(files, file_id, type_)?;
+		Ok((document, file_id))
+	}
+
+	fn from_file_id<'f, P>(
+		files: &'f mut source::Files<P>,
+		file_id: FileId,
+		type_: MimeType,
+	) -> Result<Self, LoadError>
+	where
+		P: DisplayPath<'f>,
+	{
+		match type_ {
+			MimeType::TreeLdr => Ok(Self::TreeLdr(Box::new(import_treeldr(files, file_id)))),
+			MimeType::NQuads => Ok(Self::NQuads(import_nquads(files, file_id))),
+			#[cfg(feature = "json-schema")]
+			MimeType::JsonSchema => Ok(Self::JsonSchema(Box::new(import_json_schema(
+				files, file_id,
+			)))),
+			#[allow(unreachable_patterns)]
+			mime_type => Err(LoadError::UnsupportedMimeType(mime_type)),
 		}
 	}
 
