@@ -247,7 +247,7 @@ impl Command {
 			}
 		}
 
-		match crate::generate(vocabulary, &mut loader, model, options, &layouts).await {
+		match crate::generate(vocabulary, model, options, &layouts) {
 			Ok(definition) => {
 				use json_ld::syntax::Print;
 				println!("{}", definition.pretty_print());

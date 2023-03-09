@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use json_ld::{syntax::Keyword, ContextLoader, Nullable};
+use json_ld::{syntax::Keyword, Nullable};
 use locspan::Meta;
 use rdf_types::{IriVocabulary, VocabularyMut};
 use shelves::Ref;
@@ -524,18 +524,14 @@ impl<'a, V: IriVocabulary<Iri = IriIndex>, M> Builder<'a, V, M> {
 }
 
 /// Generate a JSON-LD context from a TreeLDR model.
-pub async fn generate<V, L, M>(
+pub fn generate<V, M>(
 	vocabulary: &mut V,
-	_loader: &mut L,
 	model: &treeldr::MutableModel<M>,
 	options: Options<M>,
 	layouts: &[TId<treeldr::Layout>],
 ) -> Result<json_ld::syntax::context::Value<()>, Error>
 where
 	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
-	L: ContextLoader<IriIndex, M> + Send + Sync,
-	L::Context: Into<json_ld::syntax::context::Value<M>>,
-	L::ContextError: Send,
 	M: Clone + Send + Sync,
 {
 	let mut builder = Builder::new(vocabulary, model, options);
