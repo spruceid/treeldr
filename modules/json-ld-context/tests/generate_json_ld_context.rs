@@ -131,15 +131,9 @@ impl Test {
 				let mut loader = json_ld::NoLoader::<IriIndex, Span>::new();
 				let options = options.load(&mut vocabulary, &mut loader).await;
 
-				let output = treeldr_json_ld_context::generate(
-					&mut vocabulary,
-					&mut loader,
-					&model,
-					options,
-					&layouts,
-				)
-				.await
-				.expect("unable to generate LD context");
+				let output =
+					treeldr_json_ld_context::generate(&mut vocabulary, &model, options, &layouts)
+						.expect("unable to generate LD context");
 
 				let expected = json_ld::syntax::Value::parse_str(expected_output, |_| ())
 					.expect("invalid JSON");
@@ -211,15 +205,9 @@ impl Test {
 				let mut loader = json_ld::NoLoader::<IriIndex, Span>::new();
 				let options = options.load(&mut vocabulary, &mut loader).await;
 
-				let output = treeldr_json_ld_context::generate(
-					&mut vocabulary,
-					&mut loader,
-					&model,
-					options,
-					&layouts,
-				)
-				.await
-				.expect("unable to generate LD context");
+				let output =
+					treeldr_json_ld_context::generate(&mut vocabulary, &model, options, &layouts)
+						.expect("unable to generate LD context");
 
 				eprintln!("output:\n{}", output.pretty_print());
 			}
