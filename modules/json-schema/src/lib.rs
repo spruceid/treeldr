@@ -12,10 +12,15 @@ pub use embedding::Embedding;
 pub use import::import_schema;
 pub use schema::Schema;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
+	#[error("missing layout name")]
 	NoLayoutName(TId<treeldr::Layout>),
+
+	#[error("infinite schema")]
 	InfiniteSchema(TId<treeldr::Layout>),
+
+	#[error("serialization failed: {0}")]
 	Serialization(serde_json::Error),
 }
 
