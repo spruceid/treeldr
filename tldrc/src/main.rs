@@ -4,6 +4,7 @@ use codespan_reporting::term::{
 	termcolor::{ColorChoice, StandardStream},
 };
 use contextual::WithContext;
+use locspan::Meta;
 use std::path::PathBuf;
 use treeldr::to_rdf::ToRdf;
 use treeldr_load as load;
@@ -54,6 +55,7 @@ async fn main() {
 	for filename in args.filenames {
 		match load::Document::load(&mut files, &filename) {
 			Ok((document, _)) => documents.push(document),
+			Err(load::LoadError::Parsing(Meta(e, meta))) => e.display_and_exit(&files, meta),
 			Err(e) => {
 				log::error!("unable to read file `{}`: {}", filename.display(), e);
 				std::process::exit(1);
