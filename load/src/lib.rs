@@ -58,6 +58,9 @@ pub enum LoadError {
 
 	#[error("unable to read file `{0}`: {1}")]
 	UnableToRead(PathBuf, std::io::Error),
+
+	#[error("parse error")]
+	Parsing(#[from] Meta<ParseError, source::Metadata>),
 }
 
 pub struct TreeLdrDocument {
@@ -276,8 +279,8 @@ impl Document {
 		P: DisplayPath<'f>,
 	{
 		match type_ {
-			MimeType::TreeLdr => Ok(Self::TreeLdr(Box::new(import_treeldr(files, file_id)))),
-			MimeType::NQuads => Ok(Self::NQuads(import_nquads(files, file_id))),
+			MimeType::TreeLdr => Ok(Self::TreeLdr(Box::new(import_treeldr(files, file_id)?))),
+			MimeType::NQuads => Ok(Self::NQuads(import_nquads(files, file_id)?)),
 			#[cfg(feature = "json-schema")]
 			MimeType::JsonSchema => Ok(Self::JsonSchema(Box::new(import_json_schema(
 				files, file_id,
@@ -377,11 +380,60 @@ impl DeclaredDocument {
 	}
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError {
+	#[error("TreeLDR syntax error")]
+	TreeLdr(Box<treeldr_syntax::parsing::Error<treeldr_syntax::lexing::Error>>),
+
+	#[error("Turtle syntax error")]
+	Turtle(Box<turtle_syntax::parsing::Error<turtle_syntax::lexing::Error>>),
+
+	#[error("N-Quads syntax error")]
+	NQuads(Box<nquads_syntax::parsing::Error<nquads_syntax::lexing::Error>>),
+}
+
+impl ParseError {
+	pub fn diagnostic(
+		self,
+		meta: source::Metadata,
+	) -> codespan_reporting::diagnostic::Diagnostic<source::FileId> {
+		match self {
+			Self::TreeLdr(e) => Meta(e, meta).diagnostic(),
+			Self::NQuads(e) => codespan_reporting::diagnostic::Diagnostic::error()
+				.with_message("parse error")
+				.with_labels(vec![meta
+					.optional_location()
+					.unwrap()
+					.as_primary_label()
+					.with_message(e.to_string())]),
+			Self::Turtle(e) => codespan_reporting::diagnostic::Diagnostic::error()
+				.with_message("parse error")
+				.with_labels(vec![meta
+					.optional_location()
+					.unwrap()
+					.as_primary_label()
+					.with_message(e.to_string())]),
+		}
+	}
+
+	pub fn display_and_exit<'a, P: source::DisplayPath<'a>>(
+		self,
+		files: &'a source::Files<P>,
+		meta: source::Metadata,
+	) {
+		let diagnostic = self.diagnostic(meta);
+		let writer = StandardStream::stderr(ColorChoice::Always);
+		let config = codespan_reporting::term::Config::default();
+		term::emit(&mut writer.lock(), &config, files, &diagnostic).expect("diagnostic failed");
+		std::process::exit(1);
+	}
+}
+
 /// Import a TreeLDR file.
 pub fn import_treeldr<'f, P>(
 	files: &'f source::Files<P>,
 	source_id: source::FileId,
-) -> TreeLdrDocument
+) -> Result<TreeLdrDocument, Meta<ParseError, source::Metadata>>
 where
 	P: DisplayPath<'f>,
 {
@@ -394,20 +446,14 @@ where
 	}) {
 		Ok(doc) => {
 			log::debug!("parsing succeeded.");
-			TreeLdrDocument {
+			Ok(TreeLdrDocument {
 				doc: doc.into_value(),
 				local_context: syntax::build::LocalContext::new(
 					file.base_iri().map(|iri| iri.into()),
 				),
-			}
+			})
 		}
-		Err(e) => {
-			let diagnostic = e.diagnostic();
-			let writer = StandardStream::stderr(ColorChoice::Always);
-			let config = codespan_reporting::term::Config::default();
-			term::emit(&mut writer.lock(), &config, files, &diagnostic).expect("diagnostic failed");
-			std::process::exit(1);
-		}
+		Err(e) => Err(e.map(ParseError::TreeLdr)),
 	}
 }
 
@@ -419,7 +465,7 @@ pub type Dataset =
 pub fn import_nquads<'f, P>(
 	files: &'f source::Files<P>,
 	source_id: source::FileId,
-) -> nquads_syntax::Document<source::Metadata>
+) -> Result<nquads_syntax::Document<source::Metadata>, Meta<ParseError, source::Metadata>>
 where
 	P: DisplayPath<'f>,
 {
@@ -430,21 +476,9 @@ where
 	}) {
 		Ok(Meta(doc, _)) => {
 			log::debug!("parsing succeeded.");
-			doc
+			Ok(doc)
 		}
-		Err(Meta(e, meta)) => {
-			let diagnostic = codespan_reporting::diagnostic::Diagnostic::error()
-				.with_message("parse error")
-				.with_labels(vec![meta
-					.optional_location()
-					.unwrap()
-					.as_primary_label()
-					.with_message(e.to_string())]);
-			let writer = StandardStream::stderr(ColorChoice::Always);
-			let config = codespan_reporting::term::Config::default();
-			term::emit(&mut writer.lock(), &config, files, &diagnostic).expect("diagnostic failed");
-			std::process::exit(1);
-		}
+		Err(Meta(e, meta)) => Err(Meta(ParseError::NQuads(e), meta)),
 	}
 }
 
