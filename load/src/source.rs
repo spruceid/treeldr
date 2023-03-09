@@ -20,6 +20,7 @@ impl<'a> DisplayPath<'a> for PathBuf {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FileId(usize);
 
 pub type Location = locspan::Location<FileId>;

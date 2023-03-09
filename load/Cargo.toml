@@ -11,6 +11,7 @@ default = ["turtle"]
 turtle = ["turtle-syntax"]
 json-schema = ["treeldr-json-schema", "serde_json"]
 json-ld-context = ["treeldr-json-ld-context"]
+serde = ["dep:serde"]
 
 [dependencies]
 treeldr.workspace = true
@@ -24,6 +25,7 @@ locspan = { workspace = true, features = ["reporting"] }
 codespan-reporting.workspace = true
 thiserror.workspace = true
 nquads-syntax.workspace = true
+serde = { version = "1.0.154", features = ["derive"], optional = true }
 
 # Extensions.
 turtle-syntax = { version = "5.0.0", optional = true }
