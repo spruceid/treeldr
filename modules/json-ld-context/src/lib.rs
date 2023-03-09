@@ -18,9 +18,17 @@ mod unresolved;
 
 pub use command::Command;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-	//
+	#[error("ambiguous term `{0}`")]
+	AmbiguousTerm(String),
+
+	#[error("protected term `{term}` redefinition")]
+	ProtectedTermRedefinition {
+		term: String,
+		protected_definition: Box<resolved::TermDefinition>,
+		redefinition: Box<resolved::TermDefinition>,
+	},
 }
 
 /// Generator options.

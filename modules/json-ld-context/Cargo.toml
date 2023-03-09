@@ -17,6 +17,7 @@ derivative.workspace = true
 contextual.workspace = true
 shelves.workspace = true
 json-ld.workspace = true
+thiserror.workspace = true
 futures = "0.3.25"
 
 [dev-dependencies]

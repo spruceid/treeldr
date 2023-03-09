@@ -195,18 +195,18 @@ impl LocalContexts {
 		&self,
 		context_comparison: &LocalContextComparison,
 		r: Ref<LocalContext>,
-	) -> BuiltDefinitions {
+	) -> Result<BuiltDefinitions, Error> {
 		let mut result = BuiltDefinitions::default();
 
 		if let Some(bindings) = self.definitions.get(&r) {
 			for (term, defs) in bindings {
 				for def in &defs.added {
-					result.insert(self, context_comparison, r, term.to_string(), def)
+					result.insert(self, context_comparison, r, term.to_string(), def)?
 				}
 			}
 		}
 
-		result
+		Ok(result)
 	}
 
 	pub fn build(
@@ -216,7 +216,7 @@ impl LocalContexts {
 		context_comparison: &LocalContextComparison,
 		r: Ref<LocalContext>,
 	) -> Result<Option<json_ld::syntax::context::Value<()>>, Error> {
-		let bindings = self.build_definitions(context_comparison, r);
+		let bindings = self.build_definitions(context_comparison, r)?;
 		let context = self.contexts.get(r).unwrap();
 		context.build(vocabulary, prefixes, self, context_comparison, bindings)
 	}
@@ -233,19 +233,19 @@ impl BuiltDefinitions {
 		this: Ref<LocalContext>,
 		term: String,
 		def: &TermDefinition,
-	) {
+	) -> Result<(), Error> {
 		match self.0.entry(term) {
 			btree_map::Entry::Occupied(mut e) => {
 				match e.get().compare(context_comparison, def).ordering {
 					Some(Ordering::Greater | Ordering::Equal) => {
 						// we can skip it.
+						Ok(())
 					}
 					Some(Ordering::Less) => {
 						e.insert(def.clone());
+						Ok(())
 					}
-					None => {
-						panic!("ambiguous term `{}`", e.key())
-					}
+					None => Err(Error::AmbiguousTerm(e.key().clone())),
 				}
 			}
 			btree_map::Entry::Vacant(e) => {
@@ -290,18 +290,20 @@ impl BuiltDefinitions {
 															this,
 															term.clone(),
 															def,
-														)
+														)?
 													}
 												}
 											}
 										}
 
-										return;
+										return Ok(());
 									}
 									_ => {
-										panic!(
-											"protected term redefinition: {parent_def:?}, {def:?}"
-										)
+										return Err(Error::ProtectedTermRedefinition {
+											term: e.key().clone(),
+											protected_definition: Box::new(parent_def.clone()),
+											redefinition: Box::new(def.clone()),
+										});
 									}
 								}
 							}
@@ -314,6 +316,8 @@ impl BuiltDefinitions {
 				if !parent_defined || must_override {
 					e.insert(def.clone());
 				}
+
+				Ok(())
 			}
 		}
 	}
