@@ -12,6 +12,7 @@ iref.workspace = true
 clap = { workspace = true, features = ["derive"] }
 derivative.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 
 # For the import function.
 treeldr-build.workspace = true
