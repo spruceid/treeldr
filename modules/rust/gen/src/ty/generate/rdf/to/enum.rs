@@ -24,7 +24,7 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 	) -> Result<(), crate::Error> {
 		let ident = ty.ident();
 		let def_params_values = ParametersValues::default();
-		let impl_params_values = ParametersValues::new(quote!(N::Id));
+		let impl_params_values = ParametersValues::new_for_type(quote!(N::Id));
 
 		let iterator_ident = triples_and_values_iterator_name_from(ident);
 		let mut iterator_variants = Vec::with_capacity(ty.variants().len());

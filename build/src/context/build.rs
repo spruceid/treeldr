@@ -6,6 +6,7 @@ use treeldr::{metadata::Merge, BlankIdIndex, IriIndex, Model, MutableModel};
 
 use crate::{error, ty::ClassHierarchy, Context, Error};
 
+mod close_layout_types;
 mod assign_default_layouts;
 mod assign_default_names;
 mod compute_layout_intersections;
@@ -28,6 +29,9 @@ impl<M: Clone> Context<M> {
 		M: Clone + Merge,
 	{
 		// TODO check for infinite values (lists).
+
+		log::debug!("close layout `tldr:layoutFor` relation by aliasing...");
+		self.close_layout_types();
 
 		log::debug!("dispatch sub properties...");
 		self.dispatch_sub_properties()?;

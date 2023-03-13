@@ -4,6 +4,7 @@ description = "Schema definition language."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+default-run = "tldrc"
 
 [features]
 default = ["json-schema", "json-ld-context"]

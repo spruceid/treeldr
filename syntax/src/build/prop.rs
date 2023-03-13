@@ -61,13 +61,15 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 					match ann {
 						crate::Annotation::Multiple => {
 							functional = false;
-							functional_loc = Some(ann_loc);
 						}
 						crate::Annotation::Required => {
 							required = true;
 							required_loc = Some(ann_loc);
 						}
-						crate::Annotation::Single => (),
+						crate::Annotation::Single => {
+							functional = true;
+							functional_loc = Some(ann_loc);
+						},
 					}
 				}
 
@@ -80,10 +82,10 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 			node.comment_mut().insert_base(comment.cast())
 		}
 
-		if let Some(functional_loc) = functional_loc {
+		if functional {
 			node.type_mut().insert_base(Meta(
 				treeldr_build::prop::Type::FunctionalProperty.into(),
-				functional_loc,
+				functional_loc.unwrap_or_else(|| id_loc.clone()),
 			));
 		}
 

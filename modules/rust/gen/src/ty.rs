@@ -1,4 +1,4 @@
-use crate::{module, path, Context, Path};
+use crate::{module::{self, TraitImpl, TraitId}, path, Context, Path};
 
 use quote::format_ident;
 pub use treeldr::layout::Primitive;
@@ -112,6 +112,37 @@ impl Type {
 	pub fn description(&self) -> &Description {
 		&self.desc
 	}
+
+	/// Collect all the trait implementation required for this type.
+	pub fn collect_trait_implementations<V, M>(
+		&self,
+		context: &Context<V, M>,
+		mut f: impl FnMut(TraitImpl) -> bool
+	) {
+		let layout = match self.description() {
+			Description::Struct(s) => Some(s.layout()),
+			Description::Enum(e) => Some(e.layout()),
+			Description::Primitive(p) => Some(TId::new(p.id())),
+			_ => None
+		};
+
+		if let Some(layout_ref) = layout {
+			let layout = context.model().get(layout_ref).unwrap();
+			f(TraitId::FromRdf.impl_for(layout_ref));
+			f(TraitId::TriplesAndValues.impl_for(layout_ref));
+			f(TraitId::IntoJsonLd.impl_for(layout_ref));
+			
+			let mut stack: Vec<_> = layout.as_layout().ty().iter().map(|v| **v.value).collect();
+			while let Some(ty_ref) = stack.pop() {
+				if f(TraitId::Defined(ty_ref).impl_for(layout_ref)) {
+					let ty = context.model().get(ty_ref).unwrap();
+					if let Some(super_classes) = ty.as_type().sub_class_of() {
+						stack.extend(super_classes.iter().map(|s| **s.value))
+					}
+				}
+			}
+		}
+	}
 }
 
 #[derive(Debug)]
@@ -191,7 +222,7 @@ impl Description {
 			treeldr::layout::Description::Alias(alias_ref) => {
 				let name = layout.as_component().name().expect("unnamed alias");
 				let ident = generate::type_ident_of_name(name);
-				Self::Alias(Alias::new(ident, *alias_ref.value()))
+				Self::Alias(Alias::new(ident, layout_ref, *alias_ref.value()))
 			}
 			treeldr::layout::Description::Primitive(p) => Self::Primitive(*p),
 			treeldr::layout::Description::Derived(p) => {
@@ -227,7 +258,7 @@ impl Description {
 					))
 				}
 
-				Self::Struct(Struct::new(ident, fields))
+				Self::Struct(Struct::new(layout_ref, ident, fields))
 			}
 			treeldr::layout::Description::Enum(e) => {
 				let name = layout.as_component().name().expect("unnamed enum");
@@ -243,7 +274,7 @@ impl Description {
 					))
 				}
 
-				Self::Enum(Enum::new(ident, variants))
+				Self::Enum(Enum::new(layout_ref, ident, variants))
 			}
 			treeldr::layout::Description::Required(r) => {
 				Self::BuiltIn(BuiltIn::Required(**r.item_layout()))

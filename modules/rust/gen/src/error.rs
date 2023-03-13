@@ -1,5 +1,5 @@
 use crate::Context;
-use contextual::WithContext;
+use contextual::{WithContext, DisplayWithContext};
 use rdf_types::Vocabulary;
 use std::fmt;
 use treeldr::{BlankIdIndex, IriIndex, TId};
@@ -19,21 +19,21 @@ pub enum Error {
 	BlankProperty(TId<treeldr::Property>),
 }
 
-impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> crate::fmt::Display<V, M> for Error {
-	fn fmt(&self, context: &Context<V, M>, f: &mut fmt::Formatter) -> fmt::Result {
+impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V> for Error {
+	fn fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::UnreachableType(layout_ref) => {
 				write!(
 					f,
 					"unbound layout `{}`",
-					layout_ref.id().with(context.vocabulary())
+					layout_ref.id().with(vocabulary)
 				)
 			}
 			Self::UnreachableTrait(type_ref) => {
 				write!(
 					f,
 					"unbound type `{}`",
-					type_ref.id().with(context.vocabulary())
+					type_ref.id().with(vocabulary)
 				)
 			}
 			Self::MissingDefaultImpl => {
@@ -43,9 +43,16 @@ impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> crate::fmt::Displ
 				write!(
 					f,
 					"blank property `{}`",
-					prop_ref.id().with(context.vocabulary())
+					prop_ref.id().with(vocabulary)
 				)
 			}
 		}
+	}
+}
+
+impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M> crate::fmt::Display<V, M> for Error {
+	fn fmt(&self, context: &Context<V, M>, f: &mut fmt::Formatter) -> fmt::Result {
+		use fmt::Display;
+		self.with(context.vocabulary()).fmt(f)
 	}
 }

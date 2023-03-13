@@ -6,12 +6,45 @@ use shelves::Ref;
 use std::collections::HashSet;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TraitId {
+	FromRdf,
+	TriplesAndValues,
+	IntoJsonLd,
+	Defined(TId<treeldr::Type>)
+}
+
+impl TraitId {
+	pub fn impl_for(self, ty: TId<treeldr::Layout>) -> TraitImpl {
+		TraitImpl::new(ty, self)
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TraitImpl {
+	pub ty: TId<treeldr::Layout>,
+	pub tr: TraitId,
+}
+
+impl TraitImpl {
+	pub fn new(
+		ty: TId<treeldr::Layout>,
+		tr: TraitId,
+	) -> Self {
+		Self {
+			ty,
+			tr
+		}
+	}
+}
+
 pub struct Module {
 	parent: Option<Ref<Self>>,
 	ident: proc_macro2::Ident,
 	sub_modules: HashSet<Ref<Self>>,
 	layouts: HashSet<TId<treeldr::Layout>>,
 	types: HashSet<TId<treeldr::Type>>,
+	trait_impls: HashSet<TraitImpl>
 }
 
 impl Module {
@@ -22,6 +55,7 @@ impl Module {
 			sub_modules: HashSet::new(),
 			layouts: HashSet::new(),
 			types: HashSet::new(),
+			trait_impls: HashSet::new()
 		}
 	}
 
@@ -58,6 +92,14 @@ impl Module {
 	pub fn types_mut(&mut self) -> &mut HashSet<TId<treeldr::Type>> {
 		&mut self.types
 	}
+
+	pub fn trait_impls(&self) -> &HashSet<TraitImpl> {
+		&self.trait_impls
+	}
+
+	pub fn trait_impls_mut(&mut self) -> &mut HashSet<TraitImpl> {
+		&mut self.trait_impls
+	}
 }
 
 impl<M> Generate<M> for Module {
@@ -79,6 +121,10 @@ impl<M> Generate<M> for Module {
 		for layout_ref in &self.layouts {
 			let ty = context.layout_type(*layout_ref).expect("undefined layout");
 			ty.generate(context, scope, tokens)?
+		}
+
+		for trait_impl in &self.trait_impls {
+			trait_impl.generate(context, scope, tokens)?
 		}
 
 		Ok(())
@@ -111,4 +157,13 @@ pub enum Parent {
 	/// The parent module is unreachable.
 	Extern,
 	Ref(Ref<Module>),
+}
+
+impl Parent {
+	pub fn into_ref(self) -> Option<Ref<Module>> {
+		match self {
+			Self::Extern => None,
+			Self::Ref(r) => Some(r)
+		}
+	}
 }

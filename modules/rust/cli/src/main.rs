@@ -1,5 +1,6 @@
 use clap::Parser;
 use codespan_reporting::term::{self, termcolor::StandardStream};
+use contextual::WithContext;
 use iref::IriBuf;
 use proc_macro2::{Ident, Span};
 use quote::format_ident;
@@ -191,7 +192,7 @@ pub fn main() {
 						eprintln!("unreachable {ty:?}")
 					}
 
-					eprintln!("error: {e:?}")
+					eprintln!("error: {}", e.with(&vocabulary))
 				}
 			}
 		}

@@ -142,7 +142,7 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 		}
 
 		let ident = ty.ident();
-		let params_values = ParametersValues::new(quote!(N::Id));
+		let params_values = ParametersValues::new_for_type(quote!(N::Id));
 		let params = ty.params().instantiate(&params_values);
 
 		let bounds = bounds

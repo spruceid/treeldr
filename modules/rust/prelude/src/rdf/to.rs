@@ -87,7 +87,7 @@ impl<T: TriplesAndValues<N, L>, N: Namespace, L> TriplesAndValues<N, L> for Opti
 }
 
 pub struct FlattenTriplesAndValues<I, U, L> {
-	current: Option<U>,
+	current: Option<Box<U>>,
 	rest: I,
 	_l: PhantomData<L>,
 }
@@ -110,7 +110,7 @@ impl<'a, I: Iterator<Item = &'a T>, T: TriplesAndValues<N, L>, N: Namespace, L> 
 				},
 				None => match self.rest.next() {
 					Some(i) => {
-						self.current = Some(i.unbound_rdf_triples_and_values(namespace, generator))
+						self.current = Some(Box::new(i.unbound_rdf_triples_and_values(namespace, generator)))
 					}
 					None => break None,
 				},

@@ -9,18 +9,24 @@ use super::{params::ParametersValues, Parameters};
 
 #[derive(Debug)]
 pub struct Struct {
+	layout: TId<treeldr::Layout>,
 	ident: proc_macro2::Ident,
 	fields: Vec<Field>,
 	params: Parameters,
 }
 
 impl Struct {
-	pub fn new(ident: proc_macro2::Ident, fields: Vec<Field>) -> Self {
+	pub fn new(layout: TId<treeldr::Layout>, ident: proc_macro2::Ident, fields: Vec<Field>) -> Self {
 		Self {
+			layout,
 			ident,
 			fields,
 			params: Parameters::default(),
 		}
+	}
+	
+	pub fn layout(&self) -> TId<treeldr::Layout> {
+		self.layout
 	}
 
 	pub fn ident(&self) -> &proc_macro2::Ident {
@@ -47,6 +53,10 @@ impl Struct {
 		self.fields
 			.iter()
 			.all(|f| f.ty(context).impl_default(context))
+	}
+
+	pub fn field_for(&self, p: TId<treeldr::Property>) -> Option<&Field> {
+		self.fields.iter().find(|f| f.property() == Some(p))
 	}
 
 	pub(crate) fn compute_params(

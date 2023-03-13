@@ -84,8 +84,8 @@ pub enum Kind {
 /// Layout definition.
 #[derive(Debug)]
 pub struct Definition<M> {
-	/// Type represented by this layout.
-	ty: FunctionalPropertyValue<TId<Type>, M>,
+	/// Types represented by this layout.
+	ty: PropertyValues<TId<Type>, M>,
 
 	/// Layout description.
 	desc: Description<M>,
@@ -149,6 +149,17 @@ impl<M> Description<M> {
 			Self::Set(_) => Kind::Set,
 			Self::OneOrMany(_) => Kind::OneOrMany,
 			Self::Alias(_) => Kind::Alias,
+		}
+	}
+
+	pub fn collection_item(&self) -> Option<&Meta<TId<Layout>, M>> {
+		match self {
+			Self::Required(c) => Some(c.item_layout()),
+			Self::Option(c) => Some(c.item_layout()),
+			Self::Array(c) => Some(c.item_layout()),
+			Self::Set(c) => Some(c.item_layout()),
+			Self::OneOrMany(c) => Some(c.item_layout()),
+			_ => None
 		}
 	}
 
@@ -398,7 +409,7 @@ impl<'a, M> Iterator for DescriptionPropertyValueIter<'a, M> {
 impl<M> Definition<M> {
 	/// Creates a new layout definition.
 	pub fn new(
-		ty: FunctionalPropertyValue<TId<Type>, M>,
+		ty: PropertyValues<TId<Type>, M>,
 		desc: Description<M>,
 		intersection_of: FunctionalPropertyValue<Multiple<TId<Layout>, M>, M>,
 	) -> Self {
@@ -410,8 +421,8 @@ impl<M> Definition<M> {
 	}
 
 	/// Type for which the layout is defined.
-	pub fn ty(&self) -> Option<TId<Type>> {
-		self.ty.value().cloned()
+	pub fn ty(&self) -> &PropertyValues<TId<Type>, M> {
+		&self.ty
 	}
 
 	/// Returns the layout description.
@@ -792,10 +803,8 @@ impl<'a, M> ClassBindingRef<'a, M> {
 	}
 }
 
-#[derive(Derivative)]
-#[derivative(Default(bound = ""))]
 pub struct ClassBindings<'a, M> {
-	ty: property_values::functional::Iter<'a, TId<crate::Type>, M>,
+	ty: property_values::non_functional::Iter<'a, TId<crate::Type>, M>,
 	desc: Option<DescriptionPropertyValueIter<'a, M>>,
 	intersection_of: property_values::functional::Iter<'a, Multiple<TId<crate::Layout>, M>, M>,
 	restrictions: Option<WithRestrictionsIter<'a, M>>,

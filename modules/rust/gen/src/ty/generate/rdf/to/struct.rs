@@ -25,7 +25,7 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 	) -> Result<(), crate::Error> {
 		let ident = ty.ident();
 		let def_params_values = ParametersValues::default();
-		let impl_params_values = ParametersValues::new(quote!(N::Id));
+		let impl_params_values = ParametersValues::new_for_type(quote!(N::Id));
 		let params = ty.params().instantiate(&impl_params_values);
 		let iterator_ident = triples_and_values_iterator_name_from(ident);
 
@@ -154,7 +154,7 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 			impl<'a, N: ::treeldr_rust_prelude::rdf_types::Namespace, V: 'a> ::treeldr_rust_prelude::RdfIterator<N> for #iterator_ident<'a, N::Id, V>
 			where
 				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
+				N::Id: 'a + Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
 				#bounds
 			{
 				type Item = ::treeldr_rust_prelude::rdf::TripleOrValue<N::Id, V>;

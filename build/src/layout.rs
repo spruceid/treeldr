@@ -14,7 +14,7 @@ use rdf_types::IriVocabulary;
 pub use treeldr::layout::{DescriptionProperty, Property};
 use treeldr::{
 	metadata::Merge, prop::UnknownProperty, Id, IriIndex, MetaOption, Multiple, Name,
-	PropertyValueRef, TId, Value,
+	PropertyValueRef, TId, Value, PropertyValues,
 };
 
 pub mod array;
@@ -368,16 +368,16 @@ pub struct NoSingleDescription<'a, M> {
 #[derive(Debug, Clone, Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct DescriptionProperties<M> {
-	derived_from: FunctionalPropertyValue<Id, M>,
-	struct_: FunctionalPropertyValue<Id, M>,
-	reference: FunctionalPropertyValue<Id, M>,
-	enum_: FunctionalPropertyValue<Id, M>,
-	required: FunctionalPropertyValue<Id, M>,
-	option: FunctionalPropertyValue<Id, M>,
-	set: FunctionalPropertyValue<Id, M>,
-	one_or_many: FunctionalPropertyValue<Id, M>,
-	array: FunctionalPropertyValue<Id, M>,
-	alias: FunctionalPropertyValue<Id, M>,
+	pub derived_from: FunctionalPropertyValue<Id, M>,
+	pub struct_: FunctionalPropertyValue<Id, M>,
+	pub reference: FunctionalPropertyValue<Id, M>,
+	pub enum_: FunctionalPropertyValue<Id, M>,
+	pub required: FunctionalPropertyValue<Id, M>,
+	pub option: FunctionalPropertyValue<Id, M>,
+	pub set: FunctionalPropertyValue<Id, M>,
+	pub one_or_many: FunctionalPropertyValue<Id, M>,
+	pub array: FunctionalPropertyValue<Id, M>,
+	pub alias: FunctionalPropertyValue<Id, M>,
 }
 
 impl<M> DescriptionProperties<M> {
@@ -950,8 +950,8 @@ pub enum Kind {
 /// Layout definition.
 #[derive(Clone)]
 pub struct Definition<M> {
-	/// Type for which this layout is defined.
-	ty: FunctionalPropertyValue<Id, M>,
+	/// Types for which this layout is defined.
+	ty: PropertyValues<Id, M>,
 
 	/// Layout description.
 	desc: DescriptionProperties<M>,
@@ -986,7 +986,7 @@ pub struct ParentLayout {
 impl<M> Default for Definition<M> {
 	fn default() -> Self {
 		Self {
-			ty: FunctionalPropertyValue::default(),
+			ty: PropertyValues::default(),
 			desc: DescriptionProperties::default(),
 			intersection_of: FunctionalPropertyValue::default(),
 			restrictions: FunctionalPropertyValue::default(),
@@ -1000,12 +1000,12 @@ impl<M> Definition<M> {
 		Self::default()
 	}
 
-	/// Type for which the layout is defined.
-	pub fn ty(&self) -> &FunctionalPropertyValue<Id, M> {
+	/// Types for which the layout is defined.
+	pub fn ty(&self) -> &PropertyValues<Id, M> {
 		&self.ty
 	}
 
-	pub fn ty_mut(&mut self) -> &mut FunctionalPropertyValue<Id, M> {
+	pub fn ty_mut(&mut self) -> &mut PropertyValues<Id, M> {
 		&mut self.ty
 	}
 
@@ -1381,11 +1381,16 @@ impl<M: Clone> Definition<M> {
 			})?;
 
 		let desc = self.build_description(context, as_resource, as_component, &metadata)?;
-		let ty = self.ty.clone().into_type_at_node_binding(
-			context,
-			as_resource.id,
-			Property::For(None),
-		)?;
+		let ty = self
+			.ty()
+			.try_mapped(|_, Meta(ty, m)| {
+				context
+					.require_type_id(*ty)
+					.map(|ty| Meta(ty, m.clone()))
+			})
+			.map_err(|(Meta(e, m), _)| {
+				e.at_node_property(as_resource.id, Property::For(None), m.clone())
+			})?;
 
 		Ok(Meta(
 			treeldr::layout::Definition::new(ty, desc, intersection_of),

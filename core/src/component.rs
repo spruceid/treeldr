@@ -93,13 +93,11 @@ impl<M> Definition<M> {
 			layout: self
 				.layout
 				.as_ref()
-				.map(|l| l.bindings())
-				.unwrap_or_default(),
+				.map(|l| l.bindings()),
 			formatted: self
 				.formatted
 				.as_ref()
 				.map(|f| f.bindings())
-				.unwrap_or_default(),
 		}
 	}
 }
@@ -248,8 +246,8 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 #[derivative(Default(bound = ""))]
 pub struct Bindings<'a, M> {
 	data: ClassBindings<'a, M>,
-	layout: layout::Bindings<'a, M>,
-	formatted: formatted::Bindings<'a, M>,
+	layout: Option<layout::Bindings<'a, M>>,
+	formatted: Option<formatted::Bindings<'a, M>>,
 }
 
 impl<'a, M> Iterator for Bindings<'a, M> {
@@ -261,9 +259,17 @@ impl<'a, M> Iterator for Bindings<'a, M> {
 			.map(|m| m.map(ClassBindingRef::into_binding_ref))
 			.or_else(|| {
 				self.layout
-					.next()
-					.map(|m| m.map(BindingRef::Layout))
-					.or_else(|| self.formatted.next().map(|m| m.map(BindingRef::Formatted)))
+					.as_mut()
+					.and_then(|i| {
+						i.next().map(|m| m.map(BindingRef::Layout))
+					})
+			})
+			.or_else(|| {
+				self.formatted
+					.as_mut()
+					.and_then(|i| {
+						i.next().map(|m| m.map(BindingRef::Formatted))
+					})
 			})
 	}
 }

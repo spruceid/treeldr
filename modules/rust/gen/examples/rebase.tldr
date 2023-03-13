@@ -1,6 +1,7 @@
 base <https://example.com/rebase/>;
 use <http://www.w3.org/1999/02/22-rdf-syntax-ns#> as rdf;
 use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
 use <https://treeldr.org/> as tldr;
 use <https://www.w3.org/2018/credentials#> as vc;
 
@@ -20,9 +21,9 @@ layout Credential for vc:VerifiableCredential {
 
 	vc:credentialSubject: required multiple rdfs:Resource,
 	vc:issuer: Issuer,
-	vc:issuanceDate: required tldr:DateTime,
+	vc:issuanceDate: required xs:dateTime,
 	vc:proof: multiple Proof,
-	vc:expirationDate: tldr:DateTime,
+	vc:expirationDate: xs:dateTime,
 	vc:credentialStatus: Status,
 	vc:termsOfUse: multiple TermOfUse,
 	vc:evidence: multiple Evidence,
@@ -73,4 +74,4 @@ layout RefreshService for rdfs:Resource;
 /// if dereferenced, results in a document containing machine-readable
 /// information about the issuer that can be used to verify the information
 /// expressed in the credential.
-layout Issuer for rdfs:Resource = tldr:URI | rdfs:Resource as Object;
+layout Issuer for rdfs:Resource = xs:anyURI | rdfs:Resource as Object;

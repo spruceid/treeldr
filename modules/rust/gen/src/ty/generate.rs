@@ -1,5 +1,5 @@
 use super::{
-	enumeration::Enum, structure::Struct, BuiltIn, Description, ParametersValues, Primitive, Type,
+	enumeration::Enum, structure::Struct, BuiltIn, Description, ParametersValues, Primitive, Type, alias::Alias,
 };
 use crate::{doc_attribute, Context, Error, Generate, GenerateIn, Module, Referenced};
 use proc_macro2::TokenStream;
@@ -8,6 +8,7 @@ use rdf_types::Vocabulary;
 use shelves::Ref;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
+mod tr_impl;
 mod json_ld;
 mod rdf;
 
@@ -105,24 +106,33 @@ impl<M> Generate<M> for Type {
 		let doc = doc_attribute(self.label(), self.documentation());
 		tokens.extend(doc);
 		match &self.desc {
-			Description::Alias(a) => {
-				let param_values = ParametersValues::default();
-				let alias = a
-					.target()
-					.generate_in_with(context, scope, &param_values)
-					.into_tokens()?;
-				let ident = a.ident();
-				let params = a.params().instantiate(&param_values);
-				tokens.extend(quote! {
-					pub type #ident #params = #alias #params;
-				});
-
-				Ok(())
-			}
+			Description::Alias(a) => a.generate(context, scope, tokens),
 			Description::Struct(s) => s.generate(context, scope, tokens),
 			Description::Enum(e) => e.generate(context, scope, tokens),
 			_ => Ok(()),
 		}
+	}
+}
+
+impl<M> Generate<M> for Alias {
+	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: Option<Ref<Module>>,
+		tokens: &mut TokenStream,
+	) -> Result<(), Error> {
+		let param_values = ParametersValues::default();
+		let alias = self
+			.target()
+			.generate_in_with(context, scope, &param_values)
+			.into_tokens()?;
+		let ident = self.ident();
+		let params = self.params().instantiate(&param_values);
+		tokens.extend(quote! {
+			pub type #ident #params = #alias #params ;
+		});
+
+		Ok(())
 	}
 }
 
@@ -201,10 +211,6 @@ impl<M> Generate<M> for Struct {
 			})
 		}
 
-		rdf::from::FromRdfImpl.generate(context, scope, self, tokens)?;
-		rdf::to::RdfTriplesImpl.generate(context, scope, self, tokens)?;
-		json_ld::IntoJsonLdImpl.generate(context, scope, self, tokens)?;
-
 		Ok(())
 	}
 }
@@ -236,10 +242,6 @@ impl<M> Generate<M> for Enum {
 				#(#variants),*
 			}
 		});
-
-		rdf::from::FromRdfImpl.generate(context, scope, self, tokens)?;
-		rdf::to::RdfTriplesImpl.generate(context, scope, self, tokens)?;
-		json_ld::IntoJsonLdImpl.generate(context, scope, self, tokens)?;
 
 		Ok(())
 	}

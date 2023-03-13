@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
@@ -145,39 +147,38 @@ fn collect_bounds<V, M>(
 	layout: TId<treeldr::Layout>,
 	mut bound: impl FnMut(Bound),
 ) {
-	fn collect<V, M>(
-		context: &crate::Context<V, M>,
-		layout: TId<treeldr::Layout>,
-		bound: &mut impl FnMut(Bound),
-	) {
-		let ty = context.layout_type(layout).unwrap();
+	let mut stack = vec![layout];
+	let mut visited = HashSet::new();
 
-		match ty.description() {
-			ty::Description::Never => (),
-			ty::Description::Alias(a) => collect(context, a.target(), bound),
-			ty::Description::Primitive(p) => bound(Bound::AsLiteral(*p)),
-			ty::Description::BuiltIn(b) => match b {
-				ty::BuiltIn::BTreeSet(item_layout) => collect(context, *item_layout, bound),
-				ty::BuiltIn::OneOrMany(item_layout) => collect(context, *item_layout, bound),
-				ty::BuiltIn::Option(item_layout) => collect(context, *item_layout, bound),
-				ty::BuiltIn::Required(item_layout) => collect(context, *item_layout, bound),
-				ty::BuiltIn::Vec(item_layout) => collect(context, *item_layout, bound),
-			},
-			ty::Description::Struct(s) => {
-				for field in s.fields() {
-					collect(context, field.layout(), bound)
-				}
-			}
-			ty::Description::Enum(e) => {
-				for variant in e.variants() {
-					if let Some(layout_ref) = variant.ty() {
-						collect(context, layout_ref, bound)
+	while let Some(layout) = stack.pop() {
+		if visited.insert(layout) {
+			let ty = context.layout_type(layout).unwrap();
+
+			match ty.description() {
+				ty::Description::Never => (),
+				ty::Description::Alias(a) => stack.push(a.target()),
+				ty::Description::Primitive(p) => bound(Bound::AsLiteral(*p)),
+				ty::Description::BuiltIn(b) => match b {
+					ty::BuiltIn::BTreeSet(item_layout) |
+					ty::BuiltIn::OneOrMany(item_layout) |
+					ty::BuiltIn::Option(item_layout) |
+					ty::BuiltIn::Required(item_layout) |
+					ty::BuiltIn::Vec(item_layout) => stack.push(*item_layout),
+				},
+				ty::Description::Struct(s) => {
+					for field in s.fields() {
+						stack.push(field.layout())
 					}
 				}
+				ty::Description::Enum(e) => {
+					for variant in e.variants() {
+						if let Some(layout_ref) = variant.ty() {
+							stack.push(layout_ref)
+						}
+					}
+				}
+				ty::Description::IdentifierParameter => (),
 			}
-			ty::Description::IdentifierParameter => (),
 		}
 	}
-
-	collect(context, layout, &mut bound)
 }

@@ -3,7 +3,7 @@ use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use treeldr::TId;
 
-use crate::{Error, Generate};
+use crate::{Error, Generate, GenerateIn, ty::params::{ParametersValues, Parameters, ParametersBounds}};
 
 use super::{AssociatedType, AssociatedTypeBound, Method, MethodType, Trait};
 
@@ -24,6 +24,9 @@ impl<M> Generate<M> for Trait {
 		tokens: &mut proc_macro2::TokenStream,
 	) -> Result<(), crate::Error> {
 		let ident = &self.ident;
+		let params_values = ParametersValues::new_for_trait(quote!(C));
+		let params_bounds = ParametersBounds::new_for_trait(quote!(?Sized));
+		let params = Parameters::context_parameter().instantiate(&params_values).with_bounds(&params_bounds);
 
 		let mut super_traits = TokenStream::new();
 		for &ty_ref in &self.super_traits {
@@ -36,26 +39,86 @@ impl<M> Generate<M> for Trait {
 			super_traits.extend(
 				ty_ref
 					.with(self)
-					.generate_with(context, scope)
+					.generate_in_with(context, scope, &params_values)
 					.into_tokens()?,
 			)
 		}
 
 		let mut associated_types = Vec::with_capacity(self.associated_types.len());
+		let mut never_associated_types = Vec::with_capacity(self.associated_types.len());
+		let mut ref_associated_types = Vec::with_capacity(self.associated_types.len());
 		for ty in &self.associated_types {
-			associated_types.push(ty.with(self).generate_with(context, scope).into_tokens()?)
+			associated_types.push(ty.with(self).generate_in_with(context, scope, &params_values).into_tokens()?);
+
+			let a_ident = ty.ident();
+			let never_expr = match ty.bound() {
+				AssociatedTypeBound::Types(_) => {
+					quote!(::std::convert::Infallible)
+				}
+				AssociatedTypeBound::Collection(_) => {
+					quote!(::std::iter::Empty<::std::convert::Infallible>)
+				}
+			};
+			never_associated_types.push(quote! {
+				type #a_ident <'a> = #never_expr where Self: 'a;
+			});
+			ref_associated_types.push(quote! {
+				type #a_ident <'a> = T::#a_ident<'a> where Self: 'a;
+			})
 		}
 
 		let mut methods = Vec::with_capacity(self.methods.len());
+		let mut never_methods = Vec::with_capacity(self.methods.len());
+		let mut ref_methods = Vec::with_capacity(self.methods.len());
 		for m in &self.methods {
-			methods.push(m.with(self).generate_with(context, scope).into_tokens()?)
+			methods.push(m.with(self).generate_with(context, scope).into_tokens()?);
+
+			let m_ident = m.ident();
+			let return_ty = match m.type_() {
+				MethodType::Required(i) => {
+					let ty_ident = self.associated_types[*i].ident();
+					quote!(Self::#ty_ident<'_>)
+				}
+				MethodType::Option(i) => {
+					let ty_ident = self.associated_types[*i].ident();
+					quote!(Option<Self::#ty_ident<'_>>)
+				}
+			};
+			never_methods.push(quote! {
+				fn #m_ident (&self, _context: &C) -> #return_ty {
+					unreachable!()
+				}
+			});
+			ref_methods.push(quote! {
+				fn #m_ident (&self, context: &C) -> #return_ty {
+					T::#m_ident(*self, context)
+				}
+			})
 		}
 
+		let context_ident = self.context_ident();
+
 		tokens.extend(quote! {
-			pub trait #ident #super_traits {
+			pub trait #ident #params #super_traits {
 				#(#associated_types)*
 
 				#(#methods)*
+			}
+
+			pub trait #context_ident <I: ?Sized> {
+				type #ident: #ident <Self>;
+
+				fn get(&self, id: &I) -> Option<&Self::#ident>;
+			}
+
+			impl <C: ?Sized> #ident <C> for ::std::convert::Infallible {
+				#(#never_associated_types)*
+				#(#never_methods)*
+			}
+
+			impl<'r, C: ?Sized, T: #ident<C>> #ident <C> for &'r T {
+				#(#ref_associated_types)*
+				#(#ref_methods)*
 			}
 		});
 
@@ -80,7 +143,7 @@ impl<'a, 't, M> Generate<M> for contextual::Contextual<&'a Method, &'t Trait> {
 			.into_tokens()?;
 
 		tokens.extend(quote! {
-			fn #ident (&self) -> #ty;
+			fn #ident (&self, context: &C) -> #ty;
 		});
 
 		Ok(())
@@ -97,20 +160,14 @@ impl<'a, 't, M> Generate<M> for contextual::Contextual<&'a MethodType, &'t Trait
 		tokens: &mut proc_macro2::TokenStream,
 	) -> Result<(), crate::Error> {
 		match self.0 {
-			MethodType::Direct(i, has_lifetime) => {
+			MethodType::Required(i) => {
 				let ty_expr = self.1.generate_associated_type_expr(quote!(Self), *i);
 				tokens.extend(ty_expr);
-				if *has_lifetime {
-					tokens.extend(quote!(<'_>));
-				}
-			}
-			MethodType::Reference(i) => {
-				let ty_expr = self.1.generate_associated_type_expr(quote!(Self), *i);
-				tokens.extend(quote!(&#ty_expr))
+				tokens.extend(quote!(<'_>));
 			}
 			MethodType::Option(i) => {
 				let ty_expr = self.1.generate_associated_type_expr(quote!(Self), *i);
-				tokens.extend(quote!(Option<&#ty_expr>))
+				tokens.extend(quote!(Option<#ty_expr<'_>>))
 			}
 		}
 
@@ -118,78 +175,77 @@ impl<'a, 't, M> Generate<M> for contextual::Contextual<&'a MethodType, &'t Trait
 	}
 }
 
-impl<'a, 't, M> Generate<M> for contextual::Contextual<&'a AssociatedType, &'t Trait> {
-	fn generate<
+impl<'a, 't, M> GenerateIn<M> for contextual::Contextual<&'a AssociatedType, &'t Trait> {
+	fn generate_in<
 		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
 	>(
 		&self,
 		context: &crate::Context<V, M>,
 		scope: Option<shelves::Ref<crate::Module>>,
+		params_values: &ParametersValues,
 		tokens: &mut proc_macro2::TokenStream,
 	) -> Result<(), crate::Error> {
 		let ident = &self.ident;
 		let bound = self
 			.bound
 			.with(self.1)
-			.generate_with(context, scope)
+			.generate_in_with(context, scope, params_values)
 			.into_tokens()?;
 
-		let params = if self.has_lifetime {
-			Some(quote!(<'a>))
-		} else {
-			None
-		};
-
 		tokens.extend(quote! {
-			type #ident #params : #bound;
+			type #ident <'a> : #bound;
 		});
 
 		Ok(())
 	}
 }
 
-impl<'a, 't, M> Generate<M> for contextual::Contextual<&'a AssociatedTypeBound, &'t Trait> {
-	fn generate<
+impl<'a, 't, M> GenerateIn<M> for contextual::Contextual<&'a AssociatedTypeBound, &'t Trait> {
+	fn generate_in<
 		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
 	>(
 		&self,
 		context: &crate::Context<V, M>,
 		scope: Option<shelves::Ref<crate::Module>>,
+		params_value: &ParametersValues,
 		tokens: &mut proc_macro2::TokenStream,
 	) -> Result<(), crate::Error> {
 		match self.0 {
 			AssociatedTypeBound::Types(refs) => {
-				for (i, type_ref) in refs.iter().enumerate() {
-					if i > 0 {
-						tokens.extend(quote!(+));
-					}
-
-					type_ref.generate(context, scope, tokens)?
+				tokens.extend(quote!('a));
+				
+				for type_ref in refs {
+					tokens.extend(quote!(+));
+					type_ref.generate_in(context, scope, params_value, tokens)?;
 				}
+
+				tokens.extend(quote!(where Self: 'a));
 
 				Ok(())
 			}
 			AssociatedTypeBound::Collection(i) => {
 				let ty_expr = self.1.generate_associated_type_expr(quote!(Self), *i);
-				tokens.extend(quote!(Iterator<Item = &'a #ty_expr> where Self: 'a));
+				tokens.extend(quote!('a + Iterator<Item = #ty_expr<'a>> where Self: 'a));
 				Ok(())
 			}
 		}
 	}
 }
 
-impl<M> Generate<M> for TId<treeldr::Type> {
-	fn generate<
+impl<M> GenerateIn<M> for TId<treeldr::Type> {
+	fn generate_in<
 		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
 	>(
 		&self,
 		context: &crate::Context<V, M>,
 		scope: Option<shelves::Ref<crate::Module>>,
+		params_values: &ParametersValues,
 		tokens: &mut TokenStream,
 	) -> Result<(), crate::Error> {
 		let tr = context.type_trait(*self).expect("trait not found");
 		let path = tr.path(context).ok_or(Error::UnreachableTrait(*self))?;
 		context.module_path(scope).to(&path).to_tokens(tokens);
+		Parameters::context_parameter().instantiate(params_values).to_tokens(tokens);
 		Ok(())
 	}
 }

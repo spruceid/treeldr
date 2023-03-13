@@ -1,14 +1,14 @@
 use crate::{
-	module,
+	module::{self, TraitId},
 	tr::Trait,
 	ty::{self, params::Parameters},
-	Module, Path, Type,
+	Module, Path, Type
 };
 use proc_macro2::Ident;
 use quote::format_ident;
 use rdf_types::Vocabulary;
 use shelves::{Ref, Shelf};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use treeldr::{value::Literal, IriIndex, TId};
 
 /// Rust context.
@@ -27,7 +27,7 @@ pub struct Context<'a, V, M> {
 
 	types: BTreeMap<TId<treeldr::Type>, Trait>,
 
-	anonymous_types: usize,
+	anonymous_types: usize
 }
 
 impl<'a, V, M> Context<'a, V, M> {
@@ -58,6 +58,10 @@ impl<'a, V, M> Context<'a, V, M> {
 
 	pub fn module(&self, r: Ref<Module>) -> Option<&Module> {
 		self.modules.get(r)
+	}
+
+	pub fn module_mut(&mut self, r: Ref<Module>) -> Option<&mut Module> {
+		self.modules.get_mut(r)
 	}
 
 	pub fn module_path(&self, r: Option<Ref<Module>>) -> Path {
@@ -144,7 +148,45 @@ impl<'a, V, M> Context<'a, V, M> {
 	}
 
 	pub fn run_pre_computations(&mut self) {
-		self.compute_type_params()
+		self.compute_type_params();
+		self.dispatch_trait_implementations()
+	}
+
+	pub fn dispatch_trait_implementations(&mut self) {
+		let mut trait_impls = HashSet::new();
+		for ty in self.layouts.values() {
+			ty.collect_trait_implementations(self, |i| trait_impls.insert(i))
+		}
+
+		for i in trait_impls {
+			let module_ref = match i.tr {
+				TraitId::Defined(tr) => {
+					let tr_module = self.types.get(&tr).and_then(|tr| tr.module());
+					let ty_module = self.layouts.get(&i.ty).and_then(|ty| ty.module());
+
+					match (tr_module, ty_module) {
+						(Some(module::Parent::Ref(a)), Some(module::Parent::Ref(b))) => {
+							Some(std::cmp::max(a, b))
+						}
+						(Some(module::Parent::Ref(a)), _) => {
+							Some(a)
+						}
+						(_, Some(module::Parent::Ref(b))) => {
+							Some(b)
+						}
+						_ => None
+					}
+				}
+				_ => {
+					self.layouts.get(&i.ty).and_then(|ty| ty.module()).and_then(module::Parent::into_ref)
+				}
+			};
+
+			if let Some(module_ref) = module_ref {
+				let module = self.module_mut(module_ref).unwrap();
+				module.trait_impls_mut().insert(i);
+			}
+		}
 	}
 
 	pub fn compute_type_params(&mut self) {

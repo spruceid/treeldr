@@ -10,18 +10,24 @@ use super::{params::ParametersValues, Parameters};
 /// Rust `enum` type.
 #[derive(Debug)]
 pub struct Enum {
+	layout: TId<treeldr::Layout>,
 	ident: Ident,
 	variants: Vec<Variant>,
 	params: Parameters,
 }
 
 impl Enum {
-	pub fn new(ident: Ident, variants: Vec<Variant>) -> Self {
+	pub fn new(layout: TId<treeldr::Layout>, ident: Ident, variants: Vec<Variant>) -> Self {
 		Self {
+			layout,
 			ident,
 			variants,
 			params: Parameters::default(),
 		}
+	}
+
+	pub fn layout(&self) -> TId<treeldr::Layout> {
+		self.layout
 	}
 
 	pub fn ident(&self) -> &Ident {

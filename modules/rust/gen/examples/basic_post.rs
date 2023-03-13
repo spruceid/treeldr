@@ -20,6 +20,10 @@ use treeldr_rust_prelude::{ld::import_quad, static_iref::iri, FromRdf, IntoJsonL
 	"modules/rust/gen/examples/basic_post.tldr"
 )]
 pub mod schema {
+	/// TLDR types.
+	#[prefix("https://treeldr.org/")]
+	pub mod tldr {}
+	
 	/// RDF Schema types.
 	#[prefix("http://www.w3.org/2000/01/rdf-schema#")]
 	pub mod rdfs {}
@@ -27,6 +31,10 @@ pub mod schema {
 	/// XSD types.
 	#[prefix("http://www.w3.org/2001/XMLSchema#")]
 	pub mod xsd {}
+
+	/// schema.org.
+	#[prefix("https://schema.org/")]
+	pub mod org {}
 
 	/// Verifiable Credential schema.
 	#[prefix("https://www.w3.org/2018/credentials#")]

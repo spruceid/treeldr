@@ -131,8 +131,12 @@ impl Trait {
 		self.module
 	}
 
-	pub fn ident(&self) -> &proc_macro2::Ident {
+	pub fn ident(&self) -> &Ident {
 		&self.ident
+	}
+
+	pub fn context_ident(&self) -> Ident {
+		format_ident!("{}Provider", self.ident)
 	}
 
 	pub fn label(&self) -> Option<&str> {
@@ -158,6 +162,9 @@ impl Trait {
 
 /// Trait associated type.
 pub struct AssociatedType {
+	/// Property.
+	prop: TId<treeldr::Property>,
+
 	/// Associated type definition.
 	ident: Ident,
 
@@ -168,25 +175,23 @@ pub struct AssociatedType {
 	doc: treeldr::StrippedDocumentation,
 
 	/// Trait bound.
-	bound: AssociatedTypeBound,
-
-	has_lifetime: bool,
+	bound: AssociatedTypeBound
 }
 
 impl AssociatedType {
 	pub fn new(
+		prop: TId<treeldr::Property>,
 		ident: Ident,
 		label: Option<String>,
 		doc: treeldr::StrippedDocumentation,
-		bound: AssociatedTypeBound,
-		has_lifetime: bool,
+		bound: AssociatedTypeBound
 	) -> Self {
 		Self {
+			prop,
 			ident,
 			label,
 			doc,
-			bound,
-			has_lifetime,
+			bound
 		}
 	}
 
@@ -201,6 +206,7 @@ impl AssociatedType {
 		let label = prop.preferred_label().map(Literal::to_string);
 		let doc = prop.comment().clone_stripped();
 		let assoc_ty = Self::new(
+			p.property(),
 			ident,
 			label,
 			doc,
@@ -210,8 +216,7 @@ impl AssociatedType {
 					.iter()
 					.map(|r| **r.value)
 					.collect(),
-			),
-			false,
+			)
 		);
 
 		if prop.as_property().is_functional() {
@@ -222,13 +227,21 @@ impl AssociatedType {
 
 			let ident = format_ident!("{}s", name.to_pascal_case());
 			Self::new(
+				p.property(),
 				ident,
 				None,
 				treeldr::StrippedDocumentation::default(),
-				AssociatedTypeBound::Collection(i),
-				true,
+				AssociatedTypeBound::Collection(i)
 			)
 		}
+	}
+
+	pub fn property(&self) -> TId<treeldr::Property> {
+		self.prop
+	}
+
+	pub fn ident(&self) -> &Ident {
+		&self.ident
 	}
 
 	pub fn label(&self) -> Option<&str> {
@@ -239,8 +252,12 @@ impl AssociatedType {
 		&self.doc
 	}
 
-	pub fn has_lifetime(&self) -> bool {
-		self.has_lifetime
+	pub fn bound(&self) -> &AssociatedTypeBound {
+		&self.bound
+	}
+
+	pub fn is_collection(&self) -> bool {
+		self.bound.is_collection()
 	}
 }
 
@@ -255,8 +272,17 @@ pub enum AssociatedTypeBound {
 	Collection(usize),
 }
 
+impl AssociatedTypeBound {
+	pub fn is_collection(&self) -> bool {
+		matches!(self, Self::Collection(_))
+	}
+}
+
 /// Trait method.
 pub struct Method {
+	/// Property.
+	prop: TId<treeldr::Property>,
+
 	/// Identifier.
 	ident: Ident,
 
@@ -272,12 +298,14 @@ pub struct Method {
 
 impl Method {
 	pub fn new(
+		prop: TId<treeldr::Property>,
 		ident: Ident,
 		label: Option<String>,
 		doc: treeldr::StrippedDocumentation,
 		ty: MethodType,
 	) -> Self {
 		Self {
+			prop,
 			ident,
 			label,
 			doc,
@@ -292,8 +320,6 @@ impl Method {
 		p: treeldr::ty::properties::RestrictedProperty<M>,
 	) -> Self {
 		let assoc_ty = AssociatedType::build(context, associated_types, name, p);
-		let has_lifetime = assoc_ty.has_lifetime();
-
 		let i = associated_types.len();
 		associated_types.push(assoc_ty);
 
@@ -309,15 +335,23 @@ impl Method {
 
 		let ty = if prop.as_property().is_functional() {
 			if prop.as_property().is_required() {
-				MethodType::Reference(i)
+				MethodType::Required(i)
 			} else {
 				MethodType::Option(i)
 			}
 		} else {
-			MethodType::Direct(i, has_lifetime)
+			MethodType::Required(i)
 		};
 
-		Self::new(ident, label, doc, ty)
+		Self::new(p.property(), ident, label, doc, ty)
+	}
+
+	pub fn property(&self) -> TId<treeldr::Property> {
+		self.prop
+	}
+
+	pub fn ident(&self) -> &Ident {
+		&self.ident
 	}
 
 	pub fn label(&self) -> Option<&str> {
@@ -327,23 +361,21 @@ impl Method {
 	pub fn documentation(&self) -> &treeldr::StrippedDocumentation {
 		&self.doc
 	}
+
+	pub fn type_(&self) -> &MethodType {
+		&self.ty
+	}
 }
 
 /// Method type.
 pub enum MethodType {
 	/// Direct associated type given by its index.
-	///
-	/// If the boolean is `true` a lifetime is added to the type:
-	/// `Self::T<'_>`, otherwise `Self::T`.
-	Direct(usize, bool),
-
-	/// Referenced associated type given by its index.
-	///
-	/// `&Self::T`.
-	Reference(usize),
+	/// 
+	/// `Self::T<'_>`.
+	Required(usize),
 
 	/// Optional referenced type given by its index.
 	///
-	/// `Option<&Self::T>`.
+	/// `Option<Self::T<'a>>`.
 	Option(usize),
 }
