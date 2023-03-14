@@ -134,7 +134,7 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 			path.push(triples_and_values_iterator_name_from(e.ident()));
 			Ok(quote!(#path<#lifetime, I, V>))
 		}
-		ty::Description::IdentifierParameter => Ok(quote!(
+		ty::Description::Reference(_) => Ok(quote!(
 			::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::IdValue<'a, I, V>>
 		)),
 	}
@@ -159,11 +159,11 @@ fn collect_bounds<V, M>(
 				ty::Description::Alias(a) => stack.push(a.target()),
 				ty::Description::Primitive(p) => bound(Bound::AsLiteral(*p)),
 				ty::Description::BuiltIn(b) => match b {
-					ty::BuiltIn::BTreeSet(item_layout) |
-					ty::BuiltIn::OneOrMany(item_layout) |
-					ty::BuiltIn::Option(item_layout) |
-					ty::BuiltIn::Required(item_layout) |
-					ty::BuiltIn::Vec(item_layout) => stack.push(*item_layout),
+					ty::BuiltIn::BTreeSet(item_layout)
+					| ty::BuiltIn::OneOrMany(item_layout)
+					| ty::BuiltIn::Option(item_layout)
+					| ty::BuiltIn::Required(item_layout)
+					| ty::BuiltIn::Vec(item_layout) => stack.push(*item_layout),
 				},
 				ty::Description::Struct(s) => {
 					for field in s.fields() {
@@ -177,7 +177,7 @@ fn collect_bounds<V, M>(
 						}
 					}
 				}
-				ty::Description::IdentifierParameter => (),
+				ty::Description::Reference(_) => (),
 			}
 		}
 	}

@@ -26,8 +26,11 @@ impl<M> Context<M> {
 			context: &Context<M>,
 			diff: &mut HashMap<Id, HashMap<Id, M>>,
 			layout_ref: Id,
-			Meta(type_ref, meta): &Meta<Id, M>
-		) -> bool where M: Clone + Merge {
+			Meta(type_ref, meta): &Meta<Id, M>,
+		) -> bool
+		where
+			M: Clone + Merge,
+		{
 			let node = context.get(layout_ref).unwrap();
 			if !node.as_layout().ty().contains(&type_ref) {
 				let types = diff.entry(layout_ref).or_default();
@@ -51,7 +54,9 @@ impl<M> Context<M> {
 
 		for (layout_ref, diff) in diff {
 			let node = self.get_mut(layout_ref).unwrap();
-			node.as_layout_mut().ty_mut().extend(diff.into_iter().map(|(t, m)| Meta(t, m)))
+			node.as_layout_mut()
+				.ty_mut()
+				.extend(diff.into_iter().map(|(t, m)| Meta(t, m)))
 		}
 	}
 }

@@ -3,6 +3,8 @@ pub use grdf;
 pub use rdf_types;
 pub use static_iref;
 
+pub mod iter;
+
 #[cfg(feature = "json-ld")]
 pub use json_ld;
 
@@ -32,4 +34,8 @@ impl<I> From<I> for Id<I> {
 	fn from(value: I) -> Self {
 		Id(value)
 	}
+}
+
+pub trait Provider<I: ?Sized, T: ?Sized> {
+	fn get(&self, id: &I) -> Option<&T>;
 }

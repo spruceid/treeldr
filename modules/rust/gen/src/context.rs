@@ -2,7 +2,7 @@ use crate::{
 	module::{self, TraitId},
 	tr::Trait,
 	ty::{self, params::Parameters},
-	Module, Path, Type
+	Module, Path, Type,
 };
 use proc_macro2::Ident;
 use quote::format_ident;
@@ -27,7 +27,7 @@ pub struct Context<'a, V, M> {
 
 	types: BTreeMap<TId<treeldr::Type>, Trait>,
 
-	anonymous_types: usize
+	anonymous_types: usize,
 }
 
 impl<'a, V, M> Context<'a, V, M> {
@@ -168,18 +168,16 @@ impl<'a, V, M> Context<'a, V, M> {
 						(Some(module::Parent::Ref(a)), Some(module::Parent::Ref(b))) => {
 							Some(std::cmp::max(a, b))
 						}
-						(Some(module::Parent::Ref(a)), _) => {
-							Some(a)
-						}
-						(_, Some(module::Parent::Ref(b))) => {
-							Some(b)
-						}
-						_ => None
+						(Some(module::Parent::Ref(a)), _) => Some(a),
+						(_, Some(module::Parent::Ref(b))) => Some(b),
+						_ => None,
 					}
 				}
-				_ => {
-					self.layouts.get(&i.ty).and_then(|ty| ty.module()).and_then(module::Parent::into_ref)
-				}
+				_ => self
+					.layouts
+					.get(&i.ty)
+					.and_then(|ty| ty.module())
+					.and_then(module::Parent::into_ref),
 			};
 
 			if let Some(module_ref) = module_ref {

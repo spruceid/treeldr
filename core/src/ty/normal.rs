@@ -1,4 +1,4 @@
-use crate::{PropertyValues, TId, Type};
+use crate::{MutableModel, PropertyValues, TId, Type};
 use derivative::Derivative;
 
 /// Normal type.
@@ -21,5 +21,15 @@ impl<M> Normal<M> {
 
 	pub fn sub_class_of(&self) -> &PropertyValues<TId<Type>, M> {
 		&self.sub_class_of
+	}
+
+	pub fn is_subclass_of(&self, model: &MutableModel<M>, other: TId<Type>) -> bool {
+		for s in &self.sub_class_of {
+			if model.is_subclass_of_or_eq(other, **s.value) {
+				return true;
+			}
+		}
+
+		false
 	}
 }

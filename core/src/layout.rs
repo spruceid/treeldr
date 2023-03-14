@@ -159,8 +159,12 @@ impl<M> Description<M> {
 			Self::Array(c) => Some(c.item_layout()),
 			Self::Set(c) => Some(c.item_layout()),
 			Self::OneOrMany(c) => Some(c.item_layout()),
-			_ => None
+			_ => None,
 		}
+	}
+
+	pub fn is_reference(&self) -> bool {
+		matches!(self, Self::Reference(_))
 	}
 
 	/// Checks if this layout is required.

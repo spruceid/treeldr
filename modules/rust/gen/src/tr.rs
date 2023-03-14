@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use proc_macro2::Ident;
 use quote::format_ident;
 use rdf_types::Vocabulary;
@@ -6,6 +8,44 @@ use treeldr::{ty::PseudoProperty, value::Literal, Id, IriIndex, Name, TId};
 use crate::{module, path, Context, Path};
 
 mod generate;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ContextBound(pub TId<treeldr::Type>);
+
+pub trait CollectContextBounds {
+	fn collect_context_bounds<V, M>(
+		&self,
+		context: &Context<V, M>,
+		tr: TId<treeldr::Type>,
+		mut f: impl FnMut(ContextBound),
+	) {
+		let mut visited = HashSet::new();
+		self.collect_context_bounds_from(context, tr, &mut visited, &mut f)
+	}
+
+	fn collect_context_bounds_from<V, M>(
+		&self,
+		context: &Context<V, M>,
+		tr: TId<treeldr::Type>,
+		visited: &mut HashSet<TId<treeldr::Layout>>,
+		f: &mut impl FnMut(ContextBound),
+	);
+}
+
+impl CollectContextBounds for TId<treeldr::Layout> {
+	fn collect_context_bounds_from<V, M>(
+		&self,
+		context: &Context<V, M>,
+		tr: TId<treeldr::Type>,
+		visited: &mut HashSet<TId<treeldr::Layout>>,
+		f: &mut impl FnMut(ContextBound),
+	) {
+		if visited.insert(*self) {
+			let ty = context.layout_type(*self).unwrap();
+			ty.collect_context_bounds_from(context, tr, visited, f)
+		}
+	}
+}
 
 pub struct Trait {
 	module: Option<module::Parent>,
@@ -127,6 +167,12 @@ impl Trait {
 		Some(path)
 	}
 
+	pub fn context_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
+		let mut path = context.parent_module_path(self.module)?;
+		path.push(path::Segment::Ident(self.context_ident()));
+		Some(path)
+	}
+
 	pub fn module(&self) -> Option<module::Parent> {
 		self.module
 	}
@@ -175,7 +221,7 @@ pub struct AssociatedType {
 	doc: treeldr::StrippedDocumentation,
 
 	/// Trait bound.
-	bound: AssociatedTypeBound
+	bound: AssociatedTypeBound,
 }
 
 impl AssociatedType {
@@ -184,14 +230,14 @@ impl AssociatedType {
 		ident: Ident,
 		label: Option<String>,
 		doc: treeldr::StrippedDocumentation,
-		bound: AssociatedTypeBound
+		bound: AssociatedTypeBound,
 	) -> Self {
 		Self {
 			prop,
 			ident,
 			label,
 			doc,
-			bound
+			bound,
 		}
 	}
 
@@ -216,7 +262,7 @@ impl AssociatedType {
 					.iter()
 					.map(|r| **r.value)
 					.collect(),
-			)
+			),
 		);
 
 		if prop.as_property().is_functional() {
@@ -231,7 +277,7 @@ impl AssociatedType {
 				ident,
 				None,
 				treeldr::StrippedDocumentation::default(),
-				AssociatedTypeBound::Collection(i)
+				AssociatedTypeBound::Collection(i),
 			)
 		}
 	}
@@ -370,7 +416,7 @@ impl Method {
 /// Method type.
 pub enum MethodType {
 	/// Direct associated type given by its index.
-	/// 
+	///
 	/// `Self::T<'_>`.
 	Required(usize),
 

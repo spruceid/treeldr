@@ -28,7 +28,7 @@ impl Alias {
 	pub fn layout(&self) -> TId<treeldr::Layout> {
 		self.layout
 	}
-	
+
 	pub fn target(&self) -> TId<treeldr::Layout> {
 		self.target
 	}

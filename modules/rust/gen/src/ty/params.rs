@@ -11,11 +11,17 @@ pub struct Parameters {
 
 impl Parameters {
 	pub fn identifier_parameter() -> Self {
-		Self { context: false, identifier: true }
+		Self {
+			context: false,
+			identifier: true,
+		}
 	}
 
 	pub fn context_parameter() -> Self {
-		Self { context: true, identifier: false }
+		Self {
+			context: true,
+			identifier: false,
+		}
 	}
 
 	pub fn with_context(self) -> Self {
@@ -115,7 +121,10 @@ pub struct ParametersValues {
 
 impl Default for ParametersValues {
 	fn default() -> Self {
-		Self::new(Parameter::Context.default_value(), Parameter::Identifier.default_value())
+		Self::new(
+			Parameter::Context.default_value(),
+			Parameter::Identifier.default_value(),
+		)
 	}
 }
 
@@ -123,16 +132,22 @@ impl ParametersValues {
 	pub fn new(context: TokenStream, identifier: TokenStream) -> Self {
 		Self {
 			context: Some(context),
-			identifier: Some(identifier)
+			identifier: Some(identifier),
 		}
 	}
 
 	pub fn new_for_type(identifier: TokenStream) -> Self {
-		Self { context: None, identifier: Some(identifier) }
+		Self {
+			context: None,
+			identifier: Some(identifier),
+		}
 	}
 
 	pub fn new_for_trait(context: TokenStream) -> Self {
-		Self { context: Some(context), identifier: None }
+		Self {
+			context: Some(context),
+			identifier: None,
+		}
 	}
 
 	pub fn get(&self, p: Parameter) -> Option<&TokenStream> {
@@ -158,16 +173,22 @@ impl ParametersBounds {
 	pub fn new(context: Option<TokenStream>, identifier: Option<TokenStream>) -> Self {
 		Self {
 			context,
-			identifier
+			identifier,
 		}
 	}
 
 	pub fn new_for_type(identifier: TokenStream) -> Self {
-		Self { context: None, identifier: Some(identifier) }
+		Self {
+			context: None,
+			identifier: Some(identifier),
+		}
 	}
 
 	pub fn new_for_trait(context: TokenStream) -> Self {
-		Self { context: Some(context), identifier: None }
+		Self {
+			context: Some(context),
+			identifier: None,
+		}
 	}
 
 	pub fn get(&self, p: Parameter) -> Option<&TokenStream> {
@@ -188,7 +209,7 @@ impl<'a> InstantiatedParameters<'a> {
 		BoundedInstantiatedParameters {
 			params: self.params,
 			values: self.values,
-			bounds
+			bounds,
 		}
 	}
 }
@@ -215,7 +236,7 @@ impl<'a> ToTokens for InstantiatedParameters<'a> {
 pub struct BoundedInstantiatedParameters<'a> {
 	params: Parameters,
 	values: &'a ParametersValues,
-	bounds: &'a ParametersBounds
+	bounds: &'a ParametersBounds,
 }
 
 impl<'a> ToTokens for BoundedInstantiatedParameters<'a> {

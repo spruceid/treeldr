@@ -23,7 +23,7 @@ pub mod schema {
 	/// TLDR types.
 	#[prefix("https://treeldr.org/")]
 	pub mod tldr {}
-	
+
 	/// RDF Schema types.
 	#[prefix("http://www.w3.org/2000/01/rdf-schema#")]
 	pub mod rdfs {}

@@ -1,5 +1,6 @@
 use super::{
-	enumeration::Enum, structure::Struct, BuiltIn, Description, ParametersValues, Primitive, Type, alias::Alias,
+	alias::Alias, enumeration::Enum, structure::Struct, BuiltIn, Description, ParametersValues,
+	Primitive, Type,
 };
 use crate::{doc_attribute, Context, Error, Generate, GenerateIn, Module, Referenced};
 use proc_macro2::TokenStream;
@@ -8,9 +9,9 @@ use rdf_types::Vocabulary;
 use shelves::Ref;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
-mod tr_impl;
 mod json_ld;
 mod rdf;
+mod tr_impl;
 
 impl<M> GenerateIn<M> for BuiltIn {
 	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -288,7 +289,7 @@ impl<M> GenerateIn<M> for TId<treeldr::Layout> {
 				e.params().instantiate(params_values).to_tokens(tokens);
 				Ok(())
 			}
-			Description::IdentifierParameter => {
+			Description::Reference(_) => {
 				tokens.extend(quote! { ::treeldr_rust_prelude::Id<I> });
 				Ok(())
 			}
@@ -341,13 +342,74 @@ impl<M> GenerateIn<M> for Referenced<TId<treeldr::Layout>> {
 				tokens.extend(quote! { &#path #params });
 				Ok(())
 			}
-			Description::IdentifierParameter => {
+			Description::Reference(_) => {
 				tokens.extend(quote! { &::treeldr_rust_prelude::Id<I> });
 				Ok(())
 			}
 			Description::BuiltIn(b) => {
 				Referenced(*b).generate_in(context, scope, params_values, tokens)
 			}
+		}
+	}
+}
+
+pub struct InContext<T>(pub T);
+
+impl<M> GenerateIn<M> for InContext<TId<treeldr::Layout>> {
+	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: Option<Ref<Module>>,
+		params_values: &ParametersValues,
+		tokens: &mut TokenStream,
+	) -> Result<(), Error> {
+		let ty = context
+			.layout_type(self.0)
+			.expect("undefined generated layout");
+		match &ty.desc {
+			Description::Never => {
+				tokens.extend(quote! { ! });
+				Ok(())
+			}
+			Description::Primitive(p) => p.generate(context, scope, tokens),
+			Description::Alias(a) => {
+				let path = ty
+					.path(context, a.ident().clone())
+					.ok_or(Error::UnreachableType(self.0))?;
+				context.module_path(scope).to(&path).to_tokens(tokens);
+				a.params().instantiate(params_values).to_tokens(tokens);
+				Ok(())
+			}
+			Description::Struct(s) => {
+				let path = ty
+					.path(context, s.ident().clone())
+					.ok_or(Error::UnreachableType(self.0))?;
+				context.module_path(scope).to(&path).to_tokens(tokens);
+				s.params().instantiate(params_values).to_tokens(tokens);
+				Ok(())
+			}
+			Description::Enum(e) => {
+				let path = ty
+					.path(context, e.ident().clone())
+					.ok_or(Error::UnreachableType(self.0))?;
+				context.module_path(scope).to(&path).to_tokens(tokens);
+				e.params().instantiate(params_values).to_tokens(tokens);
+				Ok(())
+			}
+			Description::Reference(ty_id) => {
+				let tr = context.type_trait(*ty_id).unwrap();
+				let context_path = context
+					.module_path(scope)
+					.to(&tr
+						.context_path(context)
+						.ok_or(Error::UnreachableTrait(*ty_id))?)
+					.into_token_stream();
+				let ident = tr.ident();
+				let id_param_value = params_values.get(super::params::Parameter::Identifier);
+				tokens.extend(quote! { <C as #context_path <#id_param_value>>::#ident });
+				Ok(())
+			}
+			Description::BuiltIn(b) => b.generate_in(context, scope, params_values, tokens),
 		}
 	}
 }

@@ -6,9 +6,9 @@ use treeldr::{metadata::Merge, BlankIdIndex, IriIndex, Model, MutableModel};
 
 use crate::{error, ty::ClassHierarchy, Context, Error};
 
-mod close_layout_types;
 mod assign_default_layouts;
 mod assign_default_names;
+mod close_layout_types;
 mod compute_layout_intersections;
 mod compute_layouts_relations;
 mod dispatch_sub_properties;

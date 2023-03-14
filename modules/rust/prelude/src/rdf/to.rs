@@ -110,7 +110,9 @@ impl<'a, I: Iterator<Item = &'a T>, T: TriplesAndValues<N, L>, N: Namespace, L> 
 				},
 				None => match self.rest.next() {
 					Some(i) => {
-						self.current = Some(Box::new(i.unbound_rdf_triples_and_values(namespace, generator)))
+						self.current = Some(Box::new(
+							i.unbound_rdf_triples_and_values(namespace, generator),
+						))
 					}
 					None => break None,
 				},

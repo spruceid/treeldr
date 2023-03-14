@@ -14,7 +14,7 @@ use rdf_types::IriVocabulary;
 pub use treeldr::layout::{DescriptionProperty, Property};
 use treeldr::{
 	metadata::Merge, prop::UnknownProperty, Id, IriIndex, MetaOption, Multiple, Name,
-	PropertyValueRef, TId, Value, PropertyValues,
+	PropertyValueRef, PropertyValues, TId, Value,
 };
 
 pub mod array;
@@ -1383,11 +1383,7 @@ impl<M: Clone> Definition<M> {
 		let desc = self.build_description(context, as_resource, as_component, &metadata)?;
 		let ty = self
 			.ty()
-			.try_mapped(|_, Meta(ty, m)| {
-				context
-					.require_type_id(*ty)
-					.map(|ty| Meta(ty, m.clone()))
-			})
+			.try_mapped(|_, Meta(ty, m)| context.require_type_id(*ty).map(|ty| Meta(ty, m.clone())))
 			.map_err(|(Meta(e, m), _)| {
 				e.at_node_property(as_resource.id, Property::For(None), m.clone())
 			})?;

@@ -11,7 +11,7 @@ pub enum TraitId {
 	FromRdf,
 	TriplesAndValues,
 	IntoJsonLd,
-	Defined(TId<treeldr::Type>)
+	Defined(TId<treeldr::Type>),
 }
 
 impl TraitId {
@@ -27,14 +27,8 @@ pub struct TraitImpl {
 }
 
 impl TraitImpl {
-	pub fn new(
-		ty: TId<treeldr::Layout>,
-		tr: TraitId,
-	) -> Self {
-		Self {
-			ty,
-			tr
-		}
+	pub fn new(ty: TId<treeldr::Layout>, tr: TraitId) -> Self {
+		Self { ty, tr }
 	}
 }
 
@@ -44,7 +38,7 @@ pub struct Module {
 	sub_modules: HashSet<Ref<Self>>,
 	layouts: HashSet<TId<treeldr::Layout>>,
 	types: HashSet<TId<treeldr::Type>>,
-	trait_impls: HashSet<TraitImpl>
+	trait_impls: HashSet<TraitImpl>,
 }
 
 impl Module {
@@ -55,7 +49,7 @@ impl Module {
 			sub_modules: HashSet::new(),
 			layouts: HashSet::new(),
 			types: HashSet::new(),
-			trait_impls: HashSet::new()
+			trait_impls: HashSet::new(),
 		}
 	}
 
@@ -163,7 +157,7 @@ impl Parent {
 	pub fn into_ref(self) -> Option<Ref<Module>> {
 		match self {
 			Self::Extern => None,
-			Self::Ref(r) => Some(r)
+			Self::Ref(r) => Some(r),
 		}
 	}
 }

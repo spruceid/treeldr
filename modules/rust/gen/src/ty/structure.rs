@@ -1,4 +1,10 @@
-use crate::{doc_attribute, Context, Error, GenerateIn, Module};
+use std::collections::HashSet;
+
+use crate::{
+	doc_attribute,
+	tr::{CollectContextBounds, ContextBound},
+	Context, Error, GenerateIn, Module,
+};
 use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
@@ -16,7 +22,11 @@ pub struct Struct {
 }
 
 impl Struct {
-	pub fn new(layout: TId<treeldr::Layout>, ident: proc_macro2::Ident, fields: Vec<Field>) -> Self {
+	pub fn new(
+		layout: TId<treeldr::Layout>,
+		ident: proc_macro2::Ident,
+		fields: Vec<Field>,
+	) -> Self {
 		Self {
 			layout,
 			ident,
@@ -24,7 +34,7 @@ impl Struct {
 			params: Parameters::default(),
 		}
 	}
-	
+
 	pub fn layout(&self) -> TId<treeldr::Layout> {
 		self.layout
 	}
@@ -70,6 +80,35 @@ impl Struct {
 		}
 
 		result
+	}
+}
+
+impl CollectContextBounds for Struct {
+	fn collect_context_bounds_from<V, M>(
+		&self,
+		context: &Context<V, M>,
+		tr: TId<treeldr::Type>,
+		visited: &mut HashSet<TId<treeldr::Layout>>,
+		f: &mut impl FnMut(ContextBound),
+	) {
+		for field in self.fields() {
+			if let Some(p) = field.property() {
+				let prop = context.model().get(p).unwrap();
+				for domain in prop.as_property().domain() {
+					if context.model().is_subclass_of_or_eq(**domain.value, tr) {
+						for range in prop.as_property().range() {
+							field.layout().collect_context_bounds_from(
+								context,
+								**range.value,
+								visited,
+								f,
+							);
+						}
+						break;
+					}
+				}
+			}
+		}
 	}
 }
 

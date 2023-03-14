@@ -1,5 +1,5 @@
 use crate::Context;
-use contextual::{WithContext, DisplayWithContext};
+use contextual::{DisplayWithContext, WithContext};
 use rdf_types::Vocabulary;
 use std::fmt;
 use treeldr::{BlankIdIndex, IriIndex, TId};
@@ -23,28 +23,16 @@ impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V
 	fn fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Self::UnreachableType(layout_ref) => {
-				write!(
-					f,
-					"unbound layout `{}`",
-					layout_ref.id().with(vocabulary)
-				)
+				write!(f, "unbound layout `{}`", layout_ref.id().with(vocabulary))
 			}
 			Self::UnreachableTrait(type_ref) => {
-				write!(
-					f,
-					"unbound type `{}`",
-					type_ref.id().with(vocabulary)
-				)
+				write!(f, "unbound type `{}`", type_ref.id().with(vocabulary))
 			}
 			Self::MissingDefaultImpl => {
 				write!(f, "missing `Default` implementation")
 			}
 			Self::BlankProperty(prop_ref) => {
-				write!(
-					f,
-					"blank property `{}`",
-					prop_ref.id().with(vocabulary)
-				)
+				write!(f, "blank property `{}`", prop_ref.id().with(vocabulary))
 			}
 		}
 	}

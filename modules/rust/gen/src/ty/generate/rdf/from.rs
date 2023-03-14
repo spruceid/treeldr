@@ -56,11 +56,11 @@ fn collect_bounds<V, M>(
 				ty::Description::Alias(a) => stack.push(a.target()),
 				ty::Description::Primitive(p) => bound(Bound::FromLiteral(*p)),
 				ty::Description::BuiltIn(b) => match b {
-					ty::BuiltIn::BTreeSet(item_layout) |
-					ty::BuiltIn::OneOrMany(item_layout) |
-					ty::BuiltIn::Option(item_layout) |
-					ty::BuiltIn::Required(item_layout) |
-					ty::BuiltIn::Vec(item_layout) => stack.push(*item_layout),
+					ty::BuiltIn::BTreeSet(item_layout)
+					| ty::BuiltIn::OneOrMany(item_layout)
+					| ty::BuiltIn::Option(item_layout)
+					| ty::BuiltIn::Required(item_layout)
+					| ty::BuiltIn::Vec(item_layout) => stack.push(*item_layout),
 				},
 				ty::Description::Struct(s) => {
 					for field in s.fields() {
@@ -74,7 +74,7 @@ fn collect_bounds<V, M>(
 						}
 					}
 				}
-				ty::Description::IdentifierParameter => (),
+				ty::Description::Reference(_) => (),
 			}
 		}
 	}
@@ -164,7 +164,7 @@ fn from_object<V, M>(context: &Context<V, M>, ty: &Type, object: TokenStream) ->
 			let ty = context.layout_type(a.target()).unwrap();
 			from_object(context, ty, object)
 		}
-		Description::IdentifierParameter => {
+		Description::Reference(_) => {
 			quote! {
 				match #object {
 					::treeldr_rust_prelude::rdf::Object::Id(id) => ::treeldr_rust_prelude::Id(id.clone()),

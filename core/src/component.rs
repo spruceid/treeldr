@@ -90,14 +90,8 @@ impl<M> Definition<M> {
 	pub fn bindings(&self) -> Bindings<M> {
 		Bindings {
 			data: self.data.bindings(),
-			layout: self
-				.layout
-				.as_ref()
-				.map(|l| l.bindings()),
-			formatted: self
-				.formatted
-				.as_ref()
-				.map(|f| f.bindings())
+			layout: self.layout.as_ref().map(|l| l.bindings()),
+			formatted: self.formatted.as_ref().map(|f| f.bindings()),
 		}
 	}
 }
@@ -260,16 +254,12 @@ impl<'a, M> Iterator for Bindings<'a, M> {
 			.or_else(|| {
 				self.layout
 					.as_mut()
-					.and_then(|i| {
-						i.next().map(|m| m.map(BindingRef::Layout))
-					})
+					.and_then(|i| i.next().map(|m| m.map(BindingRef::Layout)))
 			})
 			.or_else(|| {
 				self.formatted
 					.as_mut()
-					.and_then(|i| {
-						i.next().map(|m| m.map(BindingRef::Formatted))
-					})
+					.and_then(|i| i.next().map(|m| m.map(BindingRef::Formatted)))
 			})
 	}
 }

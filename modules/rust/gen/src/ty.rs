@@ -1,4 +1,9 @@
-use crate::{module::{self, TraitImpl, TraitId}, path, Context, Path};
+use crate::{
+	module::{self, TraitId, TraitImpl},
+	path,
+	tr::{CollectContextBounds, ContextBound},
+	Context, Path,
+};
 
 use quote::format_ident;
 pub use treeldr::layout::Primitive;
@@ -58,7 +63,7 @@ impl Type {
 			Description::BuiltIn(_) => {
 				todo!()
 			}
-			Description::IdentifierParameter => {
+			Description::Reference(_) => {
 				format_ident!("I")
 			}
 		}
@@ -70,7 +75,7 @@ impl Type {
 	) -> Parameters {
 		match self.description() {
 			Description::Alias(a) => a.compute_params(dependency_params),
-			Description::IdentifierParameter => Parameters::identifier_parameter(),
+			Description::Reference(_) => Parameters::identifier_parameter(),
 			Description::Struct(s) => s.compute_params(dependency_params),
 			Description::Enum(e) => e.compute_params(dependency_params),
 			Description::BuiltIn(p) => p.compute_params(dependency_params),
@@ -117,13 +122,13 @@ impl Type {
 	pub fn collect_trait_implementations<V, M>(
 		&self,
 		context: &Context<V, M>,
-		mut f: impl FnMut(TraitImpl) -> bool
+		mut f: impl FnMut(TraitImpl) -> bool,
 	) {
 		let layout = match self.description() {
 			Description::Struct(s) => Some(s.layout()),
 			Description::Enum(e) => Some(e.layout()),
 			Description::Primitive(p) => Some(TId::new(p.id())),
-			_ => None
+			_ => None,
 		};
 
 		if let Some(layout_ref) = layout {
@@ -131,7 +136,7 @@ impl Type {
 			f(TraitId::FromRdf.impl_for(layout_ref));
 			f(TraitId::TriplesAndValues.impl_for(layout_ref));
 			f(TraitId::IntoJsonLd.impl_for(layout_ref));
-			
+
 			let mut stack: Vec<_> = layout.as_layout().ty().iter().map(|v| **v.value).collect();
 			while let Some(ty_ref) = stack.pop() {
 				if f(TraitId::Defined(ty_ref).impl_for(layout_ref)) {
@@ -145,12 +150,41 @@ impl Type {
 	}
 }
 
+impl CollectContextBounds for Type {
+	fn collect_context_bounds_from<V, M>(
+		&self,
+		context: &Context<V, M>,
+		tr: TId<treeldr::Type>,
+		visited: &mut std::collections::HashSet<TId<treeldr::Layout>>,
+		f: &mut impl FnMut(ContextBound),
+	) {
+		match self.description() {
+			Description::Struct(s) => s.collect_context_bounds_from(context, tr, visited, f),
+			Description::Reference(tr) => f(ContextBound(*tr)),
+			Description::BuiltIn(b) => match b {
+				BuiltIn::Required(item) => {
+					item.collect_context_bounds_from(context, tr, visited, f)
+				}
+				BuiltIn::Option(item) => item.collect_context_bounds_from(context, tr, visited, f),
+				BuiltIn::Vec(item) => item.collect_context_bounds_from(context, tr, visited, f),
+				BuiltIn::BTreeSet(item) => {
+					item.collect_context_bounds_from(context, tr, visited, f)
+				}
+				BuiltIn::OneOrMany(item) => {
+					item.collect_context_bounds_from(context, tr, visited, f)
+				}
+			},
+			_ => (),
+		}
+	}
+}
+
 #[derive(Debug)]
 pub enum Description {
 	BuiltIn(BuiltIn),
 	Never,
 	Alias(Alias),
-	IdentifierParameter,
+	Reference(TId<treeldr::Type>),
 	Primitive(Primitive),
 	Struct(Struct),
 	Enum(Enum),
@@ -165,7 +199,7 @@ impl Description {
 				let ty = context.layout_type(a.target()).unwrap();
 				ty.impl_default(context)
 			}
-			Self::IdentifierParameter => false,
+			Self::Reference(_) => false,
 			Self::Primitive(_) => false,
 			Self::Struct(s) => s.impl_default(context),
 			Self::Enum(_) => false,
@@ -232,7 +266,9 @@ impl Description {
 					Self::Primitive(p.primitive())
 				}
 			}
-			treeldr::layout::Description::Reference(_) => Self::IdentifierParameter,
+			treeldr::layout::Description::Reference(_) => {
+				Self::Reference(**layout.as_layout().ty().first().unwrap().value)
+			}
 			treeldr::layout::Description::Struct(s) => {
 				let ident = layout
 					.as_component()

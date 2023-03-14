@@ -192,6 +192,16 @@ impl<M> MutableModel<M> {
 		})
 	}
 
+	/// Checks if `b` is a strict sub class of `a`.
+	pub fn is_subclass_of(&self, a: TId<Type>, b: TId<Type>) -> bool {
+		self.get(b).unwrap().as_type().is_subclass_of(self, a)
+	}
+
+	/// Checks if `b` is a sub class of `a` or equal to `a`.
+	pub fn is_subclass_of_or_eq(&self, a: TId<Type>, b: TId<Type>) -> bool {
+		a == b || self.get(b).unwrap().as_type().is_subclass_of(self, a)
+	}
+
 	pub fn properties(&self) -> impl Iterator<Item = (TId<Property>, Ref<Property, M>)> {
 		self.nodes.iter().filter_map(|(i, n)| {
 			if n.is_property() {

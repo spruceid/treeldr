@@ -3,7 +3,10 @@ use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use treeldr::TId;
 
-use crate::{Error, Generate, GenerateIn, ty::params::{ParametersValues, Parameters, ParametersBounds}};
+use crate::{
+	ty::params::{Parameters, ParametersBounds, ParametersValues},
+	Error, Generate, GenerateIn,
+};
 
 use super::{AssociatedType, AssociatedTypeBound, Method, MethodType, Trait};
 
@@ -26,7 +29,9 @@ impl<M> Generate<M> for Trait {
 		let ident = &self.ident;
 		let params_values = ParametersValues::new_for_trait(quote!(C));
 		let params_bounds = ParametersBounds::new_for_trait(quote!(?Sized));
-		let params = Parameters::context_parameter().instantiate(&params_values).with_bounds(&params_bounds);
+		let params = Parameters::context_parameter()
+			.instantiate(&params_values)
+			.with_bounds(&params_bounds);
 
 		let mut super_traits = TokenStream::new();
 		for &ty_ref in &self.super_traits {
@@ -48,7 +53,11 @@ impl<M> Generate<M> for Trait {
 		let mut never_associated_types = Vec::with_capacity(self.associated_types.len());
 		let mut ref_associated_types = Vec::with_capacity(self.associated_types.len());
 		for ty in &self.associated_types {
-			associated_types.push(ty.with(self).generate_in_with(context, scope, &params_values).into_tokens()?);
+			associated_types.push(
+				ty.with(self)
+					.generate_in_with(context, scope, &params_values)
+					.into_tokens()?,
+			);
 
 			let a_ident = ty.ident();
 			let never_expr = match ty.bound() {
@@ -60,10 +69,10 @@ impl<M> Generate<M> for Trait {
 				}
 			};
 			never_associated_types.push(quote! {
-				type #a_ident <'a> = #never_expr where Self: 'a;
+				type #a_ident <'a> = #never_expr where Self: 'a, C: 'a;
 			});
 			ref_associated_types.push(quote! {
-				type #a_ident <'a> = T::#a_ident<'a> where Self: 'a;
+				type #a_ident <'a> = T::#a_ident<'a> where Self: 'a, C: 'a;
 			})
 		}
 
@@ -77,20 +86,20 @@ impl<M> Generate<M> for Trait {
 			let return_ty = match m.type_() {
 				MethodType::Required(i) => {
 					let ty_ident = self.associated_types[*i].ident();
-					quote!(Self::#ty_ident<'_>)
+					quote!(Self::#ty_ident<'a>)
 				}
 				MethodType::Option(i) => {
 					let ty_ident = self.associated_types[*i].ident();
-					quote!(Option<Self::#ty_ident<'_>>)
+					quote!(Option<Self::#ty_ident<'a>>)
 				}
 			};
 			never_methods.push(quote! {
-				fn #m_ident (&self, _context: &C) -> #return_ty {
+				fn #m_ident <'a> (&'a self, _context: &'a C) -> #return_ty {
 					unreachable!()
 				}
 			});
 			ref_methods.push(quote! {
-				fn #m_ident (&self, context: &C) -> #return_ty {
+				fn #m_ident <'a> (&'a self, context: &'a C) -> #return_ty {
 					T::#m_ident(*self, context)
 				}
 			})
@@ -105,10 +114,12 @@ impl<M> Generate<M> for Trait {
 				#(#methods)*
 			}
 
-			pub trait #context_ident <I: ?Sized> {
+			pub trait #context_ident <I: ?Sized>: ::treeldr_rust_prelude::Provider<I, Self::#ident> {
 				type #ident: #ident <Self>;
 
-				fn get(&self, id: &I) -> Option<&Self::#ident>;
+				fn get(&self, id: &I) -> Option<&Self::#ident> {
+					<Self as ::treeldr_rust_prelude::Provider<I, Self::#ident>>::get(self, id)
+				}
 			}
 
 			impl <C: ?Sized> #ident <C> for ::std::convert::Infallible {
@@ -143,7 +154,7 @@ impl<'a, 't, M> Generate<M> for contextual::Contextual<&'a Method, &'t Trait> {
 			.into_tokens()?;
 
 		tokens.extend(quote! {
-			fn #ident (&self, context: &C) -> #ty;
+			fn #ident <'a> (&'a self, context: &'a C) -> #ty;
 		});
 
 		Ok(())
@@ -163,11 +174,11 @@ impl<'a, 't, M> Generate<M> for contextual::Contextual<&'a MethodType, &'t Trait
 			MethodType::Required(i) => {
 				let ty_expr = self.1.generate_associated_type_expr(quote!(Self), *i);
 				tokens.extend(ty_expr);
-				tokens.extend(quote!(<'_>));
+				tokens.extend(quote!(<'a>));
 			}
 			MethodType::Option(i) => {
 				let ty_expr = self.1.generate_associated_type_expr(quote!(Self), *i);
-				tokens.extend(quote!(Option<#ty_expr<'_>>))
+				tokens.extend(quote!(Option<#ty_expr<'a>>))
 			}
 		}
 
@@ -213,19 +224,19 @@ impl<'a, 't, M> GenerateIn<M> for contextual::Contextual<&'a AssociatedTypeBound
 		match self.0 {
 			AssociatedTypeBound::Types(refs) => {
 				tokens.extend(quote!('a));
-				
+
 				for type_ref in refs {
 					tokens.extend(quote!(+));
 					type_ref.generate_in(context, scope, params_value, tokens)?;
 				}
 
-				tokens.extend(quote!(where Self: 'a));
+				tokens.extend(quote!(where Self: 'a, C: 'a));
 
 				Ok(())
 			}
 			AssociatedTypeBound::Collection(i) => {
 				let ty_expr = self.1.generate_associated_type_expr(quote!(Self), *i);
-				tokens.extend(quote!('a + Iterator<Item = #ty_expr<'a>> where Self: 'a));
+				tokens.extend(quote!('a + Iterator<Item = #ty_expr<'a>> where Self: 'a, C: 'a));
 				Ok(())
 			}
 		}
@@ -245,7 +256,9 @@ impl<M> GenerateIn<M> for TId<treeldr::Type> {
 		let tr = context.type_trait(*self).expect("trait not found");
 		let path = tr.path(context).ok_or(Error::UnreachableTrait(*self))?;
 		context.module_path(scope).to(&path).to_tokens(tokens);
-		Parameters::context_parameter().instantiate(params_values).to_tokens(tokens);
+		Parameters::context_parameter()
+			.instantiate(params_values)
+			.to_tokens(tokens);
 		Ok(())
 	}
 }

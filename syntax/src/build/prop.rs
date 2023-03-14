@@ -69,7 +69,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 						crate::Annotation::Single => {
 							functional = true;
 							functional_loc = Some(ann_loc);
-						},
+						}
 					}
 				}
 
