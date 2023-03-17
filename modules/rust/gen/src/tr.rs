@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use proc_macro2::Ident;
-use quote::format_ident;
+use proc_macro2::{Ident, TokenStream};
+use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
 use treeldr::{ty::PseudoProperty, value::Literal, Id, IriIndex, Name, TId};
 
@@ -173,6 +173,12 @@ impl Trait {
 		Some(path)
 	}
 
+	pub fn dyn_table_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
+		let mut path = context.parent_module_path(self.module)?;
+		path.push(path::Segment::Ident(self.dyn_table_ident()));
+		Some(path)
+	}
+
 	pub fn module(&self) -> Option<module::Parent> {
 		self.module
 	}
@@ -183,6 +189,10 @@ impl Trait {
 
 	pub fn context_ident(&self) -> Ident {
 		format_ident!("{}Provider", self.ident)
+	}
+
+	pub fn dyn_table_ident(&self) -> Ident {
+		format_ident!("{}DynTable", self.ident)
 	}
 
 	pub fn label(&self) -> Option<&str> {
@@ -199,6 +209,10 @@ impl Trait {
 
 	pub fn associated_types(&self) -> &[AssociatedType] {
 		&self.associated_types
+	}
+
+	pub fn associated_type_for(&self, prop: TId<treeldr::Property>, collection: bool) -> Option<&AssociatedType> {
+		self.associated_types.iter().find(|a| a.prop == prop && a.is_collection() == collection)
 	}
 
 	pub fn methods(&self) -> &[Method] {
@@ -290,6 +304,23 @@ impl AssociatedType {
 		&self.ident
 	}
 
+	/// Identifier of the trait object for this associated type.
+	pub fn trait_object_ident(&self, tr: &Trait) -> Option<Ident> {
+		if self.is_collection() {
+			None
+		} else {
+			Some(format_ident!("Dyn{}{}", tr.ident(), &self.ident))
+		}
+	}
+
+	pub fn trait_object_path<V, M>(&self, context: &Context<V, M>, tr: &Trait) -> Option<Path> {
+		self.trait_object_ident(tr).map(|ident| {
+			let mut path = context.parent_module_path(tr.module()).unwrap();
+			path.push(ident);
+			path
+		})
+	}
+
 	pub fn label(&self) -> Option<&str> {
 		self.label.as_deref()
 	}
@@ -304,6 +335,10 @@ impl AssociatedType {
 
 	pub fn is_collection(&self) -> bool {
 		self.bound.is_collection()
+	}
+
+	pub fn collection_item_type(&self) -> Option<usize> {
+		self.bound.collection_item_type()
 	}
 }
 
@@ -321,6 +356,13 @@ pub enum AssociatedTypeBound {
 impl AssociatedTypeBound {
 	pub fn is_collection(&self) -> bool {
 		matches!(self, Self::Collection(_))
+	}
+
+	pub fn collection_item_type(&self) -> Option<usize> {
+		match self {
+			Self::Collection(item_ty) => Some(*item_ty),
+			Self::Types(_) => None
+		}
 	}
 }
 
@@ -410,6 +452,19 @@ impl Method {
 
 	pub fn type_(&self) -> &MethodType {
 		&self.ty
+	}
+
+	pub fn return_type_expr(&self, tr: &Trait) -> TokenStream {
+		match &self.ty {
+			MethodType::Required(i) => {
+				let a_ident = tr.associated_types()[*i].ident();
+				quote!(Self::#a_ident<'a>)
+			}
+			MethodType::Option(i) => {
+				let a_ident = tr.associated_types()[*i].ident();
+				quote!(Option<Self::#a_ident<'a>>)
+			}
+		}
 	}
 }
 

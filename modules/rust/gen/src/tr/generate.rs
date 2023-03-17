@@ -1,14 +1,46 @@
 use contextual::WithContext;
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, Ident};
 use quote::{quote, ToTokens};
 use treeldr::TId;
 
 use crate::{
 	ty::params::{Parameters, ParametersBounds, ParametersValues},
-	Error, Generate, GenerateIn,
+	Error, Generate, GenerateIn, Context,
 };
 
 use super::{AssociatedType, AssociatedTypeBound, Method, MethodType, Trait};
+
+fn associated_trait_object_type<V, M>(
+	context: &Context<V, M>,
+	scope: Option<shelves::Ref<crate::Module>>,
+	ident: Ident,
+	classes: &[TId<treeldr::Type>]
+) -> TokenStream {
+	let tables = classes.iter().map(|ty| {
+		let tr = context.type_trait(*ty).unwrap();
+		let path = context.module_path(scope).to(&tr.dyn_table_path(context).unwrap());
+		quote!(#path <C>)
+	});
+
+	let trait_impls = classes.iter().enumerate().map(|(i, ty)| {
+		let tr = context.type_trait(*ty).unwrap();
+		let tr_path = context.module_path(scope).to(&tr.path(context).unwrap());
+		quote! {
+			impl <'a, C> #tr_path <C> for #ident <'a, C> {
+				// ...
+			}
+		}
+	});
+
+	quote! {
+		pub struct #ident <'a, C: ?Sized> {
+			_p: ::std::marker::PhantomData<&'a C>,
+			tables: (#(#tables,)*)
+		}
+
+		#(#trait_impls)*
+	}
+}
 
 impl Trait {
 	pub fn generate_associated_type_expr(&self, ty_expr: TokenStream, index: usize) -> TokenStream {
@@ -52,6 +84,7 @@ impl<M> Generate<M> for Trait {
 		let mut associated_types = Vec::with_capacity(self.associated_types.len());
 		let mut never_associated_types = Vec::with_capacity(self.associated_types.len());
 		let mut ref_associated_types = Vec::with_capacity(self.associated_types.len());
+		let mut associated_types_trait_objects = Vec::with_capacity(self.associated_types.len());
 		for ty in &self.associated_types {
 			associated_types.push(
 				ty.with(self)
@@ -61,7 +94,14 @@ impl<M> Generate<M> for Trait {
 
 			let a_ident = ty.ident();
 			let never_expr = match ty.bound() {
-				AssociatedTypeBound::Types(_) => {
+				AssociatedTypeBound::Types(classes) => {
+					associated_types_trait_objects.push(associated_trait_object_type(
+						context,
+						scope,
+						ty.trait_object_ident(self).unwrap(),
+						classes
+					));
+
 					quote!(::std::convert::Infallible)
 				}
 				AssociatedTypeBound::Collection(_) => {
@@ -106,6 +146,7 @@ impl<M> Generate<M> for Trait {
 		}
 
 		let context_ident = self.context_ident();
+		let dyn_table_ident = self.dyn_table_ident();
 
 		tokens.extend(quote! {
 			pub trait #ident #params #super_traits {
@@ -131,6 +172,12 @@ impl<M> Generate<M> for Trait {
 				#(#ref_associated_types)*
 				#(#ref_methods)*
 			}
+
+			pub struct #dyn_table_ident <C: ?Sized> {
+				_d: ::std::marker::PhantomData<C>
+			}
+
+			#(#associated_types_trait_objects)*
 		});
 
 		Ok(())
