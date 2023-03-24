@@ -160,6 +160,7 @@ impl CollectContextBounds for Type {
 	) {
 		match self.description() {
 			Description::Struct(s) => s.collect_context_bounds_from(context, tr, visited, f),
+			Description::Enum(e) => e.collect_context_bounds_from(context, tr, visited, f),
 			Description::Reference(tr) => f(ContextBound(*tr)),
 			Description::BuiltIn(b) => match b {
 				BuiltIn::Required(item) => {

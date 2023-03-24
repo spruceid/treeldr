@@ -1,4 +1,9 @@
-use crate::{Context, Error, GenerateIn, Module};
+use std::collections::HashSet;
+
+use crate::{
+	tr::{CollectContextBounds, ContextBound},
+	Context, Error, GenerateIn, Module,
+};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use rdf_types::Vocabulary;
@@ -59,6 +64,22 @@ impl Enum {
 		}
 
 		result
+	}
+}
+
+impl CollectContextBounds for Enum {
+	fn collect_context_bounds_from<V, M>(
+		&self,
+		context: &Context<V, M>,
+		tr: TId<treeldr::Type>,
+		visited: &mut HashSet<TId<treeldr::Layout>>,
+		f: &mut impl FnMut(ContextBound),
+	) {
+		for variant in self.variants() {
+			if let Some(l) = variant.ty() {
+				l.collect_context_bounds_from(context, tr, visited, f)
+			}
+		}
 	}
 }
 

@@ -179,6 +179,12 @@ impl Trait {
 		Some(path)
 	}
 
+	pub fn dyn_table_instance_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
+		let mut path = context.parent_module_path(self.module)?;
+		path.push(path::Segment::Ident(self.dyn_table_instance_ident()));
+		Some(path)
+	}
+
 	pub fn module(&self) -> Option<module::Parent> {
 		self.module
 	}
@@ -193,6 +199,10 @@ impl Trait {
 
 	pub fn dyn_table_ident(&self) -> Ident {
 		format_ident!("{}DynTable", self.ident)
+	}
+
+	pub fn dyn_table_instance_ident(&self) -> Ident {
+		format_ident!("{}DynTableInstance", self.ident)
 	}
 
 	pub fn label(&self) -> Option<&str> {
@@ -211,8 +221,14 @@ impl Trait {
 		&self.associated_types
 	}
 
-	pub fn associated_type_for(&self, prop: TId<treeldr::Property>, collection: bool) -> Option<&AssociatedType> {
-		self.associated_types.iter().find(|a| a.prop == prop && a.is_collection() == collection)
+	pub fn associated_type_for(
+		&self,
+		prop: TId<treeldr::Property>,
+		collection: bool,
+	) -> Option<&AssociatedType> {
+		self.associated_types
+			.iter()
+			.find(|a| a.prop == prop && a.is_collection() == collection)
 	}
 
 	pub fn methods(&self) -> &[Method] {
@@ -361,7 +377,7 @@ impl AssociatedTypeBound {
 	pub fn collection_item_type(&self) -> Option<usize> {
 		match self {
 			Self::Collection(item_ty) => Some(*item_ty),
-			Self::Types(_) => None
+			Self::Types(_) => None,
 		}
 	}
 }

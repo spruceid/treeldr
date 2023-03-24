@@ -10,16 +10,16 @@ use crate::{
 	tr::ContextBound,
 	ty::{
 		self,
-		params::{Parameter, ParametersValues}
+		params::{Parameter, ParametersValues},
 	},
 	Context, Error, Generate, GenerateIn, Module,
 };
 
 use super::GenerateFor;
 
+mod r#enum;
 mod primitive;
 mod r#struct;
-mod r#enum;
 
 impl<M> GenerateIn<M> for ContextBound {
 	fn generate_in<

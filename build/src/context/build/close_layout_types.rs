@@ -32,7 +32,7 @@ impl<M> Context<M> {
 			M: Clone + Merge,
 		{
 			let node = context.get(layout_ref).unwrap();
-			if !node.as_layout().ty().contains(&type_ref) {
+			if !node.as_layout().ty().contains(type_ref) {
 				let types = diff.entry(layout_ref).or_default();
 				types.insert(*type_ref, meta.clone()).is_none()
 			} else {

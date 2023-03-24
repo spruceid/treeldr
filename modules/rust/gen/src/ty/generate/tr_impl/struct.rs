@@ -4,15 +4,23 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use treeldr::TId;
 
-use crate::{ty::{structure::Struct, generate::{GenerateFor, InContext}, params::{ParametersValues, ParametersBounds}}, Context, Error, GenerateIn, tr::{CollectContextBounds, MethodType}};
+use crate::{
+	tr::{CollectContextBounds, MethodType},
+	ty::{
+		generate::{GenerateFor, InContext},
+		params::{ParametersBounds, ParametersValues},
+		structure::Struct,
+	},
+	Context, Error, GenerateIn,
+};
 
-use super::{ClassTraitImpl, collection_iterator, context_bounds_tokens};
+use super::{collection_iterator, context_bounds_tokens, ClassTraitImpl};
 
 pub struct ClassTraitAssociatedTypePath<'a> {
 	ty: &'a Struct,
 	// tr: TId<treeldr::Type>,
 	prop: TId<treeldr::Property>,
-	collection: bool
+	collection: bool,
 }
 
 impl<'a> ClassTraitAssociatedTypePath<'a> {
@@ -20,19 +28,21 @@ impl<'a> ClassTraitAssociatedTypePath<'a> {
 		ty: &'a Struct,
 		// tr: TId<treeldr::Type>,
 		prop: TId<treeldr::Property>,
-		collection: bool
+		collection: bool,
 	) -> Self {
 		Self {
 			ty,
 			// tr,
 			prop,
-			collection
+			collection,
 		}
 	}
 }
 
 impl<'a, M> GenerateIn<M> for ClassTraitAssociatedTypePath<'a> {
-	fn generate_in<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate_in<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &Context<V, M>,
 		scope: Option<shelves::Ref<crate::Module>>,
@@ -42,11 +52,9 @@ impl<'a, M> GenerateIn<M> for ClassTraitAssociatedTypePath<'a> {
 		match self.ty.field_for(self.prop) {
 			Some(f) => {
 				if self.collection {
-					let iter_expr =
-						collection_iterator(context, scope, f.layout(), &params_values)?;
+					let iter_expr = collection_iterator(context, scope, f.layout(), params_values)?;
 					let layout = context.model().get(f.layout()).unwrap();
-					let item_layout =
-						**layout.as_layout().description().collection_item().unwrap();
+					let item_layout = **layout.as_layout().description().collection_item().unwrap();
 					if context
 						.model()
 						.get(item_layout)
@@ -56,9 +64,11 @@ impl<'a, M> GenerateIn<M> for ClassTraitAssociatedTypePath<'a> {
 						.is_reference()
 					{
 						let ty_expr = InContext(item_layout)
-							.generate_in_with(context, scope, &params_values)
+							.generate_in_with(context, scope, params_values)
 							.into_tokens()?;
-						tokens.extend(quote!(::treeldr_rust_prelude::iter::Fetch <'a, C, #ty_expr, #iter_expr>))
+						tokens.extend(
+							quote!(::treeldr_rust_prelude::iter::Fetch <'a, C, #ty_expr, #iter_expr>),
+						)
 					} else {
 						tokens.extend(iter_expr)
 					}
@@ -66,18 +76,16 @@ impl<'a, M> GenerateIn<M> for ClassTraitAssociatedTypePath<'a> {
 					Ok(())
 				} else {
 					let layout = context.model().get(f.layout()).unwrap();
-					let item_layout =
-						**layout.as_layout().description().collection_item().unwrap();
+					let item_layout = **layout.as_layout().description().collection_item().unwrap();
 					tokens.extend(quote!(&'a));
-					InContext(item_layout)
-						.generate_in(context, scope, params_values, tokens)
+					InContext(item_layout).generate_in(context, scope, params_values, tokens)
 				}
 			}
 			None => {
 				if self.collection {
-					tokens.extend(quote!(::std::iter::Empty<::std::convert::Infallible>))
+					tokens.extend(quote!(::std::iter::Empty<&'a ::std::convert::Infallible>))
 				} else {
-					tokens.extend(quote!(::std::convert::Infallible))
+					tokens.extend(quote!(&'a ::std::convert::Infallible))
 				}
 
 				Ok(())
@@ -105,7 +113,6 @@ impl<M> GenerateFor<Struct, M> for ClassTraitImpl {
 				.generate_in_with(context, scope, &params_values)
 				.into_tokens()?;
 			let mut context_bounds = BTreeSet::new();
-
 			ty.collect_context_bounds(context, self.0, |b| {
 				context_bounds.insert(b);
 			});
@@ -118,8 +125,10 @@ impl<M> GenerateFor<Struct, M> for ClassTraitImpl {
 					ty,
 					// self.0,
 					a.property(),
-					a.bound().is_collection()
-				).generate_in_with(context, scope, &params_values).into_tokens()?;
+					a.bound().is_collection(),
+				)
+				.generate_in_with(context, scope, &params_values)
+				.into_tokens()?;
 
 				associated_types.push(quote! {
 					type #a_ident <'a> = #ty_expr where Self: 'a, C: 'a;
@@ -196,10 +205,24 @@ impl<M> GenerateFor<Struct, M> for ClassTraitImpl {
 				.instantiate(&params_values)
 				.with_bounds(&params_bounds);
 
+			let dyn_table_path = context
+				.module_path(scope)
+				.to(&tr.dyn_table_path(context).unwrap());
+			let dyn_table_instance_path = context
+				.module_path(scope)
+				.to(&tr.dyn_table_instance_path(context).unwrap());
+
 			tokens.extend(quote! {
 				impl #params #tr_path for #ident #ty_params {
 					#(#associated_types)*
 					#(#methods)*
+				}
+
+				unsafe impl #params ::treeldr_rust_prelude::AsTraitObject<#dyn_table_path<C>> for #ident #ty_params {
+					fn as_trait_object(&self) -> (*const u8, #dyn_table_instance_path<C>) {
+						let table = #dyn_table_instance_path::new::<Self>();
+						(self as *const Self as *const u8, table)
+					}
 				}
 			})
 		}
