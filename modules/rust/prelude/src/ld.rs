@@ -27,6 +27,18 @@ impl<N, M> IntoJsonLd<N, M> for chrono::DateTime<chrono::Utc> {
 	}
 }
 
+impl<N, M> IntoJsonLd<N, M> for iref::IriBuf {
+	fn into_json_ld(self, _namespace: &N) -> json_ld::syntax::Value<M> {
+		json_ld::syntax::Value::String(self.to_string().into())
+	}
+}
+
+impl<N, M> IntoJsonLd<N, M> for iref::IriRefBuf {
+	fn into_json_ld(self, _namespace: &N) -> json_ld::syntax::Value<M> {
+		json_ld::syntax::Value::String(self.to_string().into())
+	}
+}
+
 impl<N, I: std::fmt::Display, B: std::fmt::Display, M> IntoJsonLd<N, M> for Subject<I, B> {
 	fn into_json_ld(self, _namespace: &N) -> json_ld::syntax::Value<M> {
 		match self {

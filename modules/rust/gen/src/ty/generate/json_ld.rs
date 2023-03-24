@@ -98,13 +98,33 @@ impl<M> GenerateFor<Enum, M> for IntoJsonLdImpl {
 		let ident = ty.ident();
 		let params_values = ParametersValues::new_for_type(quote!(N::Id));
 		let params = ty.params().instantiate(&params_values);
+
+		let variants = ty.variants().iter().map(|variant| {
+			let v_ident = variant.ident();
+			if variant.ty().is_some() {
+				quote! {
+					Self::#v_ident(value) => {
+						value.into_json_ld(namespace)
+					}
+				}
+			} else {
+				quote! {
+					Self::#v_ident => {
+						::treeldr_rust_prelude::json_ld::syntax::Value::Null
+					}
+				}
+			}
+		});
+
 		tokens.extend(quote! {
 			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace> ::treeldr_rust_prelude::IntoJsonLd<N> for #ident #params where N::Id: ::treeldr_rust_prelude::contextual::DisplayWithContext<N> {
 				fn into_json_ld(
 					self,
 					namespace: &N
 				) -> ::treeldr_rust_prelude::json_ld::syntax::Value {
-					todo!()
+					match self {
+						#(#variants,)*
+					}
 				}
 			}
 		});
