@@ -15,6 +15,7 @@ derivative.workspace = true
 thiserror.workspace = true
 contextual.workspace = true
 rdf-types.workspace = true
+locspan.workspace = true
 
 [dev-dependencies]
 treeldr-rust-macros.workspace = true
@@ -24,6 +25,5 @@ grdf.workspace = true
 json-ld.workspace = true
 json-syntax.workspace = true
 decoded-char.workspace = true
-locspan.workspace = true
 async-std = { workspace = true, features = ["attributes"] }
 log.workspace = true

@@ -67,3 +67,19 @@ impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T
 		}
 	}
 }
+
+impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V>
+	for iref::IriBuf
+{
+	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+		let lexical = type_check(
+			vocabulary,
+			literal,
+			iri!("http://www.w3.org/2001/XMLSchema#anyURI"),
+		)?;
+		match lexical.as_ref().parse::<Self>() {
+			Ok(d) => Ok(d),
+			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
+		}
+	}
+}
