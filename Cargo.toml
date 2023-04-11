@@ -45,7 +45,7 @@ thiserror = "1.0.31"
 decoded-char = "0.1.1"
 contextual = "0.1.3"
 json-ld = "0.14.0"
-json-syntax = "0.8.11"
+json-syntax = "0.9.1"
 
 chrono = "0.4.19"
 quote = "1.0"
