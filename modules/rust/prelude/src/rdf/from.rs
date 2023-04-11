@@ -71,10 +71,59 @@ from_rdf_literal! {
 	i64,
 	String,
 	iref::IriBuf,
+	::chrono::NaiveDate,
 	::chrono::DateTime<::chrono::Utc>
 }
 
 /// Literal value type check.
 pub trait TypeCheck<T> {
 	fn has_type(&self, ty: &T) -> bool;
+}
+
+impl<S, I: RdfType, L> TypeCheck<I> for Literal<S, I, L> {
+	fn has_type(&self, ty: &I) -> bool {
+		match self {
+			Literal::String(_) => ty.is_string(),
+			Literal::LangString(_, _) => ty.is_lang_string(),
+			Literal::TypedString(_, t) => t == ty
+		}
+	}
+}
+
+impl<S, I: RdfType, B, L> TypeCheck<rdf_types::Id<I, B>> for Literal<S, I, L> {
+	fn has_type(&self, ty: &rdf_types::Id<I, B>) -> bool {
+		match ty {
+			rdf_types::Id::Iri(ty) => match self {
+				Literal::String(_) => ty.is_string(),
+				Literal::LangString(_, _) => ty.is_lang_string(),
+				Literal::TypedString(_, t) => t == ty
+			}
+			rdf_types::Id::Blank(_) => false
+		}
+	}
+}
+pub trait RdfType: PartialEq {
+	fn is_string(&self) -> bool;
+
+	fn is_lang_string(&self) -> bool;
+}
+
+impl<'a> RdfType for iref::Iri<'a> {
+	fn is_string(&self) -> bool {
+		*self == static_iref::iri!("http://www.w3.org/2001/XMLSchema#string")
+	}
+
+	fn is_lang_string(&self) -> bool {
+		*self == static_iref::iri!("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+	}
+}
+
+impl RdfType for iref::IriBuf {
+	fn is_string(&self) -> bool {
+		*self == static_iref::iri!("http://www.w3.org/2001/XMLSchema#string")
+	}
+
+	fn is_lang_string(&self) -> bool {
+		*self == static_iref::iri!("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+	}
 }

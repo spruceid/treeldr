@@ -21,6 +21,12 @@ impl<N, M> IntoJsonLd<N, M> for String {
 	}
 }
 
+impl<N, M> IntoJsonLd<N, M> for chrono::NaiveDate {
+	fn into_json_ld(self, _namespace: &N) -> json_ld::syntax::Value<M> {
+		json_ld::syntax::Value::String(self.to_string().into())
+	}
+}
+
 impl<N, M> IntoJsonLd<N, M> for chrono::DateTime<chrono::Utc> {
 	fn into_json_ld(self, _namespace: &N) -> json_ld::syntax::Value<M> {
 		json_ld::syntax::Value::String(self.to_string().into())
