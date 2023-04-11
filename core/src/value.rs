@@ -230,6 +230,13 @@ impl AsRdfLiteral for String {
 }
 
 impl AsRdfLiteral for Literal {
+	fn language(&self) -> Option<LanguageTag> {
+		match self {
+			Self::LangString(s) => Some(s.language()),
+			_ => None,
+		}
+	}
+
 	fn rdf_type(&self) -> IriIndex {
 		match self {
 			Self::Numeric(n) => n.rdf_type(),
