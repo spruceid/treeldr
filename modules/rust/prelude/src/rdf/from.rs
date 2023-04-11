@@ -85,7 +85,7 @@ impl<S, I: RdfType, L> TypeCheck<I> for Literal<S, I, L> {
 		match self {
 			Literal::String(_) => ty.is_string(),
 			Literal::LangString(_, _) => ty.is_lang_string(),
-			Literal::TypedString(_, t) => t == ty
+			Literal::TypedString(_, t) => t == ty,
 		}
 	}
 }
@@ -96,9 +96,9 @@ impl<S, I: RdfType, B, L> TypeCheck<rdf_types::Id<I, B>> for Literal<S, I, L> {
 			rdf_types::Id::Iri(ty) => match self {
 				Literal::String(_) => ty.is_string(),
 				Literal::LangString(_, _) => ty.is_lang_string(),
-				Literal::TypedString(_, t) => t == ty
-			}
-			rdf_types::Id::Blank(_) => false
+				Literal::TypedString(_, t) => t == ty,
+			},
+			rdf_types::Id::Blank(_) => false,
 		}
 	}
 }

@@ -6,9 +6,7 @@ use rdf_types::{Id, Term};
 use treeldr_rust_macros::tldr;
 use treeldr_rust_prelude::{ld::import_quad, static_iref::iri, FromRdf};
 
-#[tldr(
-	"modules/rust/gen/tests/t02.tldr"
-)]
+#[tldr("modules/rust/gen/tests/t02.tldr")]
 pub mod schema {
 	#[prefix("https://treeldr.org/")]
 	pub mod tldr {}
@@ -25,18 +23,18 @@ pub mod schema {
 
 #[async_std::test]
 async fn t02() {
-	let mut loader: json_ld::FsLoader<IriBuf, Span> = json_ld::FsLoader::new(|_, _, s| {
-		json_syntax::Value::parse_str(s, |span| span)
-	});
+	let mut loader: json_ld::FsLoader<IriBuf, Span> =
+		json_ld::FsLoader::new(|_, _, s| json_syntax::Value::parse_str(s, |span| span));
 	loader.mount(iri!("https://example.com/").to_owned(), "tests/");
 
-	let doc: json_ld::RemoteDocumentReference<IriBuf, Span, _> = json_ld::RemoteDocumentReference::Iri(iri!("https://example.com/t02.jsonld").to_owned());
+	let doc: json_ld::RemoteDocumentReference<IriBuf, Span, _> =
+		json_ld::RemoteDocumentReference::Iri(iri!("https://example.com/t02.jsonld").to_owned());
 	let mut generator = rdf_types::generator::Blank::new().with_default_metadata();
-	let mut to_rdf = doc.to_rdf(&mut generator, &mut loader).await.expect("expansion failed");
-	let dataset: grdf::HashDataset<_, _, _, _> = to_rdf
-		.quads()
-		.map(import_quad)
-		.collect();
+	let mut to_rdf = doc
+		.to_rdf(&mut generator, &mut loader)
+		.await
+		.expect("expansion failed");
+	let dataset: grdf::HashDataset<_, _, _, _> = to_rdf.quads().map(import_quad).collect();
 
 	for triple in dataset.default_graph() {
 		eprintln!("{} .", triple)
@@ -49,8 +47,11 @@ async fn t02() {
 	)
 	.expect("invalid value");
 
-	assert_eq!(value, schema::test::Foo {
-		name: Some("Foo".to_string()),
-		date: Some("2023-04-19".parse().unwrap())
-	});
+	assert_eq!(
+		value,
+		schema::test::Foo {
+			name: Some("Foo".to_string()),
+			date: Some("2023-04-19".parse().unwrap())
+		}
+	);
 }
