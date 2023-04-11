@@ -281,6 +281,8 @@ impl Document {
 		match type_ {
 			MimeType::TreeLdr => Ok(Self::TreeLdr(Box::new(import_treeldr(files, file_id)?))),
 			MimeType::NQuads => Ok(Self::NQuads(import_nquads(files, file_id)?)),
+			#[cfg(feature = "turtle")]
+			MimeType::Turtle => Ok(Self::Turtle(import_turtle(files, file_id)?)),
 			#[cfg(feature = "json-schema")]
 			MimeType::JsonSchema => Ok(Self::JsonSchema(Box::new(import_json_schema(
 				files, file_id,
@@ -479,6 +481,28 @@ where
 			Ok(doc)
 		}
 		Err(Meta(e, meta)) => Err(Meta(ParseError::NQuads(e), meta)),
+	}
+}
+
+/// Import a RDF Turtle file.
+#[cfg(feature = "turtle")]
+pub fn import_turtle<'f, P>(
+	files: &'f source::Files<P>,
+	source_id: source::FileId,
+) -> Result<turtle_syntax::Document<source::Metadata>, Meta<ParseError, source::Metadata>>
+where
+	P: DisplayPath<'f>,
+{
+	use turtle_syntax::Parse;
+	let file = files.get(source_id).unwrap();
+	match turtle_syntax::Document::parse_str(file.buffer().as_str(), |span| {
+		source::Metadata::Extern(Location::new(source_id, span))
+	}) {
+		Ok(Meta(doc, _)) => {
+			log::debug!("parsing succeeded.");
+			Ok(doc)
+		}
+		Err(Meta(e, meta)) => Err(Meta(ParseError::Turtle(e), meta)),
 	}
 }
 
