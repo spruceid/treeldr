@@ -451,6 +451,12 @@ pub enum Rdfs {
 
 	#[iri("rdfs:range")]
 	Range,
+
+	#[iri("rdfs:seeAlso")]
+	SeeAlso,
+
+	#[iri("rdfs:isDefinedBy")]
+	IsDefinedBy,
 }
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
