@@ -18,6 +18,6 @@ _:t13 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/
 <http://www.example.com/Foo> <https://treeldr.org/layoutFor> <http://www.example.com/Foo> .
 <http://www.example.com/Foo> <https://treeldr.org/fields> _:t13 .
 <http://www.example.com/Foo> <https://treeldr.org/name> "Foo" .
-<http://www.example.com/Foo/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<http://www.example.com/Foo/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#FunctionalProperty> .
 <http://www.example.com/Foo/bar> <http://www.w3.org/2000/01/rdf-schema#domain> <http://www.example.com/Foo> .
 <http://www.example.com/Foo/bar> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.example.com/URI> .
