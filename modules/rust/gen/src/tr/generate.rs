@@ -123,14 +123,28 @@ fn associated_trait_object_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 		}
 	});
 
-	Ok(quote! {
-		pub struct #ident <'d, C: ?Sized> {
+	let fields = if tables.len() == 0 {
+		quote! {
+			_p: ::std::marker::PhantomData<&'d C>
+		}
+	} else {
+		quote! {
 			_p: ::std::marker::PhantomData<&'d C>,
 			ptr: *const u8,
 			tables: (#(#tables,)*)
 		}
+	};
 
-		impl<'d, C: ?Sized> #ident <'d, C> {
+	let constructor = if tables_init.is_empty() {
+		quote! {
+			pub fn new<T: #(#trait_bounds+)* ::treeldr_rust_prelude::Reference<'d>>(_value: T) -> Self {
+				Self {
+					_p: ::std::marker::PhantomData
+				}
+			}
+		}
+	} else {
+		quote! {
 			pub fn new<T: #(#trait_bounds+)* ::treeldr_rust_prelude::Reference<'d>>(value: T) -> Self {
 				let ptr;
 				let tables = (#(#tables_init,)*);
@@ -141,6 +155,16 @@ fn associated_trait_object_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 					tables
 				}
 			}
+		}
+	};
+
+	Ok(quote! {
+		pub struct #ident <'d, C: ?Sized> {
+			#fields
+		}
+
+		impl<'d, C: ?Sized> #ident <'d, C> {
+			#constructor
 		}
 
 		impl<'d, C: ?Sized> Clone for #ident <'d, C> {
