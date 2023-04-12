@@ -40,7 +40,7 @@ async fn t01() {
 		eprintln!("{} .", triple)
 	}
 
-	let value = schema::test::Enum::from_rdf(
+	let value = schema::test::DefaultEnum::from_rdf(
 		&mut (),
 		&Term::Id(Id::Iri(iri!("https://example.com/subject").to_owned())),
 		dataset.default_graph(),
@@ -49,7 +49,7 @@ async fn t01() {
 
 	assert_eq!(
 		value,
-		schema::test::Enum::A(schema::test::A {
+		schema::test::DefaultEnum::A(schema::test::DefaultA {
 			a: Some("foo".to_string())
 		})
 	);

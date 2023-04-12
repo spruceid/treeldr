@@ -73,7 +73,7 @@ async fn main() {
 	.expect("invalid post");
 
 	// Wrap the post inside a VC.
-	let mut vc = schema::basic_post::VerifiableBasicPost::new(chrono::Utc::now());
+	let mut vc = schema::basic_post::DefaultVerifiableBasicPost::new(chrono::Utc::now());
 	vc.credential_subject = Some(post).into_iter().collect();
 	vc.type_.extend([
 		treeldr_rust_prelude::Id(Id::Iri(

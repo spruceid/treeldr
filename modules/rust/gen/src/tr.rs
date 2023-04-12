@@ -92,22 +92,11 @@ impl Trait {
 				let label = ty.preferred_label().map(Literal::to_string);
 				let doc = ty.comment().clone_stripped();
 
-				let ident = match context
-					.model()
-					.get(TId::<treeldr::Layout>::new(type_ref.id()))
-				{
-					Some(layout) => layout
-						.as_component()
-						.name()
-						.map(|name| format_ident!("Any{}", name.to_pascal_case())),
-					None => {
-						let iri = context.vocabulary().iri(&iri_index).unwrap();
-						Name::from_iri(iri)
-							.ok()
-							.flatten()
-							.map(|name| format_ident!("{}", name.to_pascal_case()))
-					}
-				};
+				let iri = context.vocabulary().iri(&iri_index).unwrap();
+				let ident = Name::from_iri(iri)
+					.ok()
+					.flatten()
+					.map(|name| format_ident!("{}", name.to_pascal_case()));
 
 				ident.map(|ident| {
 					let mut super_traits = Vec::new();

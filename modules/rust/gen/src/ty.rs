@@ -252,11 +252,16 @@ impl Description {
 			.get(layout_ref)
 			.expect("undefined described layout");
 
+		let is_type = context
+			.model()
+			.get(TId::<treeldr::Type>::new(layout_ref.id()))
+			.is_some();
+
 		match layout.as_layout().description() {
 			treeldr::layout::Description::Never => Self::Never,
 			treeldr::layout::Description::Alias(alias_ref) => {
 				let name = layout.as_component().name().expect("unnamed alias");
-				let ident = generate::type_ident_of_name(name);
+				let ident = generate::type_ident_of_name(name, is_type);
 				Self::Alias(Alias::new(ident, layout_ref, *alias_ref.value()))
 			}
 			treeldr::layout::Description::Primitive(p) => Self::Primitive(*p),
@@ -274,7 +279,7 @@ impl Description {
 				let ident = layout
 					.as_component()
 					.name()
-					.map(generate::type_ident_of_name)
+					.map(|n| generate::type_ident_of_name(n, is_type))
 					.unwrap_or_else(|| context.next_anonymous_type_ident());
 				let mut fields = Vec::with_capacity(s.fields().len());
 				for (i, field_id) in s.fields().iter().enumerate() {
@@ -299,7 +304,7 @@ impl Description {
 			}
 			treeldr::layout::Description::Enum(e) => {
 				let name = layout.as_component().name().expect("unnamed enum");
-				let ident = generate::type_ident_of_name(name);
+				let ident = generate::type_ident_of_name(name, is_type);
 				let mut variants = Vec::with_capacity(e.variants().len());
 				for variant_id in e.variants() {
 					let variant = context.model().get(**variant_id).unwrap();
