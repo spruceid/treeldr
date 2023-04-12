@@ -429,7 +429,9 @@ impl<M> Generate<M> for treeldr::layout::Primitive {
 			Self::Double => quote! { f64 },
 			Self::String => quote! { ::std::string::String },
 			Self::Date => quote! { ::treeldr_rust_prelude::chrono::NaiveDate },
-			Self::DateTime => quote! { ::treeldr_rust_prelude::chrono::DateTime<::treeldr_rust_prelude::chrono::Utc> },
+			Self::DateTime => {
+				quote! { ::treeldr_rust_prelude::chrono::DateTime<::treeldr_rust_prelude::chrono::Utc> }
+			}
 			Self::Time => quote! { ::treeldr_rust_prelude::chrono::NaiveTime },
 			Self::Url => quote! { ::treeldr_rust_prelude::iref::IriBuf },
 			Self::Uri => quote! { ::treeldr_rust_prelude::iref::IriBuf },
@@ -455,7 +457,9 @@ impl<M> Generate<M> for Referenced<treeldr::layout::Primitive> {
 			Primitive::Double => quote! { f64 },
 			Primitive::String => quote! { &str },
 			Primitive::Date => quote! { ::treeldr_rust_prelude::chrono::NaiveDate },
-			Primitive::DateTime => quote! { ::treeldr_rust_prelude::chrono::DateTime<::treeldr_rust_prelude::chrono::Utc> },
+			Primitive::DateTime => {
+				quote! { ::treeldr_rust_prelude::chrono::DateTime<::treeldr_rust_prelude::chrono::Utc> }
+			}
 			Primitive::Time => quote! { ::treeldr_rust_prelude::chrono::NaiveTime },
 			Primitive::Url => quote! { ::treeldr_rust_prelude::iref::Iri },
 			Primitive::Uri => quote! { ::treeldr_rust_prelude::iref::Iri },

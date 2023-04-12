@@ -1,9 +1,9 @@
+pub use chrono;
 pub use contextual;
 pub use grdf;
-pub use rdf_types;
 pub use iref;
+pub use rdf_types;
 pub use static_iref;
-pub use chrono;
 
 pub mod iter;
 

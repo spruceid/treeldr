@@ -6,7 +6,7 @@ pub mod schema {
 	/// RDF Schema types.
 	#[prefix("http://www.w3.org/2000/01/rdf-schema#")]
 	pub mod rdfs {}
-	
+
 	/// XML schema types.
 	#[prefix("http://www.w3.org/2001/XMLSchema#")]
 	pub mod xml {}
