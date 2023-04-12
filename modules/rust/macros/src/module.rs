@@ -6,7 +6,7 @@ use rdf_types::Vocabulary;
 use std::path::PathBuf;
 use syn::spanned::Spanned;
 use thiserror::Error;
-use treeldr::{BlankIdIndex, IriIndex};
+use treeldr::{BlankIdIndex, IriIndex, TId};
 
 pub type GenContext<'a, V> = treeldr_rust_gen::Context<'a, V, treeldr_load::Metadata>;
 
@@ -133,14 +133,15 @@ impl Module {
 		context: &mut GenContext<V>,
 	) {
 		use std::collections::HashMap;
-		let mut map = HashMap::new();
+		let mut type_map = HashMap::new();
+		let mut layout_map = HashMap::new();
 
 		for prefix in &mut self.prefixes {
 			let module_ref = context.add_module(None, prefix.ident.clone());
 			prefix.module = Some(module_ref);
 
-			for (layout_ref, layout) in context.model().layouts() {
-				if let treeldr::Id::Iri(term) = layout.id() {
+			for (id, node) in context.model().nodes() {
+				if let treeldr::Id::Iri(term) = id {
 					let iri = vocabulary.iri(&term).unwrap();
 
 					if iri
@@ -148,22 +149,46 @@ impl Module {
 						.strip_prefix(prefix.prefix_attrs.iri.0.as_str())
 						.is_some()
 					{
-						map.insert(
-							layout_ref,
-							treeldr_rust_gen::module::Parent::Ref(module_ref),
-						);
+						if node.is_type() {
+							type_map.insert(
+								TId::new(id),
+								treeldr_rust_gen::module::Parent::Ref(module_ref),
+							);
+						}
+
+						if node.is_layout() {
+							layout_map.insert(
+								TId::new(id),
+								treeldr_rust_gen::module::Parent::Ref(module_ref),
+							);
+						}
 					}
 				}
 			}
 		}
 
-		for (layout_ref, _) in context.model().layouts() {
-			context.add_layout(
-				map.get(&layout_ref)
-					.cloned()
-					.or(Some(treeldr_rust_gen::module::Parent::Extern)),
-				layout_ref,
-			)
+		for (id, node) in context.model().nodes() {
+			if node.is_type() {
+				let type_ref = TId::new(id);
+				context.add_type(
+					type_map
+						.get(&type_ref)
+						.cloned()
+						.or(Some(treeldr_rust_gen::module::Parent::Extern)),
+					type_ref,
+				);
+			}
+
+			if node.is_layout() {
+				let layout_ref = TId::new(id);
+				context.add_layout(
+					layout_map
+						.get(&layout_ref)
+						.cloned()
+						.or(Some(treeldr_rust_gen::module::Parent::Extern)),
+					layout_ref,
+				)
+			}
 		}
 	}
 
