@@ -88,13 +88,13 @@ impl<M> GenerateFor<Enum, M> for ClassTraitImpl {
 
 							if v.ty().is_some() {
 								quote! {
-									#v_ident (value) => {
+									Self::#v_ident (value) => {
 										value.#m_ident(context).map(#m_path::<'a, C>::new)
 									}
 								}
 							} else {
 								quote! {
-									#v_ident => {
+									Self::#v_ident => {
 										None
 									}
 								}
