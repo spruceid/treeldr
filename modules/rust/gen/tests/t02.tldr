@@ -1,0 +1,8 @@
+base <https://example.com/>;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <https://example.com/> as ex;
+
+type Foo {
+	ex:name: xs:string,
+	ex:date: xs:date
+}

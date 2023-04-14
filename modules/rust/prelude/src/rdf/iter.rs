@@ -8,6 +8,7 @@ pub trait RdfIterator<N: Namespace> {
 		&mut self,
 		namespace: &mut N,
 		generator: &mut G,
+		graph: Option<&N::Id>,
 	) -> Option<Self::Item>;
 }
 
@@ -15,35 +16,61 @@ pub trait IntoRdfIterator<N: Namespace> {
 	type Item;
 	type IntoIter: RdfIterator<N, Item = Self::Item>;
 
-	fn next_with<G: Generator<N>>(
-		&mut self,
+	fn into_rdf_iter<G: Generator<N>>(
+		self,
 		namespace: &mut N,
 		generator: &mut G,
 	) -> Option<Self::IntoIter>;
 }
 
 /// Iterator bound to a namespace and generator.
-pub struct Bound<'n, 'g, I, N, G> {
+pub struct Bound<'n, 'g, 't, I, N: Namespace, G> {
 	inner: I,
 	namespace: &'n mut N,
 	generator: &'g mut G,
+	graph: Option<&'t N::Id>,
 }
 
-impl<'n, 'g, I, N, G> Bound<'n, 'g, I, N, G> {
-	pub fn new(inner: I, namespace: &'n mut N, generator: &'g mut G) -> Self {
+impl<'n, 'g, 't, I, N: Namespace, G> Bound<'n, 'g, 't, I, N, G> {
+	pub fn new(
+		inner: I,
+		namespace: &'n mut N,
+		generator: &'g mut G,
+		graph: Option<&'t N::Id>,
+	) -> Self {
 		Self {
 			inner,
 			namespace,
 			generator,
+			graph,
 		}
+	}
+
+	pub fn namespace(&self) -> &N {
+		self.namespace
+	}
+
+	pub fn namespace_mut(&mut self) -> &mut N {
+		self.namespace
+	}
+
+	pub fn generator(&self) -> &G {
+		self.generator
+	}
+
+	pub fn generator_mut(&mut self) -> &mut G {
+		self.generator
 	}
 }
 
-impl<'n, 'g, I: RdfIterator<N>, N: Namespace, G: Generator<N>> Iterator for Bound<'n, 'g, I, N, G> {
+impl<'n, 'g, 't, I: RdfIterator<N>, N: Namespace, G: Generator<N>> Iterator
+	for Bound<'n, 'g, 't, I, N, G>
+{
 	type Item = I::Item;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.inner.next_with(self.namespace, self.generator)
+		self.inner
+			.next_with(self.namespace, self.generator, self.graph)
 	}
 }
 
@@ -56,6 +83,7 @@ impl<T, N: Namespace> RdfIterator<N> for Once<T> {
 		&mut self,
 		_namespace: &mut N,
 		_generator: &mut G,
+		_graph: Option<&N::Id>,
 	) -> Option<Self::Item> {
 		self.0.take()
 	}
@@ -76,9 +104,10 @@ impl<T: RdfIterator<N>, N: Namespace> RdfIterator<N> for Optional<T> {
 		&mut self,
 		namespace: &mut N,
 		generator: &mut G,
+		graph: Option<&N::Id>,
 	) -> Option<Self::Item> {
 		self.0
 			.as_mut()
-			.and_then(|inner| inner.next_with(namespace, generator))
+			.and_then(|inner| inner.next_with(namespace, generator, graph))
 	}
 }

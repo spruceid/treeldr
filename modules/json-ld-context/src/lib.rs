@@ -279,7 +279,8 @@ impl unresolved::Bindings {
 			id: layout
 				.as_layout()
 				.ty()
-				.map(|id| Unresolved::Resolved(json_ld::Term::Id(id.id().into()))),
+				.first() // TODO: deal with multi-type layouts.
+				.map(|id| Unresolved::Resolved(json_ld::Term::Id(id.value.id().into()))),
 			context: layout_contexts.insert(builder, local_contexts, parent, [layout_id], true),
 			..Default::default()
 		};

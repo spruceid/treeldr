@@ -1,3 +1,4 @@
+use derivative::Derivative;
 use locspan::Meta;
 
 use crate::metadata::Merge;
@@ -241,6 +242,8 @@ impl<'a, M> Iterator for ExcludedProperties<'a, M> {
 	}
 }
 
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub struct RestrictedProperty<'a, M> {
 	prop: TId<Property>,
 	restrictions: &'a Restrictions<M>,

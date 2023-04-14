@@ -1,4 +1,9 @@
-use crate::{Context, Error, GenerateIn, Module};
+use std::collections::HashSet;
+
+use crate::{
+	tr::{CollectContextBounds, ContextBound},
+	Context, Error, GenerateIn, Module,
+};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use rdf_types::Vocabulary;
@@ -10,18 +15,24 @@ use super::{params::ParametersValues, Parameters};
 /// Rust `enum` type.
 #[derive(Debug)]
 pub struct Enum {
+	layout: TId<treeldr::Layout>,
 	ident: Ident,
 	variants: Vec<Variant>,
 	params: Parameters,
 }
 
 impl Enum {
-	pub fn new(ident: Ident, variants: Vec<Variant>) -> Self {
+	pub fn new(layout: TId<treeldr::Layout>, ident: Ident, variants: Vec<Variant>) -> Self {
 		Self {
+			layout,
 			ident,
 			variants,
 			params: Parameters::default(),
 		}
+	}
+
+	pub fn layout(&self) -> TId<treeldr::Layout> {
+		self.layout
 	}
 
 	pub fn ident(&self) -> &Ident {
@@ -53,6 +64,22 @@ impl Enum {
 		}
 
 		result
+	}
+}
+
+impl CollectContextBounds for Enum {
+	fn collect_context_bounds_from<V, M>(
+		&self,
+		context: &Context<V, M>,
+		tr: TId<treeldr::Type>,
+		visited: &mut HashSet<TId<treeldr::Layout>>,
+		f: &mut impl FnMut(ContextBound),
+	) {
+		for variant in self.variants() {
+			if let Some(l) = variant.ty() {
+				l.collect_context_bounds_from(context, tr, visited, f)
+			}
+		}
 	}
 }
 

@@ -16,7 +16,7 @@ type vc:VerifiableCredential {
 	/// objects that contain one or more properties that are each related to a
 	/// subject of the verifiable credential.
 	/// 
-	/// A verifiable credential MUST have a credentialSubject property. 
+	/// A verifiable credential MUST have a credentialSubject property.
 	vc:credentialSubject: required multiple rdfs:Resource,
 
 	/// Issuer.

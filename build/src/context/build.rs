@@ -8,6 +8,7 @@ use crate::{error, ty::ClassHierarchy, Context, Error};
 
 mod assign_default_layouts;
 mod assign_default_names;
+mod close_layout_types;
 mod compute_layout_intersections;
 mod compute_layouts_relations;
 mod dispatch_sub_properties;
@@ -28,6 +29,9 @@ impl<M: Clone> Context<M> {
 		M: Clone + Merge,
 	{
 		// TODO check for infinite values (lists).
+
+		log::debug!("close layout `tldr:layoutFor` relation by aliasing...");
+		self.close_layout_types();
 
 		log::debug!("dispatch sub properties...");
 		self.dispatch_sub_properties()?;

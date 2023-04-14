@@ -227,6 +227,25 @@ impl<M> Description<M> {
 		}
 	}
 
+	pub fn is_subclass_of(&self, model: &MutableModel<M>, other: TId<Type>) -> bool {
+		match self {
+			Self::Empty => false,
+			Self::Data(_) => false,  // this may be true?
+			Self::Union(_) => false, // TODO: this may be true!
+			Self::Intersection(i) => {
+				for t in i.intersection_of().value() {
+					if model.is_subclass_of(other, **t) {
+						return true;
+					}
+				}
+
+				false
+			}
+			Self::Normal(n) => n.is_subclass_of(model, other),
+			Self::Restriction(_) => false,
+		}
+	}
+
 	pub fn dependencies(&self) -> Multiple<TId<crate::Type>, M>
 	where
 		M: Clone,
@@ -316,6 +335,10 @@ impl<M> Definition<M> {
 			Description::Normal(n) => Some(n.sub_class_of()),
 			_ => None,
 		}
+	}
+
+	pub fn is_subclass_of(&self, model: &MutableModel<M>, other: TId<Type>) -> bool {
+		self.desc.is_subclass_of(model, other)
 	}
 
 	pub fn collect_all_superclasses(

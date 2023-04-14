@@ -1,18 +1,20 @@
 use crate::{
-	module,
+	module::{self, TraitId},
+	tr::{Trait, TraitModules},
 	ty::{self, params::Parameters},
 	Module, Path, Type,
 };
 use proc_macro2::Ident;
 use quote::format_ident;
+use rdf_types::Vocabulary;
 use shelves::{Ref, Shelf};
-use std::collections::{BTreeMap, HashMap};
-use treeldr::{value::Literal, TId};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use treeldr::{value::Literal, IriIndex, TId};
 
 /// Rust context.
 pub struct Context<'a, V, M> {
 	/// TreeLDR model.
-	model: &'a treeldr::MutableModel<M>,
+	model: &'a treeldr::Model<M>,
 
 	/// Vocabulary.
 	vocabulary: &'a V,
@@ -23,16 +25,19 @@ pub struct Context<'a, V, M> {
 	/// Maps each TreeLDR layout to its Rust type.
 	layouts: BTreeMap<TId<treeldr::Layout>, Type>,
 
+	types: BTreeMap<TId<treeldr::Type>, Trait>,
+
 	anonymous_types: usize,
 }
 
 impl<'a, V, M> Context<'a, V, M> {
-	pub fn new(model: &'a treeldr::MutableModel<M>, vocabulary: &'a V) -> Self {
+	pub fn new(model: &'a treeldr::Model<M>, vocabulary: &'a V) -> Self {
 		Self {
 			model,
 			vocabulary,
 			modules: Shelf::default(),
 			layouts: BTreeMap::default(),
+			types: BTreeMap::default(),
 			anonymous_types: 0,
 		}
 	}
@@ -43,7 +48,7 @@ impl<'a, V, M> Context<'a, V, M> {
 		format_ident!("Anonymous{i}")
 	}
 
-	pub fn model(&self) -> &'a treeldr::MutableModel<M> {
+	pub fn model(&self) -> &'a treeldr::Model<M> {
 		self.model
 	}
 
@@ -53,6 +58,10 @@ impl<'a, V, M> Context<'a, V, M> {
 
 	pub fn module(&self, r: Ref<Module>) -> Option<&Module> {
 		self.modules.get(r)
+	}
+
+	pub fn module_mut(&mut self, r: Ref<Module>) -> Option<&mut Module> {
+		self.modules.get_mut(r)
 	}
 
 	pub fn module_path(&self, r: Option<Ref<Module>>) -> Path {
@@ -81,6 +90,10 @@ impl<'a, V, M> Context<'a, V, M> {
 		self.layouts.get(&r)
 	}
 
+	pub fn type_trait(&self, r: TId<treeldr::Type>) -> Option<&Trait> {
+		self.types.get(&r)
+	}
+
 	pub fn add_module(
 		&mut self,
 		parent: Option<Ref<Module>>,
@@ -98,10 +111,7 @@ impl<'a, V, M> Context<'a, V, M> {
 	}
 
 	pub fn add_layout(&mut self, module: Option<module::Parent>, layout_ref: TId<treeldr::Layout>) {
-		let layout = self
-			.model()
-			.get(layout_ref)
-			.expect("undefined described layout");
+		let layout = self.model().get(layout_ref).expect("undefined layout");
 		let label = layout.preferred_label().map(Literal::to_string);
 		let doc = layout.comment().clone_stripped();
 
@@ -117,8 +127,82 @@ impl<'a, V, M> Context<'a, V, M> {
 		}
 	}
 
+	pub fn add_type(&mut self, modules: TraitModules, type_ref: TId<treeldr::Type>) -> bool
+	where
+		V: Vocabulary<Iri = IriIndex>,
+	{
+		match Trait::build(self, modules, type_ref) {
+			Some(tr) => {
+				self.types.insert(type_ref, tr);
+
+				if let Some(module::Parent::Ref(module)) = modules.main {
+					self.modules
+						.get_mut(module)
+						.expect("undefined module")
+						.types_mut()
+						.insert(type_ref);
+				}
+
+				if let Some(module::Parent::Ref(module)) = modules.provider {
+					self.modules
+						.get_mut(module)
+						.expect("undefined module")
+						.types_providers_mut()
+						.insert(crate::tr::ProviderOf(type_ref));
+				}
+
+				if let Some(module::Parent::Ref(module)) = modules.trait_object {
+					self.modules
+						.get_mut(module)
+						.expect("undefined module")
+						.types_trait_objects_mut()
+						.insert(crate::tr::TraitObjectsOf(type_ref));
+				}
+
+				true
+			}
+			None => false,
+		}
+	}
+
 	pub fn run_pre_computations(&mut self) {
-		self.compute_type_params()
+		self.compute_type_params();
+		self.dispatch_trait_implementations()
+	}
+
+	pub fn dispatch_trait_implementations(&mut self) {
+		let mut trait_impls = HashSet::new();
+		for ty in self.layouts.values() {
+			ty.collect_trait_implementations(self, |i| trait_impls.insert(i))
+		}
+
+		for i in trait_impls {
+			let module_ref = match i.tr {
+				TraitId::Defined(tr) => {
+					let tr_module = self.types.get(&tr).and_then(|tr| tr.module());
+					let ty_module = self.layouts.get(&i.ty).and_then(|ty| ty.module());
+
+					match (tr_module, ty_module) {
+						(Some(module::Parent::Ref(a)), Some(module::Parent::Ref(b))) => {
+							Some(std::cmp::max(a, b))
+						}
+						(Some(module::Parent::Ref(a)), _) => Some(a),
+						(_, Some(module::Parent::Ref(b))) => Some(b),
+						_ => None,
+					}
+				}
+				_ => self
+					.layouts
+					.get(&i.ty)
+					.and_then(|ty| ty.module())
+					.and_then(module::Parent::into_ref),
+			};
+
+			if let Some(module_ref) = module_ref {
+				let module = self.module_mut(module_ref).unwrap();
+				module.trait_impls_mut().insert(i);
+			}
+		}
 	}
 
 	pub fn compute_type_params(&mut self) {

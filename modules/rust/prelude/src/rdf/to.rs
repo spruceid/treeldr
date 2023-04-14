@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, marker::PhantomData};
 
-use rdf_types::{Generator, Namespace, Object, Triple};
+use rdf_types::{Generator, Namespace, Object, Quad};
 
 use crate::{Id, RdfIterator};
 
@@ -10,55 +10,56 @@ pub use literal::*;
 
 use super::iter;
 
-/// Triple or value sum type.
+/// Quad or value sum type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum TripleOrValue<I, L> {
-	Triple(Triple<I, I, Object<I, L>>),
+pub enum QuadOrValue<I, L> {
+	Quad(Quad<I, I, Object<I, L>, I>),
 	Value(Object<I, L>),
 }
 
 /// RDF traversal.
-pub trait TriplesAndValues<N: Namespace, L> {
-	type TriplesAndValues<'a>: 'a + RdfIterator<N, Item = TripleOrValue<N::Id, L>>
+pub trait QuadsAndValues<N: Namespace, L> {
+	type QuadsAndValues<'a>: 'a + RdfIterator<N, Item = QuadOrValue<N::Id, L>>
 	where
 		Self: 'a,
 		N::Id: 'a,
 		L: 'a;
 
-	fn unbound_rdf_triples_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
 		&'a self,
 		namespace: &mut N,
 		generator: &mut G,
-	) -> Self::TriplesAndValues<'a>
+	) -> Self::QuadsAndValues<'a>
 	where
 		N::Id: 'a,
 		L: 'a;
 
-	fn rdf_triples_and_values<'a, 'n, 'g, G: Generator<N>>(
+	fn rdf_triples_and_values<'a, 'n, 'g, 't, G: Generator<N>>(
 		&'a self,
 		namespace: &'n mut N,
 		generator: &'g mut G,
-	) -> iter::Bound<'n, 'g, Self::TriplesAndValues<'a>, N, G>
+		graph: Option<&'t N::Id>,
+	) -> iter::Bound<'n, 'g, 't, Self::QuadsAndValues<'a>, N, G>
 	where
 		N::Id: 'a,
 		L: 'a,
 	{
-		let inner = self.unbound_rdf_triples_and_values(namespace, generator);
-		iter::Bound::new(inner, namespace, generator)
+		let inner = self.unbound_rdf_quads_and_values(namespace, generator);
+		iter::Bound::new(inner, namespace, generator, graph)
 	}
 }
 
-impl<N: Namespace, L> TriplesAndValues<N, L> for Id<N::Id>
+impl<N: Namespace, L> QuadsAndValues<N, L> for Id<N::Id>
 where
 	N::Id: Clone,
 {
-	type TriplesAndValues<'a> = ValuesOnly<IdValue<'a, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
+	type QuadsAndValues<'a> = ValuesOnly<IdValue<'a, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
 
-	fn unbound_rdf_triples_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
 		&'a self,
 		_namespace: &mut N,
 		_generator: &mut G,
-	) -> Self::TriplesAndValues<'a>
+	) -> Self::QuadsAndValues<'a>
 	where
 		N::Id: 'a,
 		L: 'a,
@@ -67,50 +68,53 @@ where
 	}
 }
 
-impl<T: TriplesAndValues<N, L>, N: Namespace, L> TriplesAndValues<N, L> for Option<T> {
-	type TriplesAndValues<'a> = super::iter::Optional<T::TriplesAndValues<'a>> where Self: 'a, N::Id: 'a, L: 'a;
+impl<T: QuadsAndValues<N, L>, N: Namespace, L> QuadsAndValues<N, L> for Option<T> {
+	type QuadsAndValues<'a> = super::iter::Optional<T::QuadsAndValues<'a>> where Self: 'a, N::Id: 'a, L: 'a;
 
-	fn unbound_rdf_triples_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
 		&'a self,
 		namespace: &mut N,
 		generator: &mut G,
-	) -> Self::TriplesAndValues<'a>
+	) -> Self::QuadsAndValues<'a>
 	where
 		N::Id: 'a,
 		L: 'a,
 	{
 		super::iter::Optional::new(
 			self.as_ref()
-				.map(|t| t.unbound_rdf_triples_and_values(namespace, generator)),
+				.map(|t| t.unbound_rdf_quads_and_values(namespace, generator)),
 		)
 	}
 }
 
-pub struct FlattenTriplesAndValues<I, U, L> {
-	current: Option<U>,
+pub struct FlattenQuadsAndValues<I, U, L> {
+	current: Option<Box<U>>,
 	rest: I,
 	_l: PhantomData<L>,
 }
 
-impl<'a, I: Iterator<Item = &'a T>, T: TriplesAndValues<N, L>, N: Namespace, L> RdfIterator<N>
-	for FlattenTriplesAndValues<I, T::TriplesAndValues<'a>, L>
+impl<'a, I: Iterator<Item = &'a T>, T: QuadsAndValues<N, L>, N: Namespace, L> RdfIterator<N>
+	for FlattenQuadsAndValues<I, T::QuadsAndValues<'a>, L>
 {
-	type Item = TripleOrValue<N::Id, L>;
+	type Item = QuadOrValue<N::Id, L>;
 
 	fn next_with<G: Generator<N>>(
 		&mut self,
 		namespace: &mut N,
 		generator: &mut G,
+		graph: Option<&N::Id>,
 	) -> Option<Self::Item> {
 		loop {
 			match &mut self.current {
-				Some(c) => match c.next_with(namespace, generator) {
+				Some(c) => match c.next_with(namespace, generator, graph) {
 					Some(item) => break Some(item),
 					None => self.current = None,
 				},
 				None => match self.rest.next() {
 					Some(i) => {
-						self.current = Some(i.unbound_rdf_triples_and_values(namespace, generator))
+						self.current = Some(Box::new(
+							i.unbound_rdf_quads_and_values(namespace, generator),
+						))
 					}
 					None => break None,
 				},
@@ -119,23 +123,23 @@ impl<'a, I: Iterator<Item = &'a T>, T: TriplesAndValues<N, L>, N: Namespace, L> 
 	}
 }
 
-impl<T: TriplesAndValues<N, L>, N: Namespace, L> TriplesAndValues<N, L> for BTreeSet<T> {
-	type TriplesAndValues<'a> = FlattenTriplesAndValues<
+impl<T: QuadsAndValues<N, L>, N: Namespace, L> QuadsAndValues<N, L> for BTreeSet<T> {
+	type QuadsAndValues<'a> = FlattenQuadsAndValues<
 		std::collections::btree_set::Iter<'a, T>,
-		T::TriplesAndValues<'a>,
+		T::QuadsAndValues<'a>,
 		L
 	> where Self: 'a, N::Id: 'a, L: 'a;
 
-	fn unbound_rdf_triples_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
 		&'a self,
 		_namespace: &mut N,
 		_generator: &mut G,
-	) -> Self::TriplesAndValues<'a>
+	) -> Self::QuadsAndValues<'a>
 	where
 		N::Id: 'a,
 		L: 'a,
 	{
-		FlattenTriplesAndValues {
+		FlattenQuadsAndValues {
 			current: None,
 			rest: self.iter(),
 			_l: PhantomData,
@@ -143,75 +147,77 @@ impl<T: TriplesAndValues<N, L>, N: Namespace, L> TriplesAndValues<N, L> for BTre
 	}
 }
 
-/// RDF triples iterator provider.
+/// RDF quads iterator provider.
 ///
 /// The namespace `N` defines the node identifier type.
 /// The type parameter `L` is the type of literal values.
-pub trait Triples<N: Namespace, L> {
+pub trait Quads<N: Namespace, L> {
 	/// Triples iterator.
-	type Triples<'a>: 'a + RdfIterator<N, Item = Triple<N::Id, N::Id, Object<N::Id, L>>>
+	type Quads<'a>: 'a + RdfIterator<N, Item = Quad<N::Id, N::Id, Object<N::Id, L>, N::Id>>
 	where
 		Self: 'a,
 		N::Id: 'a,
 		L: 'a;
 
-	fn unbound_rdf_triples<'a, G: Generator<N>>(
+	fn unbound_rdf_quads<'a, G: Generator<N>>(
 		&'a self,
 		namespace: &mut N,
 		generator: &mut G,
-	) -> Self::Triples<'_>
+	) -> Self::Quads<'_>
 	where
 		N::Id: 'a,
 		L: 'a;
 
-	fn rdf_triples<'a, 'n, 'g, G: Generator<N>>(
+	fn rdf_quads<'a, 'n, 'g, 't, G: Generator<N>>(
 		&'a self,
 		namespace: &'n mut N,
 		generator: &'g mut G,
-	) -> iter::Bound<'n, 'g, Self::Triples<'_>, N, G>
+		graph: Option<&'t N::Id>,
+	) -> iter::Bound<'n, 'g, 't, Self::Quads<'_>, N, G>
 	where
 		N::Id: 'a,
 		L: 'a,
 	{
-		let inner = self.unbound_rdf_triples(namespace, generator);
-		iter::Bound::new(inner, namespace, generator)
+		let inner = self.unbound_rdf_quads(namespace, generator);
+		iter::Bound::new(inner, namespace, generator, graph)
 	}
 }
 
-impl<T: TriplesAndValues<N, L>, N: Namespace, L> Triples<N, L> for T {
-	type Triples<'a> = FilterTriples<T::TriplesAndValues<'a>> where Self: 'a, N::Id: 'a, L: 'a;
+impl<T: QuadsAndValues<N, L>, N: Namespace, L> Quads<N, L> for T {
+	type Quads<'a> = FilterQuads<T::QuadsAndValues<'a>> where Self: 'a, N::Id: 'a, L: 'a;
 
-	fn unbound_rdf_triples<'a, G: Generator<N>>(
+	fn unbound_rdf_quads<'a, G: Generator<N>>(
 		&'a self,
 		namespace: &mut N,
 		generator: &mut G,
-	) -> Self::Triples<'a>
+	) -> Self::Quads<'a>
 	where
 		N::Id: 'a,
 		L: 'a,
 	{
-		FilterTriples(self.unbound_rdf_triples_and_values(namespace, generator))
+		FilterQuads(self.unbound_rdf_quads_and_values(namespace, generator))
 	}
 }
 
 /// Wrapper that changes a `TripleOrValue<I, L>` iterator into a
 /// `Triple<I, I, Object<I, L>>` iterator.
-pub struct FilterTriples<T>(pub T);
+pub struct FilterQuads<T>(pub T);
 
-impl<N: Namespace, L, T: RdfIterator<N, Item = TripleOrValue<N::Id, L>>> RdfIterator<N>
-	for FilterTriples<T>
+impl<N: Namespace, L, T: RdfIterator<N, Item = QuadOrValue<N::Id, L>>> RdfIterator<N>
+	for FilterQuads<T>
 {
-	type Item = Triple<N::Id, N::Id, Object<N::Id, L>>;
+	type Item = Quad<N::Id, N::Id, Object<N::Id, L>, N::Id>;
 
 	fn next_with<G: Generator<N>>(
 		&mut self,
 		namespace: &mut N,
 		generator: &mut G,
+		graph: Option<&N::Id>,
 	) -> Option<Self::Item> {
 		loop {
-			match self.0.next_with(namespace, generator) {
-				Some(TripleOrValue::Triple(triple)) => break Some(triple),
-				Some(TripleOrValue::Value(_)) => (),
+			match self.0.next_with(namespace, generator, graph) {
+				Some(QuadOrValue::Quad(triple)) => break Some(triple),
+				Some(QuadOrValue::Value(_)) => (),
 				None => break None,
 			}
 		}
@@ -233,6 +239,7 @@ impl<'a, T: AsLiteral<N, L>, I, L, N: Namespace> RdfIterator<N> for LiteralValue
 		&mut self,
 		namespace: &mut N,
 		_generator: &mut G,
+		_graph: Option<&N::Id>,
 	) -> Option<Self::Item> {
 		self.0
 			.take()
@@ -259,6 +266,7 @@ where
 		&mut self,
 		_namespace: &mut N,
 		_generator: &mut G,
+		_graph: Option<&N::Id>,
 	) -> Option<Self::Item> {
 		self.0.take().cloned().map(Object::Id)
 	}
@@ -273,15 +281,16 @@ impl<T> ValuesOnly<T> {
 }
 
 impl<L, T: RdfIterator<N, Item = Object<N::Id, L>>, N: Namespace> RdfIterator<N> for ValuesOnly<T> {
-	type Item = TripleOrValue<N::Id, L>;
+	type Item = QuadOrValue<N::Id, L>;
 
 	fn next_with<G: Generator<N>>(
 		&mut self,
 		namespace: &mut N,
 		generator: &mut G,
+		graph: Option<&N::Id>,
 	) -> Option<Self::Item> {
 		self.0
-			.next_with(namespace, generator)
-			.map(TripleOrValue::Value)
+			.next_with(namespace, generator, graph)
+			.map(QuadOrValue::Value)
 	}
 }

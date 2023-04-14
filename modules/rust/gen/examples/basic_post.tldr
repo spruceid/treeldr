@@ -12,10 +12,10 @@ layout BasicPost for schema:BlogPosting {
 	tldr:self as id: required &rdfs:Resource,
 
 	/// Title of the post.
-	schema:title: xs:string,
+	schema:title: schema:Text,
 
 	/// Content of the post.
-	schema:body: xs:string
+	schema:body: schema:Text
 }
 
 /// Verifiable `BasicPost`.

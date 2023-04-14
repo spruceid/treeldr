@@ -1,5 +1,6 @@
 use clap::Parser;
 use codespan_reporting::term::{self, termcolor::StandardStream};
+use contextual::WithContext;
 use iref::IriBuf;
 use proc_macro2::{Ident, Span};
 use quote::format_ident;
@@ -8,7 +9,7 @@ use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr};
 use stderrlog::ColorChoice;
 use treeldr::{Id, TId};
 use treeldr_load as load;
-use treeldr_rust_gen::Generate;
+use treeldr_rust_gen::{tr::TraitModules, Generate};
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -118,19 +119,46 @@ pub fn main() {
 
 			let root_ref = gen_context.add_module(None, format_ident!("example"));
 
-			let mut map = HashMap::new();
+			let mut layout_map = HashMap::new();
+			let mut type_map = HashMap::new();
 
 			for prefix in args.modules {
 				let module_ref = gen_context.add_module(Some(root_ref), prefix.ident);
-				for (layout_ref, layout) in model.layouts() {
-					if let treeldr::Id::Iri(term) = layout.id() {
+				let providers_module_ref =
+					gen_context.add_module(Some(module_ref), format_ident!("provider"));
+				let trait_objects_module_ref =
+					gen_context.add_module(Some(module_ref), format_ident!("trait_object"));
+				let layouts_module_ref =
+					gen_context.add_module(Some(module_ref), format_ident!("layout"));
+
+				for (id, node) in model.nodes() {
+					if let treeldr::Id::Iri(term) = id {
 						let iri = vocabulary.iri(&term).unwrap();
 
 						if iri.as_str().strip_prefix(prefix.iri.as_str()).is_some() {
-							map.insert(
-								layout_ref,
-								treeldr_rust_gen::module::Parent::Ref(module_ref),
-							);
+							if node.is_type() {
+								type_map.insert(
+									TId::new(id),
+									TraitModules {
+										main: Some(treeldr_rust_gen::module::Parent::Ref(
+											module_ref,
+										)),
+										provider: Some(treeldr_rust_gen::module::Parent::Ref(
+											providers_module_ref,
+										)),
+										trait_object: Some(treeldr_rust_gen::module::Parent::Ref(
+											trait_objects_module_ref,
+										)),
+									},
+								);
+							}
+
+							if node.is_layout() {
+								layout_map.insert(
+									TId::new(id),
+									treeldr_rust_gen::module::Parent::Ref(layouts_module_ref),
+								);
+							}
 						}
 					}
 				}
@@ -138,16 +166,28 @@ pub fn main() {
 
 			for layout_iri in args.layouts {
 				let layout_ref = TId::new(Id::Iri(vocabulary.get(layout_iri.as_iri()).unwrap()));
-				map.insert(layout_ref, treeldr_rust_gen::module::Parent::Ref(root_ref));
+				layout_map.insert(layout_ref, treeldr_rust_gen::module::Parent::Ref(root_ref));
 			}
 
-			for (layout_ref, _) in model.layouts() {
-				gen_context.add_layout(
-					map.get(&layout_ref)
-						.cloned()
-						.or(Some(treeldr_rust_gen::module::Parent::Extern)),
-					layout_ref,
-				)
+			for (id, node) in model.nodes() {
+				if node.is_type() {
+					let type_ref = TId::new(id);
+					gen_context.add_type(
+						type_map.get(&type_ref).cloned().unwrap_or_default(),
+						type_ref,
+					);
+				}
+
+				if node.is_layout() {
+					let layout_ref = TId::new(id);
+					gen_context.add_layout(
+						layout_map
+							.get(&layout_ref)
+							.cloned()
+							.or(Some(treeldr_rust_gen::module::Parent::Extern)),
+						layout_ref,
+					)
+				}
 			}
 
 			gen_context.run_pre_computations();
@@ -165,7 +205,7 @@ pub fn main() {
 						eprintln!("unreachable {ty:?}")
 					}
 
-					eprintln!("error: {e:?}")
+					eprintln!("error: {}", e.with(&vocabulary))
 				}
 			}
 		}

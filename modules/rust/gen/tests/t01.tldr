@@ -1,0 +1,13 @@
+base <https://example.com/>;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <https://example.com/> as ex;
+
+type Enum = A | B;
+
+type A {
+	ex:a: xs:string
+}
+
+type B {
+	ex:b: xs:string
+}

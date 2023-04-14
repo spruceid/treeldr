@@ -12,6 +12,7 @@ mod error;
 pub mod fmt;
 pub mod module;
 pub mod path;
+pub mod tr;
 pub mod ty;
 
 pub use context::Context;
@@ -158,4 +159,40 @@ where
 
 		Ok(())
 	}
+}
+
+pub fn doc_attribute(
+	label: Option<&str>,
+	doc: &treeldr::StrippedDocumentation,
+) -> Vec<TokenStream> {
+	let mut content = String::new();
+
+	if let Some(label) = label {
+		content.push_str(label)
+	}
+
+	if let Some(short) = doc.short_description() {
+		if !content.is_empty() {
+			content.push_str("\n\n");
+		}
+
+		content.push_str(short)
+	}
+
+	if let Some(long) = doc.long_description() {
+		if !content.is_empty() {
+			content.push_str("\n\n");
+		}
+
+		content.push_str(long)
+	}
+
+	content
+		.lines()
+		.map(|line| {
+			quote::quote! {
+				#[doc = #line]
+			}
+		})
+		.collect()
 }

@@ -36,6 +36,6 @@ _:t29 <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/
 <http://www.example.com/Type> <https://treeldr.org/layoutFor> <http://www.example.com/Type> .
 <http://www.example.com/Type> <https://treeldr.org/fields> _:t29 .
 <http://www.example.com/Type> <https://treeldr.org/name> "Type" .
-<http://www.example.com/Type/list> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<http://www.example.com/Type/list> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#FunctionalProperty> .
 <http://www.example.com/Type/list> <http://www.w3.org/2000/01/rdf-schema#domain> <http://www.example.com/Type> .
 <http://www.example.com/Type/list> <http://www.w3.org/2000/01/rdf-schema#range> _:t20 .

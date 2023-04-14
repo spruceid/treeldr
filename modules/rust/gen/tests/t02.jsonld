@@ -1,0 +1,12 @@
+{
+	"@context": {
+		"name": "https://example.com/name",
+		"date": {
+			"@id": "https://example.com/date",
+			"@type": "http://www.w3.org/2001/XMLSchema#date"
+		}
+	},
+	"@id": "https://example.com/subject",
+	"name": "Foo",
+	"date": "2023-04-19"
+}

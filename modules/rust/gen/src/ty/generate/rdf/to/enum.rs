@@ -8,11 +8,10 @@ use crate::{
 };
 
 use super::{
-	collect_bounds, triples_and_values_iterator_name_from, triples_and_values_iterator_of,
-	RdfTriplesImpl,
+	collect_bounds, quads_and_values_iterator_name_from, quads_and_values_iterator_of, RdfQuadsImpl,
 };
 
-impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
+impl<M> GenerateFor<Enum, M> for RdfQuadsImpl {
 	fn generate<
 		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
 	>(
@@ -24,9 +23,9 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 	) -> Result<(), crate::Error> {
 		let ident = ty.ident();
 		let def_params_values = ParametersValues::default();
-		let impl_params_values = ParametersValues::new(quote!(N::Id));
+		let impl_params_values = ParametersValues::new_for_type(quote!(N::Id));
 
-		let iterator_ident = triples_and_values_iterator_name_from(ident);
+		let iterator_ident = quads_and_values_iterator_name_from(ident);
 		let mut iterator_variants = Vec::with_capacity(ty.variants().len());
 		let mut iterator_variants_next = Vec::with_capacity(ty.variants().len());
 		let mut variants_init = Vec::with_capacity(ty.variants().len());
@@ -35,7 +34,7 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 			let variant_ident = variant.ident();
 			match variant.ty() {
 				Some(variant_type) => {
-					let variant_iterator_type = triples_and_values_iterator_of(
+					let variant_iterator_type = quads_and_values_iterator_of(
 						context,
 						scope,
 						&def_params_values,
@@ -49,10 +48,10 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 						#variant_ident ( #variant_iterator_type )
 					});
 					iterator_variants_next.push(quote! {
-						Self::#variant_ident(inner) => inner.next_with(namespace, generator)
+						Self::#variant_ident(inner) => inner.next_with(namespace, generator, graph)
 					});
 					variants_init.push(quote! {
-						Self::#variant_ident(value) => #iterator_ident::#variant_ident(value.unbound_rdf_triples_and_values(namespace, generator))
+						Self::#variant_ident(value) => #iterator_ident::#variant_ident(value.unbound_rdf_quads_and_values(namespace, generator))
 					})
 				}
 				None => {
@@ -87,14 +86,15 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 				N::Id: 'a + Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
 				#bounds
 			{
-				type Item = ::treeldr_rust_prelude::rdf::TripleOrValue<N::Id, V>;
+				type Item = ::treeldr_rust_prelude::rdf::QuadOrValue<N::Id, V>;
 
 				fn next_with<
 					G: ::treeldr_rust_prelude::rdf_types::Generator<N>
 				>(
 					&mut self,
 					namespace: &mut N,
-					generator: &mut G
+					generator: &mut G,
+					graph: Option<&N::Id>
 				) -> Option<Self::Item> {
 					match self {
 						#(#iterator_variants_next),*
@@ -102,22 +102,22 @@ impl<M> GenerateFor<Enum, M> for RdfTriplesImpl {
 				}
 			}
 
-			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::rdf::TriplesAndValues<N, V> for #ident #params
+			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::rdf::QuadsAndValues<N, V> for #ident #params
 			where
 				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
 				N::Id: Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
 				#bounds
 			{
-				type TriplesAndValues<'a> = #iterator_ident<'a, N::Id, V> where Self: 'a, N::Id: 'a, V: 'a;
+				type QuadsAndValues<'a> = #iterator_ident<'a, N::Id, V> where Self: 'a, N::Id: 'a, V: 'a;
 
-				fn unbound_rdf_triples_and_values<
+				fn unbound_rdf_quads_and_values<
 					'a,
 					G: ::treeldr_rust_prelude::rdf_types::Generator<N>
 				>(
 					&'a self,
 					namespace: &mut N,
 					generator: &mut G
-				) -> Self::TriplesAndValues<'a>
+				) -> Self::QuadsAndValues<'a>
 				where
 					N::Id: 'a,
 					V: 'a

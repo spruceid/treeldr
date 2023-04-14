@@ -12,7 +12,7 @@ use crate::{
 	Context, Error, Generate, GenerateList,
 };
 
-use super::{collect_bounds, from_object, from_objects, FromRdfImpl};
+use super::{collect_bounds, from_objects, FromRdfImpl};
 
 impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -78,10 +78,6 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 
 						match field_layout.as_layout().description() {
 							treeldr::layout::Description::Required(_) => {
-								let object = quote! { object };
-								let from_object =
-									from_object(context, field.ty(context), object.clone());
-
 								quote! {
 									let mut objects = #objects;
 
@@ -91,7 +87,7 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 												panic!("multiples values on functional property")
 											}
 
-											#from_object
+											::treeldr_rust_prelude::FromRdf::from_rdf(namespace, object, graph)?
 										}
 										None => {
 											return Err(::treeldr_rust_prelude::FromRdfError::MissingRequiredPropertyValue)
@@ -101,12 +97,7 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 							}
 							treeldr::layout::Description::Option(_) => {
 								match field.ty(context).description() {
-									Description::BuiltIn(BuiltIn::Option(item_layout)) => {
-										let item_ty = context.layout_type(*item_layout).unwrap();
-										let object = quote! { object };
-										let from_object =
-											from_object(context, item_ty, object.clone());
-
+									Description::BuiltIn(BuiltIn::Option(_)) => {
 										quote! {
 											let mut objects = #objects;
 											let object = objects.next();
@@ -115,8 +106,8 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 											}
 
 											match object {
-												Some(#object) => Some({
-													#from_object
+												Some(object) => Some({
+													::treeldr_rust_prelude::FromRdf::from_rdf(namespace, object, graph)?
 												}),
 												None => None
 											}
@@ -125,7 +116,7 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 									_ => panic!("not an option"),
 								}
 							}
-							_ => from_objects(context, field.ty(context), objects),
+							_ => from_objects(field.ty(context), objects),
 						}
 					}
 				}
@@ -142,7 +133,7 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 		}
 
 		let ident = ty.ident();
-		let params_values = ParametersValues::new(quote!(N::Id));
+		let params_values = ParametersValues::new_for_type(quote!(N::Id));
 		let params = ty.params().instantiate(&params_values);
 
 		let bounds = bounds
@@ -155,11 +146,12 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 			where
 				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
 				N::Id: Clone + Ord + ::treeldr_rust_prelude::rdf_types::FromIri<Iri=N::Iri>,
+				V: ::treeldr_rust_prelude::rdf::TypeCheck<N::Id>,
 				#bounds
 			{
 				fn from_rdf<G>(
 					namespace: &mut N,
-					id: &N::Id,
+					value: &::treeldr_rust_prelude::rdf_types::Object<N::Id, V>,
 					graph: &G
 				) -> Result<Self, ::treeldr_rust_prelude::FromRdfError>
 				where
@@ -169,9 +161,16 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 						Object=::treeldr_rust_prelude::rdf_types::Object<N::Id, V>
 					>
 				{
-					Ok(Self {
-						#(#fields_init),*
-					})
+					match value {
+						::treeldr_rust_prelude::rdf_types::Object::Id(id) => {
+							Ok(Self {
+								#(#fields_init),*
+							})
+						}
+						::treeldr_rust_prelude::rdf_types::Object::Literal(_) => {
+							Err(::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue)
+						}
+					}
 				}
 			}
 		});

@@ -8,12 +8,14 @@ edition.workspace = true
 treeldr.workspace = true
 proc-macro2.workspace = true
 quote.workspace = true
+syn = "2.0.8"
 iref.workspace = true
 shelves.workspace = true
 derivative.workspace = true
 thiserror.workspace = true
 contextual.workspace = true
 rdf-types.workspace = true
+locspan.workspace = true
 
 [dev-dependencies]
 treeldr-rust-macros.workspace = true
@@ -23,6 +25,5 @@ grdf.workspace = true
 json-ld.workspace = true
 json-syntax.workspace = true
 decoded-char.workspace = true
-locspan.workspace = true
 async-std = { workspace = true, features = ["attributes"] }
 log.workspace = true
