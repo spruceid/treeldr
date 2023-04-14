@@ -45,6 +45,22 @@ impl<'n, 'g, 't, I, N: Namespace, G> Bound<'n, 'g, 't, I, N, G> {
 			graph,
 		}
 	}
+
+	pub fn namespace(&self) -> &N {
+		&self.namespace
+	}
+
+	pub fn namespace_mut(&mut self) -> &mut N {
+		&mut self.namespace
+	}
+
+	pub fn generator(&self) -> &G {
+		&self.generator
+	}
+
+	pub fn generator_mut(&mut self) -> &mut G {
+		&mut self.generator
+	}
 }
 
 impl<'n, 'g, 't, I: RdfIterator<N>, N: Namespace, G: Generator<N>> Iterator
