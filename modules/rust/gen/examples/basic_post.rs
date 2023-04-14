@@ -65,7 +65,7 @@ async fn main() {
 		.collect();
 
 	// RDF into schema generated from TreeLDR.
-	let post = schema::basic_post::BasicPost::from_rdf(
+	let post = schema::basic_post::layout::BasicPost::from_rdf(
 		&mut (),
 		&Term::Id(Id::Iri(iri!("https://example.com/#MyPost").to_owned())),
 		dataset.default_graph(),
@@ -73,7 +73,7 @@ async fn main() {
 	.expect("invalid post");
 
 	// Wrap the post inside a VC.
-	let mut vc = schema::basic_post::DefaultVerifiableBasicPost::new(chrono::Utc::now());
+	let mut vc = schema::basic_post::layout::VerifiableBasicPost::new(chrono::Utc::now());
 	vc.credential_subject = Some(post).into_iter().collect();
 	vc.type_.extend([
 		treeldr_rust_prelude::Id(Id::Iri(

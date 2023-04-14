@@ -480,12 +480,8 @@ pub trait GenerateFor<T, M> {
 	) -> Result<(), Error>;
 }
 
-pub fn type_ident_of_name(name: &treeldr::Name, is_type: bool) -> proc_macro2::Ident {
-	if is_type {
-		quote::format_ident!("Default{}", name.to_pascal_case())
-	} else {
-		quote::format_ident!("{}", name.to_pascal_case())
-	}
+pub fn type_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
+	quote::format_ident!("{}", name.to_pascal_case())
 }
 
 pub fn field_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {

@@ -9,7 +9,7 @@ use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr};
 use stderrlog::ColorChoice;
 use treeldr::{Id, TId};
 use treeldr_load as load;
-use treeldr_rust_gen::Generate;
+use treeldr_rust_gen::{tr::TraitModules, Generate};
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -124,6 +124,12 @@ pub fn main() {
 
 			for prefix in args.modules {
 				let module_ref = gen_context.add_module(Some(root_ref), prefix.ident);
+				let providers_module_ref =
+					gen_context.add_module(Some(module_ref), format_ident!("provider"));
+				let trait_objects_module_ref =
+					gen_context.add_module(Some(module_ref), format_ident!("trait_object"));
+				let layouts_module_ref =
+					gen_context.add_module(Some(module_ref), format_ident!("layout"));
 
 				for (id, node) in model.nodes() {
 					if let treeldr::Id::Iri(term) = id {
@@ -133,14 +139,24 @@ pub fn main() {
 							if node.is_type() {
 								type_map.insert(
 									TId::new(id),
-									treeldr_rust_gen::module::Parent::Ref(module_ref),
+									TraitModules {
+										main: Some(treeldr_rust_gen::module::Parent::Ref(
+											module_ref,
+										)),
+										provider: Some(treeldr_rust_gen::module::Parent::Ref(
+											providers_module_ref,
+										)),
+										trait_object: Some(treeldr_rust_gen::module::Parent::Ref(
+											trait_objects_module_ref,
+										)),
+									},
 								);
 							}
 
 							if node.is_layout() {
 								layout_map.insert(
 									TId::new(id),
-									treeldr_rust_gen::module::Parent::Ref(module_ref),
+									treeldr_rust_gen::module::Parent::Ref(layouts_module_ref),
 								);
 							}
 						}
@@ -157,10 +173,7 @@ pub fn main() {
 				if node.is_type() {
 					let type_ref = TId::new(id);
 					gen_context.add_type(
-						type_map
-							.get(&type_ref)
-							.cloned()
-							.or(Some(treeldr_rust_gen::module::Parent::Extern)),
+						type_map.get(&type_ref).cloned().unwrap_or_default(),
 						type_ref,
 					);
 				}

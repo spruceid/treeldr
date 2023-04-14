@@ -1,6 +1,6 @@
 use crate::{
 	module::{self, TraitId},
-	tr::Trait,
+	tr::{Trait, TraitModules},
 	ty::{self, params::Parameters},
 	Module, Path, Type,
 };
@@ -127,20 +127,38 @@ impl<'a, V, M> Context<'a, V, M> {
 		}
 	}
 
-	pub fn add_type(&mut self, module: Option<module::Parent>, type_ref: TId<treeldr::Type>) -> bool
+	pub fn add_type(&mut self, modules: TraitModules, type_ref: TId<treeldr::Type>) -> bool
 	where
 		V: Vocabulary<Iri = IriIndex>,
 	{
-		match Trait::build(self, module, type_ref) {
+		match Trait::build(self, modules, type_ref) {
 			Some(tr) => {
 				self.types.insert(type_ref, tr);
-				if let Some(module::Parent::Ref(module)) = module {
+
+				if let Some(module::Parent::Ref(module)) = modules.main {
 					self.modules
 						.get_mut(module)
 						.expect("undefined module")
 						.types_mut()
 						.insert(type_ref);
 				}
+
+				if let Some(module::Parent::Ref(module)) = modules.provider {
+					self.modules
+						.get_mut(module)
+						.expect("undefined module")
+						.types_providers_mut()
+						.insert(crate::tr::ProviderOf(type_ref));
+				}
+
+				if let Some(module::Parent::Ref(module)) = modules.trait_object {
+					self.modules
+						.get_mut(module)
+						.expect("undefined module")
+						.types_trait_objects_mut()
+						.insert(crate::tr::TraitObjectsOf(type_ref));
+				}
+
 				true
 			}
 			None => false,

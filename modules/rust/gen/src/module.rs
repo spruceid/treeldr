@@ -38,6 +38,8 @@ pub struct Module {
 	sub_modules: HashSet<Ref<Self>>,
 	layouts: HashSet<TId<treeldr::Layout>>,
 	types: HashSet<TId<treeldr::Type>>,
+	types_providers: HashSet<crate::tr::ProviderOf>,
+	types_trait_objects: HashSet<crate::tr::TraitObjectsOf>,
 	trait_impls: HashSet<TraitImpl>,
 }
 
@@ -49,6 +51,8 @@ impl Module {
 			sub_modules: HashSet::new(),
 			layouts: HashSet::new(),
 			types: HashSet::new(),
+			types_providers: HashSet::new(),
+			types_trait_objects: HashSet::new(),
 			trait_impls: HashSet::new(),
 		}
 	}
@@ -87,6 +91,22 @@ impl Module {
 		&mut self.types
 	}
 
+	pub fn types_providers(&self) -> &HashSet<crate::tr::ProviderOf> {
+		&self.types_providers
+	}
+
+	pub fn types_providers_mut(&mut self) -> &mut HashSet<crate::tr::ProviderOf> {
+		&mut self.types_providers
+	}
+
+	pub fn types_trait_objects(&self) -> &HashSet<crate::tr::TraitObjectsOf> {
+		&self.types_trait_objects
+	}
+
+	pub fn types_trait_objects_mut(&mut self) -> &mut HashSet<crate::tr::TraitObjectsOf> {
+		&mut self.types_trait_objects
+	}
+
 	pub fn trait_impls(&self) -> &HashSet<TraitImpl> {
 		&self.trait_impls
 	}
@@ -110,6 +130,14 @@ impl<M> Generate<M> for Module {
 		for type_ref in &self.types {
 			let ty = context.type_trait(*type_ref).expect("undefined type");
 			ty.generate(context, scope, tokens)?
+		}
+
+		for provider in &self.types_providers {
+			provider.generate(context, scope, tokens)?
+		}
+
+		for trait_objects in &self.types_trait_objects {
+			trait_objects.generate(context, scope, tokens)?
 		}
 
 		for layout_ref in &self.layouts {

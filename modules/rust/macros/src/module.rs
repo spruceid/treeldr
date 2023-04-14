@@ -1,12 +1,13 @@
 use iref::IriBuf;
 use litrs::Literal;
 use proc_macro2::{Span, TokenStream, TokenTree};
-use quote::quote;
+use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
 use std::path::PathBuf;
 use syn::spanned::Spanned;
 use thiserror::Error;
 use treeldr::{BlankIdIndex, IriIndex, TId};
+use treeldr_rust_gen::tr::TraitModules;
 
 pub type GenContext<'a, V> = treeldr_rust_gen::Context<'a, V, treeldr_load::Metadata>;
 
@@ -138,6 +139,12 @@ impl Module {
 
 		for prefix in &mut self.prefixes {
 			let module_ref = context.add_module(None, prefix.ident.clone());
+			let providers_module_ref =
+				context.add_module(Some(module_ref), format_ident!("provider"));
+			let trait_objects_module_ref =
+				context.add_module(Some(module_ref), format_ident!("trait_object"));
+			let layouts_module_ref = context.add_module(Some(module_ref), format_ident!("layout"));
+
 			prefix.module = Some(module_ref);
 
 			for (id, node) in context.model().nodes() {
@@ -152,14 +159,22 @@ impl Module {
 						if node.is_type() {
 							type_map.insert(
 								TId::new(id),
-								treeldr_rust_gen::module::Parent::Ref(module_ref),
+								TraitModules {
+									main: Some(treeldr_rust_gen::module::Parent::Ref(module_ref)),
+									provider: Some(treeldr_rust_gen::module::Parent::Ref(
+										providers_module_ref,
+									)),
+									trait_object: Some(treeldr_rust_gen::module::Parent::Ref(
+										trait_objects_module_ref,
+									)),
+								},
 							);
 						}
 
 						if node.is_layout() {
 							layout_map.insert(
 								TId::new(id),
-								treeldr_rust_gen::module::Parent::Ref(module_ref),
+								treeldr_rust_gen::module::Parent::Ref(layouts_module_ref),
 							);
 						}
 					}
@@ -171,10 +186,7 @@ impl Module {
 			if node.is_type() {
 				let type_ref = TId::new(id);
 				context.add_type(
-					type_map
-						.get(&type_ref)
-						.cloned()
-						.or(Some(treeldr_rust_gen::module::Parent::Extern)),
+					type_map.get(&type_ref).cloned().unwrap_or_default(),
 					type_ref,
 				);
 			}

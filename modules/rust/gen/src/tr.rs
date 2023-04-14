@@ -47,8 +47,30 @@ impl CollectContextBounds for TId<treeldr::Layout> {
 	}
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct TraitModules {
+	/// The main trait definition module.
+	pub main: Option<module::Parent>,
+
+	/// Where the `*Provider` trait is defined.
+	pub provider: Option<module::Parent>,
+
+	/// Where the
+	pub trait_object: Option<module::Parent>,
+}
+
+impl Default for TraitModules {
+	fn default() -> Self {
+		Self {
+			main: Some(module::Parent::Extern),
+			provider: Some(module::Parent::Extern),
+			trait_object: Some(module::Parent::Extern),
+		}
+	}
+}
+
 pub struct Trait {
-	module: Option<module::Parent>,
+	modules: TraitModules,
 	ident: Ident,
 	label: Option<String>,
 	doc: treeldr::StrippedDocumentation,
@@ -59,7 +81,7 @@ pub struct Trait {
 
 impl Trait {
 	pub fn new(
-		module: Option<module::Parent>,
+		modules: TraitModules,
 		ident: Ident,
 		label: Option<String>,
 		doc: treeldr::StrippedDocumentation,
@@ -68,7 +90,7 @@ impl Trait {
 		methods: Vec<Method>,
 	) -> Self {
 		Self {
-			module,
+			modules,
 			ident,
 			label,
 			doc,
@@ -80,7 +102,7 @@ impl Trait {
 
 	pub fn build<V, M>(
 		context: &Context<V, M>,
-		module: Option<module::Parent>,
+		modules: TraitModules,
 		type_ref: TId<treeldr::Type>,
 	) -> Option<Self>
 	where
@@ -136,7 +158,7 @@ impl Trait {
 					}
 
 					Self::new(
-						module,
+						modules,
 						ident,
 						label,
 						doc,
@@ -151,31 +173,35 @@ impl Trait {
 	}
 
 	pub fn path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
-		let mut path = context.parent_module_path(self.module)?;
+		let mut path = context.parent_module_path(self.modules.main)?;
 		path.push(path::Segment::Ident(self.ident.clone()));
 		Some(path)
 	}
 
 	pub fn context_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
-		let mut path = context.parent_module_path(self.module)?;
+		let mut path = context.parent_module_path(self.modules.provider)?;
 		path.push(path::Segment::Ident(self.context_ident()));
 		Some(path)
 	}
 
 	pub fn dyn_table_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
-		let mut path = context.parent_module_path(self.module)?;
+		let mut path = context.parent_module_path(self.modules.trait_object)?;
 		path.push(path::Segment::Ident(self.dyn_table_ident()));
 		Some(path)
 	}
 
 	pub fn dyn_table_instance_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
-		let mut path = context.parent_module_path(self.module)?;
+		let mut path = context.parent_module_path(self.modules.trait_object)?;
 		path.push(path::Segment::Ident(self.dyn_table_instance_ident()));
 		Some(path)
 	}
 
 	pub fn module(&self) -> Option<module::Parent> {
-		self.module
+		self.modules.main
+	}
+
+	pub fn trait_objects_module(&self) -> Option<module::Parent> {
+		self.modules.trait_object
 	}
 
 	pub fn ident(&self) -> &Ident {
@@ -224,6 +250,12 @@ impl Trait {
 		&self.methods
 	}
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TraitObjectsOf(pub TId<treeldr::Type>);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ProviderOf(pub TId<treeldr::Type>);
 
 /// Trait associated type.
 pub struct AssociatedType {
@@ -320,7 +352,9 @@ impl AssociatedType {
 
 	pub fn trait_object_path<V, M>(&self, context: &Context<V, M>, tr: &Trait) -> Option<Path> {
 		self.trait_object_ident(tr).map(|ident| {
-			let mut path = context.parent_module_path(tr.module()).unwrap();
+			let mut path = context
+				.parent_module_path(tr.trait_objects_module())
+				.unwrap();
 			path.push(ident);
 			path
 		})

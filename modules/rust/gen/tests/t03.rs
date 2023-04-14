@@ -40,7 +40,7 @@ async fn t03() {
 		eprintln!("{} .", triple)
 	}
 
-	let value = schema::test::DefaultFoo::from_rdf(
+	let value = schema::test::layout::Foo::from_rdf(
 		&mut (),
 		&Term::Id(Id::Iri(iri!("https://example.com/subject").to_owned())),
 		dataset.default_graph(),
@@ -49,7 +49,7 @@ async fn t03() {
 
 	assert_eq!(
 		value,
-		schema::test::DefaultFoo {
+		schema::test::layout::Foo {
 			name: "Foo".to_string()
 		}
 	);

@@ -11,7 +11,9 @@ use crate::{
 	Context, Error, Generate, GenerateIn,
 };
 
-use super::{AssociatedType, AssociatedTypeBound, Method, MethodType, Trait};
+use super::{
+	AssociatedType, AssociatedTypeBound, Method, MethodType, ProviderOf, Trait, TraitObjectsOf,
+};
 
 fn collect_type_traits<V, M>(
 	context: &Context<V, M>,
@@ -317,9 +319,9 @@ impl<M> Generate<M> for Trait {
 			})
 		}
 
-		let context_ident = self.context_ident();
-		let dyn_table_ident = self.dyn_table_ident();
-		let dyn_table_instance_ident = self.dyn_table_instance_ident();
+		let dyn_table_path = context
+			.module_path(scope)
+			.to(&self.dyn_table_path(context).unwrap());
 
 		if table_fields.is_empty() {
 			table_fields.push(quote! {
@@ -332,18 +334,10 @@ impl<M> Generate<M> for Trait {
 		}
 
 		tokens.extend(quote! {
-			pub trait #ident #params: ::treeldr_rust_prelude::AsTraitObject<#dyn_table_ident<C>> #super_traits {
+			pub trait #ident #params: ::treeldr_rust_prelude::AsTraitObject<#dyn_table_path<C>> #super_traits {
 				#(#associated_types)*
 
 				#(#methods)*
-			}
-
-			pub trait #context_ident <I: ?Sized>: ::treeldr_rust_prelude::Provider<I, Self::#ident> {
-				type #ident: #ident <Self>;
-
-				fn get(&self, id: &I) -> Option<&Self::#ident> {
-					<Self as ::treeldr_rust_prelude::Provider<I, Self::#ident>>::get(self, id)
-				}
 			}
 
 			impl <C: ?Sized> #ident <C> for ::std::convert::Infallible {
@@ -355,7 +349,155 @@ impl<M> Generate<M> for Trait {
 				#(#ref_associated_types)*
 				#(#ref_methods)*
 			}
+		});
 
+		Ok(())
+	}
+}
+
+impl<M> Generate<M> for TraitObjectsOf {
+	fn generate<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
+		&self,
+		context: &crate::Context<V, M>,
+		scope: Option<shelves::Ref<crate::Module>>,
+		tokens: &mut proc_macro2::TokenStream,
+	) -> Result<(), crate::Error> {
+		let tr = context.type_trait(self.0).unwrap();
+		let params_values = ParametersValues::new_for_trait(quote!(C));
+		let tr_path = self
+			.0
+			.generate_in_with(context, scope, &params_values)
+			.into_tokens()?;
+
+		let mut super_traits = TokenStream::new();
+		for &ty_ref in &tr.super_traits {
+			super_traits.extend(quote!(+));
+			super_traits.extend(
+				ty_ref
+					.with(self)
+					.generate_in_with(context, scope, &params_values)
+					.into_tokens()?,
+			)
+		}
+
+		let mut associated_types = Vec::with_capacity(tr.associated_types.len());
+		let mut never_associated_types = Vec::with_capacity(tr.associated_types.len());
+		let mut ref_associated_types = Vec::with_capacity(tr.associated_types.len());
+		let mut associated_types_trait_objects = Vec::with_capacity(tr.associated_types.len());
+		for ty in &tr.associated_types {
+			associated_types.push(
+				ty.with(tr)
+					.generate_in_with(context, scope, &params_values)
+					.into_tokens()?,
+			);
+
+			let a_ident = ty.ident();
+			let never_expr = match ty.bound() {
+				AssociatedTypeBound::Types(classes) => {
+					associated_types_trait_objects.push(associated_trait_object_type(
+						context,
+						scope,
+						ty.trait_object_ident(tr).unwrap(),
+						classes,
+					)?);
+
+					quote!(&'a ::std::convert::Infallible)
+				}
+				AssociatedTypeBound::Collection(_) => {
+					quote!(::std::iter::Empty<&'a ::std::convert::Infallible>)
+				}
+			};
+			never_associated_types.push(quote! {
+				type #a_ident <'a> = #never_expr where Self: 'a, C: 'a;
+			});
+			ref_associated_types.push(quote! {
+				type #a_ident <'a> = T::#a_ident<'a> where Self: 'a, C: 'a;
+			})
+		}
+
+		let mut methods = Vec::with_capacity(tr.methods.len());
+		let mut never_methods = Vec::with_capacity(tr.methods.len());
+		let mut ref_methods = Vec::with_capacity(tr.methods.len());
+		let mut table_fields = Vec::with_capacity(tr.methods.len());
+		let mut table_fields_init = Vec::with_capacity(tr.methods.len());
+		for m in &tr.methods {
+			methods.push(m.with(tr).generate_with(context, scope).into_tokens()?);
+
+			let m_ident = m.ident();
+			let (return_ty, table_field_ty, wrap) = match m.type_() {
+				MethodType::Required(i) => {
+					let a = &tr.associated_types[*i];
+					let ty_ident = a.ident();
+					let (table_ty, table_wrap) = match a.trait_object_path(context, tr) {
+						Some(path) => {
+							let path = context.module_path(scope).to(&path);
+							(quote!(#path <'a, C>), quote!(#path::new(object)))
+						}
+						None => {
+							let item_a = &tr.associated_types[a.collection_item_type().unwrap()];
+							let item_path = context
+								.module_path(scope)
+								.to(&item_a.trait_object_path(context, tr).unwrap());
+							(
+								quote!(::treeldr_rust_prelude::BoxedDynIterator<#item_path <'a, C>>),
+								quote!(::treeldr_rust_prelude::BoxedDynIterator::new(object.map(#item_path::new))),
+							)
+						}
+					};
+					(quote!(Self::#ty_ident<'a>), table_ty, table_wrap)
+				}
+				MethodType::Option(i) => {
+					let a = &tr.associated_types[*i];
+					let ty_ident = a.ident();
+					let path = context
+						.module_path(scope)
+						.to(&a.trait_object_path(context, tr).unwrap());
+					(
+						quote!(Option<Self::#ty_ident<'a>>),
+						quote!(Option<#path <'a, C>>),
+						quote!(object.map(#path::new)),
+					)
+				}
+			};
+			never_methods.push(quote! {
+				fn #m_ident <'a> (&'a self, _context: &'a C) -> #return_ty {
+					unreachable!()
+				}
+			});
+			ref_methods.push(quote! {
+				fn #m_ident <'a> (&'a self, context: &'a C) -> #return_ty {
+					T::#m_ident(*self, context)
+				}
+			});
+
+			table_fields.push(quote! {
+				pub #m_ident: unsafe fn (*const u8, context: ::treeldr_rust_prelude::ContravariantReference<'a, C>) -> #table_field_ty
+			});
+			table_fields_init.push(quote! {
+				#m_ident: |ptr, context| unsafe {
+					let subject = &*(ptr as *const T);
+					let object = context.get(|context| subject.#m_ident(context));
+					#wrap
+				}
+			})
+		}
+
+		let dyn_table_ident = tr.dyn_table_ident();
+		let dyn_table_instance_ident = tr.dyn_table_instance_ident();
+
+		if table_fields.is_empty() {
+			table_fields.push(quote! {
+				_d: ::std::marker::PhantomData<&'a C>
+			});
+
+			table_fields_init.push(quote! {
+				_d: ::std::marker::PhantomData
+			})
+		}
+
+		tokens.extend(quote! {
 			pub struct #dyn_table_ident <C: ?Sized>(std::marker::PhantomData<C>);
 
 			impl<C: ?Sized> ::treeldr_rust_prelude::Table for #dyn_table_ident <C> {
@@ -375,7 +517,7 @@ impl<M> Generate<M> for Trait {
 			impl<'a, C: ?Sized> Copy for #dyn_table_instance_ident <'a, C> {}
 
 			impl<'a, C: ?Sized> #dyn_table_instance_ident <'a, C> {
-				pub fn new<T: 'a + #ident<C>>() -> Self {
+				pub fn new<T: 'a + #tr_path>() -> Self {
 					Self {
 						#(#table_fields_init,)*
 					}
@@ -383,6 +525,40 @@ impl<M> Generate<M> for Trait {
 			}
 
 			#(#associated_types_trait_objects)*
+		});
+
+		Ok(())
+	}
+}
+
+impl<M> Generate<M> for ProviderOf {
+	fn generate<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
+		&self,
+		context: &crate::Context<V, M>,
+		scope: Option<shelves::Ref<crate::Module>>,
+		tokens: &mut proc_macro2::TokenStream,
+	) -> Result<(), crate::Error> {
+		let tr = context.type_trait(self.0).unwrap();
+
+		let ident = tr.ident();
+		let context_ident = tr.context_ident();
+
+		let tr_params = ParametersValues::new_for_trait(quote!(Self));
+		let tr_path = self
+			.0
+			.generate_in_with(context, scope, &tr_params)
+			.into_tokens()?;
+
+		tokens.extend(quote! {
+			pub trait #context_ident <I: ?Sized>: ::treeldr_rust_prelude::Provider<I, Self::#ident> {
+				type #ident: #tr_path;
+
+				fn get(&self, id: &I) -> Option<&Self::#ident> {
+					<Self as ::treeldr_rust_prelude::Provider<I, Self::#ident>>::get(self, id)
+				}
+			}
 		});
 
 		Ok(())
