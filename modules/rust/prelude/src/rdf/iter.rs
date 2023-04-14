@@ -47,19 +47,19 @@ impl<'n, 'g, 't, I, N: Namespace, G> Bound<'n, 'g, 't, I, N, G> {
 	}
 
 	pub fn namespace(&self) -> &N {
-		&self.namespace
+		self.namespace
 	}
 
 	pub fn namespace_mut(&mut self) -> &mut N {
-		&mut self.namespace
+		self.namespace
 	}
 
 	pub fn generator(&self) -> &G {
-		&self.generator
+		self.generator
 	}
 
 	pub fn generator_mut(&mut self) -> &mut G {
-		&mut self.generator
+		self.generator
 	}
 }
 
