@@ -9,11 +9,10 @@ use crate::{
 };
 
 use super::{
-	collect_bounds, triples_and_values_iterator_name_from, triples_and_values_iterator_of,
-	RdfTriplesImpl,
+	collect_bounds, quads_and_values_iterator_name_from, quads_and_values_iterator_of, RdfQuadsImpl,
 };
 
-impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
+impl<M> GenerateFor<Struct, M> for RdfQuadsImpl {
 	fn generate<
 		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
 	>(
@@ -27,7 +26,7 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 		let def_params_values = ParametersValues::default();
 		let impl_params_values = ParametersValues::new_for_type(quote!(N::Id));
 		let params = ty.params().instantiate(&impl_params_values);
-		let iterator_ident = triples_and_values_iterator_name_from(ident);
+		let iterator_ident = quads_and_values_iterator_name_from(ident);
 
 		let mut iterator_fields = Vec::with_capacity(ty.fields().len());
 		let mut iterator_fields_init = Vec::with_capacity(ty.fields().len());
@@ -36,7 +35,7 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 			.id_
 			.take()
 			.map(::treeldr_rust_prelude::rdf_types::Object::Id)
-			.map(::treeldr_rust_prelude::rdf::TripleOrValue::Value));
+			.map(::treeldr_rust_prelude::rdf::QuadOrValue::Value));
 		let mut bounds = BTreeSet::new();
 		for field in ty.fields() {
 			let field_ident = field.ident();
@@ -58,7 +57,7 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 					_ => panic!("invalid `tldr:self` layout"),
 				})
 			} else {
-				let iter_ty = triples_and_values_iterator_of(
+				let iter_ty = quads_and_values_iterator_of(
 					context,
 					scope,
 					&def_params_values,
@@ -72,7 +71,7 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 					#field_ident: #iter_ty
 				});
 				iterator_fields_init.push(quote! {
-					#field_ident: self.#field_ident.unbound_rdf_triples_and_values(namespace, generator)
+					#field_ident: self.#field_ident.unbound_rdf_quads_and_values(namespace, generator)
 				});
 
 				let mut prop_iri = None;
@@ -87,16 +86,17 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 						let prop_iri = context.vocabulary().iri(&iri_index).unwrap().into_str();
 						quote! {
 							.map(|item| match item {
-								::treeldr_rust_prelude::rdf::TripleOrValue::Triple(triple) => {
-									treeldr_rust_prelude::rdf::TripleOrValue::Triple(triple)
+								::treeldr_rust_prelude::rdf::QuadOrValue::Quad(quad) => {
+									treeldr_rust_prelude::rdf::QuadOrValue::Quad(quad)
 								}
-								treeldr_rust_prelude::rdf::TripleOrValue::Value(value) => {
-									treeldr_rust_prelude::rdf::TripleOrValue::Triple(::rdf_types::Triple(
+								treeldr_rust_prelude::rdf::QuadOrValue::Value(value) => {
+									treeldr_rust_prelude::rdf::QuadOrValue::Quad(::rdf_types::Quad(
 										self.id_.clone().unwrap(),
 										treeldr_rust_prelude::rdf_types::FromIri::from_iri(
 											vocabulary.insert(::treeldr_rust_prelude::static_iref::iri!(#prop_iri))
 										),
-										value
+										value,
+										graph.cloned()
 									))
 								}
 							})
@@ -105,8 +105,8 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 					None => {
 						quote! {
 							.filer_map(|item| match item {
-								treeldr_rust_prelude::rdf::TripleOrValue::Triple(triple) => Some(treeldr_rust_prelude::rdf::TripleOrValue::Triple(triple)),
-								treeldr_rust_prelude::rdf::TripleOrValue::Value(value) => None
+								treeldr_rust_prelude::rdf::QuadOrValue::Quad(quad) => Some(treeldr_rust_prelude::rdf::QuadOrValue::Quad(quad)),
+								treeldr_rust_prelude::rdf::QuadOrValue::Value(value) => None
 							})
 						}
 					}
@@ -116,7 +116,8 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 					self.#field_ident
 						.next_with(
 							vocabulary,
-							generator
+							generator,
+							graph
 						)
 						#map_prop_item
 						.or_else(|| #next)
@@ -157,35 +158,36 @@ impl<M> GenerateFor<Struct, M> for RdfTriplesImpl {
 				N::Id: 'a + Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
 				#bounds
 			{
-				type Item = ::treeldr_rust_prelude::rdf::TripleOrValue<N::Id, V>;
+				type Item = ::treeldr_rust_prelude::rdf::QuadOrValue<N::Id, V>;
 
 				fn next_with<
 					G: ::treeldr_rust_prelude::rdf_types::Generator<N>
 				>(
 					&mut self,
 					vocabulary: &mut N,
-					generator: &mut G
+					generator: &mut G,
+					graph: Option<&N::Id>
 				) -> Option<Self::Item> {
 					#next
 				}
 			}
 
-			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::rdf::TriplesAndValues<N, V> for #ident #params
+			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::rdf::QuadsAndValues<N, V> for #ident #params
 			where
 				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
 				N::Id: Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
 				#bounds
 			{
-				type TriplesAndValues<'a> = #iterator_ident<'a, N::Id, V> where Self: 'a, N::Id: 'a, V: 'a;
+				type QuadsAndValues<'a> = #iterator_ident<'a, N::Id, V> where Self: 'a, N::Id: 'a, V: 'a;
 
-				fn unbound_rdf_triples_and_values<
+				fn unbound_rdf_quads_and_values<
 					'a,
 					G: ::treeldr_rust_prelude::rdf_types::Generator<N>
 				>(
 					&'a self,
 					namespace: &mut N,
 					generator: &mut G
-				) -> Self::TriplesAndValues<'a>
+				) -> Self::QuadsAndValues<'a>
 				where
 					N::Id: 'a,
 					V: 'a

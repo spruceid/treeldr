@@ -80,7 +80,7 @@ impl<M> Generate<M> for TraitImpl {
 					super::rdf::from::FromRdfImpl.generate(context, scope, s, tokens)
 				}
 				TraitId::TriplesAndValues => {
-					super::rdf::to::RdfTriplesImpl.generate(context, scope, s, tokens)
+					super::rdf::to::RdfQuadsImpl.generate(context, scope, s, tokens)
 				}
 				TraitId::IntoJsonLd => {
 					super::json_ld::IntoJsonLdImpl.generate(context, scope, s, tokens)
@@ -92,7 +92,7 @@ impl<M> Generate<M> for TraitImpl {
 					super::rdf::from::FromRdfImpl.generate(context, scope, e, tokens)
 				}
 				TraitId::TriplesAndValues => {
-					super::rdf::to::RdfTriplesImpl.generate(context, scope, e, tokens)
+					super::rdf::to::RdfQuadsImpl.generate(context, scope, e, tokens)
 				}
 				TraitId::IntoJsonLd => {
 					super::json_ld::IntoJsonLdImpl.generate(context, scope, e, tokens)

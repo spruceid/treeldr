@@ -3,7 +3,7 @@ use rdf_types::{Generator, IriVocabulary, Literal, Namespace};
 
 use crate::rdf::{LiteralValue, ValuesOnly};
 
-use super::TriplesAndValues;
+use super::QuadsAndValues;
 
 pub trait AsLiteral<N, L> {
 	fn rdf_literal_value(&self, namespace: &mut N) -> L;
@@ -18,17 +18,17 @@ where
 	}
 }
 
-impl<N: Namespace + IriVocabulary, L> TriplesAndValues<N, L> for String
+impl<N: Namespace + IriVocabulary, L> QuadsAndValues<N, L> for String
 where
 	Self: AsLiteral<N, L>,
 {
-	type TriplesAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
+	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
 
-	fn unbound_rdf_triples_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
 		&'a self,
 		_namespace: &mut N,
 		_generator: &mut G,
-	) -> Self::TriplesAndValues<'a>
+	) -> Self::QuadsAndValues<'a>
 	where
 		N::Id: 'a,
 		L: 'a,
@@ -37,17 +37,17 @@ where
 	}
 }
 
-impl<N: Namespace + IriVocabulary, L> TriplesAndValues<N, L> for IriBuf
+impl<N: Namespace + IriVocabulary, L> QuadsAndValues<N, L> for IriBuf
 where
 	Self: AsLiteral<N, L>,
 {
-	type TriplesAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
+	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
 
-	fn unbound_rdf_triples_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
 		&'a self,
 		_namespace: &mut N,
 		_generator: &mut G,
-	) -> Self::TriplesAndValues<'a>
+	) -> Self::QuadsAndValues<'a>
 	where
 		N::Id: 'a,
 		L: 'a,
@@ -56,17 +56,17 @@ where
 	}
 }
 
-impl<N: Namespace + IriVocabulary, L> TriplesAndValues<N, L> for chrono::NaiveDate
+impl<N: Namespace + IriVocabulary, L> QuadsAndValues<N, L> for chrono::NaiveDate
 where
 	Self: AsLiteral<N, L>,
 {
-	type TriplesAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
+	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
 
-	fn unbound_rdf_triples_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
 		&'a self,
 		_namespace: &mut N,
 		_generator: &mut G,
-	) -> Self::TriplesAndValues<'a>
+	) -> Self::QuadsAndValues<'a>
 	where
 		N::Id: 'a,
 		L: 'a,
@@ -75,17 +75,17 @@ where
 	}
 }
 
-impl<N: Namespace + IriVocabulary, L> TriplesAndValues<N, L> for chrono::DateTime<chrono::Utc>
+impl<N: Namespace + IriVocabulary, L> QuadsAndValues<N, L> for chrono::DateTime<chrono::Utc>
 where
 	Self: AsLiteral<N, L>,
 {
-	type TriplesAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
+	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
 
-	fn unbound_rdf_triples_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
 		&'a self,
 		_namespace: &mut N,
 		_generator: &mut G,
-	) -> Self::TriplesAndValues<'a>
+	) -> Self::QuadsAndValues<'a>
 	where
 		N::Id: 'a,
 		L: 'a,

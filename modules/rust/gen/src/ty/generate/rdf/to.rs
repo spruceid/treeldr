@@ -13,10 +13,10 @@ use crate::{
 mod r#enum;
 mod r#struct;
 
-/// `RdfTriples` trait implementation.
-pub struct RdfTriplesImpl;
+/// `RdfQuads` trait implementation.
+pub struct RdfQuadsImpl;
 
-/// Bound that may appear in a `RdfTriples` implementation.
+/// Bound that may appear in a `RdfQuads` implementation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Bound {
 	/// The given primitive must implement `AsLiteral`.
@@ -46,14 +46,14 @@ impl<M> Generate<M> for Bound {
 	}
 }
 
-/// Returns the name of the triples and values iterator derived from the given
+/// Returns the name of the quads and values iterator derived from the given
 /// layout name.
-fn triples_and_values_iterator_name_from(ident: &Ident) -> Ident {
-	format_ident!("{ident}TriplesAndValues")
+fn quads_and_values_iterator_name_from(ident: &Ident) -> Ident {
+	format_ident!("{ident}QuadsAndValues")
 }
 
-/// Returns a path to the triples and values iterator of the given layout.
-fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
+/// Returns a path to the quads and values iterator of the given layout.
+fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
 	context: &crate::Context<V, M>,
 	scope: Option<shelves::Ref<crate::Module>>,
 	params_values: &ParametersValues,
@@ -65,7 +65,7 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 	match ty.description() {
 		ty::Description::Never => Ok(quote!(::treeldr_rust_prelude::rdf::iter::Empty<V>)),
 		ty::Description::Alias(a) => {
-			triples_and_values_iterator_of(context, scope, params_values, a.target(), lifetime)
+			quads_and_values_iterator_of(context, scope, params_values, a.target(), lifetime)
 		}
 		ty::Description::Primitive(p) => {
 			let p_ty = p.generate_with(context, scope).into_tokens()?;
@@ -78,14 +78,14 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 				let item_ty_expr = item_layout
 					.generate_in_with(context, scope, params_values)
 					.into_tokens()?;
-				let inner = triples_and_values_iterator_of(
+				let inner = quads_and_values_iterator_of(
 					context,
 					scope,
 					params_values,
 					*item_layout,
 					lifetime.clone(),
 				)?;
-				Ok(quote!(::treeldr_rust_prelude::rdf::FlattenTriplesAndValues<
+				Ok(quote!(::treeldr_rust_prelude::rdf::FlattenQuadsAndValues<
 						::std::collections::btree_set::Iter<#lifetime, #item_ty_expr>,
 						#inner,
 						V
@@ -95,7 +95,7 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 				todo!()
 			}
 			ty::BuiltIn::Option(item_layout) => {
-				let inner = triples_and_values_iterator_of(
+				let inner = quads_and_values_iterator_of(
 					context,
 					scope,
 					params_values,
@@ -104,13 +104,9 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 				)?;
 				Ok(quote!(::treeldr_rust_prelude::rdf::iter::Optional<#inner>))
 			}
-			ty::BuiltIn::Required(item_layout) => triples_and_values_iterator_of(
-				context,
-				scope,
-				params_values,
-				*item_layout,
-				lifetime,
-			),
+			ty::BuiltIn::Required(item_layout) => {
+				quads_and_values_iterator_of(context, scope, params_values, *item_layout, lifetime)
+			}
 			ty::BuiltIn::Vec(item_layout) => {
 				let item_ty_expr = item_layout
 					.generate_in_with(context, scope, params_values)
@@ -124,14 +120,14 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 			let mut path = context
 				.module_path(scope)
 				.to(&context.parent_module_path(ty.module()).unwrap());
-			path.push(triples_and_values_iterator_name_from(s.ident()));
+			path.push(quads_and_values_iterator_name_from(s.ident()));
 			Ok(quote!(#path<#lifetime, I, V>))
 		}
 		ty::Description::Enum(e) => {
 			let mut path = context
 				.module_path(scope)
 				.to(&context.parent_module_path(ty.module()).unwrap());
-			path.push(triples_and_values_iterator_name_from(e.ident()));
+			path.push(quads_and_values_iterator_name_from(e.ident()));
 			Ok(quote!(#path<#lifetime, I, V>))
 		}
 		ty::Description::Reference(_) => Ok(quote!(
@@ -140,7 +136,7 @@ fn triples_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankI
 	}
 }
 
-/// Collect the bounds necessary for the `Triples` or `TriplesAndValues`
+/// Collect the bounds necessary for the `Quads` or `QuadsAndValues`
 /// implementations.
 fn collect_bounds<V, M>(
 	context: &crate::Context<V, M>,
