@@ -16,14 +16,3 @@ thiserror.workspace = true
 contextual.workspace = true
 rdf-types.workspace = true
 locspan.workspace = true
-
-[dev-dependencies]
-treeldr-rust-macros.workspace = true
-treeldr-rust-prelude.workspace = true
-chrono.workspace = true
-grdf.workspace = true
-json-ld.workspace = true
-json-syntax.workspace = true
-decoded-char.workspace = true
-async-std = { workspace = true, features = ["attributes"] }
-log.workspace = true
