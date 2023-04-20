@@ -138,12 +138,30 @@ impl Module {
 		let mut layout_map = HashMap::new();
 
 		for prefix in &mut self.prefixes {
-			let module_ref = context.add_module(None, prefix.ident.clone());
-			let providers_module_ref =
-				context.add_module(Some(module_ref), format_ident!("provider"));
-			let trait_objects_module_ref =
-				context.add_module(Some(module_ref), format_ident!("trait_object"));
-			let layouts_module_ref = context.add_module(Some(module_ref), format_ident!("layout"));
+			let module_ref = context.add_module(
+				None,
+				prefix.extern_path.clone(),
+				prefix.ident.clone(),
+				prefix.vis.clone(),
+			);
+			let providers_module_ref = context.add_module(
+				Some(module_ref),
+				None,
+				format_ident!("provider"),
+				treeldr_rust_gen::module::Visibility::Public,
+			);
+			let trait_objects_module_ref = context.add_module(
+				Some(module_ref),
+				None,
+				format_ident!("trait_object"),
+				treeldr_rust_gen::module::Visibility::Public,
+			);
+			let layouts_module_ref = context.add_module(
+				Some(module_ref),
+				None,
+				format_ident!("layout"),
+				treeldr_rust_gen::module::Visibility::Public,
+			);
 
 			prefix.module = Some(module_ref);
 
@@ -231,6 +249,9 @@ pub struct Prefix {
 	/// Attributes.
 	attrs: Vec<syn::Attribute>,
 
+	/// Optional extern path.
+	extern_path: Option<treeldr_rust_gen::module::ExternPath>,
+
 	/// Visibility.
 	vis: syn::Visibility,
 
@@ -304,26 +325,23 @@ impl PrefixAttributes {
 		let mut iri = None;
 
 		for attr in input_attrs {
-			if is_prefix_path(&attr.path) {
-				if attr.path.segments[0].arguments.is_empty() {
-					let mut tokens = attr.tokens.into_iter();
-					match tokens.next() {
-						Some(TokenTree::Punct(p)) if p.as_char() == '=' => {
-							iri = Some(expect_iri_literal(&mut tokens, attr.path.span())?);
+			if is_prefix_path(attr.path()) {
+				let span = attr.path().span();
+				if attr.path().segments[0].arguments.is_empty() {
+					match attr.meta {
+						syn::Meta::List(list) => {
+							let mut tokens = list.tokens.into_iter();
+							iri = Some(expect_iri_literal(&mut tokens, span)?);
 						}
-						Some(TokenTree::Group(g))
-							if g.delimiter() == proc_macro2::Delimiter::Parenthesis =>
-						{
-							let mut tokens = g.stream().into_iter();
-							iri = Some(expect_iri_literal(&mut tokens, attr.path.span())?);
+						syn::Meta::NameValue(n) => {
+							return Err((ParseError::UnexpectedToken, n.eq_token.span()))
 						}
-						Some(token) => return Err((ParseError::UnexpectedToken, token.span())),
-						None => return Err((ParseError::MissingArgument, attr.path.span())),
+						syn::Meta::Path(_) => return Err((ParseError::MissingArgument, span)),
 					}
 				} else {
 					return Err((
 						ParseError::UnexpectedPrefixPathArguments,
-						attr.path.segments[0].arguments.span(),
+						attr.path().segments[0].arguments.span(),
 					));
 				}
 			} else {
@@ -347,11 +365,38 @@ impl Prefix {
 				Ok(Self {
 					attrs: m.attrs,
 					vis: m.vis,
+					extern_path: None,
 					ident: m.ident,
 					prefix_attrs,
 					content: m.content.map(|(_, items)| items).unwrap_or_default(),
 					module: None,
 				})
+			}
+			syn::Item::Use(mut u) => {
+				let span = u.span();
+
+				match u.tree {
+					syn::UseTree::Path(p) => {
+						let prefix_attrs = PrefixAttributes::from_attributes(&mut u.attrs, span)?;
+
+						match treeldr_rust_gen::module::ExternPathWithRenaming::try_from(p) {
+							Ok(p) => {
+								let (path, ident) = p.into_path_and_ident();
+								Ok(Self {
+									attrs: u.attrs,
+									vis: u.vis,
+									extern_path: Some(path),
+									ident,
+									prefix_attrs,
+									content: Vec::new(),
+									module: None,
+								})
+							}
+							Err(_) => Err((ParseError::NotAModule, span)),
+						}
+					}
+					_ => Err((ParseError::NotAModule, span)),
+				}
 			}
 			_ => Err((ParseError::NotAModule, item.span())),
 		}
@@ -367,17 +412,35 @@ impl Prefix {
 		let ident = &self.ident;
 		let module_ref = self.module.unwrap();
 		let module = context.module(module_ref).unwrap();
-		let generated = module
-			.generate_with(context, Some(module_ref))
-			.into_tokens()?;
-		let rest = &self.content;
 
-		Ok(quote! {
-			#(#attrs)*
-			#vis mod #ident {
-				#generated
-				#(#rest)*
+		match module.extern_path() {
+			Some(path) => {
+				if path.ident() == ident {
+					Ok(quote! {
+						#(#attrs)*
+						#vis use #path;
+					})
+				} else {
+					Ok(quote! {
+						#(#attrs)*
+						#vis use #path as #ident;
+					})
+				}
 			}
-		})
+			None => {
+				let generated = module
+					.generate_with(context, Some(module_ref))
+					.into_tokens()?;
+				let rest = &self.content;
+
+				Ok(quote! {
+					#(#attrs)*
+					#vis mod #ident {
+						#generated
+						#(#rest)*
+					}
+				})
+			}
+		}
 	}
 }

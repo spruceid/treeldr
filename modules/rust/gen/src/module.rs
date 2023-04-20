@@ -32,9 +32,132 @@ impl TraitImpl {
 	}
 }
 
+/// Module visibility.
+pub enum Visibility {
+	Public,
+	Inherited,
+}
+
+impl From<Visibility> for syn::Visibility {
+	fn from(vis: Visibility) -> syn::Visibility {
+		match vis {
+			Visibility::Public => Self::Public(syn::token::Pub::default()),
+			Visibility::Inherited => Self::Inherited,
+		}
+	}
+}
+
+/// Module extern path.
+///
+/// ```text
+/// path::to::extern::module
+/// ```
+#[derive(Clone)]
+pub struct ExternPath {
+	root: proc_macro2::Ident,
+	rest: Vec<(syn::token::PathSep, proc_macro2::Ident)>,
+}
+
+impl ExternPath {
+	pub fn new(root: proc_macro2::Ident) -> Self {
+		Self {
+			root,
+			rest: Vec::new(),
+		}
+	}
+
+	pub fn ident(&self) -> &proc_macro2::Ident {
+		match self.rest.last() {
+			Some((_, ident)) => ident,
+			None => &self.root,
+		}
+	}
+
+	pub fn push(&mut self, sep: syn::token::PathSep, ident: proc_macro2::Ident) {
+		self.rest.push((sep, ident))
+	}
+}
+
+/// Module extern path with optional renaming.
+///
+/// ```text
+/// path::to::extern::module as renaming
+/// ```
+pub struct ExternPathWithRenaming {
+	pub path: ExternPath,
+	pub renaming: Option<(syn::token::As, proc_macro2::Ident)>,
+}
+
+impl ExternPathWithRenaming {
+	pub fn into_path_and_ident(self) -> (ExternPath, proc_macro2::Ident) {
+		match self.renaming {
+			Some((_, ident)) => (self.path, ident),
+			None => {
+				let ident = self.path.ident().clone();
+				(self.path, ident)
+			}
+		}
+	}
+}
+
+/// Error raised when parsing an invalid module extern path.
+#[derive(Debug, thiserror::Error)]
+#[error("invalid extern module path")]
+pub struct InvalidExternPath;
+
+impl TryFrom<syn::UsePath> for ExternPathWithRenaming {
+	type Error = InvalidExternPath;
+
+	fn try_from(p: syn::UsePath) -> Result<Self, Self::Error> {
+		let root = p.ident;
+		let mut rest = Vec::new();
+		let mut sep = p.colon2_token;
+		let mut tree = *p.tree;
+
+		loop {
+			match tree {
+				syn::UseTree::Path(p) => {
+					rest.push((sep, p.ident));
+					sep = p.colon2_token;
+					tree = *p.tree;
+				}
+				syn::UseTree::Name(n) => {
+					rest.push((sep, n.ident));
+					break Ok(Self {
+						path: ExternPath { root, rest },
+						renaming: None,
+					});
+				}
+				syn::UseTree::Rename(r) => {
+					rest.push((sep, r.ident));
+					let renaming = Some((r.as_token, r.rename));
+					break Ok(Self {
+						path: ExternPath { root, rest },
+						renaming,
+					});
+				}
+				_ => break Err(InvalidExternPath),
+			}
+		}
+	}
+}
+
+impl quote::ToTokens for ExternPath {
+	fn to_tokens(&self, tokens: &mut TokenStream) {
+		self.root.to_tokens(tokens);
+		for (sep, ident) in &self.rest {
+			sep.to_tokens(tokens);
+			ident.to_tokens(tokens);
+		}
+	}
+}
+
+/// TreeLDR generated module.
 pub struct Module {
 	parent: Option<Ref<Self>>,
+	extern_path: Option<ExternPath>,
 	ident: proc_macro2::Ident,
+	visibility: syn::Visibility,
 	sub_modules: HashSet<Ref<Self>>,
 	layouts: HashSet<TId<treeldr::Layout>>,
 	types: HashSet<TId<treeldr::Type>>,
@@ -44,10 +167,17 @@ pub struct Module {
 }
 
 impl Module {
-	pub fn new(parent: Option<Ref<Self>>, ident: proc_macro2::Ident) -> Self {
+	pub fn new(
+		parent: Option<Ref<Self>>,
+		extern_path: Option<ExternPath>,
+		ident: proc_macro2::Ident,
+		visibility: impl Into<syn::Visibility>,
+	) -> Self {
 		Self {
 			parent,
+			extern_path,
 			ident,
+			visibility: visibility.into(),
 			sub_modules: HashSet::new(),
 			layouts: HashSet::new(),
 			types: HashSet::new(),
@@ -59,6 +189,14 @@ impl Module {
 
 	pub fn ident(&self) -> &proc_macro2::Ident {
 		&self.ident
+	}
+
+	pub fn visibility(&self) -> &syn::Visibility {
+		&self.visibility
+	}
+
+	pub fn extern_path(&self) -> Option<&ExternPath> {
+		self.extern_path.as_ref()
 	}
 
 	pub fn path<V, M>(&self, context: &Context<V, M>) -> Path {
@@ -162,13 +300,30 @@ impl<M> Generate<M> for Ref<Module> {
 	) -> Result<(), Error> {
 		let module = context.module(*self).expect("undefined module");
 		let ident = module.ident();
-		let content = module.generate_with(context, Some(*self)).into_tokens()?;
+		let visibility = module.visibility();
 
-		tokens.extend(quote! {
-			pub mod #ident {
-				#content
+		match module.extern_path() {
+			Some(path) => {
+				if path.ident() == ident {
+					tokens.extend(quote! {
+						#visibility use #path;
+					});
+				} else {
+					tokens.extend(quote! {
+						#visibility use #path as #ident;
+					});
+				}
 			}
-		});
+			None => {
+				let content = module.generate_with(context, Some(*self)).into_tokens()?;
+
+				tokens.extend(quote! {
+					#visibility mod #ident {
+						#content
+					}
+				});
+			}
+		}
 
 		Ok(())
 	}

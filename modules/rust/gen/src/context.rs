@@ -97,9 +97,13 @@ impl<'a, V, M> Context<'a, V, M> {
 	pub fn add_module(
 		&mut self,
 		parent: Option<Ref<Module>>,
+		extern_path: Option<module::ExternPath>,
 		ident: proc_macro2::Ident,
+		visibility: impl Into<syn::Visibility>,
 	) -> Ref<Module> {
-		let r = self.modules.insert(Module::new(parent, ident));
+		let r = self
+			.modules
+			.insert(Module::new(parent, extern_path, ident, visibility));
 		if let Some(parent) = parent {
 			self.modules
 				.get_mut(parent)
