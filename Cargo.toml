@@ -50,6 +50,7 @@ json-syntax = "0.9.1"
 chrono = "0.4.19"
 quote = "1.0"
 proc-macro2 = "1.0"
+syn = "2.0.15"
 
 clap = "3.0"
 async-std = "1.12.0"

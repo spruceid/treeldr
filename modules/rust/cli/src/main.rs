@@ -9,7 +9,7 @@ use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr};
 use stderrlog::ColorChoice;
 use treeldr::{Id, TId};
 use treeldr_load as load;
-use treeldr_rust_gen::{tr::TraitModules, Generate};
+use treeldr_rust_gen::{module::Visibility, tr::TraitModules, Generate};
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -117,19 +117,33 @@ pub fn main() {
 
 			let mut gen_context = treeldr_rust_gen::Context::new(&model, &vocabulary);
 
-			let root_ref = gen_context.add_module(None, format_ident!("example"));
+			let root_ref =
+				gen_context.add_module(None, None, format_ident!("example"), Visibility::Public);
 
 			let mut layout_map = HashMap::new();
 			let mut type_map = HashMap::new();
 
 			for prefix in args.modules {
-				let module_ref = gen_context.add_module(Some(root_ref), prefix.ident);
-				let providers_module_ref =
-					gen_context.add_module(Some(module_ref), format_ident!("provider"));
-				let trait_objects_module_ref =
-					gen_context.add_module(Some(module_ref), format_ident!("trait_object"));
-				let layouts_module_ref =
-					gen_context.add_module(Some(module_ref), format_ident!("layout"));
+				let module_ref =
+					gen_context.add_module(Some(root_ref), None, prefix.ident, Visibility::Public);
+				let providers_module_ref = gen_context.add_module(
+					Some(module_ref),
+					None,
+					format_ident!("provider"),
+					Visibility::Public,
+				);
+				let trait_objects_module_ref = gen_context.add_module(
+					Some(module_ref),
+					None,
+					format_ident!("trait_object"),
+					Visibility::Public,
+				);
+				let layouts_module_ref = gen_context.add_module(
+					Some(module_ref),
+					None,
+					format_ident!("layout"),
+					Visibility::Public,
+				);
 
 				for (id, node) in model.nodes() {
 					if let treeldr::Id::Iri(term) = id {
