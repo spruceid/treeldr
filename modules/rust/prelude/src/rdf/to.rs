@@ -49,6 +49,22 @@ pub trait QuadsAndValues<N: Namespace, L> {
 	}
 }
 
+impl<'t, T: QuadsAndValues<N, L>, N: Namespace, L> QuadsAndValues<N, L> for &'t T {
+	type QuadsAndValues<'a> = T::QuadsAndValues<'a> where Self: 'a, N::Id: 'a, L: 'a;
+
+	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
+		&'a self,
+		namespace: &mut N,
+		generator: &mut G,
+	) -> Self::QuadsAndValues<'a>
+	where
+		N::Id: 'a,
+		L: 'a,
+	{
+		T::unbound_rdf_quads_and_values(self, namespace, generator)
+	}
+}
+
 impl<N: Namespace, L> QuadsAndValues<N, L> for Id<N::Id>
 where
 	N::Id: Clone,
