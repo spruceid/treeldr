@@ -30,7 +30,7 @@ impl<M> GenerateFor<Struct, M> for IntoJsonLdImpl {
 					Id::Iri(iri) => {
 						let iri = context.vocabulary().iri(&iri).unwrap().to_string();
 						quote!(::treeldr_rust_prelude::json_ld::ValidId::Iri(
-							vocabulary.insert(::treeldr_rust_prelude::static_iref::iri!(#iri))
+							vocabulary.insert(::treeldr_rust_prelude::iref::Iri::new(#iri).unwrap())
 						))
 					}
 					Id::Blank(blank) => {
