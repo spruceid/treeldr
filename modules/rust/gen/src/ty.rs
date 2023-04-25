@@ -136,6 +136,7 @@ impl Type {
 			f(TraitId::FromRdf.impl_for(layout_ref));
 			f(TraitId::TriplesAndValues.impl_for(layout_ref));
 			f(TraitId::IntoJsonLd.impl_for(layout_ref));
+			f(TraitId::IntoJsonLdSyntax.impl_for(layout_ref));
 
 			let mut stack: Vec<_> = layout.as_layout().ty().iter().map(|v| **v.value).collect();
 			while let Some(ty_ref) = stack.pop() {

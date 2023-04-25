@@ -85,6 +85,9 @@ impl<M> Generate<M> for TraitImpl {
 				TraitId::IntoJsonLd => {
 					super::json_ld::IntoJsonLdImpl.generate(context, scope, s, tokens)
 				}
+				TraitId::IntoJsonLdSyntax => {
+					super::json_ld::IntoJsonLdSyntaxImpl.generate(context, scope, s, tokens)
+				}
 				TraitId::Defined(tr) => ClassTraitImpl(tr).generate(context, scope, s, tokens),
 			},
 			ty::Description::Enum(e) => match self.tr {
@@ -96,6 +99,9 @@ impl<M> Generate<M> for TraitImpl {
 				}
 				TraitId::IntoJsonLd => {
 					super::json_ld::IntoJsonLdImpl.generate(context, scope, e, tokens)
+				}
+				TraitId::IntoJsonLdSyntax => {
+					super::json_ld::IntoJsonLdSyntaxImpl.generate(context, scope, e, tokens)
 				}
 				TraitId::Defined(tr) => ClassTraitImpl(tr).generate(context, scope, e, tokens),
 			},

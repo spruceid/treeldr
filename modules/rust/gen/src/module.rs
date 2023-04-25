@@ -11,6 +11,7 @@ pub enum TraitId {
 	FromRdf,
 	TriplesAndValues,
 	IntoJsonLd,
+	IntoJsonLdSyntax,
 	Defined(TId<treeldr::Type>),
 }
 
