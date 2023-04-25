@@ -1,4 +1,4 @@
-// cargo run -p treeldr-rust-cli -- -i modules/rust/gen/tests/t03.tldr -m rdfs="http://www.w3.org/2000/01/rdf-schema#" -m xsd="http://www.w3.org/2001/XMLSchema#" -m example="https://example.com/example/" | rustfmt
+// cargo run -p treeldr-rust-cli -- -i modules/rust/macros/tests/t03.tldr -m rdfs="http://www.w3.org/2000/01/rdf-schema#" -m xsd="http://www.w3.org/2001/XMLSchema#" -m example="https://example.com/example/" | rustfmt
 use iref::IriBuf;
 use json_ld::{syntax::Parse, JsonLdProcessor};
 use locspan::Span;

@@ -21,7 +21,7 @@ pub mod ld;
 pub use rdf::{FromRdf, FromRdfError, RdfIterator};
 
 #[cfg(feature = "json-ld")]
-pub use crate::ld::IntoJsonLd;
+pub use crate::ld::{IntoJsonLdObject, IntoJsonLdObjectMeta, IntoJsonLdSyntax};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id<I>(pub I);
