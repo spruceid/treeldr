@@ -38,6 +38,58 @@
 <http://www.w3.org/2001/XMLSchema#integer> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#integer> .
 <http://www.w3.org/2001/XMLSchema#integer> <https://treeldr.org/alias> <https://treeldr.org/Integer> .
 
+<http://www.w3.org/2001/XMLSchema#nonPositiveInteger> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#nonPositiveInteger> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#nonPositiveInteger> .
+<http://www.w3.org/2001/XMLSchema#nonPositiveInteger> <https://treeldr.org/alias> <https://treeldr.org/NonPositiveInteger> .
+
 <http://www.w3.org/2001/XMLSchema#nonNegativeInteger> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 <http://www.w3.org/2001/XMLSchema#nonNegativeInteger> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#nonNegativeInteger> .
-<http://www.w3.org/2001/XMLSchema#nonNegativeInteger> <https://treeldr.org/alias> <https://treeldr.org/UnsignedInteger> .
+<http://www.w3.org/2001/XMLSchema#nonNegativeInteger> <https://treeldr.org/alias> <https://treeldr.org/NonNegativeInteger> .
+
+<http://www.w3.org/2001/XMLSchema#positiveInteger> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#positiveInteger> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#positiveInteger> .
+<http://www.w3.org/2001/XMLSchema#positiveInteger> <https://treeldr.org/alias> <https://treeldr.org/PositiveInteger> .
+
+<http://www.w3.org/2001/XMLSchema#negativeInteger> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#negativeInteger> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#negativeInteger> .
+<http://www.w3.org/2001/XMLSchema#negativeInteger> <https://treeldr.org/alias> <https://treeldr.org/NegativeInteger> .
+
+<http://www.w3.org/2001/XMLSchema#long> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#long> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#long> .
+<http://www.w3.org/2001/XMLSchema#long> <https://treeldr.org/alias> <https://treeldr.org/I64> .
+
+<http://www.w3.org/2001/XMLSchema#int> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#int> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#int> .
+<http://www.w3.org/2001/XMLSchema#int> <https://treeldr.org/alias> <https://treeldr.org/I32> .
+
+<http://www.w3.org/2001/XMLSchema#short> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#short> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#short> .
+<http://www.w3.org/2001/XMLSchema#short> <https://treeldr.org/alias> <https://treeldr.org/I16> .
+
+<http://www.w3.org/2001/XMLSchema#byte> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#byte> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#byte> .
+<http://www.w3.org/2001/XMLSchema#byte> <https://treeldr.org/alias> <https://treeldr.org/I8> .
+
+<http://www.w3.org/2001/XMLSchema#unsignedLong> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#unsignedLong> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#unsignedLong> .
+<http://www.w3.org/2001/XMLSchema#unsignedLong> <https://treeldr.org/alias> <https://treeldr.org/U64> .
+
+<http://www.w3.org/2001/XMLSchema#unsignedInt> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#unsignedInt> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#unsignedInt> .
+<http://www.w3.org/2001/XMLSchema#unsignedInt> <https://treeldr.org/alias> <https://treeldr.org/U32> .
+
+<http://www.w3.org/2001/XMLSchema#unsignedShort> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#unsignedShort> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#unsignedShort> .
+<http://www.w3.org/2001/XMLSchema#unsignedShort> <https://treeldr.org/alias> <https://treeldr.org/U16> .
+
+<http://www.w3.org/2001/XMLSchema#unsignedByte> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#unsignedByte> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#unsignedByte> .
+<http://www.w3.org/2001/XMLSchema#unsignedByte> <https://treeldr.org/alias> <https://treeldr.org/U8> .
+
+<http://www.w3.org/2001/XMLSchema#hexBinary> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#hexBinary> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#hexBinary> .
+<http://www.w3.org/2001/XMLSchema#hexBinary> <https://treeldr.org/alias> <https://treeldr.org/HexBytes> .
+
+<http://www.w3.org/2001/XMLSchema#base64Binary> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<http://www.w3.org/2001/XMLSchema#base64Binary> <https://treeldr.org/layoutFor> <http://www.w3.org/2001/XMLSchema#base64Binary> .
+<http://www.w3.org/2001/XMLSchema#base64Binary> <https://treeldr.org/alias> <https://treeldr.org/Base64Bytes> .

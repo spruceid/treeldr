@@ -38,6 +38,31 @@ impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T
 	}
 }
 
+// macro_rules! impl_from_literal {
+// 	{ $($ty:ty : $rdf_ty:tt),* } => {
+// 		$(
+// 			impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V> for $ty {
+// 				fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+// 					let lexical = type_check(
+// 						vocabulary,
+// 						literal,
+// 						iri!($rdf_ty),
+// 					)?;
+
+// 					match <$ty>::parse_rdf(lexical.as_ref()) {
+// 						Ok(i) => Ok(i),
+// 						Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
+// 					}
+// 				}
+// 			}
+// 		)*
+// 	};
+// }
+
+// impl_from_literal! {
+// 	xsd_types::Integer: "http://www.w3.org/2001/XMLSchema#integer"
+// }
+
 impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V> for i64 {
 	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
 		let lexical = type_check(

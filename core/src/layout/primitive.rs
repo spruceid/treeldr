@@ -20,9 +20,21 @@ pub enum Primitive {
 	#[iri("tldr:Integer")]
 	Integer,
 
-	/// Unsigned integer number.
-	#[iri("tldr:UnsignedInteger")]
-	UnsignedInteger,
+	/// Non negative integer number.
+	#[iri("tldr:NonNegativeInteger")]
+	NonNegativeInteger,
+
+	/// Non positive integer number.
+	#[iri("tldr:NonPositiveInteger")]
+	NonPositiveInteger,
+
+	/// Strictly negative integer number.
+	#[iri("tldr:NegativeInteger")]
+	NegativeInteger,
+
+	/// Strictly positive integer number.
+	#[iri("tldr:PositiveInteger")]
+	PositiveInteger,
 
 	/// Floating point number.
 	#[iri("tldr:Float")]
@@ -31,6 +43,46 @@ pub enum Primitive {
 	/// Double.
 	#[iri("tldr:Double")]
 	Double,
+
+	/// I64.
+	#[iri("tldr:I64")]
+	I64,
+
+	/// I32.
+	#[iri("tldr:I32")]
+	I32,
+
+	/// I16.
+	#[iri("tldr:I16")]
+	I16,
+
+	/// I8.
+	#[iri("tldr:I8")]
+	I8,
+
+	/// U64.
+	#[iri("tldr:U64")]
+	U64,
+
+	/// U32.
+	#[iri("tldr:U32")]
+	U32,
+
+	/// U16.
+	#[iri("tldr:U16")]
+	U16,
+
+	/// U8.
+	#[iri("tldr:U8")]
+	U8,
+
+	/// Base 64 byte string.
+	#[iri("tldr:Base64Bytes")]
+	Base64Bytes,
+
+	/// Hex byte string.
+	#[iri("tldr:HexBytes")]
+	HexBytes,
 
 	/// String.
 	#[iri("tldr:String")]
@@ -70,35 +122,30 @@ impl Primitive {
 		}
 	}
 
-	pub fn from_name(name: &str) -> Option<Self> {
-		match name {
-			"boolean" => Some(Self::Boolean),
-			"integer" => Some(Self::Integer),
-			"unsigned" => Some(Self::UnsignedInteger),
-			"float" => Some(Self::Float),
-			"double" => Some(Self::Double),
-			"string" => Some(Self::String),
-			"time" => Some(Self::Time),
-			"date" => Some(Self::Date),
-			"datetime" => Some(Self::DateTime),
-			"iri" => Some(Self::Iri),
-			"uri" => Some(Self::Uri),
-			"url" => Some(Self::Url),
-			_ => None,
-		}
-	}
-
 	pub fn name(&self) -> &'static str {
 		match self {
 			Self::Boolean => "boolean",
 			Self::Integer => "integer",
-			Self::UnsignedInteger => "unsigned",
+			Self::NonNegativeInteger => "non negative integer",
+			Self::NonPositiveInteger => "non positive integer",
+			Self::NegativeInteger => "negative integer",
+			Self::PositiveInteger => "positive integer",
 			Self::Float => "float",
 			Self::Double => "double",
+			Self::U64 => "u64",
+			Self::U32 => "u32",
+			Self::U16 => "u16",
+			Self::U8 => "u8",
+			Self::I64 => "i64",
+			Self::I32 => "i32",
+			Self::I16 => "i16",
+			Self::I8 => "i8",
+			Self::Base64Bytes => "base 64 bytes",
+			Self::HexBytes => "hex bytes",
 			Self::String => "string",
 			Self::Time => "time",
 			Self::Date => "date",
-			Self::DateTime => "datetime",
+			Self::DateTime => "date and time",
 			Self::Iri => "iri",
 			Self::Uri => "uri",
 			Self::Url => "url",

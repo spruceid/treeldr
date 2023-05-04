@@ -4,7 +4,11 @@ use std::fmt;
 
 use rdf_types::{IriVocabulary, RdfDisplayWithContext};
 pub use real::*;
-use xsd_types::{Double, Float, Integer, NonNegativeInteger};
+use xsd_types::{
+	Byte, Double, Float, Int, Integer, Long, NegativeInteger, NonNegativeInteger,
+	NonPositiveInteger, PositiveInteger, Short, UnsignedByte, UnsignedInt, UnsignedLong,
+	UnsignedShort,
+};
 
 use crate::IriIndex;
 
@@ -85,6 +89,72 @@ impl From<NonNegativeInteger> for Numeric {
 	}
 }
 
+impl From<NonPositiveInteger> for Numeric {
+	fn from(value: NonPositiveInteger) -> Self {
+		Self::Real(value.into())
+	}
+}
+
+impl From<PositiveInteger> for Numeric {
+	fn from(value: PositiveInteger) -> Self {
+		Self::Real(value.into())
+	}
+}
+
+impl From<NegativeInteger> for Numeric {
+	fn from(value: NegativeInteger) -> Self {
+		Self::Real(value.into())
+	}
+}
+
+impl From<Long> for Numeric {
+	fn from(value: Long) -> Self {
+		Self::Real(value.into())
+	}
+}
+
+impl From<Int> for Numeric {
+	fn from(value: Int) -> Self {
+		Self::Real(value.into())
+	}
+}
+
+impl From<Short> for Numeric {
+	fn from(value: Short) -> Self {
+		Self::Real(value.into())
+	}
+}
+
+impl From<Byte> for Numeric {
+	fn from(value: Byte) -> Self {
+		Self::Real(value.into())
+	}
+}
+
+impl From<UnsignedLong> for Numeric {
+	fn from(value: UnsignedLong) -> Self {
+		Self::Real(value.into())
+	}
+}
+
+impl From<UnsignedInt> for Numeric {
+	fn from(value: UnsignedInt) -> Self {
+		Self::Real(value.into())
+	}
+}
+
+impl From<UnsignedShort> for Numeric {
+	fn from(value: UnsignedShort) -> Self {
+		Self::Real(value.into())
+	}
+}
+
+impl From<UnsignedByte> for Numeric {
+	fn from(value: UnsignedByte) -> Self {
+		Self::Real(value.into())
+	}
+}
+
 impl From<Float> for Numeric {
 	fn from(value: Float) -> Self {
 		Self::Float(value)
@@ -94,5 +164,196 @@ impl From<Float> for Numeric {
 impl From<Double> for Numeric {
 	fn from(value: Double) -> Self {
 		Self::Double(value)
+	}
+}
+
+impl TryFrom<Numeric> for Float {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Float(f) => Ok(f),
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for Double {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Double(f) => Ok(f),
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for Integer {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => r
+				.into_integer()
+				.map_err(|r| Numeric::Real(Real::Rational(r))),
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for NonNegativeInteger {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => r
+				.into_non_negative_integer()
+				.map_err(|r| Numeric::Real(Real::Rational(r))),
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for NonPositiveInteger {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => r
+				.into_non_positive_integer()
+				.map_err(|r| Numeric::Real(Real::Rational(r))),
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for PositiveInteger {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => r
+				.into_positive_integer()
+				.map_err(|r| Numeric::Real(Real::Rational(r))),
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for NegativeInteger {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => r
+				.into_negative_integer()
+				.map_err(|r| Numeric::Real(Real::Rational(r))),
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for Long {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => {
+				r.into_long().map_err(|r| Numeric::Real(Real::Rational(r)))
+			}
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for Int {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => {
+				r.into_int().map_err(|r| Numeric::Real(Real::Rational(r)))
+			}
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for Short {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => {
+				r.into_short().map_err(|r| Numeric::Real(Real::Rational(r)))
+			}
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for Byte {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => {
+				r.into_byte().map_err(|r| Numeric::Real(Real::Rational(r)))
+			}
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for UnsignedLong {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => r
+				.into_unsigned_long()
+				.map_err(|r| Numeric::Real(Real::Rational(r))),
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for UnsignedInt {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => r
+				.into_unsigned_int()
+				.map_err(|r| Numeric::Real(Real::Rational(r))),
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for UnsignedShort {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => r
+				.into_unsigned_short()
+				.map_err(|r| Numeric::Real(Real::Rational(r))),
+			n => Err(n),
+		}
+	}
+}
+
+impl TryFrom<Numeric> for UnsignedByte {
+	type Error = Numeric;
+
+	fn try_from(value: Numeric) -> Result<Self, Self::Error> {
+		match value {
+			Numeric::Real(Real::Rational(r)) => r
+				.into_unsigned_byte()
+				.map_err(|r| Numeric::Real(Real::Rational(r))),
+			n => Err(n),
+		}
 	}
 }

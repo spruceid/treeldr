@@ -423,10 +423,23 @@ impl<M> Generate<M> for treeldr::layout::Primitive {
 	) -> Result<(), Error> {
 		tokens.extend(match self {
 			Self::Boolean => quote! { bool },
-			Self::Integer => quote! { i32 },
-			Self::UnsignedInteger => quote! { u32 },
+			Self::Integer => quote! { ::treeldr_rust_prelude::ty::Integer },
+			Self::NonNegativeInteger => quote! { ::treeldr_rust_prelude::ty::NonNegativeInteger },
+			Self::NonPositiveInteger => quote! { ::treeldr_rust_prelude::ty::NonPositiveInteger },
+			Self::PositiveInteger => quote! { ::treeldr_rust_prelude::ty::PositiveInteger },
+			Self::NegativeInteger => quote! { ::treeldr_rust_prelude::ty::NegativeInteger },
+			Self::I64 => quote! { i64 },
+			Self::I32 => quote! { i32 },
+			Self::I16 => quote! { i16 },
+			Self::I8 => quote! { i8 },
+			Self::U64 => quote! { u64 },
+			Self::U32 => quote! { u32 },
+			Self::U16 => quote! { u16 },
+			Self::U8 => quote! { u8 },
 			Self::Float => quote! { f32 },
 			Self::Double => quote! { f64 },
+			Self::Base64Bytes => quote! { ::treeldr_rust_prelude::ty::Base64BytesBuf },
+			Self::HexBytes => quote! { ::treeldr_rust_prelude::ty::HexBytesBuf },
 			Self::String => quote! { ::std::string::String },
 			Self::Date => quote! { ::treeldr_rust_prelude::chrono::NaiveDate },
 			Self::DateTime => {
@@ -451,10 +464,27 @@ impl<M> Generate<M> for Referenced<treeldr::layout::Primitive> {
 	) -> Result<(), Error> {
 		tokens.extend(match self.0 {
 			Primitive::Boolean => quote! { bool },
-			Primitive::Integer => quote! { i32 },
-			Primitive::UnsignedInteger => quote! { u32 },
+			Primitive::Integer => quote! { ::treeldr_rust_prelude::ty::Integer },
+			Primitive::NonNegativeInteger => {
+				quote! { &::treeldr_rust_prelude::ty::NonNegativeInteger }
+			}
+			Primitive::NonPositiveInteger => {
+				quote! { &::treeldr_rust_prelude::ty::NonPositiveInteger }
+			}
+			Primitive::PositiveInteger => quote! { &::treeldr_rust_prelude::ty::PositiveInteger },
+			Primitive::NegativeInteger => quote! { &::treeldr_rust_prelude::ty::NegativeInteger },
+			Primitive::I64 => quote! { i64 },
+			Primitive::I32 => quote! { i32 },
+			Primitive::I16 => quote! { i16 },
+			Primitive::I8 => quote! { i8 },
+			Primitive::U64 => quote! { u64 },
+			Primitive::U32 => quote! { u32 },
+			Primitive::U16 => quote! { u16 },
+			Primitive::U8 => quote! { u8 },
 			Primitive::Float => quote! { f32 },
 			Primitive::Double => quote! { f64 },
+			Primitive::Base64Bytes => quote! { &::treeldr_rust_prelude::ty::Base64Bytes },
+			Primitive::HexBytes => quote! { &::treeldr_rust_prelude::ty::HexBytes },
 			Primitive::String => quote! { &str },
 			Primitive::Date => quote! { ::treeldr_rust_prelude::chrono::NaiveDate },
 			Primitive::DateTime => {

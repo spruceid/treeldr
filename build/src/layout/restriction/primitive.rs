@@ -1,15 +1,16 @@
 use crate::{error, resource::BindingValueRef, Error};
 use locspan::{MapLocErr, Meta};
 use std::collections::BTreeMap;
-pub use treeldr::{
-	layout::{primitive::restriction, primitive::RegExp, Primitive},
-	value, Id, MetaOption,
-};
 use treeldr::{
+	layout::primitive::restriction::{template::float::FloatType, RestrainableType},
 	metadata::Merge,
 	prop::UnknownProperty,
 	vocab::{Term, Xsd},
 	IriIndex, TId,
+};
+pub use treeldr::{
+	layout::{primitive::restriction, primitive::RegExp, Primitive},
+	value, Id, MetaOption,
 };
 
 pub use treeldr::layout::restriction::Property;
@@ -29,6 +30,37 @@ impl Restriction {
 	}
 }
 
+impl<T: Into<value::Numeric>> From<restriction::template::integer::Restriction<T>> for Restriction {
+	fn from(value: restriction::template::integer::Restriction<T>) -> Self {
+		Self::Numeric(value.into())
+	}
+}
+
+impl<T: Into<value::Numeric>> From<restriction::template::float::Restriction<T>> for Restriction {
+	fn from(value: restriction::template::float::Restriction<T>) -> Self {
+		Self::Numeric(value.into())
+	}
+}
+
+#[derive(Debug)]
+pub struct Conflict<M>(pub Restriction, pub Meta<Restriction, M>);
+
+impl<T: Into<value::Numeric>, M> From<restriction::template::integer::Conflict<T, M>>
+	for Conflict<M>
+{
+	fn from(value: restriction::template::integer::Conflict<T, M>) -> Self {
+		Self(value.0.into(), value.1.cast())
+	}
+}
+
+impl<T: Into<value::Numeric>, M> From<restriction::template::float::Conflict<T, M>>
+	for Conflict<M>
+{
+	fn from(value: restriction::template::float::Conflict<T, M>) -> Self {
+		Self(value.0.into(), value.1.cast())
+	}
+}
+
 /// Numeric restriction.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Numeric {
@@ -45,6 +77,39 @@ impl Numeric {
 			Self::ExclusiveMinimum(v) => NumericBindingRef::ExclusiveMinimum(None, v),
 			Self::InclusiveMaximum(v) => NumericBindingRef::InclusiveMaximum(None, v),
 			Self::ExclusiveMaximum(v) => NumericBindingRef::ExclusiveMaximum(None, v),
+		}
+	}
+}
+
+impl<T: Into<value::Numeric>> From<restriction::template::integer::Restriction<T>> for Numeric {
+	fn from(value: restriction::template::integer::Restriction<T>) -> Self {
+		match value {
+			restriction::template::integer::Restriction::MinInclusive(v) => {
+				Self::InclusiveMinimum(v.into())
+			}
+			restriction::template::integer::Restriction::MaxInclusive(v) => {
+				Self::InclusiveMaximum(v.into())
+			}
+		}
+	}
+}
+
+impl<T: Into<value::Numeric>> From<restriction::template::float::Restriction<T>> for Numeric {
+	fn from(value: restriction::template::float::Restriction<T>) -> Self {
+		use restriction::template::float::{Max, Min};
+		match value {
+			restriction::template::float::Restriction::Min(Min::Included(v)) => {
+				Self::InclusiveMinimum(v.into())
+			}
+			restriction::template::float::Restriction::Min(Min::Excluded(v)) => {
+				Self::ExclusiveMinimum(v.into())
+			}
+			restriction::template::float::Restriction::Max(Max::Included(v)) => {
+				Self::InclusiveMaximum(v.into())
+			}
+			restriction::template::float::Restriction::Max(Max::Excluded(v)) => {
+				Self::ExclusiveMaximum(v.into())
+			}
 		}
 	}
 }
@@ -139,9 +204,13 @@ impl<M: Merge> Restrictions<M> {
 	}
 }
 
-impl<M: Clone> Restrictions<M> {
-	pub fn build_boolean(self, id: Id) -> Result<(), Error<M>> {
-		match self.map.into_iter().next() {
+pub trait BuildRestrictions<M>: Sized {
+	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>>;
+}
+
+impl<T, M: Merge> BuildRestrictions<M> for restriction::template::none::Restrictions<T, M> {
+	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
+		match restrictions.map.into_iter().next() {
 			Some((restriction, causes)) => Err(Error::new(
 				error::LayoutDatatypeRestrictionInvalid {
 					id,
@@ -151,41 +220,122 @@ impl<M: Clone> Restrictions<M> {
 				.into(),
 				causes,
 			)),
-			None => Ok(()),
+			None => Ok(Self::default()),
 		}
 	}
+}
 
-	pub fn build_integer(self, id: Id) -> Result<restriction::integer::Restrictions<M>, Error<M>>
-	where
-		M: Merge,
-	{
-		let mut r = restriction::integer::Restrictions::default();
+pub trait IntegerType: Sized {
+	fn pred(&self) -> Option<Self>;
 
-		for (restriction, causes) in self.map {
-			match restriction {
-				Restriction::Numeric(restriction) => match restriction {
-					Numeric::InclusiveMinimum(min) => match min.into_integer() {
-						Ok(min) => r.insert_min(Meta(min, causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionIntegerConflict,
-						)?,
+	fn succ(&self) -> Option<Self>;
+}
+
+macro_rules! impl_integer_type {
+	{ $id:ident, $($ty:ty [$pred_test:expr] [$succ_test:expr]),* } => {
+		$(
+			impl IntegerType for $ty {
+				fn pred(&$id) -> Option<Self> {
+					if $pred_test {
+						Some($id.clone() - 1)
+					} else {
+						None
+					}
+				}
+
+				fn succ(&$id) -> Option<Self> {
+					if $succ_test {
+						Some($id.clone() + 1)
+					} else {
+						None
+					}
+				}
+			}
+		)*
+	};
+}
+
+impl_integer_type! {
+	self,
+	xsd_types::Integer [true] [true],
+	xsd_types::NonPositiveInteger [true] [!self.is_zero()],
+	xsd_types::NonNegativeInteger [!self.is_zero()] [true],
+	xsd_types::NegativeInteger [true] [!self.is_minus_one()],
+	xsd_types::PositiveInteger [!self.is_one()] [true],
+	xsd_types::Long [*self > Self::MIN] [*self < Self::MAX],
+	xsd_types::Int [*self > Self::MIN] [*self < Self::MAX],
+	xsd_types::Short [*self > Self::MIN] [*self < Self::MAX],
+	xsd_types::Byte [*self > Self::MIN] [*self < Self::MAX],
+	xsd_types::UnsignedLong [*self > Self::MIN] [*self < Self::MAX],
+	xsd_types::UnsignedInt [*self > Self::MIN] [*self < Self::MAX],
+	xsd_types::UnsignedShort [*self > Self::MIN] [*self < Self::MAX],
+	xsd_types::UnsignedByte [*self > Self::MIN] [*self < Self::MAX]
+}
+
+impl<
+		T: IntegerType
+			+ RestrainableType
+			+ Clone
+			+ PartialOrd
+			+ TryFrom<value::Numeric>
+			+ Into<value::Numeric>,
+		M: Clone + Merge,
+	> BuildRestrictions<M> for restriction::template::integer::Restrictions<T, M>
+{
+	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
+		let mut r = Self::default();
+
+		for (restriction, causes) in restrictions.map {
+			match restriction.clone() {
+				Restriction::Numeric(numeric_restriction) => match numeric_restriction {
+					Numeric::InclusiveMinimum(min) => match T::try_from(min) {
+						Ok(min) => r.insert_min(Meta(min, causes)).map_loc_err(|c| {
+							error::Description::LayoutDatatypeRestrictionConflict(c.into())
+						})?,
 						Err(_) => todo!(),
 					},
-					Numeric::ExclusiveMinimum(min) => match min.into_integer() {
-						Ok(min) => r.insert_min(Meta(min + 1, causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionIntegerConflict,
-						)?,
+					Numeric::ExclusiveMinimum(min) => match T::try_from(min) {
+						Ok(min) => match min.succ() {
+							Some(min) => r.insert_min(Meta(min, causes)).map_loc_err(|c| {
+								error::Description::LayoutDatatypeRestrictionConflict(c.into())
+							})?,
+							None => {
+								return Err(Meta(
+									error::LayoutDatatypeRestrictionInvalid {
+										id,
+										primitive: T::PRIMITIVE,
+										restriction,
+									}
+									.into(),
+									causes,
+								))
+							}
+						},
 						Err(_) => todo!(),
 					},
-					Numeric::InclusiveMaximum(max) => match max.into_integer() {
-						Ok(max) => r.insert_max(Meta(max, causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionIntegerConflict,
-						)?,
+					Numeric::InclusiveMaximum(max) => match T::try_from(max) {
+						Ok(max) => r.insert_max(Meta(max, causes)).map_loc_err(|c| {
+							error::Description::LayoutDatatypeRestrictionConflict(c.into())
+						})?,
 						Err(_) => todo!(),
 					},
-					Numeric::ExclusiveMaximum(max) => match max.into_integer() {
-						Ok(max) => r.insert_max(Meta(max - 1, causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionIntegerConflict,
-						)?,
+					Numeric::ExclusiveMaximum(max) => match T::try_from(max) {
+						Ok(max) => match max.pred() {
+							Some(max) => r.insert_max(Meta(max, causes)).map_loc_err(|c| {
+								error::Description::LayoutDatatypeRestrictionConflict(c.into())
+							})?,
+							None => {
+								return Err(Meta(
+									error::LayoutDatatypeRestrictionInvalid {
+										id,
+										primitive: T::PRIMITIVE,
+										restriction,
+									}
+									.into(),
+									causes,
+								))
+							}
+						},
 						Err(_) => todo!(),
 					},
 				},
@@ -205,41 +355,54 @@ impl<M: Clone> Restrictions<M> {
 
 		Ok(r)
 	}
+}
 
-	pub fn build_unsigned_integer(
-		self,
-		id: Id,
-	) -> Result<restriction::unsigned::Restrictions<M>, Error<M>>
-	where
-		M: Merge,
-	{
-		let mut r = restriction::unsigned::Restrictions::default();
+impl<
+		T: FloatType + Clone + PartialOrd + TryFrom<value::Numeric> + Into<value::Numeric>,
+		M: Clone + Merge,
+	> BuildRestrictions<M> for restriction::template::float::Restrictions<T, M>
+{
+	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
+		use restriction::template::float::{Max, Min};
+		let mut r = Self::default();
 
-		for (restriction, causes) in self.map {
+		for (restriction, causes) in restrictions.map {
 			match restriction {
 				Restriction::Numeric(restriction) => match restriction {
-					Numeric::InclusiveMinimum(min) => match min.into_non_negative_integer() {
-						Ok(min) => r.insert_min(Meta(min, causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionUnsignedConflict,
-						)?,
+					Numeric::InclusiveMinimum(min) => match T::try_from(min) {
+						Ok(min) => {
+							r.insert_min(Meta(Min::Included(min), causes))
+								.map_loc_err(|c| {
+									error::Description::LayoutDatatypeRestrictionConflict(c.into())
+								})?
+						}
 						Err(_) => todo!(),
 					},
-					Numeric::ExclusiveMinimum(min) => match min.into_non_negative_integer() {
-						Ok(min) => r.insert_min(Meta(min + 1, causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionUnsignedConflict,
-						)?,
+					Numeric::ExclusiveMinimum(min) => match T::try_from(min) {
+						Ok(min) => {
+							r.insert_min(Meta(Min::Excluded(min), causes))
+								.map_loc_err(|c| {
+									error::Description::LayoutDatatypeRestrictionConflict(c.into())
+								})?
+						}
 						Err(_) => todo!(),
 					},
-					Numeric::InclusiveMaximum(max) => match max.into_non_negative_integer() {
-						Ok(max) => r.insert_max(Meta(max, causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionUnsignedConflict,
-						)?,
+					Numeric::InclusiveMaximum(max) => match T::try_from(max) {
+						Ok(max) => {
+							r.insert_max(Meta(Max::Included(max), causes))
+								.map_loc_err(|c| {
+									error::Description::LayoutDatatypeRestrictionConflict(c.into())
+								})?
+						}
 						Err(_) => todo!(),
 					},
-					Numeric::ExclusiveMaximum(max) => match max.into_non_negative_integer() {
-						Ok(max) => r.insert_max(Meta(max - 1, causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionUnsignedConflict,
-						)?,
+					Numeric::ExclusiveMaximum(max) => match T::try_from(max) {
+						Ok(max) => {
+							r.insert_max(Meta(Max::Excluded(max), causes))
+								.map_loc_err(|c| {
+									error::Description::LayoutDatatypeRestrictionConflict(c.into())
+								})?
+						}
 						Err(_) => todo!(),
 					},
 				},
@@ -259,118 +422,13 @@ impl<M: Clone> Restrictions<M> {
 
 		Ok(r)
 	}
+}
 
-	pub fn build_float(self, id: Id) -> Result<restriction::float::Restrictions<M>, Error<M>>
-	where
-		M: Merge,
-	{
-		use restriction::float::{Max, Min};
-		let mut r = restriction::float::Restrictions::default();
-
-		for (restriction, causes) in self.map {
-			match restriction {
-				Restriction::Numeric(restriction) => match restriction {
-					Numeric::InclusiveMinimum(min) => match min.into_float() {
-						Ok(min) => r.insert_min(Meta(Min::Included(min), causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionFloatConflict,
-						)?,
-						Err(_) => todo!(),
-					},
-					Numeric::ExclusiveMinimum(min) => match min.into_float() {
-						Ok(min) => r.insert_min(Meta(Min::Excluded(min), causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionFloatConflict,
-						)?,
-						Err(_) => todo!(),
-					},
-					Numeric::InclusiveMaximum(max) => match max.into_float() {
-						Ok(max) => r.insert_max(Meta(Max::Included(max), causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionFloatConflict,
-						)?,
-						Err(_) => todo!(),
-					},
-					Numeric::ExclusiveMaximum(max) => match max.into_float() {
-						Ok(max) => r.insert_max(Meta(Max::Excluded(max), causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionFloatConflict,
-						)?,
-						Err(_) => todo!(),
-					},
-				},
-				other => {
-					return Err(Error::new(
-						error::LayoutDatatypeRestrictionInvalid {
-							id,
-							primitive: Primitive::Integer,
-							restriction: other,
-						}
-						.into(),
-						causes,
-					))
-				}
-			}
-		}
-
-		Ok(r)
-	}
-
-	pub fn build_double(self, id: Id) -> Result<restriction::double::Restrictions<M>, Error<M>>
-	where
-		M: Merge,
-	{
-		use restriction::double::{Max, Min};
-		let mut r = restriction::double::Restrictions::default();
-
-		for (restriction, causes) in self.map {
-			match restriction {
-				Restriction::Numeric(restriction) => match restriction {
-					Numeric::InclusiveMinimum(min) => match min.into_double() {
-						Ok(min) => r.insert_min(Meta(Min::Included(min), causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionDoubleConflict,
-						)?,
-						Err(_) => todo!(),
-					},
-					Numeric::ExclusiveMinimum(min) => match min.into_double() {
-						Ok(min) => r.insert_min(Meta(Min::Excluded(min), causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionDoubleConflict,
-						)?,
-						Err(_) => todo!(),
-					},
-					Numeric::InclusiveMaximum(max) => match max.into_double() {
-						Ok(max) => r.insert_max(Meta(Max::Included(max), causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionDoubleConflict,
-						)?,
-						Err(_) => todo!(),
-					},
-					Numeric::ExclusiveMaximum(max) => match max.into_double() {
-						Ok(max) => r.insert_max(Meta(Max::Excluded(max), causes)).map_loc_err(
-							error::Description::LayoutDatatypeRestrictionDoubleConflict,
-						)?,
-						Err(_) => todo!(),
-					},
-				},
-				other => {
-					return Err(Error::new(
-						error::LayoutDatatypeRestrictionInvalid {
-							id,
-							primitive: Primitive::Integer,
-							restriction: other,
-						}
-						.into(),
-						causes,
-					))
-				}
-			}
-		}
-
-		Ok(r)
-	}
-
-	pub fn build_string(self, id: Id) -> Result<restriction::string::Restrictions<M>, Error<M>>
-	where
-		M: Merge,
-	{
+impl<M: Clone + Merge> BuildRestrictions<M> for restriction::template::string::Restrictions<M> {
+	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
 		let mut p = restriction::string::Restrictions::default();
 
-		for (restriction, causes) in self.map.into_iter() {
+		for (restriction, causes) in restrictions.map.into_iter() {
 			match restriction {
 				Restriction::String(restriction) => match restriction {
 					String::Pattern(regexp) => p.insert_pattern(Meta(regexp, causes)),
@@ -391,95 +449,11 @@ impl<M: Clone> Restrictions<M> {
 
 		Ok(p)
 	}
+}
 
-	pub fn build_time(self, id: Id) -> Result<(), Error<M>> {
-		match self.map.into_iter().next() {
-			Some((restriction, causes)) => Err(Error::new(
-				error::LayoutDatatypeRestrictionInvalid {
-					id,
-					primitive: Primitive::Time,
-					restriction,
-				}
-				.into(),
-				causes,
-			)),
-			None => Ok(()),
-		}
-	}
-
-	pub fn build_date(self, id: Id) -> Result<(), Error<M>> {
-		match self.map.into_iter().next() {
-			Some((restriction, causes)) => Err(Error::new(
-				error::LayoutDatatypeRestrictionInvalid {
-					id,
-					primitive: Primitive::Date,
-					restriction,
-				}
-				.into(),
-				causes,
-			)),
-			None => Ok(()),
-		}
-	}
-
-	pub fn build_date_time(self, id: Id) -> Result<(), Error<M>> {
-		match self.map.into_iter().next() {
-			Some((restriction, causes)) => Err(Error::new(
-				error::LayoutDatatypeRestrictionInvalid {
-					id,
-					primitive: Primitive::DateTime,
-					restriction,
-				}
-				.into(),
-				causes,
-			)),
-			None => Ok(()),
-		}
-	}
-
-	pub fn build_iri(self, id: Id) -> Result<(), Error<M>> {
-		match self.map.into_iter().next() {
-			Some((restriction, causes)) => Err(Error::new(
-				error::LayoutDatatypeRestrictionInvalid {
-					id,
-					primitive: Primitive::Iri,
-					restriction,
-				}
-				.into(),
-				causes,
-			)),
-			None => Ok(()),
-		}
-	}
-
-	pub fn build_uri(self, id: Id) -> Result<(), Error<M>> {
-		match self.map.into_iter().next() {
-			Some((restriction, causes)) => Err(Error::new(
-				error::LayoutDatatypeRestrictionInvalid {
-					id,
-					primitive: Primitive::Uri,
-					restriction,
-				}
-				.into(),
-				causes,
-			)),
-			None => Ok(()),
-		}
-	}
-
-	pub fn build_url(self, id: Id) -> Result<(), Error<M>> {
-		match self.map.into_iter().next() {
-			Some((restriction, causes)) => Err(Error::new(
-				error::LayoutDatatypeRestrictionInvalid {
-					id,
-					primitive: Primitive::Url,
-					restriction,
-				}
-				.into(),
-				causes,
-			)),
-			None => Ok(()),
-		}
+impl<M: Clone> Restrictions<M> {
+	pub fn build<R: BuildRestrictions<M>>(self, id: Id) -> Result<R, Error<M>> {
+		R::build(self, id)
 	}
 }
 

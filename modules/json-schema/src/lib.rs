@@ -647,15 +647,73 @@ fn generate_primitive_type(p: treeldr::layout::Primitive) -> serde_json::Value {
 		Primitive::Integer => {
 			def.insert("type".into(), "integer".into());
 		}
-		Primitive::UnsignedInteger => {
+		Primitive::NonNegativeInteger => {
 			def.insert("type".into(), "integer".into());
 			def.insert("minimum".into(), 0.into());
+		}
+		Primitive::NonPositiveInteger => {
+			def.insert("type".into(), "integer".into());
+			def.insert("maximum".into(), 0.into());
+		}
+		Primitive::PositiveInteger => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), 1.into());
+		}
+		Primitive::NegativeInteger => {
+			def.insert("type".into(), "integer".into());
+			def.insert("maximum".into(), (-1).into());
+		}
+		Primitive::I64 => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), i64::MIN.into());
+			def.insert("maximum".into(), i64::MAX.into());
+		}
+		Primitive::I32 => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), i32::MIN.into());
+			def.insert("maximum".into(), i32::MAX.into());
+		}
+		Primitive::I16 => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), i16::MIN.into());
+			def.insert("maximum".into(), i16::MAX.into());
+		}
+		Primitive::I8 => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), i8::MIN.into());
+			def.insert("maximum".into(), i8::MAX.into());
+		}
+		Primitive::U64 => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), u64::MIN.into());
+			def.insert("maximum".into(), u64::MAX.into());
+		}
+		Primitive::U32 => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), u32::MIN.into());
+			def.insert("maximum".into(), u32::MAX.into());
+		}
+		Primitive::U16 => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), u16::MIN.into());
+			def.insert("maximum".into(), u16::MAX.into());
+		}
+		Primitive::U8 => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), u8::MIN.into());
+			def.insert("maximum".into(), u8::MAX.into());
 		}
 		Primitive::Float => {
 			def.insert("type".into(), "number".into());
 		}
 		Primitive::Double => {
 			def.insert("type".into(), "number".into());
+		}
+		Primitive::Base64Bytes => {
+			def.insert("type".into(), "string".into());
+		}
+		Primitive::HexBytes => {
+			def.insert("type".into(), "string".into());
 		}
 		Primitive::String => {
 			def.insert("type".into(), "string".into());
@@ -694,21 +752,103 @@ fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> se
 	let mut def = serde_json::Map::new();
 
 	match n {
-		RestrictedPrimitive::Boolean => {
+		RestrictedPrimitive::Boolean(_) => {
 			def.insert("type".into(), "bool".into());
 		}
 		RestrictedPrimitive::Integer(_) => {
 			def.insert("type".into(), "integer".into());
 		}
-		RestrictedPrimitive::UnsignedInteger(_) => {
+		RestrictedPrimitive::NonNegativeInteger(_) => {
 			def.insert("type".into(), "integer".into());
 			def.insert("minimum".into(), 0.into());
+		}
+		RestrictedPrimitive::NonPositiveInteger(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("maximum".into(), 0.into());
+		}
+		RestrictedPrimitive::PositiveInteger(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), 1.into());
+		}
+		RestrictedPrimitive::NegativeInteger(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("maximum".into(), (-1).into());
+		}
+		RestrictedPrimitive::I64(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), i64::MIN.into());
+			def.insert("maximum".into(), i64::MAX.into());
+		}
+		RestrictedPrimitive::I32(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), i32::MIN.into());
+			def.insert("maximum".into(), i32::MAX.into());
+		}
+		RestrictedPrimitive::I16(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), i16::MIN.into());
+			def.insert("maximum".into(), i16::MAX.into());
+		}
+		RestrictedPrimitive::I8(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), i8::MIN.into());
+			def.insert("maximum".into(), i8::MAX.into());
+		}
+		RestrictedPrimitive::U64(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), u64::MIN.into());
+			def.insert("maximum".into(), u64::MAX.into());
+		}
+		RestrictedPrimitive::U32(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), u32::MIN.into());
+			def.insert("maximum".into(), u32::MAX.into());
+		}
+		RestrictedPrimitive::U16(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), u16::MIN.into());
+			def.insert("maximum".into(), u16::MAX.into());
+		}
+		RestrictedPrimitive::U8(_) => {
+			def.insert("type".into(), "integer".into());
+			def.insert("minimum".into(), u8::MIN.into());
+			def.insert("maximum".into(), u8::MAX.into());
 		}
 		RestrictedPrimitive::Float(_) => {
 			def.insert("type".into(), "number".into());
 		}
 		RestrictedPrimitive::Double(_) => {
 			def.insert("type".into(), "number".into());
+		}
+		RestrictedPrimitive::Base64Bytes(restrictions) => {
+			def.insert("type".into(), "string".into());
+			if let Some(r) = restrictions.as_ref() {
+				if let Some(pattern) = r.pattern() {
+					match pattern.as_singleton() {
+						Some(singleton) => {
+							def.insert("const".into(), singleton.into());
+						}
+						None => {
+							def.insert("pattern".into(), pattern.to_string().into());
+						}
+					}
+				}
+			}
+		}
+		RestrictedPrimitive::HexBytes(restrictions) => {
+			def.insert("type".into(), "string".into());
+			if let Some(r) = restrictions.as_ref() {
+				if let Some(pattern) = r.pattern() {
+					match pattern.as_singleton() {
+						Some(singleton) => {
+							def.insert("const".into(), singleton.into());
+						}
+						None => {
+							def.insert("pattern".into(), pattern.to_string().into());
+						}
+					}
+				}
+			}
 		}
 		RestrictedPrimitive::String(restrictions) => {
 			def.insert("type".into(), "string".into());
@@ -725,27 +865,27 @@ fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> se
 				}
 			}
 		}
-		RestrictedPrimitive::Time => {
+		RestrictedPrimitive::Time(_) => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "time".into());
 		}
-		RestrictedPrimitive::Date => {
+		RestrictedPrimitive::Date(_) => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "date".into());
 		}
-		RestrictedPrimitive::DateTime => {
+		RestrictedPrimitive::DateTime(_) => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "date-time".into());
 		}
-		RestrictedPrimitive::Iri => {
+		RestrictedPrimitive::Iri(_) => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "iri".into());
 		}
-		RestrictedPrimitive::Uri => {
+		RestrictedPrimitive::Uri(_) => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "uri".into());
 		}
-		RestrictedPrimitive::Url => {
+		RestrictedPrimitive::Url(_) => {
 			def.insert("type".into(), "string".into());
 			def.insert("format".into(), "uri".into());
 		}

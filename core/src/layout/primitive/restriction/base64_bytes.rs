@@ -12,8 +12,8 @@ pub type Conflict<M> = template::string::Conflict<M>;
 
 pub type Iter<'a, M> = template::string::Iter<'a, M>;
 
-impl RestrainableType for xsd_types::String {
-	const PRIMITIVE: Primitive = Primitive::String;
+impl RestrainableType for xsd_types::Base64Binary {
+	const PRIMITIVE: Primitive = Primitive::Base64Bytes;
 
 	type RestrictionRef<'a> = RestrictionRef<'a>;
 	type Restrictions<M> = Restrictions<M>;

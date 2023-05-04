@@ -8,6 +8,7 @@ edition.workspace = true
 treeldr.workspace = true
 log.workspace = true
 rdf-types = { workspace = true, features = ["meta"] }
+xsd-types.workspace = true
 iref.workspace = true
 derivative.workspace = true
 locspan = { workspace = true, features = ["reporting"] }
