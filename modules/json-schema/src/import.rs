@@ -9,6 +9,16 @@ use treeldr::{metadata::Merge, vocab, BlankIdIndex, Id, IriIndex, Name};
 use treeldr_build::{layout::Restrictions, Context};
 use vocab::{LocQuad, Object, Term};
 
+/// Checks if the given JSON document is a JSON Schema.
+pub fn is_json_schema<M>(json: &json_syntax::Value<M>) -> bool {
+	match json.as_object() {
+		Some(object) => {
+			object.get("$schema").next().is_some()
+		}
+		None => false
+	}
+}
+
 /// Import error.
 #[derive(Debug)]
 pub enum Error<M> {

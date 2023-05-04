@@ -5,6 +5,8 @@ use std::hash::Hash;
 use std::ops::{Deref, Range};
 use std::path::{Path, PathBuf};
 
+use crate::document;
+
 pub trait DisplayPath<'a> {
 	type Display: 'a + fmt::Display;
 
@@ -63,21 +65,22 @@ pub enum MimeType {
 	/// text/turtle
 	Turtle,
 
-	/// application/schema+json
-	JsonSchema,
+	/// application/json
+	Json(Option<document::json::MimeType>)
 }
 
 impl MimeType {
-	fn name(&self) -> &'static str {
+	pub fn name(&self) -> &'static str {
 		match self {
 			Self::TreeLdr => "application/treeldr",
 			Self::NQuads => "application/n-quads",
 			Self::Turtle => "text/turtle",
-			Self::JsonSchema => "application/schema+json",
+			Self::Json(None) => "application/json",
+			Self::Json(Some(t)) => t.name()
 		}
 	}
 
-	fn infer(source: &Path, _content: &str) -> Option<MimeType> {
+	pub fn infer(source: &Path, _content: &str) -> Option<MimeType> {
 		source
 			.extension()
 			.and_then(std::ffi::OsStr::to_str)
@@ -85,7 +88,7 @@ impl MimeType {
 				"tldr" => Some(MimeType::TreeLdr),
 				"nq" => Some(MimeType::NQuads),
 				"ttl" => Some(MimeType::Turtle),
-				"json" => Some(MimeType::JsonSchema),
+				"json" => Some(MimeType::Json(None)),
 				_ => None,
 			})
 	}
