@@ -12,10 +12,8 @@ use vocab::{LocQuad, Object, Term};
 /// Checks if the given JSON document is a JSON Schema.
 pub fn is_json_schema<M>(json: &json_syntax::Value<M>) -> bool {
 	match json.as_object() {
-		Some(object) => {
-			object.get("$schema").next().is_some()
-		}
-		None => false
+		Some(object) => object.get("$schema").next().is_some(),
+		None => false,
 	}
 }
 
@@ -60,8 +58,8 @@ pub fn import_schema<
 	generator: &mut impl Generator<V>,
 ) -> Result<Id, Error<M>> {
 	match schema {
-		Schema::True => todo!(),
-		Schema::False => {
+		Schema::Boolean(true) => todo!(),
+		Schema::Boolean(false) => {
 			let id = generator.next(vocabulary);
 			context.declare_layout(id, M::default());
 			Ok(id)
@@ -89,8 +87,8 @@ pub fn import_sub_schema<
 	generator: &mut impl Generator<V>,
 ) -> Result<Id, Error<M>> {
 	match schema {
-		Schema::True => todo!(),
-		Schema::False => {
+		Schema::Boolean(true) => todo!(),
+		Schema::Boolean(false) => {
 			let id = generator.next(vocabulary);
 			context.declare_layout(id, M::default());
 			Ok(id)
@@ -279,24 +277,18 @@ fn strip_json_schema_extension(iri: Iri) -> Iri {
 
 fn into_numeric(
 	primitive: treeldr::layout::Primitive,
-	n: &serde_json::Number,
+	n: &json_syntax::Number,
 ) -> treeldr::value::Numeric {
 	use treeldr::value;
 	match primitive {
-		treeldr::layout::Primitive::Float => match n.as_f64() {
-			Some(d) => value::Float::new(d as f32).into(),
-			None => todo!(),
-		},
-		treeldr::layout::Primitive::Double => match n.as_f64() {
-			Some(d) => value::Double::new(d).into(),
-			None => todo!(),
-		},
-		treeldr::layout::Primitive::Integer => match xsd_types::Integer::from_str(&n.to_string()) {
+		treeldr::layout::Primitive::Float => value::Float::new(n.as_f64_lossy() as f32).into(),
+		treeldr::layout::Primitive::Double => value::Double::new(n.as_f64_lossy()).into(),
+		treeldr::layout::Primitive::Integer => match xsd_types::Integer::from_str(n) {
 			Ok(n) => n.into(),
 			Err(_) => todo!(),
 		},
 		treeldr::layout::Primitive::NonNegativeInteger => {
-			match xsd_types::NonNegativeInteger::from_str(&n.to_string()) {
+			match xsd_types::NonNegativeInteger::from_str(n) {
 				Ok(n) => n.into(),
 				Err(_) => todo!(),
 			}
@@ -323,7 +315,7 @@ fn import_layout_description<
 > {
 	let mut kind = LayoutKind::Unknown;
 	if let Some(types) = &schema.validation.any.ty {
-		for ty in types {
+		for ty in types.as_slice() {
 			let k = match ty {
 				schema::Type::Null => todo!(),
 				schema::Type::Boolean => LayoutKind::Boolean,
@@ -361,11 +353,11 @@ fn import_layout_description<
 	}
 
 	match &schema.desc {
-		schema::Description::Definition {
+		schema::Description::Definition(schema::Definition {
 			string,
 			array,
 			object,
-		} => {
+		}) => {
 			if !string.is_empty() || !schema.validation.string.is_empty() {
 				kind.refine(LayoutKind::String)?;
 			}
@@ -447,15 +439,17 @@ fn import_layout_description<
 					let mut restrictions = treeldr_build::layout::Restrictions::default();
 
 					if let Some(cnst) = &schema.validation.any.cnst {
-						restrictions.primitive.insert(Meta(
-							Restriction::String(String::Pattern(cnst.to_string().into())),
-							M::default(),
-						));
+						if let Some(cnst) = cnst.as_str() {
+							restrictions.primitive.insert(Meta(
+								Restriction::String(String::Pattern(cnst.to_string().into())),
+								M::default(),
+							));
+						}
 					}
 
 					if let Some(pattern) = &schema.validation.string.pattern {
 						restrictions.primitive.insert(Meta(
-							Restriction::String(String::Pattern(pattern.to_string().into())),
+							Restriction::String(String::Pattern(pattern.clone().into())),
 							M::default(),
 						));
 					}

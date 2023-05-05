@@ -1,6 +1,6 @@
-use locspan::{Meta, Location};
+use locspan::{Location, Meta};
 
-use crate::{source, ParseError, DisplayPath};
+use crate::{source, DisplayPath, ParseError};
 
 /// Import a N-Quads file.
 pub fn import<'f, P>(

@@ -1,9 +1,9 @@
-use locspan::{Meta, Location};
-use rdf_types::{VocabularyMut, Generator};
-use treeldr::{IriIndex, BlankIdIndex};
+use locspan::{Location, Meta};
+use rdf_types::{Generator, VocabularyMut};
+use treeldr::{BlankIdIndex, IriIndex};
 use treeldr_syntax as syntax;
 
-use crate::{source, BuildContext, ParseError, DisplayPath, LangError};
+use crate::{source, BuildContext, DisplayPath, LangError, ParseError};
 
 /// TreeLDR document.
 pub struct Document {

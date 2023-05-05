@@ -8,11 +8,12 @@ edition.workspace = true
 [dependencies]
 treeldr.workspace = true
 log.workspace = true
-iref.workspace = true
+iref = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["derive"] }
 derivative.workspace = true
-json-syntax.workspace = true
+json-syntax = { workspace = true, features = ["serde"] }
 thiserror.workspace = true
+serde = { workspace = true, features = ["derive"] }
 
 # For the import function.
 treeldr-build.workspace = true

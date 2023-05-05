@@ -66,7 +66,7 @@ pub enum MimeType {
 	Turtle,
 
 	/// application/json
-	Json(Option<document::json::MimeType>)
+	Json(Option<document::json::MimeType>),
 }
 
 impl MimeType {
@@ -76,19 +76,26 @@ impl MimeType {
 			Self::NQuads => "application/n-quads",
 			Self::Turtle => "text/turtle",
 			Self::Json(None) => "application/json",
-			Self::Json(Some(t)) => t.name()
+			Self::Json(Some(t)) => t.name(),
 		}
 	}
 
 	pub fn infer(source: &Path, _content: &str) -> Option<MimeType> {
+		use std::ffi::OsStr;
+
 		source
 			.extension()
-			.and_then(std::ffi::OsStr::to_str)
+			.and_then(OsStr::to_str)
 			.and_then(|ext| match ext {
 				"tldr" => Some(MimeType::TreeLdr),
 				"nq" => Some(MimeType::NQuads),
 				"ttl" => Some(MimeType::Turtle),
-				"json" => Some(MimeType::Json(None)),
+				"json" => match source.file_stem().and_then(OsStr::to_str) {
+					Some(stem) if stem.ends_with(".schema") => {
+						Some(MimeType::Json(Some(document::json::MimeType::JsonSchema)))
+					}
+					_ => Some(MimeType::Json(None)),
+				},
 				_ => None,
 			})
 	}

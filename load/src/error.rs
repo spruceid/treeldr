@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
-use codespan_reporting::term::termcolor::{StandardStream, ColorChoice};
-use locspan::{Meta, MaybeLocated};
+use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+use locspan::{MaybeLocated, Meta};
 use rdf_types::Vocabulary;
 use thiserror::Error;
-use treeldr::{IriIndex, BlankIdIndex, reporting::Diagnose};
+use treeldr::{reporting::Diagnose, BlankIdIndex, IriIndex};
 
 use crate::source;
 
@@ -22,8 +22,6 @@ pub enum LoadError {
 	#[error("parse error")]
 	Parsing(#[from] Meta<ParseError, source::Metadata>),
 }
-
-
 
 #[derive(Debug)]
 pub enum BuildAllError {
@@ -165,7 +163,8 @@ impl ParseError {
 		let diagnostic = self.diagnostic(meta);
 		let writer = StandardStream::stderr(ColorChoice::Always);
 		let config = codespan_reporting::term::Config::default();
-		codespan_reporting::term::emit(&mut writer.lock(), &config, files, &diagnostic).expect("diagnostic failed");
+		codespan_reporting::term::emit(&mut writer.lock(), &config, files, &diagnostic)
+			.expect("diagnostic failed");
 		std::process::exit(1);
 	}
 }

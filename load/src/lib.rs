@@ -1,26 +1,16 @@
-use codespan_reporting::term::{
-	self,
-	termcolor::{ColorChoice, StandardStream},
-};
-use iref::IriBuf;
-use locspan::{Location, MaybeLocated, Meta};
-use rdf_types::{Generator, Vocabulary, VocabularyMut};
-use std::hash::Hash;
-use std::path::{Path, PathBuf};
-use thiserror::Error;
+use rdf_types::{Generator, VocabularyMut};
 use treeldr::{
-	reporting::Diagnose,
 	vocab::{GraphLabel, Object},
 	BlankIdIndex, Id, IriIndex,
 };
 
+mod document;
 mod error;
 mod source;
-mod document;
 
+pub use document::Document;
 pub use error::*;
 pub use source::*;
-pub use document::Document;
 
 pub use treeldr::reporting;
 pub type BuildContext = treeldr_build::Context<source::Metadata>;

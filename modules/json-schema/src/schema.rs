@@ -1,15 +1,39 @@
 use iref::{IriBuf, IriRefBuf};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 mod validation;
 pub use validation::*;
 
-pub mod from_serde_json;
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum OneOrMany<T> {
+	One(T),
+	Many(Vec<T>),
+}
 
+impl<T> OneOrMany<T> {
+	pub fn into_vec(self) -> Vec<T> {
+		match self {
+			Self::One(t) => vec![t],
+			Self::Many(v) => v,
+		}
+	}
+
+	pub fn as_slice(&self) -> &[T] {
+		match self {
+			Self::One(t) => std::slice::from_ref(t),
+			Self::Many(v) => v,
+		}
+	}
+}
+
+// pub mod from_syntax;
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
 pub enum Schema {
-	True,
-	False,
+	Boolean(bool),
 	Ref(RefSchema),
 	DynamicRef(DynamicRefSchema),
 	Regular(RegularSchema),
@@ -64,29 +88,38 @@ impl From<RegularSchema> for Schema {
 }
 
 /// Regular schema definition.
+#[derive(Serialize, Deserialize)]
 pub struct RegularSchema {
 	/// Meta schema properties.
+	#[serde(flatten)]
 	pub meta_schema: MetaSchema,
 
 	/// Schema identifier.
+	#[serde(rename = "$id")]
 	pub id: Option<IriBuf>,
 
 	/// Meta data.
+	#[serde(flatten)]
 	pub meta_data: MetaData,
 
 	/// Schema description.
+	#[serde(flatten)]
 	pub desc: Description,
 
 	/// Schema validation.
+	#[serde(flatten)]
 	pub validation: Validation,
 
+	#[serde(rename = "$anchor")]
 	pub anchor: Option<String>,
 
+	#[serde(rename = "$dynamicAnchor")]
 	pub dynamic_anchor: Option<String>,
 
 	/// The "$defs" keyword reserves a location for schema authors to inline
 	/// re-usable JSON Schemas into a more general schema. The keyword does not
 	/// directly affect the validation result.
+	#[serde(rename = "$defs")]
 	pub defs: Option<BTreeMap<String, Schema>>,
 }
 
@@ -97,14 +130,16 @@ impl RegularSchema {
 }
 
 /// A Vocabulary for Basic Meta-Data Annotations.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MetaData {
 	pub title: Option<String>,
 	pub description: Option<String>,
-	pub default: Option<serde_json::Value>,
+	pub default: Option<json_syntax::Value>,
 	pub deprecated: Option<bool>,
 	pub read_only: Option<bool>,
 	pub write_only: Option<bool>,
-	pub examples: Option<Vec<serde_json::Value>>,
+	pub examples: Option<Vec<json_syntax::Value>>,
 }
 
 impl MetaData {
@@ -120,10 +155,12 @@ impl MetaData {
 }
 
 /// Meta-Schemas and Vocabularies.
+#[derive(Serialize, Deserialize)]
 pub struct MetaSchema {
 	/// The "$schema" keyword is both used as a JSON Schema dialect identifier
 	/// and as the identifier of a resource which is itself a JSON Schema, which
 	/// describes the set of valid schemas written for this particular dialect.
+	#[serde(rename = "$schema")]
 	pub schema: Option<IriBuf>,
 
 	/// The "$vocabulary" keyword is used in meta-schemas to identify the
@@ -135,6 +172,7 @@ pub struct MetaSchema {
 	/// understood by the implementation MUST be processed in a manner
 	/// consistent with the semantic definitions contained within the
 	/// vocabulary.
+	#[serde(rename = "$vocabulary")]
 	pub vocabulary: Option<BTreeMap<IriBuf, bool>>,
 }
 
@@ -145,49 +183,102 @@ impl MetaSchema {
 }
 
 /// Schema defined with the `$ref` keyword.
+#[derive(Serialize, Deserialize)]
 pub struct RefSchema {
-	pub meta_data: MetaData,
+	#[serde(rename = "$ref")]
 	pub target: IriRefBuf,
+
+	#[serde(flatten)]
+	pub meta_data: MetaData,
 }
 
 /// Schema defined with the `$dynamicRef` keyword.
+#[derive(Serialize, Deserialize)]
 pub struct DynamicRefSchema {
-	pub meta_data: MetaData,
+	#[serde(rename = "$ref")]
 	pub target: IriRefBuf,
+
+	#[serde(flatten)]
+	pub meta_data: MetaData,
 }
 
 /// Schema description.
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
 pub enum Description {
-	Definition {
-		string: StringEncodedData,
-		array: ArraySchema,
-		object: ObjectSchema,
-	},
-	AllOf(Vec<Schema>),
-	AnyOf(Vec<Schema>),
-	OneOf(Vec<Schema>),
-	Not(Box<Schema>),
-	If {
-		condition: Box<Schema>,
-		then: Option<Box<Schema>>,
-		els: Option<Box<Schema>>,
-	},
+	AllOf(AllOf),
+	AnyOf(AnyOf),
+	OneOf(OneOf),
+	Not(Not),
+	If(IfThenElse),
+	Definition(Definition),
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AllOf {
+	#[serde(rename = "allOf")]
+	pub schemas: Vec<Schema>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AnyOf {
+	#[serde(rename = "anyOf")]
+	pub schemas: Vec<Schema>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OneOf {
+	#[serde(rename = "oneOf")]
+	pub schemas: Vec<Schema>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Not {
+	#[serde(rename = "not")]
+	pub schema: Box<Schema>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct IfThenElse {
+	#[serde(rename = "if")]
+	pub condition: Box<Schema>,
+
+	pub then: Option<Box<Schema>>,
+
+	#[serde(rename = "else")]
+	pub els: Option<Box<Schema>>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Definition {
+	#[serde(flatten)]
+	pub string: StringEncodedData,
+
+	#[serde(flatten)]
+	pub array: ArraySchema,
+
+	#[serde(flatten)]
+	pub object: ObjectSchema,
+}
+
+impl Definition {
+	pub fn is_empty(&self) -> bool {
+		self.string.is_empty() && self.array.is_empty() && self.object.is_empty()
+	}
 }
 
 impl Description {
 	pub fn is_empty(&self) -> bool {
 		match self {
-			Self::Definition {
-				string,
-				array,
-				object,
-			} => string.is_empty() && array.is_empty() && object.is_empty(),
+			Self::Definition(def) => def.is_empty(),
 			_ => false,
 		}
 	}
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ArraySchema {
 	/// Validation succeeds if each element of the instance validates against
 	/// the schema at the same position, if any. This keyword does not constrain
@@ -240,6 +331,8 @@ impl ArraySchema {
 }
 
 /// Keywords for Applying Subschemas to Objects.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ObjectSchema {
 	/// Validation succeeds if, for each name that appears in both the instance
 	/// and as a name within this keyword's value, the child instance for that
@@ -312,6 +405,8 @@ impl ObjectSchema {
 }
 
 /// A Vocabulary for the Contents of String-Encoded Data
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StringEncodedData {
 	/// Defines that the string SHOULD be interpreted as binary data and decoded
 	/// using the encoding named by this property.

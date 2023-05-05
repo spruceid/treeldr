@@ -2,6 +2,7 @@ use crate::embedding;
 use contextual::WithContext;
 use embedding::Embedding;
 use iref::{Iri, IriBuf};
+use json_syntax::Print;
 use rdf_types::Vocabulary;
 use std::fmt;
 use treeldr::{BlankIdIndex, IriIndex, TId};
@@ -33,7 +34,6 @@ pub enum Error<M> {
 	UndefinedLayout(IriBuf),
 	NotALayout(Box<NotALayoutError<M>>),
 	InfiniteSchema(String),
-	Serialization(serde_json::Error),
 }
 
 impl<F> fmt::Display for Error<F> {
@@ -43,7 +43,6 @@ impl<F> fmt::Display for Error<F> {
 			Self::UndefinedLayout(iri) => write!(f, "undefined layout `{iri}`"),
 			Self::NotALayout(e) => write!(f, "node `{}` is not a layout", e.0),
 			Self::InfiniteSchema(iri) => write!(f, "infinite schema `{iri}`"),
-			Self::Serialization(e) => write!(f, "JSON serialization failed: {e}"),
 		}
 	}
 }
@@ -116,10 +115,7 @@ impl Command {
 			main_layout_ref,
 		) {
 			Ok(json_schema) => {
-				println!(
-					"{}",
-					serde_json::to_string_pretty(&json_schema).map_err(Error::Serialization)?
-				);
+				println!("{}", json_schema.pretty_print());
 
 				Ok(())
 			}
@@ -129,7 +125,6 @@ impl Command {
 			Err(crate::Error::InfiniteSchema(r)) => Err(Box::new(Error::InfiniteSchema(
 				model.get(r).unwrap().id().with(vocabulary).to_string(),
 			))),
-			Err(crate::Error::Serialization(e)) => Err(Box::new(Error::Serialization(e))),
 		}
 	}
 }

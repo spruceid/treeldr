@@ -1,5 +1,6 @@
 use contextual::WithContext;
 use iref::Iri;
+use json_syntax::Parse;
 use locspan::Meta;
 use rdf_types::{BlankIdBuf, IriVocabularyMut, VocabularyMut};
 use treeldr::{
@@ -34,8 +35,10 @@ fn import_json_schema<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 	grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel>,
 	Id,
 ) {
-	let json: serde_json::Value = serde_json::from_str(content).expect("invalid JSON");
-	let input = treeldr_json_schema::Schema::try_from(json).expect("invalid JSON Schema");
+	let json = json_syntax::Value::parse_str(content, |_| ())
+		.expect("invalid JSON")
+		.into_value();
+	let input = json_syntax::from_value(json).expect("invalid JSON Schema");
 
 	let mut context: Context<()> = Context::new();
 	let mut generator = rdf_types::generator::Blank::new_with_prefix("t".to_string());

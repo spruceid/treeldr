@@ -19,7 +19,7 @@ pub enum Error {
 	NoLayoutName(TId<treeldr::Layout>),
 
 	#[error("infinite schema")]
-	InfiniteSchema(TId<treeldr::Layout>)
+	InfiniteSchema(TId<treeldr::Layout>),
 }
 
 /// Generate a JSON Schema from a TreeLDR model.
@@ -273,7 +273,10 @@ fn generate_struct<F>(
 		let mut type_schema = json_syntax::Object::new();
 
 		type_schema.insert(Meta("type".into(), ()), Meta("string".into(), ()));
-		type_schema.insert(Meta("pattern".into(), ()), Meta(name.to_pascal_case().into(), ()));
+		type_schema.insert(
+			Meta("pattern".into(), ()),
+			Meta(name.to_pascal_case().into(), ()),
+		);
 
 		properties.insert(Meta(type_prop.into(), ()), Meta(type_schema.into(), ()));
 		required_properties.push(Meta(type_prop.into(), ()));
@@ -297,17 +300,24 @@ fn generate_struct<F>(
 			if let Some(description) = field.preferred_label() {
 				obj.insert(
 					Meta("description".into(), ()),
-					Meta(remove_newlines(description.lexical_form().trim()).into(), ()),
+					Meta(
+						remove_newlines(description.lexical_form().trim()).into(),
+						(),
+					),
 				);
 			}
 		}
 
-		properties.insert(Meta(field.name().unwrap().to_camel_case().into(), ()), Meta(layout_schema, ()));
+		properties.insert(
+			Meta(field.name().unwrap().to_camel_case().into(), ()),
+			Meta(layout_schema, ()),
+		);
 
 		if required {
-			required_properties.push(Meta(json_syntax::Value::from(
-				field.name().unwrap().to_camel_case(),
-			), ()));
+			required_properties.push(Meta(
+				json_syntax::Value::from(field.name().unwrap().to_camel_case()),
+				(),
+			));
 		}
 	}
 
@@ -318,7 +328,10 @@ fn generate_struct<F>(
 	}
 
 	if !required_properties.is_empty() {
-		json.insert(Meta("required".into(), ()), Meta(required_properties.into(), ()));
+		json.insert(
+			Meta("required".into(), ()),
+			Meta(required_properties.into(), ()),
+		);
 	}
 
 	Ok(json.into())
@@ -364,16 +377,19 @@ fn generate_layout_defs_ref<F>(
 ) -> Result<(), Error> {
 	json.insert(
 		Meta("$ref".into(), ()),
-		Meta(format!(
-			"#/$defs/{}",
-			model
-				.get(layout_ref)
-				.unwrap()
-				.as_component()
-				.name()
-				.ok_or(Error::NoLayoutName(layout_ref))?
-		)
-		.into(), ()),
+		Meta(
+			format!(
+				"#/$defs/{}",
+				model
+					.get(layout_ref)
+					.unwrap()
+					.as_component()
+					.name()
+					.ok_or(Error::NoLayoutName(layout_ref))?
+			)
+			.into(),
+			(),
+		),
 	);
 	Ok(())
 }
@@ -498,7 +514,13 @@ fn generate_option_type<F>(
 		item_layout_ref,
 	)?;
 
-	def.insert(Meta("anyOf".into(), ()), Meta(vec![Meta(null_schema.into(), ()), Meta(item_schema, ())].into(), ()));
+	def.insert(
+		Meta("anyOf".into(), ()),
+		Meta(
+			vec![Meta(null_schema.into(), ()), Meta(item_schema, ())].into(),
+			(),
+		),
+	);
 	Ok(def.into())
 }
 
@@ -598,18 +620,24 @@ fn generate_one_or_many_type<F>(
 
 	def.insert(
 		Meta("oneOf".into(), ()),
-		Meta(vec![
-			Meta(item_schema, ()),
-			Meta(generate_set_type(
-				vocabulary,
-				model,
-				embedding,
-				type_property,
-				item_layout_ref,
-				restrictions,
-			)?, ()),
-		]
-		.into(), ()),
+		Meta(
+			vec![
+				Meta(item_schema, ()),
+				Meta(
+					generate_set_type(
+						vocabulary,
+						model,
+						embedding,
+						type_property,
+						item_layout_ref,
+						restrictions,
+					)?,
+					(),
+				),
+			]
+			.into(),
+			(),
+		),
 	);
 
 	Ok(def.into())
@@ -908,7 +936,10 @@ fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> js
 							def.insert(Meta("const".into(), ()), Meta(singleton.into(), ()));
 						}
 						None => {
-							def.insert(Meta("pattern".into(), ()), Meta(pattern.to_string().into(), ()));
+							def.insert(
+								Meta("pattern".into(), ()),
+								Meta(pattern.to_string().into(), ()),
+							);
 						}
 					}
 				}

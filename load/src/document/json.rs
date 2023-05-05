@@ -1,9 +1,9 @@
 use json_syntax::Parse;
 use locspan::Location;
 use rdf_types::{Generator, VocabularyMut};
-use treeldr::{IriIndex, BlankIdIndex};
+use treeldr::{BlankIdIndex, IriIndex};
 
-use crate::{LoadError, source, BuildContext, LangError};
+use crate::{source, BuildContext, LangError, LoadError};
 
 #[cfg(feature = "json-schema")]
 pub mod schema;
@@ -17,26 +17,26 @@ pub enum MimeType {
 	JsonSchema,
 
 	/// application/lexicon+json
-	Lexicon
+	Lexicon,
 }
 
 impl MimeType {
 	pub fn name(&self) -> &'static str {
 		match self {
 			Self::JsonSchema => "application/schema+json",
-			Self::Lexicon => "application/lexicon+json"
+			Self::Lexicon => "application/lexicon+json",
 		}
 	}
 
 	pub fn infer(json: &json_syntax::MetaValue<source::Metadata>) -> Option<Self> {
 		#[cfg(feature = "json-schema")]
 		if treeldr_json_schema::import::is_json_schema(json) {
-			return Some(Self::JsonSchema)
+			return Some(Self::JsonSchema);
 		}
 
 		#[cfg(feature = "lexicon")]
-		if treeldr_json_schema::import::is_lexicon_document(json) {
-			return Some(Self::Lexicon)
+		if treeldr_lexicon::import::is_lexicon_document(json) {
+			return Some(Self::Lexicon);
 		}
 
 		None
@@ -48,7 +48,7 @@ pub enum Document {
 	Schema(treeldr_json_schema::Schema),
 
 	#[cfg(feature = "lexicon")]
-	Lexicon
+	Lexicon(treeldr_lexicon::LexiconDoc),
 }
 
 impl Document {
@@ -59,13 +59,16 @@ impl Document {
 		generator: &mut impl Generator<V>,
 	) -> Result<(), LangError> {
 		match self {
+			#[cfg(feature = "json-schema")]
 			Self::Schema(s) => {
-				treeldr_json_schema::import_schema(&s, None, context, vocabulary, generator)?;
+				treeldr_json_schema::import_schema(s, None, context, vocabulary, generator)?;
 				Ok(())
 			}
 			#[cfg(feature = "lexicon")]
-			Self::Lexicon => {
-				todo!()
+			Self::Lexicon(_d) => {
+				// treeldr_lexicon::import(&s, None, context, vocabulary, generator)?;
+				// ...
+				unimplemented!()
 			}
 		}
 	}
@@ -74,19 +77,21 @@ impl Document {
 pub fn import<P>(
 	files: &source::Files<P>,
 	source_id: source::FileId,
-	mime_type: Option<MimeType>
+	mime_type: Option<MimeType>,
 ) -> Result<Document, LoadError> {
 	let file = files.get(source_id).unwrap();
-	let json = json_syntax::Value::parse_str(file.buffer(), |span| source::Metadata::Extern(Location::new(source_id, span))).expect("invalid JSON");
+	let json = json_syntax::Value::parse_str(file.buffer(), |span| {
+		source::Metadata::Extern(Location::new(source_id, span))
+	})
+	.expect("invalid JSON");
 
 	match mime_type.or_else(|| MimeType::infer(&json)) {
-		Some(MimeType::JsonSchema) => {
-			Ok(Document::Schema(schema::import(json)))
-		}
+		#[cfg(feature = "json-schema")]
+		Some(MimeType::JsonSchema) => Ok(Document::Schema(schema::import(json))),
 		#[cfg(feature = "lexicon")]
-		Some(MimeType::Lexicon) => {
-			Ok(Document::Schema(schema::import(json)))
-		}
-		unsupported => Err(LoadError::UnsupportedMimeType(crate::MimeType::Json(unsupported)))
+		Some(MimeType::Lexicon) => Ok(Document::Lexicon(lexicon::import(json))),
+		unsupported => Err(LoadError::UnsupportedMimeType(crate::MimeType::Json(
+			unsupported,
+		))),
 	}
 }

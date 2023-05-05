@@ -1,6 +1,6 @@
-use locspan::{Meta, Location};
+use locspan::{Location, Meta};
 
-use crate::{source, ParseError, DisplayPath, LangError};
+use crate::{source, DisplayPath, LangError, ParseError};
 
 impl From<turtle_syntax::build::MetaError<source::Metadata>> for LangError {
 	fn from(e: turtle_syntax::build::MetaError<source::Metadata>) -> Self {

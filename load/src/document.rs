@@ -1,17 +1,17 @@
-use std::{path::Path, hash::Hash};
+use std::{hash::Hash, path::Path};
 
 use iref::IriBuf;
 use locspan::Meta;
-use rdf_types::{VocabularyMut, Generator, Id};
-use treeldr::{IriIndex, BlankIdIndex};
+use rdf_types::{Generator, Id, VocabularyMut};
+use treeldr::{BlankIdIndex, IriIndex};
 
-use crate::{source, Dataset, LoadError, DisplayPath, MimeType, FileId, BuildContext, LangError};
+use crate::{source, BuildContext, Dataset, DisplayPath, FileId, LangError, LoadError, MimeType};
 
-pub mod tldr;
+pub mod json;
 pub mod nquads;
+pub mod tldr;
 #[cfg(feature = "turtle")]
 pub mod turtle;
-pub mod json;
 
 pub enum Document {
 	TreeLdr(Box<tldr::Document>),
@@ -87,9 +87,7 @@ impl Document {
 			#[cfg(feature = "turtle")]
 			MimeType::Turtle => Ok(Self::Turtle(turtle::import(files, file_id)?)),
 			#[cfg(feature = "json-schema")]
-			MimeType::Json(t) => Ok(Self::Json(Box::new(json::import(
-				files, file_id, t
-			)?))),
+			MimeType::Json(t) => Ok(Self::Json(Box::new(json::import(files, file_id, t)?))),
 			#[allow(unreachable_patterns)]
 			mime_type => Err(LoadError::UnsupportedMimeType(mime_type)),
 		}
