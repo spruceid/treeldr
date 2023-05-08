@@ -3,237 +3,431 @@ pub mod import;
 
 use std::collections::BTreeMap;
 
+use import::IntoTriples;
+use rdf_types::Vocabulary;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-#[derive(Serialize_repr, Deserialize_repr)]
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum Version {
-    One = 1,
+	One = 1,
 }
 
 /// A lexicon document.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LexiconDoc {
-    lexicon: Version,
-    id: String,
-    revision: Option<u32>,
-    description: Option<String>,
+	pub lexicon: Version,
+	pub id: String,
 
-    #[serde(rename = "defs")]
-    definitions: BTreeMap<String, Definition>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub revision: Option<u32>,
+
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
+
+	#[serde(rename = "defs")]
+	pub definitions: Definitions,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct LexRef(String);
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Definitions {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	main: Option<LexMainUserType>,
 
-#[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Definition {
-    UserType(LexUserType),
-    Array(LexArray),
-    Primitive(LexPrimitive),
-    Ref(LexRef),
+	#[serde(flatten)]
+	other: BTreeMap<String, LexUserType>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
+pub enum LexMainUserType {
+	Record(LexRecord),
+	Query(LexXrpcQuery),
+	Procedure(LexXrpcProcedure),
+	Subscription(LexXrpcSubscription),
+}
+
+impl From<LexMainUserType> for LexUserType {
+	fn from(value: LexMainUserType) -> Self {
+		match value {
+			LexMainUserType::Record(r) => Self::Record(r),
+			LexMainUserType::Query(q) => Self::Query(q),
+			LexMainUserType::Procedure(p) => Self::Procedure(p),
+			LexMainUserType::Subscription(s) => Self::Subscription(s),
+		}
+	}
+}
+
+impl LexiconDoc {
+	pub fn into_triples<V: Vocabulary, G>(
+		self,
+		vocabulary: &mut V,
+		generator: G,
+	) -> IntoTriples<V, G> {
+		IntoTriples::new(self, vocabulary, generator)
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LexRef {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
+
+	#[serde(rename = "ref")]
+	pub ref_: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LexRefUnion {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
+
+	pub refs: Vec<String>,
+
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub closed: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "kebab-case")]
+pub enum LexRefVariant {
+	Ref(LexRef),
+	Union(LexRefUnion),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "kebab-case")]
 pub enum LexUserType {
-    Query(LexXrpcQuery),
-    Procedure(LexXrpcProcedure),
-    Record(LexRecord),
-    Token(LexToken),
-    Object(LexObject),
-    Blob(LexBlob),
-    Image(LexImage),
-    Video(LexVideo),
-    Audio(LexAudio),
+	Record(LexRecord),
+	Query(LexXrpcQuery),
+	Procedure(LexXrpcProcedure),
+	Subscription(LexXrpcSubscription),
+	Array(LexArray),
+	Token(LexToken),
+	Object(LexObject),
+	Boolean(LexBoolean),
+	Integer(LexInteger),
+	String(LexString),
+	Bytes(LexBytes),
+	CidLink(LexCidLink),
+	Unknown(LexUnknown),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LexXrpcQuery {
-    description: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
 
-    #[serde(default)]
-    parameters: BTreeMap<String, LexPrimitive>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub parameters: Option<LexXrpcParameters>,
 
-    output: Option<LexXrpcBody>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub output: Option<LexXrpcBody>,
 
-    #[serde(default)]
-    errors: Vec<LexXrpcError>,
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub errors: Vec<LexXrpcError>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LexXrpcParametersType {
+	Params,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LexXrpcParameters {
+	#[serde(rename = "type")]
+	pub type_: LexXrpcParametersType,
+
+	pub description: Option<String>,
+
+	#[serde(default)]
+	pub required: Vec<String>,
+
+	pub properties: BTreeMap<String, LexXrpcParametersProperty>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum LexXrpcParametersProperty {
+	Primitive(LexPrimitive),
+	NonPrimitive(LexXrpcParametersNonPrimitiveProperty),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum LexXrpcParametersNonPrimitiveProperty {
+	Array(LexPrimitiveArray),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LexXrpcBody {
-    description: Option<String>,
+	pub description: Option<String>,
 
-    encoding: Encoding,
+	pub encoding: LexXrpcBodyEncoding,
 
-    schema: LexObject,
+	pub schema: LexXrpcBodySchema,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Encoding {
-    One(String),
-    Many(Vec<String>),
+pub enum LexXrpcBodyEncoding {
+	One(String),
+	Many(Vec<String>),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum LexXrpcBodySchema {
+	Object(LexObject),
+	Ref(LexRefVariant),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LexXrpcSubscriptionMessage {
+	pub description: Option<String>,
+	pub schema: LexXrpcBodySchema,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LexXrpcError {
-    name: String,
-    description: Option<String>,
+	pub name: String,
+	pub description: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LexXrpcProcedure {
-    description: Option<String>,
+	pub description: Option<String>,
 
-    #[serde(default)]
-    parameters: BTreeMap<String, LexPrimitive>,
+	#[serde(default)]
+	pub parameters: BTreeMap<String, LexPrimitive>,
 
-    input: Option<LexXrpcBody>,
+	pub input: Option<LexXrpcBody>,
 
-    output: Option<LexXrpcBody>,
+	pub output: Option<LexXrpcBody>,
 
-    #[serde(default)]
-    errors: Vec<LexXrpcError>,
+	#[serde(default)]
+	pub errors: Vec<LexXrpcError>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LexRecord {
-    description: Option<String>,
-    key: Option<String>,
-    record: LexObject,
+	pub description: Option<String>,
+	pub key: Option<String>,
+	pub record: LexObject,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LexXrpcSubscription {
+	pub description: Option<String>,
+	pub parameters: Option<LexXrpcParameters>,
+	pub message: Option<LexXrpcSubscriptionMessage>,
+
+	#[serde(default)]
+	pub infos: Vec<LexXrpcError>,
+
+	#[serde(default)]
+	pub errors: Vec<LexXrpcError>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LexToken {
-    description: Option<String>,
+	pub description: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LexObject {
-    description: Option<String>,
-    required: Vec<String>,
+	pub description: Option<String>,
 
-    #[serde(default)]
-    properties: BTreeMap<String, Property>,
+	#[serde(default)]
+	pub required: Vec<String>,
+
+	#[serde(default)]
+	pub nullable: Vec<String>,
+
+	#[serde(default)]
+	pub properties: BTreeMap<String, ObjectProperty>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Property {
-    Ref(LexRef),
-    Array(LexArray),
-    Primitive(LexPrimitive),
-    Refs(Vec<LexRef>),
+pub enum ObjectProperty {
+	Ref(LexRefVariant),
+	Ipld(LexIpldType),
+	Primitive(LexPrimitive),
+	NonPrimitive(ObjectNonPrimitiveProperty),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ObjectNonPrimitiveProperty {
+	Array(LexArray),
+	Blob(LexBlob),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum LexIpldType {
+	Bytes(LexBytes),
+	CidLink(LexCidLink),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LexCidLink {
+	pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LexBytes {
+	pub description: Option<String>,
+
+	pub min_size: Option<u32>,
+
+	pub max_size: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LexBlob {
-    description: Option<String>,
+	pub description: Option<String>,
 
-    accept: Option<Vec<String>>,
+	pub accept: Option<Vec<String>>,
 
-    max_size: Option<u32>,
+	pub max_size: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LexImage {
-    description: Option<String>,
-    accept: Option<Vec<String>>,
-    max_size: Option<u32>,
-    max_width: Option<u32>,
-    max_height: Option<u32>,
+	pub description: Option<String>,
+	pub accept: Option<Vec<String>>,
+	pub max_size: Option<u32>,
+	pub max_width: Option<u32>,
+	pub max_height: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LexVideo {
-    description: Option<String>,
-    accept: Option<Vec<String>>,
-    max_size: Option<u32>,
-    max_width: Option<u32>,
-    max_height: Option<u32>,
-    max_length: Option<u32>,
+	pub description: Option<String>,
+	pub accept: Option<Vec<String>>,
+	pub max_size: Option<u32>,
+	pub max_width: Option<u32>,
+	pub max_height: Option<u32>,
+	pub max_length: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LexAudio {
-    description: Option<String>,
-    accept: Option<Vec<String>>,
-    max_size: Option<u32>,
-    max_length: Option<u32>,
+	pub description: Option<String>,
+	pub accept: Option<Vec<String>>,
+	pub max_size: Option<u32>,
+	pub max_length: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LexArray {
-    description: Option<String>,
-    items: ArrayItem,
-    min_length: Option<u32>,
-    max_lenght: Option<u32>,
+pub struct LexArray<T = ArrayItem> {
+	pub description: Option<String>,
+	pub items: T,
+	pub min_length: Option<u32>,
+	pub max_length: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
+pub type LexPrimitiveArray = LexArray<LexPrimitive>;
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ArrayItem {
-    Ref(LexRef),
-    Primitive(LexPrimitive),
-    Refs(Vec<LexRef>),
+	Primitive(LexPrimitive),
+	Ipld(LexIpldType),
+	Blob(LexBlob),
+	Ref(LexRefVariant),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 pub enum LexPrimitive {
-    Boolean(LexBoolean),
-    Number(LexNumber),
-    Integer(LexInteger),
-    String(LexString),
+	Boolean(LexBoolean),
+	Integer(LexInteger),
+	String(LexString),
+	Unknown(LexUnknown),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LexBoolean {
-    default: Option<bool>,
-    const_: Option<bool>,
+	pub description: Option<String>,
+	pub default: Option<bool>,
+	pub const_: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LexNumber {
-    default: Option<f64>,
-    minimum: Option<f64>,
-    maximum: Option<f64>,
-    enum_: Option<Vec<f64>>,
-    const_: Option<f64>,
+	pub default: Option<f64>,
+	pub minimum: Option<f64>,
+	pub maximum: Option<f64>,
+	pub enum_: Option<Vec<f64>>,
+	pub const_: Option<f64>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LexInteger {
-    default: Option<i64>,
-    minimum: Option<i64>,
-    maximum: Option<i64>,
-    enum_: Option<Vec<i64>>,
-    const_: Option<i64>,
+	pub description: Option<String>,
+	pub default: Option<i64>,
+	pub minimum: Option<i64>,
+	pub maximum: Option<i64>,
+	pub enum_: Option<Vec<i64>>,
+	pub const_: Option<i64>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LexString {
-    default: Option<String>,
-    min_length: Option<u32>,
-    max_length: Option<u32>,
-    enum_: Option<Vec<String>>,
-    const_: Option<String>,
+	pub description: Option<String>,
+	pub default: Option<String>,
+	pub format: Option<LexStringFormat>,
+	pub min_length: Option<u32>,
+	pub max_length: Option<u32>,
+	pub min_grapheme: Option<u32>,
+	pub max_grapheme: Option<u32>,
+	pub enum_: Option<Vec<String>>,
+	pub const_: Option<String>,
 
-    #[serde(default)]
-    known_values: Vec<String>,
+	#[serde(default)]
+	pub known_values: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LexStringFormat {
+	Datetime,
+	Uri,
+	AtUri,
+	Did,
+	Handle,
+	AtIdentifier,
+	Nsid,
+	Cid,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LexUnknown {
+	pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LexParams {
+	#[serde(default)]
+	pub properties: BTreeMap<String, ObjectProperty>,
 }

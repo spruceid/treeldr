@@ -32,7 +32,7 @@ pub enum DeclaredDocument {
 	#[cfg(feature = "turtle")]
 	Turtle(Dataset),
 
-	Json(Box<json::Document>),
+	Json(Box<json::DeclaredDocument>),
 }
 
 impl Document {
@@ -143,10 +143,7 @@ impl Document {
 					.map_err(LangError::NQuads)?;
 				Ok(DeclaredDocument::NQuads(dataset))
 			}
-			Self::Json(d) => {
-				d.declare(context, vocabulary, generator)?;
-				Ok(DeclaredDocument::Json(d))
-			}
+			Self::Json(d) => Ok(d.declare(context, vocabulary, generator)?),
 		}
 	}
 }

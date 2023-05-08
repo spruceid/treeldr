@@ -9,9 +9,12 @@ edition.workspace = true
 treeldr.workspace = true
 log.workspace = true
 iref.workspace = true
+static-iref.workspace = true
+contextual.workspace = true
 clap = { workspace = true, features = ["derive"] }
 derivative.workspace = true
 thiserror.workspace = true
 json-syntax = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_repr = "0.1"
+rdf-types.workspace = true
