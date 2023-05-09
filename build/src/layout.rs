@@ -38,6 +38,7 @@ pub enum SingleDescriptionProperty<M> {
 	Required(FunctionalPropertyValue<Id, M>),
 	Option(FunctionalPropertyValue<Id, M>),
 	Set(FunctionalPropertyValue<Id, M>),
+	Map(FunctionalPropertyValue<Id, M>),
 	OneOrMany(FunctionalPropertyValue<Id, M>),
 	Array(FunctionalPropertyValue<Id, M>),
 	Alias(FunctionalPropertyValue<Id, M>),
@@ -53,6 +54,7 @@ pub enum SingleDescriptionPropertyRef<'a, M> {
 	Required(&'a FunctionalPropertyValue<Id, M>),
 	Option(&'a FunctionalPropertyValue<Id, M>),
 	Set(&'a FunctionalPropertyValue<Id, M>),
+	Map(&'a FunctionalPropertyValue<Id, M>),
 	OneOrMany(&'a FunctionalPropertyValue<Id, M>),
 	Array(&'a FunctionalPropertyValue<Id, M>),
 	Alias(&'a FunctionalPropertyValue<Id, M>),
@@ -68,6 +70,7 @@ impl<'a, M> SingleDescriptionPropertyRef<'a, M> {
 			Self::Required(p) => p.first().unwrap().value.into_metadata(),
 			Self::Option(p) => p.first().unwrap().value.into_metadata(),
 			Self::Set(p) => p.first().unwrap().value.into_metadata(),
+			Self::Map(p) => p.first().unwrap().value.into_metadata(),
 			Self::OneOrMany(p) => p.first().unwrap().value.into_metadata(),
 			Self::Array(p) => p.first().unwrap().value.into_metadata(),
 			Self::Alias(p) => p.first().unwrap().value.into_metadata(),
@@ -86,6 +89,7 @@ impl<'a, M> SingleDescriptionPropertyRef<'a, M> {
 			Self::Required(p) => SingleDescriptionProperty::Required(p.clone()),
 			Self::Option(p) => SingleDescriptionProperty::Option(p.clone()),
 			Self::Set(p) => SingleDescriptionProperty::Set(p.clone()),
+			Self::Map(p) => SingleDescriptionProperty::Map(p.clone()),
 			Self::OneOrMany(p) => SingleDescriptionProperty::OneOrMany(p.clone()),
 			Self::Array(p) => SingleDescriptionProperty::Array(p.clone()),
 			Self::Alias(p) => SingleDescriptionProperty::Alias(p.clone()),
@@ -98,6 +102,7 @@ impl<'a, M> SingleDescriptionPropertyRef<'a, M> {
 		id: Id,
 		restrictions: MetaOption<Restrictions<M>, M>,
 		array_semantics: &array::Semantics<M>,
+		map_value: FunctionalPropertyValue<Id, M>,
 	) -> Result<treeldr::layout::Description<M>, Error<M>>
 	where
 		M: Clone + Merge,
@@ -284,6 +289,39 @@ impl<'a, M> SingleDescriptionPropertyRef<'a, M> {
 					)?,
 				))
 			}
+			Self::Map(p) => {
+				let key_layout = p.clone().try_unwrap().map_err(|e| {
+					e.at_functional_node_property(id, DescriptionProperty::Map(None))
+				})?;
+
+				let value_layout = map_value.into_required_layout_at_node_binding(
+					context,
+					id,
+					Property::MapValue(None),
+					self.metadata(),
+				)?;
+
+				Ok(treeldr::layout::Description::Map(
+					key_layout
+						.into_required()
+						.unwrap()
+						.try_map_borrow_metadata(|key_layout_id, meta| {
+							let meta = meta.first().unwrap().value.into_metadata();
+							let item_layout_ref =
+								context.require_layout_id(key_layout_id).map_err(|e| {
+									e.at_node_property(
+										id,
+										DescriptionProperty::Map(None),
+										meta.clone(),
+									)
+								})?;
+							Ok(treeldr::layout::Map::new(
+								Meta(item_layout_ref, meta.clone()),
+								value_layout,
+							))
+						})?,
+				))
+			}
 			Self::OneOrMany(p) => {
 				let value = p.clone().try_unwrap().map_err(|e| {
 					e.at_functional_node_property(id, DescriptionProperty::OneOrMany(None))
@@ -375,6 +413,7 @@ pub struct DescriptionProperties<M> {
 	pub required: FunctionalPropertyValue<Id, M>,
 	pub option: FunctionalPropertyValue<Id, M>,
 	pub set: FunctionalPropertyValue<Id, M>,
+	pub map: FunctionalPropertyValue<Id, M>,
 	pub one_or_many: FunctionalPropertyValue<Id, M>,
 	pub array: FunctionalPropertyValue<Id, M>,
 	pub alias: FunctionalPropertyValue<Id, M>,
@@ -389,6 +428,7 @@ impl<M> DescriptionProperties<M> {
 			&& self.required.is_empty()
 			&& self.option.is_empty()
 			&& self.set.is_empty()
+			&& self.map.is_empty()
 			&& self.one_or_many.is_empty()
 			&& self.array.is_empty()
 			&& self.alias.is_empty()
@@ -406,6 +446,7 @@ impl<M> DescriptionProperties<M> {
 			BaseDescriptionBinding::Required(id) => self.required.insert_base(Meta(id, m)),
 			BaseDescriptionBinding::Option(id) => self.option.insert_base(Meta(id, m)),
 			BaseDescriptionBinding::Set(id) => self.set.insert_base(Meta(id, m)),
+			BaseDescriptionBinding::Map(id) => self.map.insert_base(Meta(id, m)),
 			BaseDescriptionBinding::OneOrMany(id) => self.one_or_many.insert_base(Meta(id, m)),
 			BaseDescriptionBinding::Array(id) => self.array.insert_base(Meta(id, m)),
 			BaseDescriptionBinding::Alias(id) => self.alias.insert_base(Meta(id, m)),
@@ -450,6 +491,7 @@ impl<M> DescriptionProperties<M> {
 				self.required.insert(p, prop_cmp, value.into_expected_id()?)
 			}
 			DescriptionProperty::Set(p) => self.set.insert(p, prop_cmp, value.into_expected_id()?),
+			DescriptionProperty::Map(p) => self.map.insert(p, prop_cmp, value.into_expected_id()?),
 			DescriptionProperty::Variants(p) => {
 				self.enum_.insert(p, prop_cmp, value.into_expected_id()?)
 			}
@@ -735,12 +777,13 @@ impl<M> DescriptionProperties<M> {
 		id: Id,
 		restrictions: MetaOption<Restrictions<M>, M>,
 		array_semantics: &array::Semantics<M>,
+		map_value: FunctionalPropertyValue<Id, M>,
 	) -> Result<treeldr::layout::Description<M>, Error<M>>
 	where
 		M: Clone + Merge,
 	{
 		match self.single_description() {
-			Ok(Some(desc)) => desc.build(context, id, restrictions, array_semantics),
+			Ok(Some(desc)) => desc.build(context, id, restrictions, array_semantics, map_value),
 			Ok(None) => match Primitive::from_id(id) {
 				Some(p) => Ok(treeldr::layout::Description::Primitive(p)),
 				None => Ok(treeldr::layout::Description::Never),
@@ -880,6 +923,7 @@ pub enum BaseDescriptionBinding {
 	Required(Id),
 	Option(Id),
 	Set(Id),
+	Map(Id),
 	OneOrMany(Id),
 	Array(Id),
 	Alias(Id),
@@ -894,6 +938,7 @@ pub enum DescriptionBinding {
 	Required(Option<TId<UnknownProperty>>, Id),
 	Option(Option<TId<UnknownProperty>>, Id),
 	Set(Option<TId<UnknownProperty>>, Id),
+	Map(Option<TId<UnknownProperty>>, Id),
 	OneOrMany(Option<TId<UnknownProperty>>, Id),
 	Array(Option<TId<UnknownProperty>>, Id),
 	Alias(Option<TId<UnknownProperty>>, Id),
@@ -909,6 +954,7 @@ impl DescriptionBinding {
 			Self::Required(p, _) => DescriptionProperty::Required(*p),
 			Self::Option(p, _) => DescriptionProperty::Option(*p),
 			Self::Set(p, _) => DescriptionProperty::Set(*p),
+			Self::Map(p, _) => DescriptionProperty::Map(*p),
 			Self::OneOrMany(p, _) => DescriptionProperty::OneOrMany(*p),
 			Self::Array(p, _) => DescriptionProperty::Array(*p),
 			Self::Alias(p, _) => DescriptionProperty::Alias(*p),
@@ -924,6 +970,7 @@ impl DescriptionBinding {
 			Self::Required(_, v) => BindingValueRef::Id(*v),
 			Self::Option(_, v) => BindingValueRef::Id(*v),
 			Self::Set(_, v) => BindingValueRef::Id(*v),
+			Self::Map(_, v) => BindingValueRef::Id(*v),
 			Self::OneOrMany(_, v) => BindingValueRef::Id(*v),
 			Self::Array(_, v) => BindingValueRef::Id(*v),
 			Self::Alias(_, v) => BindingValueRef::Id(*v),
@@ -963,6 +1010,9 @@ pub struct Definition<M> {
 
 	/// List semantics.
 	array_semantics: array::Semantics<M>,
+
+	/// Map layout value format.
+	map_value: FunctionalPropertyValue<Id, M>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -991,6 +1041,7 @@ impl<M> Default for Definition<M> {
 			intersection_of: FunctionalPropertyValue::default(),
 			restrictions: FunctionalPropertyValue::default(),
 			array_semantics: array::Semantics::default(),
+			map_value: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -1069,6 +1120,9 @@ impl<M> Definition<M> {
 				self.array_semantics
 					.set_nil(p, prop_cmp, value.into_expected_id()?)
 			}
+			Property::MapValue(p) => self
+				.map_value
+				.insert(p, prop_cmp, value.into_expected_id()?),
 		}
 
 		Ok(())
@@ -1081,6 +1135,7 @@ impl<M> Definition<M> {
 			intersection_of: self.intersection_of.iter(),
 			restrictions: self.restrictions.iter(),
 			array_semantics: self.array_semantics.bindings(),
+			map_value: self.map_value.iter(),
 		}
 	}
 }
@@ -1339,8 +1394,13 @@ impl<M: Clone> Definition<M> {
 			.transpose()?
 			.into();
 
-		self.desc
-			.build(context, as_resource.id, restrictions, &self.array_semantics)
+		self.desc.build(
+			context,
+			as_resource.id,
+			restrictions,
+			&self.array_semantics,
+			self.map_value.clone(),
+		)
 	}
 
 	pub(crate) fn build(
@@ -1429,6 +1489,7 @@ pub enum ClassBinding {
 	IntersectionOf(Option<TId<UnknownProperty>>, Id),
 	WithRestrictions(Option<TId<UnknownProperty>>, Id),
 	ArraySemantics(array::Binding),
+	MapValue(Option<TId<UnknownProperty>>, Id),
 }
 
 pub type Binding = ClassBinding;
@@ -1441,6 +1502,7 @@ impl ClassBinding {
 			Self::IntersectionOf(p, _) => Property::IntersectionOf(*p),
 			Self::WithRestrictions(p, _) => Property::WithRestrictions(*p),
 			Self::ArraySemantics(b) => b.property(),
+			Self::MapValue(p, _) => Property::MapValue(*p),
 		}
 	}
 
@@ -1451,6 +1513,7 @@ impl ClassBinding {
 			Self::IntersectionOf(_, v) => BindingValueRef::Id(*v),
 			Self::WithRestrictions(_, v) => BindingValueRef::Id(*v),
 			Self::ArraySemantics(b) => b.value(),
+			Self::MapValue(_, v) => BindingValueRef::Id(*v),
 		}
 	}
 }
@@ -1461,6 +1524,7 @@ pub struct ClassBindings<'a, M> {
 	intersection_of: functional_property_value::Iter<'a, Id, M>,
 	restrictions: functional_property_value::Iter<'a, Id, M>,
 	array_semantics: array::Bindings<'a, M>,
+	map_value: functional_property_value::Iter<'a, Id, M>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -1490,6 +1554,13 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 										self.array_semantics
 											.next()
 											.map(|v| v.map(ClassBinding::ArraySemantics))
+											.or_else(|| {
+												self.map_value.next().map(|v| {
+													v.into_cloned_class_binding(
+														ClassBinding::MapValue,
+													)
+												})
+											})
 									})
 							})
 					})

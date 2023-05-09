@@ -172,6 +172,10 @@ impl CollectContextBounds for Type {
 				BuiltIn::BTreeSet(item) => {
 					item.collect_context_bounds_from(context, tr, visited, f)
 				}
+				BuiltIn::BTreeMap(key, value) => {
+					key.collect_context_bounds_from(context, tr, visited, f);
+					value.collect_context_bounds_from(context, tr, visited, f)
+				}
 				BuiltIn::OneOrMany(item) => {
 					item.collect_context_bounds_from(context, tr, visited, f)
 				}
@@ -223,6 +227,9 @@ pub enum BuiltIn {
 	/// BTreeSet.
 	BTreeSet(TId<treeldr::Layout>),
 
+	/// BTreeMap.
+	BTreeMap(TId<treeldr::Layout>, TId<treeldr::Layout>),
+
 	/// OneOrMany, for non empty sets.
 	OneOrMany(TId<treeldr::Layout>),
 }
@@ -238,6 +245,7 @@ impl BuiltIn {
 	) -> Parameters {
 		match self {
 			Self::BTreeSet(i) => dependency_params(*i),
+			Self::BTreeMap(k, v) => dependency_params(*k).union_with(dependency_params(*v)),
 			Self::OneOrMany(i) => dependency_params(*i),
 			Self::Option(i) => dependency_params(*i),
 			Self::Required(i) => dependency_params(*i),
@@ -325,6 +333,9 @@ impl Description {
 			}
 			treeldr::layout::Description::Set(s) => {
 				Self::BuiltIn(BuiltIn::BTreeSet(**s.item_layout()))
+			}
+			treeldr::layout::Description::Map(m) => {
+				Self::BuiltIn(BuiltIn::BTreeMap(**m.key_layout(), **m.value_layout()))
 			}
 			treeldr::layout::Description::OneOrMany(s) => {
 				Self::BuiltIn(BuiltIn::OneOrMany(**s.item_layout()))

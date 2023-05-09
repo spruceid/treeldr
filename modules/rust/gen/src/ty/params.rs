@@ -67,6 +67,11 @@ impl Parameters {
 		self.context |= other.context;
 		self.identifier |= other.identifier
 	}
+
+	pub fn union_with(mut self, other: Self) -> Self {
+		self.append(other);
+		self
+	}
 }
 
 impl IntoIterator for Parameters {

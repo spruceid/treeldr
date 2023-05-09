@@ -149,6 +149,15 @@ where
 					.into_tokens()?;
 				Ok(quote!(::std::collections::btree_set::Iter<'a, #item_expr>))
 			}
+			ty::BuiltIn::BTreeMap(key, value) => {
+				let key_expr = key
+					.generate_in_with(context, scope, params_values)
+					.into_tokens()?;
+				let value_expr = value
+					.generate_in_with(context, scope, params_values)
+					.into_tokens()?;
+				Ok(quote!(::std::collections::btree_map::Iter<'a, #key_expr, #value_expr>))
+			}
 			ty::BuiltIn::OneOrMany(item) => {
 				let item_expr = item
 					.generate_in_with(context, scope, params_values)

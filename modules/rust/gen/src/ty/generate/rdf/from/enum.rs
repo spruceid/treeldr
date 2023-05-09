@@ -208,6 +208,7 @@ impl VariantSignature<IdCondition> {
 				Self::build_for_id_from_layout(model, **item.item_layout(), result)
 			}
 			Description::Set(_) => false,
+			Description::Map(_) => false,
 			Description::Struct(s) => {
 				for Meta(field_ref, _) in s.fields() {
 					let field = model.get(*field_ref).unwrap();
@@ -291,6 +292,7 @@ impl VariantSignature<LiteralCondition> {
 				Self::build_for_literal_from_layout(model, **item.item_layout(), result)
 			}
 			Description::Set(_) => false,
+			Description::Map(_) => false,
 			Description::Struct(_) => false,
 		}
 	}

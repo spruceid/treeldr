@@ -96,6 +96,8 @@ impl IncludedLayout {
 				}
 				Description::Set(s) => IncludedLayout::new(**s.item_layout(), self.type_scoped)
 					.flatten(model, options, result),
+				Description::Map(s) => IncludedLayout::new(**s.value_layout(), self.type_scoped)
+					.flatten(model, options, result),
 				Description::Array(a) => IncludedLayout::new(**a.item_layout(), self.type_scoped)
 					.flatten(model, options, result),
 				Description::Enum(e) => {

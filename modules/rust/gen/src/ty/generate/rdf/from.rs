@@ -56,6 +56,10 @@ fn collect_bounds<V, M>(
 				ty::Description::Alias(a) => stack.push(a.target()),
 				ty::Description::Primitive(p) => bound(Bound::FromLiteral(*p)),
 				ty::Description::BuiltIn(b) => match b {
+					ty::BuiltIn::BTreeMap(key_layout, value_layout) => {
+						stack.push(*key_layout);
+						stack.push(*value_layout)
+					}
 					ty::BuiltIn::BTreeSet(item_layout)
 					| ty::BuiltIn::OneOrMany(item_layout)
 					| ty::BuiltIn::Option(item_layout)

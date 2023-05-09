@@ -120,6 +120,14 @@ pub enum TreeLdr {
 	#[iri("tldr:set")]
 	Set,
 
+	/// Map layout key format.
+	#[iri("tldr:mapKey")]
+	MapKey,
+
+	/// Map layout value format.
+	#[iri("tldr:mapValue")]
+	MapValue,
+
 	/// "One or many" layout.
 	#[iri("tldr:oneOrMany")]
 	OneOrMany,
