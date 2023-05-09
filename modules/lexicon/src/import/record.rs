@@ -33,9 +33,23 @@ impl<V: VocabularyMut> Process<V> for LexRecord {
 			)),
 		));
 
-		log::warn!("records not yet supported");
+		if let Some(_) = self.key {
+			log::warn!("records `key` constraint not yet supported");
+		}
+
+		triples.push(Triple(
+			id.clone(),
+			vocabulary.insert(vocab::TreeLdr::MapKey.as_iri()),
+			Object::Id(Id::Iri(vocabulary.insert(vocab::Xsd::String.as_iri()))),
+		));
 
 		let record_id = sub_id(vocabulary, &id, "record");
-		stack.push(Item::Object(record_id, self.record))
+		stack.push(Item::Object(record_id.clone(), self.record));
+
+		triples.push(Triple(
+			id.clone(),
+			vocabulary.insert(vocab::TreeLdr::MapValue.as_iri()),
+			Object::Id(record_id),
+		));
 	}
 }
