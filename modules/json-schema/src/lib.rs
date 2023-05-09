@@ -571,8 +571,8 @@ fn generate_map_type<F>(
 	type_property: Option<&str>,
 	key_layout_ref: TId<treeldr::Layout>,
 	value_layout_ref: TId<treeldr::Layout>,
-) -> Result<serde_json::Value, Error> {
-	let mut def = serde_json::Map::new();
+) -> Result<json_syntax::Value, Error> {
+	let mut def = json_syntax::Object::new();
 
 	let key_schema = generate_layout_ref(
 		vocabulary,
@@ -592,9 +592,12 @@ fn generate_map_type<F>(
 		value_layout_ref,
 	)?;
 
-	def.insert("type".into(), "object".into());
-	def.insert("propertyNames".into(), key_schema);
-	def.insert("additionalProperties".into(), value_schema);
+	def.insert(Meta("type".into(), ()), Meta("object".into(), ()));
+	def.insert(Meta("propertyNames".into(), ()), Meta(key_schema, ()));
+	def.insert(
+		Meta("additionalProperties".into(), ()),
+		Meta(value_schema, ()),
+	);
 
 	Ok(def.into())
 }
