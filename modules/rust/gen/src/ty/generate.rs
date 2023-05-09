@@ -43,6 +43,13 @@ impl<M> GenerateIn<M> for BuiltIn {
 					.into_tokens()?;
 				tokens.extend(quote! { std::collections::BTreeSet<#item> })
 			}
+			Self::BTreeMap(key, value) => {
+				let key = key.generate_in_with(context, scope, params).into_tokens()?;
+				let value = value
+					.generate_in_with(context, scope, params)
+					.into_tokens()?;
+				tokens.extend(quote! { std::collections::BTreeMap<#key, #value> })
+			}
 			Self::OneOrMany(item) => {
 				let item = item
 					.generate_in_with(context, scope, params)
@@ -84,6 +91,13 @@ impl<M> GenerateIn<M> for Referenced<BuiltIn> {
 					.generate_in_with(context, scope, params)
 					.into_tokens()?;
 				tokens.extend(quote! { &std::collections::BTreeSet<#item> })
+			}
+			BuiltIn::BTreeMap(key, value) => {
+				let key = key.generate_in_with(context, scope, params).into_tokens()?;
+				let value = value
+					.generate_in_with(context, scope, params)
+					.into_tokens()?;
+				tokens.extend(quote! { &std::collections::BTreeMap<#key, #value> })
 			}
 			BuiltIn::OneOrMany(item) => {
 				let item = item

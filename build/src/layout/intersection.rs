@@ -138,6 +138,7 @@ pub enum Description<M> {
 	Required(#[locspan(stripped)] IdIntersection<M>),
 	Option(#[locspan(stripped)] IdIntersection<M>),
 	Set(#[locspan(stripped)] IdIntersection<M>),
+	Map(#[locspan(stripped)] IdIntersection<M>),
 	OneOrMany(#[locspan(stripped)] IdIntersection<M>),
 	Array(#[locspan(stripped)] IdIntersection<M>),
 	Alias(#[locspan(stripped)] IdIntersection<M>),
@@ -195,6 +196,9 @@ impl<M> Description<M> {
 			}
 			super::DescriptionBinding::Set(_, id) => {
 				Self::Set(IdIntersection::new(Meta(id, meta.clone())))
+			}
+			super::DescriptionBinding::Map(_, id) => {
+				Self::Map(IdIntersection::new(Meta(id, meta.clone())))
 			}
 			super::DescriptionBinding::Struct(_, id) => {
 				Self::Struct(IdIntersection::new(Meta(id, meta.clone())))
@@ -323,6 +327,16 @@ impl<M> Description<M> {
 			)),
 			Self::Set(l) => desc.insert(Meta(
 				super::BaseDescriptionBinding::Set(l.prepare_layout(
+					vocabulary,
+					generator,
+					context,
+					stack,
+					meta.clone(),
+				)),
+				meta,
+			)),
+			Self::Map(l) => desc.insert(Meta(
+				super::BaseDescriptionBinding::Map(l.prepare_layout(
 					vocabulary,
 					generator,
 					context,

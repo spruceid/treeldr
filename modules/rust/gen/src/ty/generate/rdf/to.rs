@@ -91,8 +91,11 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 						V
 					>))
 			}
+			ty::BuiltIn::BTreeMap(_, _) => {
+				todo!("btreemap triples iterator generator")
+			}
 			ty::BuiltIn::OneOrMany(_) => {
-				todo!()
+				todo!("one or many triples iterator generator")
 			}
 			ty::BuiltIn::Option(item_layout) => {
 				let inner = quads_and_values_iterator_of(
@@ -155,6 +158,10 @@ fn collect_bounds<V, M>(
 				ty::Description::Alias(a) => stack.push(a.target()),
 				ty::Description::Primitive(p) => bound(Bound::AsLiteral(*p)),
 				ty::Description::BuiltIn(b) => match b {
+					ty::BuiltIn::BTreeMap(key_layout, value_layout) => {
+						stack.push(*key_layout);
+						stack.push(*value_layout)
+					}
 					ty::BuiltIn::BTreeSet(item_layout)
 					| ty::BuiltIn::OneOrMany(item_layout)
 					| ty::BuiltIn::Option(item_layout)

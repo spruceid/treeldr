@@ -223,6 +223,14 @@ fn generate_layout_schema<F>(
 			**s.item_layout(),
 			s.restrictions(),
 		),
+		Description::Map(s) => generate_map_type(
+			vocabulary,
+			model,
+			embedding,
+			type_property,
+			**s.key_layout(),
+			**s.value_layout(),
+		),
 		Description::OneOrMany(s) => generate_one_or_many_type(
 			vocabulary,
 			model,
@@ -435,6 +443,14 @@ fn generate_layout_ref<F>(
 			**s.item_layout(),
 			s.restrictions(),
 		),
+		Description::Map(m) => generate_map_type(
+			vocabulary,
+			model,
+			embedding,
+			type_property,
+			**m.key_layout(),
+			**m.value_layout(),
+		),
 		Description::OneOrMany(s) => generate_one_or_many_type(
 			vocabulary,
 			model,
@@ -524,6 +540,41 @@ fn generate_set_type<F>(
 			def.insert("maxItems".into(), m.into());
 		}
 	}
+
+	Ok(def.into())
+}
+
+fn generate_map_type<F>(
+	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	model: &treeldr::MutableModel<F>,
+	embedding: &embedding::Configuration,
+	type_property: Option<&str>,
+	key_layout_ref: TId<treeldr::Layout>,
+	value_layout_ref: TId<treeldr::Layout>,
+) -> Result<serde_json::Value, Error> {
+	let mut def = serde_json::Map::new();
+
+	let key_schema = generate_layout_ref(
+		vocabulary,
+		model,
+		embedding,
+		type_property,
+		None,
+		key_layout_ref,
+	)?;
+
+	let value_schema = generate_layout_ref(
+		vocabulary,
+		model,
+		embedding,
+		type_property,
+		None,
+		value_layout_ref,
+	)?;
+
+	def.insert("type".into(), "object".into());
+	def.insert("propertyNames".into(), key_schema);
+	def.insert("additionalProperties".into(), value_schema);
 
 	Ok(def.into())
 }

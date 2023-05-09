@@ -13,6 +13,7 @@ use locspan::Meta;
 pub mod array;
 pub mod enumeration;
 pub mod field;
+mod map;
 mod one_or_many;
 mod optional;
 pub mod primitive;
@@ -29,6 +30,7 @@ mod usages;
 pub use array::Array;
 pub use enumeration::Enum;
 pub use field::Field;
+pub use map::Map;
 pub use one_or_many::OneOrMany;
 pub use optional::Optional;
 pub use primitive::{restriction::Restricted as RestrictedPrimitive, Primitive};
@@ -77,6 +79,7 @@ pub enum Kind {
 	Option,
 	Array,
 	Set,
+	Map,
 	OneOrMany,
 	Alias,
 }
@@ -127,6 +130,9 @@ pub enum Description<M> {
 	/// Set.
 	Set(RequiredFunctionalPropertyValue<Set<M>, M>),
 
+	/// Map.
+	Map(RequiredFunctionalPropertyValue<Map<M>, M>),
+
 	/// One or many.
 	OneOrMany(RequiredFunctionalPropertyValue<OneOrMany<M>, M>),
 
@@ -147,6 +153,7 @@ impl<M> Description<M> {
 			Self::Option(_) => Kind::Option,
 			Self::Array(_) => Kind::Array,
 			Self::Set(_) => Kind::Set,
+			Self::Map(_) => Kind::Map,
 			Self::OneOrMany(_) => Kind::OneOrMany,
 			Self::Alias(_) => Kind::Alias,
 		}
@@ -202,6 +209,7 @@ impl<M> Description<M> {
 			Self::Option(o) => Some(DescriptionPropertyValue::Option(o)),
 			Self::Array(a) => Some(DescriptionPropertyValue::Array(a)),
 			Self::Set(s) => Some(DescriptionPropertyValue::Set(s)),
+			Self::Map(s) => Some(DescriptionPropertyValue::Map(s)),
 			Self::OneOrMany(o) => Some(DescriptionPropertyValue::OneOrMany(o)),
 			Self::Alias(l) => Some(DescriptionPropertyValue::Alias(l)),
 		}
@@ -228,6 +236,13 @@ impl<M> Description<M> {
 
 	pub fn with_restrictions(&self) -> Option<WithRestrictions<M>> {
 		self.restrictions().and_then(WithRestrictions::new)
+	}
+
+	pub fn as_map(&self) -> Option<&Map<M>> {
+		match self {
+			Self::Map(m) => Some(m),
+			_ => None,
+		}
 	}
 }
 
@@ -326,6 +341,7 @@ pub enum DescriptionPropertyValue<'a, M> {
 	Option(&'a RequiredFunctionalPropertyValue<Optional<M>, M>),
 	Array(&'a RequiredFunctionalPropertyValue<Array<M>, M>),
 	Set(&'a RequiredFunctionalPropertyValue<Set<M>, M>),
+	Map(&'a RequiredFunctionalPropertyValue<Map<M>, M>),
 	OneOrMany(&'a RequiredFunctionalPropertyValue<OneOrMany<M>, M>),
 	Alias(&'a RequiredFunctionalPropertyValue<TId<Layout>, M>),
 }
@@ -341,6 +357,7 @@ impl<'a, M> DescriptionPropertyValue<'a, M> {
 			Self::Option(i) => DescriptionPropertyValueIter::Option(i.iter()),
 			Self::Array(i) => DescriptionPropertyValueIter::Array(i.iter()),
 			Self::Set(i) => DescriptionPropertyValueIter::Set(i.iter()),
+			Self::Map(i) => DescriptionPropertyValueIter::Map(i.iter()),
 			Self::OneOrMany(i) => DescriptionPropertyValueIter::OneOrMany(i.iter()),
 			Self::Alias(i) => DescriptionPropertyValueIter::Alias(i.iter()),
 		}
@@ -365,6 +382,7 @@ pub enum DescriptionPropertyValueIter<'a, M> {
 	Option(property_values::required_functional::Iter<'a, Optional<M>, M>),
 	Array(property_values::required_functional::Iter<'a, Array<M>, M>),
 	Set(property_values::required_functional::Iter<'a, Set<M>, M>),
+	Map(property_values::required_functional::Iter<'a, Map<M>, M>),
 	OneOrMany(property_values::required_functional::Iter<'a, OneOrMany<M>, M>),
 	Alias(property_values::required_functional::Iter<'a, TId<Layout>, M>),
 }
@@ -397,6 +415,9 @@ impl<'a, M> Iterator for DescriptionPropertyValueIter<'a, M> {
 			}),
 			Self::Set(v) => v.next().map(|s| {
 				s.into_class_binding(|id, c| DescriptionBindingRef::Set(id, **c.item_layout()))
+			}),
+			Self::Map(v) => v.next().map(|s| {
+				s.into_class_binding(|id, c| DescriptionBindingRef::Map(id, **c.key_layout()))
 			}),
 			Self::OneOrMany(v) => v.next().map(|s| {
 				s.into_class_binding(|id, c| {
@@ -456,6 +477,10 @@ impl<M> Definition<M> {
 			Description::Required(r) => ComposingLayouts::One(Some(*r.item_layout().value())),
 			Description::Array(a) => ComposingLayouts::One(Some(*a.item_layout().value())),
 			Description::Set(s) => ComposingLayouts::One(Some(*s.item_layout().value())),
+			Description::Map(m) => ComposingLayouts::Two(
+				Some(*m.key_layout().value()),
+				Some(*m.value_layout().value()),
+			),
 			Description::OneOrMany(s) => ComposingLayouts::One(Some(*s.item_layout().value())),
 			Description::Alias(_) => ComposingLayouts::None,
 		}
@@ -504,6 +529,7 @@ impl<M> Definition<M> {
 				.array_semantics()
 				.map(|s| s.bindings())
 				.unwrap_or_default(),
+			map_value: self.desc.as_map().map(|m| m.value_layout().iter()),
 		}
 	}
 }
@@ -515,6 +541,7 @@ pub enum ComposingLayouts<'a, M> {
 	),
 	Enum(enumeration::ComposingLayouts<'a, M>),
 	One(Option<TId<Layout>>),
+	Two(Option<TId<Layout>>, Option<TId<Layout>>),
 	None,
 }
 
@@ -526,6 +553,7 @@ impl<'a, M> Iterator for ComposingLayouts<'a, M> {
 			Self::Fields(model, fields) => fields.next().map(|f| model.get(**f).unwrap().format()),
 			Self::Enum(e) => e.next(),
 			Self::One(r) => r.take(),
+			Self::Two(a, b) => a.take().or_else(|| b.take()),
 			Self::None => None,
 		}
 	}
@@ -540,6 +568,7 @@ pub enum Property {
 	ArrayListFirst(Option<TId<UnknownProperty>>),
 	ArrayListRest(Option<TId<UnknownProperty>>),
 	ArrayListNil(Option<TId<UnknownProperty>>),
+	MapValue(Option<TId<UnknownProperty>>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -551,6 +580,7 @@ pub enum DescriptionProperty {
 	Required(Option<TId<UnknownProperty>>),
 	Option(Option<TId<UnknownProperty>>),
 	Set(Option<TId<UnknownProperty>>),
+	Map(Option<TId<UnknownProperty>>),
 	OneOrMany(Option<TId<UnknownProperty>>),
 	Array(Option<TId<UnknownProperty>>),
 	Alias(Option<TId<UnknownProperty>>),
@@ -583,6 +613,8 @@ impl Property {
 				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::ArrayListNil)))
 			}
 			Self::ArrayListNil(Some(p)) => p.id(),
+			Self::MapValue(Some(p)) => p.id(),
+			Self::MapValue(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::MapValue))),
 		}
 	}
 
@@ -621,6 +653,8 @@ impl Property {
 				PropertyName::Resource("\"array as list\" empty list value")
 			}
 			Self::ArrayListNil(Some(p)) => PropertyName::Other(*p),
+			Self::MapValue(None) => PropertyName::Resource("map value layout"),
+			Self::MapValue(Some(p)) => PropertyName::Other(*p),
 		}
 	}
 
@@ -658,6 +692,8 @@ impl DescriptionProperty {
 			Self::Option(Some(p)) => p.id(),
 			Self::Set(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Set))),
 			Self::Set(Some(p)) => p.id(),
+			Self::Map(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::MapKey))),
+			Self::Map(Some(p)) => p.id(),
 			Self::OneOrMany(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::OneOrMany))),
 			Self::OneOrMany(Some(p)) => p.id(),
 			Self::Array(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Array))),
@@ -700,6 +736,8 @@ impl DescriptionProperty {
 			Self::Option(Some(p)) => PropertyName::Other(*p),
 			Self::Set(None) => PropertyName::Resource("set item layout"),
 			Self::Set(Some(p)) => PropertyName::Other(*p),
+			Self::Map(None) => PropertyName::Resource("map key layout"),
+			Self::Map(Some(p)) => PropertyName::Other(*p),
 			Self::OneOrMany(None) => PropertyName::Resource("one or many item layout"),
 			Self::OneOrMany(Some(p)) => PropertyName::Other(*p),
 			Self::Array(None) => PropertyName::Resource("array item layout"),
@@ -737,6 +775,7 @@ pub enum DescriptionBindingRef<'a, M> {
 	Option(Option<TId<UnknownProperty>>, TId<Layout>),
 	Array(Option<TId<UnknownProperty>>, TId<Layout>),
 	Set(Option<TId<UnknownProperty>>, TId<Layout>),
+	Map(Option<TId<UnknownProperty>>, TId<Layout>),
 	OneOrMany(Option<TId<UnknownProperty>>, TId<Layout>),
 	Alias(Option<TId<UnknownProperty>>, TId<Layout>),
 }
@@ -752,6 +791,7 @@ impl<'a, M> DescriptionBindingRef<'a, M> {
 			Self::Option(p, _) => DescriptionProperty::Option(*p),
 			Self::Array(p, _) => DescriptionProperty::Array(*p),
 			Self::Set(p, _) => DescriptionProperty::Set(*p),
+			Self::Map(p, _) => DescriptionProperty::Map(*p),
 			Self::OneOrMany(p, _) => DescriptionProperty::OneOrMany(*p),
 			Self::Alias(p, _) => DescriptionProperty::Alias(*p),
 		}
@@ -767,6 +807,7 @@ impl<'a, M> DescriptionBindingRef<'a, M> {
 			Self::Option(_, v) => BindingValueRef::Layout(*v),
 			Self::Array(_, v) => BindingValueRef::Layout(*v),
 			Self::Set(_, v) => BindingValueRef::Layout(*v),
+			Self::Map(_, v) => BindingValueRef::Layout(*v),
 			Self::OneOrMany(_, v) => BindingValueRef::Layout(*v),
 			Self::Alias(_, v) => BindingValueRef::Layout(*v),
 		}
@@ -779,6 +820,7 @@ pub enum ClassBindingRef<'a, M> {
 	IntersectionOf(Option<TId<UnknownProperty>>, &'a Multiple<TId<Layout>, M>),
 	WithRestrictions(Option<TId<UnknownProperty>>, Restrictions<'a, M>),
 	ArraySemantics(array::Binding),
+	MapValue(Option<TId<UnknownProperty>>, TId<Layout>),
 }
 
 pub type BindingRef<'a, M> = ClassBindingRef<'a, M>;
@@ -791,6 +833,7 @@ impl<'a, M> ClassBindingRef<'a, M> {
 			Self::IntersectionOf(p, _) => Property::IntersectionOf(*p),
 			Self::WithRestrictions(p, _) => Property::WithRestrictions(*p),
 			Self::ArraySemantics(b) => b.property(),
+			Self::MapValue(p, _) => Property::MapValue(*p),
 		}
 	}
 
@@ -803,6 +846,7 @@ impl<'a, M> ClassBindingRef<'a, M> {
 			}
 			Self::WithRestrictions(_, v) => BindingValueRef::LayoutRestrictions(*v),
 			Self::ArraySemantics(b) => b.value(),
+			Self::MapValue(_, v) => BindingValueRef::Layout(*v),
 		}
 	}
 }
@@ -813,6 +857,7 @@ pub struct ClassBindings<'a, M> {
 	intersection_of: property_values::functional::Iter<'a, Multiple<TId<crate::Layout>, M>, M>,
 	restrictions: Option<WithRestrictionsIter<'a, M>>,
 	array_semantics: array::Bindings<'a, M>,
+	map_value: Option<property_values::required_functional::Iter<'a, TId<Layout>, M>>,
 }
 
 pub type Bindings<'a, M> = ClassBindings<'a, M>;
@@ -845,6 +890,15 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 										self.array_semantics
 											.next()
 											.map(|v| v.map(ClassBindingRef::ArraySemantics))
+											.or_else(|| {
+												self.map_value.as_mut().and_then(|m| {
+													m.next().map(|v| {
+														v.into_cloned_class_binding(
+															ClassBindingRef::MapValue,
+														)
+													})
+												})
+											})
 									})
 							})
 					})

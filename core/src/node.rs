@@ -258,7 +258,7 @@ pub enum Property {
 }
 
 impl Property {
-	pub const ALL: [Self; 56] = [
+	pub const ALL: [Self; 58] = [
 		Self::Self_(None),
 		Self::Type(None),
 		Self::Label(None),
@@ -350,6 +350,12 @@ impl Property {
 		))),
 		Self::Component(component::Property::Layout(layout::Property::Description(
 			layout::DescriptionProperty::Set(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::Description(
+			layout::DescriptionProperty::Map(None),
+		))),
+		Self::Component(component::Property::Layout(layout::Property::MapValue(
+			None,
 		))),
 		Self::Component(component::Property::Layout(layout::Property::Description(
 			layout::DescriptionProperty::Variants(None),
@@ -537,6 +543,16 @@ impl Property {
 			))) => Self::Component(component::Property::Layout(layout::Property::Description(
 				layout::DescriptionProperty::Set(sub_prop),
 			))),
+			Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Map(_),
+			))) => Self::Component(component::Property::Layout(layout::Property::Description(
+				layout::DescriptionProperty::Map(sub_prop),
+			))),
+			Self::Component(component::Property::Layout(layout::Property::MapValue(_))) => {
+				Self::Component(component::Property::Layout(layout::Property::MapValue(
+					sub_prop,
+				)))
+			}
 			Self::Component(component::Property::Layout(layout::Property::Description(
 				layout::DescriptionProperty::Variants(_),
 			))) => Self::Component(component::Property::Layout(layout::Property::Description(
