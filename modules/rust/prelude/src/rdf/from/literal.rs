@@ -1,6 +1,7 @@
 use super::FromRdfError;
 use iref::Iri;
 use rdf_types::{IriVocabularyMut, Literal};
+use static_iref::iri;
 
 mod xsd;
 
@@ -22,7 +23,13 @@ fn type_check<'l, V: IriVocabularyMut<Iri = T>, S, T, L>(
 				Err(FromRdfError::UnexpectedType)
 			}
 		}
-		Literal::String(_) => Err(FromRdfError::UnexpectedType),
+		Literal::String(s) => {
+			if expected_ty == iri!("http://www.w3.org/2001/XMLSchema#string") {
+				Ok(s)
+			} else {
+				Err(FromRdfError::UnexpectedType)
+			}
+		}
 		Literal::LangString(_, _) => Err(FromRdfError::UnexpectedType),
 	}
 }

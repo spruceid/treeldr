@@ -1,80 +1,53 @@
 use rdf_types::{IriVocabularyMut, Literal};
 use static_iref::iri;
+use xsd_types::ParseRdf;
 
 use crate::FromRdfError;
 
 use super::{type_check, FromLiteral};
 
-impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V> for bool {
-	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-		let lexical = type_check(
-			vocabulary,
-			literal,
-			iri!("http://www.w3.org/2001/XMLSchema#boolean"),
-		)?;
-		match lexical.as_ref() {
-			"true" => Ok(true),
-			"false" => Ok(false),
-			_ => Err(FromRdfError::InvalidLexicalRepresentation),
-		}
-	}
-}
+macro_rules! impl_from_literal {
+	{ $($ty:ty : $rdf_ty:tt),* } => {
+		$(
+			impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V> for $ty {
+				fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+					let lexical = type_check(
+						vocabulary,
+						literal,
+						iri!($rdf_ty),
+					)?;
 
-impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V>
-	for String
-{
-	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-		match literal {
-			Literal::String(s) => Ok(s.as_ref().to_owned()),
-			Literal::TypedString(s, ty) => {
-				if vocabulary.iri(ty).unwrap() == iri!("http://www.w3.org/2001/XMLSchema#string") {
-					Ok(s.as_ref().to_owned())
-				} else {
-					Err(FromRdfError::UnexpectedType)
+					match <$ty>::parse_rdf(lexical.as_ref()) {
+						Ok(i) => Ok(i),
+						Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
+					}
 				}
 			}
-			Literal::LangString(_, _) => Err(FromRdfError::UnexpectedType),
-		}
-	}
+		)*
+	};
 }
 
-// macro_rules! impl_from_literal {
-// 	{ $($ty:ty : $rdf_ty:tt),* } => {
-// 		$(
-// 			impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V> for $ty {
-// 				fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-// 					let lexical = type_check(
-// 						vocabulary,
-// 						literal,
-// 						iri!($rdf_ty),
-// 					)?;
-
-// 					match <$ty>::parse_rdf(lexical.as_ref()) {
-// 						Ok(i) => Ok(i),
-// 						Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
-// 					}
-// 				}
-// 			}
-// 		)*
-// 	};
-// }
-
-// impl_from_literal! {
-// 	xsd_types::Integer: "http://www.w3.org/2001/XMLSchema#integer"
-// }
-
-impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V> for i64 {
-	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-		let lexical = type_check(
-			vocabulary,
-			literal,
-			iri!("http://www.w3.org/2001/XMLSchema#integer"),
-		)?;
-		match xsd_types::lexical::Integer::new(lexical.as_ref()) {
-			Ok(i) => Ok(i.as_str().parse().unwrap()),
-			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
-		}
-	}
+impl_from_literal! {
+	xsd_types::Boolean: "http://www.w3.org/2001/XMLSchema#boolean",
+	xsd_types::Decimal: "http://www.w3.org/2001/XMLSchema#decimal",
+	xsd_types::Integer: "http://www.w3.org/2001/XMLSchema#integer",
+	xsd_types::Long: "http://www.w3.org/2001/XMLSchema#long",
+	xsd_types::Int: "http://www.w3.org/2001/XMLSchema#int",
+	xsd_types::Short: "http://www.w3.org/2001/XMLSchema#short",
+	xsd_types::Byte: "http://www.w3.org/2001/XMLSchema#byte",
+	xsd_types::NonNegativeInteger: "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+	xsd_types::PositiveInteger: "http://www.w3.org/2001/XMLSchema#positiveInteger",
+	xsd_types::UnsignedLong: "http://www.w3.org/2001/XMLSchema#unsignedLong",
+	xsd_types::UnsignedInt: "http://www.w3.org/2001/XMLSchema#unsignedInt",
+	xsd_types::UnsignedShort: "http://www.w3.org/2001/XMLSchema#unsignedShort",
+	xsd_types::UnsignedByte: "http://www.w3.org/2001/XMLSchema#unsignedByte",
+	xsd_types::NonPositiveInteger: "http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
+	xsd_types::NegativeInteger: "http://www.w3.org/2001/XMLSchema#negativeInteger",
+	xsd_types::Double: "http://www.w3.org/2001/XMLSchema#double",
+	xsd_types::Float: "http://www.w3.org/2001/XMLSchema#float",
+	xsd_types::String: "http://www.w3.org/2001/XMLSchema#string",
+	xsd_types::Base64BinaryBuf: "http://www.w3.org/2001/XMLSchema#base64Binary",
+	xsd_types::HexBinaryBuf: "http://www.w3.org/2001/XMLSchema#hexBinary"
 }
 
 impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V>

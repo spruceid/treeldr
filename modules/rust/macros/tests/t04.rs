@@ -40,7 +40,7 @@ async fn t04() {
 	loader.mount(iri!("https://example.com/").to_owned(), "tests/");
 
 	let doc: json_ld::RemoteDocumentReference<IriBuf, Span, _> =
-		json_ld::RemoteDocumentReference::Iri(iri!("https://example.com/t03.jsonld").to_owned());
+		json_ld::RemoteDocumentReference::Iri(iri!("https://example.com/t04.jsonld").to_owned());
 	let mut generator = rdf_types::generator::Blank::new().with_default_metadata();
 	let mut to_rdf = doc
 		.to_rdf(&mut generator, &mut loader)

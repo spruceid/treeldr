@@ -84,6 +84,52 @@ impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for bool {
 	}
 }
 
+macro_rules! impl_into_json_ld_syntax_literal {
+	{ $($ty:ty : $rdf_ty:tt),* } => {
+		$(
+			impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for $ty {
+				fn into_json_ld_object_meta(
+					self,
+					vocabulary: &mut V,
+					meta: M,
+				) -> json_ld::IndexedObject<V::Iri, V::BlankId, M> {
+					Meta(
+						json_ld::Indexed::new(
+							json_ld::Object::Value(json_ld::Value::Literal(
+								json_ld::object::Literal::String(LiteralString::Inferred(self.to_string())),
+								Some(vocabulary.insert(iri!($rdf_ty))),
+							)),
+							None,
+						),
+						meta,
+					)
+				}
+			}
+		)*
+	};
+}
+
+impl_into_json_ld_syntax_literal! {
+	xsd_types::Decimal: "http://www.w3.org/2001/XMLSchema#decimal",
+	xsd_types::Integer: "http://www.w3.org/2001/XMLSchema#integer",
+	xsd_types::Long: "http://www.w3.org/2001/XMLSchema#long",
+	xsd_types::Int: "http://www.w3.org/2001/XMLSchema#int",
+	xsd_types::Short: "http://www.w3.org/2001/XMLSchema#short",
+	xsd_types::Byte: "http://www.w3.org/2001/XMLSchema#byte",
+	xsd_types::NonNegativeInteger: "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+	xsd_types::PositiveInteger: "http://www.w3.org/2001/XMLSchema#positiveInteger",
+	xsd_types::UnsignedLong: "http://www.w3.org/2001/XMLSchema#unsignedLong",
+	xsd_types::UnsignedInt: "http://www.w3.org/2001/XMLSchema#unsignedInt",
+	xsd_types::UnsignedShort: "http://www.w3.org/2001/XMLSchema#unsignedShort",
+	xsd_types::UnsignedByte: "http://www.w3.org/2001/XMLSchema#unsignedByte",
+	xsd_types::NonPositiveInteger: "http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
+	xsd_types::NegativeInteger: "http://www.w3.org/2001/XMLSchema#negativeInteger",
+	xsd_types::Double: "http://www.w3.org/2001/XMLSchema#double",
+	xsd_types::Float: "http://www.w3.org/2001/XMLSchema#float",
+	xsd_types::Base64BinaryBuf: "http://www.w3.org/2001/XMLSchema#base64Binary",
+	xsd_types::HexBinaryBuf: "http://www.w3.org/2001/XMLSchema#hexBinary"
+}
+
 impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for String {
 	fn into_json_ld_object_meta(
 		self,
