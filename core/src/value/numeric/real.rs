@@ -6,7 +6,10 @@ mod rational;
 
 use num::BigInt;
 pub use rational::*;
-use xsd_types::{Decimal, Integer, NonNegativeInteger};
+use xsd_types::{
+	Byte, Decimal, Int, Integer, Long, NegativeInteger, NonNegativeInteger, NonPositiveInteger,
+	PositiveInteger, Short, UnsignedByte, UnsignedInt, UnsignedLong, UnsignedShort,
+};
 
 /// Real number value.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -63,6 +66,83 @@ impl From<Integer> for Real {
 
 impl From<NonNegativeInteger> for Real {
 	fn from(value: NonNegativeInteger) -> Self {
+		let n: BigInt = value.into();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<NonPositiveInteger> for Real {
+	fn from(value: NonPositiveInteger) -> Self {
+		let n: BigInt = value.into();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<PositiveInteger> for Real {
+	fn from(value: PositiveInteger) -> Self {
+		let n: BigInt = value.into_big_int();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<NegativeInteger> for Real {
+	fn from(value: NegativeInteger) -> Self {
+		let n: BigInt = value.into_big_int();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<Long> for Real {
+	fn from(value: Long) -> Self {
+		let n: BigInt = value.into();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<Int> for Real {
+	fn from(value: Int) -> Self {
+		let n: BigInt = value.into();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<Short> for Real {
+	fn from(value: Short) -> Self {
+		let n: BigInt = value.into();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<Byte> for Real {
+	fn from(value: Byte) -> Self {
+		let n: BigInt = value.into();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<UnsignedLong> for Real {
+	fn from(value: UnsignedLong) -> Self {
+		let n: BigInt = value.into();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<UnsignedInt> for Real {
+	fn from(value: UnsignedInt) -> Self {
+		let n: BigInt = value.into();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<UnsignedShort> for Real {
+	fn from(value: UnsignedShort) -> Self {
+		let n: BigInt = value.into();
+		Self::Rational(n.into())
+	}
+}
+
+impl From<UnsignedByte> for Real {
+	fn from(value: UnsignedByte) -> Self {
 		let n: BigInt = value.into();
 		Self::Rational(n.into())
 	}

@@ -1,0 +1,7 @@
+{
+	"@context": {
+		"name": "https://example.com/name"
+	},
+	"@id": "https://example.com/subject",
+	"name": "Foo"
+}

@@ -2,9 +2,9 @@ use locspan::{Span, MaybeLocated};
 use rdf_types::Vocabulary;
 use treeldr::{IriIndex, BlankIdIndex};
 
-pub type LayoutDatatypeRestrictionDoubleConflict<M> = treeldr::layout::primitive::restriction::double::Conflict<M>;
+pub type LayoutDatatypeRestrictionConflict<M> = crate::layout::restriction::primitive::Conflict<M>;
 
-impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutDatatypeRestrictionDoubleConflict<M> where M::File: Clone {
+impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutDatatypeRestrictionConflict<M> where M::File: Clone {
 	fn message(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
 		"conflicting restrictions".to_string()
 	}

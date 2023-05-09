@@ -285,7 +285,7 @@ fn into_numeric(
 			Ok(n) => n.into(),
 			Err(_) => todo!(),
 		},
-		treeldr::layout::Primitive::UnsignedInteger => {
+		treeldr::layout::Primitive::NonNegativeInteger => {
 			match xsd_types::NonNegativeInteger::from_str(&n.to_string()) {
 				Ok(n) => n.into(),
 				Err(_) => todo!(),

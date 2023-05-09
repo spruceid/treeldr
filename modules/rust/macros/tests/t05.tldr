@@ -1,0 +1,10 @@
+base <https://example.com/>;
+use <http://www.w3.org/2001/XMLSchema#> as xs;
+use <https://example.com/> as ex;
+
+type Foo {
+	ex:nonNegativeInteger: xs:nonNegativeInteger,
+	ex:int: xs:int,
+	ex:base64: xs:base64Binary,
+	ex:hex: xs:hexBinary
+}

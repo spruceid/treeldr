@@ -1,7 +1,11 @@
 use crate::{vocab::StrippedLiteral, IriIndex};
 use num::{BigInt, BigRational, Signed, Zero};
 use std::fmt;
-use xsd_types::{Decimal, Integer, NoDecimalRepresentation, NonNegativeInteger};
+use xsd_types::{
+	Byte, Decimal, Int, Integer, Long, NegativeInteger, NoDecimalRepresentation,
+	NonNegativeInteger, NonPositiveInteger, PositiveInteger, Short, UnsignedByte, UnsignedInt,
+	UnsignedLong, UnsignedShort,
+};
 
 lazy_static::lazy_static! {
 	static ref TEN: BigInt = 10u32.into();
@@ -44,6 +48,50 @@ impl Rational {
 		self.0.is_integer() && !self.0.is_negative()
 	}
 
+	pub fn is_non_positive_integer(&self) -> bool {
+		self.0.is_integer() && !self.0.is_positive()
+	}
+
+	pub fn is_positive_integer(&self) -> bool {
+		self.0.is_integer() && self.0.is_positive()
+	}
+
+	pub fn is_negative_integer(&self) -> bool {
+		self.0.is_integer() && self.0.is_negative()
+	}
+
+	pub fn is_long(&self) -> bool {
+		self.0.is_integer() && i64::try_from(self.0.numer()).is_ok()
+	}
+
+	pub fn is_int(&self) -> bool {
+		self.0.is_integer() && i32::try_from(self.0.numer()).is_ok()
+	}
+
+	pub fn is_short(&self) -> bool {
+		self.0.is_integer() && i16::try_from(self.0.numer()).is_ok()
+	}
+
+	pub fn is_byte(&self) -> bool {
+		self.0.is_integer() && i8::try_from(self.0.numer()).is_ok()
+	}
+
+	pub fn is_unsigned_long(&self) -> bool {
+		self.0.is_integer() && u64::try_from(self.0.numer()).is_ok()
+	}
+
+	pub fn is_unsigned_int(&self) -> bool {
+		self.0.is_integer() && u32::try_from(self.0.numer()).is_ok()
+	}
+
+	pub fn is_unsigned_short(&self) -> bool {
+		self.0.is_integer() && u16::try_from(self.0.numer()).is_ok()
+	}
+
+	pub fn is_unsigned_byte(&self) -> bool {
+		self.0.is_integer() && u8::try_from(self.0.numer()).is_ok()
+	}
+
 	pub fn as_integer(&self) -> Option<&Integer> {
 		if self.is_integer() {
 			Some(self.numer())
@@ -63,6 +111,94 @@ impl Rational {
 	pub fn into_non_negative_integer(self) -> Result<NonNegativeInteger, Self> {
 		if self.is_non_negative_integer() {
 			Ok(unsafe { NonNegativeInteger::new_unchecked(self.into_numer().into()) })
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_non_positive_integer(self) -> Result<NonPositiveInteger, Self> {
+		if self.is_non_positive_integer() {
+			Ok(unsafe { NonPositiveInteger::new_unchecked(self.into_numer().into()) })
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_positive_integer(self) -> Result<PositiveInteger, Self> {
+		if self.is_positive_integer() {
+			Ok(unsafe { PositiveInteger::new_unchecked(self.into_numer().into()) })
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_negative_integer(self) -> Result<NegativeInteger, Self> {
+		if self.is_negative_integer() {
+			Ok(unsafe { NegativeInteger::new_unchecked(self.into_numer().into()) })
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_long(self) -> Result<Long, Self> {
+		if self.is_integer() {
+			Long::try_from(self.0.numer()).map_err(|_| self)
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_int(self) -> Result<Int, Self> {
+		if self.is_integer() {
+			Int::try_from(self.0.numer()).map_err(|_| self)
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_short(self) -> Result<Short, Self> {
+		if self.is_integer() {
+			Short::try_from(self.0.numer()).map_err(|_| self)
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_byte(self) -> Result<Byte, Self> {
+		if self.is_integer() {
+			Byte::try_from(self.0.numer()).map_err(|_| self)
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_unsigned_long(self) -> Result<UnsignedLong, Self> {
+		if self.is_integer() {
+			UnsignedLong::try_from(self.0.numer()).map_err(|_| self)
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_unsigned_int(self) -> Result<UnsignedInt, Self> {
+		if self.is_integer() {
+			UnsignedInt::try_from(self.0.numer()).map_err(|_| self)
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_unsigned_short(self) -> Result<UnsignedShort, Self> {
+		if self.is_integer() {
+			UnsignedShort::try_from(self.0.numer()).map_err(|_| self)
+		} else {
+			Err(self)
+		}
+	}
+
+	pub fn into_unsigned_byte(self) -> Result<UnsignedByte, Self> {
+		if self.is_integer() {
+			UnsignedByte::try_from(self.0.numer()).map_err(|_| self)
 		} else {
 			Err(self)
 		}

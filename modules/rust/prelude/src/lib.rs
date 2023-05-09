@@ -13,6 +13,8 @@ pub use json_ld;
 #[cfg(feature = "json-ld")]
 pub use locspan;
 
+pub mod ty;
+
 pub mod rdf;
 
 #[cfg(feature = "json-ld")]

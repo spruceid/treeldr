@@ -1,4 +1,3 @@
-// cargo run -p treeldr-rust-cli -- -i modules/rust/gen/tests/t04.tldr -m rdfs="http://www.w3.org/2000/01/rdf-schema#" -m xsd="http://www.w3.org/2001/XMLSchema#" -m example="https://example.com/example/" | rustfmt
 use iref::IriBuf;
 use json_ld::{syntax::Parse, JsonLdProcessor};
 use locspan::Span;
@@ -18,7 +17,7 @@ pub mod base_schema {
 	pub mod xsd {}
 }
 
-#[tldr("modules/rust/macros/tests/t03.tldr")]
+#[tldr("modules/rust/macros/tests/t05.tldr")]
 pub mod schema {
 	#[prefix("https://treeldr.org/")]
 	pub use crate::base_schema::tldr;
@@ -40,7 +39,7 @@ async fn t04() {
 	loader.mount(iri!("https://example.com/").to_owned(), "tests/");
 
 	let doc: json_ld::RemoteDocumentReference<IriBuf, Span, _> =
-		json_ld::RemoteDocumentReference::Iri(iri!("https://example.com/t04.jsonld").to_owned());
+		json_ld::RemoteDocumentReference::Iri(iri!("https://example.com/t05.jsonld").to_owned());
 	let mut generator = rdf_types::generator::Blank::new().with_default_metadata();
 	let mut to_rdf = doc
 		.to_rdf(&mut generator, &mut loader)
@@ -62,7 +61,14 @@ async fn t04() {
 	assert_eq!(
 		value,
 		schema::test::layout::Foo {
-			name: "Foo".to_string()
+			non_negative_integer: Some(10u32.into()),
+			base64: Some(treeldr_rust_prelude::ty::Base64BytesBuf::from_bytes(
+				b"Hello World!".to_vec()
+			)),
+			hex: Some(treeldr_rust_prelude::ty::HexBytesBuf::from_bytes(
+				b"Hello World!".to_vec()
+			)),
+			int: Some(10)
 		}
 	);
 }
