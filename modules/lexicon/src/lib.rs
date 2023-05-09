@@ -1,12 +1,15 @@
-pub mod export;
-pub mod import;
-
 use std::collections::BTreeMap;
 
 use import::IntoTriples;
 use rdf_types::Vocabulary;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+
+pub mod export;
+pub mod import;
+mod nsid;
+
+pub use nsid::*;
 
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
@@ -18,7 +21,7 @@ pub enum Version {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LexiconDoc {
 	pub lexicon: Version,
-	pub id: String,
+	pub id: NsidBuf,
 
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub revision: Option<u32>,

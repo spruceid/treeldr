@@ -1,4 +1,4 @@
-use contextual::{DisplayWithContext, WithContext};
+use contextual::DisplayWithContext;
 use iref::{AsIri, Iri, IriBuf};
 use rdf_types::{
 	BlankIdVocabulary, Generator, Id, IriVocabulary, Literal, Object, Triple, Vocabulary,
@@ -8,10 +8,15 @@ use treeldr::vocab;
 
 use crate::{
 	LexBoolean, LexInteger, LexObject, LexPrimitive, LexPrimitiveArray, LexRef, LexRefUnion,
-	LexRefVariant, LexString, LexUnknown, LexUserType, LexXrpcBody, LexXrpcBodySchema,
-	LexXrpcParametersNonPrimitiveProperty, LexXrpcParametersProperty, LexXrpcQuery, LexiconDoc,
-	ObjectNonPrimitiveProperty, ObjectProperty,
+	LexRefVariant, LexString, LexUnknown, LexUserType, LexXrpcBody, LexXrpcParametersProperty,
+	LexiconDoc, Nsid, ObjectProperty,
 };
+
+mod object;
+mod primitive;
+mod record;
+mod reference;
+mod xrpc;
 
 /// Checks if the given JSON document is a supported Lexicon document.
 pub fn is_lexicon_document<M>(json: &json_syntax::Value<M>) -> bool {
@@ -36,20 +41,45 @@ trait RdfId<V: VocabularyMut> {
 	fn rdf_id(&self, vocabulary: &mut V, namespace: Iri) -> OutputSubject<V>;
 }
 
+struct Context {
+	base_iri: IriBuf,
+}
+
+impl Context {
+	fn resolve_reference(&self, r: &str) -> IriBuf {
+		match r.split_once('#') {
+			Some((nsid, fragment)) => {
+				let mut iri = Nsid::new(nsid).unwrap().as_iri();
+				iri.path_mut().push(fragment.try_into().unwrap());
+				iri
+			}
+			None => {
+				let mut iri = self.base_iri.clone();
+				iri.path_mut().push(r.try_into().unwrap());
+				iri
+			}
+		}
+	}
+}
+
 pub struct IntoTriples<'v, V: Vocabulary, G> {
 	vocabulary: &'v mut V,
 	generator: G,
 	stack: Vec<Item<V>>,
 	pending: Vec<OutputTriple<V>>,
+	context: Context,
 }
 
 impl<'v, V: Vocabulary, G> IntoTriples<'v, V, G> {
 	pub fn new(doc: LexiconDoc, vocabulary: &'v mut V, generator: G) -> Self {
+		let base_iri = doc.id.as_iri();
+
 		Self {
 			vocabulary,
 			generator,
 			stack: vec![Item::Doc(doc)],
 			pending: Vec::new(),
+			context: Context { base_iri },
 		}
 	}
 }
@@ -78,6 +108,7 @@ where
 				&mut self.generator,
 				&mut self.stack,
 				&mut self.pending,
+				&self.context,
 			);
 
 			if let Some(triple) = self.pending.pop() {
@@ -90,10 +121,9 @@ where
 	}
 }
 
-pub enum Item<V: Vocabulary> {
+enum Item<V: Vocabulary> {
 	Doc(LexiconDoc),
 	UserType(OutputSubject<V>, LexUserType),
-	XrpcQuery(OutputSubject<V>, LexXrpcQuery),
 	XrpcParametersProperty(OutputSubject<V>, LexXrpcParametersProperty),
 	XrpcBody(OutputSubject<V>, LexXrpcBody),
 	Primitive(OutputSubject<V>, LexPrimitive),
@@ -109,13 +139,28 @@ pub enum Item<V: Vocabulary> {
 	Unknown(OutputSubject<V>, LexUnknown),
 }
 
-impl<V: VocabularyMut> Item<V> {
-	pub fn process(
+trait Process<V: VocabularyMut> {
+	fn process(
 		self,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
 		stack: &mut Vec<Item<V>>,
 		triples: &mut Vec<OutputTriple<V>>,
+		context: &Context,
+		id: OutputSubject<V>,
+	) where
+		V::Iri: Clone,
+		V::BlankId: Clone;
+}
+
+impl<V: VocabularyMut> Item<V> {
+	fn process(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		stack: &mut Vec<Item<V>>,
+		triples: &mut Vec<OutputTriple<V>>,
+		context: &Context,
 	) where
 		V::Iri: Clone,
 		V::BlankId: Clone,
@@ -123,531 +168,83 @@ impl<V: VocabularyMut> Item<V> {
 		match self {
 			Self::Doc(doc) => {
 				if let Some(main) = doc.definitions.main {
-					let iri = IriBuf::from_string(format!("lexicon:{}", doc.id)).unwrap();
+					let iri = doc.id.as_iri();
 					let id = Id::Iri(vocabulary.insert(iri.as_iri()));
 					stack.push(Item::UserType(id, main.into()))
 				}
 
 				for (suffix, ty) in doc.definitions.other {
 					let iri =
-						IriBuf::from_string(format!("lexicon:{}.{}", doc.id, suffix)).unwrap();
+						IriBuf::from_string(format!("{}/{}", doc.id.as_iri(), suffix)).unwrap();
 					let id = Id::Iri(vocabulary.insert(iri.as_iri()));
 					stack.push(Item::UserType(id, ty))
 				}
 			}
-			Self::UserType(id, ty) => match ty {
-				LexUserType::Record(_) => {
-					log::warn!("records are not yet supported")
-				}
-				LexUserType::Query(q) => stack.push(Item::XrpcQuery(id, q)),
-				LexUserType::Procedure(_) => {
-					log::warn!("procedures are not yet supported")
-				}
-				LexUserType::Subscription(_) => {
-					log::warn!("subscriptions are not yet supported")
-				}
-				LexUserType::Array(_) => {
-					log::warn!("arrays are not yet supported")
-				}
-				LexUserType::Token(_) => {
-					log::warn!("tokens are not yet supported")
-				}
-				LexUserType::Object(o) => stack.push(Item::Object(id, o)),
-				LexUserType::Boolean(b) => stack.push(Item::Boolean(id, b)),
-				LexUserType::Integer(i) => stack.push(Item::Integer(id, i)),
-				LexUserType::String(s) => stack.push(Item::String(id, s)),
-				LexUserType::Bytes(_) => {
-					log::warn!("bytes are not yet supported")
-				}
-				LexUserType::CidLink(_) => {
-					log::warn!("CID links are not yet supported")
-				}
-				LexUserType::Unknown(u) => stack.push(Item::Unknown(id, u)),
-			},
-			Self::XrpcQuery(id, q) => {
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::Rdf::Type.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-				));
-
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(
-						nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str())
-							.to_string(),
-					)),
-				));
-
-				let fields_id = match q.parameters {
-					Some(params) => build_rdf_list(
-						vocabulary,
-						generator,
-						triples,
-						params.properties,
-						|vocabulary, generator, triples, (name, p)| {
-							let f_id = generator.next(vocabulary);
-
-							triples.push(Triple(
-								f_id.clone(),
-								vocabulary.insert(vocab::Rdf::Type.as_iri()),
-								Object::Id(Id::Iri(
-									vocabulary.insert(vocab::TreeLdr::Field.as_iri()),
-								)),
-							));
-
-							triples.push(Triple(
-								f_id.clone(),
-								vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-								Object::Literal(Literal::String(name.clone())),
-							));
-
-							let item_iri = IriBuf::new(&format!(
-								"{}.{}",
-								vocabulary.iri(id.as_iri().unwrap()).unwrap(),
-								name
-							))
-							.unwrap();
-							let item_id = Id::Iri(vocabulary.insert(item_iri.as_iri()));
-							stack.push(Item::XrpcParametersProperty(item_id.clone(), p));
-
-							let t_id = generator.next(vocabulary);
-							triples.push(Triple(
-								t_id.clone(),
-								vocabulary.insert(vocab::Rdf::Type.as_iri()),
-								Object::Id(Id::Iri(
-									vocabulary.insert(vocab::TreeLdr::Layout.as_iri()),
-								)),
-							));
-
-							if params.required.contains(&name) {
-								triples.push(Triple(
-									t_id.clone(),
-									vocabulary.insert(vocab::TreeLdr::Required.as_iri()),
-									Object::Id(item_id),
-								));
-							} else {
-								triples.push(Triple(
-									t_id.clone(),
-									vocabulary.insert(vocab::TreeLdr::Option.as_iri()),
-									Object::Id(item_id),
-								));
-							};
-
-							triples.push(Triple(
-								f_id.clone(),
-								vocabulary.insert(vocab::TreeLdr::Format.as_iri()),
-								Object::Id(t_id),
-							));
-
-							Object::Id(f_id)
-						},
-					),
-					None => Id::Iri(vocabulary.insert(vocab::Rdf::Nil.as_iri())),
-				};
-
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::Fields.as_iri()),
-					Object::Id(fields_id),
-				));
-
-				if let Some(output) = q.output {
-					let o_iri = IriBuf::new(&format!(
-						"{}.output",
-						vocabulary.iri(id.as_iri().unwrap()).unwrap()
-					))
-					.unwrap();
-					let o_id = Id::Iri(vocabulary.insert(o_iri.as_iri()));
-					stack.push(Item::XrpcBody(o_id, output))
-				}
+			Self::UserType(id, ty) => {
+				ty.process(vocabulary, generator, stack, triples, context, id)
 			}
-			Self::XrpcParametersProperty(id, p) => match p {
-				LexXrpcParametersProperty::Primitive(p) => stack.push(Item::Primitive(id, p)),
-				LexXrpcParametersProperty::NonPrimitive(n) => match n {
-					LexXrpcParametersNonPrimitiveProperty::Array(a) => {
-						stack.push(Item::PrimitiveArray(id, a))
-					}
-				},
-			},
-			Self::XrpcBody(id, b) => match b.schema {
-				LexXrpcBodySchema::Object(o) => stack.push(Item::Object(id, o)),
-				LexXrpcBodySchema::Ref(r) => stack.push(Item::RefVariant(id, r)),
-			},
-			Self::Primitive(id, p) => match p {
-				LexPrimitive::Boolean(b) => stack.push(Item::Boolean(id, b)),
-				LexPrimitive::Integer(i) => stack.push(Item::Integer(id, i)),
-				LexPrimitive::String(s) => stack.push(Item::String(id, s)),
-				LexPrimitive::Unknown(u) => stack.push(Item::Unknown(id, u)),
-			},
+			Self::XrpcParametersProperty(id, p) => {
+				p.process(vocabulary, generator, stack, triples, context, id)
+			}
+			Self::XrpcBody(id, b) => b.process(vocabulary, generator, stack, triples, context, id),
+			Self::Primitive(id, p) => p.process(vocabulary, generator, stack, triples, context, id),
 			Self::PrimitiveArray(id, a) => {
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::Rdf::Type.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-				));
-
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(
-						nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str())
-							.to_string(),
-					)),
-				));
-
-				let item_iri = IriBuf::from_string(format!(
-					"{}.items",
-					vocabulary.iri(id.as_iri().unwrap()).unwrap()
-				))
-				.unwrap();
-				let item_id = Id::Iri(vocabulary.insert(item_iri.as_iri()));
-				stack.push(Item::Primitive(item_id.clone(), a.items));
-
-				triples.push(Triple(
-					id,
-					vocabulary.insert(vocab::TreeLdr::Array.as_iri()),
-					Object::Id(item_id),
-				));
+				a.process(vocabulary, generator, stack, triples, context, id)
 			}
-			Self::RefVariant(id, r) => match r {
-				LexRefVariant::Ref(r) => stack.push(Item::Ref(id, r)),
-				LexRefVariant::Union(u) => stack.push(Item::RefUnion(id, u)),
-			},
-			Self::Ref(id, r) => {
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::Rdf::Type.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-				));
-
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(
-						nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str())
-							.to_string(),
-					)),
-				));
-
-				let iri = IriBuf::from_string(format!("lexicon:{}", r.ref_)).unwrap();
-
-				triples.push(Triple(
-					id,
-					vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(iri.as_iri()))),
-				));
+			Self::RefVariant(id, r) => {
+				r.process(vocabulary, generator, stack, triples, context, id)
 			}
-			Self::RefUnion(id, r) => {
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::Rdf::Type.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-				));
-
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(
-						nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str())
-							.to_string(),
-					)),
-				));
-
-				if r.closed.is_some() {
-					log::warn!("ref union `closed` constraint not yet supported")
-				}
-
-				let variants_id = build_rdf_list(
-					vocabulary,
-					generator,
-					triples,
-					r.refs,
-					|vocabulary, generator, triples, r| {
-						let v_id = generator.next(vocabulary);
-
-						triples.push(Triple(
-							v_id.clone(),
-							vocabulary.insert(vocab::Rdf::Type.as_iri()),
-							Object::Id(Id::Iri(
-								vocabulary.insert(vocab::TreeLdr::Variant.as_iri()),
-							)),
-						));
-
-						triples.push(Triple(
-							v_id.clone(),
-							vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-							Object::Literal(Literal::String(nsid_name(&r).to_string())),
-						));
-
-						let format_iri = IriBuf::from_string(format!("lexicon:{}", r)).unwrap();
-						let format_id = Id::Iri(vocabulary.insert(format_iri.as_iri()));
-
-						triples.push(Triple(
-							v_id.clone(),
-							vocabulary.insert(vocab::TreeLdr::Format.as_iri()),
-							Object::Id(format_id),
-						));
-
-						Object::Id(v_id)
-					},
-				);
-
-				triples.push(Triple(
-					id,
-					vocabulary.insert(vocab::TreeLdr::Enumeration.as_iri()),
-					Object::Id(variants_id),
-				));
+			Self::Ref(id, r) => r.process(vocabulary, generator, stack, triples, context, id),
+			Self::RefUnion(id, r) => r.process(vocabulary, generator, stack, triples, context, id),
+			Self::Object(id, o) => o.process(vocabulary, generator, stack, triples, context, id),
+			Self::ObjectProperty(id, p) => {
+				p.process(vocabulary, generator, stack, triples, context, id)
 			}
-			Self::Object(id, o) => {
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::Rdf::Type.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-				));
+			Self::Boolean(id, b) => b.process(vocabulary, generator, stack, triples, context, id),
+			Self::Integer(id, i) => i.process(vocabulary, generator, stack, triples, context, id),
+			Self::String(id, s) => s.process(vocabulary, generator, stack, triples, context, id),
+			Self::Unknown(id, u) => u.process(vocabulary, generator, stack, triples, context, id),
+		}
+	}
+}
 
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(
-						nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str())
-							.to_string(),
-					)),
-				));
-
-				if !o.nullable.is_empty() {
-					log::warn!("object `nullable` constraint not yet supported")
-				}
-
-				let fields_id = build_rdf_list(
-					vocabulary,
-					generator,
-					triples,
-					o.properties,
-					|vocabulary, generator, triples, (name, prop)| {
-						let f_id = generator.next(vocabulary);
-
-						triples.push(Triple(
-							f_id.clone(),
-							vocabulary.insert(vocab::Rdf::Type.as_iri()),
-							Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Field.as_iri()))),
-						));
-
-						triples.push(Triple(
-							f_id.clone(),
-							vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-							Object::Literal(Literal::String(name.clone())),
-						));
-
-						let item_iri = IriBuf::from_string(format!(
-							"{}.{}",
-							vocabulary.iri(id.as_iri().unwrap()).unwrap(),
-							name
-						))
-						.unwrap();
-						let item_id = Id::Iri(vocabulary.insert(item_iri.as_iri()));
-						stack.push(Item::ObjectProperty(item_id.clone(), prop));
-
-						let t_id = generator.next(vocabulary);
-						triples.push(Triple(
-							t_id.clone(),
-							vocabulary.insert(vocab::Rdf::Type.as_iri()),
-							Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-						));
-
-						if o.required.contains(&name) {
-							triples.push(Triple(
-								t_id.clone(),
-								vocabulary.insert(vocab::TreeLdr::Required.as_iri()),
-								Object::Id(item_id),
-							));
-						} else {
-							triples.push(Triple(
-								t_id.clone(),
-								vocabulary.insert(vocab::TreeLdr::Option.as_iri()),
-								Object::Id(item_id),
-							));
-						};
-
-						triples.push(Triple(
-							f_id.clone(),
-							vocabulary.insert(vocab::TreeLdr::Format.as_iri()),
-							Object::Id(t_id),
-						));
-
-						Object::Id(f_id)
-					},
-				);
-
-				triples.push(Triple(
-					id,
-					vocabulary.insert(vocab::TreeLdr::Fields.as_iri()),
-					Object::Id(fields_id),
-				));
+impl<V: VocabularyMut> Process<V> for LexUserType {
+	fn process(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		stack: &mut Vec<Item<V>>,
+		triples: &mut Vec<OutputTriple<V>>,
+		context: &Context,
+		id: OutputSubject<V>,
+	) where
+		V::Iri: Clone,
+		V::BlankId: Clone,
+	{
+		match self {
+			Self::Record(r) => r.process(vocabulary, generator, stack, triples, context, id),
+			Self::Query(q) => q.process(vocabulary, generator, stack, triples, context, id),
+			Self::Procedure(p) => p.process(vocabulary, generator, stack, triples, context, id),
+			Self::Subscription(_) => {
+				log::warn!("subscriptions are not yet supported")
 			}
-			Self::ObjectProperty(id, p) => match p {
-				ObjectProperty::Ref(r) => stack.push(Item::RefVariant(id, r)),
-				ObjectProperty::Primitive(p) => stack.push(Item::Primitive(id, p)),
-				ObjectProperty::NonPrimitive(ObjectNonPrimitiveProperty::Array(_)) => {
-					log::warn!("arrays are not yet supported")
-				}
-				ObjectProperty::NonPrimitive(ObjectNonPrimitiveProperty::Blob(_)) => {
-					log::warn!("blobs are not yet supported")
-				}
-				ObjectProperty::Ipld(_) => {
-					log::warn!("IPLD types are not yet supported")
-				}
-			},
-			Self::Boolean(id, b) => {
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::Rdf::Type.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-				));
-
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(
-						nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str())
-							.to_string(),
-					)),
-				));
-
-				if b.const_.is_some() {
-					log::warn!("boolean `const` constraint not yet supported")
-				}
-
-				if b.default.is_some() {
-					log::warn!("boolean `default` constraint not yet supported")
-				}
-
-				triples.push(Triple(
-					id,
-					vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
-					Object::Id(Id::Iri(
-						vocabulary.insert(vocab::Primitive::Boolean.as_iri()),
-					)),
-				));
+			Self::Array(_) => {
+				log::warn!("arrays are not yet supported")
 			}
-			Self::Integer(id, i) => {
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::Rdf::Type.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-				));
-
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(
-						nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str())
-							.to_string(),
-					)),
-				));
-
-				if i.const_.is_some() {
-					log::warn!("integer `const` constraint not yet supported")
-				}
-
-				if i.default.is_some() {
-					log::warn!("integer `default` constraint not yet supported")
-				}
-
-				if i.enum_.is_some() {
-					log::warn!("integer `enum` constraint not yet supported")
-				}
-
-				if i.minimum.is_some() {
-					log::warn!("integer `minimum` constraint not yet supported")
-				}
-
-				if i.maximum.is_some() {
-					log::warn!("integer `maximum` constraint not yet supported")
-				}
-
-				triples.push(Triple(
-					id,
-					vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
-					Object::Id(Id::Iri(
-						vocabulary.insert(vocab::Primitive::Boolean.as_iri()),
-					)),
-				));
+			Self::Token(_) => {
+				log::warn!("tokens are not yet supported")
 			}
-			Self::String(id, s) => {
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::Rdf::Type.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-				));
-
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(
-						nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str())
-							.to_string(),
-					)),
-				));
-
-				if s.const_.is_some() {
-					log::warn!("string `const` constraint not yet supported")
-				}
-
-				if s.default.is_some() {
-					log::warn!("string `default` constraint not yet supported")
-				}
-
-				if s.enum_.is_some() {
-					log::warn!("string `enum` constraint not yet supported")
-				}
-
-				if s.min_length.is_some() {
-					log::warn!("string `min_length` constraint not yet supported")
-				}
-
-				if s.max_length.is_some() {
-					log::warn!("string `max_length` constraint not yet supported")
-				}
-
-				if s.min_grapheme.is_some() {
-					log::warn!("string `min_grapheme` constraint not yet supported")
-				}
-
-				if s.max_grapheme.is_some() {
-					log::warn!("string `max_grapheme` constraint not yet supported")
-				}
-
-				if s.format.is_some() {
-					log::warn!("string `format` constraint not yet supported")
-				}
-
-				triples.push(Triple(
-					id,
-					vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
-					Object::Id(Id::Iri(
-						vocabulary.insert(vocab::Primitive::Boolean.as_iri()),
-					)),
-				));
+			Self::Object(o) => stack.push(Item::Object(id, o)),
+			Self::Boolean(b) => stack.push(Item::Boolean(id, b)),
+			Self::Integer(i) => stack.push(Item::Integer(id, i)),
+			Self::String(s) => stack.push(Item::String(id, s)),
+			Self::Bytes(_) => {
+				log::warn!("bytes are not yet supported")
 			}
-			Self::Unknown(id, _) => {
-				log::warn!("unknown user type {}", id.with(&*vocabulary));
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::Rdf::Type.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-				));
-
-				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(
-						nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str())
-							.to_string(),
-					)),
-				));
+			Self::CidLink(_) => {
+				log::warn!("CID links are not yet supported")
 			}
+			Self::Unknown(u) => stack.push(Item::Unknown(id, u)),
 		}
 	}
 }
@@ -657,6 +254,21 @@ fn nsid_name(nsid: &str) -> &str {
 		Some((_, r)) => r,
 		None => nsid,
 	}
+}
+
+fn sub_id<V: VocabularyMut>(
+	vocabulary: &mut V,
+	id: &OutputSubject<V>,
+	name: &str,
+) -> OutputSubject<V> {
+	let iri = IriBuf::new(&format!(
+		"{}/{}",
+		vocabulary.iri(id.as_iri().unwrap()).unwrap(),
+		name
+	))
+	.unwrap();
+
+	Id::Iri(vocabulary.insert(iri.as_iri()))
 }
 
 fn build_rdf_list<V: VocabularyMut, G: Generator<V>, I: IntoIterator>(
