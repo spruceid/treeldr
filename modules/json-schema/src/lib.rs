@@ -729,56 +729,56 @@ fn generate_primitive_type(p: treeldr::layout::Primitive) -> json_syntax::Value 
 			def.insert(Meta("minimum".into(), ()), Meta(0.into(), ()));
 		}
 		Primitive::NonPositiveInteger => {
-			def.insert("type".into(), "integer".into());
-			def.insert("maximum".into(), 0.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(0.into(), ()));
 		}
 		Primitive::PositiveInteger => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), 1.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(1.into(), ()));
 		}
 		Primitive::NegativeInteger => {
-			def.insert("type".into(), "integer".into());
-			def.insert("maximum".into(), (-1).into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta((-1).into(), ()));
 		}
 		Primitive::I64 => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), i64::MIN.into());
-			def.insert("maximum".into(), i64::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(i64::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(i64::MAX.into(), ()));
 		}
 		Primitive::I32 => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), i32::MIN.into());
-			def.insert("maximum".into(), i32::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(i32::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(i32::MAX.into(), ()));
 		}
 		Primitive::I16 => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), i16::MIN.into());
-			def.insert("maximum".into(), i16::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(i16::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(i16::MAX.into(), ()));
 		}
 		Primitive::I8 => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), i8::MIN.into());
-			def.insert("maximum".into(), i8::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(i8::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(i8::MAX.into(), ()));
 		}
 		Primitive::U64 => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), u64::MIN.into());
-			def.insert("maximum".into(), u64::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(u64::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(u64::MAX.into(), ()));
 		}
 		Primitive::U32 => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), u32::MIN.into());
-			def.insert("maximum".into(), u32::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(u32::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(u32::MAX.into(), ()));
 		}
 		Primitive::U16 => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), u16::MIN.into());
-			def.insert("maximum".into(), u16::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(u16::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(u16::MAX.into(), ()));
 		}
 		Primitive::U8 => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), u8::MIN.into());
-			def.insert("maximum".into(), u8::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(u8::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(u8::MAX.into(), ()));
 		}
 		Primitive::Float => {
 			def.insert(Meta("type".into(), ()), Meta("number".into(), ()));
@@ -787,10 +787,10 @@ fn generate_primitive_type(p: treeldr::layout::Primitive) -> json_syntax::Value 
 			def.insert(Meta("type".into(), ()), Meta("number".into(), ()));
 		}
 		Primitive::Base64Bytes => {
-			def.insert("type".into(), "string".into());
+			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
 		Primitive::HexBytes => {
-			def.insert("type".into(), "string".into());
+			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
 		Primitive::String => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
@@ -840,56 +840,56 @@ fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> js
 			def.insert(Meta("minimum".into(), ()), Meta(0.into(), ()));
 		}
 		RestrictedPrimitive::NonPositiveInteger(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("maximum".into(), 0.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(0.into(), ()));
 		}
 		RestrictedPrimitive::PositiveInteger(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), 1.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(1.into(), ()));
 		}
 		RestrictedPrimitive::NegativeInteger(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("maximum".into(), (-1).into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta((-1).into(), ()));
 		}
 		RestrictedPrimitive::I64(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), i64::MIN.into());
-			def.insert("maximum".into(), i64::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(i64::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(i64::MAX.into(), ()));
 		}
 		RestrictedPrimitive::I32(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), i32::MIN.into());
-			def.insert("maximum".into(), i32::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(i32::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(i32::MAX.into(), ()));
 		}
 		RestrictedPrimitive::I16(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), i16::MIN.into());
-			def.insert("maximum".into(), i16::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(i16::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(i16::MAX.into(), ()));
 		}
 		RestrictedPrimitive::I8(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), i8::MIN.into());
-			def.insert("maximum".into(), i8::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(i8::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(i8::MAX.into(), ()));
 		}
 		RestrictedPrimitive::U64(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), u64::MIN.into());
-			def.insert("maximum".into(), u64::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(u64::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(u64::MAX.into(), ()));
 		}
 		RestrictedPrimitive::U32(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), u32::MIN.into());
-			def.insert("maximum".into(), u32::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(u32::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(u32::MAX.into(), ()));
 		}
 		RestrictedPrimitive::U16(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), u16::MIN.into());
-			def.insert("maximum".into(), u16::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(u16::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(u16::MAX.into(), ()));
 		}
 		RestrictedPrimitive::U8(_) => {
-			def.insert("type".into(), "integer".into());
-			def.insert("minimum".into(), u8::MIN.into());
-			def.insert("maximum".into(), u8::MAX.into());
+			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+			def.insert(Meta("minimum".into(), ()), Meta(u8::MIN.into(), ()));
+			def.insert(Meta("maximum".into(), ()), Meta(u8::MAX.into(), ()));
 		}
 		RestrictedPrimitive::Float(_) => {
 			def.insert(Meta("type".into(), ()), Meta("number".into(), ()));
@@ -898,30 +898,36 @@ fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> js
 			def.insert(Meta("type".into(), ()), Meta("number".into(), ()));
 		}
 		RestrictedPrimitive::Base64Bytes(restrictions) => {
-			def.insert("type".into(), "string".into());
+			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			if let Some(r) = restrictions.as_ref() {
 				if let Some(pattern) = r.pattern() {
 					match pattern.as_singleton() {
 						Some(singleton) => {
-							def.insert("const".into(), singleton.into());
+							def.insert(Meta("const".into(), ()), Meta(singleton.into(), ()));
 						}
 						None => {
-							def.insert("pattern".into(), pattern.to_string().into());
+							def.insert(
+								Meta("pattern".into(), ()),
+								Meta(pattern.to_string().into(), ()),
+							);
 						}
 					}
 				}
 			}
 		}
 		RestrictedPrimitive::HexBytes(restrictions) => {
-			def.insert("type".into(), "string".into());
+			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			if let Some(r) = restrictions.as_ref() {
 				if let Some(pattern) = r.pattern() {
 					match pattern.as_singleton() {
 						Some(singleton) => {
-							def.insert("const".into(), singleton.into());
+							def.insert(Meta("const".into(), ()), Meta(singleton.into(), ()));
 						}
 						None => {
-							def.insert("pattern".into(), pattern.to_string().into());
+							def.insert(
+								Meta("pattern".into(), ()),
+								Meta(pattern.to_string().into(), ()),
+							);
 						}
 					}
 				}
