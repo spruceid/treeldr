@@ -7,15 +7,19 @@ use rdf_types::{
 use treeldr::vocab;
 
 use crate::{
-	LexBoolean, LexInteger, LexObject, LexPrimitive, LexPrimitiveArray, LexRef, LexRefUnion,
-	LexRefVariant, LexString, LexUnknown, LexUserType, LexXrpcBody, LexXrpcParametersProperty,
-	LexiconDoc, Nsid, ObjectProperty,
+	LexAnyUserType, LexBlob, LexBoolean, LexInteger, LexIpldType, LexObject, LexPrimitive,
+	LexPrimitiveArray, LexRef, LexRefUnion, LexRefVariant, LexString, LexUnknown, LexXrpcBody,
+	LexXrpcParametersProperty, LexXrpcSubscriptionMessage, LexiconDoc, Nsid, ObjectProperty,
 };
 
+mod array;
+mod blob;
+mod ipld;
 mod object;
 mod primitive;
 mod record;
 mod reference;
+mod token;
 mod xrpc;
 
 /// Checks if the given JSON document is a supported Lexicon document.
@@ -48,16 +52,18 @@ struct Context {
 impl Context {
 	fn resolve_reference(&self, r: &str) -> IriBuf {
 		match r.split_once('#') {
-			Some((nsid, fragment)) => {
-				let mut iri = Nsid::new(nsid).unwrap().as_iri();
-				iri.path_mut().push(fragment.try_into().unwrap());
-				iri
+			Some((prefix, fragment)) => {
+				if prefix.is_empty() {
+					let mut iri = self.base_iri.clone();
+					iri.path_mut().push(fragment.try_into().unwrap());
+					iri
+				} else {
+					let mut iri = Nsid::new(prefix).unwrap().as_iri();
+					iri.path_mut().push(fragment.try_into().unwrap());
+					iri
+				}
 			}
-			None => {
-				let mut iri = self.base_iri.clone();
-				iri.path_mut().push(r.try_into().unwrap());
-				iri
-			}
+			None => Nsid::new(r).unwrap().as_iri(),
 		}
 	}
 }
@@ -123,9 +129,10 @@ where
 
 enum Item<V: Vocabulary> {
 	Doc(LexiconDoc),
-	UserType(OutputSubject<V>, LexUserType),
+	UserType(OutputSubject<V>, LexAnyUserType),
 	XrpcParametersProperty(OutputSubject<V>, LexXrpcParametersProperty),
 	XrpcBody(OutputSubject<V>, LexXrpcBody),
+	XrpcSubscriptionMessage(OutputSubject<V>, LexXrpcSubscriptionMessage),
 	Primitive(OutputSubject<V>, LexPrimitive),
 	PrimitiveArray(OutputSubject<V>, LexPrimitiveArray),
 	RefVariant(OutputSubject<V>, LexRefVariant),
@@ -136,7 +143,13 @@ enum Item<V: Vocabulary> {
 	String(OutputSubject<V>, LexString),
 	Object(OutputSubject<V>, LexObject),
 	ObjectProperty(OutputSubject<V>, ObjectProperty),
+	Blob(OutputSubject<V>, LexBlob),
+	Ipld(OutputSubject<V>, LexIpldType),
 	Unknown(OutputSubject<V>, LexUnknown),
+}
+
+trait IntoItem<V: Vocabulary> {
+	fn into_item(self, id: OutputSubject<V>) -> Item<V>;
 }
 
 trait Process<V: VocabularyMut> {
@@ -170,14 +183,14 @@ impl<V: VocabularyMut> Item<V> {
 				if let Some(main) = doc.definitions.main {
 					let iri = doc.id.as_iri();
 					let id = Id::Iri(vocabulary.insert(iri.as_iri()));
-					stack.push(Item::UserType(id, main.into()))
+					stack.push(Item::UserType(id, main))
 				}
 
 				for (suffix, ty) in doc.definitions.other {
 					let iri =
 						IriBuf::from_string(format!("{}/{}", doc.id.as_iri(), suffix)).unwrap();
 					let id = Id::Iri(vocabulary.insert(iri.as_iri()));
-					stack.push(Item::UserType(id, ty))
+					stack.push(Item::UserType(id, ty.into()))
 				}
 			}
 			Self::UserType(id, ty) => {
@@ -187,6 +200,9 @@ impl<V: VocabularyMut> Item<V> {
 				p.process(vocabulary, generator, stack, triples, context, id)
 			}
 			Self::XrpcBody(id, b) => b.process(vocabulary, generator, stack, triples, context, id),
+			Self::XrpcSubscriptionMessage(id, m) => {
+				m.process(vocabulary, generator, stack, triples, context, id)
+			}
 			Self::Primitive(id, p) => p.process(vocabulary, generator, stack, triples, context, id),
 			Self::PrimitiveArray(id, a) => {
 				a.process(vocabulary, generator, stack, triples, context, id)
@@ -203,12 +219,14 @@ impl<V: VocabularyMut> Item<V> {
 			Self::Boolean(id, b) => b.process(vocabulary, generator, stack, triples, context, id),
 			Self::Integer(id, i) => i.process(vocabulary, generator, stack, triples, context, id),
 			Self::String(id, s) => s.process(vocabulary, generator, stack, triples, context, id),
+			Self::Blob(id, b) => b.process(vocabulary, generator, stack, triples, context, id),
+			Self::Ipld(id, i) => i.process(vocabulary, generator, stack, triples, context, id),
 			Self::Unknown(id, u) => u.process(vocabulary, generator, stack, triples, context, id),
 		}
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexUserType {
+impl<V: VocabularyMut> Process<V> for LexAnyUserType {
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -225,25 +243,15 @@ impl<V: VocabularyMut> Process<V> for LexUserType {
 			Self::Record(r) => r.process(vocabulary, generator, stack, triples, context, id),
 			Self::Query(q) => q.process(vocabulary, generator, stack, triples, context, id),
 			Self::Procedure(p) => p.process(vocabulary, generator, stack, triples, context, id),
-			Self::Subscription(_) => {
-				log::warn!("subscriptions are not yet supported")
-			}
-			Self::Array(_) => {
-				log::warn!("arrays are not yet supported")
-			}
-			Self::Token(_) => {
-				log::warn!("tokens are not yet supported")
-			}
-			Self::Object(o) => stack.push(Item::Object(id, o)),
-			Self::Boolean(b) => stack.push(Item::Boolean(id, b)),
-			Self::Integer(i) => stack.push(Item::Integer(id, i)),
-			Self::String(s) => stack.push(Item::String(id, s)),
-			Self::Bytes(_) => {
-				log::warn!("bytes are not yet supported")
-			}
-			Self::CidLink(_) => {
-				log::warn!("CID links are not yet supported")
-			}
+			Self::Subscription(s) => s.process(vocabulary, generator, stack, triples, context, id),
+			Self::Array(a) => a.process(vocabulary, generator, stack, triples, context, id),
+			Self::Token(t) => t.process(vocabulary, generator, stack, triples, context, id),
+			Self::Object(o) => o.process(vocabulary, generator, stack, triples, context, id),
+			Self::Boolean(b) => b.process(vocabulary, generator, stack, triples, context, id),
+			Self::Integer(i) => i.process(vocabulary, generator, stack, triples, context, id),
+			Self::String(s) => s.process(vocabulary, generator, stack, triples, context, id),
+			Self::Bytes(b) => b.process(vocabulary, generator, stack, triples, context, id),
+			Self::CidLink(l) => l.process(vocabulary, generator, stack, triples, context, id),
 			Self::Unknown(u) => stack.push(Item::Unknown(id, u)),
 		}
 	}

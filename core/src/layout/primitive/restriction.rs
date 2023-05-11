@@ -6,6 +6,8 @@ use locspan::Meta;
 pub mod base64_bytes;
 pub mod boolean;
 pub mod byte;
+pub mod bytes;
+pub mod cid;
 pub mod date;
 pub mod datetime;
 pub mod double;
@@ -196,7 +198,9 @@ restricted_type! {
 	DateTime: xsd_types::DateTime,
 	Iri: iri::Iri,
 	Uri: uri::Uri,
-	Url: url::Url
+	Url: url::Url,
+	Bytes: bytes::Bytes,
+	Cid: cid::Cid
 }
 
 /// Values of the `tldr:withRestrictions` property.

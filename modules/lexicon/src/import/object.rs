@@ -108,27 +108,29 @@ impl<V: VocabularyMut> Process<V> for LexObject {
 impl<V: VocabularyMut> Process<V> for ObjectProperty {
 	fn process(
 		self,
-		_vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
 		stack: &mut Vec<Item<V>>,
-		_triples: &mut Vec<OutputTriple<V>>,
-		_context: &Context,
+		triples: &mut Vec<OutputTriple<V>>,
+		context: &Context,
 		id: OutputSubject<V>,
 	) where
 		V::Iri: Clone,
 		V::BlankId: Clone,
 	{
 		match self {
-			ObjectProperty::Ref(r) => stack.push(Item::RefVariant(id, r)),
-			ObjectProperty::Primitive(p) => stack.push(Item::Primitive(id, p)),
-			ObjectProperty::NonPrimitive(ObjectNonPrimitiveProperty::Array(_)) => {
-				log::warn!("arrays are not yet supported")
+			ObjectProperty::Ref(r) => r.process(vocabulary, generator, stack, triples, context, id),
+			ObjectProperty::Primitive(p) => {
+				p.process(vocabulary, generator, stack, triples, context, id)
 			}
-			ObjectProperty::NonPrimitive(ObjectNonPrimitiveProperty::Blob(_)) => {
-				log::warn!("blobs are not yet supported")
+			ObjectProperty::NonPrimitive(ObjectNonPrimitiveProperty::Array(a)) => {
+				a.process(vocabulary, generator, stack, triples, context, id)
 			}
-			ObjectProperty::Ipld(_) => {
-				log::warn!("IPLD types are not yet supported")
+			ObjectProperty::NonPrimitive(ObjectNonPrimitiveProperty::Blob(b)) => {
+				b.process(vocabulary, generator, stack, triples, context, id)
+			}
+			ObjectProperty::Ipld(i) => {
+				i.process(vocabulary, generator, stack, triples, context, id)
 			}
 		}
 	}

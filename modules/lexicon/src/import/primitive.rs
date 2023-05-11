@@ -1,11 +1,11 @@
 use contextual::WithContext;
-use iref::{AsIri, IriBuf};
-use rdf_types::{Generator, Id, Literal, Object, Triple, VocabularyMut};
+use iref::AsIri;
+use rdf_types::{Generator, Id, Literal, Object, Triple, Vocabulary, VocabularyMut};
 use treeldr::vocab;
 
-use crate::{LexBoolean, LexInteger, LexPrimitive, LexPrimitiveArray, LexString, LexUnknown};
+use crate::{LexBoolean, LexInteger, LexPrimitive, LexString, LexUnknown};
 
-use super::{nsid_name, Context, Item, OutputSubject, OutputTriple, Process};
+use super::{nsid_name, Context, IntoItem, Item, OutputSubject, OutputTriple, Process};
 
 impl<V: VocabularyMut> Process<V> for LexPrimitive {
 	fn process(
@@ -29,46 +29,9 @@ impl<V: VocabularyMut> Process<V> for LexPrimitive {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexPrimitiveArray {
-	fn process(
-		self,
-		vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
-		stack: &mut Vec<Item<V>>,
-		triples: &mut Vec<OutputTriple<V>>,
-		_context: &Context,
-		id: OutputSubject<V>,
-	) where
-		V::Iri: Clone,
-		V::BlankId: Clone,
-	{
-		triples.push(Triple(
-			id.clone(),
-			vocabulary.insert(vocab::Rdf::Type.as_iri()),
-			Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
-		));
-
-		triples.push(Triple(
-			id.clone(),
-			vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-			Object::Literal(Literal::String(
-				nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str()).to_string(),
-			)),
-		));
-
-		let item_iri = IriBuf::from_string(format!(
-			"{}/items",
-			vocabulary.iri(id.as_iri().unwrap()).unwrap()
-		))
-		.unwrap();
-		let item_id = Id::Iri(vocabulary.insert(item_iri.as_iri()));
-		stack.push(Item::Primitive(item_id.clone(), self.items));
-
-		triples.push(Triple(
-			id,
-			vocabulary.insert(vocab::TreeLdr::Array.as_iri()),
-			Object::Id(item_id),
-		));
+impl<V: Vocabulary> IntoItem<V> for LexPrimitive {
+	fn into_item(self, id: OutputSubject<V>) -> Item<V> {
+		Item::Primitive(id, self)
 	}
 }
 

@@ -7,5 +7,5 @@ use crate::source;
 // }
 
 pub fn import(json: json_syntax::MetaValue<source::Metadata>) -> treeldr_lexicon::LexiconDoc {
-	json_syntax::from_meta_value(json).expect("invalid JSON Schema")
+	json_syntax::from_meta_value(json).expect("invalid Lexicon schema")
 }

@@ -822,6 +822,12 @@ fn generate_primitive_type(p: treeldr::layout::Primitive) -> json_syntax::Value 
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("uri".into(), ()));
 		}
+		Primitive::Bytes => {
+			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
+		}
+		Primitive::Cid => {
+			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
+		}
 	}
 
 	def.into()
@@ -977,6 +983,12 @@ fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> js
 		RestrictedPrimitive::Url(_) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("uri".into(), ()));
+		}
+		RestrictedPrimitive::Bytes(_) => {
+			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
+		}
+		RestrictedPrimitive::Cid(_) => {
+			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
 	}
 

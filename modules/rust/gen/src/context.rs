@@ -293,12 +293,11 @@ impl ModulePathBuilder {
 		let r = if name.is_empty() {
 			parent
 		} else {
-			context.add_module(
-				Some(parent),
-				None,
-				proc_macro2::Ident::new(name, proc_macro2::Span::call_site()),
-				module::Visibility::Public,
-			)
+			let name = treeldr::Name::new(name).unwrap();
+			let ident =
+				proc_macro2::Ident::new(&name.to_camel_case(), proc_macro2::Span::call_site());
+
+			context.add_module(Some(parent), None, ident, module::Visibility::Public)
 		};
 
 		self.by_path

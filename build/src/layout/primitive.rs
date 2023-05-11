@@ -104,6 +104,12 @@ impl<M: Clone + Merge> BuildPrimitive<M> for Primitive {
 			Primitive::Url => Ok(treeldr::layout::RestrictedPrimitive::Url(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
+			Primitive::Bytes => Ok(treeldr::layout::RestrictedPrimitive::Bytes(
+				restrictions.try_map(|r| r.build(id))?,
+			)),
+			Primitive::Cid => Ok(treeldr::layout::RestrictedPrimitive::Cid(
+				restrictions.try_map(|r| r.build(id))?,
+			)),
 		}
 	}
 }

@@ -3,3 +3,9 @@ pub use xsd_types::{
 	HexBinaryBuf as HexBytesBuf, Integer, NegativeInteger, NonNegativeInteger, NonPositiveInteger,
 	PositiveInteger,
 };
+
+pub type Bytes = [u8];
+pub type BytesBuf = Vec<u8>;
+
+pub type Cid = str;
+pub type CidBuf = String;

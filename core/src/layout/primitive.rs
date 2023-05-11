@@ -111,6 +111,16 @@ pub enum Primitive {
 	/// URL.
 	#[iri("tldr:URL")]
 	Url,
+
+	/// Arbitrary bytes.
+	#[iri("tldr:Bytes")]
+	Bytes,
+
+	/// CID (Content IDentifier).
+	///
+	/// See <https://github.com/multiformats/cid>
+	#[iri("tldr:CID")]
+	Cid,
 }
 
 impl Primitive {
@@ -149,6 +159,8 @@ impl Primitive {
 			Self::Iri => "iri",
 			Self::Uri => "uri",
 			Self::Url => "url",
+			Self::Bytes => "bytes",
+			Self::Cid => "content identifier",
 		}
 	}
 

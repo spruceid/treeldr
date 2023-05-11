@@ -562,6 +562,8 @@ impl<'a> IntoRdf for layout::primitive::RestrictionRef<'a> {
 			Self::Iri(r) => r.into_rdf_with(vocabulary, generator, quads, options),
 			Self::Uri(r) => r.into_rdf_with(vocabulary, generator, quads, options),
 			Self::Url(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::Bytes(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::Cid(r) => r.into_rdf_with(vocabulary, generator, quads, options),
 		}
 	}
 }
