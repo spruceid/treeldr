@@ -55,7 +55,7 @@ quote = "1.0"
 proc-macro2 = "1.0"
 syn = "2.0.15"
 
-clap = "3.0"
+clap = "4.0"
 async-std = "1.12.0"
 nquads-syntax = "0.12.0"
 

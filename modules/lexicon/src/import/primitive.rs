@@ -168,7 +168,7 @@ impl<V: VocabularyMut> Process<V> for LexInteger {
 			id,
 			vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
 			Object::Id(Id::Iri(
-				vocabulary.insert(vocab::Primitive::Boolean.as_iri()),
+				vocabulary.insert(vocab::Primitive::Integer.as_iri()),
 			)),
 		));
 	}
@@ -237,7 +237,7 @@ impl<V: VocabularyMut> Process<V> for LexString {
 			id,
 			vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
 			Object::Id(Id::Iri(
-				vocabulary.insert(vocab::Primitive::Boolean.as_iri()),
+				vocabulary.insert(vocab::Primitive::String.as_iri()),
 			)),
 		));
 	}

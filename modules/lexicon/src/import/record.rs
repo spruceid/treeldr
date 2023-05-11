@@ -33,7 +33,7 @@ impl<V: VocabularyMut> Process<V> for LexRecord {
 			)),
 		));
 
-		if let Some(_) = self.key {
+		if self.key.is_some() {
 			log::warn!("records `key` constraint not yet supported");
 		}
 

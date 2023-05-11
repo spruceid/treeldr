@@ -1,13 +1,13 @@
 use iref::IriBuf;
 use litrs::Literal;
 use proc_macro2::{Span, TokenStream, TokenTree};
-use quote::{format_ident, quote};
+use quote::quote;
 use rdf_types::Vocabulary;
 use std::path::PathBuf;
 use syn::spanned::Spanned;
 use thiserror::Error;
 use treeldr::{BlankIdIndex, IriIndex, TId};
-use treeldr_rust_gen::tr::TraitModules;
+use treeldr_rust_gen::{tr::TraitModules, DedicatedSubModule, ModulePathBuilder};
 
 pub type GenContext<'a, V> = treeldr_rust_gen::Context<'a, V, treeldr_load::Metadata>;
 
@@ -38,28 +38,39 @@ pub type GenError = treeldr_rust_gen::Error;
 
 pub struct Inputs {
 	list: Vec<Input>,
+	no_rdf: bool,
 }
 
 impl Inputs {
 	pub fn from_stream(tokens: TokenStream) -> Result<Self, SpannedParseError> {
 		let mut list = Vec::new();
+		let mut no_rdf = false;
 		let mut tokens = tokens.into_iter();
 
 		while let Some(token) = tokens.next() {
-			let (s, span) = token_to_string(token)?;
-			list.push(Input {
-				filename: s.into(),
-				span,
-			});
+			match token {
+				TokenTree::Ident(id) if id == "no_rdf" => no_rdf = true,
+				token => {
+					let (s, span) = token_to_string(token)?;
+					list.push(Input {
+						filename: s.into(),
+						span,
+					});
 
-			match tokens.next() {
-				None => (),
-				Some(TokenTree::Punct(p)) if p.as_char() == ',' => (),
-				Some(token) => return Err((ParseError::UnexpectedToken, token.span())),
+					match tokens.next() {
+						None => (),
+						Some(TokenTree::Punct(p)) if p.as_char() == ',' => (),
+						Some(token) => return Err((ParseError::UnexpectedToken, token.span())),
+					}
+				}
 			}
 		}
 
-		Ok(Self { list })
+		Ok(Self { list, no_rdf })
+	}
+
+	pub fn no_rdf(&self) -> bool {
+		self.no_rdf
 	}
 
 	fn iter(&self) -> std::slice::Iter<Input> {
@@ -144,24 +155,8 @@ impl Module {
 				prefix.ident.clone(),
 				prefix.vis.clone(),
 			);
-			let providers_module_ref = context.add_module(
-				Some(module_ref),
-				None,
-				format_ident!("provider"),
-				treeldr_rust_gen::module::Visibility::Public,
-			);
-			let trait_objects_module_ref = context.add_module(
-				Some(module_ref),
-				None,
-				format_ident!("trait_object"),
-				treeldr_rust_gen::module::Visibility::Public,
-			);
-			let layouts_module_ref = context.add_module(
-				Some(module_ref),
-				None,
-				format_ident!("layout"),
-				treeldr_rust_gen::module::Visibility::Public,
-			);
+
+			let mut sub_modules = ModulePathBuilder::new(module_ref);
 
 			prefix.module = Some(module_ref);
 
@@ -169,30 +164,50 @@ impl Module {
 				if let treeldr::Id::Iri(term) = id {
 					let iri = vocabulary.iri(&term).unwrap();
 
-					if iri
+					if let Some(suffix) = iri
 						.as_str()
 						.strip_prefix(prefix.prefix_attrs.iri.0.as_str())
-						.is_some()
 					{
+						let path = suffix
+							.rsplit_once('/')
+							.map(|(path, _)| path)
+							.unwrap_or_default();
+
 						if node.is_type() {
 							type_map.insert(
 								TId::new(id),
 								TraitModules {
-									main: Some(treeldr_rust_gen::module::Parent::Ref(module_ref)),
+									main: Some(treeldr_rust_gen::module::Parent::Ref(
+										sub_modules.get(context, path, None),
+									)),
 									provider: Some(treeldr_rust_gen::module::Parent::Ref(
-										providers_module_ref,
+										sub_modules.get(
+											context,
+											path,
+											Some(DedicatedSubModule::ClassProviders),
+										),
 									)),
 									trait_object: Some(treeldr_rust_gen::module::Parent::Ref(
-										trait_objects_module_ref,
+										sub_modules.get(
+											context,
+											path,
+											Some(DedicatedSubModule::TraitObjects),
+										),
 									)),
 								},
 							);
 						}
 
 						if node.is_layout() {
+							let sub_module = context
+								.options()
+								.impl_rdf
+								.then_some(DedicatedSubModule::Layouts);
 							layout_map.insert(
 								TId::new(id),
-								treeldr_rust_gen::module::Parent::Ref(layouts_module_ref),
+								treeldr_rust_gen::module::Parent::Ref(
+									sub_modules.get(context, path, sub_module),
+								),
 							);
 						}
 					}

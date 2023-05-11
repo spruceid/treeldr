@@ -18,3 +18,7 @@ json-syntax = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_repr = "0.1"
 rdf-types.workspace = true
+
+[dev-dependencies]
+treeldr-rust-prelude.workspace = true
+treeldr-rust-macros.workspace = true

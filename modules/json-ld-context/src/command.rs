@@ -70,6 +70,7 @@ impl fmt::Display for InvalidMountPointSyntax {
 	}
 }
 
+#[derive(Debug, Clone)]
 pub struct MountPoint {
 	pub iri: IriBuf,
 	pub path: PathBuf,
@@ -110,6 +111,7 @@ impl fmt::Display for InvalidPrefixBinding {
 	}
 }
 
+#[derive(Debug, Clone)]
 pub struct PrefixBinding {
 	pub prefix: String,
 	pub iri: IriBuf,

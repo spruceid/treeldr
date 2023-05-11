@@ -10,11 +10,11 @@ use treeldr::{BlankIdIndex, IriIndex, TId};
 #[derive(clap::Args)]
 /// Generate a JSON Schema from a TreeLDR model.
 pub struct Command {
-	#[clap(multiple_occurrences(true), required(true))]
+	#[clap(required(true))]
 	/// Layout schema to generate.
 	layouts: Vec<IriBuf>,
 
-	#[clap(short = 'e', multiple_occurrences(true))]
+	#[clap(short = 'e')]
 	/// Layout schema to embed.
 	embeds: Vec<IriBuf>,
 
