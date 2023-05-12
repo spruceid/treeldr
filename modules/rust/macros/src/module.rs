@@ -168,10 +168,7 @@ impl Module {
 						.as_str()
 						.strip_prefix(prefix.prefix_attrs.iri.0.as_str())
 					{
-						let path = suffix
-							.rsplit_once('/')
-							.map(|(path, _)| path)
-							.unwrap_or_default();
+						let path = treeldr_rust_gen::ModulePathBuilder::split_iri_path(suffix).0;
 
 						if node.is_type() {
 							type_map.insert(

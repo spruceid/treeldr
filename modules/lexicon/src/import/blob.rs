@@ -33,6 +33,14 @@ impl<V: VocabularyMut> Process<V> for LexBlob {
 			)),
 		));
 
+		if let Some(desc) = self.description {
+			triples.push(Triple(
+				id.clone(),
+				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
+				Object::Literal(Literal::String(desc)),
+			));
+		}
+
 		if self.accept.is_some() {
 			log::warn!("blob `accept` constraint not yet supported")
 		}

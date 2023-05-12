@@ -149,10 +149,9 @@ pub fn main() {
 						let iri = vocabulary.iri(&term).unwrap();
 
 						if let Some(suffix) = iri.as_str().strip_prefix(prefix.iri.as_str()) {
-							let path = suffix
-								.rsplit_once('/')
-								.map(|(path, _)| path)
-								.unwrap_or_default();
+							let path =
+								treeldr_rust_gen::ModulePathBuilder::split_iri_path(suffix).0;
+							eprintln!("path: {path}");
 
 							if node.is_type() {
 								type_map.insert(

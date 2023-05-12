@@ -90,6 +90,14 @@ impl<V: VocabularyMut> Process<V> for LexRefUnion {
 			)),
 		));
 
+		if let Some(desc) = self.description {
+			triples.push(Triple(
+				id.clone(),
+				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
+				Object::Literal(Literal::String(desc)),
+			));
+		}
+
 		if self.closed.is_some() {
 			log::warn!("ref union `closed` constraint not yet supported")
 		}

@@ -36,6 +36,14 @@ impl<V: VocabularyMut> Process<V> for LexXrpcSubscription {
 			)),
 		));
 
+		if let Some(desc) = self.description {
+			triples.push(Triple(
+				id.clone(),
+				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
+				Object::Literal(Literal::String(desc)),
+			));
+		}
+
 		if let Some(message) = self.message {
 			let msg_id = sub_id(vocabulary, &id, "message");
 			stack.push(Item::XrpcSubscriptionMessage(msg_id, message))
@@ -54,6 +62,15 @@ impl<V: VocabularyMut> Process<V> for LexXrpcSubscription {
 				error_id.clone(),
 				vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
 				Object::Literal(Literal::String("error".to_string())),
+			));
+
+			triples.push(Triple(
+				error_id.clone(),
+				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
+				Object::Literal(Literal::String(format!(
+					"Errors of <{}>.",
+					vocabulary.iri(id.as_iri().unwrap()).unwrap()
+				))),
 			));
 
 			let variants_id = build_rdf_list(
@@ -100,6 +117,15 @@ impl<V: VocabularyMut> Process<V> for LexXrpcSubscription {
 				info_id.clone(),
 				vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
 				Object::Literal(Literal::String("info".to_string())),
+			));
+
+			triples.push(Triple(
+				info_id.clone(),
+				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
+				Object::Literal(Literal::String(format!(
+					"Infos of <{}>.",
+					vocabulary.iri(id.as_iri().unwrap()).unwrap()
+				))),
 			));
 
 			let variants_id = build_rdf_list(

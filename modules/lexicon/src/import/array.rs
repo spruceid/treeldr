@@ -33,6 +33,14 @@ impl<V: VocabularyMut, T: IntoItem<V>> Process<V> for LexArray<T> {
 			)),
 		));
 
+		if let Some(desc) = self.description {
+			triples.push(Triple(
+				id.clone(),
+				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
+				Object::Literal(Literal::String(desc)),
+			));
+		}
+
 		let item_iri = IriBuf::from_string(format!(
 			"{}/items",
 			vocabulary.iri(id.as_iri().unwrap()).unwrap()

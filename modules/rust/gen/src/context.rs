@@ -262,12 +262,24 @@ pub struct ModulePathBuilder {
 	by_path: HashMap<String, HashMap<Option<DedicatedSubModule>, Ref<Module>>>,
 }
 
+fn path_delimiter(c: char) -> bool {
+	matches!(c, '/' | ':' | '.')
+}
+
 impl ModulePathBuilder {
+	pub const DELIMITER: fn(char) -> bool = path_delimiter;
+
 	pub fn new(root: Ref<Module>) -> Self {
 		Self {
 			root,
 			by_path: HashMap::new(),
 		}
+	}
+
+	pub fn split_iri_path(iri: &str) -> (&str, &str) {
+		iri.rsplit_once('#')
+			.or_else(|| iri.rsplit_once(Self::DELIMITER))
+			.unwrap_or(("", iri))
 	}
 
 	pub fn get<V, M>(
@@ -284,7 +296,7 @@ impl ModulePathBuilder {
 
 		let (parent, name) = match dedicated_submodule {
 			Some(d) => (self.get(context, path, None), d.name()),
-			None => match path.rsplit_once('/') {
+			None => match path.rsplit_once(Self::DELIMITER) {
 				Some((prefix, name)) => (self.get(context, prefix, None), name),
 				None => (self.root, path),
 			},
@@ -295,7 +307,7 @@ impl ModulePathBuilder {
 		} else {
 			let name = treeldr::Name::new(name).unwrap();
 			let ident =
-				proc_macro2::Ident::new(&name.to_camel_case(), proc_macro2::Span::call_site());
+				proc_macro2::Ident::new(&name.to_snake_case(), proc_macro2::Span::call_site());
 
 			context.add_module(Some(parent), None, ident, module::Visibility::Public)
 		};

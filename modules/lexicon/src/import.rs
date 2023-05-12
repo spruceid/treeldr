@@ -258,7 +258,7 @@ impl<V: VocabularyMut> Process<V> for LexAnyUserType {
 }
 
 fn nsid_name(s: &str) -> &str {
-	match s.rsplit_once('/') {
+	match s.rsplit_once(|c| matches!(c, '/' | '.')) {
 		Some((_, r)) => r,
 		None => s,
 	}

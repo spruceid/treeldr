@@ -33,6 +33,14 @@ impl<V: VocabularyMut> Process<V> for LexCidLink {
 			)),
 		));
 
+		if let Some(desc) = self.description {
+			triples.push(Triple(
+				id.clone(),
+				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
+				Object::Literal(Literal::String(desc)),
+			));
+		}
+
 		triples.push(Triple(
 			id,
 			vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),

@@ -164,6 +164,14 @@ impl<V: VocabularyMut> Process<V> for LexString {
 			)),
 		));
 
+		if let Some(desc) = self.description {
+			triples.push(Triple(
+				id.clone(),
+				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
+				Object::Literal(Literal::String(desc)),
+			));
+		}
+
 		if self.const_.is_some() {
 			log::warn!("string `const` constraint not yet supported")
 		}

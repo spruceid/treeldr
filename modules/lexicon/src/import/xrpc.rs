@@ -44,6 +44,14 @@ where
 					Object::Literal(Literal::String(name.clone())),
 				));
 
+				if let Some(desc) = p.description() {
+					triples.push(Triple(
+						f_id.clone(),
+						vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
+						Object::Literal(Literal::String(desc.to_string())),
+					));
+				}
+
 				let item_id = sub_id(vocabulary, id, &name);
 				stack.push(Item::XrpcParametersProperty(item_id.clone(), p));
 

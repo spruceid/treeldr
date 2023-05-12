@@ -171,11 +171,28 @@ pub enum LexXrpcParametersProperty {
 	NonPrimitive(LexXrpcParametersNonPrimitiveProperty),
 }
 
+impl LexXrpcParametersProperty {
+	pub fn description(&self) -> Option<&str> {
+		match self {
+			Self::Primitive(p) => p.description(),
+			Self::NonPrimitive(n) => n.description(),
+		}
+	}
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "kebab-case")]
 pub enum LexXrpcParametersNonPrimitiveProperty {
 	Array(LexPrimitiveArray),
+}
+
+impl LexXrpcParametersNonPrimitiveProperty {
+	pub fn description(&self) -> Option<&str> {
+		match self {
+			Self::Array(a) => a.description.as_deref(),
+		}
+	}
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -382,6 +399,17 @@ pub enum LexPrimitive {
 	Integer(LexInteger),
 	String(LexString),
 	Unknown(LexUnknown),
+}
+
+impl LexPrimitive {
+	pub fn description(&self) -> Option<&str> {
+		match self {
+			Self::Boolean(b) => b.description.as_deref(),
+			Self::Integer(i) => i.description.as_deref(),
+			Self::String(s) => s.description.as_deref(),
+			Self::Unknown(u) => u.description.as_deref(),
+		}
+	}
 }
 
 #[derive(Debug, Serialize, Deserialize)]

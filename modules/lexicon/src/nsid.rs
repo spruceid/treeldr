@@ -31,11 +31,7 @@ impl Nsid {
 
 	pub fn as_iri(&self) -> IriBuf {
 		let mut iri = IriBuf::from_scheme("lexicon".try_into().unwrap());
-
-		for segment in self.0.split('.') {
-			iri.path_mut().push(segment.try_into().unwrap())
-		}
-
+		iri.path_mut().push(self.0.try_into().unwrap());
 		iri
 	}
 }

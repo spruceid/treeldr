@@ -38,6 +38,14 @@ impl<V: VocabularyMut> Process<V> for LexXrpcQuery {
 			)),
 		));
 
+		if let Some(desc) = self.description {
+			triples.push(Triple(
+				id.clone(),
+				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
+				Object::Literal(Literal::String(desc)),
+			));
+		}
+
 		let fields_id =
 			process_xrpc_parameters(vocabulary, generator, stack, triples, &id, self.parameters);
 
