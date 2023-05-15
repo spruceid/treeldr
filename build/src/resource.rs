@@ -311,11 +311,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::Class(None)) {
 			Ok(self.as_type())
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: Type::Class(None).into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				Type::Class(None).into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -326,11 +326,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::Class(None)) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: Type::Class(None).into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				Type::Class(None).into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -341,11 +341,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, ty::SubClass::DataType) {
 			Ok(self.as_datatype())
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: ty::SubClass::DataType.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				ty::SubClass::DataType.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -356,11 +356,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, ty::SubClass::DataType) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: ty::SubClass::DataType.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				ty::SubClass::DataType.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -371,11 +371,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, ty::SubClass::Restriction) {
 			Ok(self.as_restriction())
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: ty::SubClass::Restriction.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				ty::SubClass::Restriction.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -386,11 +386,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::LayoutRestriction) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: Type::LayoutRestriction.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				Type::LayoutRestriction.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -401,11 +401,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::DatatypeRestriction) {
 			Ok(self.as_datatype_restriction())
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: Type::DatatypeRestriction.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				Type::DatatypeRestriction.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -416,11 +416,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::DatatypeRestriction) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: Type::DatatypeRestriction.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				Type::DatatypeRestriction.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -431,11 +431,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::Property(None)) {
 			Ok(self.as_property())
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: Type::Property(None).into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				Type::Property(None).into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -446,11 +446,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::Property(None)) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: Type::Property(None).into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				Type::Property(None).into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -461,11 +461,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, component::Type::Layout) {
 			Ok(self.as_layout())
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: component::Type::Layout.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				component::Type::Layout.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -476,11 +476,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, component::Type::Layout) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: component::Type::Layout.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				component::Type::Layout.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -491,11 +491,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, component::formatted::Type::LayoutField) {
 			Ok(self.as_layout_field())
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: component::formatted::Type::LayoutField.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				component::formatted::Type::LayoutField.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -506,11 +506,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, component::formatted::Type::LayoutField) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: component::formatted::Type::LayoutField.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				component::formatted::Type::LayoutField.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -521,11 +521,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, component::formatted::Type::LayoutVariant) {
 			Ok(self.as_layout_variant())
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: component::formatted::Type::LayoutVariant.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				component::formatted::Type::LayoutVariant.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -536,11 +536,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, component::formatted::Type::LayoutVariant) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: component::formatted::Type::LayoutVariant.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				component::formatted::Type::LayoutVariant.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -551,11 +551,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::LayoutRestriction) {
 			Ok(self.as_layout_restriction())
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: Type::LayoutRestriction.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				Type::LayoutRestriction.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -566,11 +566,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::LayoutRestriction) {
 			Ok(treeldr::TId::new(self.data.id))
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: Type::LayoutRestriction.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				Type::LayoutRestriction.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
@@ -581,11 +581,11 @@ impl<M: Clone> Definition<M> {
 		if self.has_type(context, Type::List) {
 			Ok(self.as_list())
 		} else {
-			Err(NodeTypeInvalid {
-				id: self.data.id,
-				expected: Type::List.into(),
-				found: self.data.type_.clone(),
-			})
+			Err(NodeTypeInvalid::new(
+				self.data.id,
+				Type::List.into(),
+				self.data.type_.clone(),
+			))
 		}
 	}
 
