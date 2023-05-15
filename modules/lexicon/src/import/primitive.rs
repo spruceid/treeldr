@@ -5,7 +5,9 @@ use treeldr::vocab;
 
 use crate::{LexBoolean, LexInteger, LexPrimitive, LexString, LexUnknown};
 
-use super::{nsid_name, Context, IntoItem, Item, OutputSubject, OutputTriple, Process};
+use super::{
+	build_rdf_list, nsid_name, Context, IntoItem, Item, OutputSubject, OutputTriple, Process,
+};
 
 impl<V: VocabularyMut> Process<V> for LexPrimitive {
 	fn process(
@@ -84,7 +86,7 @@ impl<V: VocabularyMut> Process<V> for LexInteger {
 	fn process(
 		self,
 		vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
+		generator: &mut impl Generator<V>,
 		_stack: &mut Vec<Item<V>>,
 		triples: &mut Vec<OutputTriple<V>>,
 		_context: &Context,
@@ -119,21 +121,66 @@ impl<V: VocabularyMut> Process<V> for LexInteger {
 			log::warn!("integer `enum` constraint not yet supported")
 		}
 
-		if self.minimum.is_some() {
-			log::warn!("integer `minimum` constraint not yet supported")
-		}
+		let primitive = self.best_primitive();
+		match self.bounds_constraints(primitive) {
+			(None, None) => {
+				triples.push(Triple(
+					id,
+					vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
+					Object::Id(Id::Iri(vocabulary.insert(primitive.as_iri()))),
+				));
+			}
+			(min, max) => {
+				let constraits = min
+					.into_iter()
+					.map(|m| (vocab::TreeLdr::InclusiveMinimum, m))
+					.chain(
+						max.into_iter()
+							.map(|m| (vocab::TreeLdr::InclusiveMaximum, m)),
+					);
 
-		if self.maximum.is_some() {
-			log::warn!("integer `maximum` constraint not yet supported")
-		}
+				let constraints_id = build_rdf_list(
+					vocabulary,
+					generator,
+					triples,
+					constraits,
+					|vocabulary, generator, triples, (prop, value)| {
+						let c_id = generator.next(vocabulary);
 
-		triples.push(Triple(
-			id,
-			vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
-			Object::Id(Id::Iri(
-				vocabulary.insert(vocab::Primitive::Integer.as_iri()),
-			)),
-		));
+						triples.push(Triple(
+							c_id.clone(),
+							vocabulary.insert(vocab::Rdf::Type.as_iri()),
+							Object::Id(Id::Iri(
+								vocabulary.insert(vocab::TreeLdr::LayoutRestriction.as_iri()),
+							)),
+						));
+
+						triples.push(Triple(
+							c_id.clone(),
+							vocabulary.insert(prop.as_iri()),
+							Object::Literal(Literal::TypedString(
+								value.to_string(),
+								vocabulary.insert(primitive.natural_type_term().unwrap().as_iri()),
+							)),
+						));
+
+						Object::Id(c_id)
+					},
+				);
+
+				triples.push(Triple(
+					id.clone(),
+					vocabulary.insert(vocab::TreeLdr::DerivedFrom.as_iri()),
+					Object::Id(Id::Iri(vocabulary.insert(primitive.as_iri()))),
+				));
+
+				triples.push(Triple(
+					id,
+					vocabulary.insert(vocab::TreeLdr::WithRestrictions.as_iri()),
+					Object::Id(constraints_id),
+				));
+			}
+		}
 	}
 }
 

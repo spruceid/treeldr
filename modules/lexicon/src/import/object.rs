@@ -1,10 +1,12 @@
-use iref::{AsIri, IriBuf};
+use iref::AsIri;
 use rdf_types::{Generator, Id, Literal, Object, Triple, VocabularyMut};
 use treeldr::vocab;
 
 use crate::{LexObject, ObjectNonPrimitiveProperty, ObjectProperty};
 
-use super::{build_rdf_list, nsid_name, Context, Item, OutputSubject, OutputTriple, Process};
+use super::{
+	build_rdf_list, nsid_name, sub_id, Context, Item, OutputSubject, OutputTriple, Process,
+};
 
 impl<V: VocabularyMut> Process<V> for LexObject {
 	fn process(
@@ -57,13 +59,7 @@ impl<V: VocabularyMut> Process<V> for LexObject {
 					Object::Literal(Literal::String(name.clone())),
 				));
 
-				let item_iri = IriBuf::from_string(format!(
-					"{}/{}",
-					vocabulary.iri(id.as_iri().unwrap()).unwrap(),
-					name
-				))
-				.unwrap();
-				let item_id = Id::Iri(vocabulary.insert(item_iri.as_iri()));
+				let item_id = sub_id(vocabulary, &id, &name);
 				stack.push(Item::ObjectProperty(item_id.clone(), prop));
 
 				let t_id = generator.next(vocabulary);

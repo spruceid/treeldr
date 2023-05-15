@@ -55,11 +55,11 @@ impl Context {
 			Some((prefix, fragment)) => {
 				if prefix.is_empty() {
 					let mut iri = self.base_iri.clone();
-					iri.path_mut().push(fragment.try_into().unwrap());
+					iri.set_fragment(Some(fragment.try_into().unwrap()));
 					iri
 				} else {
 					let mut iri = Nsid::new(prefix).unwrap().as_iri();
-					iri.path_mut().push(fragment.try_into().unwrap());
+					iri.set_fragment(Some(fragment.try_into().unwrap()));
 					iri
 				}
 			}
@@ -188,7 +188,7 @@ impl<V: VocabularyMut> Item<V> {
 
 				for (suffix, ty) in doc.definitions.other {
 					let iri =
-						IriBuf::from_string(format!("{}/{}", doc.id.as_iri(), suffix)).unwrap();
+						IriBuf::from_string(format!("{}#{}", doc.id.as_iri(), suffix)).unwrap();
 					let id = Id::Iri(vocabulary.insert(iri.as_iri()));
 					stack.push(Item::UserType(id, ty.into()))
 				}
@@ -258,7 +258,7 @@ impl<V: VocabularyMut> Process<V> for LexAnyUserType {
 }
 
 fn nsid_name(s: &str) -> &str {
-	match s.rsplit_once(|c| matches!(c, '/' | '.')) {
+	match s.rsplit_once(|c| matches!(c, '/' | '.' | '#')) {
 		Some((_, r)) => r,
 		None => s,
 	}
@@ -269,13 +269,22 @@ fn sub_id<V: VocabularyMut>(
 	id: &OutputSubject<V>,
 	name: &str,
 ) -> OutputSubject<V> {
-	let iri = IriBuf::new(&format!(
-		"{}/{}",
-		vocabulary.iri(id.as_iri().unwrap()).unwrap(),
-		name
-	))
-	.unwrap();
+	let parent_iri = vocabulary.iri(id.as_iri().unwrap()).unwrap();
 
+	let value = match parent_iri.as_str().split_once('#') {
+		Some((a, b)) => {
+			format!("{a}/{b}/{name}")
+		}
+		None => {
+			if parent_iri.path().segments().count() > 1 {
+				format!("{parent_iri}/{name}")
+			} else {
+				format!("{parent_iri}/main/{name}")
+			}
+		}
+	};
+
+	let iri = IriBuf::new(&value).unwrap();
 	Id::Iri(vocabulary.insert(iri.as_iri()))
 }
 
@@ -294,6 +303,8 @@ where
 	let mut head = Id::Iri(vocabulary.insert(vocab::Rdf::Nil.as_iri()));
 
 	for item in items.into_iter().rev() {
+		let first = f(vocabulary, generator, triples, item);
+
 		let node = generator.next(vocabulary);
 
 		triples.push(Triple(
@@ -301,8 +312,6 @@ where
 			vocabulary.insert(vocab::Rdf::Type.as_iri()),
 			Object::Id(Id::Iri(vocabulary.insert(vocab::Rdf::List.as_iri()))),
 		));
-
-		let first = f(vocabulary, generator, triples, item);
 
 		triples.push(Triple(
 			node.clone(),
@@ -320,4 +329,39 @@ where
 	}
 
 	head
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn sub_id_1() {
+		let parent_id = Id::Iri(IriBuf::new("lexicon:app.bsky.embed").unwrap());
+		let id = sub_id(&mut (), &parent_id, "external");
+		assert_eq!(
+			id.into_iri().unwrap().as_str(),
+			"lexicon:app.bsky.embed/main/external"
+		)
+	}
+
+	#[test]
+	fn sub_id_2() {
+		let parent_id = Id::Iri(IriBuf::new("lexicon:app.bsky.embed#external").unwrap());
+		let id = sub_id(&mut (), &parent_id, "foo");
+		assert_eq!(
+			id.into_iri().unwrap().as_str(),
+			"lexicon:app.bsky.embed/external/foo"
+		)
+	}
+
+	#[test]
+	fn sub_id_3() {
+		let parent_id = Id::Iri(IriBuf::new("lexicon:app.bsky.embed/external/foo").unwrap());
+		let id = sub_id(&mut (), &parent_id, "bar");
+		assert_eq!(
+			id.into_iri().unwrap().as_str(),
+			"lexicon:app.bsky.embed/external/foo/bar"
+		)
+	}
 }

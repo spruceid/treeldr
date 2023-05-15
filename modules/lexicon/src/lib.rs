@@ -441,6 +441,95 @@ pub struct LexInteger {
 	pub const_: Option<i64>,
 }
 
+impl LexInteger {
+	/// Find the best fitting TreeLDR primitive integer layout for this integer
+	/// type.
+	pub fn best_primitive(&self) -> treeldr::vocab::Primitive {
+		match (self.minimum, self.maximum) {
+			(Some(min), Some(max)) if min >= u8::MIN as i64 && max <= u8::MAX as i64 => {
+				treeldr::vocab::Primitive::U8
+			}
+			(Some(min), Some(max)) if min >= u16::MIN as i64 && max <= u16::MAX as i64 => {
+				treeldr::vocab::Primitive::U16
+			}
+			(Some(min), Some(max)) if min >= u32::MIN as i64 && max <= u32::MAX as i64 => {
+				treeldr::vocab::Primitive::U32
+			}
+			(Some(min), Some(_max)) if min >= u64::MIN as i64 => {
+				// && max <= u8::MAX as i64
+				treeldr::vocab::Primitive::U64
+			}
+			(Some(min), Some(max)) if min >= i8::MIN as i64 && max <= i8::MAX as i64 => {
+				treeldr::vocab::Primitive::I8
+			}
+			(Some(min), Some(max)) if min >= i16::MIN as i64 && max <= i16::MAX as i64 => {
+				treeldr::vocab::Primitive::I16
+			}
+			(Some(min), Some(max)) if min >= i32::MIN as i64 && max <= i32::MAX as i64 => {
+				treeldr::vocab::Primitive::I32
+			}
+			(Some(_min), Some(_max)) => {
+				// if min >= i64::MIN && max <= i64::MAX => {
+				treeldr::vocab::Primitive::I64
+			}
+			(Some(min), _) if min > 0 => treeldr::vocab::Primitive::PositiveInteger,
+			(Some(min), _) if min >= 0 => treeldr::vocab::Primitive::NonNegativeInteger,
+			(_, Some(max)) if max < 0 => treeldr::vocab::Primitive::NegativeInteger,
+			(_, Some(max)) if max <= 0 => treeldr::vocab::Primitive::NonPositiveInteger,
+			_ => treeldr::vocab::Primitive::Integer,
+		}
+	}
+
+	pub fn bounds_constraints(&self, p: treeldr::vocab::Primitive) -> (Option<i64>, Option<i64>) {
+		match p {
+			treeldr::vocab::Primitive::U8 => (
+				self.minimum.filter(|m| *m > u8::MIN as i64),
+				self.maximum.filter(|m| *m < u8::MAX as i64),
+			),
+			treeldr::vocab::Primitive::U16 => (
+				self.minimum.filter(|m| *m > u16::MIN as i64),
+				self.maximum.filter(|m| *m < u16::MAX as i64),
+			),
+			treeldr::vocab::Primitive::U32 => (
+				self.minimum.filter(|m| *m > u32::MIN as i64),
+				self.maximum.filter(|m| *m < u32::MAX as i64),
+			),
+			treeldr::vocab::Primitive::U64 => {
+				(self.minimum.filter(|m| *m > u64::MIN as i64), self.maximum)
+			}
+			treeldr::vocab::Primitive::I8 => (
+				self.minimum.filter(|m| *m > i8::MIN as i64),
+				self.maximum.filter(|m| *m < i8::MAX as i64),
+			),
+			treeldr::vocab::Primitive::I16 => (
+				self.minimum.filter(|m| *m > i16::MIN as i64),
+				self.maximum.filter(|m| *m < i16::MAX as i64),
+			),
+			treeldr::vocab::Primitive::I32 => (
+				self.minimum.filter(|m| *m > i32::MIN as i64),
+				self.maximum.filter(|m| *m < i32::MAX as i64),
+			),
+			treeldr::vocab::Primitive::I64 => (
+				self.minimum.filter(|m| *m > i64::MIN),
+				self.maximum.filter(|m| *m < i64::MAX),
+			),
+			treeldr::vocab::Primitive::PositiveInteger => {
+				(self.minimum.filter(|m| *m > 1), self.maximum)
+			}
+			treeldr::vocab::Primitive::NonNegativeInteger => {
+				(self.minimum.filter(|m| *m > 0), self.maximum)
+			}
+			treeldr::vocab::Primitive::NegativeInteger => {
+				(self.minimum, self.maximum.filter(|m| *m < -1))
+			}
+			treeldr::vocab::Primitive::NonPositiveInteger => {
+				(self.minimum, self.maximum.filter(|m| *m < 0))
+			}
+			_ => (self.minimum, self.maximum),
+		}
+	}
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LexString {
