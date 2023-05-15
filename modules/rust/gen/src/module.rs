@@ -1,6 +1,5 @@
-use crate::{path::Segment, Context, Error, Generate, Path};
+use crate::{path::Segment, syntax, Context, Error, GenerateSyntax, Path};
 use proc_macro2::TokenStream;
-use quote::quote;
 use rdf_types::Vocabulary;
 use shelves::Ref;
 use std::collections::HashSet;
@@ -255,78 +254,86 @@ impl Module {
 	}
 }
 
-impl<M> Generate<M> for Module {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for Module {
+	type Output = syntax::ModuleContent;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
+		scope: &crate::Scope,
+	) -> Result<Self::Output, Error> {
+		let mut items = Vec::new();
+
 		for module_ref in &self.sub_modules {
-			module_ref.generate(context, scope, tokens)?;
+			items.push(syntax::ModuleItem::Module(
+				module_ref.generate_syntax(context, scope)?,
+			));
 		}
 
 		for type_ref in &self.types {
-			let ty = context.type_trait(*type_ref).expect("undefined type");
-			ty.generate(context, scope, tokens)?
+			let tr = context.type_trait(*type_ref).expect("undefined class");
+			items.push(syntax::ModuleItem::Trait(syntax::TraitDefinition::Class(tr.generate_syntax(context, scope)?)));
 		}
 
-		for provider in &self.types_providers {
-			provider.generate(context, scope, tokens)?
-		}
+		// for provider in &self.types_providers {
+		// 	items.push(syntax::ModuleItem::Trait(syntax::TraitDefinition::ClassProvider(provider.generate_syntax(context, scope))?));
+		// }
 
-		for trait_objects in &self.types_trait_objects {
-			trait_objects.generate(context, scope, tokens)?
-		}
+		// for trait_objects in &self.types_trait_objects {
+		// 	for trait_object in trait_objects.generate_syntax(context, scope)? {
+		// 		items.push(syntax::ModuleItem::Type(syntax::TypeDefinition::ClassTraitObject(trait_object)));
+		// 	}
+		// }
 
 		for layout_ref in &self.layouts {
 			let ty = context.layout_type(*layout_ref).expect("undefined layout");
-			ty.generate(context, scope, tokens)?
+			if let Some(def) = ty.generate_syntax(context, scope)? {
+				items.push(syntax::ModuleItem::Type(syntax::TypeDefinition::Layout(
+					def,
+				)));
+			}
 		}
 
-		for trait_impl in &self.trait_impls {
-			trait_impl.generate(context, scope, tokens)?
-		}
+		// for trait_impl in &self.trait_impls {
+		// 	items.push(syntax::ModuleItem::TraitImpl(trait_impl.generate_syntax(context, scope)?));
+		// }
 
-		Ok(())
+		Ok(syntax::ModuleContent { items })
 	}
 }
 
-impl<M> Generate<M> for Ref<Module> {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for Ref<Module> {
+	type Output = syntax::ModuleOrUse;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		_scope: Option<Ref<Module>>,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
+		scope: &crate::Scope,
+	) -> Result<Self::Output, Error> {
 		let module = context.module(*self).expect("undefined module");
 		let ident = module.ident();
-		let visibility = module.visibility();
+		let vis = module.visibility();
 
 		match module.extern_path() {
 			Some(path) => {
-				if path.ident() == ident {
-					tokens.extend(quote! {
-						#visibility use #path;
-					});
+				let ident = if path.ident() == ident {
+					None
 				} else {
-					tokens.extend(quote! {
-						#visibility use #path as #ident;
-					});
-				}
-			}
-			None => {
-				let content = module.generate_with(context, Some(*self)).into_tokens()?;
+					Some(ident.clone())
+				};
 
-				tokens.extend(quote! {
-					#visibility mod #ident {
-						#content
-					}
-				});
+				Ok(syntax::ModuleOrUse::Use(syntax::Use {
+					vis: vis.clone(),
+					path: path.clone(),
+					ident,
+				}))
 			}
+			None => Ok(syntax::ModuleOrUse::Module(syntax::Module {
+				vis: vis.clone(),
+				ident: ident.clone(),
+				content: module.generate_syntax(context, scope)?,
+			})),
 		}
-
-		Ok(())
 	}
 }
 

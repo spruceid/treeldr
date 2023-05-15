@@ -35,13 +35,7 @@ impl<M> Generate<M> for Bound {
 				let ty = p.generate_with(context, scope).into_tokens()?;
 				tokens.extend(quote!(#ty: ::treeldr_rust_prelude::rdf::AsLiteral<N, V>));
 				Ok(())
-			} // Self::TriplesAndValues(layout_ref) => {
-			  // 	let ty = context.layout_type(*layout_ref).unwrap();
-			  // 	let mut path = context.module_path(scope).to(&context.parent_module_path(ty.module()).unwrap());
-			  // 	path.push(ty.ident());
-			  // 	tokens.extend(quote!(#path: ::treeldr_rust_prelude::rdf::TriplesAndValues<N, V>));
-			  // 	Ok(())
-			  // }
+			}
 		}
 	}
 }

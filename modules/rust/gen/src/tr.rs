@@ -8,6 +8,11 @@ use treeldr::{ty::PseudoProperty, value::Literal, Id, IriIndex, Name, TId};
 use crate::{module, path, Context, Path};
 
 mod generate;
+mod trait_objects;
+mod class_provider;
+
+pub use trait_objects::TraitObjectsOf;
+pub use class_provider::ProviderOf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ContextBound(pub TId<treeldr::Type>);
@@ -250,12 +255,6 @@ impl Trait {
 		&self.methods
 	}
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TraitObjectsOf(pub TId<treeldr::Type>);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ProviderOf(pub TId<treeldr::Type>);
 
 /// Trait associated type.
 pub struct AssociatedType {

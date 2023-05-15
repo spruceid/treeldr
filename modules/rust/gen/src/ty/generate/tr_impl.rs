@@ -12,10 +12,8 @@ use crate::{
 		self,
 		params::{Parameter, ParametersValues},
 	},
-	Context, Error, Generate, GenerateIn, Module,
+	Context, Error, Module,
 };
-
-use super::GenerateFor;
 
 mod r#enum;
 mod primitive;
@@ -88,7 +86,7 @@ impl<M> Generate<M> for TraitImpl {
 				TraitId::IntoJsonLdSyntax => {
 					super::json_ld::IntoJsonLdSyntaxImpl.generate(context, scope, s, tokens)
 				}
-				TraitId::Defined(tr) => ClassTraitImpl(tr).generate(context, scope, s, tokens),
+				TraitId::Defined(tr) => ClassTraitImpl(tr, s).generate_syntax(context, scope),
 			},
 			ty::Description::Enum(e) => match self.tr {
 				TraitId::FromRdf => {
@@ -103,10 +101,10 @@ impl<M> Generate<M> for TraitImpl {
 				TraitId::IntoJsonLdSyntax => {
 					super::json_ld::IntoJsonLdSyntaxImpl.generate(context, scope, e, tokens)
 				}
-				TraitId::Defined(tr) => ClassTraitImpl(tr).generate(context, scope, e, tokens),
+				TraitId::Defined(tr) => ClassTraitImpl(tr, e).generate_syntax(context, scope),
 			},
 			ty::Description::Primitive(p) => match self.tr {
-				TraitId::Defined(tr) => ClassTraitImpl(tr).generate(context, scope, p, tokens),
+				TraitId::Defined(tr) => ClassTraitImpl(tr, p).generate_syntax(context, scope),
 				_ => Ok(()),
 			},
 			_ => {
@@ -117,7 +115,7 @@ impl<M> Generate<M> for TraitImpl {
 }
 
 /// Class trait implementation.
-pub struct ClassTraitImpl(TId<treeldr::Type>);
+pub struct ClassTraitImpl<T>(pub TId<treeldr::Type>, pub T);
 
 fn collection_iterator<V, M>(
 	context: &Context<V, M>,

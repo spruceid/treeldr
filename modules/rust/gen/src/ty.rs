@@ -103,6 +103,7 @@ impl Type {
 	pub fn path<V, M>(&self, context: &Context<V, M>, ident: proc_macro2::Ident) -> Option<Path> {
 		let mut path = context.parent_module_path(self.module)?;
 		path.push(path::Segment::Ident(ident));
+		*path.parameters_mut() = self.params();
 		Some(path)
 	}
 

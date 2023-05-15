@@ -1,17 +1,15 @@
 use std::collections::HashSet;
 
 use crate::{
-	doc_attribute,
+	syntax,
 	tr::{CollectContextBounds, ContextBound},
-	Context, Error, GenerateIn, Module,
+	Context, Error, GenerateSyntax, Scope,
 };
-use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
-use shelves::Ref;
 use treeldr::{vocab, BlankIdIndex, Id, IriIndex, Name, TId};
 
-use super::{params::ParametersValues, Parameters};
+use super::Parameters;
 
 #[derive(Debug)]
 pub struct Struct {
@@ -215,26 +213,91 @@ impl Field {
 	}
 }
 
-impl<M> GenerateIn<M> for Field {
-	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for Struct {
+	type Output = syntax::Struct;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		params: &ParametersValues,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
-		let ident = &self.ident;
-		let ty = self
-			.layout
-			.generate_in_with(context, scope, params)
-			.into_tokens()?;
-		let doc = doc_attribute(self.label(), self.documentation());
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		let ident = self.ident().clone();
 
-		tokens.extend(quote! {
-			#(#doc)*
-			pub #ident: #ty
+		let params = syntax::LayoutParameters {
+			identifier: if self.params().identifier {
+				Some(format_ident!("I"))
+			} else {
+				None
+			},
+		};
+
+		let mut scope = scope.clone();
+		scope.params.identifier = params.identifier.clone().map(|i| {
+			syn::Type::Path(syn::TypePath {
+				qself: None,
+				path: i.into(),
+			})
 		});
 
-		Ok(())
+		let mut derives = syntax::Derives {
+			clone: true,
+			partial_eq: true,
+			eq: true,
+			ord: true,
+			debug: true,
+			..Default::default()
+		};
+
+		let mut fields = Vec::with_capacity(self.fields().len());
+		let mut constructor_inputs = Vec::new();
+
+		for field in self.fields() {
+			let syn_field = field.generate_syntax(context, &scope)?;
+
+			fields.push(syn_field);
+
+			if !field.ty(context).impl_default(context) {
+				let ty = field.layout().generate_syntax(context, &scope)?;
+				constructor_inputs.push((field.ident().clone(), ty));
+			}
+		}
+
+		if constructor_inputs.is_empty() {
+			derives.default = true
+		}
+
+		Ok(syntax::Struct {
+			derives,
+			ident,
+			params,
+			fields,
+			constructor_inputs,
+		})
+	}
+}
+
+impl<M> GenerateSyntax<M> for Field {
+	type Output = syntax::Field;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		let initial_value = if self.ty(context).impl_default(context) {
+			syn::parse2(quote!(Default::default())).unwrap()
+		} else {
+			syn::Expr::Path(syn::ExprPath {
+				attrs: Vec::new(),
+				qself: None,
+				path: self.ident.clone().into(),
+			})
+		};
+
+		Ok(syntax::Field {
+			ident: self.ident.clone(),
+			type_: self.layout.generate_syntax(context, scope)?,
+			initial_value,
+		})
 	}
 }
