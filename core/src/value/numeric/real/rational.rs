@@ -252,6 +252,35 @@ impl From<Decimal> for Rational {
 	}
 }
 
+macro_rules! from_integer {
+	( $($ty:ty),* ) => {
+		$(
+			impl From<$ty> for Rational {
+				fn from(value: $ty) -> Self {
+					let n: BigInt = value.into();
+					n.into()
+				}
+			}
+		)*
+	};
+}
+
+from_integer! {
+	Integer,
+	NonNegativeInteger,
+	PositiveInteger,
+	NonPositiveInteger,
+	NegativeInteger,
+	Long,
+	Int,
+	Short,
+	Byte,
+	UnsignedLong,
+	UnsignedInt,
+	UnsignedShort,
+	UnsignedByte
+}
+
 impl TryFrom<Rational> for super::Decimal {
 	type Error = Rational;
 
