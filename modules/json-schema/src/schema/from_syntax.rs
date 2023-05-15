@@ -1,6 +1,7 @@
 use super::*;
 use iref::{IriBuf, IriRefBuf};
-use serde_json::Value;
+use json_syntax::Value;
+use locspan::Meta;
 use std::fmt;
 
 #[derive(Debug)]
@@ -38,14 +39,14 @@ impl fmt::Display for Error {
 
 trait ValueTryInto: Sized {
 	fn try_into_bool(self) -> Result<bool, Error>;
-	fn try_into_number(self) -> Result<serde_json::Number, Error>;
+	fn try_into_number(self) -> Result<json_syntax::NumberBuf, Error>;
 	fn try_into_u64(self) -> Result<u64, Error> {
 		self.try_into_number()?
 			.as_u64()
 			.ok_or(Error::NotAPositiveInteger)
 	}
 	fn try_into_string(self) -> Result<String, Error>;
-	fn try_into_array(self) -> Result<Vec<Value>, Error>;
+	fn try_into_array(self) -> Result<json_syntax::Array, Error>;
 
 	fn try_into_schema_array(self) -> Result<Vec<Schema>, Error> {
 		let mut schemas = Vec::new();
@@ -69,7 +70,7 @@ trait ValueTryInto: Sized {
 		Ok(Box::new(self.try_into_schema()?))
 	}
 
-	fn try_into_object(self) -> Result<serde_json::Map<String, Value>, Error>;
+	fn try_into_object(self) -> Result<json_syntax::Object, Error>;
 
 	fn try_into_uri(self) -> Result<IriBuf, Error> {
 		IriBuf::from_string(self.try_into_string()?).map_err(|_| Error::InvalidUri)
@@ -83,12 +84,12 @@ trait ValueTryInto: Sized {
 impl ValueTryInto for Value {
 	fn try_into_bool(self) -> Result<bool, Error> {
 		match self {
-			Self::Bool(b) => Ok(b),
+			Self::Boolean(b) => Ok(b),
 			_ => Err(Error::NotABoolean),
 		}
 	}
 
-	fn try_into_number(self) -> Result<serde_json::Number, Error> {
+	fn try_into_number(self) -> Result<json_syntax::NumberBuf, Error> {
 		match self {
 			Self::Number(n) => Ok(n),
 			_ => Err(Error::NotANumber),
@@ -97,19 +98,19 @@ impl ValueTryInto for Value {
 
 	fn try_into_string(self) -> Result<String, Error> {
 		match self {
-			Self::String(s) => Ok(s),
+			Self::String(s) => Ok(s.into_string()),
 			_ => Err(Error::NotAString),
 		}
 	}
 
-	fn try_into_array(self) -> Result<Vec<Value>, Error> {
+	fn try_into_array(self) -> Result<json_syntax::Array, Error> {
 		match self {
 			Self::Array(a) => Ok(a),
 			_ => Err(Error::NotAnArray),
 		}
 	}
 
-	fn try_into_object(self) -> Result<serde_json::Map<String, Value>, Error> {
+	fn try_into_object(self) -> Result<json_syntax::Object, Error> {
 		match self {
 			Self::Object(o) => Ok(o),
 			_ => Err(Error::NotAnObject),
@@ -121,7 +122,7 @@ impl ValueTryInto for Value {
 	}
 }
 
-fn read_meta_data(value: &mut serde_json::Map<String, Value>) -> Result<MetaData, Error> {
+fn read_meta_data(value: &mut json_syntax::Object) -> Result<MetaData, Error> {
 	Ok(MetaData {
 		title: value
 			.remove("title")
@@ -151,7 +152,7 @@ fn read_meta_data(value: &mut serde_json::Map<String, Value>) -> Result<MetaData
 	})
 }
 
-fn read_meta_schema(value: &mut serde_json::Map<String, Value>) -> Result<MetaSchema, Error> {
+fn read_meta_schema(value: &mut json_syntax::Object) -> Result<MetaSchema, Error> {
 	Ok(MetaSchema {
 		schema: value
 			.remove("$schema")
@@ -172,7 +173,7 @@ fn read_meta_schema(value: &mut serde_json::Map<String, Value>) -> Result<MetaSc
 	})
 }
 
-fn read_description(value: &mut serde_json::Map<String, Value>) -> Result<Description, Error> {
+fn read_description(value: &mut json_syntax::Object) -> Result<Description, Error> {
 	if let Some(all_of) = value.remove("allOf") {
 		Ok(Description::AllOf(all_of.try_into_schema_array()?))
 	} else if let Some(any_of) = value.remove("anyOf") {
@@ -203,7 +204,7 @@ fn read_description(value: &mut serde_json::Map<String, Value>) -> Result<Descri
 }
 
 fn read_string_encoded_data_schema(
-	value: &mut serde_json::Map<String, Value>,
+	value: &mut json_syntax::Object,
 ) -> Result<StringEncodedData, Error> {
 	Ok(StringEncodedData {
 		content_encoding: value
@@ -221,7 +222,7 @@ fn read_string_encoded_data_schema(
 	})
 }
 
-fn read_array_schema(value: &mut serde_json::Map<String, Value>) -> Result<ArraySchema, Error> {
+fn read_array_schema(value: &mut json_syntax::Object) -> Result<ArraySchema, Error> {
 	Ok(ArraySchema {
 		prefix_items: value
 			.remove("prefixItems")
@@ -242,7 +243,7 @@ fn read_array_schema(value: &mut serde_json::Map<String, Value>) -> Result<Array
 	})
 }
 
-fn read_object_schema(value: &mut serde_json::Map<String, Value>) -> Result<ObjectSchema, Error> {
+fn read_object_schema(value: &mut json_syntax::Object) -> Result<ObjectSchema, Error> {
 	Ok(ObjectSchema {
 		properties: value
 			.remove("properties")
@@ -288,7 +289,7 @@ fn read_object_schema(value: &mut serde_json::Map<String, Value>) -> Result<Obje
 	})
 }
 
-fn read_validation(value: &mut serde_json::Map<String, Value>) -> Result<Validation, Error> {
+fn read_validation(value: &mut json_syntax::Object) -> Result<Validation, Error> {
 	Ok(Validation {
 		any: read_any_validation(value)?,
 		numeric: read_numeric_validation(value)?,
@@ -299,7 +300,7 @@ fn read_validation(value: &mut serde_json::Map<String, Value>) -> Result<Validat
 	})
 }
 
-fn read_any_validation(value: &mut serde_json::Map<String, Value>) -> Result<AnyValidation, Error> {
+fn read_any_validation(value: &mut json_syntax::Object) -> Result<AnyValidation, Error> {
 	Ok(AnyValidation {
 		ty: value
 			.remove("type")
@@ -325,7 +326,7 @@ fn read_any_validation(value: &mut serde_json::Map<String, Value>) -> Result<Any
 }
 
 fn read_numeric_validation(
-	value: &mut serde_json::Map<String, Value>,
+	value: &mut json_syntax::Object,
 ) -> Result<NumericValidation, Error> {
 	Ok(NumericValidation {
 		multiple_of: value
@@ -352,7 +353,7 @@ fn read_numeric_validation(
 }
 
 fn read_string_validation(
-	value: &mut serde_json::Map<String, Value>,
+	value: &mut json_syntax::Object,
 ) -> Result<StringValidation, Error> {
 	Ok(StringValidation {
 		max_length: value
@@ -371,7 +372,7 @@ fn read_string_validation(
 }
 
 fn read_array_validation(
-	value: &mut serde_json::Map<String, Value>,
+	value: &mut json_syntax::Object,
 ) -> Result<ArrayValidation, Error> {
 	Ok(ArrayValidation {
 		max_items: value
@@ -398,7 +399,7 @@ fn read_array_validation(
 }
 
 fn read_object_validation(
-	value: &mut serde_json::Map<String, Value>,
+	value: &mut json_syntax::Object,
 ) -> Result<ObjectValidation, Error> {
 	Ok(ObjectValidation {
 		max_properties: value
@@ -484,8 +485,8 @@ impl TryFrom<Value> for Schema {
 
 	fn try_from(v: Value) -> Result<Self, Self::Error> {
 		match v {
-			Value::Bool(true) => Ok(Self::True),
-			Value::Bool(false) => Ok(Self::False),
+			Value::Boolean(true) => Ok(Self::True),
+			Value::Boolean(false) => Ok(Self::False),
 			Value::Object(mut obj) => {
 				if let Some(value) = obj.remove("$ref") {
 					let value = value.as_str().ok_or(Error::NotAString)?;

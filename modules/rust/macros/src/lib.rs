@@ -16,6 +16,10 @@ use module::Module;
 pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 	match module::Inputs::from_stream(attr.into()) {
 		Ok(inputs) => {
+			let options = treeldr_rust_gen::Options {
+				impl_rdf: !inputs.no_rdf(),
+			};
+
 			let item = syn::parse_macro_input!(item as syn::Item);
 			match Module::from_item(item) {
 				Ok(mut module) => {
@@ -47,7 +51,7 @@ pub fn tldr(attr: TokenStream, item: TokenStream) -> TokenStream {
 					) {
 						Ok(model) => {
 							let mut gen_context =
-								treeldr_rust_gen::Context::new(&model, &vocabulary);
+								treeldr_rust_gen::Context::new(&model, &vocabulary, options);
 							module.bind(&vocabulary, &mut gen_context);
 
 							gen_context.run_pre_computations();

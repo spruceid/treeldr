@@ -9,9 +9,20 @@ use super::NodeBindingTypeInvalid;
 
 #[derive(Debug)]
 pub struct NodeTypeInvalid<M> {
-	pub id: Id,
-	pub expected: Type,
-	pub found: PropertyValues<Type, M>
+	id: Id,
+	expected: Type,
+	found: PropertyValues<Type, M>
+}
+
+impl<M> NodeTypeInvalid<M> {
+	pub fn new(
+		id: Id,
+		expected: Type,
+		found: PropertyValues<Type, M>
+	) -> Self {
+		// panic!("invalid type");
+		Self { id, expected, found }
+	}
 }
 
 impl<M> NodeTypeInvalid<M> {

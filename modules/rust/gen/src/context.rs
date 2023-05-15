@@ -11,6 +11,17 @@ use shelves::{Ref, Shelf};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use treeldr::{value::Literal, IriIndex, TId};
 
+#[derive(Debug, Clone, Copy)]
+pub struct Options {
+	pub impl_rdf: bool,
+}
+
+impl Default for Options {
+	fn default() -> Self {
+		Self { impl_rdf: true }
+	}
+}
+
 /// Rust context.
 pub struct Context<'a, V, M> {
 	/// TreeLDR model.
@@ -28,10 +39,12 @@ pub struct Context<'a, V, M> {
 	types: BTreeMap<TId<treeldr::Type>, Trait>,
 
 	anonymous_types: usize,
+
+	options: Options,
 }
 
 impl<'a, V, M> Context<'a, V, M> {
-	pub fn new(model: &'a treeldr::Model<M>, vocabulary: &'a V) -> Self {
+	pub fn new(model: &'a treeldr::Model<M>, vocabulary: &'a V, options: Options) -> Self {
 		Self {
 			model,
 			vocabulary,
@@ -39,7 +52,12 @@ impl<'a, V, M> Context<'a, V, M> {
 			layouts: BTreeMap::default(),
 			types: BTreeMap::default(),
 			anonymous_types: 0,
+			options,
 		}
+	}
+
+	pub fn options(&self) -> &Options {
+		&self.options
 	}
 
 	pub fn next_anonymous_type_ident(&mut self) -> Ident {
@@ -235,6 +253,86 @@ impl<'a, V, M> Context<'a, V, M> {
 
 		for (layout_ref, ty) in &mut self.layouts {
 			ty.set_params(map.get(layout_ref).unwrap().as_ref().copied().unwrap())
+		}
+	}
+}
+
+pub struct ModulePathBuilder {
+	root: Ref<Module>,
+	by_path: HashMap<String, HashMap<Option<DedicatedSubModule>, Ref<Module>>>,
+}
+
+fn path_delimiter(c: char) -> bool {
+	matches!(c, '/' | ':' | '.')
+}
+
+impl ModulePathBuilder {
+	pub const DELIMITER: fn(char) -> bool = path_delimiter;
+
+	pub fn new(root: Ref<Module>) -> Self {
+		Self {
+			root,
+			by_path: HashMap::new(),
+		}
+	}
+
+	pub fn split_iri_path(iri: &str) -> (&str, &str) {
+		iri.rsplit_once('#')
+			.or_else(|| iri.rsplit_once(Self::DELIMITER))
+			.unwrap_or(("", iri))
+	}
+
+	pub fn get<V, M>(
+		&mut self,
+		context: &mut Context<V, M>,
+		path: &str,
+		dedicated_submodule: Option<DedicatedSubModule>,
+	) -> Ref<Module> {
+		if let Some(s) = self.by_path.get(path) {
+			if let Some(r) = s.get(&dedicated_submodule) {
+				return *r;
+			}
+		}
+
+		let (parent, name) = match dedicated_submodule {
+			Some(d) => (self.get(context, path, None), d.name()),
+			None => match path.rsplit_once(Self::DELIMITER) {
+				Some((prefix, name)) => (self.get(context, prefix, None), name),
+				None => (self.root, path),
+			},
+		};
+
+		let r = if name.is_empty() {
+			parent
+		} else {
+			let name = treeldr::Name::new(name).unwrap();
+			let ident =
+				proc_macro2::Ident::new(&name.to_snake_case(), proc_macro2::Span::call_site());
+
+			context.add_module(Some(parent), None, ident, module::Visibility::Public)
+		};
+
+		self.by_path
+			.entry(path.to_string())
+			.or_default()
+			.insert(dedicated_submodule, r);
+		r
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DedicatedSubModule {
+	ClassProviders,
+	TraitObjects,
+	Layouts,
+}
+
+impl DedicatedSubModule {
+	fn name(&self) -> &'static str {
+		match self {
+			Self::ClassProviders => "provider",
+			Self::TraitObjects => "trait_object",
+			Self::Layouts => "layout",
 		}
 	}
 }

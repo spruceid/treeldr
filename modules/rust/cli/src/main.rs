@@ -9,28 +9,32 @@ use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr};
 use stderrlog::ColorChoice;
 use treeldr::{Id, TId};
 use treeldr_load as load;
-use treeldr_rust_gen::{module::Visibility, tr::TraitModules, Generate};
+use treeldr_rust_gen::{module::Visibility, tr::TraitModules, DedicatedSubModule, Generate};
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
 struct Args {
 	/// Input files.
-	#[clap(short = 'i', multiple_occurrences = true)]
+	#[clap(short = 'i')]
 	filenames: Vec<PathBuf>,
 
 	/// Sets the level of verbosity.
-	#[clap(short, long = "verbose", parse(from_occurrences))]
-	verbosity: usize,
+	#[clap(short, long = "verbose", action = clap::ArgAction::Count)]
+	verbosity: u8,
 
 	/// Layouts to generate.
 	layouts: Vec<IriBuf>,
 
-	#[clap(short = 'm', multiple_occurrences = true)]
+	#[clap(short = 'm')]
 	modules: Vec<ModuleBinding>,
+
+	#[clap(long)]
+	no_rdf: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct ModuleBinding {
-	pub ident: Ident,
+	pub ident: String,
 	pub iri: IriBuf,
 }
 
@@ -43,7 +47,7 @@ impl FromStr for ModuleBinding {
 				let iri = IriBuf::new(iri)
 					.map_err(|e| InvalidPrefixBinding::InvalidIri(iri.to_string(), e))?;
 				Ok(Self {
-					ident: Ident::new(prefix, Span::call_site()),
+					ident: prefix.to_string(),
 					iri,
 				})
 			}
@@ -74,7 +78,10 @@ pub fn main() {
 	let args = Args::parse();
 
 	// Init logger.
-	stderrlog::new().verbosity(args.verbosity).init().unwrap();
+	stderrlog::new()
+		.verbosity(args.verbosity as usize)
+		.init()
+		.unwrap();
 
 	let mut files = load::Files::<PathBuf>::new();
 	let mut documents = Vec::new();
@@ -115,7 +122,11 @@ pub fn main() {
 			// 	println!("{} .", quad.with(&vocabulary))
 			// }
 
-			let mut gen_context = treeldr_rust_gen::Context::new(&model, &vocabulary);
+			let options = treeldr_rust_gen::Options {
+				impl_rdf: !args.no_rdf,
+			};
+
+			let mut gen_context = treeldr_rust_gen::Context::new(&model, &vocabulary, options);
 
 			let root_ref =
 				gen_context.add_module(None, None, format_ident!("example"), Visibility::Public);
@@ -124,44 +135,44 @@ pub fn main() {
 			let mut type_map = HashMap::new();
 
 			for prefix in args.modules {
-				let module_ref =
-					gen_context.add_module(Some(root_ref), None, prefix.ident, Visibility::Public);
-				let providers_module_ref = gen_context.add_module(
-					Some(module_ref),
+				let module_ref = gen_context.add_module(
+					Some(root_ref),
 					None,
-					format_ident!("provider"),
+					Ident::new(&prefix.ident, Span::call_site()),
 					Visibility::Public,
 				);
-				let trait_objects_module_ref = gen_context.add_module(
-					Some(module_ref),
-					None,
-					format_ident!("trait_object"),
-					Visibility::Public,
-				);
-				let layouts_module_ref = gen_context.add_module(
-					Some(module_ref),
-					None,
-					format_ident!("layout"),
-					Visibility::Public,
-				);
+
+				let mut sub_modules = treeldr_rust_gen::ModulePathBuilder::new(module_ref);
 
 				for (id, node) in model.nodes() {
 					if let treeldr::Id::Iri(term) = id {
 						let iri = vocabulary.iri(&term).unwrap();
 
-						if iri.as_str().strip_prefix(prefix.iri.as_str()).is_some() {
+						if let Some(suffix) = iri.as_str().strip_prefix(prefix.iri.as_str()) {
+							let path =
+								treeldr_rust_gen::ModulePathBuilder::split_iri_path(suffix).0;
+							eprintln!("path: {path}");
+
 							if node.is_type() {
 								type_map.insert(
 									TId::new(id),
 									TraitModules {
 										main: Some(treeldr_rust_gen::module::Parent::Ref(
-											module_ref,
+											sub_modules.get(&mut gen_context, path, None),
 										)),
 										provider: Some(treeldr_rust_gen::module::Parent::Ref(
-											providers_module_ref,
+											sub_modules.get(
+												&mut gen_context,
+												path,
+												Some(DedicatedSubModule::ClassProviders),
+											),
 										)),
 										trait_object: Some(treeldr_rust_gen::module::Parent::Ref(
-											trait_objects_module_ref,
+											sub_modules.get(
+												&mut gen_context,
+												path,
+												Some(DedicatedSubModule::TraitObjects),
+											),
 										)),
 									},
 								);
@@ -170,7 +181,11 @@ pub fn main() {
 							if node.is_layout() {
 								layout_map.insert(
 									TId::new(id),
-									treeldr_rust_gen::module::Parent::Ref(layouts_module_ref),
+									treeldr_rust_gen::module::Parent::Ref(sub_modules.get(
+										&mut gen_context,
+										path,
+										options.impl_rdf.then_some(DedicatedSubModule::Layouts),
+									)),
 								);
 							}
 						}

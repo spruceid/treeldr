@@ -1,6 +1,11 @@
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+use serde::{Deserialize, Serialize};
+
+use super::OneOrMany;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Type {
 	Null,
 	Boolean,
@@ -11,12 +16,23 @@ pub enum Type {
 	Object,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Validation {
+	#[serde(flatten)]
 	pub any: AnyValidation,
+
+	#[serde(flatten)]
 	pub numeric: NumericValidation,
+
+	#[serde(flatten)]
 	pub string: StringValidation,
+
+	#[serde(flatten)]
 	pub array: ArrayValidation,
+
+	#[serde(flatten)]
 	pub object: ObjectValidation,
+
 	pub format: Option<Format>,
 }
 
@@ -32,47 +48,55 @@ impl Validation {
 }
 
 /// Validation Keywords for Any Instance Type.
+#[derive(Serialize, Deserialize)]
 pub struct AnyValidation {
-	pub ty: Option<Vec<Type>>,
-	pub enm: Option<Vec<serde_json::Value>>,
-	pub cnst: Option<serde_json::Value>,
+	#[serde(rename = "type")]
+	pub ty: Option<OneOrMany<Type>>,
+
+	#[serde(rename = "enum")]
+	pub enm: Option<Vec<json_syntax::Value>>,
+
+	#[serde(rename = "const")]
+	pub cnst: Option<json_syntax::Value>,
 }
 
 /// Validation Keywords for Numeric Instances (number and integer).
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NumericValidation {
 	/// The value of "multipleOf" MUST be a number, strictly greater than 0.
 	///
 	/// A numeric instance is valid only if division by this keyword's value
 	/// results in an integer.
-	pub multiple_of: Option<serde_json::Number>,
+	pub multiple_of: Option<json_syntax::NumberBuf>,
 
 	/// The value of "maximum" MUST be a number, representing an inclusive upper
 	/// limit for a numeric instance.
 	///
 	/// If the instance is a number, then this keyword validates only if the
 	/// instance is less than or exactly equal to "maximum".
-	pub maximum: Option<serde_json::Number>,
+	pub maximum: Option<json_syntax::NumberBuf>,
 
 	/// The value of "exclusiveMaximum" MUST be a number, representing an
 	/// exclusive upper limit for a numeric instance.
 	///
 	/// If the instance is a number, then the instance is valid only if it has a
 	/// value strictly less than (not equal to) "exclusiveMaximum".
-	pub exclusive_maximum: Option<serde_json::Number>,
+	pub exclusive_maximum: Option<json_syntax::NumberBuf>,
 
 	/// The value of "minimum" MUST be a number, representing an inclusive lower
 	/// limit for a numeric instance.
 	///
 	/// If the instance is a number, then this keyword validates only if the
 	/// instance is greater than or exactly equal to "minimum".
-	pub minimum: Option<serde_json::Number>,
+	pub minimum: Option<json_syntax::NumberBuf>,
 
 	/// The value of "exclusiveMinimum" MUST be a number, representing an
 	/// exclusive lower limit for a numeric instance.
 	///
 	/// If the instance is a number, then the instance is valid only if it has a
 	/// value strictly greater than (not equal to) "exclusiveMinimum".
-	pub exclusive_minimum: Option<serde_json::Number>,
+	pub exclusive_minimum: Option<json_syntax::NumberBuf>,
 }
 
 impl NumericValidation {
@@ -86,6 +110,8 @@ impl NumericValidation {
 }
 
 /// Validation Keywords for Strings
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StringValidation {
 	/// A string instance is valid against this keyword if its length is less
 	/// than, or equal to, the value of this keyword.
@@ -120,6 +146,8 @@ impl StringValidation {
 }
 
 /// Validation Keywords for Arrays
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ArrayValidation {
 	/// The value of this keyword MUST be a non-negative integer.
 	///
@@ -181,6 +209,8 @@ impl ArrayValidation {
 }
 
 /// Validation Keywords for Objects
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ObjectValidation {
 	/// An object instance is valid against "maxProperties" if its number of
 	/// properties is less than, or equal to, the value of this keyword.
@@ -223,7 +253,8 @@ impl ObjectValidation {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Format {
 	/// A string instance is valid against this attribute if it is a valid
 	/// representation according to the "date-time" production.

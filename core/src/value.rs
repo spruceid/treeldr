@@ -4,6 +4,7 @@ use langtag::LanguageTag;
 use locspan::Meta;
 use rdf_types::IriVocabulary;
 pub use xsd_types::value::*;
+use xsd_types::ParseRdf;
 
 use crate::{vocab, Id, IriIndex};
 
@@ -60,6 +61,35 @@ impl Literal {
 	}
 }
 
+macro_rules! from_rational {
+	( $($ty:ty),* ) => {
+		$(
+			impl From<$ty> for Literal {
+				fn from(value: $ty) -> Self {
+					Self::Numeric(Numeric::Real(Real::Rational(value.into())))
+				}
+			}
+		)*
+	};
+}
+
+from_rational! {
+	Decimal,
+	Integer,
+	NonNegativeInteger,
+	PositiveInteger,
+	NonPositiveInteger,
+	NegativeInteger,
+	Long,
+	Int,
+	Short,
+	Byte,
+	UnsignedLong,
+	UnsignedInt,
+	UnsignedShort,
+	UnsignedByte
+}
+
 impl From<String> for Literal {
 	fn from(value: String) -> Self {
 		Self::String(value)
@@ -94,22 +124,51 @@ impl<V: IriVocabulary<Iri = IriIndex>> rdf_types::RdfDisplayWithContext<V> for L
 pub enum InvalidLiteral {
 	#[error("missing language tag")]
 	MissingLanguageTag,
+
+	#[error("invalid lexical value")]
+	InvalidLexicalValue(IriIndex),
 }
 
 impl<M> TryFrom<vocab::Literal<M>> for Literal {
 	type Error = InvalidLiteral;
 
 	fn try_from(value: vocab::Literal<M>) -> Result<Self, Self::Error> {
+		macro_rules! match_type {
+			( ($s:ident, $ty:ident): $($term:ident),* ) => {
+				match $ty {
+					IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String)) => {
+						Ok(Literal::String($s.into_value()))
+					}
+					IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::LangString)) => {
+						Err(InvalidLiteral::MissingLanguageTag)
+					}
+					$(
+						IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::$term)) => {
+							Ok(Integer::parse_rdf(&$s).map_err(|_| InvalidLiteral::InvalidLexicalValue($ty))?.into())
+						}
+					)*
+					ty => Ok(Literal::Other($s.into_value(), ty)),
+				}
+			};
+		}
+
 		match value {
 			vocab::Literal::String(s) => Ok(Literal::String(s.into_value())),
-			vocab::Literal::TypedString(s, Meta(ty, _)) => match ty {
-				IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String)) => {
-					Ok(Literal::String(s.into_value()))
-				}
-				IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::LangString)) => {
-					Err(InvalidLiteral::MissingLanguageTag)
-				}
-				ty => Ok(Literal::Other(s.into_value(), ty)),
+			vocab::Literal::TypedString(s, Meta(ty, _)) => match_type! { (s, ty):
+				Decimal,
+				Integer,
+				NonNegativeInteger,
+				PositiveInteger,
+				NonPositiveInteger,
+				NegativeInteger,
+				Long,
+				Int,
+				Short,
+				Byte,
+				UnsignedLong,
+				UnsignedInt,
+				UnsignedShort,
+				UnsignedByte
 			},
 			vocab::Literal::LangString(s, tag) => Ok(Literal::LangString(LangString::new(
 				s.into_value(),

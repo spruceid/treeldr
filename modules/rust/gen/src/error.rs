@@ -29,7 +29,10 @@ impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V
 				write!(f, "unbound type `{}`", type_ref.id().with(vocabulary))
 			}
 			Self::MissingDefaultImpl => {
-				write!(f, "missing `Default` implementation")
+				write!(
+					f,
+					"missing `Default` implementation required for `FromRdf` trait implementation"
+				)
 			}
 			Self::BlankProperty(prop_ref) => {
 				write!(f, "blank property `{}`", prop_ref.id().with(vocabulary))

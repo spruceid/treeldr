@@ -7,11 +7,11 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["turtle"]
+default = ["turtle", "json-schema", "lexicon"]
 turtle = ["turtle-syntax"]
-json-schema = ["treeldr-json-schema", "serde_json"]
+json-schema = ["treeldr-json-schema", "json-syntax"]
 json-ld-context = ["treeldr-json-ld-context"]
-serde = ["dep:serde"]
+lexicon = ["treeldr-lexicon", "json-syntax"]
 
 [dependencies]
 treeldr.workspace = true
@@ -30,5 +30,6 @@ serde = { version = "1.0.154", features = ["derive"], optional = true }
 # Extensions.
 turtle-syntax = { version = "5.0.0", optional = true }
 treeldr-json-schema = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
+json-syntax = { workspace = true, features = ["serde"], optional = true }
 treeldr-json-ld-context = { workspace = true, optional = true }
+treeldr-lexicon = { workspace = true, optional = true }

@@ -1,4 +1,5 @@
 use iref::Iri;
+use json_syntax::{BorrowUnordered, Parse as ParseJson, Print};
 use rdf_types::IriVocabulary;
 use static_iref::iri;
 use treeldr::{Id, TId};
@@ -73,16 +74,17 @@ impl Test {
 				)
 				.expect("unable to generate JSON Schema");
 
-				let expected: serde_json::Value =
-					serde_json::from_str(expected_output).expect("invalid JSON");
+				let expected = json_syntax::Value::parse_str(expected_output, |_| ())
+					.expect("invalid JSON")
+					.into_value();
 
-				let success = output == expected;
+				let success = output.unordered() == expected.unordered();
 
 				if !success {
 					eprintln!(
 						"output:\n{}\nexpected:\n{}",
-						serde_json::to_string_pretty(&output).unwrap(),
-						serde_json::to_string_pretty(&expected).unwrap()
+						output.pretty_print(),
+						expected.pretty_print()
 					);
 				}
 
@@ -137,10 +139,7 @@ impl Test {
 				)
 				.expect("unable to generate JSON Schema");
 
-				eprintln!(
-					"output:\n{}",
-					serde_json::to_string_pretty(&output).unwrap()
-				);
+				eprintln!("output:\n{}", output.pretty_print());
 			}
 		}
 	}

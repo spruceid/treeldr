@@ -463,6 +463,8 @@ impl<M> Generate<M> for treeldr::layout::Primitive {
 			Self::Url => quote! { ::treeldr_rust_prelude::iref::IriBuf },
 			Self::Uri => quote! { ::treeldr_rust_prelude::iref::IriBuf },
 			Self::Iri => quote! { ::treeldr_rust_prelude::iref::IriBuf },
+			Self::Bytes => quote! { ::treeldr_rust_prelude::ty::BytesBuf },
+			Self::Cid => quote! { ::treeldr_rust_prelude::ty::CidBuf },
 		});
 
 		Ok(())
@@ -508,6 +510,8 @@ impl<M> Generate<M> for Referenced<treeldr::layout::Primitive> {
 			Primitive::Url => quote! { ::treeldr_rust_prelude::iref::Iri },
 			Primitive::Uri => quote! { ::treeldr_rust_prelude::iref::Iri },
 			Primitive::Iri => quote! { ::treeldr_rust_prelude::iref::Iri },
+			Primitive::Bytes => quote! { &::treeldr_rust_prelude::ty::Bytes },
+			Primitive::Cid => quote! { &::treeldr_rust_prelude::ty::Cid },
 		});
 
 		Ok(())

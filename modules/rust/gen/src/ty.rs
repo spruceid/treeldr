@@ -17,7 +17,7 @@ pub mod structure;
 
 use alias::Alias;
 use enumeration::Enum;
-use params::{Parameters, ParametersValues};
+pub use params::{Parameter, Parameters, ParametersValues};
 use structure::Struct;
 
 #[derive(Debug)]
@@ -133,9 +133,13 @@ impl Type {
 
 		if let Some(layout_ref) = layout {
 			let layout = context.model().get(layout_ref).unwrap();
-			f(TraitId::FromRdf.impl_for(layout_ref));
-			f(TraitId::TriplesAndValues.impl_for(layout_ref));
-			f(TraitId::IntoJsonLd.impl_for(layout_ref));
+
+			if context.options().impl_rdf {
+				f(TraitId::FromRdf.impl_for(layout_ref));
+				f(TraitId::IntoJsonLd.impl_for(layout_ref));
+				f(TraitId::TriplesAndValues.impl_for(layout_ref));
+			}
+
 			f(TraitId::IntoJsonLdSyntax.impl_for(layout_ref));
 
 			let mut stack: Vec<_> = layout.as_layout().ty().iter().map(|v| **v.value).collect();

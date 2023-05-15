@@ -15,12 +15,12 @@ type BuildContext = treeldr_build::Context<load::Metadata>;
 #[clap(name="treeldr", author, version, about, long_about = None)]
 struct Args {
 	/// Input files.
-	#[clap(short = 'i', multiple_occurrences = true)]
+	#[clap(short = 'i')]
 	filenames: Vec<PathBuf>,
 
 	/// Sets the level of verbosity.
-	#[clap(short, long = "verbose", parse(from_occurrences))]
-	verbosity: usize,
+	#[clap(short, long = "verbose", action = clap::ArgAction::Count)]
+	verbosity: u8,
 
 	#[clap(subcommand)]
 	command: Option<Command>,
@@ -47,7 +47,10 @@ async fn main() {
 	let args = Args::parse();
 
 	// Init logger.
-	stderrlog::new().verbosity(args.verbosity).init().unwrap();
+	stderrlog::new()
+		.verbosity(args.verbosity as usize)
+		.init()
+		.unwrap();
 
 	let mut files = load::Files::<PathBuf>::new();
 	let mut documents = Vec::new();
