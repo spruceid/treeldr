@@ -136,6 +136,9 @@ impl From<Term> for Type {
 			Term::TreeLdr(vocab::TreeLdr::Variant) => {
 				component::formatted::Type::LayoutVariant.into()
 			}
+			Term::TreeLdr(vocab::TreeLdr::LayoutRestriction) => {
+				node::Type::LayoutRestriction.into()
+			}
 			t => Self::Other(OtherTypeId(TId::new(Id::Iri(IriIndex::Iri(t))))),
 		}
 	}

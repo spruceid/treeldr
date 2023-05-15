@@ -799,7 +799,7 @@ impl<'a, M> DescriptionBindingRef<'a, M> {
 
 	pub fn value(&self) -> BindingValueRef<'a, M> {
 		match self {
-			Self::DerivedFrom(_, p) => BindingValueRef::Type(p.ty()),
+			Self::DerivedFrom(_, p) => BindingValueRef::Layout(p.layout()),
 			Self::Reference(_, v) => BindingValueRef::Layout(*v),
 			Self::Struct(_, v) => BindingValueRef::Fields(v),
 			Self::Enum(_, v) => BindingValueRef::Variants(v),

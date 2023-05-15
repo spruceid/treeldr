@@ -169,8 +169,46 @@ impl Primitive {
 		Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Primitive(*self))))
 	}
 
-	pub fn ty(&self) -> TId<crate::Type> {
+	pub fn layout(&self) -> TId<crate::Layout> {
 		TId::new(self.id())
+	}
+
+	pub fn natural_type_term(&self) -> Option<vocab::Term> {
+		use vocab::{Term, Xsd};
+		match self {
+			Self::Boolean => Some(Term::Xsd(Xsd::Boolean)),
+			Self::Integer => Some(Term::Xsd(Xsd::Integer)),
+			Self::NonNegativeInteger => Some(Term::Xsd(Xsd::NonNegativeInteger)),
+			Self::NonPositiveInteger => Some(Term::Xsd(Xsd::NonPositiveInteger)),
+			Self::NegativeInteger => Some(Term::Xsd(Xsd::NegativeInteger)),
+			Self::PositiveInteger => Some(Term::Xsd(Xsd::PositiveInteger)),
+			Self::Float => Some(Term::Xsd(Xsd::Float)),
+			Self::Double => Some(Term::Xsd(Xsd::Double)),
+			Self::U64 => Some(Term::Xsd(Xsd::UnsignedLong)),
+			Self::U32 => Some(Term::Xsd(Xsd::UnsignedInt)),
+			Self::U16 => Some(Term::Xsd(Xsd::UnsignedShort)),
+			Self::U8 => Some(Term::Xsd(Xsd::UnsignedByte)),
+			Self::I64 => Some(Term::Xsd(Xsd::Long)),
+			Self::I32 => Some(Term::Xsd(Xsd::Int)),
+			Self::I16 => Some(Term::Xsd(Xsd::Short)),
+			Self::I8 => Some(Term::Xsd(Xsd::Byte)),
+			Self::Base64Bytes => Some(Term::Xsd(Xsd::Base64Binary)),
+			Self::HexBytes => Some(Term::Xsd(Xsd::HexBinary)),
+			Self::String => Some(Term::Xsd(Xsd::String)),
+			Self::Time => Some(Term::Xsd(Xsd::Time)),
+			Self::Date => Some(Term::Xsd(Xsd::Date)),
+			Self::DateTime => Some(Term::Xsd(Xsd::DateTime)),
+			Self::Iri => Some(Term::Xsd(Xsd::AnyUri)),
+			Self::Uri => Some(Term::Xsd(Xsd::AnyUri)),
+			Self::Url => Some(Term::Xsd(Xsd::AnyUri)),
+			Self::Bytes => None,
+			Self::Cid => None,
+		}
+	}
+
+	pub fn natural_type(&self) -> Option<TId<crate::Type>> {
+		self.natural_type_term()
+			.map(|t| TId::new(Id::Iri(IriIndex::Iri(t))))
 	}
 }
 
