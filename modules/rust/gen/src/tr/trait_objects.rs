@@ -206,7 +206,7 @@ fn associated_trait_object_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 		let methods = tr.methods().iter().map(|m| {
 			syntax::ClassAssociatedTypeTraitObjectTraitImplMethod {
 				ident: m.ident().clone(),
-				return_ty: syn::parse2(m.return_type_expr(tr)).unwrap(),
+				return_ty: m.return_type_expr(tr),
 				table_index: i
 			}
 		}).collect();

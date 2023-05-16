@@ -145,7 +145,7 @@ impl Type {
 
 			let mut stack: Vec<_> = layout.as_layout().ty().iter().map(|v| **v.value).collect();
 			while let Some(ty_ref) = stack.pop() {
-				if f(TraitId::Defined(ty_ref).impl_for(layout_ref)) {
+				if f(TraitId::Class(ty_ref).impl_for(layout_ref)) {
 					let ty = context.model().get(ty_ref).unwrap();
 					if let Some(super_classes) = ty.as_type().sub_class_of() {
 						stack.extend(super_classes.iter().map(|s| **s.value))

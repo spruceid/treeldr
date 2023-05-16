@@ -12,7 +12,7 @@ pub mod syntax;
 pub mod tr;
 pub mod ty;
 
-pub use context::{Context, Options};
+pub use context::{Context, DedicatedSubModule, ModulePathBuilder, Options};
 pub use error::Error;
 pub use module::Module;
 pub use path::Path;

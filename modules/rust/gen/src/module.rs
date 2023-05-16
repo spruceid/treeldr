@@ -11,7 +11,7 @@ pub enum TraitId {
 	TriplesAndValues,
 	IntoJsonLd,
 	IntoJsonLdSyntax,
-	Defined(TId<treeldr::Type>),
+	Class(TId<treeldr::Type>),
 }
 
 impl TraitId {

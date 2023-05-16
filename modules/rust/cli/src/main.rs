@@ -3,13 +3,13 @@ use codespan_reporting::term::{self, termcolor::StandardStream};
 use contextual::WithContext;
 use iref::IriBuf;
 use proc_macro2::{Ident, Span};
-use quote::format_ident;
+use quote::{format_ident, ToTokens};
 use rdf_types::IriVocabulary;
 use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr};
 use stderrlog::ColorChoice;
 use treeldr::{Id, TId};
 use treeldr_load as load;
-use treeldr_rust_gen::{module::Visibility, tr::TraitModules, DedicatedSubModule, Generate};
+use treeldr_rust_gen::{module::Visibility, tr::TraitModules, DedicatedSubModule, GenerateSyntax};
 
 #[derive(Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]
@@ -221,12 +221,12 @@ pub fn main() {
 
 			gen_context.run_pre_computations();
 			let module = gen_context.module(root_ref).unwrap();
+			let scope = treeldr_rust_gen::Scope::new(Some(root_ref));
 			match module
-				.generate_with(&gen_context, Some(root_ref))
-				.into_tokens()
+				.generate_syntax(&gen_context, &scope)
 			{
 				Ok(generated) => {
-					println!("{generated}")
+					println!("{}", generated.into_token_stream())
 				}
 				Err(e) => {
 					if let treeldr_rust_gen::Error::UnreachableType(layout_ref) = &e {

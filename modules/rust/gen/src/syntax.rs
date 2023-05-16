@@ -3,11 +3,13 @@ use quote::{quote, ToTokens};
 
 use crate::module::ExternPath;
 
-mod ty;
-mod tr;
+pub mod ty;
+pub mod tr;
+pub mod tr_impl;
 
 pub use ty::*;
 pub use tr::*;
+pub use tr_impl::TraitImplementation;
 
 pub enum ModuleOrUse {
 	Module(Module),

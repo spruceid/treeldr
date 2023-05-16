@@ -5,7 +5,7 @@ use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
-mod json_ld;
+// mod json_ld;
 mod rdf;
 mod tr_impl;
 
@@ -334,6 +334,9 @@ impl<M> GenerateSyntax<M> for treeldr::layout::Primitive {
 			Self::HexBytes => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::HexBytesBuf }).unwrap())
 			}
+			Self::Bytes => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::BytesBuf }).unwrap())
+			}
 			Self::String => Ok(syn::parse2(quote! { ::std::string::String }).unwrap()),
 			Self::Date => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::chrono::NaiveDate }).unwrap())
@@ -348,6 +351,9 @@ impl<M> GenerateSyntax<M> for treeldr::layout::Primitive {
 			Self::Url => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
 			Self::Uri => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
 			Self::Iri => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
+			Self::Cid => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::CidBuf }).unwrap())
+			}
 		}
 	}
 }
@@ -395,6 +401,9 @@ impl<M> GenerateSyntax<M> for Referenced<treeldr::layout::Primitive> {
 			Primitive::HexBytes => {
 				Ok(syn::parse2(quote! { &::treeldr_rust_prelude::ty::HexBytes }).unwrap())
 			}
+			Primitive::Bytes => {
+				Ok(syn::parse2(quote! { &::treeldr_rust_prelude::ty::Bytes }).unwrap())
+			}
 			Primitive::String => Ok(syn::parse2(quote! { &str }).unwrap()),
 			Primitive::Date => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::chrono::NaiveDate }).unwrap())
@@ -414,6 +423,9 @@ impl<M> GenerateSyntax<M> for Referenced<treeldr::layout::Primitive> {
 			}
 			Primitive::Iri => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::Iri }).unwrap())
+			}
+			Primitive::Cid => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Cid }).unwrap())
 			}
 		}
 	}

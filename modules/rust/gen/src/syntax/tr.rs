@@ -66,66 +66,6 @@ impl ToTokens for ClassTraitParameters {
 	}
 }
 
-pub enum TraitImplementation {
-	ClassTraitImpl(ClassTraitImpl)
-}
-
-impl ToTokens for TraitImplementation {
-	fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-		match self {
-			Self::ClassTraitImpl(i) => i.to_tokens(tokens)
-		}
-	}
-}
-
-pub struct ClassTraitImpl {
-	ident: Ident,
-	trait_path: syn::Path,
-	context_bounds: Vec<syn::TraitBound>,
-	associated_types: Vec<(Ident, syn::Type)>,
-	methods: Vec<ClassTraitImplMethod>,
-	dyn_table_path: syn::Path,
-	dyn_table_instance_path: syn::Path
-}
-
-impl ToTokens for ClassTraitImpl {
-	fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-		let ident = &self.ident;
-		let tr_path = &self.trait_path;
-		let context_bounds = &self.context_bounds;
-		let associated_types = self.associated_types.iter().map(|(id, ty)| {
-			quote!(type #id <'a> = #ty where Self: 'a , C: 'a ;)
-		});
-		let methods = &self.methods;
-		let dyn_table_path = &self.dyn_table_path;
-		let dyn_table_instance_path = &self.dyn_table_instance_path;
-
-		tokens.extend(quote! {
-			impl <C: ?Sized #(+#context_bounds)*> #tr_path for #ident <C> {
-				#(#associated_types)*
-				#(#methods)*
-			}
-
-			unsafe impl <C: ?Sized #(+#context_bounds)*> ::treeldr_rust_prelude::AsTraitObject<#dyn_table_path<C>> for #ident <C> {
-				fn as_trait_object(&self) -> (*const u8, #dyn_table_instance_path<C>) {
-					let table = #dyn_table_instance_path::new::<Self>();
-					(self as *const Self as *const u8, table)
-				}
-			}
-		})
-	}
-}
-
-pub struct ClassTraitImplMethod {
-	// ...
-}
-
-impl ToTokens for ClassTraitImpl {
-	fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-		todo!()
-	}
-}
-
 pub struct ClassTraitDefinition {
 	pub ident: Ident,
 	pub super_traits: Vec<syn::TraitBound>,

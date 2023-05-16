@@ -6,15 +6,19 @@ use rdf_types::Vocabulary;
 use treeldr::{vocab::Primitive, BlankIdIndex, IriIndex, TId};
 
 use crate::{
-	ty::{self, params::ParametersValues},
-	Error, Generate, GenerateIn,
+	ty,
+	Error, GenerateSyntax
 };
 
 mod r#enum;
 mod r#struct;
 
 /// `RdfQuads` trait implementation.
-pub struct RdfQuadsImpl;
+pub struct RdfQuadsImpl<'a, T> {
+	pub tr_ref: TId<treeldr::Type>,
+	pub ty_ref: TId<treeldr::Layout>,
+	pub ty: &'a T
+}
 
 /// Bound that may appear in a `RdfQuads` implementation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -23,18 +27,18 @@ pub enum Bound {
 	AsLiteral(Primitive),
 }
 
-impl<M> Generate<M> for Bound {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for Bound {
+	type Output = syn::WherePredicate;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &crate::Context<V, M>,
-		scope: Option<shelves::Ref<crate::Module>>,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
+		scope: &crate::Scope,
+	) -> Result<Self::Output, Error> {
 		match self {
 			Self::AsLiteral(p) => {
-				let ty = p.generate_with(context, scope).into_tokens()?;
-				tokens.extend(quote!(#ty: ::treeldr_rust_prelude::rdf::AsLiteral<N, V>));
-				Ok(())
+				let ty = p.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(#ty: ::treeldr_rust_prelude::rdf::AsLiteral<N, V>)).unwrap())
 			}
 		}
 	}
@@ -49,41 +53,37 @@ fn quads_and_values_iterator_name_from(ident: &Ident) -> Ident {
 /// Returns a path to the quads and values iterator of the given layout.
 fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, M>(
 	context: &crate::Context<V, M>,
-	scope: Option<shelves::Ref<crate::Module>>,
-	params_values: &ParametersValues,
+	scope: &crate::Scope,
 	layout: TId<treeldr::Layout>,
 	lifetime: TokenStream,
-) -> Result<TokenStream, Error> {
+) -> Result<syn::Type, Error> {
 	let ty = context.layout_type(layout).unwrap();
 
 	match ty.description() {
-		ty::Description::Never => Ok(quote!(::treeldr_rust_prelude::rdf::iter::Empty<V>)),
+		ty::Description::Never => Ok(syn::parse2(quote!(::treeldr_rust_prelude::rdf::iter::Empty<V>)).unwrap()),
 		ty::Description::Alias(a) => {
-			quads_and_values_iterator_of(context, scope, params_values, a.target(), lifetime)
+			quads_and_values_iterator_of(context, scope, a.target(), lifetime)
 		}
 		ty::Description::Primitive(p) => {
-			let p_ty = p.generate_with(context, scope).into_tokens()?;
+			let p_ty = p.generate_syntax(context, scope)?;
 			Ok(
-				quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'a, #p_ty, I, V>>),
+				syn::parse2(quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'a, #p_ty, I, V>>)).unwrap(),
 			)
 		}
 		ty::Description::BuiltIn(b) => match b {
 			ty::BuiltIn::BTreeSet(item_layout) => {
-				let item_ty_expr = item_layout
-					.generate_in_with(context, scope, params_values)
-					.into_tokens()?;
+				let item_ty_expr = item_layout.generate_syntax(context, scope)?;
 				let inner = quads_and_values_iterator_of(
 					context,
 					scope,
-					params_values,
 					*item_layout,
 					lifetime.clone(),
 				)?;
-				Ok(quote!(::treeldr_rust_prelude::rdf::FlattenQuadsAndValues<
-						::std::collections::btree_set::Iter<#lifetime, #item_ty_expr>,
-						#inner,
-						V
-					>))
+				Ok(syn::parse2(quote!(::treeldr_rust_prelude::rdf::FlattenQuadsAndValues<
+					::std::collections::btree_set::Iter<#lifetime, #item_ty_expr>,
+					#inner,
+					V
+				>)).unwrap())
 			}
 			ty::BuiltIn::BTreeMap(_, _) => {
 				todo!("btreemap triples iterator generator")
@@ -95,41 +95,40 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 				let inner = quads_and_values_iterator_of(
 					context,
 					scope,
-					params_values,
 					*item_layout,
 					lifetime,
 				)?;
-				Ok(quote!(::treeldr_rust_prelude::rdf::iter::Optional<#inner>))
+				Ok(syn::parse2(quote!(::treeldr_rust_prelude::rdf::iter::Optional<#inner>)).unwrap())
 			}
 			ty::BuiltIn::Required(item_layout) => {
-				quads_and_values_iterator_of(context, scope, params_values, *item_layout, lifetime)
+				quads_and_values_iterator_of(context, scope, *item_layout, lifetime)
 			}
 			ty::BuiltIn::Vec(item_layout) => {
-				let item_ty_expr = item_layout
-					.generate_in_with(context, scope, params_values)
-					.into_tokens()?;
+				let item_ty_expr = item_layout.generate_syntax(context, scope)?;
 				Ok(
-					quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::slice::Iter<#lifetime, #item_ty_expr>>),
+					syn::parse2(quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::slice::Iter<#lifetime, #item_ty_expr>>)).unwrap(),
 				)
 			}
 		},
 		ty::Description::Struct(s) => {
 			let mut path = context
-				.module_path(scope)
+				.module_path(scope.module)
 				.to(&context.parent_module_path(ty.module()).unwrap());
 			path.push(quads_and_values_iterator_name_from(s.ident()));
-			Ok(quote!(#path<#lifetime, I, V>))
+			let path = path.generate_syntax(context, scope)?;
+			Ok(syn::parse2(quote!(#path<#lifetime, I, V>)).unwrap())
 		}
 		ty::Description::Enum(e) => {
 			let mut path = context
-				.module_path(scope)
+				.module_path(scope.module)
 				.to(&context.parent_module_path(ty.module()).unwrap());
 			path.push(quads_and_values_iterator_name_from(e.ident()));
-			Ok(quote!(#path<#lifetime, I, V>))
+			let path = path.generate_syntax(context, scope)?;
+			Ok(syn::parse2(quote!(#path<#lifetime, I, V>)).unwrap())
 		}
-		ty::Description::Reference(_) => Ok(quote!(
+		ty::Description::Reference(_) => Ok(syn::parse2(quote!(
 			::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::IdValue<'a, I, V>>
-		)),
+		)).unwrap()),
 	}
 }
 
