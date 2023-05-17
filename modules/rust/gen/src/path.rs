@@ -103,14 +103,12 @@ impl<M> GenerateSyntax<M> for Path {
 			let mut args = syn::punctuated::Punctuated::new();
 
 			for p in self.params.iter() {
-				args.push(syn::GenericArgument::Type(
-					scope.bound_params().get(p).unwrap().clone(),
-				))
+				args.push(scope.bound_params().get(p).unwrap().into_owned())
 			}
 
 			segments.last_mut().unwrap().arguments =
 				syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
-					colon2_token: None,
+					colon2_token: Some(syn::token::PathSep::default()),
 					lt_token: Default::default(),
 					args,
 					gt_token: Default::default(),

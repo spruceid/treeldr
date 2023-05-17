@@ -151,7 +151,6 @@ pub fn main() {
 						if let Some(suffix) = iri.as_str().strip_prefix(prefix.iri.as_str()) {
 							let path =
 								treeldr_rust_gen::ModulePathBuilder::split_iri_path(suffix).0;
-							eprintln!("path: {path}");
 
 							if node.is_type() {
 								type_map.insert(
@@ -222,9 +221,7 @@ pub fn main() {
 			gen_context.run_pre_computations();
 			let module = gen_context.module(root_ref).unwrap();
 			let scope = treeldr_rust_gen::Scope::new(Some(root_ref));
-			match module
-				.generate_syntax(&gen_context, &scope)
-			{
+			match module.generate_syntax(&gen_context, &scope) {
 				Ok(generated) => {
 					println!("{}", generated.into_token_stream())
 				}

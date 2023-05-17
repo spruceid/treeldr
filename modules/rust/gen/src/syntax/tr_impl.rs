@@ -1,17 +1,25 @@
 use quote::ToTokens;
 
 pub mod class;
-pub mod rdf;
 pub mod json_ld;
+pub mod rdf;
 
 pub enum TraitImplementation {
-	ClassTraitImpl(class::TraitImpl)
+	ClassTrait(class::TraitImpl),
+	RdfQuads(rdf::QuadsImpl),
+	FromRdf(rdf::FromRdfImpl),
+	IntoJsonLd(json_ld::IntoJsonLdImpl),
+	IntoJsonLdSyntax(json_ld::IntoJsonLdSyntaxImpl),
 }
 
 impl ToTokens for TraitImplementation {
 	fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
 		match self {
-			Self::ClassTraitImpl(i) => i.to_tokens(tokens)
+			Self::ClassTrait(i) => i.to_tokens(tokens),
+			Self::RdfQuads(i) => i.to_tokens(tokens),
+			Self::FromRdf(i) => i.to_tokens(tokens),
+			Self::IntoJsonLd(i) => i.to_tokens(tokens),
+			Self::IntoJsonLdSyntax(i) => i.to_tokens(tokens),
 		}
 	}
 }

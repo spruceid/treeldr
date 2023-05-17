@@ -5,19 +5,21 @@ use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
 use treeldr::{vocab::Primitive, BlankIdIndex, IriIndex, TId};
 
-use crate::{
-	ty,
-	Error, GenerateSyntax
-};
+use crate::{ty, Error, GenerateSyntax};
 
 mod r#enum;
 mod r#struct;
 
 /// `RdfQuads` trait implementation.
 pub struct RdfQuadsImpl<'a, T> {
-	pub tr_ref: TId<treeldr::Type>,
 	pub ty_ref: TId<treeldr::Layout>,
-	pub ty: &'a T
+	pub ty: &'a T,
+}
+
+impl<'a, T> RdfQuadsImpl<'a, T> {
+	pub fn new(ty_ref: TId<treeldr::Layout>, ty: &'a T) -> Self {
+		Self { ty_ref, ty }
+	}
 }
 
 /// Bound that may appear in a `RdfQuads` implementation.
@@ -60,7 +62,9 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 	let ty = context.layout_type(layout).unwrap();
 
 	match ty.description() {
-		ty::Description::Never => Ok(syn::parse2(quote!(::treeldr_rust_prelude::rdf::iter::Empty<V>)).unwrap()),
+		ty::Description::Never => {
+			Ok(syn::parse2(quote!(::treeldr_rust_prelude::rdf::iter::Empty<V>)).unwrap())
+		}
 		ty::Description::Alias(a) => {
 			quads_and_values_iterator_of(context, scope, a.target(), lifetime)
 		}
@@ -73,17 +77,16 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 		ty::Description::BuiltIn(b) => match b {
 			ty::BuiltIn::BTreeSet(item_layout) => {
 				let item_ty_expr = item_layout.generate_syntax(context, scope)?;
-				let inner = quads_and_values_iterator_of(
-					context,
-					scope,
-					*item_layout,
-					lifetime.clone(),
-				)?;
-				Ok(syn::parse2(quote!(::treeldr_rust_prelude::rdf::FlattenQuadsAndValues<
+				let inner =
+					quads_and_values_iterator_of(context, scope, *item_layout, lifetime.clone())?;
+				Ok(
+					syn::parse2(quote!(::treeldr_rust_prelude::rdf::FlattenQuadsAndValues<
 					::std::collections::btree_set::Iter<#lifetime, #item_ty_expr>,
 					#inner,
 					V
-				>)).unwrap())
+				>))
+					.unwrap(),
+				)
 			}
 			ty::BuiltIn::BTreeMap(_, _) => {
 				todo!("btreemap triples iterator generator")
@@ -92,22 +95,21 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 				todo!("one or many triples iterator generator")
 			}
 			ty::BuiltIn::Option(item_layout) => {
-				let inner = quads_and_values_iterator_of(
-					context,
-					scope,
-					*item_layout,
-					lifetime,
-				)?;
-				Ok(syn::parse2(quote!(::treeldr_rust_prelude::rdf::iter::Optional<#inner>)).unwrap())
+				let inner = quads_and_values_iterator_of(context, scope, *item_layout, lifetime)?;
+				Ok(
+					syn::parse2(quote!(::treeldr_rust_prelude::rdf::iter::Optional<#inner>))
+						.unwrap(),
+				)
 			}
 			ty::BuiltIn::Required(item_layout) => {
 				quads_and_values_iterator_of(context, scope, *item_layout, lifetime)
 			}
 			ty::BuiltIn::Vec(item_layout) => {
 				let item_ty_expr = item_layout.generate_syntax(context, scope)?;
-				Ok(
-					syn::parse2(quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::slice::Iter<#lifetime, #item_ty_expr>>)).unwrap(),
+				Ok(syn::parse2(
+					quote!(::treeldr_rust_prelude::rdf::iter::Flatten<::std::slice::Iter<#lifetime, #item_ty_expr>>),
 				)
+				.unwrap())
 			}
 		},
 		ty::Description::Struct(s) => {
@@ -128,7 +130,8 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 		}
 		ty::Description::Reference(_) => Ok(syn::parse2(quote!(
 			::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::IdValue<'a, I, V>>
-		)).unwrap()),
+		))
+		.unwrap()),
 	}
 }
 

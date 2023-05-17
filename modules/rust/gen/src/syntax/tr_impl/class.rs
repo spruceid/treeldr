@@ -1,5 +1,5 @@
 use proc_macro2::{Ident, TokenStream};
-use quote::{ToTokens, quote};
+use quote::{quote, ToTokens};
 
 pub struct TraitImpl {
 	pub type_path: syn::Type,
@@ -8,7 +8,7 @@ pub struct TraitImpl {
 	pub associated_types: Vec<(Ident, syn::Type)>,
 	pub methods: Vec<Method>,
 	pub dyn_table_path: syn::Path,
-	pub dyn_table_instance_path: syn::Path
+	pub dyn_table_instance_path: syn::Path,
 }
 
 impl ToTokens for TraitImpl {
@@ -16,21 +16,22 @@ impl ToTokens for TraitImpl {
 		let ty_path = &self.type_path;
 		let tr_path = &self.trait_path;
 		let context_bounds = &self.context_bounds;
-		let associated_types = self.associated_types.iter().map(|(id, ty)| {
-			quote!(type #id <'a> = #ty where Self: 'a , C: 'a ;)
-		});
+		let associated_types = self
+			.associated_types
+			.iter()
+			.map(|(id, ty)| quote!(type #id <'a> = #ty where Self: 'a , C: 'a ;));
 		let methods = &self.methods;
 		let dyn_table_path = &self.dyn_table_path;
 		let dyn_table_instance_path = &self.dyn_table_instance_path;
 
 		tokens.extend(quote! {
-			impl <C: ?Sized #(+#context_bounds)*> #tr_path for #ty_path <C> {
+			impl <I, C: ?Sized #(+#context_bounds)*> #tr_path for #ty_path {
 				#(#associated_types)*
 				#(#methods)*
 			}
 
-			unsafe impl <C: ?Sized #(+#context_bounds)*> ::treeldr_rust_prelude::AsTraitObject<#dyn_table_path<C>> for #ty_path <C> {
-				fn as_trait_object(&self) -> (*const u8, #dyn_table_instance_path<C>) {
+			unsafe impl <I, C: ?Sized #(+#context_bounds)*> ::treeldr_rust_prelude::AsTraitObject<#dyn_table_path> for #ty_path {
+				fn as_trait_object<'r>(&'r self) -> (*const u8, #dyn_table_instance_path) {
 					let table = #dyn_table_instance_path::new::<Self>();
 					(self as *const Self as *const u8, table)
 				}
@@ -42,7 +43,7 @@ impl ToTokens for TraitImpl {
 pub struct Method {
 	pub ident: Ident,
 	pub return_ty: syn::Type,
-	pub body: TokenStream
+	pub body: TokenStream,
 }
 
 impl ToTokens for Method {

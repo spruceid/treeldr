@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
 	ty::{self, BuiltIn, Description, Primitive, Type},
-	Error, Generate,
+	Error, GenerateSyntax,
 };
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -13,25 +13,37 @@ mod r#enum;
 mod r#struct;
 
 /// `FromRdf` trait implementation.
-pub struct FromRdfImpl;
+pub struct FromRdfImpl<'a, T> {
+	ty_ref: TId<treeldr::Layout>,
+	ty: &'a T,
+}
+
+impl<'a, T> FromRdfImpl<'a, T> {
+	pub fn new(ty_ref: TId<treeldr::Layout>, ty: &'a T) -> Self {
+		Self { ty_ref, ty }
+	}
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Bound {
 	FromLiteral(Primitive),
 }
 
-impl<M> Generate<M> for Bound {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for Bound {
+	type Output = syn::WherePredicate;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &crate::Context<V, M>,
-		scope: Option<shelves::Ref<crate::Module>>,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
+		scope: &crate::Scope,
+	) -> Result<Self::Output, Error> {
 		match self {
 			Self::FromLiteral(p) => {
-				let ty = p.generate_with(context, scope).into_tokens()?;
-				tokens.extend(quote!(#ty: ::treeldr_rust_prelude::rdf::FromLiteral<V, N>));
-				Ok(())
+				let ty = p.generate_syntax(context, scope)?;
+				Ok(
+					syn::parse2(quote!(#ty: ::treeldr_rust_prelude::rdf::FromLiteral<V, N>))
+						.unwrap(),
+				)
 			}
 		}
 	}

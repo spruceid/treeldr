@@ -95,7 +95,7 @@ impl ToTokens for Alias {
 		let params = &self.params;
 		let target = &self.target;
 
-		tokens.extend(quote!(pub type #ident #params = #target #params))
+		tokens.extend(quote!(pub type #ident #params = #target #params ;))
 	}
 }
 
@@ -104,6 +104,17 @@ macro_rules! derives_type {
 		#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 		pub struct Derives {
 			$( pub $name : bool ),*
+		}
+
+		impl IntoIterator for Derives {
+			type Item = Derive;
+			type IntoIter = DerivesIter;
+
+			fn into_iter(self) -> Self::IntoIter {
+				DerivesIter {
+					$($name: self.$name),*
+				}
+			}
 		}
 
 		#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -117,7 +128,12 @@ macro_rules! derives_type {
 			}
 		}
 
-		impl Iterator for Derives {
+		#[derive(Debug, Clone)]
+		pub struct DerivesIter {
+			$( pub $name : bool ),*
+		}
+
+		impl Iterator for DerivesIter {
 			type Item = Derive;
 
 			fn next(&mut self) -> Option<Self::Item> {
@@ -156,7 +172,7 @@ derives_type! {
 impl ToTokens for Derives {
 	fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
 		if !self.is_empty() {
-			let derives = *self;
+			let derives = self.into_iter();
 			tokens.extend(quote!(#[derive(#(#derives),*)]))
 		}
 	}
@@ -274,7 +290,7 @@ impl ToTokens for Variant {
 
 pub struct ClassDynTraitDefinition {
 	pub table: ClassDynTable,
-	pub associated_types_trait_objects: Vec<ClassAssociatedTypeTraitObject>
+	pub associated_types_trait_objects: Vec<ClassAssociatedTypeTraitObject>,
 }
 
 impl ToTokens for ClassDynTraitDefinition {
@@ -290,7 +306,7 @@ pub struct ClassDynTable {
 	pub trait_path: syn::Path,
 	pub ident: Ident,
 	pub instance_ident: Ident,
-	pub fields: Vec<ClassDynTableField>
+	pub fields: Vec<ClassDynTableField>,
 }
 
 impl ToTokens for ClassDynTable {
@@ -308,13 +324,10 @@ impl ToTokens for ClassDynTable {
 		let (fields, fields_init) = if fields.is_empty() {
 			(
 				quote!(_d: ::std::marker::PhantomData<&'a C>),
-				quote!(_d: ::std::marker::PhantomData)
+				quote!(_d: ::std::marker::PhantomData),
 			)
 		} else {
-			(
-				quote!(#(#fields),*),
-				quote!(#(#fields_init,)*)
-			)
+			(quote!(#(#fields),*), quote!(#(#fields_init,)*))
 		};
 
 		tokens.extend(quote! {
@@ -350,7 +363,7 @@ impl ToTokens for ClassDynTable {
 pub struct ClassDynTableField {
 	pub ident: Ident,
 	pub ty: syn::Type,
-	pub initial_value: syn::Expr
+	pub initial_value: syn::Expr,
 }
 
 impl ToTokens for ClassDynTableField {
@@ -368,7 +381,7 @@ pub struct ClassAssociatedTypeTraitObject {
 	pub ident: Ident,
 	pub tables: Vec<ClassAssociatedTypeTraitObjectTable>,
 	pub trait_bounds: Vec<syn::TraitBound>,
-	pub trait_impls: Vec<ClassAssociatedTypeTraitObjectTraitImpl>
+	pub trait_impls: Vec<ClassAssociatedTypeTraitObjectTraitImpl>,
 }
 
 impl ToTokens for ClassAssociatedTypeTraitObject {
@@ -403,7 +416,7 @@ impl ToTokens for ClassAssociatedTypeTraitObject {
 				pub fn new<T: #(#trait_bounds+)* ::treeldr_rust_prelude::Reference<'d>>(value: T) -> Self {
 					let ptr;
 					let tables = (#(#tables_init,)*);
-	
+
 					Self {
 						_p: ::std::marker::PhantomData,
 						ptr,
@@ -417,21 +430,21 @@ impl ToTokens for ClassAssociatedTypeTraitObject {
 			pub struct #ident <'d, C: ?Sized> {
 				#fields
 			}
-	
+
 			impl<'d, C: ?Sized> #ident <'d, C> {
 				#constructor
 			}
-	
+
 			impl<'d, C: ?Sized> Clone for #ident <'d, C> {
 				fn clone(&self) -> Self {
 					*self
 				}
 			}
-	
+
 			impl<'d, C: ?Sized> Copy for #ident <'d, C> {}
-	
+
 			impl<'d, C: ?Sized> ::treeldr_rust_prelude::Reference<'d> for #ident <'d, C> {}
-	
+
 			#(#trait_impls)*
 		})
 	}
@@ -439,7 +452,7 @@ impl ToTokens for ClassAssociatedTypeTraitObject {
 
 pub struct ClassAssociatedTypeTraitObjectTable {
 	pub ty: syn::Type,
-	pub initial_value: TokenStream
+	pub initial_value: TokenStream,
 }
 
 impl ToTokens for ClassAssociatedTypeTraitObjectTable {
@@ -455,7 +468,7 @@ pub struct ClassAssociatedTypeTraitObjectTraitImpl {
 	pub table_instance_path: syn::Path,
 	pub table_index: usize,
 	pub associated_types: Vec<(Ident, syn::Type)>,
-	pub methods: Vec<ClassAssociatedTypeTraitObjectTraitImplMethod>
+	pub methods: Vec<ClassAssociatedTypeTraitObjectTraitImplMethod>,
 }
 
 impl ToTokens for ClassAssociatedTypeTraitObjectTraitImpl {
@@ -463,9 +476,10 @@ impl ToTokens for ClassAssociatedTypeTraitObjectTraitImpl {
 		let ident = &self.ident;
 		let tr_path = &self.trait_path;
 
-		let assoc_types = self.associated_types.iter().map(|(id, ty)| {
-			quote!(type #id <'a> = #ty where Self: 'a, C: 'a;)
-		});
+		let assoc_types = self
+			.associated_types
+			.iter()
+			.map(|(id, ty)| quote!(type #id <'a> = #ty where Self: 'a, C: 'a;));
 
 		let methods = &self.methods;
 		let table_path = &self.table_path;
@@ -473,16 +487,16 @@ impl ToTokens for ClassAssociatedTypeTraitObjectTraitImpl {
 		let index = syn::Index::from(self.table_index);
 
 		tokens.extend(quote! {
-			impl <'d, C: ?Sized> #tr_path <C> for #ident <'d, C> {
+			impl <'d, C: ?Sized> #tr_path for #ident <'d, C> {
 				#(#assoc_types)*
 				#(#methods)*
 			}
 
-			unsafe impl <'d, C: ?Sized> ::treeldr_rust_prelude::AsTraitObject<#table_path<C>> for #ident <'d, C> {
-				fn as_trait_object(&self) -> (*const u8, #table_instance_path<C>) {
+			unsafe impl <'d, C: ?Sized> ::treeldr_rust_prelude::AsTraitObject<#table_path> for #ident <'d, C> {
+				fn as_trait_object<'r>(&'r self) -> (*const u8, #table_instance_path) {
 					(self.ptr, self.tables.#index)
 				}
-				fn into_trait_object<'r>(self) -> (*const u8, #table_instance_path<'r, C>) where Self: ::treeldr_rust_prelude::Reference<'r> {
+				fn into_trait_object<'r>(self) -> (*const u8, #table_instance_path) where Self: ::treeldr_rust_prelude::Reference<'r> {
 					(self.ptr, self.tables.#index)
 				}
 			}

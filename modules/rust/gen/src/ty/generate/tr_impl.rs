@@ -3,9 +3,9 @@ use treeldr::TId;
 
 use crate::{
 	module::{TraitId, TraitImpl},
+	syntax,
 	tr::ContextBound,
-	ty,
-	Context, Error, GenerateSyntax, syntax,
+	ty, Context, Error, GenerateSyntax,
 };
 
 mod r#enum;
@@ -15,7 +15,9 @@ mod r#struct;
 impl<M> GenerateSyntax<M> for ContextBound {
 	type Output = syn::TraitBound;
 
-	fn generate_syntax<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate_syntax<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &Context<V, M>,
 		scope: &crate::Scope,
@@ -30,7 +32,7 @@ impl<M> GenerateSyntax<M> for ContextBound {
 				.to(&tr
 					.context_path(context)
 					.ok_or(Error::UnreachableTrait(self.0))?)
-					.generate_syntax(context, scope)?
+				.generate_syntax(context, scope)?,
 		})
 	}
 }
@@ -38,7 +40,9 @@ impl<M> GenerateSyntax<M> for ContextBound {
 impl<M> GenerateSyntax<M> for TraitImpl {
 	type Output = syntax::TraitImplementation;
 
-	fn generate_syntax<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate_syntax<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &Context<V, M>,
 		scope: &crate::Scope,
@@ -47,40 +51,44 @@ impl<M> GenerateSyntax<M> for TraitImpl {
 
 		match ty.description() {
 			ty::Description::Struct(s) => match self.tr {
-				// TraitId::FromRdf => {
-				// 	super::rdf::from::FromRdfImpl.generate(context, scope, s, tokens)
-				// }
-				// TraitId::TriplesAndValues => {
-				// 	super::rdf::to::RdfQuadsImpl.generate(context, scope, s, tokens)
-				// }
-				// TraitId::IntoJsonLd => {
-				// 	super::json_ld::IntoJsonLdImpl.generate(context, scope, s, tokens)
-				// }
-				// TraitId::IntoJsonLdSyntax => {
-				// 	super::json_ld::IntoJsonLdSyntaxImpl.generate(context, scope, s, tokens)
-				// }
-				TraitId::Class(tr) => ClassTraitImpl::new(tr, self.ty, s).generate_syntax(context, scope).map(syntax::TraitImplementation::ClassTraitImpl),
-				_ => todo!()
+				TraitId::FromRdf => super::rdf::from::FromRdfImpl::new(self.ty, s)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::FromRdf),
+				TraitId::TriplesAndValues => super::rdf::to::RdfQuadsImpl::new(self.ty, s)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::RdfQuads),
+				TraitId::IntoJsonLd => super::json_ld::IntoJsonLdImpl::new(self.ty, s)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::IntoJsonLd),
+				TraitId::IntoJsonLdSyntax => super::json_ld::IntoJsonLdSyntaxImpl::new(self.ty, s)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::IntoJsonLdSyntax),
+				TraitId::Class(tr) => ClassTraitImpl::new(tr, self.ty, s)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::ClassTrait),
 			},
 			ty::Description::Enum(e) => match self.tr {
-				// TraitId::FromRdf => {
-				// 	super::rdf::from::FromRdfImpl.generate(context, scope, e, tokens)
-				// }
-				// TraitId::TriplesAndValues => {
-				// 	super::rdf::to::RdfQuadsImpl.generate(context, scope, e, tokens)
-				// }
-				// TraitId::IntoJsonLd => {
-				// 	super::json_ld::IntoJsonLdImpl.generate(context, scope, e, tokens)
-				// }
-				// TraitId::IntoJsonLdSyntax => {
-				// 	super::json_ld::IntoJsonLdSyntaxImpl.generate(context, scope, e, tokens)
-				// }
-				TraitId::Class(tr) => ClassTraitImpl::new(tr, self.ty, e).generate_syntax(context, scope).map(syntax::TraitImplementation::ClassTraitImpl),
-				_ => todo!()
+				TraitId::FromRdf => super::rdf::from::FromRdfImpl::new(self.ty, e)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::FromRdf),
+				TraitId::TriplesAndValues => super::rdf::to::RdfQuadsImpl::new(self.ty, e)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::RdfQuads),
+				TraitId::IntoJsonLd => super::json_ld::IntoJsonLdImpl::new(self.ty, e)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::IntoJsonLd),
+				TraitId::IntoJsonLdSyntax => super::json_ld::IntoJsonLdSyntaxImpl::new(self.ty, e)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::IntoJsonLdSyntax),
+				TraitId::Class(tr) => ClassTraitImpl::new(tr, self.ty, e)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::ClassTrait),
 			},
 			ty::Description::Primitive(p) => match self.tr {
-				TraitId::Class(tr) => ClassTraitImpl::new(tr, self.ty, p).generate_syntax(context, scope).map(syntax::TraitImplementation::ClassTraitImpl),
-				_ => todo!()
+				TraitId::Class(tr) => ClassTraitImpl::new(tr, self.ty, p)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::ClassTrait),
+				_ => todo!(),
 			},
 			_ => {
 				panic!("unable to implement trait for non enum/struct type")
@@ -93,27 +101,19 @@ impl<M> GenerateSyntax<M> for TraitImpl {
 pub struct ClassTraitImpl<'a, T> {
 	pub tr_ref: TId<treeldr::Type>,
 	pub ty_ref: TId<treeldr::Layout>,
-	pub ty: &'a T
+	pub ty: &'a T,
 }
 
 impl<'a, T> ClassTraitImpl<'a, T> {
-	pub fn new(
-		tr_ref: TId<treeldr::Type>,
-		ty_ref: TId<treeldr::Layout>,
-		ty: &'a T
-	) -> Self {
-		Self {
-			tr_ref,
-			ty_ref,
-			ty
-		}
+	pub fn new(tr_ref: TId<treeldr::Type>, ty_ref: TId<treeldr::Layout>, ty: &'a T) -> Self {
+		Self { tr_ref, ty_ref, ty }
 	}
 }
 
 fn collection_iterator<V, M>(
 	context: &Context<V, M>,
 	scope: &crate::Scope,
-	collection_layout: TId<treeldr::Layout>
+	collection_layout: TId<treeldr::Layout>,
 ) -> Result<syn::Type, Error>
 where
 	V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
@@ -131,16 +131,25 @@ where
 			}
 			ty::BuiltIn::BTreeSet(item) => {
 				let item_expr = item.generate_syntax(context, scope)?;
-				Ok(syn::parse2(quote!(::std::collections::btree_set::Iter<'a, #item_expr>)).unwrap())
+				Ok(
+					syn::parse2(quote!(::std::collections::btree_set::Iter<'a, #item_expr>))
+						.unwrap(),
+				)
 			}
 			ty::BuiltIn::BTreeMap(key, value) => {
 				let key_expr = key.generate_syntax(context, scope)?;
 				let value_expr = value.generate_syntax(context, scope)?;
-				Ok(syn::parse2(quote!(::std::collections::btree_map::Iter<'a, #key_expr, #value_expr>)).unwrap())
+				Ok(syn::parse2(
+					quote!(::std::collections::btree_map::Iter<'a, #key_expr, #value_expr>),
+				)
+				.unwrap())
 			}
 			ty::BuiltIn::OneOrMany(item) => {
 				let item_expr = item.generate_syntax(context, scope)?;
-				Ok(syn::parse2(quote!(::treeldr_rust_prelude::one_or_many::Iter<'a, #item_expr>)).unwrap())
+				Ok(
+					syn::parse2(quote!(::treeldr_rust_prelude::one_or_many::Iter<'a, #item_expr>))
+						.unwrap(),
+				)
 			}
 			ty::BuiltIn::Required(_) => panic!("cannot turn required layout into iterator"),
 		},

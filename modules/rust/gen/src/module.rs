@@ -266,24 +266,30 @@ impl<M> GenerateSyntax<M> for Module {
 
 		for module_ref in &self.sub_modules {
 			items.push(syntax::ModuleItem::Module(
-				module_ref.generate_syntax(context, scope)?,
+				module_ref.generate_syntax(context, &scope)?,
 			));
 		}
 
 		for type_ref in &self.types {
 			let tr = context.type_trait(*type_ref).expect("undefined class");
-			items.push(syntax::ModuleItem::Trait(syntax::TraitDefinition::Class(tr.generate_syntax(context, scope)?)));
+			items.push(syntax::ModuleItem::Trait(syntax::TraitDefinition::Class(
+				tr.generate_syntax(context, scope)?,
+			)));
 		}
 
-		// for provider in &self.types_providers {
-		// 	items.push(syntax::ModuleItem::Trait(syntax::TraitDefinition::ClassProvider(provider.generate_syntax(context, scope))?));
-		// }
+		for provider in &self.types_providers {
+			items.push(syntax::ModuleItem::Trait(
+				syntax::TraitDefinition::ClassProvider(provider.generate_syntax(context, scope)?),
+			));
+		}
 
-		// for trait_objects in &self.types_trait_objects {
-		// 	for trait_object in trait_objects.generate_syntax(context, scope)? {
-		// 		items.push(syntax::ModuleItem::Type(syntax::TypeDefinition::ClassTraitObject(trait_object)));
-		// 	}
-		// }
+		for trait_objects in &self.types_trait_objects {
+			items.push(syntax::ModuleItem::Type(
+				syntax::TypeDefinition::ClassTraitObject(
+					trait_objects.generate_syntax(context, scope)?,
+				),
+			));
+		}
 
 		for layout_ref in &self.layouts {
 			let ty = context.layout_type(*layout_ref).expect("undefined layout");
@@ -294,9 +300,11 @@ impl<M> GenerateSyntax<M> for Module {
 			}
 		}
 
-		// for trait_impl in &self.trait_impls {
-		// 	items.push(syntax::ModuleItem::TraitImpl(trait_impl.generate_syntax(context, scope)?));
-		// }
+		for trait_impl in &self.trait_impls {
+			items.push(syntax::ModuleItem::TraitImpl(
+				trait_impl.generate_syntax(context, scope)?,
+			));
+		}
 
 		Ok(syntax::ModuleContent { items })
 	}
@@ -328,11 +336,16 @@ impl<M> GenerateSyntax<M> for Ref<Module> {
 					ident,
 				}))
 			}
-			None => Ok(syntax::ModuleOrUse::Module(syntax::Module {
-				vis: vis.clone(),
-				ident: ident.clone(),
-				content: module.generate_syntax(context, scope)?,
-			})),
+			None => {
+				let mut scope = scope.clone();
+				scope.module = Some(*self);
+
+				Ok(syntax::ModuleOrUse::Module(syntax::Module {
+					vis: vis.clone(),
+					ident: ident.clone(),
+					content: module.generate_syntax(context, &scope)?,
+				}))
+			}
 		}
 	}
 }

@@ -2,12 +2,10 @@ use quote::quote;
 use treeldr::TId;
 
 use crate::{
+	syntax,
 	tr::{CollectContextBounds, MethodType},
-	ty::{
-		generate::InContext,
-		structure::Struct,
-	},
-	Context, Error, GenerateSyntax, syntax,
+	ty::{generate::InContext, structure::Struct},
+	Context, Error, GenerateSyntax,
 };
 
 use super::{collection_iterator, ClassTraitImpl};
@@ -38,7 +36,9 @@ impl<'a> ClassTraitAssociatedTypePath<'a> {
 impl<'a, M> GenerateSyntax<M> for ClassTraitAssociatedTypePath<'a> {
 	type Output = syn::Type;
 
-	fn generate_syntax<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate_syntax<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &Context<V, M>,
 		scope: &crate::Scope,
@@ -57,9 +57,11 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitAssociatedTypePath<'a> {
 						.description()
 						.is_reference()
 					{
-						let ty_expr = InContext(item_layout)
-							.generate_syntax(context, scope)?;
-						Ok(syn::parse2(quote!(::treeldr_rust_prelude::iter::Fetch <'a, C, #ty_expr, #iter_expr>)).unwrap())
+						let ty_expr = InContext(item_layout).generate_syntax(context, scope)?;
+						Ok(syn::parse2(
+							quote!(::treeldr_rust_prelude::iter::Fetch <'a, C, #ty_expr, #iter_expr>),
+						)
+						.unwrap())
 					} else {
 						Ok(iter_expr)
 					}
@@ -72,7 +74,10 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitAssociatedTypePath<'a> {
 			}
 			None => {
 				if self.collection {
-					Ok(syn::parse2(quote!(::std::iter::Empty<&'a ::std::convert::Infallible>)).unwrap())
+					Ok(
+						syn::parse2(quote!(::std::iter::Empty<&'a ::std::convert::Infallible>))
+							.unwrap(),
+					)
 				} else {
 					Ok(syn::parse2(quote!(&'a ::std::convert::Infallible)).unwrap())
 				}
@@ -84,17 +89,24 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitAssociatedTypePath<'a> {
 impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Struct> {
 	type Output = syntax::tr_impl::class::TraitImpl;
 
-	fn generate_syntax<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate_syntax<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &Context<V, M>,
 		scope: &crate::Scope,
 	) -> Result<Self::Output, Error> {
 		let tr = context.type_trait(self.tr_ref).unwrap();
 
-		let trait_path = self
-			.tr_ref.generate_syntax(context, scope)?;
-		let type_path = self.ty_ref.generate_syntax(context, scope)?;
-		let context_bounds = self.ty.generate_context_bounds(context, self.tr_ref, scope)?;
+		let mut scope = scope.clone();
+		scope.params.identifier = Some(syn::parse2(quote!(I)).unwrap());
+		scope.params.context = Some(syn::parse2(quote!(C)).unwrap());
+
+		let trait_path = self.tr_ref.generate_syntax(context, &scope)?;
+		let type_path = self.ty_ref.generate_syntax(context, &scope)?;
+		let context_bounds = self
+			.ty
+			.generate_context_bounds(context, self.tr_ref, &scope)?;
 
 		let mut associated_types = Vec::new();
 		for a in tr.associated_types() {
@@ -104,7 +116,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Struct> {
 				a.property(),
 				a.bound().is_collection(),
 			)
-			.generate_syntax(context, scope)?;
+			.generate_syntax(context, &scope)?;
 
 			associated_types.push((a.ident().clone(), ty_expr));
 		}
@@ -118,11 +130,8 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Struct> {
 						MethodType::Required(i) => {
 							if tr.associated_types()[*i].is_collection() {
 								let layout = context.model().get(f.layout()).unwrap();
-								let item_layout = **layout
-									.as_layout()
-									.description()
-									.collection_item()
-									.unwrap();
+								let item_layout =
+									**layout.as_layout().description().collection_item().unwrap();
 								if context
 									.model()
 									.get(item_layout)
@@ -161,18 +170,22 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Struct> {
 			methods.push(syntax::tr_impl::class::Method {
 				ident: m.ident().clone(),
 				return_ty: m.return_type_expr(tr),
-				body
+				body,
 			})
 		}
 
 		let dyn_table_path = context
 			.module_path(scope.module)
 			.to(&tr.dyn_table_path(context).unwrap())
-			.generate_syntax(context, scope)?;
-		let dyn_table_instance_path = context
-			.module_path(scope.module)
-			.to(&tr.dyn_table_instance_path(context).unwrap())
-			.generate_syntax(context, scope)?;
+			.generate_syntax(context, &scope)?;
+		let dyn_table_instance_path = {
+			let mut scope = scope.clone();
+			scope.params.lifetime = Some(syn::Lifetime::new("'r", proc_macro2::Span::call_site()));
+			context
+				.module_path(scope.module)
+				.to(&tr.dyn_table_instance_path(context).unwrap())
+				.generate_syntax(context, &scope)?
+		};
 
 		Ok(syntax::tr_impl::class::TraitImpl {
 			type_path,
@@ -181,7 +194,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Struct> {
 			associated_types,
 			methods,
 			dyn_table_path,
-			dyn_table_instance_path
+			dyn_table_instance_path,
 		})
 	}
 }

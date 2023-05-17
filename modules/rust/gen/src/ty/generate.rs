@@ -5,7 +5,7 @@ use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
-// mod json_ld;
+mod json_ld;
 mod rdf;
 mod tr_impl;
 
@@ -21,24 +21,24 @@ impl<M> GenerateSyntax<M> for BuiltIn {
 			Self::Required(item) => item.generate_syntax(context, scope),
 			Self::Option(item) => {
 				let item = item.generate_syntax(context, scope)?;
-				Ok(syn::parse(quote!(Option<#item>).into()).unwrap())
+				Ok(syn::parse2(quote!(Option<#item>)).unwrap())
 			}
 			Self::Vec(item) => {
 				let item = item.generate_syntax(context, scope)?;
-				Ok(syn::parse(quote!(Vec<#item>).into()).unwrap())
+				Ok(syn::parse2(quote!(Vec<#item>)).unwrap())
 			}
 			Self::BTreeSet(item) => {
 				let item = item.generate_syntax(context, scope)?;
-				Ok(syn::parse(quote!(std::collections::BTreeSet<#item>).into()).unwrap())
+				Ok(syn::parse2(quote!(std::collections::BTreeSet<#item>)).unwrap())
 			}
 			Self::BTreeMap(key, value) => {
 				let key = key.generate_syntax(context, scope)?;
 				let value = value.generate_syntax(context, scope)?;
-				Ok(syn::parse(quote!(std::collections::BTreeMap<#key, #value>).into()).unwrap())
+				Ok(syn::parse2(quote!(std::collections::BTreeMap<#key, #value>)).unwrap())
 			}
 			Self::OneOrMany(item) => {
 				let item = item.generate_syntax(context, scope)?;
-				Ok(syn::parse(quote!(::treeldr_rust_prelude::OneOrMany<#item>).into()).unwrap())
+				Ok(syn::parse2(quote!(::treeldr_rust_prelude::OneOrMany<#item>)).unwrap())
 			}
 		}
 	}
@@ -56,24 +56,24 @@ impl<M> GenerateSyntax<M> for Referenced<BuiltIn> {
 			BuiltIn::Required(item) => Referenced(*item).generate_syntax(context, scope),
 			BuiltIn::Option(item) => {
 				let item = Referenced(*item).generate_syntax(context, scope)?;
-				Ok(syn::parse(quote!(Option<#item>).into()).unwrap())
+				Ok(syn::parse2(quote!(Option<#item>)).unwrap())
 			}
 			BuiltIn::Vec(item) => {
 				let item = item.generate_syntax(context, scope)?;
-				Ok(syn::parse(quote!(&[#item]).into()).unwrap())
+				Ok(syn::parse2(quote!(&[#item])).unwrap())
 			}
 			BuiltIn::BTreeSet(item) => {
 				let item = item.generate_syntax(context, scope)?;
-				Ok(syn::parse(quote!(&std::collections::BTreeSet<#item>).into()).unwrap())
+				Ok(syn::parse2(quote!(&std::collections::BTreeSet<#item>)).unwrap())
 			}
 			BuiltIn::BTreeMap(key, value) => {
 				let key = key.generate_syntax(context, scope)?;
 				let value = value.generate_syntax(context, scope)?;
-				Ok(syn::parse(quote!(&std::collections::BTreeMap<#key, #value>).into()).unwrap())
+				Ok(syn::parse2(quote!(&std::collections::BTreeMap<#key, #value>)).unwrap())
 			}
 			BuiltIn::OneOrMany(item) => {
 				let item = item.generate_syntax(context, scope)?;
-				Ok(syn::parse(quote!(&::treeldr_rust_prelude::OneOrMany<#item>).into()).unwrap())
+				Ok(syn::parse2(quote!(&::treeldr_rust_prelude::OneOrMany<#item>)).unwrap())
 			}
 		}
 	}
@@ -151,25 +151,31 @@ impl<M> GenerateSyntax<M> for TId<treeldr::Layout> {
 			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
 			Description::Primitive(p) => p.generate_syntax(context, scope),
 			Description::Alias(a) => {
-				let path = ty
-					.path(context, a.ident().clone())
-					.ok_or(Error::UnreachableType(*self))?
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, a.ident().clone())
+						.ok_or(Error::UnreachableType(*self))?)
 					.generate_syntax(context, scope)?;
 
 				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Struct(s) => {
-				let path = ty
-					.path(context, s.ident().clone())
-					.ok_or(Error::UnreachableType(*self))?
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, s.ident().clone())
+						.ok_or(Error::UnreachableType(*self))?)
 					.generate_syntax(context, scope)?;
 
 				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Enum(e) => {
-				let path = ty
-					.path(context, e.ident().clone())
-					.ok_or(Error::UnreachableType(*self))?
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, e.ident().clone())
+						.ok_or(Error::UnreachableType(*self))?)
 					.generate_syntax(context, scope)?;
 
 				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
@@ -201,25 +207,31 @@ impl<M> GenerateSyntax<M> for Referenced<TId<treeldr::Layout>> {
 			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
 			Description::Primitive(p) => Referenced(*p).generate_syntax(context, scope),
 			Description::Alias(a) => {
-				let path = ty
-					.path(context, a.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, a.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
 					.generate_syntax(context, scope)?;
 
 				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Struct(s) => {
-				let path = ty
-					.path(context, s.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, s.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
 					.generate_syntax(context, scope)?;
 
 				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Enum(e) => {
-				let path = ty
-					.path(context, e.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, e.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
 					.generate_syntax(context, scope)?;
 
 				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
@@ -351,9 +363,7 @@ impl<M> GenerateSyntax<M> for treeldr::layout::Primitive {
 			Self::Url => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
 			Self::Uri => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
 			Self::Iri => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
-			Self::Cid => {
-				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::CidBuf }).unwrap())
-			}
+			Self::Cid => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::CidBuf }).unwrap()),
 		}
 	}
 }
@@ -424,9 +434,7 @@ impl<M> GenerateSyntax<M> for Referenced<treeldr::layout::Primitive> {
 			Primitive::Iri => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::Iri }).unwrap())
 			}
-			Primitive::Cid => {
-				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Cid }).unwrap())
-			}
+			Primitive::Cid => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Cid }).unwrap()),
 		}
 	}
 }

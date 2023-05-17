@@ -1,28 +1,31 @@
-use std::collections::{HashSet, BTreeSet};
+use std::collections::{BTreeSet, HashSet};
 
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
 use treeldr::{ty::PseudoProperty, value::Literal, Id, IriIndex, Name, TId};
 
-use crate::{module, path, Context, Path, GenerateSyntax};
+use crate::{module, path, Context, GenerateSyntax, Path};
 
+mod class_provider;
 mod generate;
 mod trait_objects;
-mod class_provider;
 
-pub use trait_objects::TraitObjectsOf;
 pub use class_provider::ProviderOf;
+pub use trait_objects::TraitObjectsOf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ContextBound(pub TId<treeldr::Type>);
 
 pub trait CollectContextBounds {
-	fn generate_context_bounds<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>, M>(
+	fn generate_context_bounds<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+		M,
+	>(
 		&self,
 		context: &Context<V, M>,
 		tr: TId<treeldr::Type>,
-		scope: &crate::Scope
+		scope: &crate::Scope,
 	) -> Result<Vec<syn::TraitBound>, crate::Error> {
 		let mut context_bound_set = BTreeSet::new();
 		self.collect_context_bounds(context, tr, |b| {
@@ -198,24 +201,29 @@ impl Trait {
 	pub fn path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
 		let mut path = context.parent_module_path(self.modules.main)?;
 		path.push(path::Segment::Ident(self.ident.clone()));
+		path.parameters_mut().context = true;
 		Some(path)
 	}
 
 	pub fn context_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
 		let mut path = context.parent_module_path(self.modules.provider)?;
 		path.push(path::Segment::Ident(self.context_ident()));
+		path.parameters_mut().identifier = true;
 		Some(path)
 	}
 
 	pub fn dyn_table_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
 		let mut path = context.parent_module_path(self.modules.trait_object)?;
 		path.push(path::Segment::Ident(self.dyn_table_ident()));
+		path.parameters_mut().context = true;
 		Some(path)
 	}
 
 	pub fn dyn_table_instance_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
 		let mut path = context.parent_module_path(self.modules.trait_object)?;
 		path.push(path::Segment::Ident(self.dyn_table_instance_ident()));
+		path.parameters_mut().context = true;
+		path.parameters_mut().lifetime = true;
 		Some(path)
 	}
 
@@ -373,6 +381,8 @@ impl AssociatedType {
 				.parent_module_path(tr.trait_objects_module())
 				.unwrap();
 			path.push(ident);
+			path.parameters_mut().lifetime = true;
+			path.parameters_mut().context = true;
 			path
 		})
 	}

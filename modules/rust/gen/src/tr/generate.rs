@@ -3,13 +3,9 @@ use quote::quote;
 use rdf_types::Vocabulary;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
-use crate::{
-	Context, Error, GenerateSyntax, syntax
-};
+use crate::{syntax, Context, Error, GenerateSyntax};
 
-use super::{
-	AssociatedType, AssociatedTypeBound, Method, MethodType, Trait,
-};
+use super::{AssociatedType, AssociatedTypeBound, Method, MethodType, Trait};
 
 impl<M> GenerateSyntax<M> for Trait {
 	type Output = syntax::ClassTraitDefinition;
@@ -22,7 +18,7 @@ impl<M> GenerateSyntax<M> for Trait {
 		let mut scope = scope.clone();
 		scope.params.context = Some(syn::Type::Path(syn::TypePath {
 			qself: None,
-			path: Ident::new("C", proc_macro2::Span::call_site()).into()
+			path: Ident::new("C", proc_macro2::Span::call_site()).into(),
 		}));
 		scope.self_trait = Some(self);
 
@@ -32,13 +28,15 @@ impl<M> GenerateSyntax<M> for Trait {
 			.generate_syntax(context, &scope)?;
 
 		let mut super_traits = Vec::new();
-		super_traits.push(syn::parse2(quote!(::treeldr_rust_prelude::AsTraitObject<#dyn_table_path<C>>)).unwrap());
+		super_traits.push(
+			syn::parse2(quote!(::treeldr_rust_prelude::AsTraitObject<#dyn_table_path>)).unwrap(),
+		);
 		for &ty_ref in &self.super_traits {
 			super_traits.push(syn::TraitBound {
 				paren_token: None,
 				modifier: syn::TraitBoundModifier::None,
 				lifetimes: None,
-				path: ty_ref.generate_syntax(context, &scope)?
+				path: ty_ref.generate_syntax(context, &scope)?,
 			})
 		}
 
@@ -51,12 +49,12 @@ impl<M> GenerateSyntax<M> for Trait {
 		for m in &self.methods {
 			methods.push(m.generate_syntax(context, &scope)?);
 		}
-		
+
 		Ok(syntax::ClassTraitDefinition {
 			ident: self.ident.clone(),
 			super_traits,
 			associated_types,
-			methods
+			methods,
 		})
 	}
 }
@@ -113,14 +111,14 @@ impl<M> GenerateSyntax<M> for AssociatedTypeBound {
 						paren_token: None,
 						modifier: syn::TraitBoundModifier::None,
 						lifetimes: None,
-						path: type_ref.generate_syntax(context, scope)?
+						path: type_ref.generate_syntax(context, scope)?,
 					}))
 				}
 			}
 			Self::Collection(i) => {
 				result.push(syn::TypeParamBound::Lifetime(syn::Lifetime {
 					apostrophe: proc_macro2::Span::call_site(),
-					ident: Ident::new("a", proc_macro2::Span::call_site())
+					ident: Ident::new("a", proc_macro2::Span::call_site()),
 				}));
 
 				let a_ident = scope.self_trait.unwrap().associated_types[*i].ident();
@@ -128,7 +126,7 @@ impl<M> GenerateSyntax<M> for AssociatedTypeBound {
 					paren_token: None,
 					modifier: syn::TraitBoundModifier::None,
 					lifetimes: None,
-					path: syn::parse2(quote!(Iterator<Item = Self::#a_ident <'a>>)).unwrap()
+					path: syn::parse2(quote!(Iterator<Item = Self::#a_ident <'a>>)).unwrap(),
 				}))
 			}
 		}
@@ -150,7 +148,7 @@ impl<M> GenerateSyntax<M> for Method {
 			ident: self.ident().clone(),
 			return_type: self.ty.generate_syntax(context, scope)?,
 			never_body: quote!(unreachable!()),
-			ref_body: quote!(T::#ident(*self, context))
+			ref_body: quote!(T::#ident(*self, context)),
 		})
 	}
 }
@@ -190,6 +188,9 @@ impl<M> GenerateSyntax<M> for TId<treeldr::Type> {
 	) -> Result<Self::Output, Error> {
 		let tr = context.type_trait(*self).expect("trait not found");
 		let path = tr.path(context).ok_or(Error::UnreachableTrait(*self))?;
-		context.module_path(scope.module).to(&path).generate_syntax(context, scope)
+		context
+			.module_path(scope.module)
+			.to(&path)
+			.generate_syntax(context, scope)
 	}
 }

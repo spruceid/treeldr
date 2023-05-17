@@ -1,31 +1,32 @@
 use std::collections::BTreeSet;
 
-use proc_macro2::TokenStream;
 use quote::quote;
 use rdf_types::Vocabulary;
 use treeldr::{BlankIdIndex, Id, IriIndex};
 
 use crate::{
-	ty::{
-		generate::GenerateFor, params::ParametersValues, structure::Struct, BuiltIn, Description,
-	},
-	Context, Error, Generate, GenerateList,
+	syntax,
+	ty::{structure::Struct, BuiltIn, Description},
+	Context, Error, GenerateSyntax,
 };
 
 use super::{collect_bounds, from_objects, FromRdfImpl};
 
-impl<M> GenerateFor<Struct, M> for FromRdfImpl {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Struct> {
+	type Output = syntax::tr_impl::rdf::FromRdfImpl;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<shelves::Ref<crate::Module>>,
-		ty: &Struct,
-		tokens: &mut TokenStream,
-	) -> Result<(), crate::Error> {
-		let mut fields_init = Vec::with_capacity(ty.fields().len());
-		let mut bounds = BTreeSet::new();
+		scope: &crate::Scope,
+	) -> Result<Self::Output, Error> {
+		let mut scope = scope.clone();
+		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
 
-		for field in ty.fields() {
+		let mut fields_init = Vec::with_capacity(self.ty.fields().len());
+		let mut bound_set = BTreeSet::new();
+
+		for field in self.ty.fields() {
 			let id = field.ident();
 
 			let init = match field.property() {
@@ -35,7 +36,7 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 					let field_layout_ref = field.layout();
 					let field_layout = context.model().get(field_layout_ref).unwrap();
 					collect_bounds(context, field_layout_ref, |b| {
-						bounds.insert(b);
+						bound_set.insert(b);
 					});
 
 					if prop.id()
@@ -132,49 +133,22 @@ impl<M> GenerateFor<Struct, M> for FromRdfImpl {
 			fields_init.push(quote! { #id: { #init } })
 		}
 
-		let ident = ty.ident();
-		let params_values = ParametersValues::new_for_type(quote!(N::Id));
-		let params = ty.params().instantiate(&params_values);
+		let mut bounds = Vec::with_capacity(bound_set.len());
+		for b in bound_set {
+			bounds.push(b.generate_syntax(context, &scope)?)
+		}
 
-		let bounds = bounds
-			.separated_by(&quote!(,))
-			.generate_with(context, scope)
-			.into_tokens()?;
-
-		tokens.extend(quote! {
-			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::FromRdf<N, V> for #ident #params
-			where
-				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: Clone + Ord + ::treeldr_rust_prelude::rdf_types::FromIri<Iri=N::Iri>,
-				V: ::treeldr_rust_prelude::rdf::TypeCheck<N::Id>,
-				#bounds
-			{
-				fn from_rdf<G>(
-					namespace: &mut N,
-					value: &::treeldr_rust_prelude::rdf_types::Object<N::Id, V>,
-					graph: &G
-				) -> Result<Self, ::treeldr_rust_prelude::FromRdfError>
-				where
-					G: ::treeldr_rust_prelude::grdf::Graph<
-						Subject=N::Id,
-						Predicate=N::Id,
-						Object=::treeldr_rust_prelude::rdf_types::Object<N::Id, V>
-					>
-				{
-					match value {
-						::treeldr_rust_prelude::rdf_types::Object::Id(id) => {
-							Ok(Self {
-								#(#fields_init),*
-							})
-						}
-						::treeldr_rust_prelude::rdf_types::Object::Literal(_) => {
-							Err(::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue)
-						}
-					}
-				}
-			}
-		});
-
-		Ok(())
+		Ok(syntax::tr_impl::rdf::FromRdfImpl {
+			type_path: self.ty_ref.generate_syntax(context, &scope)?,
+			bounds,
+			from_id: quote! {
+				Ok(Self {
+					#(#fields_init),*
+				})
+			},
+			from_literal: quote!(Err(
+				::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue
+			)),
+		})
 	}
 }

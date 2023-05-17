@@ -17,7 +17,7 @@ pub mod structure;
 
 use alias::Alias;
 use enumeration::Enum;
-pub use params::{Parameter, Parameters, ParametersValues};
+pub use params::{Parameter, Parameters};
 use structure::Struct;
 
 #[derive(Debug)]

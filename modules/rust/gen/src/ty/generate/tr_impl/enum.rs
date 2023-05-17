@@ -1,44 +1,57 @@
 use quote::quote;
 
 use crate::{
+	syntax,
 	tr::{CollectContextBounds, MethodType},
-	ty::{
-		enumeration::Enum
-	},
-	Context, Error, GenerateSyntax, syntax,
+	ty::enumeration::Enum,
+	Context, Error, GenerateSyntax,
 };
- 
+
 use super::ClassTraitImpl;
 
 impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 	type Output = syntax::tr_impl::class::TraitImpl;
 
-	fn generate_syntax<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate_syntax<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &Context<V, M>,
 		scope: &crate::Scope,
 	) -> Result<Self::Output, Error> {
 		let tr = context.type_trait(self.tr_ref).unwrap();
 
-		let context_bounds = self.ty.generate_context_bounds(context, self.tr_ref, scope)?;
+		let mut scope = scope.clone();
+		scope.params.identifier = Some(syn::parse2(quote!(I)).unwrap());
+		scope.params.context = Some(syn::parse2(quote!(C)).unwrap());
+		scope.params.lifetime = Some(syn::Lifetime::new("'a", proc_macro2::Span::call_site()));
 
-		let type_path = self.ty_ref.generate_syntax(context, scope)?;
-		let trait_path = self
-			.tr_ref.generate_syntax(context, scope)?;
+		let context_bounds = self
+			.ty
+			.generate_context_bounds(context, self.tr_ref, &scope)?;
+
+		let type_path = self.ty_ref.generate_syntax(context, &scope)?;
+		let trait_path = self.tr_ref.generate_syntax(context, &scope)?;
 
 		let mut associated_types = Vec::new();
 		for a in tr.associated_types() {
 			let a_expr = match a.trait_object_path(context, tr) {
 				Some(path) => {
-					let path = context.module_path(scope.module).to(&path).generate_syntax(context, scope)?;
-					syn::parse2(quote!(#path <'a, C>)).unwrap()
+					let path = context
+						.module_path(scope.module)
+						.to(&path)
+						.generate_syntax(context, &scope)?;
+					syn::parse2(quote!(#path)).unwrap()
 				}
 				None => {
 					let item_path = tr.associated_types()[a.collection_item_type().unwrap()]
 						.trait_object_path(context, tr)
 						.unwrap();
-					let item_path = context.module_path(scope.module).to(&item_path).generate_syntax(context, scope)?;
-					syn::parse2(quote!(Box<dyn 'a + Iterator<Item = #item_path <'a, C>>>)).unwrap()
+					let item_path = context
+						.module_path(scope.module)
+						.to(&item_path)
+						.generate_syntax(context, &scope)?;
+					syn::parse2(quote!(Box<dyn 'a + Iterator<Item = #item_path>>)).unwrap()
 				}
 			};
 
@@ -59,7 +72,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 						let m_path = context
 							.module_path(scope.module)
 							.to(&m_a.trait_object_path(context, tr).unwrap())
-							.generate_syntax(context, scope)?;
+							.generate_syntax(context, &scope)?;
 
 						if v.ty().is_some() {
 							quote! {
@@ -81,7 +94,10 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 
 							match m_a.trait_object_path(context, tr) {
 								Some(path) => {
-									let path = context.module_path(scope.module).to(&path).generate_syntax(context, scope)?;
+									let path = context
+										.module_path(scope.module)
+										.to(&path)
+										.generate_syntax(context, &scope)?;
 									quote! {
 										Self::#v_ident (value) => {
 											#path::new(value.#m_ident(context))
@@ -89,12 +105,12 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 									}
 								}
 								None => {
-									let item_a = &tr.associated_types()
-										[m_a.collection_item_type().unwrap()];
+									let item_a =
+										&tr.associated_types()[m_a.collection_item_type().unwrap()];
 									let path = context
 										.module_path(scope.module)
 										.to(&item_a.trait_object_path(context, tr).unwrap())
-										.generate_syntax(context, scope)?;
+										.generate_syntax(context, &scope)?;
 									quote! {
 										Self::#v_ident (value) => {
 											Box::new(value.#m_ident(context).map(#path::new))
@@ -113,7 +129,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 				};
 
 				cases.push(case)
-			};
+			}
 
 			methods.push(syntax::tr_impl::class::Method {
 				ident: m.ident().clone(),
@@ -122,18 +138,18 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 					match self {
 						#(#cases)*
 					}
-				}
+				},
 			});
 		}
 
 		let dyn_table_path = context
 			.module_path(scope.module)
 			.to(&tr.dyn_table_path(context).unwrap())
-			.generate_syntax(context, scope)?;
+			.generate_syntax(context, &scope)?;
 		let dyn_table_instance_path = context
 			.module_path(scope.module)
 			.to(&tr.dyn_table_instance_path(context).unwrap())
-			.generate_syntax(context, scope)?;
+			.generate_syntax(context, &scope)?;
 
 		Ok(syntax::tr_impl::class::TraitImpl {
 			type_path,
@@ -142,7 +158,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 			associated_types,
 			methods,
 			dyn_table_path,
-			dyn_table_instance_path
+			dyn_table_instance_path,
 		})
 	}
 }

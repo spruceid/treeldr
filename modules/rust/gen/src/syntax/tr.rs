@@ -70,7 +70,7 @@ pub struct ClassTraitDefinition {
 	pub ident: Ident,
 	pub super_traits: Vec<syn::TraitBound>,
 	pub associated_types: Vec<TraitAssociatedType>,
-	pub methods: Vec<TraitMethod>
+	pub methods: Vec<TraitMethod>,
 }
 
 impl ToTokens for ClassTraitDefinition {
@@ -135,7 +135,7 @@ pub struct TraitAssociatedType {
 	pub ident: Ident,
 	pub bounds: Vec<syn::TypeParamBound>,
 	pub never_value: syn::Type,
-	pub ref_value: syn::Type
+	pub ref_value: syn::Type,
 }
 
 impl ToTokens for TraitAssociatedType {
@@ -153,7 +153,7 @@ pub struct TraitMethod {
 	pub ident: Ident,
 	pub return_type: syn::Type,
 	pub never_body: TokenStream,
-	pub ref_body: TokenStream
+	pub ref_body: TokenStream,
 }
 
 impl ToTokens for TraitMethod {
@@ -170,7 +170,7 @@ impl ToTokens for TraitMethod {
 pub struct ClassProviderTraitDefinition {
 	pub ident: Ident,
 	pub class_ident: Ident,
-	pub trait_path: syn::Path
+	pub trait_path: syn::Path,
 }
 
 impl ToTokens for ClassProviderTraitDefinition {

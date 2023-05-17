@@ -5,8 +5,9 @@ use quote::quote;
 use treeldr::Id;
 
 use crate::{
+	syntax,
 	ty::{self, structure::Struct},
-	GenerateSyntax, syntax
+	GenerateSyntax,
 };
 
 use super::{
@@ -16,11 +17,16 @@ use super::{
 impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 	type Output = syntax::tr_impl::rdf::QuadsImpl;
 
-	fn generate_syntax<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate_syntax<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &crate::Context<V, M>,
 		scope: &crate::Scope,
 	) -> Result<Self::Output, crate::Error> {
+		let mut scope = scope.clone();
+		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
+
 		let ident = self.ty.ident();
 		let iterator_ident = quads_and_values_iterator_name_from(ident);
 
@@ -54,12 +60,8 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 					_ => panic!("invalid `tldr:self` layout"),
 				})
 			} else {
-				let iter_ty = quads_and_values_iterator_of(
-					context,
-					scope,
-					field.layout(),
-					quote!('a),
-				)?;
+				let iter_ty =
+					quads_and_values_iterator_of(context, &scope, field.layout(), quote!('a))?;
 
 				collect_bounds(context, field.layout(), |b| {
 					bounds_set.insert(b);
@@ -69,8 +71,8 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 					ident: field_ident.clone(),
 					ty: iter_ty,
 					init: quote! {
-						#field_ident: self.#field_ident.unbound_rdf_quads_and_values(namespace, generator)
-					}
+						self.#field_ident.unbound_rdf_quads_and_values(namespace, generator)
+					},
 				});
 
 				let mut prop_iri = None;
@@ -127,8 +129,8 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 		if iterator_fields.is_empty() {
 			iterator_fields.push(syntax::tr_impl::rdf::IteratorField {
 				ident: Ident::new("_v", proc_macro2::Span::call_site()),
-				ty: syn::parse2(quote!(_v: ::std::marker::PhantomData<&'a V>)).unwrap(),
-				init: quote!(::std::marker::PhantomData)
+				ty: syn::parse2(quote!(::std::marker::PhantomData<&'a V>)).unwrap(),
+				init: quote!(::std::marker::PhantomData),
 			})
 		}
 
@@ -140,10 +142,10 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 
 		let mut bounds = Vec::with_capacity(bounds_set.len());
 		for b in bounds_set {
-			bounds.push(b.generate_syntax(context, scope)?)
+			bounds.push(b.generate_syntax(context, &scope)?)
 		}
 
-		let type_path = self.ty_ref.generate_syntax(context, scope)?;
+		let type_path = self.ty_ref.generate_syntax(context, &scope)?;
 
 		Ok(syntax::tr_impl::rdf::QuadsImpl {
 			type_path,
@@ -152,10 +154,10 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 					ident: iterator_ident,
 					fields: iterator_fields,
 					id_init: iterator_id_init,
-					next_body
-				}
+					next_body,
+				},
 			),
-			bounds
+			bounds,
 		})
 	}
 }

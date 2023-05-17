@@ -3,11 +3,14 @@ use std::collections::BTreeSet;
 use proc_macro2::Ident;
 use quote::quote;
 use rdf_types::Vocabulary;
-use treeldr::{TId, IriIndex, BlankIdIndex};
+use treeldr::{BlankIdIndex, IriIndex, TId};
 
-use crate::{GenerateSyntax, syntax::{self, ClassAssociatedTypeTraitObject}, Context, Error, Scope};
+use crate::{
+	syntax::{self, ClassAssociatedTypeTraitObject},
+	Context, Error, GenerateSyntax, Scope,
+};
 
-use super::{MethodType, AssociatedTypeBound};
+use super::{AssociatedTypeBound, MethodType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DynTableOf(pub TId<treeldr::Type>);
@@ -15,11 +18,17 @@ pub struct DynTableOf(pub TId<treeldr::Type>);
 impl<M> GenerateSyntax<M> for DynTableOf {
 	type Output = syntax::ClassDynTable;
 
-	fn generate_syntax<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate_syntax<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &crate::Context<V, M>,
 		scope: &crate::Scope,
 	) -> Result<Self::Output, crate::Error> {
+		let mut scope = scope.clone();
+		scope.params.context = Some(syn::parse2(quote!(C)).unwrap());
+		scope.params.lifetime = Some(syn::Lifetime::new("'a", proc_macro2::Span::call_site()));
+
 		let tr = context.type_trait(self.0).unwrap();
 		let mut fields = Vec::with_capacity(tr.methods.len());
 		for m in &tr.methods {
@@ -33,8 +42,11 @@ impl<M> GenerateSyntax<M> for DynTableOf {
 					let a = &tr.associated_types[*i];
 					match a.trait_object_path(context, tr) {
 						Some(path) => {
-							let path = context.module_path(scope.module).to(&path).generate_syntax(context, scope)?;
-							ty = syn::parse2(quote!(#path <'a, C>)).unwrap();
+							let path = context
+								.module_path(scope.module)
+								.to(&path)
+								.generate_syntax(context, &scope)?;
+							ty = syn::parse2(quote!(#path)).unwrap();
 							wrap = quote!(#path::new(object));
 						}
 						None => {
@@ -42,9 +54,12 @@ impl<M> GenerateSyntax<M> for DynTableOf {
 							let item_path = context
 								.module_path(scope.module)
 								.to(&item_a.trait_object_path(context, tr).unwrap())
-								.generate_syntax(context, scope)?;
+								.generate_syntax(context, &scope)?;
 
-							ty = syn::parse2(quote!(::treeldr_rust_prelude::BoxedDynIterator<#item_path <'a, C>>)).unwrap();
+							ty = syn::parse2(
+								quote!(::treeldr_rust_prelude::BoxedDynIterator<#item_path>),
+							)
+							.unwrap();
 							wrap = quote!(::treeldr_rust_prelude::BoxedDynIterator::new(object.map(#item_path::new)));
 						}
 					}
@@ -54,9 +69,9 @@ impl<M> GenerateSyntax<M> for DynTableOf {
 					let path = context
 						.module_path(scope.module)
 						.to(&a.trait_object_path(context, tr).unwrap())
-						.generate_syntax(context, scope)?;
+						.generate_syntax(context, &scope)?;
 
-					ty = syn::parse2(quote!(Option<#path <'a, C>>)).unwrap();
+					ty = syn::parse2(quote!(Option<#path>)).unwrap();
 					wrap = quote!(object.map(#path::new));
 				}
 			};
@@ -70,15 +85,16 @@ impl<M> GenerateSyntax<M> for DynTableOf {
 						let object = context.get(|context| subject.#m_ident(context));
 						#wrap
 					}
-				}).unwrap()
+				})
+				.unwrap(),
 			})
 		}
 
 		Ok(syntax::ClassDynTable {
-			trait_path: self.0.generate_syntax(context, scope)?,
+			trait_path: self.0.generate_syntax(context, &scope)?,
 			ident: tr.dyn_table_ident(),
 			instance_ident: tr.dyn_table_instance_ident(),
-			fields
+			fields,
 		})
 	}
 }
@@ -89,19 +105,24 @@ pub struct TraitObjectsOf(pub TId<treeldr::Type>);
 impl<M> GenerateSyntax<M> for TraitObjectsOf {
 	type Output = syntax::ClassDynTraitDefinition;
 
-	fn generate_syntax<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate_syntax<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &crate::Context<V, M>,
 		scope: &crate::Scope,
 	) -> Result<Self::Output, crate::Error> {
 		let tr = context.type_trait(self.0).unwrap();
-		let mut associated_types_trait_objects = Vec::with_capacity(tr.associated_types.len());
 
+		let mut scope = scope.clone();
+		scope.params.context = Some(syn::parse2(quote!(C)).unwrap());
+
+		let mut associated_types_trait_objects = Vec::with_capacity(tr.associated_types.len());
 		for ty in &tr.associated_types {
 			if let AssociatedTypeBound::Types(classes) = ty.bound() {
 				associated_types_trait_objects.push(associated_trait_object_type(
 					context,
-					scope,
+					&scope,
 					ty.trait_object_ident(tr).unwrap(),
 					classes,
 				)?)
@@ -109,8 +130,8 @@ impl<M> GenerateSyntax<M> for TraitObjectsOf {
 		}
 
 		Ok(syntax::ClassDynTraitDefinition {
-			table: DynTableOf(self.0).generate_syntax(context, scope)?,
-			associated_types_trait_objects
+			table: DynTableOf(self.0).generate_syntax(context, &scope)?,
+			associated_types_trait_objects,
 		})
 	}
 }
@@ -148,24 +169,27 @@ fn associated_trait_object_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 			paren_token: None,
 			modifier: syn::TraitBoundModifier::None,
 			lifetimes: None,
-			path: ty.generate_syntax(context, scope)?
+			path: ty.generate_syntax(context, scope)?,
 		})
 	}
 
 	let mut tables = Vec::with_capacity(all_classes.len());
 	for (i, ty) in all_classes.iter().enumerate() {
+		let mut scope = scope.clone();
+		scope.params.lifetime = Some(syn::Lifetime::new("'d", proc_macro2::Span::call_site()));
+
 		let tr = context.type_trait(*ty).unwrap();
 		let path = context
 			.module_path(scope.module)
 			.to(&tr.dyn_table_path(context).unwrap())
-			.generate_syntax(context, scope)?;
+			.generate_syntax(context, &scope)?;
 		let instance_path = context
 			.module_path(scope.module)
 			.to(&tr.dyn_table_instance_path(context).unwrap())
-			.generate_syntax(context, scope)?;
+			.generate_syntax(context, &scope)?;
 		let into_trait_object =
-			quote!( ::treeldr_rust_prelude::AsTraitObject::<#path<C>>::into_trait_object(value) );
-		
+			quote!( ::treeldr_rust_prelude::AsTraitObject::<#path>::into_trait_object(value) );
+
 		let initial_value = if i == 0 {
 			quote!( {
 				let (p, t) = #into_trait_object;
@@ -177,8 +201,8 @@ fn associated_trait_object_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 		};
 
 		tables.push(syntax::ClassAssociatedTypeTraitObjectTable {
-			ty: syn::parse2(quote!(#instance_path <'d, C>)).unwrap(),
-			initial_value
+			ty: syn::parse2(quote!(#instance_path)).unwrap(),
+			initial_value,
 		})
 	}
 
@@ -188,40 +212,64 @@ fn associated_trait_object_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 
 		let mut associated_types = Vec::with_capacity(tr.associated_types().len());
 		for a in tr.associated_types() {
+			let mut scope = scope.clone();
+			scope.params.lifetime = Some(syn::Lifetime::new("'a", proc_macro2::Span::call_site()));
+
 			let ty = match a.trait_object_path(context, tr) {
 				Some(path) => {
-					let path = context.module_path(scope.module).to(&path).generate_syntax(context, scope)?;
-					syn::parse2(quote!(#path <'a, C>)).unwrap()
+					let path = context
+						.module_path(scope.module)
+						.to(&path)
+						.generate_syntax(context, &scope)?;
+					syn::parse2(quote!(#path)).unwrap()
 				}
 				None => {
 					let item_a = &tr.associated_types()[a.collection_item_type().unwrap()];
-					let item_path = context.module_path(scope.module).to(&item_a.trait_object_path(context, tr).unwrap()).generate_syntax(context, scope)?;
-					syn::parse2(quote!(::treeldr_rust_prelude::BoxedDynIterator<'a, #item_path <'a, C>>)).unwrap()
+					let item_path = context
+						.module_path(scope.module)
+						.to(&item_a.trait_object_path(context, tr).unwrap())
+						.generate_syntax(context, &scope)?;
+					syn::parse2(quote!(::treeldr_rust_prelude::BoxedDynIterator<'a, #item_path>))
+						.unwrap()
 				}
 			};
 
 			associated_types.push((a.ident().clone(), ty))
 		}
 
-		let methods = tr.methods().iter().map(|m| {
-			syntax::ClassAssociatedTypeTraitObjectTraitImplMethod {
+		let methods = tr
+			.methods()
+			.iter()
+			.map(|m| syntax::ClassAssociatedTypeTraitObjectTraitImplMethod {
 				ident: m.ident().clone(),
 				return_ty: m.return_type_expr(tr),
-				table_index: i
-			}
-		}).collect();
+				table_index: i,
+			})
+			.collect();
 
-		let table_path = context.module_path(scope.module).to(&tr.dyn_table_path(context).unwrap()).generate_syntax(context, scope)?;
-		let table_instance_path = context.module_path(scope.module).to(&tr.dyn_table_instance_path(context).unwrap()).generate_syntax(context, scope)?;
+		let table_path = context
+			.module_path(scope.module)
+			.to(&tr.dyn_table_path(context).unwrap())
+			.generate_syntax(context, scope)?;
+
+		let mut scope = scope.clone();
+		scope.params.lifetime = Some(syn::Lifetime::new("'r", proc_macro2::Span::call_site()));
+		let table_instance_path = context
+			.module_path(scope.module)
+			.to(&tr.dyn_table_instance_path(context).unwrap())
+			.generate_syntax(context, &scope)?;
 
 		trait_impls.push(syntax::ClassAssociatedTypeTraitObjectTraitImpl {
 			ident: ident.clone(),
-			trait_path: context.module_path(scope.module).to(&tr.path(context).unwrap()).generate_syntax(context, scope)?,
+			trait_path: context
+				.module_path(scope.module)
+				.to(&tr.path(context).unwrap())
+				.generate_syntax(context, &scope)?,
 			table_path,
 			table_instance_path,
 			table_index: i,
 			associated_types,
-			methods
+			methods,
 		})
 	}
 
@@ -229,6 +277,6 @@ fn associated_trait_object_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 		ident,
 		tables,
 		trait_bounds,
-		trait_impls
+		trait_impls,
 	})
 }

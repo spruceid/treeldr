@@ -1,38 +1,45 @@
 use quote::quote;
 use treeldr::vocab::Primitive;
 
-use crate::{
-	tr::MethodType,
-	Context, Error, GenerateSyntax, syntax,
-};
+use crate::{syntax, tr::MethodType, Context, Error, GenerateSyntax};
 
 use super::ClassTraitImpl;
 
 impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Primitive> {
 	type Output = syntax::tr_impl::class::TraitImpl;
 
-	fn generate_syntax<V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>>(
+	fn generate_syntax<
+		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
+	>(
 		&self,
 		context: &Context<V, M>,
 		scope: &crate::Scope,
-	) -> Result<Self::Output, Error> {		
-		let type_path = self.ty_ref
-			.generate_syntax(context, scope)?;
-		
-		let trait_path = self.tr_ref.generate_syntax(context, scope)?;
+	) -> Result<Self::Output, Error> {
+		let mut scope = scope.clone();
+		scope.params.identifier = Some(syn::parse2(quote!(I)).unwrap());
+		scope.params.context = Some(syn::parse2(quote!(C)).unwrap());
+		scope.params.lifetime = Some(syn::Lifetime::new("'r", proc_macro2::Span::call_site()));
+
+		let type_path = self.ty_ref.generate_syntax(context, &scope)?;
+
+		let trait_path = self.tr_ref.generate_syntax(context, &scope)?;
 
 		let tr = context.type_trait(self.tr_ref).unwrap();
-		let associated_types = tr.associated_types().iter().map(|a| {
-			let ty_expr = if a.is_collection() {
-				let item_a = &tr.associated_types()[a.collection_item_type().unwrap()];
-				let item_ident = item_a.ident();
-				syn::parse2(quote!(::std::iter::Empty<Self::#item_ident <'a>>)).unwrap()
-			} else {
-				syn::parse2(quote!(&'a ::std::convert::Infallible)).unwrap()
-			};
+		let associated_types = tr
+			.associated_types()
+			.iter()
+			.map(|a| {
+				let ty_expr = if a.is_collection() {
+					let item_a = &tr.associated_types()[a.collection_item_type().unwrap()];
+					let item_ident = item_a.ident();
+					syn::parse2(quote!(::std::iter::Empty<Self::#item_ident <'a>>)).unwrap()
+				} else {
+					syn::parse2(quote!(&'a ::std::convert::Infallible)).unwrap()
+				};
 
-			(a.ident().clone(), ty_expr)
-		}).collect();
+				(a.ident().clone(), ty_expr)
+			})
+			.collect();
 
 		let methods: Vec<_> = tr
 			.methods()
@@ -61,7 +68,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Primitive> {
 				syntax::tr_impl::class::Method {
 					ident: m.ident().clone(),
 					return_ty: m.return_type_expr(tr),
-					body
+					body,
 				}
 			})
 			.collect();
@@ -69,11 +76,11 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Primitive> {
 		let dyn_table_path = context
 			.module_path(scope.module)
 			.to(&tr.dyn_table_path(context).unwrap())
-			.generate_syntax(context, scope)?;
+			.generate_syntax(context, &scope)?;
 		let dyn_table_instance_path = context
 			.module_path(scope.module)
 			.to(&tr.dyn_table_instance_path(context).unwrap())
-			.generate_syntax(context, scope)?;
+			.generate_syntax(context, &scope)?;
 
 		Ok(syntax::tr_impl::class::TraitImpl {
 			type_path,
@@ -82,7 +89,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Primitive> {
 			associated_types,
 			methods,
 			dyn_table_path,
-			dyn_table_instance_path
+			dyn_table_instance_path,
 		})
 	}
 }
