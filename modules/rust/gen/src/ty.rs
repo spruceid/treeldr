@@ -17,7 +17,7 @@ pub mod structure;
 
 use alias::Alias;
 use enumeration::Enum;
-pub use params::{Parameter, Parameters, ParametersValues};
+pub use params::{Parameter, Parameters};
 use structure::Struct;
 
 #[derive(Debug)]
@@ -103,6 +103,7 @@ impl Type {
 	pub fn path<V, M>(&self, context: &Context<V, M>, ident: proc_macro2::Ident) -> Option<Path> {
 		let mut path = context.parent_module_path(self.module)?;
 		path.push(path::Segment::Ident(ident));
+		*path.parameters_mut() = self.params();
 		Some(path)
 	}
 
@@ -144,7 +145,7 @@ impl Type {
 
 			let mut stack: Vec<_> = layout.as_layout().ty().iter().map(|v| **v.value).collect();
 			while let Some(ty_ref) = stack.pop() {
-				if f(TraitId::Defined(ty_ref).impl_for(layout_ref)) {
+				if f(TraitId::Class(ty_ref).impl_for(layout_ref)) {
 					let ty = context.model().get(ty_ref).unwrap();
 					if let Some(super_classes) = ty.as_type().sub_class_of() {
 						stack.extend(super_classes.iter().map(|s| **s.value))

@@ -12,6 +12,9 @@ pub enum Error {
 	#[error("unreachable trait")]
 	UnreachableTrait(TId<treeldr::Type>),
 
+	#[error("unreachable trait object")]
+	UnreachableTraitObject(TId<treeldr::Type>),
+
 	#[error("missing required `Default` implementation")]
 	MissingDefaultImpl,
 
@@ -27,6 +30,13 @@ impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V
 			}
 			Self::UnreachableTrait(type_ref) => {
 				write!(f, "unbound type `{}`", type_ref.id().with(vocabulary))
+			}
+			Self::UnreachableTraitObject(type_ref) => {
+				write!(
+					f,
+					"unbound trait object for `{}`",
+					type_ref.id().with(vocabulary)
+				)
 			}
 			Self::MissingDefaultImpl => {
 				write!(

@@ -7,31 +7,28 @@ use rdf_types::Vocabulary;
 use treeldr::{vocab, BlankIdIndex, Id, IriIndex, TId};
 
 use crate::{
-	ty::{
-		enumeration::{Enum, Variant},
-		generate::GenerateFor,
-		params::ParametersValues,
-	},
-	Context, Generate, GenerateList,
+	syntax,
+	ty::enumeration::{Enum, Variant},
+	Context, Error, GenerateSyntax,
 };
 
 use super::{collect_bounds, FromRdfImpl};
 
-impl<M> GenerateFor<Enum, M> for FromRdfImpl {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Enum> {
+	type Output = syntax::tr_impl::rdf::FromRdfImpl;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<shelves::Ref<crate::Module>>,
-		ty: &Enum,
-		tokens: &mut TokenStream,
-	) -> Result<(), crate::Error> {
-		let ident = ty.ident();
-		let params_values = ParametersValues::new_for_type(quote!(N::Id));
-		let params = ty.params().instantiate(&params_values);
-		let mut bounds = BTreeSet::new();
+		scope: &crate::Scope,
+	) -> Result<Self::Output, Error> {
+		let mut scope = scope.clone();
+		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
 
+		let mut bound_set = BTreeSet::new();
 		let mut id_set = BTreeSet::new();
-		let id_signatures: Vec<_> = ty
+		let id_signatures: Vec<_> = self
+			.ty
 			.variants()
 			.iter()
 			.enumerate()
@@ -42,7 +39,7 @@ impl<M> GenerateFor<Enum, M> for FromRdfImpl {
 
 						if let Some(variant_layout_ref) = variant.ty() {
 							collect_bounds(context, variant_layout_ref, |b| {
-								bounds.insert(b);
+								bound_set.insert(b);
 							});
 						}
 
@@ -54,7 +51,8 @@ impl<M> GenerateFor<Enum, M> for FromRdfImpl {
 			.collect();
 
 		let mut literal_set = BTreeSet::new();
-		let literal_signatures: Vec<_> = ty
+		let literal_signatures: Vec<_> = self
+			.ty
 			.variants()
 			.iter()
 			.enumerate()
@@ -65,7 +63,7 @@ impl<M> GenerateFor<Enum, M> for FromRdfImpl {
 
 						if let Some(variant_layout_ref) = variant.ty() {
 							collect_bounds(context, variant_layout_ref, |b| {
-								bounds.insert(b);
+								bound_set.insert(b);
 							});
 						}
 
@@ -81,53 +79,26 @@ impl<M> GenerateFor<Enum, M> for FromRdfImpl {
 
 		let id_branch = id_tree.generate(
 			context,
-			ty.variants(),
+			self.ty.variants(),
 			&quote!(::treeldr_rust_prelude::FromRdfError::ExpectedLiteralValue),
 		);
 		let literal_branch = literal_tree.generate(
 			context,
-			ty.variants(),
+			self.ty.variants(),
 			&quote!(::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue),
 		);
 
-		let bounds = bounds
-			.separated_by(&quote!(,))
-			.generate_with(context, scope)
-			.into_tokens()?;
+		let mut bounds = Vec::with_capacity(bound_set.len());
+		for b in bound_set {
+			bounds.push(b.generate_syntax(context, &scope)?)
+		}
 
-		tokens.extend(quote! {
-			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::FromRdf<N, V> for #ident #params
-			where
-				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: Clone + Ord + ::treeldr_rust_prelude::rdf_types::FromIri<Iri=N::Iri>,
-				V: ::treeldr_rust_prelude::rdf::TypeCheck<N::Id>,
-				#bounds
-			{
-				fn from_rdf<G>(
-					namespace: &mut N,
-					value: &::treeldr_rust_prelude::rdf_types::Object<N::Id, V>,
-					graph: &G
-				) -> Result<Self, ::treeldr_rust_prelude::FromRdfError>
-				where
-					G: ::treeldr_rust_prelude::grdf::Graph<
-						Subject=N::Id,
-						Predicate=N::Id,
-						Object=::treeldr_rust_prelude::rdf_types::Object<N::Id, V>
-					>
-				{
-					match value {
-						::treeldr_rust_prelude::rdf_types::Object::Id(id) => {
-							#id_branch
-						}
-						::treeldr_rust_prelude::rdf_types::Object::Literal(literal) => {
-							#literal_branch
-						}
-					}
-				}
-			}
-		});
-
-		Ok(())
+		Ok(syntax::tr_impl::rdf::FromRdfImpl {
+			type_path: self.ty_ref.generate_syntax(context, &scope)?,
+			bounds,
+			from_id: id_branch,
+			from_literal: literal_branch,
+		})
 	}
 }
 

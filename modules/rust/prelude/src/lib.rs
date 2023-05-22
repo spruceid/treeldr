@@ -107,7 +107,7 @@ pub unsafe trait AsTraitObject<T: Table> {
 	/// this lifetime.
 	fn as_trait_object(&self) -> (*const u8, T::Instance<'_>);
 
-	/// Turnes the given value into a custom trait object.
+	/// Turns the given value into a custom trait object.
 	///
 	/// # Safety
 	///
@@ -118,7 +118,7 @@ pub unsafe trait AsTraitObject<T: Table> {
 	where
 		Self: Reference<'r>,
 	{
-		unimplemented!()
+		unimplemented!("into_trait_object")
 	}
 }
 

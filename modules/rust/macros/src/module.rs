@@ -418,7 +418,7 @@ impl Prefix {
 		&self,
 		context: &GenContext<V>,
 	) -> Result<TokenStream, GenError> {
-		use treeldr_rust_gen::Generate;
+		use treeldr_rust_gen::GenerateSyntax;
 		let attrs = &self.attrs;
 		let vis = &self.vis;
 		let ident = &self.ident;
@@ -440,9 +440,8 @@ impl Prefix {
 				}
 			}
 			None => {
-				let generated = module
-					.generate_with(context, Some(module_ref))
-					.into_tokens()?;
+				let scope = treeldr_rust_gen::Scope::new(Some(module_ref));
+				let generated = module.generate_syntax(context, &scope)?;
 				let rest = &self.content;
 
 				Ok(quote! {

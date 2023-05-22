@@ -1,173 +1,170 @@
-use std::collections::BTreeSet;
-
-use proc_macro2::TokenStream;
 use quote::quote;
 
 use crate::{
+	syntax,
 	tr::{CollectContextBounds, MethodType},
-	ty::{
-		enumeration::Enum,
-		generate::GenerateFor,
-		params::{ParametersBounds, ParametersValues},
-	},
-	Context, Error, GenerateIn,
+	ty::enumeration::Enum,
+	Context, Error, GenerateSyntax,
 };
 
-use super::{context_bounds_tokens, ClassTraitImpl};
+use super::ClassTraitImpl;
 
-impl<M> GenerateFor<Enum, M> for ClassTraitImpl {
-	fn generate<
+impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
+	type Output = syntax::tr_impl::class::TraitImpl;
+
+	fn generate_syntax<
 		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
 	>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<shelves::Ref<crate::Module>>,
-		ty: &Enum,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
-		if let Some(tr) = context.type_trait(self.0) {
-			let ident = ty.ident();
-			let params_values = ParametersValues::default();
-			let mut context_bounds = BTreeSet::new();
-			ty.collect_context_bounds(context, self.0, |b| {
-				context_bounds.insert(b);
-			});
-			let params_bounds = ParametersBounds::new_for_trait(context_bounds_tokens(
-				&context_bounds,
-				context,
-				scope,
-				&params_values,
-			)?);
-			let params = ty
-				.params()
-				.with_context()
-				.instantiate(&params_values)
-				.with_bounds(&params_bounds);
-			let ty_params = ty.params().instantiate(&params_values);
-			let tr_path = self
-				.0
-				.generate_in_with(context, scope, &params_values)
-				.into_tokens()?;
+		scope: &crate::Scope,
+	) -> Result<Self::Output, Error> {
+		let tr = context.type_trait(self.tr_ref).unwrap();
 
-			let mut associated_types = Vec::new();
-			for a in tr.associated_types() {
-				let a_ident = a.ident();
+		let mut scope = scope.clone();
+		scope.params.identifier = Some(syn::parse2(quote!(I)).unwrap());
+		scope.params.context = Some(syn::parse2(quote!(C)).unwrap());
+		scope.params.lifetime = Some(syn::Lifetime::new("'r", proc_macro2::Span::call_site()));
 
-				let a_expr = match a.trait_object_path(context, tr) {
-					Some(path) => {
-						let path = context.module_path(scope).to(&path);
-						quote!(#path <'a, C>)
+		let context_bounds = self
+			.ty
+			.generate_context_bounds(context, self.tr_ref, &scope)?;
+
+		let type_path = self.ty_ref.generate_syntax(context, &scope)?;
+		let trait_path = self.tr_ref.generate_syntax(context, &scope)?;
+
+		let mut associated_types = Vec::new();
+		for a in tr.associated_types() {
+			let a_expr = match a.trait_object_path(context, tr) {
+				Some(path) => {
+					let path = context
+						.module_path(scope.module)
+						.to(&path)
+						.generate_syntax(context, &scope)?;
+					syn::parse2(quote!(#path)).unwrap()
+				}
+				None => {
+					let item_path = tr.associated_types()[a.collection_item_type().unwrap()]
+						.trait_object_path(context, tr)
+						.unwrap();
+					let item_path = context
+						.module_path(scope.module)
+						.to(&item_path)
+						.generate_syntax(context, &scope)?;
+					syn::parse2(quote!(Box<dyn 'r + Iterator<Item = #item_path>>)).unwrap()
+				}
+			};
+
+			associated_types.push((a.ident().clone(), a_expr))
+		}
+
+		let mut methods = Vec::new();
+		for m in tr.methods() {
+			let m_ident = m.ident();
+			let return_ty = m.return_type_expr(tr);
+
+			let mut cases = Vec::with_capacity(self.ty.variants().len());
+			for v in self.ty.variants() {
+				let v_ident = v.ident();
+				let case = match m.type_() {
+					MethodType::Option(i) => {
+						let m_a = &tr.associated_types()[*i];
+						let m_path = context
+							.module_path(scope.module)
+							.to(&m_a.trait_object_path(context, tr).unwrap())
+							.generate_syntax(context, &scope)?;
+
+						if v.ty().is_some() {
+							quote! {
+								Self::#v_ident (value) => {
+									value.#m_ident(context).map(#m_path::new)
+								}
+							}
+						} else {
+							quote! {
+								Self::#v_ident => {
+									None
+								}
+							}
+						}
 					}
-					None => {
-						let item_path = tr.associated_types()[a.collection_item_type().unwrap()]
-							.trait_object_path(context, tr)
-							.unwrap();
-						let item_path = context.module_path(scope).to(&item_path);
-						quote!(Box<dyn 'a + Iterator<Item = #item_path <'a, C>>>)
+					MethodType::Required(i) => {
+						if v.ty().is_some() {
+							let m_a = &tr.associated_types()[*i];
+
+							match m_a.trait_object_path(context, tr) {
+								Some(path) => {
+									let path = context
+										.module_path(scope.module)
+										.to(&path)
+										.generate_syntax(context, &scope)?;
+									quote! {
+										Self::#v_ident (value) => {
+											#path::new(value.#m_ident(context))
+										}
+									}
+								}
+								None => {
+									let item_a =
+										&tr.associated_types()[m_a.collection_item_type().unwrap()];
+									let path = context
+										.module_path(scope.module)
+										.to(&item_a.trait_object_path(context, tr).unwrap())
+										.generate_syntax(context, &scope)?;
+									quote! {
+										Self::#v_ident (value) => {
+											Box::new(value.#m_ident(context).map(#path::new))
+										}
+									}
+								}
+							}
+						} else {
+							quote! {
+								Self::#v_ident => {
+									Box::new(::std::iter::empty())
+								}
+							}
+						}
 					}
 				};
 
-				associated_types.push(quote! {
-					type #a_ident <'a> = #a_expr where Self: 'a , C: 'a;
-				})
+				cases.push(case)
 			}
 
-			let mut methods = Vec::new();
-			for m in tr.methods() {
-				let m_ident = m.ident();
-				let return_ty = m.return_type_expr(tr);
-
-				let variants = ty.variants().iter().map(|v| {
-					let v_ident = v.ident();
-					match m.type_() {
-						MethodType::Option(i) => {
-							let m_a = &tr.associated_types()[*i];
-							let m_path = context
-								.module_path(scope)
-								.to(&m_a.trait_object_path(context, tr).unwrap());
-
-							if v.ty().is_some() {
-								quote! {
-									Self::#v_ident (value) => {
-										value.#m_ident(context).map(#m_path::<'a, C>::new)
-									}
-								}
-							} else {
-								quote! {
-									Self::#v_ident => {
-										None
-									}
-								}
-							}
-						}
-						MethodType::Required(i) => {
-							if v.ty().is_some() {
-								let m_a = &tr.associated_types()[*i];
-
-								match m_a.trait_object_path(context, tr) {
-									Some(path) => {
-										let path = context.module_path(scope).to(&path);
-										quote! {
-											Self::#v_ident (value) => {
-												#path::new(value.#m_ident(context))
-											}
-										}
-									}
-									None => {
-										let item_a = &tr.associated_types()
-											[m_a.collection_item_type().unwrap()];
-										let path = context
-											.module_path(scope)
-											.to(&item_a.trait_object_path(context, tr).unwrap());
-										quote! {
-											Self::#v_ident (value) => {
-												Box::new(value.#m_ident(context).map(#path::new))
-											}
-										}
-									}
-								}
-							} else {
-								quote! {
-									Self::#v_ident => {
-										Box::new(::std::iter::empty())
-									}
-								}
-							}
-						}
+			methods.push(syntax::tr_impl::class::Method {
+				ident: m.ident().clone(),
+				return_ty,
+				body: quote! {
+					match self {
+						#(#cases)*
 					}
-				});
-
-				methods.push(quote! {
-					fn #m_ident <'a> (&'a self, context: &'a C) -> #return_ty {
-						match self {
-							#(#variants)*
-						}
-					}
-				});
-			}
-
-			let dyn_table_path = context
-				.module_path(scope)
-				.to(&tr.dyn_table_path(context).unwrap());
-			let dyn_table_instance_path = context
-				.module_path(scope)
-				.to(&tr.dyn_table_instance_path(context).unwrap());
-
-			tokens.extend(quote! {
-				impl #params #tr_path for #ident #ty_params {
-					#(#associated_types)*
-					#(#methods)*
-				}
-
-				unsafe impl #params ::treeldr_rust_prelude::AsTraitObject<#dyn_table_path<C>> for #ident #ty_params {
-					fn as_trait_object(&self) -> (*const u8, #dyn_table_instance_path<C>) {
-						let table = #dyn_table_instance_path::new::<Self>();
-						(self as *const Self as *const u8, table)
-					}
-				}
-			})
+				},
+			});
 		}
 
-		Ok(())
+		let dyn_table_path = context
+			.module_path(scope.module)
+			.to(&tr.dyn_table_path(context).unwrap())
+			.generate_syntax(context, &scope)?;
+		let dyn_table_instance_path = context
+			.module_path(scope.module)
+			.to(&tr.dyn_table_instance_path(context).unwrap())
+			.generate_syntax(context, &scope)?;
+
+		let mut type_params = Vec::new();
+		if self.ty.params().identifier {
+			type_params.push(syn::parse2(quote!(I)).unwrap());
+		}
+
+		Ok(syntax::tr_impl::class::TraitImpl {
+			type_path,
+			type_params,
+			trait_path,
+			context_bounds,
+			associated_types,
+			methods,
+			dyn_table_path,
+			dyn_table_instance_path,
+		})
 	}
 }

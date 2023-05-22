@@ -1,8 +1,17 @@
-use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use proc_macro2::{Ident, TokenStream};
+use quote::quote;
+use rdf_types::Vocabulary;
+use treeldr::{BlankIdIndex, IriIndex};
+
+use crate::{ty, Context, Error, GenerateSyntax, Scope};
 
 #[derive(Default, Clone)]
-pub struct Path(Vec<Segment>);
+pub struct Path {
+	segments: Vec<Segment>,
+
+	// Required parameters.
+	params: ty::Parameters,
+}
 
 impl Path {
 	pub fn new() -> Self {
@@ -10,15 +19,15 @@ impl Path {
 	}
 
 	pub fn len(&self) -> usize {
-		self.0.len()
+		self.segments.len()
 	}
 
 	pub fn is_empty(&self) -> bool {
-		self.0.is_empty()
+		self.segments.is_empty()
 	}
 
 	pub fn segments(&self) -> std::slice::Iter<Segment> {
-		self.0.iter()
+		self.segments.iter()
 	}
 
 	pub fn longest_common_prefix(&self, other: &Self) -> Self {
@@ -39,32 +48,77 @@ impl Path {
 		}
 
 		for i in lcp.len()..other.len() {
-			path.push(other.0[i].clone())
+			path.push(other.segments[i].clone())
 		}
 
+		path.params = other.params;
 		path
 	}
 
 	pub fn push(&mut self, segment: impl Into<Segment>) {
-		self.0.push(segment.into())
+		self.segments.push(segment.into())
+	}
+
+	pub fn parameters(&self) -> &ty::Parameters {
+		&self.params
+	}
+
+	pub fn parameters_mut(&mut self) -> &mut ty::Parameters {
+		&mut self.params
 	}
 }
 
 impl FromIterator<Segment> for Path {
 	fn from_iter<I: IntoIterator<Item = Segment>>(iter: I) -> Self {
-		Self(iter.into_iter().collect())
+		Self {
+			segments: iter.into_iter().collect(),
+			params: ty::Parameters::default(),
+		}
 	}
 }
 
-impl ToTokens for Path {
-	fn to_tokens(&self, tokens: &mut TokenStream) {
-		for (i, segment) in self.segments().enumerate() {
-			if i > 0 {
-				tokens.extend(quote! { :: })
+impl<M> GenerateSyntax<M> for Path {
+	type Output = syn::Path;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		_context: &Context<V, M>,
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		let mut segments = syn::punctuated::Punctuated::new();
+
+		for s in self.segments() {
+			let ident = match s {
+				Segment::Super => Ident::new("super", proc_macro2::Span::call_site()),
+				Segment::Ident(id) => id.clone(),
+			};
+
+			segments.push(syn::PathSegment {
+				ident,
+				arguments: syn::PathArguments::None,
+			});
+		}
+
+		if !self.params.is_empty() {
+			let mut args = syn::punctuated::Punctuated::new();
+
+			for p in self.params.iter() {
+				args.push(scope.bound_params().get(p).unwrap().into_owned())
 			}
 
-			segment.to_tokens(tokens)
+			segments.last_mut().unwrap().arguments =
+				syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+					colon2_token: Some(syn::token::PathSep::default()),
+					lt_token: Default::default(),
+					args,
+					gt_token: Default::default(),
+				})
 		}
+
+		Ok(syn::Path {
+			leading_colon: None,
+			segments,
+		})
 	}
 }
 

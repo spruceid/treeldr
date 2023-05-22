@@ -1,16 +1,16 @@
 use std::collections::HashSet;
 
 use crate::{
+	syntax,
 	tr::{CollectContextBounds, ContextBound},
-	Context, Error, GenerateIn, Module,
+	Context, Error, GenerateSyntax, Scope,
 };
-use proc_macro2::{Ident, TokenStream};
-use quote::quote;
+use proc_macro2::Ident;
+use quote::format_ident;
 use rdf_types::Vocabulary;
-use shelves::Ref;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
-use super::{params::ParametersValues, Parameters};
+use super::Parameters;
 
 /// Rust `enum` type.
 #[derive(Debug)]
@@ -103,29 +103,72 @@ impl Variant {
 	}
 }
 
-impl<M> GenerateIn<M> for Variant {
-	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for Enum {
+	type Output = syntax::Enum;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		params_values: &ParametersValues,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
-		let ident = &self.ident;
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		let ident = self.ident().clone();
 
-		match self.ty.as_ref() {
-			Some(ty) => {
-				let ty = ty
-					.generate_in_with(context, scope, params_values)
-					.into_tokens()?;
+		let params = syntax::LayoutParameters {
+			identifier: if self.params().identifier {
+				Some(format_ident!("I"))
+			} else {
+				None
+			},
+		};
 
-				tokens.extend(quote! {
-					#ident(#ty)
-				})
-			}
-			None => tokens.extend(quote! { #ident }),
+		let mut scope = scope.clone();
+		scope.params.identifier = params.identifier.clone().map(|i| {
+			syn::Type::Path(syn::TypePath {
+				qself: None,
+				path: i.into(),
+			})
+		});
+
+		let derives = syntax::Derives {
+			clone: true,
+			partial_eq: true,
+			eq: true,
+			partial_ord: true,
+			ord: true,
+			debug: true,
+			..Default::default()
+		};
+
+		let mut variants = Vec::with_capacity(self.variants().len());
+
+		for variant in self.variants() {
+			variants.push(variant.generate_syntax(context, &scope)?)
 		}
 
-		Ok(())
+		Ok(syntax::Enum {
+			derives,
+			ident,
+			params,
+			variants,
+		})
+	}
+}
+
+impl<M> GenerateSyntax<M> for Variant {
+	type Output = syntax::Variant;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		Ok(syntax::Variant {
+			ident: self.ident.clone(),
+			type_: self
+				.ty
+				.as_ref()
+				.map(|ty| ty.generate_syntax(context, scope))
+				.transpose()?,
+		})
 	}
 }

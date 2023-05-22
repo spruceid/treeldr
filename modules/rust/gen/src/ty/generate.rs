@@ -1,531 +1,446 @@
-use super::{
-	alias::Alias, enumeration::Enum, structure::Struct, BuiltIn, Description, ParametersValues,
-	Primitive, Type,
-};
-use crate::{doc_attribute, Context, Error, Generate, GenerateIn, Module, Referenced};
-use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use super::{alias::Alias, BuiltIn, Description, Primitive, Type};
+use crate::{syntax, Context, Error, GenerateSyntax, Referenced, Scope};
+use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
-use shelves::Ref;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
 mod json_ld;
 mod rdf;
 mod tr_impl;
 
-impl<M> GenerateIn<M> for BuiltIn {
-	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for BuiltIn {
+	type Output = syn::Type;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		params: &ParametersValues,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
 		match self {
-			Self::Required(item) => {
-				item.generate_in(context, scope, params, tokens)?;
-			}
+			Self::Required(item) => item.generate_syntax(context, scope),
 			Self::Option(item) => {
-				let item = item
-					.generate_in_with(context, scope, params)
-					.into_tokens()?;
-				tokens.extend(quote! { Option<#item> })
+				let item = item.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(Option<#item>)).unwrap())
 			}
 			Self::Vec(item) => {
-				let item = item
-					.generate_in_with(context, scope, params)
-					.into_tokens()?;
-				tokens.extend(quote! { Vec<#item> })
+				let item = item.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(Vec<#item>)).unwrap())
 			}
 			Self::BTreeSet(item) => {
-				let item = item
-					.generate_in_with(context, scope, params)
-					.into_tokens()?;
-				tokens.extend(quote! { std::collections::BTreeSet<#item> })
+				let item = item.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(std::collections::BTreeSet<#item>)).unwrap())
 			}
 			Self::BTreeMap(key, value) => {
-				let key = key.generate_in_with(context, scope, params).into_tokens()?;
-				let value = value
-					.generate_in_with(context, scope, params)
-					.into_tokens()?;
-				tokens.extend(quote! { std::collections::BTreeMap<#key, #value> })
+				let key = key.generate_syntax(context, scope)?;
+				let value = value.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(std::collections::BTreeMap<#key, #value>)).unwrap())
 			}
 			Self::OneOrMany(item) => {
-				let item = item
-					.generate_in_with(context, scope, params)
-					.into_tokens()?;
-				tokens.extend(quote! { ::treeldr_rust_prelude::OneOrMany<#item> })
+				let item = item.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(::treeldr_rust_prelude::OneOrMany<#item>)).unwrap())
 			}
 		}
-
-		Ok(())
 	}
 }
 
-impl<M> GenerateIn<M> for Referenced<BuiltIn> {
-	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for Referenced<BuiltIn> {
+	type Output = syn::Type;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		params: &ParametersValues,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
-		match self.0 {
-			BuiltIn::Required(item) => {
-				Referenced(item).generate_in(context, scope, params, tokens)?;
-			}
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		match &self.0 {
+			BuiltIn::Required(item) => Referenced(*item).generate_syntax(context, scope),
 			BuiltIn::Option(item) => {
-				let item_ref = Referenced(item)
-					.generate_in_with(context, scope, params)
-					.into_tokens()?;
-				tokens.extend(quote! { Option<#item_ref> })
+				let item = Referenced(*item).generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(Option<#item>)).unwrap())
 			}
 			BuiltIn::Vec(item) => {
-				let item = item
-					.generate_in_with(context, scope, params)
-					.into_tokens()?;
-				tokens.extend(quote! { &[#item] })
+				let item = item.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(&[#item])).unwrap())
 			}
 			BuiltIn::BTreeSet(item) => {
-				let item = item
-					.generate_in_with(context, scope, params)
-					.into_tokens()?;
-				tokens.extend(quote! { &std::collections::BTreeSet<#item> })
+				let item = item.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(&std::collections::BTreeSet<#item>)).unwrap())
 			}
 			BuiltIn::BTreeMap(key, value) => {
-				let key = key.generate_in_with(context, scope, params).into_tokens()?;
-				let value = value
-					.generate_in_with(context, scope, params)
-					.into_tokens()?;
-				tokens.extend(quote! { &std::collections::BTreeMap<#key, #value> })
+				let key = key.generate_syntax(context, scope)?;
+				let value = value.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(&std::collections::BTreeMap<#key, #value>)).unwrap())
 			}
 			BuiltIn::OneOrMany(item) => {
-				let item = item
-					.generate_in_with(context, scope, params)
-					.into_tokens()?;
-				tokens.extend(quote! { &::treeldr_rust_prelude::OneOrMany<#item> })
+				let item = item.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote!(&::treeldr_rust_prelude::OneOrMany<#item>)).unwrap())
 			}
 		}
-
-		Ok(())
 	}
 }
 
-impl<M> Generate<M> for Type {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for Type {
+	type Output = Option<syntax::LayoutTypeDefinition>;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
-		let doc = doc_attribute(self.label(), self.documentation());
-		tokens.extend(doc);
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
 		match &self.desc {
-			Description::Alias(a) => a.generate(context, scope, tokens),
-			Description::Struct(s) => s.generate(context, scope, tokens),
-			Description::Enum(e) => e.generate(context, scope, tokens),
-			_ => Ok(()),
+			Description::Alias(a) => Ok(Some(syntax::LayoutTypeDefinition::Alias(
+				a.generate_syntax(context, scope)?,
+			))),
+			Description::Struct(s) => Ok(Some(syntax::LayoutTypeDefinition::Struct(
+				s.generate_syntax(context, scope)?,
+			))),
+			Description::Enum(e) => Ok(Some(syntax::LayoutTypeDefinition::Enum(
+				e.generate_syntax(context, scope)?,
+			))),
+			_ => Ok(None),
 		}
 	}
 }
 
-impl<M> Generate<M> for Alias {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for Alias {
+	type Output = syntax::Alias;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
-		let param_values = ParametersValues::default();
-		let alias = self
-			.target()
-			.generate_in_with(context, scope, &param_values)
-			.into_tokens()?;
-		let ident = self.ident();
-		let params = self.params().instantiate(&param_values);
-		tokens.extend(quote! {
-			pub type #ident #params = #alias #params ;
-		});
-
-		Ok(())
-	}
-}
-
-impl<M> Generate<M> for Struct {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
-		let ident = self.ident();
-		let params_values = ParametersValues::default();
-		let params = self.params().instantiate(&params_values);
-
-		let mut fields = Vec::with_capacity(self.fields().len());
-		let mut required_inputs = Vec::new();
-		let mut fields_init = Vec::new();
-		let mut derives = vec![
-			quote! { Clone },
-			quote! { PartialEq },
-			quote! { Eq },
-			quote! { PartialOrd },
-			quote! { Ord },
-			quote! { Debug },
-		];
-
-		for field in self.fields() {
-			fields.push(
-				field
-					.generate_in_with(context, scope, &params_values)
-					.into_tokens()?,
-			);
-
-			let field_ident = field.ident();
-			let init = if field.ty(context).impl_default(context) {
-				quote! {
-					Default::default()
-				}
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		let params = syntax::LayoutParameters {
+			identifier: if self.params().identifier {
+				Some(format_ident!("I"))
 			} else {
-				let ty = field
-					.layout()
-					.generate_in_with(context, scope, &params_values)
-					.into_tokens()?;
-				required_inputs.push(quote! {
-					#field_ident : #ty,
-				});
+				None
+			},
+		};
 
-				quote! {
-					#field_ident
-				}
-			};
-
-			fields_init.extend(quote! { #field_ident : #init, })
-		}
-
-		if required_inputs.is_empty() {
-			derives.push(quote! { Default });
-		}
-
-		tokens.extend(quote! {
-			#[derive(#(#derives),*)]
-			pub struct #ident #params {
-				#(#fields),*
-			}
-		});
-
-		if !required_inputs.is_empty() {
-			tokens.extend(quote! {
-				impl #params #ident #params {
-					pub fn new(#(#required_inputs)*) -> Self {
-						Self {
-							#(#fields_init)*
-						}
-					}
-				}
+		let mut scope = scope.clone();
+		scope.params.identifier = params.identifier.clone().map(|i| {
+			syn::Type::Path(syn::TypePath {
+				qself: None,
+				path: i.into(),
 			})
-		}
-
-		Ok(())
-	}
-}
-
-impl<M> Generate<M> for Enum {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
-		let ident = self.ident();
-		let params_values = ParametersValues::default();
-		let params = self.params().instantiate(&params_values);
-
-		let mut variants = Vec::with_capacity(self.variants().len());
-
-		for variant in self.variants() {
-			variants.push(
-				variant
-					.generate_in_with(context, scope, &params_values)
-					.into_tokens()?,
-			)
-		}
-
-		tokens.extend(quote! {
-			#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
-			pub enum #ident #params {
-				#(#variants),*
-			}
 		});
 
-		Ok(())
+		let target = self.target().generate_syntax(context, &scope)?;
+
+		Ok(syntax::Alias {
+			ident: self.ident().clone(),
+			params,
+			target,
+		})
 	}
 }
 
-impl<M> GenerateIn<M> for TId<treeldr::Layout> {
-	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for TId<treeldr::Layout> {
+	type Output = syn::Type;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		params_values: &ParametersValues,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
 		let ty = context
 			.layout_type(*self)
 			.expect("undefined generated layout");
 		match &ty.desc {
-			Description::Never => {
-				tokens.extend(quote! { ! });
-				Ok(())
-			}
-			Description::Primitive(p) => p.generate(context, scope, tokens),
+			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Primitive(p) => p.generate_syntax(context, scope),
 			Description::Alias(a) => {
-				let path = ty
-					.path(context, a.ident().clone())
-					.ok_or(Error::UnreachableType(*self))?;
-				context.module_path(scope).to(&path).to_tokens(tokens);
-				a.params().instantiate(params_values).to_tokens(tokens);
-				Ok(())
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, a.ident().clone())
+						.ok_or(Error::UnreachableType(*self))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Struct(s) => {
-				let path = ty
-					.path(context, s.ident().clone())
-					.ok_or(Error::UnreachableType(*self))?;
-				context.module_path(scope).to(&path).to_tokens(tokens);
-				s.params().instantiate(params_values).to_tokens(tokens);
-				Ok(())
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, s.ident().clone())
+						.ok_or(Error::UnreachableType(*self))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Enum(e) => {
-				let path = ty
-					.path(context, e.ident().clone())
-					.ok_or(Error::UnreachableType(*self))?;
-				context.module_path(scope).to(&path).to_tokens(tokens);
-				e.params().instantiate(params_values).to_tokens(tokens);
-				Ok(())
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, e.ident().clone())
+						.ok_or(Error::UnreachableType(*self))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Reference(_) => {
-				tokens.extend(quote! { ::treeldr_rust_prelude::Id<I> });
-				Ok(())
+				let id = scope
+					.bound_params()
+					.get(crate::ty::Parameter::Identifier)
+					.unwrap();
+				Ok(syn::parse2(quote!(::treeldr_rust_prelude::Id<#id>)).unwrap())
 			}
-			Description::BuiltIn(b) => b.generate_in(context, scope, params_values, tokens),
+			Description::BuiltIn(b) => b.generate_syntax(context, scope),
 		}
 	}
 }
 
-impl<M> GenerateIn<M> for Referenced<TId<treeldr::Layout>> {
-	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for Referenced<TId<treeldr::Layout>> {
+	type Output = syn::Type;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		params_values: &ParametersValues,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
 		let ty = context
 			.layout_type(self.0)
 			.expect("undefined generated layout");
 		match &ty.desc {
-			Description::Never => {
-				tokens.extend(quote! { ! });
-				Ok(())
-			}
-			Description::Primitive(p) => Referenced(*p).generate(context, scope, tokens),
+			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Primitive(p) => Referenced(*p).generate_syntax(context, scope),
 			Description::Alias(a) => {
-				let abs_path = ty
-					.path(context, a.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?;
-				let path = context.module_path(scope).to(&abs_path);
-				let params = a.params().instantiate(params_values);
-				tokens.extend(quote! { &#path #params });
-				Ok(())
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, a.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Struct(s) => {
-				let abs_path = ty
-					.path(context, s.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?;
-				let path = context.module_path(scope).to(&abs_path);
-				let params = s.params().instantiate(params_values);
-				tokens.extend(quote! { &#path #params });
-				Ok(())
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, s.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Enum(e) => {
-				let abs_path = ty
-					.path(context, e.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?;
-				let path = context.module_path(scope).to(&abs_path);
-				let params = e.params().instantiate(params_values);
-				tokens.extend(quote! { &#path #params });
-				Ok(())
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, e.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Reference(_) => {
-				tokens.extend(quote! { &::treeldr_rust_prelude::Id<I> });
-				Ok(())
+				let id = scope
+					.bound_params()
+					.get(crate::ty::Parameter::Identifier)
+					.unwrap();
+				Ok(syn::parse2(quote!(&::treeldr_rust_prelude::Id<#id>)).unwrap())
 			}
-			Description::BuiltIn(b) => {
-				Referenced(*b).generate_in(context, scope, params_values, tokens)
-			}
+			Description::BuiltIn(b) => Referenced(*b).generate_syntax(context, scope),
 		}
 	}
 }
 
 pub struct InContext<T>(pub T);
 
-impl<M> GenerateIn<M> for InContext<TId<treeldr::Layout>> {
-	fn generate_in<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+impl<M> GenerateSyntax<M> for InContext<TId<treeldr::Layout>> {
+	type Output = syn::Type;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		params_values: &ParametersValues,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
 		let ty = context
 			.layout_type(self.0)
 			.expect("undefined generated layout");
 		match &ty.desc {
-			Description::Never => {
-				tokens.extend(quote! { ! });
-				Ok(())
-			}
-			Description::Primitive(p) => p.generate(context, scope, tokens),
+			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Primitive(p) => p.generate_syntax(context, scope),
 			Description::Alias(a) => {
-				let path = ty
-					.path(context, a.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?;
-				context.module_path(scope).to(&path).to_tokens(tokens);
-				a.params().instantiate(params_values).to_tokens(tokens);
-				Ok(())
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, a.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Struct(s) => {
-				let path = ty
-					.path(context, s.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?;
-				context.module_path(scope).to(&path).to_tokens(tokens);
-				s.params().instantiate(params_values).to_tokens(tokens);
-				Ok(())
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, s.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Enum(e) => {
-				let path = ty
-					.path(context, e.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?;
-				context.module_path(scope).to(&path).to_tokens(tokens);
-				e.params().instantiate(params_values).to_tokens(tokens);
-				Ok(())
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, e.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Reference(ty_id) => {
 				let tr = context.type_trait(*ty_id).unwrap();
+				let ident = tr.ident();
 				let context_path = context
-					.module_path(scope)
+					.module_path(scope.module)
 					.to(&tr
 						.context_path(context)
 						.ok_or(Error::UnreachableTrait(*ty_id))?)
-					.into_token_stream();
-				let ident = tr.ident();
-				let id_param_value = params_values.get(super::params::Parameter::Identifier);
-				tokens.extend(quote! { <C as #context_path <#id_param_value>>::#ident });
-				Ok(())
+					.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote! { <C as #context_path >::#ident }).unwrap())
 			}
-			Description::BuiltIn(b) => b.generate_in(context, scope, params_values, tokens),
+			Description::BuiltIn(b) => b.generate_syntax(context, scope),
 		}
 	}
 }
 
-impl<M> Generate<M> for treeldr::layout::Primitive {
-	fn generate<V>(
+impl<M> GenerateSyntax<M> for treeldr::layout::Primitive {
+	type Output = syn::Type;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		_context: &Context<V, M>,
-		_scope: Option<Ref<Module>>,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
-		tokens.extend(match self {
-			Self::Boolean => quote! { bool },
-			Self::Integer => quote! { ::treeldr_rust_prelude::ty::Integer },
-			Self::NonNegativeInteger => quote! { ::treeldr_rust_prelude::ty::NonNegativeInteger },
-			Self::NonPositiveInteger => quote! { ::treeldr_rust_prelude::ty::NonPositiveInteger },
-			Self::PositiveInteger => quote! { ::treeldr_rust_prelude::ty::PositiveInteger },
-			Self::NegativeInteger => quote! { ::treeldr_rust_prelude::ty::NegativeInteger },
-			Self::I64 => quote! { i64 },
-			Self::I32 => quote! { i32 },
-			Self::I16 => quote! { i16 },
-			Self::I8 => quote! { i8 },
-			Self::U64 => quote! { u64 },
-			Self::U32 => quote! { u32 },
-			Self::U16 => quote! { u16 },
-			Self::U8 => quote! { u8 },
-			Self::Float => quote! { f32 },
-			Self::Double => quote! { f64 },
-			Self::Base64Bytes => quote! { ::treeldr_rust_prelude::ty::Base64BytesBuf },
-			Self::HexBytes => quote! { ::treeldr_rust_prelude::ty::HexBytesBuf },
-			Self::String => quote! { ::std::string::String },
-			Self::Date => quote! { ::treeldr_rust_prelude::chrono::NaiveDate },
-			Self::DateTime => {
-				quote! { ::treeldr_rust_prelude::chrono::DateTime<::treeldr_rust_prelude::chrono::Utc> }
+		_scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		match self {
+			Self::Boolean => Ok(syn::parse2(quote! { bool }).unwrap()),
+			Self::Integer => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Integer }).unwrap())
 			}
-			Self::Time => quote! { ::treeldr_rust_prelude::chrono::NaiveTime },
-			Self::Url => quote! { ::treeldr_rust_prelude::iref::IriBuf },
-			Self::Uri => quote! { ::treeldr_rust_prelude::iref::IriBuf },
-			Self::Iri => quote! { ::treeldr_rust_prelude::iref::IriBuf },
-			Self::Bytes => quote! { ::treeldr_rust_prelude::ty::BytesBuf },
-			Self::Cid => quote! { ::treeldr_rust_prelude::ty::CidBuf },
-		});
-
-		Ok(())
+			Self::NonNegativeInteger => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::NonNegativeInteger }).unwrap())
+			}
+			Self::NonPositiveInteger => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::NonPositiveInteger }).unwrap())
+			}
+			Self::PositiveInteger => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::PositiveInteger }).unwrap())
+			}
+			Self::NegativeInteger => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::NegativeInteger }).unwrap())
+			}
+			Self::I64 => Ok(syn::parse2(quote! { i64 }).unwrap()),
+			Self::I32 => Ok(syn::parse2(quote! { i32 }).unwrap()),
+			Self::I16 => Ok(syn::parse2(quote! { i16 }).unwrap()),
+			Self::I8 => Ok(syn::parse2(quote! { i8 }).unwrap()),
+			Self::U64 => Ok(syn::parse2(quote! { u64 }).unwrap()),
+			Self::U32 => Ok(syn::parse2(quote! { u32 }).unwrap()),
+			Self::U16 => Ok(syn::parse2(quote! { u16 }).unwrap()),
+			Self::U8 => Ok(syn::parse2(quote! { u8 }).unwrap()),
+			Self::Float => Ok(syn::parse2(quote! { f32 }).unwrap()),
+			Self::Double => Ok(syn::parse2(quote! { f64 }).unwrap()),
+			Self::Base64Bytes => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Base64BytesBuf }).unwrap())
+			}
+			Self::HexBytes => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::HexBytesBuf }).unwrap())
+			}
+			Self::Bytes => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::BytesBuf }).unwrap())
+			}
+			Self::String => Ok(syn::parse2(quote! { ::std::string::String }).unwrap()),
+			Self::Date => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::chrono::NaiveDate }).unwrap())
+			}
+			Self::DateTime => Ok(syn::parse2(
+				quote! { ::treeldr_rust_prelude::chrono::DateTime<::treeldr_rust_prelude::chrono::Utc> },
+			)
+			.unwrap()),
+			Self::Time => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::chrono::NaiveTime }).unwrap())
+			}
+			Self::Url => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
+			Self::Uri => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
+			Self::Iri => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
+			Self::Cid => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::CidBuf }).unwrap()),
+		}
 	}
 }
 
-impl<M> Generate<M> for Referenced<treeldr::layout::Primitive> {
-	fn generate<V>(
+impl<M> GenerateSyntax<M> for Referenced<treeldr::layout::Primitive> {
+	type Output = syn::Type;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		&self,
 		_context: &Context<V, M>,
-		_scope: Option<Ref<Module>>,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error> {
-		tokens.extend(match self.0 {
-			Primitive::Boolean => quote! { bool },
-			Primitive::Integer => quote! { ::treeldr_rust_prelude::ty::Integer },
-			Primitive::NonNegativeInteger => {
-				quote! { &::treeldr_rust_prelude::ty::NonNegativeInteger }
+		_scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		match self.0 {
+			Primitive::Boolean => Ok(syn::parse2(quote! { bool }).unwrap()),
+			Primitive::Integer => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Integer }).unwrap())
 			}
-			Primitive::NonPositiveInteger => {
-				quote! { &::treeldr_rust_prelude::ty::NonPositiveInteger }
+			Primitive::NonNegativeInteger => Ok(syn::parse2(
+				quote! { &::treeldr_rust_prelude::ty::NonNegativeInteger },
+			)
+			.unwrap()),
+			Primitive::NonPositiveInteger => Ok(syn::parse2(
+				quote! { &::treeldr_rust_prelude::ty::NonPositiveInteger },
+			)
+			.unwrap()),
+			Primitive::PositiveInteger => {
+				Ok(syn::parse2(quote! { &::treeldr_rust_prelude::ty::PositiveInteger }).unwrap())
 			}
-			Primitive::PositiveInteger => quote! { &::treeldr_rust_prelude::ty::PositiveInteger },
-			Primitive::NegativeInteger => quote! { &::treeldr_rust_prelude::ty::NegativeInteger },
-			Primitive::I64 => quote! { i64 },
-			Primitive::I32 => quote! { i32 },
-			Primitive::I16 => quote! { i16 },
-			Primitive::I8 => quote! { i8 },
-			Primitive::U64 => quote! { u64 },
-			Primitive::U32 => quote! { u32 },
-			Primitive::U16 => quote! { u16 },
-			Primitive::U8 => quote! { u8 },
-			Primitive::Float => quote! { f32 },
-			Primitive::Double => quote! { f64 },
-			Primitive::Base64Bytes => quote! { &::treeldr_rust_prelude::ty::Base64Bytes },
-			Primitive::HexBytes => quote! { &::treeldr_rust_prelude::ty::HexBytes },
-			Primitive::String => quote! { &str },
-			Primitive::Date => quote! { ::treeldr_rust_prelude::chrono::NaiveDate },
-			Primitive::DateTime => {
-				quote! { ::treeldr_rust_prelude::chrono::DateTime<::treeldr_rust_prelude::chrono::Utc> }
+			Primitive::NegativeInteger => {
+				Ok(syn::parse2(quote! { &::treeldr_rust_prelude::ty::NegativeInteger }).unwrap())
 			}
-			Primitive::Time => quote! { ::treeldr_rust_prelude::chrono::NaiveTime },
-			Primitive::Url => quote! { ::treeldr_rust_prelude::iref::Iri },
-			Primitive::Uri => quote! { ::treeldr_rust_prelude::iref::Iri },
-			Primitive::Iri => quote! { ::treeldr_rust_prelude::iref::Iri },
-			Primitive::Bytes => quote! { &::treeldr_rust_prelude::ty::Bytes },
-			Primitive::Cid => quote! { &::treeldr_rust_prelude::ty::Cid },
-		});
-
-		Ok(())
+			Primitive::I64 => Ok(syn::parse2(quote! { i64 }).unwrap()),
+			Primitive::I32 => Ok(syn::parse2(quote! { i32 }).unwrap()),
+			Primitive::I16 => Ok(syn::parse2(quote! { i16 }).unwrap()),
+			Primitive::I8 => Ok(syn::parse2(quote! { i8 }).unwrap()),
+			Primitive::U64 => Ok(syn::parse2(quote! { u64 }).unwrap()),
+			Primitive::U32 => Ok(syn::parse2(quote! { u32 }).unwrap()),
+			Primitive::U16 => Ok(syn::parse2(quote! { u16 }).unwrap()),
+			Primitive::U8 => Ok(syn::parse2(quote! { u8 }).unwrap()),
+			Primitive::Float => Ok(syn::parse2(quote! { f32 }).unwrap()),
+			Primitive::Double => Ok(syn::parse2(quote! { f64 }).unwrap()),
+			Primitive::Base64Bytes => {
+				Ok(syn::parse2(quote! { &::treeldr_rust_prelude::ty::Base64Bytes }).unwrap())
+			}
+			Primitive::HexBytes => {
+				Ok(syn::parse2(quote! { &::treeldr_rust_prelude::ty::HexBytes }).unwrap())
+			}
+			Primitive::Bytes => {
+				Ok(syn::parse2(quote! { &::treeldr_rust_prelude::ty::Bytes }).unwrap())
+			}
+			Primitive::String => Ok(syn::parse2(quote! { &str }).unwrap()),
+			Primitive::Date => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::chrono::NaiveDate }).unwrap())
+			}
+			Primitive::DateTime => Ok(syn::parse2(
+				quote! { ::treeldr_rust_prelude::chrono::DateTime<::treeldr_rust_prelude::chrono::Utc> },
+			)
+			.unwrap()),
+			Primitive::Time => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::chrono::NaiveTime }).unwrap())
+			}
+			Primitive::Url => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::Iri }).unwrap())
+			}
+			Primitive::Uri => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::Iri }).unwrap())
+			}
+			Primitive::Iri => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::Iri }).unwrap())
+			}
+			Primitive::Cid => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Cid }).unwrap()),
+		}
 	}
-}
-
-pub trait GenerateFor<T, M> {
-	fn generate<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		context: &Context<V, M>,
-		scope: Option<Ref<Module>>,
-		ty: &T,
-		tokens: &mut TokenStream,
-	) -> Result<(), Error>;
 }
 
 pub fn type_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {

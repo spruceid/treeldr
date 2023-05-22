@@ -200,7 +200,7 @@ impl<'a, V, M> Context<'a, V, M> {
 
 		for i in trait_impls {
 			let module_ref = match i.tr {
-				TraitId::Defined(tr) => {
+				TraitId::Class(tr) => {
 					let tr_module = self.types.get(&tr).and_then(|tr| tr.module());
 					let ty_module = self.layouts.get(&i.ty).and_then(|ty| ty.module());
 
