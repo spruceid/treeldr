@@ -1,3 +1,4 @@
+// cargo run -p treeldr-rust-cli -- -i examples/schema.org.tldr -i modules/rust/macros/examples/vc.tldr -i modules/rust/macros/examples/rebase.tldr -i modules/rust/macros/examples/basic_post.tldr
 use iref::Iri;
 use json_ld::{syntax::Parse, Expand, NoLoader, Print, RdfQuads};
 use locspan::{Meta, Span};

@@ -75,10 +75,10 @@ impl<M> GenerateSyntax<M> for AssociatedType {
 				// 	ty.trait_object_ident(self).unwrap(),
 				// 	classes,
 				// )?);
-				syn::parse2(quote!(&'a ::std::convert::Infallible)).unwrap()
+				syn::parse2(quote!(&'r ::std::convert::Infallible)).unwrap()
 			}
 			AssociatedTypeBound::Collection(_) => {
-				syn::parse2(quote!(::std::iter::Empty<&'a ::std::convert::Infallible>)).unwrap()
+				syn::parse2(quote!(::std::iter::Empty<&'r ::std::convert::Infallible>)).unwrap()
 			}
 		};
 
@@ -87,7 +87,7 @@ impl<M> GenerateSyntax<M> for AssociatedType {
 			ident: self.ident().clone(),
 			bounds: self.bound().generate_syntax(context, scope)?,
 			never_value,
-			ref_value: syn::parse2(quote!(T::#ident<'a>)).unwrap(),
+			ref_value: syn::parse2(quote!(T::#ident<'r>)).unwrap(),
 		})
 	}
 }
@@ -104,7 +104,7 @@ impl<M> GenerateSyntax<M> for AssociatedTypeBound {
 
 		match self {
 			Self::Types(refs) => {
-				result.push(syn::parse2(quote!(::treeldr_rust_prelude::Reference<'a>)).unwrap());
+				result.push(syn::parse2(quote!(::treeldr_rust_prelude::Reference<'r>)).unwrap());
 
 				for type_ref in refs {
 					result.push(syn::TypeParamBound::Trait(syn::TraitBound {
@@ -118,7 +118,7 @@ impl<M> GenerateSyntax<M> for AssociatedTypeBound {
 			Self::Collection(i) => {
 				result.push(syn::TypeParamBound::Lifetime(syn::Lifetime {
 					apostrophe: proc_macro2::Span::call_site(),
-					ident: Ident::new("a", proc_macro2::Span::call_site()),
+					ident: Ident::new("r", proc_macro2::Span::call_site()),
 				}));
 
 				let a_ident = scope.self_trait.unwrap().associated_types[*i].ident();
@@ -126,7 +126,7 @@ impl<M> GenerateSyntax<M> for AssociatedTypeBound {
 					paren_token: None,
 					modifier: syn::TraitBoundModifier::None,
 					lifetimes: None,
-					path: syn::parse2(quote!(Iterator<Item = Self::#a_ident <'a>>)).unwrap(),
+					path: syn::parse2(quote!(Iterator<Item = Self::#a_ident <'r>>)).unwrap(),
 				}))
 			}
 		}
@@ -167,12 +167,12 @@ impl<M> GenerateSyntax<M> for MethodType {
 			Self::Required(i) => {
 				let a = &tr.associated_types[*i];
 				let ty_ident = a.ident();
-				Ok(syn::parse2(quote!(Self::#ty_ident<'a>)).unwrap())
+				Ok(syn::parse2(quote!(Self::#ty_ident<'r>)).unwrap())
 			}
 			Self::Option(i) => {
 				let a = &tr.associated_types[*i];
 				let ty_ident = a.ident();
-				Ok(syn::parse2(quote!(Option<Self::#ty_ident<'a>>)).unwrap())
+				Ok(syn::parse2(quote!(Option<Self::#ty_ident<'r>>)).unwrap())
 			}
 		}
 	}

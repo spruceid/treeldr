@@ -3,14 +3,20 @@ use quote::{quote, ToTokens};
 
 pub enum TypeDefinition {
 	ClassTraitObject(ClassDynTraitDefinition),
-	Layout(LayoutTypeDefinition),
+	Layout(LayoutTypeDefinition, Vec<String>),
 }
 
 impl ToTokens for TypeDefinition {
 	fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
 		match self {
 			Self::ClassTraitObject(d) => d.to_tokens(tokens),
-			Self::Layout(l) => l.to_tokens(tokens),
+			Self::Layout(l, doc) => {
+				for doc in doc {
+					tokens.extend(quote!(#[doc = #doc]))
+				}
+
+				l.to_tokens(tokens)
+			}
 		}
 	}
 }
@@ -164,6 +170,7 @@ derives_type! {
 	clone: Clone,
 	partial_eq: PartialEq,
 	eq: Eq,
+	partial_ord: PartialOrd,
 	ord: Ord,
 	debug: Debug,
 	default: Default
@@ -202,27 +209,31 @@ impl ToTokens for Struct {
 			}
 		});
 
-		if self.derives.default {
-			tokens.extend(quote! {
-				impl #params #ident #params {
-					fn new() -> Self {
-						Self::default()
+		let inputs = self
+			.constructor_inputs
+			.iter()
+			.map(|(id, ty)| quote!(#id : #ty));
+		let fields_init = self.fields.iter().map(|f| {
+			let f_ident = &f.ident;
+			let value = &f.initial_value;
+			quote!(#f_ident: #value)
+		});
+
+		tokens.extend(quote! {
+			impl #params #ident #params {
+				pub fn new(#(#inputs),*) -> Self {
+					Self {
+						#(#fields_init),*
 					}
 				}
-			})
-		} else {
-			let inputs = self
-				.constructor_inputs
-				.iter()
-				.map(|(id, ty)| quote!(#id : #ty));
-			let fields_init = self.fields.iter().map(|f| &f.initial_value);
+			}
+		});
 
+		if !derives.default && self.constructor_inputs.is_empty() {
 			tokens.extend(quote! {
-				impl #params #ident #params {
-					fn new(#(#inputs),*) -> Self {
-						Self {
-							#(#fields_init),*
-						}
+				impl #params Default for #ident #params {
+					fn default() -> Self {
+						Self::new()
 					}
 				}
 			})
@@ -244,7 +255,7 @@ impl ToTokens for Field {
 		let ident = &self.ident;
 		let ty = &self.type_;
 
-		tokens.extend(quote!(#ident : #ty))
+		tokens.extend(quote!(pub #ident : #ty))
 	}
 }
 
@@ -323,7 +334,7 @@ impl ToTokens for ClassDynTable {
 
 		let (fields, fields_init) = if fields.is_empty() {
 			(
-				quote!(_d: ::std::marker::PhantomData<&'a C>),
+				quote!(_d: ::std::marker::PhantomData<&'r C>),
 				quote!(_d: ::std::marker::PhantomData),
 			)
 		} else {
@@ -334,23 +345,23 @@ impl ToTokens for ClassDynTable {
 			pub struct #ident <C: ?Sized>(std::marker::PhantomData<C>);
 
 			impl<C: ?Sized> ::treeldr_rust_prelude::Table for #ident <C> {
-				type Instance<'a> = #instance_ident <'a, C> where Self: 'a;
+				type Instance<'r> = #instance_ident <'r, C> where Self: 'r;
 			}
 
-			pub struct #instance_ident <'a, C: ?Sized> {
+			pub struct #instance_ident <'r, C: ?Sized> {
 				#fields
 			}
 
-			impl<'a, C: ?Sized> Clone for #instance_ident <'a, C> {
+			impl<'r, C: ?Sized> Clone for #instance_ident <'r, C> {
 				fn clone(&self) -> Self {
 					*self
 				}
 			}
 
-			impl<'a, C: ?Sized> Copy for #instance_ident <'a, C> {}
+			impl<'r, C: ?Sized> Copy for #instance_ident <'r, C> {}
 
-			impl<'a, C: ?Sized> #instance_ident <'a, C> {
-				pub fn new<T: 'a + #trait_path>() -> Self {
+			impl<'r, C: ?Sized> #instance_ident <'r, C> {
+				pub fn new<T: 'r + #trait_path>() -> Self {
 					Self {
 						#fields_init
 					}
@@ -372,7 +383,7 @@ impl ToTokens for ClassDynTableField {
 		let ty = &self.ty;
 
 		tokens.extend(quote! {
-			pub #ident: unsafe fn (*const u8, context: ::treeldr_rust_prelude::ContravariantReference<'a, C>) -> #ty
+			pub #ident: unsafe fn (*const u8, context: ::treeldr_rust_prelude::ContravariantReference<'r, C>) -> #ty
 		})
 	}
 }
@@ -479,7 +490,7 @@ impl ToTokens for ClassAssociatedTypeTraitObjectTraitImpl {
 		let assoc_types = self
 			.associated_types
 			.iter()
-			.map(|(id, ty)| quote!(type #id <'a> = #ty where Self: 'a, C: 'a;));
+			.map(|(id, ty)| quote!(type #id <'r> = #ty where Self: 'r, C: 'r;));
 
 		let methods = &self.methods;
 		let table_path = &self.table_path;
@@ -517,7 +528,7 @@ impl ToTokens for ClassAssociatedTypeTraitObjectTraitImplMethod {
 		let index = syn::Index::from(self.table_index);
 
 		tokens.extend(quote! {
-			fn #ident <'a> (&'a self, context: &'a C) -> #return_ty {
+			fn #ident <'r> (&'r self, context: &'r C) -> #return_ty {
 				unsafe { (self.tables.#index.#ident)(self.ptr, ::treeldr_rust_prelude::ContravariantReference::new(context)) }
 			}
 		})

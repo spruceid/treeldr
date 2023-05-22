@@ -30,7 +30,7 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Enum> {
 			let variant_type = match variant.ty() {
 				Some(variant_type) => {
 					let variant_iterator_type =
-						quads_and_values_iterator_of(context, &scope, variant_type, quote!('a))?;
+						quads_and_values_iterator_of(context, &scope, variant_type, quote!('r))?;
 					collect_bounds(context, variant_type, |b| {
 						bounds_set.insert(b);
 					});

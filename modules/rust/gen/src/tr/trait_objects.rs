@@ -27,7 +27,7 @@ impl<M> GenerateSyntax<M> for DynTableOf {
 	) -> Result<Self::Output, crate::Error> {
 		let mut scope = scope.clone();
 		scope.params.context = Some(syn::parse2(quote!(C)).unwrap());
-		scope.params.lifetime = Some(syn::Lifetime::new("'a", proc_macro2::Span::call_site()));
+		scope.params.lifetime = Some(syn::Lifetime::new("'r", proc_macro2::Span::call_site()));
 
 		let tr = context.type_trait(self.0).unwrap();
 		let mut fields = Vec::with_capacity(tr.methods.len());
@@ -181,7 +181,9 @@ fn associated_trait_object_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 		let tr = context.type_trait(*ty).unwrap();
 		let path = context
 			.module_path(scope.module)
-			.to(&tr.dyn_table_path(context).unwrap())
+			.to(&tr
+				.dyn_table_path(context)
+				.ok_or(Error::UnreachableTraitObject(*ty))?)
 			.generate_syntax(context, &scope)?;
 		let instance_path = context
 			.module_path(scope.module)
@@ -213,7 +215,7 @@ fn associated_trait_object_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 		let mut associated_types = Vec::with_capacity(tr.associated_types().len());
 		for a in tr.associated_types() {
 			let mut scope = scope.clone();
-			scope.params.lifetime = Some(syn::Lifetime::new("'a", proc_macro2::Span::call_site()));
+			scope.params.lifetime = Some(syn::Lifetime::new("'r", proc_macro2::Span::call_site()));
 
 			let ty = match a.trait_object_path(context, tr) {
 				Some(path) => {
@@ -229,7 +231,7 @@ fn associated_trait_object_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 						.module_path(scope.module)
 						.to(&item_a.trait_object_path(context, tr).unwrap())
 						.generate_syntax(context, &scope)?;
-					syn::parse2(quote!(::treeldr_rust_prelude::BoxedDynIterator<'a, #item_path>))
+					syn::parse2(quote!(::treeldr_rust_prelude::BoxedDynIterator<'r, #item_path>))
 						.unwrap()
 				}
 			};

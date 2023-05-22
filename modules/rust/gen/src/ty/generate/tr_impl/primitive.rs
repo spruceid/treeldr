@@ -32,9 +32,9 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Primitive> {
 				let ty_expr = if a.is_collection() {
 					let item_a = &tr.associated_types()[a.collection_item_type().unwrap()];
 					let item_ident = item_a.ident();
-					syn::parse2(quote!(::std::iter::Empty<Self::#item_ident <'a>>)).unwrap()
+					syn::parse2(quote!(::std::iter::Empty<Self::#item_ident <'r>>)).unwrap()
 				} else {
-					syn::parse2(quote!(&'a ::std::convert::Infallible)).unwrap()
+					syn::parse2(quote!(&'r ::std::convert::Infallible)).unwrap()
 				};
 
 				(a.ident().clone(), ty_expr)
@@ -84,6 +84,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Primitive> {
 
 		Ok(syntax::tr_impl::class::TraitImpl {
 			type_path,
+			type_params: Vec::new(),
 			trait_path,
 			context_bounds: Vec::new(),
 			associated_types,

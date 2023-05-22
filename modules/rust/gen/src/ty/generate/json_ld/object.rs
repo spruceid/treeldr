@@ -38,13 +38,13 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Struct> {
 					Id::Iri(iri) => {
 						let iri = context.vocabulary().iri(&iri).unwrap().to_string();
 						quote!(::treeldr_rust_prelude::json_ld::ValidId::Iri(
-							vocabulary.insert(::treeldr_rust_prelude::iref::Iri::new(#iri).unwrap())
+							namespace.insert(::treeldr_rust_prelude::iref::Iri::new(#iri).unwrap())
 						))
 					}
 					Id::Blank(blank) => {
 						let blank = context.vocabulary().blank_id(&blank).unwrap().to_string();
 						quote!(::treeldr_rust_prelude::json_ld::ValidId::Blank(
-							vocabulary.insert_blank_id(::treeldr_rust_prelude::rdf_types::BlankId::new(#blank).unwrap())
+							namespace.insert_blank_id(::treeldr_rust_prelude::rdf_types::BlankId::new(#blank).unwrap())
 						))
 					}
 				};
@@ -60,7 +60,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Struct> {
 						quote! {
 							result.properties_mut().insert(
 								::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::json_ld::Id::Valid(#rust_prop_id), ()),
-								::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(self.#id, vocabulary, meta)
+								::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(self.#id, namespace, meta)
 							);
 						}
 					}
@@ -69,7 +69,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Struct> {
 							if let Some(value) = self.#id {
 								result.properties_mut().insert(
 									::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::json_ld::Id::Valid(#rust_prop_id), ()),
-									::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(value, vocabulary, meta)
+									::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(value, namespace, meta)
 								);
 							}
 						}
@@ -81,7 +81,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Struct> {
 									(),
 									::treeldr_rust_prelude::locspan::Meta(
 										self.#id.into_iter()
-											.map(|v| ::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(v, vocabulary, meta)).collect(),
+											.map(|v| ::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(v, namespace, meta)).collect(),
 										()
 									)
 								);
@@ -129,7 +129,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Enum> {
 			if variant.ty().is_some() {
 				quote! {
 					Self::#v_ident(value) => {
-						value.into_json_ld_object_meta(vocabulary, meta)
+						value.into_json_ld_object_meta(namespace, meta)
 					}
 				}
 			} else {

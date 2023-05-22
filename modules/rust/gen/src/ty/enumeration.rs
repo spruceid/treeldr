@@ -133,6 +133,7 @@ impl<M> GenerateSyntax<M> for Enum {
 			clone: true,
 			partial_eq: true,
 			eq: true,
+			partial_ord: true,
 			ord: true,
 			debug: true,
 			..Default::default()

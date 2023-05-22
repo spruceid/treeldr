@@ -38,7 +38,7 @@ impl<M> GenerateSyntax<M> for ContextBound {
 }
 
 impl<M> GenerateSyntax<M> for TraitImpl {
-	type Output = syntax::TraitImplementation;
+	type Output = Option<syntax::TraitImplementation>;
 
 	fn generate_syntax<
 		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
@@ -53,42 +53,53 @@ impl<M> GenerateSyntax<M> for TraitImpl {
 			ty::Description::Struct(s) => match self.tr {
 				TraitId::FromRdf => super::rdf::from::FromRdfImpl::new(self.ty, s)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::FromRdf),
+					.map(syntax::TraitImplementation::FromRdf)
+					.map(Some),
 				TraitId::TriplesAndValues => super::rdf::to::RdfQuadsImpl::new(self.ty, s)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::RdfQuads),
+					.map(syntax::TraitImplementation::RdfQuads)
+					.map(Some),
 				TraitId::IntoJsonLd => super::json_ld::IntoJsonLdImpl::new(self.ty, s)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::IntoJsonLd),
+					.map(syntax::TraitImplementation::IntoJsonLd)
+					.map(Some),
 				TraitId::IntoJsonLdSyntax => super::json_ld::IntoJsonLdSyntaxImpl::new(self.ty, s)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::IntoJsonLdSyntax),
+					.map(syntax::TraitImplementation::IntoJsonLdSyntax)
+					.map(Some),
 				TraitId::Class(tr) => ClassTraitImpl::new(tr, self.ty, s)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::ClassTrait),
+					.map(syntax::TraitImplementation::ClassTrait)
+					.map(Some),
 			},
 			ty::Description::Enum(e) => match self.tr {
 				TraitId::FromRdf => super::rdf::from::FromRdfImpl::new(self.ty, e)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::FromRdf),
+					.map(syntax::TraitImplementation::FromRdf)
+					.map(Some),
 				TraitId::TriplesAndValues => super::rdf::to::RdfQuadsImpl::new(self.ty, e)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::RdfQuads),
+					.map(syntax::TraitImplementation::RdfQuads)
+					.map(Some),
 				TraitId::IntoJsonLd => super::json_ld::IntoJsonLdImpl::new(self.ty, e)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::IntoJsonLd),
+					.map(syntax::TraitImplementation::IntoJsonLd)
+					.map(Some),
 				TraitId::IntoJsonLdSyntax => super::json_ld::IntoJsonLdSyntaxImpl::new(self.ty, e)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::IntoJsonLdSyntax),
+					.map(syntax::TraitImplementation::IntoJsonLdSyntax)
+					.map(Some),
 				TraitId::Class(tr) => ClassTraitImpl::new(tr, self.ty, e)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::ClassTrait),
+					.map(syntax::TraitImplementation::ClassTrait)
+					.map(Some),
 			},
 			ty::Description::Primitive(p) => match self.tr {
 				TraitId::Class(tr) => ClassTraitImpl::new(tr, self.ty, p)
 					.generate_syntax(context, scope)
-					.map(syntax::TraitImplementation::ClassTrait),
-				_ => todo!(),
+					.map(syntax::TraitImplementation::ClassTrait)
+					.map(Some),
+				_ => Ok(None),
 			},
 			_ => {
 				panic!("unable to implement trait for non enum/struct type")
@@ -123,16 +134,16 @@ where
 		ty::Description::BuiltIn(b) => match b {
 			ty::BuiltIn::Vec(item) => {
 				let item_expr = item.generate_syntax(context, scope)?;
-				Ok(syn::parse2(quote!(::std::slice::Iter<'a, #item_expr>)).unwrap())
+				Ok(syn::parse2(quote!(::std::slice::Iter<'r, #item_expr>)).unwrap())
 			}
 			ty::BuiltIn::Option(item) => {
 				let item_expr = item.generate_syntax(context, scope)?;
-				Ok(syn::parse2(quote!(::std::option::Iter<'a, #item_expr>)).unwrap())
+				Ok(syn::parse2(quote!(::std::option::Iter<'r, #item_expr>)).unwrap())
 			}
 			ty::BuiltIn::BTreeSet(item) => {
 				let item_expr = item.generate_syntax(context, scope)?;
 				Ok(
-					syn::parse2(quote!(::std::collections::btree_set::Iter<'a, #item_expr>))
+					syn::parse2(quote!(::std::collections::btree_set::Iter<'r, #item_expr>))
 						.unwrap(),
 				)
 			}
@@ -140,14 +151,14 @@ where
 				let key_expr = key.generate_syntax(context, scope)?;
 				let value_expr = value.generate_syntax(context, scope)?;
 				Ok(syn::parse2(
-					quote!(::std::collections::btree_map::Iter<'a, #key_expr, #value_expr>),
+					quote!(::std::collections::btree_map::Iter<'r, #key_expr, #value_expr>),
 				)
 				.unwrap())
 			}
 			ty::BuiltIn::OneOrMany(item) => {
 				let item_expr = item.generate_syntax(context, scope)?;
 				Ok(
-					syn::parse2(quote!(::treeldr_rust_prelude::one_or_many::Iter<'a, #item_expr>))
+					syn::parse2(quote!(::treeldr_rust_prelude::one_or_many::Iter<'r, #item_expr>))
 						.unwrap(),
 				)
 			}

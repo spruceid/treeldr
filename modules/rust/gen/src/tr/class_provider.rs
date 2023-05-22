@@ -23,7 +23,7 @@ impl<M> GenerateSyntax<M> for ProviderOf {
 
 		Ok(syntax::ClassProviderTraitDefinition {
 			class_ident: tr.ident().clone(),
-			ident: tr.context_ident().clone(),
+			ident: tr.context_ident(),
 			trait_path: self.0.generate_syntax(context, &scope)?,
 		})
 	}

@@ -83,7 +83,7 @@ impl ToTokens for ClassTraitDefinition {
 		let never_associated_types = self.associated_types.iter().map(|t| {
 			let t_ident = &t.ident;
 			let value = &t.never_value;
-			quote!(type #t_ident <'a> = #value where Self: 'a, C: 'a;)
+			quote!(type #t_ident <'r> = #value where Self: 'r, C: 'r;)
 		});
 
 		let never_methods = self.methods.iter().map(|m| {
@@ -91,7 +91,7 @@ impl ToTokens for ClassTraitDefinition {
 			let return_type = &m.return_type;
 			let body = &m.never_body;
 
-			quote!(fn #m_ident <'a> (&'a self, context: &'a C) -> #return_type {
+			quote!(fn #m_ident <'r> (&'r self, context: &'r C) -> #return_type {
 				#body
 			})
 		});
@@ -99,7 +99,7 @@ impl ToTokens for ClassTraitDefinition {
 		let ref_associated_types = self.associated_types.iter().map(|t| {
 			let t_ident = &t.ident;
 			let value = &t.ref_value;
-			quote!(type #t_ident <'a> = #value where Self: 'a, C: 'a;)
+			quote!(type #t_ident <'r> = #value where Self: 'r, C: 'r;)
 		});
 
 		let ref_methods = self.methods.iter().map(|m| {
@@ -107,7 +107,7 @@ impl ToTokens for ClassTraitDefinition {
 			let return_type = &m.return_type;
 			let body = &m.ref_body;
 
-			quote!(fn #m_ident <'a> (&'a self, context: &'a C) -> #return_type {
+			quote!(fn #m_ident <'r> (&'r self, context: &'r C) -> #return_type {
 				#body
 			})
 		});
@@ -123,7 +123,7 @@ impl ToTokens for ClassTraitDefinition {
 				#(#never_methods)*
 			}
 
-			impl<'r, C: ?Sized, T: #ident<C>> #ident <C> for &'r T {
+			impl<'d, C: ?Sized, T: #ident<C>> #ident <C> for &'d T {
 				#(#ref_associated_types)*
 				#(#ref_methods)*
 			}
@@ -144,7 +144,7 @@ impl ToTokens for TraitAssociatedType {
 		let bounds = &self.bounds;
 
 		tokens.extend(quote! {
-			type #ident <'a> : #(#bounds)+* where Self: 'a, C: 'a;
+			type #ident <'r> : #(#bounds)+* where Self: 'r, C: 'r;
 		})
 	}
 }
@@ -162,7 +162,7 @@ impl ToTokens for TraitMethod {
 		let ty = &self.return_type;
 
 		tokens.extend(quote! {
-			fn #ident <'a> (&'a self, context: &'a C) -> #ty;
+			fn #ident <'r> (&'r self, context: &'r C) -> #ty;
 		})
 	}
 }

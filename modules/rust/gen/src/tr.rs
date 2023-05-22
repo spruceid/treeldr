@@ -524,11 +524,11 @@ impl Method {
 		match &self.ty {
 			MethodType::Required(i) => {
 				let a_ident = tr.associated_types()[*i].ident();
-				syn::parse2(quote!(Self::#a_ident<'a>)).unwrap()
+				syn::parse2(quote!(Self::#a_ident<'r>)).unwrap()
 			}
 			MethodType::Option(i) => {
 				let a_ident = tr.associated_types()[*i].ident();
-				syn::parse2(quote!(Option<Self::#a_ident<'a>>)).unwrap()
+				syn::parse2(quote!(Option<Self::#a_ident<'r>>)).unwrap()
 			}
 		}
 	}

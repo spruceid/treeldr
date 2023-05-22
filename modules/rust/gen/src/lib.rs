@@ -62,6 +62,26 @@ impl BoundParameters {
 			crate::ty::Parameter::Context => self.context.as_ref().map(GenericArgumentRef::Type),
 		}
 	}
+
+	pub fn add(
+		&mut self,
+		params: ty::Parameters,
+		lifetime: impl FnOnce() -> syn::Lifetime,
+		identifier: impl FnOnce() -> syn::Type,
+		context: impl FnOnce() -> syn::Type,
+	) {
+		if params.context {
+			self.context = Some(context())
+		}
+
+		if params.identifier {
+			self.identifier = Some(identifier())
+		}
+
+		if params.lifetime {
+			self.lifetime = Some(lifetime())
+		}
+	}
 }
 
 #[derive(Clone)]

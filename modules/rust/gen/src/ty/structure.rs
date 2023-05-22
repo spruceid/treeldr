@@ -243,6 +243,7 @@ impl<M> GenerateSyntax<M> for Struct {
 			clone: true,
 			partial_eq: true,
 			eq: true,
+			partial_ord: true,
 			ord: true,
 			debug: true,
 			..Default::default()
@@ -262,7 +263,7 @@ impl<M> GenerateSyntax<M> for Struct {
 			}
 		}
 
-		if constructor_inputs.is_empty() {
+		if self.params().is_empty() && constructor_inputs.is_empty() {
 			derives.default = true
 		}
 

@@ -24,7 +24,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 		let mut scope = scope.clone();
 		scope.params.identifier = Some(syn::parse2(quote!(I)).unwrap());
 		scope.params.context = Some(syn::parse2(quote!(C)).unwrap());
-		scope.params.lifetime = Some(syn::Lifetime::new("'a", proc_macro2::Span::call_site()));
+		scope.params.lifetime = Some(syn::Lifetime::new("'r", proc_macro2::Span::call_site()));
 
 		let context_bounds = self
 			.ty
@@ -51,7 +51,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 						.module_path(scope.module)
 						.to(&item_path)
 						.generate_syntax(context, &scope)?;
-					syn::parse2(quote!(Box<dyn 'a + Iterator<Item = #item_path>>)).unwrap()
+					syn::parse2(quote!(Box<dyn 'r + Iterator<Item = #item_path>>)).unwrap()
 				}
 			};
 
@@ -77,7 +77,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 						if v.ty().is_some() {
 							quote! {
 								Self::#v_ident (value) => {
-									value.#m_ident(context).map(#m_path::<'a, C>::new)
+									value.#m_ident(context).map(#m_path::new)
 								}
 							}
 						} else {
@@ -151,8 +151,14 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 			.to(&tr.dyn_table_instance_path(context).unwrap())
 			.generate_syntax(context, &scope)?;
 
+		let mut type_params = Vec::new();
+		if self.ty.params().identifier {
+			type_params.push(syn::parse2(quote!(I)).unwrap());
+		}
+
 		Ok(syntax::tr_impl::class::TraitImpl {
 			type_path,
+			type_params,
 			trait_path,
 			context_bounds,
 			associated_types,

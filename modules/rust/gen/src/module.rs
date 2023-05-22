@@ -266,7 +266,7 @@ impl<M> GenerateSyntax<M> for Module {
 
 		for module_ref in &self.sub_modules {
 			items.push(syntax::ModuleItem::Module(
-				module_ref.generate_syntax(context, &scope)?,
+				module_ref.generate_syntax(context, scope)?,
 			));
 		}
 
@@ -296,18 +296,45 @@ impl<M> GenerateSyntax<M> for Module {
 			if let Some(def) = ty.generate_syntax(context, scope)? {
 				items.push(syntax::ModuleItem::Type(syntax::TypeDefinition::Layout(
 					def,
+					doc_attributes(ty.label(), ty.documentation()),
 				)));
 			}
 		}
 
 		for trait_impl in &self.trait_impls {
-			items.push(syntax::ModuleItem::TraitImpl(
-				trait_impl.generate_syntax(context, scope)?,
-			));
+			if let Some(i) = trait_impl.generate_syntax(context, scope)? {
+				items.push(syntax::ModuleItem::TraitImpl(i));
+			}
 		}
 
 		Ok(syntax::ModuleContent { items })
 	}
+}
+
+pub fn doc_attributes(label: Option<&str>, doc: &treeldr::StrippedDocumentation) -> Vec<String> {
+	let mut content = String::new();
+
+	if let Some(label) = label {
+		content.push_str(label)
+	}
+
+	if let Some(short) = doc.short_description() {
+		if !content.is_empty() {
+			content.push_str("\n\n");
+		}
+
+		content.push_str(short)
+	}
+
+	if let Some(long) = doc.long_description() {
+		if !content.is_empty() {
+			content.push_str("\n\n");
+		}
+
+		content.push_str(long)
+	}
+
+	content.lines().map(str::to_string).collect()
 }
 
 impl<M> GenerateSyntax<M> for Ref<Module> {

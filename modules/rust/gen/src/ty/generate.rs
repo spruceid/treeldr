@@ -1,6 +1,5 @@
 use super::{alias::Alias, BuiltIn, Description, Primitive, Type};
 use crate::{syntax, Context, Error, GenerateSyntax, Referenced, Scope};
-use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use rdf_types::Vocabulary;
 use treeldr::{BlankIdIndex, IriIndex, TId};
@@ -265,25 +264,31 @@ impl<M> GenerateSyntax<M> for InContext<TId<treeldr::Layout>> {
 			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
 			Description::Primitive(p) => p.generate_syntax(context, scope),
 			Description::Alias(a) => {
-				let path = ty
-					.path(context, a.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, a.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
 					.generate_syntax(context, scope)?;
 
 				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Struct(s) => {
-				let path = ty
-					.path(context, s.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, s.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
 					.generate_syntax(context, scope)?;
 
 				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 			}
 			Description::Enum(e) => {
-				let path = ty
-					.path(context, e.ident().clone())
-					.ok_or(Error::UnreachableType(self.0))?
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, e.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
 					.generate_syntax(context, scope)?;
 
 				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
@@ -297,8 +302,7 @@ impl<M> GenerateSyntax<M> for InContext<TId<treeldr::Layout>> {
 						.context_path(context)
 						.ok_or(Error::UnreachableTrait(*ty_id))?)
 					.generate_syntax(context, scope)?;
-				let id_param_value = scope.bound_params().get(crate::ty::Parameter::Identifier);
-				Ok(syn::parse2(quote! { <C as #context_path <#id_param_value>>::#ident }).unwrap())
+				Ok(syn::parse2(quote! { <C as #context_path >::#ident }).unwrap())
 			}
 			Description::BuiltIn(b) => b.generate_syntax(context, scope),
 		}
@@ -454,40 +458,4 @@ pub fn field_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
 
 pub fn variant_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
 	quote::format_ident!("{}", name.to_pascal_case())
-}
-
-pub fn doc_attribute(
-	label: Option<&str>,
-	doc: &treeldr::StrippedDocumentation,
-) -> Vec<TokenStream> {
-	let mut content = String::new();
-
-	if let Some(label) = label {
-		content.push_str(label)
-	}
-
-	if let Some(short) = doc.short_description() {
-		if !content.is_empty() {
-			content.push_str("\n\n");
-		}
-
-		content.push_str(short)
-	}
-
-	if let Some(long) = doc.long_description() {
-		if !content.is_empty() {
-			content.push_str("\n\n");
-		}
-
-		content.push_str(long)
-	}
-
-	content
-		.lines()
-		.map(|line| {
-			quote::quote! {
-				#[doc = #line]
-			}
-		})
-		.collect()
 }

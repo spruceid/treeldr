@@ -226,10 +226,10 @@ pub fn main() {
 					println!("{}", generated.into_token_stream())
 				}
 				Err(e) => {
-					if let treeldr_rust_gen::Error::UnreachableType(layout_ref) = &e {
-						let ty = gen_context.layout_type(*layout_ref);
-						eprintln!("unreachable {ty:?}")
-					}
+					// if let treeldr_rust_gen::Error::UnreachableType(layout_ref) = &e {
+					// 	let ty = gen_context.layout_type(*layout_ref);
+					// 	eprintln!("unreachable {ty:?}")
+					// }
 
 					eprintln!("error: {}", e.with(&vocabulary))
 				}

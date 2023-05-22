@@ -59,7 +59,7 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitAssociatedTypePath<'a> {
 					{
 						let ty_expr = InContext(item_layout).generate_syntax(context, scope)?;
 						Ok(syn::parse2(
-							quote!(::treeldr_rust_prelude::iter::Fetch <'a, C, #ty_expr, #iter_expr>),
+							quote!(::treeldr_rust_prelude::iter::Fetch <'r, C, #ty_expr, #iter_expr>),
 						)
 						.unwrap())
 					} else {
@@ -69,17 +69,17 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitAssociatedTypePath<'a> {
 					let layout = context.model().get(f.layout()).unwrap();
 					let item_layout = **layout.as_layout().description().collection_item().unwrap();
 					let path = InContext(item_layout).generate_syntax(context, scope)?;
-					Ok(syn::parse2(quote!(&'a #path)).unwrap())
+					Ok(syn::parse2(quote!(&'r #path)).unwrap())
 				}
 			}
 			None => {
 				if self.collection {
 					Ok(
-						syn::parse2(quote!(::std::iter::Empty<&'a ::std::convert::Infallible>))
+						syn::parse2(quote!(::std::iter::Empty<&'r ::std::convert::Infallible>))
 							.unwrap(),
 					)
 				} else {
-					Ok(syn::parse2(quote!(&'a ::std::convert::Infallible)).unwrap())
+					Ok(syn::parse2(quote!(&'r ::std::convert::Infallible)).unwrap())
 				}
 			}
 		}
@@ -187,8 +187,14 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Struct> {
 				.generate_syntax(context, &scope)?
 		};
 
+		let mut type_params = Vec::new();
+		if self.ty.params().identifier {
+			type_params.push(syn::parse2(quote!(I)).unwrap());
+		}
+
 		Ok(syntax::tr_impl::class::TraitImpl {
 			type_path,
+			type_params,
 			trait_path,
 			context_bounds,
 			associated_types,

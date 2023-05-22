@@ -71,7 +71,7 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 		ty::Description::Primitive(p) => {
 			let p_ty = p.generate_syntax(context, scope)?;
 			Ok(
-				syn::parse2(quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'a, #p_ty, I, V>>)).unwrap(),
+				syn::parse2(quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'r, #p_ty, I, V>>)).unwrap(),
 			)
 		}
 		ty::Description::BuiltIn(b) => match b {
@@ -129,7 +129,7 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 			Ok(syn::parse2(quote!(#path<#lifetime, I, V>)).unwrap())
 		}
 		ty::Description::Reference(_) => Ok(syn::parse2(quote!(
-			::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::IdValue<'a, I, V>>
+			::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::IdValue<'r, I, V>>
 		))
 		.unwrap()),
 	}

@@ -27,19 +27,19 @@ impl ToTokens for QuadsImpl {
 				N::Id: Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
 				#(#bounds),*
 			{
-				type QuadsAndValues<'a> = #iterator_ident<'a, N::Id, V> where Self: 'a, N::Id: 'a, V: 'a;
+				type QuadsAndValues<'r> = #iterator_ident<'r, N::Id, V> where Self: 'r, N::Id: 'r, V: 'r;
 
 				fn unbound_rdf_quads_and_values<
-					'a,
+					'r,
 					G: ::treeldr_rust_prelude::rdf_types::Generator<N>
 				>(
-					&'a self,
+					&'r self,
 					namespace: &mut N,
 					generator: &mut G
-				) -> Self::QuadsAndValues<'a>
+				) -> Self::QuadsAndValues<'r>
 				where
-					N::Id: 'a,
-					V: 'a
+					N::Id: 'r,
+					V: 'r
 				{
 					#iterator_init
 				}
@@ -106,7 +106,7 @@ impl ToTokens for IteratorStruct {
 		let fields = &self.fields;
 
 		tokens.extend(quote! {
-			pub struct #ident<'a, I, V> {
+			pub struct #ident<'r, I, V> {
 				id_: Option<I>,
 				#(#fields),*
 			}
@@ -140,10 +140,10 @@ impl<'a> ToTokens for IteratorImpl<'a, IteratorStruct> {
 		let next_body = &self.0.next_body;
 
 		tokens.extend(quote! {
-			impl<'a, N: ::treeldr_rust_prelude::rdf_types::Namespace, V: 'a> ::treeldr_rust_prelude::RdfIterator<N> for #ident<'a, N::Id, V>
+			impl<'r, N: ::treeldr_rust_prelude::rdf_types::Namespace, V: 'r> ::treeldr_rust_prelude::RdfIterator<N> for #ident<'r, N::Id, V>
 			where
 				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: 'a + Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
+				N::Id: 'r + Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
 				#(#bounds),*
 			{
 				type Item = ::treeldr_rust_prelude::rdf::QuadOrValue<N::Id, V>;
@@ -174,7 +174,7 @@ impl ToTokens for IteratorEnum {
 		let variants = &self.variants;
 
 		tokens.extend(quote! {
-			pub enum #ident<'a, I, V> {
+			pub enum #ident<'r, I, V> {
 				#(#variants),*
 			}
 		})
@@ -215,10 +215,10 @@ impl<'a> ToTokens for IteratorImpl<'a, IteratorEnum> {
 		});
 
 		tokens.extend(quote! {
-			impl<'a, N: ::treeldr_rust_prelude::rdf_types::Namespace, V: 'a> ::treeldr_rust_prelude::RdfIterator<N> for #ident<'a, N::Id, V>
+			impl<'r, N: ::treeldr_rust_prelude::rdf_types::Namespace, V: 'r> ::treeldr_rust_prelude::RdfIterator<N> for #ident<'r, N::Id, V>
 			where
 				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: 'a + Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
+				N::Id: 'r + Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
 				#(#bounds),*
 			{
 				type Item = ::treeldr_rust_prelude::rdf::QuadOrValue<N::Id, V>;
