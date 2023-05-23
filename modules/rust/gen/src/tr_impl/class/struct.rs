@@ -4,7 +4,7 @@ use treeldr::TId;
 use crate::{
 	syntax,
 	tr::{CollectContextBounds, MethodType},
-	ty::{generate::InContext, structure::Struct},
+	ty::{structure::Struct, InContext},
 	Context, Error, GenerateSyntax,
 };
 

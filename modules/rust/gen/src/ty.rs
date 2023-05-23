@@ -1,24 +1,27 @@
 use crate::{
 	module::{self, TraitId, TraitImpl},
-	path,
+	path, syntax,
 	tr::{CollectContextBounds, ContextBound},
-	Context, Path,
+	Context, Error, GenerateSyntax, Path, Referenced, Scope,
 };
 
-use quote::format_ident;
+use quote::{format_ident, quote};
+use rdf_types::Vocabulary;
 pub use treeldr::layout::Primitive;
-use treeldr::{value::Literal, Name, TId};
+use treeldr::{value::Literal, BlankIdIndex, IriIndex, Name, TId};
 
 pub mod alias;
+pub mod built_in;
 pub mod enumeration;
-mod generate;
 pub mod params;
+pub mod primitive;
 pub mod structure;
 
-use alias::Alias;
-use enumeration::Enum;
+pub use alias::Alias;
+pub use built_in::BuiltIn;
+pub use enumeration::Enum;
 pub use params::{Parameter, Parameters};
-use structure::Struct;
+pub use structure::Struct;
 
 #[derive(Debug)]
 pub struct Type {
@@ -218,47 +221,6 @@ impl Description {
 	}
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum BuiltIn {
-	/// Required type, erased.
-	Required(TId<treeldr::Layout>),
-
-	/// Option.
-	Option(TId<treeldr::Layout>),
-
-	/// Vec.
-	Vec(TId<treeldr::Layout>),
-
-	/// BTreeSet.
-	BTreeSet(TId<treeldr::Layout>),
-
-	/// BTreeMap.
-	BTreeMap(TId<treeldr::Layout>, TId<treeldr::Layout>),
-
-	/// OneOrMany, for non empty sets.
-	OneOrMany(TId<treeldr::Layout>),
-}
-
-impl BuiltIn {
-	pub fn impl_default(&self) -> bool {
-		!matches!(self, Self::Required(_))
-	}
-
-	pub(crate) fn compute_params(
-		&self,
-		mut dependency_params: impl FnMut(TId<treeldr::Layout>) -> Parameters,
-	) -> Parameters {
-		match self {
-			Self::BTreeSet(i) => dependency_params(*i),
-			Self::BTreeMap(k, v) => dependency_params(*k).union_with(dependency_params(*v)),
-			Self::OneOrMany(i) => dependency_params(*i),
-			Self::Option(i) => dependency_params(*i),
-			Self::Required(i) => dependency_params(*i),
-			Self::Vec(i) => dependency_params(*i),
-		}
-	}
-}
-
 impl Description {
 	pub fn new<V, M>(context: &mut Context<V, M>, layout_ref: TId<treeldr::Layout>) -> Self {
 		let layout = context
@@ -270,7 +232,7 @@ impl Description {
 			treeldr::layout::Description::Never => Self::Never,
 			treeldr::layout::Description::Alias(alias_ref) => {
 				let name = layout.as_component().name().expect("unnamed alias");
-				let ident = generate::type_ident_of_name(name);
+				let ident = type_ident_of_name(name);
 				Self::Alias(Alias::new(ident, layout_ref, *alias_ref.value()))
 			}
 			treeldr::layout::Description::Primitive(p) => Self::Primitive(*p),
@@ -288,7 +250,7 @@ impl Description {
 				let ident = layout
 					.as_component()
 					.name()
-					.map(generate::type_ident_of_name)
+					.map(type_ident_of_name)
 					.unwrap_or_else(|| context.next_anonymous_type_ident());
 				let mut fields = Vec::with_capacity(s.fields().len());
 				for (i, field_id) in s.fields().iter().enumerate() {
@@ -298,7 +260,7 @@ impl Description {
 						.name()
 						.cloned()
 						.unwrap_or_else(|| Name::new(format!("field_{i}_")).unwrap());
-					let field_ident = generate::field_ident_of_name(&field_name);
+					let field_ident = field_ident_of_name(&field_name);
 					fields.push(structure::Field::new(
 						field_name,
 						field_ident,
@@ -313,12 +275,12 @@ impl Description {
 			}
 			treeldr::layout::Description::Enum(e) => {
 				let name = layout.as_component().name().expect("unnamed enum");
-				let ident = generate::type_ident_of_name(name);
+				let ident = type_ident_of_name(name);
 				let mut variants = Vec::with_capacity(e.variants().len());
 				for variant_id in e.variants() {
 					let variant = context.model().get(**variant_id).unwrap();
 					let variant_name = variant.as_component().name().expect("unnamed variant");
-					let ident = generate::variant_ident_of_name(variant_name);
+					let ident = variant_ident_of_name(variant_name);
 					variants.push(enumeration::Variant::new(
 						ident,
 						variant.as_formatted().format().as_ref().copied(),
@@ -347,4 +309,218 @@ impl Description {
 			}
 		}
 	}
+}
+
+impl<M> GenerateSyntax<M> for Type {
+	type Output = Option<syntax::LayoutTypeDefinition>;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		match self.description() {
+			Description::Alias(a) => Ok(Some(syntax::LayoutTypeDefinition::Alias(
+				a.generate_syntax(context, scope)?,
+			))),
+			Description::Struct(s) => Ok(Some(syntax::LayoutTypeDefinition::Struct(
+				s.generate_syntax(context, scope)?,
+			))),
+			Description::Enum(e) => Ok(Some(syntax::LayoutTypeDefinition::Enum(
+				e.generate_syntax(context, scope)?,
+			))),
+			_ => Ok(None),
+		}
+	}
+}
+
+impl<M> GenerateSyntax<M> for TId<treeldr::Layout> {
+	type Output = syn::Type;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		let ty = context
+			.layout_type(*self)
+			.expect("undefined generated layout");
+		match ty.description() {
+			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Primitive(p) => p.generate_syntax(context, scope),
+			Description::Alias(a) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, a.ident().clone())
+						.ok_or(Error::UnreachableType(*self))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
+			Description::Struct(s) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, s.ident().clone())
+						.ok_or(Error::UnreachableType(*self))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
+			Description::Enum(e) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, e.ident().clone())
+						.ok_or(Error::UnreachableType(*self))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
+			Description::Reference(_) => {
+				let id = scope
+					.bound_params()
+					.get(crate::ty::Parameter::Identifier)
+					.unwrap();
+				Ok(syn::parse2(quote!(::treeldr_rust_prelude::Id<#id>)).unwrap())
+			}
+			Description::BuiltIn(b) => b.generate_syntax(context, scope),
+		}
+	}
+}
+
+impl<M> GenerateSyntax<M> for Referenced<TId<treeldr::Layout>> {
+	type Output = syn::Type;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		let ty = context
+			.layout_type(self.0)
+			.expect("undefined generated layout");
+		match ty.description() {
+			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Primitive(p) => Referenced(*p).generate_syntax(context, scope),
+			Description::Alias(a) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, a.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
+			Description::Struct(s) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, s.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
+			Description::Enum(e) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, e.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
+			Description::Reference(_) => {
+				let id = scope
+					.bound_params()
+					.get(crate::ty::Parameter::Identifier)
+					.unwrap();
+				Ok(syn::parse2(quote!(&::treeldr_rust_prelude::Id<#id>)).unwrap())
+			}
+			Description::BuiltIn(b) => Referenced(*b).generate_syntax(context, scope),
+		}
+	}
+}
+
+pub struct InContext<T>(pub T);
+
+impl<M> GenerateSyntax<M> for InContext<TId<treeldr::Layout>> {
+	type Output = syn::Type;
+
+	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		&self,
+		context: &Context<V, M>,
+		scope: &Scope,
+	) -> Result<Self::Output, Error> {
+		let ty = context
+			.layout_type(self.0)
+			.expect("undefined generated layout");
+		match ty.description() {
+			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Primitive(p) => p.generate_syntax(context, scope),
+			Description::Alias(a) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, a.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
+			Description::Struct(s) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, s.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
+			Description::Enum(e) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, e.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
+			Description::Reference(ty_id) => {
+				let tr = context.type_trait(*ty_id).unwrap();
+				let ident = tr.ident();
+				let context_path = context
+					.module_path(scope.module)
+					.to(&tr
+						.context_path(context)
+						.ok_or(Error::UnreachableTrait(*ty_id))?)
+					.generate_syntax(context, scope)?;
+				Ok(syn::parse2(quote! { <C as #context_path >::#ident }).unwrap())
+			}
+			Description::BuiltIn(b) => b.generate_syntax(context, scope),
+		}
+	}
+}
+
+pub fn type_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
+	quote::format_ident!("{}", name.to_pascal_case())
+}
+
+pub fn field_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
+	let mut name = name.to_snake_case();
+	if matches!(name.as_str(), "type") {
+		name.push('_')
+	}
+
+	quote::format_ident!("{}", name)
+}
+
+pub fn variant_ident_of_name(name: &treeldr::Name) -> proc_macro2::Ident {
+	quote::format_ident!("{}", name.to_pascal_case())
 }
