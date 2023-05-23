@@ -74,6 +74,12 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 				syn::parse2(quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'r, #p_ty, I, V>>)).unwrap(),
 			)
 		}
+		ty::Description::RestrictedPrimitive(_) => {
+			let p_ty = layout.generate_syntax(context, scope)?;
+			Ok(
+				syn::parse2(quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'r, #p_ty, I, V>>)).unwrap(),
+			)
+		}
 		ty::Description::BuiltIn(b) => match b {
 			ty::BuiltIn::BTreeSet(item_layout) => {
 				let item_ty_expr = item_layout.generate_syntax(context, scope)?;
@@ -153,6 +159,7 @@ fn collect_bounds<V, M>(
 				ty::Description::Never => (),
 				ty::Description::Alias(a) => stack.push(a.target()),
 				ty::Description::Primitive(p) => bound(Bound::AsLiteral(*p)),
+				ty::Description::RestrictedPrimitive(r) => stack.push(r.base()),
 				ty::Description::BuiltIn(b) => match b {
 					ty::BuiltIn::BTreeMap(key_layout, value_layout) => {
 						stack.push(*key_layout);

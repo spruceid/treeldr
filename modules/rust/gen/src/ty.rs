@@ -23,7 +23,6 @@ pub use enumeration::Enum;
 pub use params::{Parameter, Parameters};
 pub use structure::Struct;
 
-#[derive(Debug)]
 pub struct Type {
 	module: Option<module::Parent>,
 	desc: Description,
@@ -63,6 +62,7 @@ impl Type {
 			Description::Primitive(_) => {
 				todo!()
 			}
+			Description::RestrictedPrimitive(r) => r.ident().clone(),
 			Description::BuiltIn(_) => {
 				todo!()
 			}
@@ -82,7 +82,9 @@ impl Type {
 			Description::Struct(s) => s.compute_params(dependency_params),
 			Description::Enum(e) => e.compute_params(dependency_params),
 			Description::BuiltIn(p) => p.compute_params(dependency_params),
-			Description::Never | Description::Primitive(_) => Parameters::default(),
+			Description::Never
+			| Description::Primitive(_)
+			| Description::RestrictedPrimitive(_) => Parameters::default(),
 		}
 	}
 
@@ -193,13 +195,13 @@ impl CollectContextBounds for Type {
 	}
 }
 
-#[derive(Debug)]
 pub enum Description {
 	BuiltIn(BuiltIn),
 	Never,
 	Alias(Alias),
 	Reference(TId<treeldr::Type>),
 	Primitive(Primitive),
+	RestrictedPrimitive(primitive::Restricted),
 	Struct(Struct),
 	Enum(Enum),
 }
@@ -215,6 +217,7 @@ impl Description {
 			}
 			Self::Reference(_) => false,
 			Self::Primitive(_) => false,
+			Self::RestrictedPrimitive(_) => false,
 			Self::Struct(s) => s.impl_default(context),
 			Self::Enum(_) => false,
 		}
@@ -238,7 +241,21 @@ impl Description {
 			treeldr::layout::Description::Primitive(p) => Self::Primitive(*p),
 			treeldr::layout::Description::Derived(p) => {
 				if p.is_restricted() {
-					todo!("restricted primitives")
+					let ident = layout
+						.as_component()
+						.name()
+						.map(type_ident_of_name)
+						.unwrap_or_else(|| context.next_anonymous_type_ident());
+
+					Self::RestrictedPrimitive(primitive::Restricted::new(
+						ident,
+						p.primitive().layout(),
+						p.restrictions()
+							.unwrap()
+							.iter()
+							.map(primitive::Restriction::new)
+							.collect(),
+					))
 				} else {
 					Self::Primitive(p.primitive())
 				}
@@ -329,6 +346,11 @@ impl<M> GenerateSyntax<M> for Type {
 			Description::Enum(e) => Ok(Some(syntax::LayoutTypeDefinition::Enum(
 				e.generate_syntax(context, scope)?,
 			))),
+			Description::RestrictedPrimitive(r) => {
+				Ok(Some(syntax::LayoutTypeDefinition::RestrictedPrimitive(
+					r.generate_syntax(context, scope)?,
+				)))
+			}
 			_ => Ok(None),
 		}
 	}
@@ -348,6 +370,16 @@ impl<M> GenerateSyntax<M> for TId<treeldr::Layout> {
 		match ty.description() {
 			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
 			Description::Primitive(p) => p.generate_syntax(context, scope),
+			Description::RestrictedPrimitive(r) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, r.ident().clone())
+						.ok_or(Error::UnreachableType(*self))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
 			Description::Alias(a) => {
 				let path = context
 					.module_path(scope.module)
@@ -404,6 +436,16 @@ impl<M> GenerateSyntax<M> for Referenced<TId<treeldr::Layout>> {
 		match ty.description() {
 			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
 			Description::Primitive(p) => Referenced(*p).generate_syntax(context, scope),
+			Description::RestrictedPrimitive(r) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, r.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
 			Description::Alias(a) => {
 				let path = context
 					.module_path(scope.module)
@@ -462,6 +504,16 @@ impl<M> GenerateSyntax<M> for InContext<TId<treeldr::Layout>> {
 		match ty.description() {
 			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
 			Description::Primitive(p) => p.generate_syntax(context, scope),
+			Description::RestrictedPrimitive(r) => {
+				let path = context
+					.module_path(scope.module)
+					.to(&ty
+						.path(context, r.ident().clone())
+						.ok_or(Error::UnreachableType(self.0))?)
+					.generate_syntax(context, scope)?;
+
+				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
+			}
 			Description::Alias(a) => {
 				let path = context
 					.module_path(scope.module)

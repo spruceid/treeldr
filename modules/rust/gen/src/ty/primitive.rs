@@ -4,6 +4,10 @@ use treeldr::{layout::Primitive, BlankIdIndex, IriIndex};
 
 use crate::{Context, Error, GenerateSyntax, Referenced, Scope};
 
+mod restricted;
+
+pub use restricted::{Restricted, Restriction};
+
 impl<M> GenerateSyntax<M> for treeldr::layout::Primitive {
 	type Output = syn::Type;
 

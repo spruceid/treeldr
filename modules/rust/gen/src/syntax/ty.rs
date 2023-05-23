@@ -1,6 +1,8 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens};
 
+pub mod primitive;
+
 pub enum TypeDefinition {
 	ClassTraitObject(ClassDynTraitDefinition),
 	Layout(LayoutTypeDefinition, Vec<String>),
@@ -24,6 +26,7 @@ impl ToTokens for TypeDefinition {
 /// Layout type definition.
 pub enum LayoutTypeDefinition {
 	Alias(Alias),
+	RestrictedPrimitive(primitive::Restricted),
 	Struct(Struct),
 	Enum(Enum),
 }
@@ -32,6 +35,7 @@ impl ToTokens for LayoutTypeDefinition {
 	fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
 		match self {
 			Self::Alias(a) => a.to_tokens(tokens),
+			Self::RestrictedPrimitive(r) => r.to_tokens(tokens),
 			Self::Struct(s) => s.to_tokens(tokens),
 			Self::Enum(e) => e.to_tokens(tokens),
 		}
