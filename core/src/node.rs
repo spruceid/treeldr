@@ -232,7 +232,7 @@ impl Type {
 			Self::Literal => Term::Rdfs(vocab::Rdfs::Literal),
 			Self::Class(None) => Term::Rdfs(vocab::Rdfs::Class),
 			Self::Class(Some(ty)) => ty.term(),
-			Self::DatatypeRestriction => Term::Rdfs(vocab::Rdfs::Resource),
+			Self::DatatypeRestriction => Term::Owl(vocab::Owl::DatatypeRestriction),
 			Self::Property(None) => Term::Rdf(vocab::Rdf::Property),
 			Self::Property(Some(ty)) => ty.term(),
 			Self::Component(None) => Term::TreeLdr(vocab::TreeLdr::Component),

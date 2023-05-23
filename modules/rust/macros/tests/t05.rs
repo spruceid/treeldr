@@ -33,7 +33,7 @@ pub mod schema {
 }
 
 #[async_std::test]
-async fn t04() {
+async fn t05() {
 	let mut loader: json_ld::FsLoader<IriBuf, Span> =
 		json_ld::FsLoader::new(|_, _, s| json_syntax::Value::parse_str(s, |span| span));
 	loader.mount(iri!("https://example.com/").to_owned(), "tests/");

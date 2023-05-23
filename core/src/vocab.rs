@@ -184,6 +184,9 @@ pub enum Owl {
 	#[iri("owl:Restriction")]
 	Restriction,
 
+	#[iri("owl:DatatypeRestriction")]
+	DatatypeRestriction,
+
 	#[iri("owl:onProperty")]
 	OnProperty,
 

@@ -180,7 +180,25 @@ impl Primitive {
 		use vocab::{Owl, Term, Xsd};
 		match iri {
 			IriIndex::Iri(Term::Xsd(Xsd::Boolean)) => Some(Self::Boolean),
-			IriIndex::Iri(Term::Owl(Owl::Real)) => Some(Self::Real),
+			IriIndex::Iri(
+				Term::Owl(Owl::Real)
+				| Term::Xsd(
+					Xsd::Decimal
+					| Xsd::Integer
+					| Xsd::NonNegativeInteger
+					| Xsd::PositiveInteger
+					| Xsd::UnsignedLong
+					| Xsd::UnsignedInt
+					| Xsd::UnsignedShort
+					| Xsd::UnsignedByte
+					| Xsd::NonPositiveInteger
+					| Xsd::NegativeInteger
+					| Xsd::Long
+					| Xsd::Int
+					| Xsd::Short
+					| Xsd::Byte,
+				),
+			) => Some(Self::Real),
 			IriIndex::Iri(Term::Xsd(Xsd::Float)) => Some(Self::Float),
 			IriIndex::Iri(Term::Xsd(Xsd::Double)) => Some(Self::Double),
 			IriIndex::Iri(Term::Xsd(Xsd::String)) => Some(Self::String),
