@@ -41,6 +41,14 @@ impl<V: VocabularyMut, T: IntoItem<V>> Process<V> for LexArray<T> {
 			));
 		}
 
+		if self.min_length.is_some() {
+			log::warn!("array `maxLength` constraint not yet supported")
+		}
+
+		if self.max_length.is_some() {
+			log::warn!("array `minLength` constraint not yet supported")
+		}
+
 		let item_iri = IriBuf::from_string(format!(
 			"{}/items",
 			vocabulary.iri(id.as_iri().unwrap()).unwrap()
