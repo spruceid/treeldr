@@ -551,7 +551,7 @@ impl<M> GenerateSyntax<M> for InContext<TId<treeldr::Layout>> {
 					.module_path(scope.module)
 					.to(&tr
 						.context_path(context)
-						.ok_or(Error::UnreachableTrait(*ty_id))?)
+						.ok_or_else(|| Error::unreachable_trait(*ty_id))?)
 					.generate_syntax(context, scope)?;
 				Ok(syn::parse2(quote! { <C as #context_path >::#ident }).unwrap())
 			}

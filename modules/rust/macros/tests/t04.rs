@@ -8,9 +8,6 @@ use treeldr_rust_prelude::{ld::import_quad, static_iref::iri, FromRdf};
 
 #[tldr]
 pub mod base_schema {
-	#[prefix("https://treeldr.org/")]
-	pub mod tldr {}
-
 	#[prefix("http://www.w3.org/2000/01/rdf-schema#")]
 	pub mod rdfs {}
 
@@ -20,9 +17,6 @@ pub mod base_schema {
 
 #[tldr("modules/rust/macros/tests/t03.tldr")]
 pub mod schema {
-	#[prefix("https://treeldr.org/")]
-	pub use crate::base_schema::tldr;
-
 	#[prefix("http://www.w3.org/2000/01/rdf-schema#")]
 	pub use crate::base_schema::rdfs as rdf_syntax;
 

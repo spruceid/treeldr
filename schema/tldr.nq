@@ -55,3 +55,39 @@
 <https://treeldr.org/mapValue> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
 <https://treeldr.org/mapValue> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/Layout> .
 <https://treeldr.org/mapValue> <http://www.w3.org/2000/01/rdf-schema#range> <https://treeldr.org/Layout> .
+
+<https://treeldr.org/pattern> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/pattern> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .
+<https://treeldr.org/pattern> <http://www.w3.org/2000/01/rdf-schema#range> <https://treeldr.org/RegularExpression> .
+
+<https://treeldr.org/minLength> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/minLength> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .
+<https://treeldr.org/minLength> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2001/XMLSchema#nonNegativeInteger> .
+
+<https://treeldr.org/maxLength> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/maxLength> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .
+<https://treeldr.org/maxLength> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2001/XMLSchema#nonNegativeInteger> .
+
+<https://treeldr.org/minGrapheme> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/minGrapheme> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .
+<https://treeldr.org/minGrapheme> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2001/XMLSchema#nonNegativeInteger> .
+
+<https://treeldr.org/maxGrapheme> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/maxGrapheme> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .
+<https://treeldr.org/maxGrapheme> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2001/XMLSchema#nonNegativeInteger> .
+
+<https://treeldr.org/inclusiveMinimum> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/inclusiveMinimum> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .
+<https://treeldr.org/inclusiveMinimum> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2002/07/owl#real> .
+
+<https://treeldr.org/inclusiveMaximum> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/inclusiveMaximum> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .
+<https://treeldr.org/inclusiveMaximum> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2002/07/owl#real> .
+
+<https://treeldr.org/exclusiveMinimum> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/exclusiveMinimum> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .
+<https://treeldr.org/exclusiveMinimum> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2002/07/owl#real> .
+
+<https://treeldr.org/exclusiveMaximum> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/exclusiveMaximum> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .
+<https://treeldr.org/exclusiveMaximum> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2002/07/owl#real> .

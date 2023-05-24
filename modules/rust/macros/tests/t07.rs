@@ -2,9 +2,6 @@ use treeldr_rust_macros::tldr;
 
 #[tldr("modules/rust/macros/tests/t07.ttl")]
 pub mod schema {
-	#[prefix("https://treeldr.org/")]
-	pub mod tldr {}
-
 	#[prefix("http://www.w3.org/2000/01/rdf-schema#")]
 	pub mod rdfs {}
 

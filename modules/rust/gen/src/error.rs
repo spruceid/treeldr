@@ -22,6 +22,12 @@ pub enum Error {
 	BlankProperty(TId<treeldr::Property>),
 }
 
+impl Error {
+	pub fn unreachable_trait(ty_ref: TId<treeldr::Type>) -> Self {
+		Self::UnreachableTrait(ty_ref)
+	}
+}
+
 impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> DisplayWithContext<V> for Error {
 	fn fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
