@@ -778,3 +778,62 @@ impl<'a> IntoRdf for layout::primitive::restriction::template::string::Restricti
 		id
 	}
 }
+
+impl<'a> IntoRdf for layout::primitive::restriction::template::unicode_string::RestrictionRef<'a> {
+	type Target = Id;
+
+	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+		self,
+		vocabulary: &mut V,
+		generator: &mut impl Generator<V>,
+		quads: &mut Vec<StrippedQuad>,
+		_options: Options,
+	) -> Self::Target {
+		let id = generator.next(vocabulary);
+
+		match self {
+			Self::MinLength(min) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinLength)),
+					Object::Literal(min.as_rdf_literal()),
+					None,
+				));
+			}
+			Self::MaxLength(max) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxLength)),
+					Object::Literal(max.as_rdf_literal()),
+					None,
+				));
+			}
+			Self::MinGrapheme(min) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinGrapheme)),
+					Object::Literal(min.as_rdf_literal()),
+					None,
+				));
+			}
+			Self::MaxGrapheme(max) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxGrapheme)),
+					Object::Literal(max.as_rdf_literal()),
+					None,
+				));
+			}
+			Self::Pattern(regexp) => {
+				quads.push(Quad(
+					id,
+					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Pattern)),
+					Object::Literal(Literal::String(regexp.to_string())),
+					None,
+				));
+			}
+		}
+
+		id
+	}
+}

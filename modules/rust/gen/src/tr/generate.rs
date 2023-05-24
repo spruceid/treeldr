@@ -187,7 +187,9 @@ impl<M> GenerateSyntax<M> for TId<treeldr::Type> {
 		scope: &crate::Scope,
 	) -> Result<Self::Output, Error> {
 		let tr = context.type_trait(*self).expect("trait not found");
-		let path = tr.path(context).ok_or(Error::UnreachableTrait(*self))?;
+		let path = tr
+			.path(context)
+			.ok_or_else(|| Error::unreachable_trait(*self))?;
 		context
 			.module_path(scope.module)
 			.to(&path)

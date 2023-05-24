@@ -30,11 +30,11 @@ impl NodeTypeName for node::Type {
 			Self::Literal => "literal",
 			Self::Class(None) => "class",
 			Self::Class(Some(ty)) => ty.name(),
-			Self::DatatypeRestriction => "datatype restriction",
 			Self::Property(None) => "property",
 			Self::Property(Some(ty)) => ty.name(),
 			Self::Component(None) => "component",
 			Self::Component(Some(ty)) => ty.name(),
+			Self::DatatypeRestriction => "datatype restriction",
 			Self::LayoutRestriction => "layout restriction",
 			Self::List => "list"
 		}

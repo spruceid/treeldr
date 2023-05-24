@@ -31,7 +31,7 @@ impl<M> GenerateSyntax<M> for ContextBound {
 				.module_path(scope.module)
 				.to(&tr
 					.context_path(context)
-					.ok_or(Error::UnreachableTrait(self.0))?)
+					.ok_or_else(|| Error::unreachable_trait(self.0))?)
 				.generate_syntax(context, scope)?,
 		})
 	}

@@ -19,6 +19,7 @@ pub use treeldr::layout::restriction::Property;
 pub enum Restriction {
 	Numeric(Numeric),
 	String(String),
+	UnicodeString(UnicodeString),
 }
 
 impl Restriction {
@@ -26,6 +27,7 @@ impl Restriction {
 		match self {
 			Self::Numeric(r) => BindingRef::Numeric(r.as_binding()),
 			Self::String(r) => BindingRef::String(r.as_binding()),
+			Self::UnicodeString(r) => BindingRef::UnicodeString(r.as_binding()),
 		}
 	}
 }
@@ -39,6 +41,34 @@ impl<T: Into<value::Numeric>> From<restriction::template::integer::Restriction<T
 impl<T: Into<value::Numeric>> From<restriction::template::float::Restriction<T>> for Restriction {
 	fn from(value: restriction::template::float::Restriction<T>) -> Self {
 		Self::Numeric(value.into())
+	}
+}
+
+impl From<restriction::template::string::Restriction> for Restriction {
+	fn from(value: restriction::template::string::Restriction) -> Self {
+		Self::String(value.into())
+	}
+}
+
+impl From<restriction::template::unicode_string::Restriction> for Restriction {
+	fn from(value: restriction::template::unicode_string::Restriction) -> Self {
+		match value {
+			restriction::template::unicode_string::Restriction::MinLength(v) => {
+				Self::String(String::MinLength(v))
+			}
+			restriction::template::unicode_string::Restriction::MaxLength(v) => {
+				Self::String(String::MaxLength(v))
+			}
+			restriction::template::unicode_string::Restriction::MinGrapheme(v) => {
+				Self::UnicodeString(UnicodeString::MinGrapheme(v))
+			}
+			restriction::template::unicode_string::Restriction::MaxGrapheme(v) => {
+				Self::UnicodeString(UnicodeString::MaxGrapheme(v))
+			}
+			restriction::template::unicode_string::Restriction::Pattern(v) => {
+				Self::String(String::Pattern(v))
+			}
+		}
 	}
 }
 
@@ -57,6 +87,18 @@ impl<T: Into<value::Numeric>, M> From<restriction::template::float::Conflict<T, 
 	for Conflict<M>
 {
 	fn from(value: restriction::template::float::Conflict<T, M>) -> Self {
+		Self(value.0.into(), value.1.cast())
+	}
+}
+
+impl<M> From<restriction::template::string::Conflict<M>> for Conflict<M> {
+	fn from(value: restriction::template::string::Conflict<M>) -> Self {
+		Self(value.0.into(), value.1.cast())
+	}
+}
+
+impl<M> From<restriction::template::unicode_string::Conflict<M>> for Conflict<M> {
+	fn from(value: restriction::template::unicode_string::Conflict<M>) -> Self {
 		Self(value.0.into(), value.1.cast())
 	}
 }
@@ -139,13 +181,27 @@ impl StringProperty {
 /// String restriction.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum String {
+	MinLength(value::NonNegativeInteger),
+	MaxLength(value::NonNegativeInteger),
 	Pattern(RegExp),
 }
 
 impl String {
 	pub fn as_binding(&self) -> StringBindingRef {
 		match self {
+			Self::MinLength(v) => StringBindingRef::MinLength(None, v),
+			Self::MaxLength(v) => StringBindingRef::MaxLength(None, v),
 			Self::Pattern(v) => StringBindingRef::Pattern(None, v),
+		}
+	}
+}
+
+impl From<restriction::template::string::Restriction> for String {
+	fn from(value: restriction::template::string::Restriction) -> Self {
+		match value {
+			restriction::template::string::Restriction::MinLength(v) => Self::MinLength(v),
+			restriction::template::string::Restriction::MaxLength(v) => Self::MaxLength(v),
+			restriction::template::string::Restriction::Pattern(v) => Self::Pattern(v),
 		}
 	}
 }
@@ -153,6 +209,29 @@ impl String {
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum StringRef<'a> {
 	Pattern(&'a RegExp),
+}
+
+/// Unicode string restriction.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum UnicodeString {
+	MinGrapheme(value::NonNegativeInteger),
+	MaxGrapheme(value::NonNegativeInteger),
+}
+
+impl UnicodeString {
+	pub fn as_binding(&self) -> UnicodeStringBindingRef {
+		match self {
+			Self::MinGrapheme(v) => UnicodeStringBindingRef::MinGrapheme(None, v),
+			Self::MaxGrapheme(v) => UnicodeStringBindingRef::MaxGrapheme(None, v),
+		}
+	}
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum UnicodeStringRef<'a> {
+	Pattern(&'a RegExp),
+	MinGrapheme(&'a value::NonNegativeInteger),
+	MaxGrapheme(&'a value::NonNegativeInteger),
 }
 
 #[derive(Clone, Debug)]
@@ -426,12 +505,73 @@ impl<
 
 impl<M: Clone + Merge> BuildRestrictions<M> for restriction::template::string::Restrictions<M> {
 	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
-		let mut p = restriction::string::Restrictions::default();
+		let mut p = restriction::template::string::Restrictions::default();
 
 		for (restriction, causes) in restrictions.map.into_iter() {
 			match restriction {
 				Restriction::String(restriction) => match restriction {
+					String::MinLength(min) => {
+						p.insert_len_min(Meta(min, causes)).map_loc_err(|c| {
+							error::Description::LayoutDatatypeRestrictionConflict(c.into())
+						})?
+					}
+					String::MaxLength(min) => {
+						p.insert_len_max(Meta(min, causes)).map_loc_err(|c| {
+							error::Description::LayoutDatatypeRestrictionConflict(c.into())
+						})?
+					}
 					String::Pattern(regexp) => p.insert_pattern(Meta(regexp, causes)),
+				},
+				other => {
+					return Err(Error::new(
+						error::LayoutDatatypeRestrictionInvalid {
+							id,
+							primitive: Primitive::String,
+							restriction: other,
+						}
+						.into(),
+						causes,
+					))
+				}
+			}
+		}
+
+		Ok(p)
+	}
+}
+
+impl<M: Clone + Merge> BuildRestrictions<M>
+	for restriction::template::unicode_string::Restrictions<M>
+{
+	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
+		let mut p = restriction::template::unicode_string::Restrictions::default();
+
+		for (restriction, causes) in restrictions.map.into_iter() {
+			match restriction {
+				Restriction::String(restriction) => match restriction {
+					String::MinLength(min) => {
+						p.insert_len_min(Meta(min, causes)).map_loc_err(|c| {
+							error::Description::LayoutDatatypeRestrictionConflict(c.into())
+						})?
+					}
+					String::MaxLength(min) => {
+						p.insert_len_max(Meta(min, causes)).map_loc_err(|c| {
+							error::Description::LayoutDatatypeRestrictionConflict(c.into())
+						})?
+					}
+					String::Pattern(regexp) => p.insert_pattern(Meta(regexp, causes)),
+				},
+				Restriction::UnicodeString(restriction) => match restriction {
+					UnicodeString::MinGrapheme(min) => {
+						p.insert_grapheme_min(Meta(min, causes)).map_loc_err(|c| {
+							error::Description::LayoutDatatypeRestrictionConflict(c.into())
+						})?
+					}
+					UnicodeString::MaxGrapheme(max) => {
+						p.insert_grapheme_max(Meta(max, causes)).map_loc_err(|c| {
+							error::Description::LayoutDatatypeRestrictionConflict(c.into())
+						})?
+					}
 				},
 				other => {
 					return Err(Error::new(
@@ -461,6 +601,7 @@ impl<M: Clone> Restrictions<M> {
 pub enum BindingRef<'a> {
 	Numeric(NumericBindingRef<'a>),
 	String(StringBindingRef<'a>),
+	UnicodeString(UnicodeStringBindingRef<'a>),
 }
 
 impl<'a> BindingRef<'a> {
@@ -468,6 +609,7 @@ impl<'a> BindingRef<'a> {
 		match self {
 			Self::Numeric(b) => b.property(),
 			Self::String(b) => b.property(),
+			Self::UnicodeString(b) => b.property(),
 		}
 	}
 
@@ -475,6 +617,7 @@ impl<'a> BindingRef<'a> {
 		match self {
 			Self::Numeric(b) => b.value(),
 			Self::String(b) => b.value(),
+			Self::UnicodeString(b) => b.value(),
 		}
 	}
 }
@@ -509,19 +652,47 @@ impl<'a> NumericBindingRef<'a> {
 
 #[derive(Debug)]
 pub enum StringBindingRef<'a> {
+	MinLength(Option<TId<UnknownProperty>>, &'a value::NonNegativeInteger),
+	MaxLength(Option<TId<UnknownProperty>>, &'a value::NonNegativeInteger),
 	Pattern(Option<TId<UnknownProperty>>, &'a RegExp),
 }
 
 impl<'a> StringBindingRef<'a> {
 	pub fn property(&self) -> Property {
 		match self {
+			Self::MinLength(p, _) => Property::MinLength(*p),
+			Self::MaxLength(p, _) => Property::MaxLength(*p),
 			Self::Pattern(p, _) => Property::Pattern(*p),
 		}
 	}
 
 	pub fn value(&self) -> BindingValueRef<'a> {
 		match self {
+			Self::MinLength(_, v) => BindingValueRef::NonNegativeInteger(v),
+			Self::MaxLength(_, v) => BindingValueRef::NonNegativeInteger(v),
 			Self::Pattern(_, v) => BindingValueRef::RegExp(v),
+		}
+	}
+}
+
+#[derive(Debug)]
+pub enum UnicodeStringBindingRef<'a> {
+	MinGrapheme(Option<TId<UnknownProperty>>, &'a value::NonNegativeInteger),
+	MaxGrapheme(Option<TId<UnknownProperty>>, &'a value::NonNegativeInteger),
+}
+
+impl<'a> UnicodeStringBindingRef<'a> {
+	pub fn property(&self) -> Property {
+		match self {
+			Self::MinGrapheme(p, _) => Property::MinGrapheme(*p),
+			Self::MaxGrapheme(p, _) => Property::MaxGrapheme(*p),
+		}
+	}
+
+	pub fn value(&self) -> BindingValueRef<'a> {
+		match self {
+			Self::MinGrapheme(_, v) => BindingValueRef::NonNegativeInteger(v),
+			Self::MaxGrapheme(_, v) => BindingValueRef::NonNegativeInteger(v),
 		}
 	}
 }

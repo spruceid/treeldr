@@ -127,6 +127,7 @@ impl From<Term> for Type {
 			Term::Rdfs(vocab::Rdfs::Datatype) => SubClass::DataType.into(),
 			Term::Rdf(vocab::Rdf::Property) => node::Type::Property(None).into(),
 			Term::Rdf(vocab::Rdf::List) => node::Type::List.into(),
+			Term::Owl(vocab::Owl::DatatypeRestriction) => node::Type::DatatypeRestriction.into(),
 			Term::Owl(vocab::Owl::Restriction) => SubClass::Restriction.into(),
 			Term::Owl(vocab::Owl::FunctionalProperty) => prop::Type::FunctionalProperty.into(),
 			Term::TreeLdr(vocab::TreeLdr::Component) => node::Type::Component(None).into(),

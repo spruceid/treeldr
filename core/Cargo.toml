@@ -19,7 +19,8 @@ langtag.workspace = true
 grdf = { workspace = true, features = ["meta"] }
 contextual.workspace = true
 thiserror.workspace = true
-btree-range-map = { version = "0.5", features = ["ordered-float"] }
+shelves.workspace = true
+btree-range-map = { version = "0.5.2", features = ["ordered-float"] }
 iref-enum = "2.1"
 num = "0.4.0"
 lazy_static = "1.4.0"

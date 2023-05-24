@@ -1,7 +1,10 @@
+pub mod automaton;
 pub mod permutation;
 pub mod scc;
 pub mod union_find;
 
+pub use automaton::{Automaton, DetAutomaton};
+use btree_range_map::RangeSet;
 pub use scc::SccGraph;
 pub use union_find::UnionFind;
 
@@ -61,4 +64,14 @@ impl<T, E, I: Iterator<Item = Result<Option<T>, E>>> TryFilterCollect<T, E> for 
 	fn try_filter_collect<B: TryFromIterator<T>>(self) -> Result<B, E> {
 		B::try_from_filtered_iterator(self)
 	}
+}
+
+pub fn charset_intersection(a: &RangeSet<char>, b: &RangeSet<char>) -> RangeSet<char> {
+	let mut result = a.clone();
+
+	for r in b.gaps() {
+		result.remove(r.cloned());
+	}
+
+	result
 }

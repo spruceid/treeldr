@@ -1,0 +1,23 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix tldr: <https://treeldr.org/> .
+@prefix ex: <https://example.com/> .
+
+ex:type a rdfs:Datatype ;
+	owl:onDatatype xsd:string ;
+	owl:withRestrictions (
+		[ a owl:DatatypeRestriction ; xsd:pattern "a*" ]
+	) .
+
+ex:layout a tldr:Layout ;
+	tldr:name "Layout" ;
+	tldr:derivedFrom tldr:String ;
+	tldr:withRestrictions (
+		[ a tldr:LayoutRestriction ; tldr:pattern "a*"^^tldr:RegularExpression ]
+		[ a tldr:LayoutRestriction ; tldr:minLength "3"^^xsd:nonNegativeInteger ]
+		[ a tldr:LayoutRestriction ; tldr:maxLength "20"^^xsd:nonNegativeInteger ]
+		[ a tldr:LayoutRestriction ; tldr:minGrapheme "3"^^xsd:nonNegativeInteger ]
+		[ a tldr:LayoutRestriction ; tldr:maxGrapheme "20"^^xsd:nonNegativeInteger ]
+	) .

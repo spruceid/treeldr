@@ -88,7 +88,7 @@ fn check(mut bytes: impl Iterator<Item = u8>) -> bool {
 			State::Segment(n) => match bytes.next() {
 				Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-') => State::Segment(n),
 				Some(b'.') => State::SegmentAlpha(n + 1),
-				None if n >= 2 => break true,
+				None if n >= 1 => break true,
 				_ => break false,
 			},
 		}

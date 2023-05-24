@@ -1,12 +1,13 @@
 use std::{borrow::Cow, fmt};
 
+use iref::AsIri;
 use langtag::LanguageTag;
 use locspan::Meta;
 use rdf_types::IriVocabulary;
 pub use xsd_types::value::*;
 use xsd_types::ParseRdf;
 
-use crate::{vocab, Id, IriIndex};
+use crate::{layout::primitive::RegExp, vocab, Id, IriIndex};
 
 mod lang_string;
 mod numeric;
@@ -47,6 +48,7 @@ pub enum Literal {
 	Numeric(Numeric),
 	LangString(LangString),
 	String(String),
+	RegExp(RegExp),
 	Other(String, IriIndex),
 }
 
@@ -56,6 +58,7 @@ impl Literal {
 			Self::Numeric(n) => Cow::Owned(n.to_string()),
 			Self::LangString(s) => Cow::Borrowed(s.as_str()),
 			Self::String(s) => Cow::Borrowed(s.as_str()),
+			Self::RegExp(e) => Cow::Owned(e.to_string()),
 			Self::Other(s, _) => Cow::Borrowed(s.as_str()),
 		}
 	}
@@ -102,6 +105,7 @@ impl fmt::Display for Literal {
 			Self::Numeric(n) => n.fmt(f),
 			Self::LangString(s) => s.fmt(f),
 			Self::String(s) => s.fmt(f),
+			Self::RegExp(e) => e.fmt(f),
 			Self::Other(s, _) => s.fmt(f),
 		}
 	}
@@ -115,6 +119,7 @@ impl<V: IriVocabulary<Iri = IriIndex>> rdf_types::RdfDisplayWithContext<V> for L
 			Self::Numeric(n) => n.rdf_fmt_with(vocabulary, f),
 			Self::LangString(s) => s.rdf_fmt(f),
 			Self::String(s) => s.fmt(f),
+			Self::RegExp(e) => write!(f, "{e}^^{}", vocab::TreeLdr::RegularExpression.as_iri()),
 			Self::Other(s, ty) => write!(f, "{s}^^{}", vocabulary.iri(ty).unwrap()),
 		}
 	}
@@ -141,6 +146,12 @@ impl<M> TryFrom<vocab::Literal<M>> for Literal {
 					}
 					IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::LangString)) => {
 						Err(InvalidLiteral::MissingLanguageTag)
+					}
+					IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::RegularExpression)) => {
+						match RegExp::parse($s.as_str()) {
+							Ok(e) => Ok(Literal::RegExp(e)),
+							Err(_) => Err(InvalidLiteral::InvalidLexicalValue($ty))
+						}
 					}
 					$(
 						IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::$term)) => {
@@ -301,6 +312,9 @@ impl AsRdfLiteral for Literal {
 			Self::Numeric(n) => n.rdf_type(),
 			Self::LangString(s) => s.rdf_type(),
 			Self::String(s) => s.rdf_type(),
+			Self::RegExp(_) => {
+				IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::RegularExpression))
+			}
 			Self::Other(_, ty) => *ty,
 		}
 	}

@@ -162,6 +162,15 @@ pub enum TreeLdr {
 	#[iri("tldr:maxLength")]
 	MaxLength,
 
+	#[iri("tldr:minGrapheme")]
+	MinGrapheme,
+
+	#[iri("tldr:maxGrapheme")]
+	MaxGrapheme,
+
+	#[iri("tldr:RegularExpression")]
+	RegularExpression,
+
 	#[iri("tldr:pattern")]
 	Pattern,
 }
@@ -183,6 +192,9 @@ pub enum Owl {
 
 	#[iri("owl:Restriction")]
 	Restriction,
+
+	#[iri("owl:DatatypeRestriction")]
+	DatatypeRestriction,
 
 	#[iri("owl:onProperty")]
 	OnProperty,

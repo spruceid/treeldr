@@ -67,6 +67,7 @@ fn collect_bounds<V, M>(
 				ty::Description::Never => (),
 				ty::Description::Alias(a) => stack.push(a.target()),
 				ty::Description::Primitive(p) => bound(Bound::FromLiteral(*p)),
+				ty::Description::RestrictedPrimitive(r) => stack.push(r.base()),
 				ty::Description::BuiltIn(b) => match b {
 					ty::BuiltIn::BTreeMap(key_layout, value_layout) => {
 						stack.push(*key_layout);

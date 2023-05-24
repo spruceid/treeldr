@@ -14,10 +14,6 @@ use treeldr_rust_prelude::{ld::import_quad, static_iref::iri, FromRdf, IntoJsonL
 	"modules/rust/macros/examples/basic_post.tldr"
 )]
 pub mod schema {
-	/// TLDR types.
-	#[prefix("https://treeldr.org/")]
-	pub mod tldr {}
-
 	/// RDF Schema types.
 	#[prefix("http://www.w3.org/2000/01/rdf-schema#")]
 	pub mod rdfs {}

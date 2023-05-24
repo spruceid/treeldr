@@ -20,6 +20,8 @@ pub mod rdf;
 #[cfg(feature = "json-ld")]
 pub mod ld;
 
+pub mod restriction;
+
 pub use rdf::{FromRdf, FromRdfError, RdfIterator};
 
 #[cfg(feature = "json-ld")]

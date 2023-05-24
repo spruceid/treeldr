@@ -8,9 +8,6 @@ use treeldr_rust_prelude::{ld::import_quad, static_iref::iri, FromRdf};
 
 #[tldr("modules/rust/macros/tests/t02.tldr")]
 pub mod schema {
-	#[prefix("https://treeldr.org/")]
-	pub mod tldr {}
-
 	#[prefix("http://www.w3.org/2000/01/rdf-schema#")]
 	pub mod rdfs {}
 

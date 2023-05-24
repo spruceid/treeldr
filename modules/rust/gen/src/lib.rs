@@ -11,6 +11,7 @@ pub mod module;
 pub mod path;
 pub mod syntax;
 pub mod tr;
+pub mod tr_impl;
 pub mod ty;
 
 pub use context::{Context, DedicatedSubModule, ModulePathBuilder, Options};
