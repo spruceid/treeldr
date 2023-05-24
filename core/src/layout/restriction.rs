@@ -270,6 +270,8 @@ pub enum Property {
 	ExclusiveMaximum(Option<TId<UnknownProperty>>),
 	MinLength(Option<TId<UnknownProperty>>),
 	MaxLength(Option<TId<UnknownProperty>>),
+	MinGrapheme(Option<TId<UnknownProperty>>),
+	MaxGrapheme(Option<TId<UnknownProperty>>),
 	Pattern(Option<TId<UnknownProperty>>),
 }
 
@@ -305,6 +307,10 @@ impl Property {
 			Self::MinLength(Some(p)) => p.id(),
 			Self::MaxLength(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::MaxLength))),
 			Self::MaxLength(Some(p)) => p.id(),
+			Self::MinGrapheme(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::MinGrapheme))),
+			Self::MinGrapheme(Some(p)) => p.id(),
+			Self::MaxGrapheme(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::MaxGrapheme))),
+			Self::MaxGrapheme(Some(p)) => p.id(),
 			Self::Pattern(None) => Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Pattern))),
 			Self::Pattern(Some(p)) => p.id(),
 		}
@@ -321,6 +327,8 @@ impl Property {
 			Self::ExclusiveMaximum(None) => Some(Term::TreeLdr(TreeLdr::ExclusiveMaximum)),
 			Self::MinLength(None) => Some(Term::TreeLdr(TreeLdr::MinLength)),
 			Self::MaxLength(None) => Some(Term::TreeLdr(TreeLdr::MaxLength)),
+			Self::MinGrapheme(None) => Some(Term::TreeLdr(TreeLdr::MinGrapheme)),
+			Self::MaxGrapheme(None) => Some(Term::TreeLdr(TreeLdr::MaxGrapheme)),
 			Self::Pattern(None) => Some(Term::TreeLdr(TreeLdr::Pattern)),
 			_ => None,
 		}
@@ -344,6 +352,10 @@ impl Property {
 			Self::MinLength(Some(p)) => PropertyName::Other(*p),
 			Self::MaxLength(None) => PropertyName::Resource("maximum length"),
 			Self::MaxLength(Some(p)) => PropertyName::Other(*p),
+			Self::MinGrapheme(None) => PropertyName::Resource("minimum grapheme length"),
+			Self::MinGrapheme(Some(p)) => PropertyName::Other(*p),
+			Self::MaxGrapheme(None) => PropertyName::Resource("maximum grapheme length"),
+			Self::MaxGrapheme(Some(p)) => PropertyName::Other(*p),
 			Self::Pattern(None) => PropertyName::Resource("pattern"),
 			Self::Pattern(Some(p)) => PropertyName::Other(*p),
 		}

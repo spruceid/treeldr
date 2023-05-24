@@ -92,8 +92,42 @@ impl<M> Definition<M> {
 					))
 				}),
 			),
-			Property::MaxLength(_) => todo!(),
-			Property::MinLength(_) => todo!(),
+			Property::MaxLength(p) => self.restriction.insert(
+				p,
+				prop_cmp,
+				value.into_expected_non_negative_integer()?.map(|p| {
+					Restriction::Primitive(primitive::Restriction::String(
+						primitive::String::MaxLength(p),
+					))
+				}),
+			),
+			Property::MinLength(p) => self.restriction.insert(
+				p,
+				prop_cmp,
+				value.into_expected_non_negative_integer()?.map(|p| {
+					Restriction::Primitive(primitive::Restriction::String(
+						primitive::String::MinLength(p),
+					))
+				}),
+			),
+			Property::MinGrapheme(p) => self.restriction.insert(
+				p,
+				prop_cmp,
+				value.into_expected_non_negative_integer()?.map(|p| {
+					Restriction::Primitive(primitive::Restriction::UnicodeString(
+						primitive::UnicodeString::MinGrapheme(p),
+					))
+				}),
+			),
+			Property::MaxGrapheme(p) => self.restriction.insert(
+				p,
+				prop_cmp,
+				value.into_expected_non_negative_integer()?.map(|p| {
+					Restriction::Primitive(primitive::Restriction::UnicodeString(
+						primitive::UnicodeString::MaxGrapheme(p),
+					))
+				}),
+			),
 			Property::Pattern(p) => self.restriction.insert(
 				p,
 				prop_cmp,

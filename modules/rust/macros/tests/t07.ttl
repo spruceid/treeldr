@@ -16,4 +16,8 @@ ex:layout a tldr:Layout ;
 	tldr:derivedFrom tldr:String ;
 	tldr:withRestrictions (
 		[ a tldr:LayoutRestriction ; tldr:pattern "a*"^^tldr:RegularExpression ]
+		[ a tldr:LayoutRestriction ; tldr:minLength "3"^^xsd:nonNegativeInteger ]
+		[ a tldr:LayoutRestriction ; tldr:maxLength "20"^^xsd:nonNegativeInteger ]
+		[ a tldr:LayoutRestriction ; tldr:minGrapheme "3"^^xsd:nonNegativeInteger ]
+		[ a tldr:LayoutRestriction ; tldr:maxGrapheme "20"^^xsd:nonNegativeInteger ]
 	) .

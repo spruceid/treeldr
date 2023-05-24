@@ -59,6 +59,8 @@ pub enum Restriction {
 	MaxExclusive(syn::Type, TokenStream),
 	MinLength(syn::Type, TokenStream),
 	MaxLength(syn::Type, TokenStream),
+	MinGrapheme(syn::Type, TokenStream),
+	MaxGrapheme(syn::Type, TokenStream),
 	Pattern(DetAutomaton<usize>),
 }
 
@@ -135,14 +137,14 @@ impl Restriction {
 					use treeldr::layout::primitive::restriction::template::string::RestrictionRef;
 					match $r {
 						RestrictionRef::MinLength(min) => {
-							let lexical = min.to_string();
+							let bytes = min.to_bytes_be().1;
 							let ty = syn::parse2(quote!(treeldr_rust_prelude::ty::NonNegativeInteger)).unwrap();
-							Self::MinLength(ty, quote!(unsafe { $ty::new_unchecked(#lexical) }))
+							Self::MinLength(ty, quote!(treeldr_rust_prelude::ty::NonNegativeInteger::from_bytes_be(&[#(#bytes),*])))
 						},
 						RestrictionRef::MaxLength(max) => {
-							let lexical = max.to_string();
+							let bytes = max.to_bytes_be().1;
 							let ty = syn::parse2(quote!(treeldr_rust_prelude::ty::NonNegativeInteger)).unwrap();
-							Self::MaxLength(ty, quote!(unsafe { $ty::new_unchecked(#lexical) }))
+							Self::MaxLength(ty, quote!(treeldr_rust_prelude::ty::NonNegativeInteger::from_bytes_be(&[#(#bytes),*])))
 						},
 						RestrictionRef::Pattern(regexp) => {
 							Self::Pattern(regexp.build())
@@ -197,7 +199,48 @@ impl Restriction {
 			RestrictionRef::Double(r) => float!(r: treeldr_rust_prelude::ty::Double, f64),
 			RestrictionRef::Base64Bytes(r) => string!(r),
 			RestrictionRef::HexBytes(r) => string!(r),
-			RestrictionRef::String(r) => string!(r),
+			RestrictionRef::String(r) => {
+				use treeldr::layout::primitive::restriction::template::unicode_string::RestrictionRef;
+				match r {
+					RestrictionRef::MinLength(min) => {
+						let bytes = min.to_bytes_be().1;
+						let ty = syn::parse2(quote!(treeldr_rust_prelude::ty::NonNegativeInteger))
+							.unwrap();
+						Self::MinLength(
+							ty,
+							quote!(treeldr_rust_prelude::ty::NonNegativeInteger::from_bytes_be(&[#(#bytes),*])),
+						)
+					}
+					RestrictionRef::MaxLength(max) => {
+						let bytes = max.to_bytes_be().1;
+						let ty = syn::parse2(quote!(treeldr_rust_prelude::ty::NonNegativeInteger))
+							.unwrap();
+						Self::MaxLength(
+							ty,
+							quote!(treeldr_rust_prelude::ty::NonNegativeInteger::from_bytes_be(&[#(#bytes),*])),
+						)
+					}
+					RestrictionRef::MinGrapheme(min) => {
+						let bytes = min.to_bytes_be().1;
+						let ty = syn::parse2(quote!(treeldr_rust_prelude::ty::NonNegativeInteger))
+							.unwrap();
+						Self::MinGrapheme(
+							ty,
+							quote!(treeldr_rust_prelude::ty::NonNegativeInteger::from_bytes_be(&[#(#bytes),*])),
+						)
+					}
+					RestrictionRef::MaxGrapheme(max) => {
+						let bytes = max.to_bytes_be().1;
+						let ty = syn::parse2(quote!(treeldr_rust_prelude::ty::NonNegativeInteger))
+							.unwrap();
+						Self::MaxGrapheme(
+							ty,
+							quote!(treeldr_rust_prelude::ty::NonNegativeInteger::from_bytes_be(&[#(#bytes),*])),
+						)
+					}
+					RestrictionRef::Pattern(regexp) => Self::Pattern(regexp.build()),
+				}
+			}
 			RestrictionRef::Boolean(_)
 			| RestrictionRef::Time(_)
 			| RestrictionRef::Date(_)
@@ -244,6 +287,14 @@ impl<M> GenerateSyntax<M> for Restriction {
 			.unwrap()),
 			Self::MaxLength(ty, value) => Ok(syn::parse2(
 				quote!(treeldr_rust_prelude::restriction::MaxLength::<#ty>::check(value, &#value)),
+			)
+			.unwrap()),
+			Self::MinGrapheme(ty, value) => Ok(syn::parse2(
+				quote!(treeldr_rust_prelude::restriction::MinGrapheme::<#ty>::check(value, &#value)),
+			)
+			.unwrap()),
+			Self::MaxGrapheme(ty, value) => Ok(syn::parse2(
+				quote!(treeldr_rust_prelude::restriction::MaxGrapheme::<#ty>::check(value, &#value)),
 			)
 			.unwrap()),
 			Self::Pattern(automaton) => {

@@ -13,3 +13,9 @@ pub use min_exclusive::*;
 pub use min_inclusive::*;
 pub use min_length::*;
 pub use pattern::Pattern;
+
+#[cfg(feature = "unicode-segmentation")]
+mod unicode_segmentation;
+
+#[cfg(feature = "unicode-segmentation")]
+pub use self::unicode_segmentation::*;

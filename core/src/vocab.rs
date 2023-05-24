@@ -162,6 +162,12 @@ pub enum TreeLdr {
 	#[iri("tldr:maxLength")]
 	MaxLength,
 
+	#[iri("tldr:minGrapheme")]
+	MinGrapheme,
+
+	#[iri("tldr:maxGrapheme")]
+	MaxGrapheme,
+
 	#[iri("tldr:RegularExpression")]
 	RegularExpression,
 

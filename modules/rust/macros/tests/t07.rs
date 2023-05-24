@@ -18,5 +18,7 @@ pub mod schema {
 #[async_std::test]
 async fn t07() {
 	assert!(schema::test::layout::Layout::new("b".to_string()).is_err());
+	assert!(schema::test::layout::Layout::new("aa".to_string()).is_err());
 	assert!(schema::test::layout::Layout::new("aaa".to_string()).is_ok());
+	assert!(schema::test::layout::Layout::new("aaaaaaaaaaaaaaaaaaaaa".to_string()).is_err());
 }

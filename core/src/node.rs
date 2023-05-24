@@ -258,7 +258,7 @@ pub enum Property {
 }
 
 impl Property {
-	pub const ALL: [Self; 58] = [
+	pub const ALL: [Self; 60] = [
 		Self::Self_(None),
 		Self::Type(None),
 		Self::Label(None),
@@ -368,6 +368,8 @@ impl Property {
 		Self::LayoutRestriction(layout::restriction::Property::MaxLength(None)),
 		Self::LayoutRestriction(layout::restriction::Property::MinCardinality(None)),
 		Self::LayoutRestriction(layout::restriction::Property::MinLength(None)),
+		Self::LayoutRestriction(layout::restriction::Property::MinGrapheme(None)),
+		Self::LayoutRestriction(layout::restriction::Property::MaxGrapheme(None)),
 		Self::LayoutRestriction(layout::restriction::Property::Pattern(None)),
 	];
 
@@ -581,6 +583,12 @@ impl Property {
 			}
 			Self::LayoutRestriction(layout::restriction::Property::MinLength(_)) => {
 				Self::LayoutRestriction(layout::restriction::Property::MinLength(sub_prop))
+			}
+			Self::LayoutRestriction(layout::restriction::Property::MinGrapheme(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::MinGrapheme(sub_prop))
+			}
+			Self::LayoutRestriction(layout::restriction::Property::MaxGrapheme(_)) => {
+				Self::LayoutRestriction(layout::restriction::Property::MaxGrapheme(sub_prop))
 			}
 			Self::LayoutRestriction(layout::restriction::Property::Pattern(_)) => {
 				Self::LayoutRestriction(layout::restriction::Property::Pattern(sub_prop))

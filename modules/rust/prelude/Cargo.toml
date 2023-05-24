@@ -19,3 +19,7 @@ json-ld = { workspace = true, optional = true }
 locspan = { workspace = true, optional = true }
 chrono.workspace = true
 contextual.workspace = true
+
+# The `unicode-segmentation` features enables the `MinGrapheme` and
+# `MaxGrapheme` string constraints.
+unicode-segmentation = { version = "1.10.1", optional = true }
