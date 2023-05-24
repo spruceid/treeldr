@@ -97,13 +97,15 @@ impl<M> Definition<M> {
 					.into_expected_integer()?
 					.map(|n| Restriction::String(String::MinLength(n))),
 			),
-			Property::Pattern(p) => self.restriction.insert(
-				p,
-				prop_cmp,
-				value
-					.into_expected_regexp()?
-					.map(|p| Restriction::String(String::Pattern(p))),
-			),
+			Property::Pattern(p) => {
+				let Meta(s, meta) = value.into_expected_string()?;
+				let regexp = RegExp::parse(&s).expect("invalid regular expression");
+				self.restriction.insert(
+					p,
+					prop_cmp,
+					Meta(Restriction::String(String::Pattern(regexp)), meta),
+				)
+			}
 		}
 
 		Ok(())

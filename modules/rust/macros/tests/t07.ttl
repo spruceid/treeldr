@@ -6,16 +6,14 @@
 @prefix ex: <https://example.com/> .
 
 ex:type a rdfs:Datatype ;
-	owl:onDatatype xsd:integer ;
+	owl:onDatatype xsd:string ;
 	owl:withRestrictions (
-		[ a owl:DatatypeRestriction ; xsd:minInclusive "12"^^xsd:integer ]
-		[ a owl:DatatypeRestriction ; xsd:maxInclusive "120"^^xsd:integer ]
+		[ a owl:DatatypeRestriction ; xsd:pattern "a*" ]
 	) .
 
 ex:layout a tldr:Layout ;
 	tldr:name "Layout" ;
-	tldr:derivedFrom tldr:Integer ;
+	tldr:derivedFrom tldr:String ;
 	tldr:withRestrictions (
-		[ a tldr:LayoutRestriction ; tldr:inclusiveMinimum "12"^^xsd:integer ]
-		[ a tldr:LayoutRestriction ; tldr:inclusiveMaximum "120"^^xsd:integer ]
+		[ a tldr:LayoutRestriction ; tldr:pattern "a*"^^tldr:RegularExpression ]
 	) .

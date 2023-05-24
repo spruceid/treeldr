@@ -162,6 +162,9 @@ pub enum TreeLdr {
 	#[iri("tldr:maxLength")]
 	MaxLength,
 
+	#[iri("tldr:RegularExpression")]
+	RegularExpression,
+
 	#[iri("tldr:pattern")]
 	Pattern,
 }

@@ -59,6 +59,13 @@ pub trait MetaValueExt<M>: Sized {
 		Ok(self.into_expected_id()?.map(Type::from))
 	}
 
+	fn into_expected_string(self) -> Result<Meta<String, M>, Error<M>> {
+		match self.into_expected_literal()? {
+			Meta(treeldr::value::Literal::String(s), meta) => Ok(Meta(s, meta)),
+			_ => panic!("expected string"),
+		}
+	}
+
 	fn into_expected_numeric(self) -> Result<Meta<treeldr::value::Numeric, M>, Error<M>> {
 		match self.into_expected_literal()? {
 			Meta(treeldr::value::Literal::Numeric(n), meta) => Ok(Meta(n, meta)),
@@ -92,9 +99,7 @@ pub trait MetaValueExt<M>: Sized {
 
 	fn into_expected_regexp(self) -> Result<Meta<treeldr::ty::data::RegExp, M>, Error<M>> {
 		match self.into_expected_literal()? {
-			Meta(treeldr::value::Literal::Other(_, _), _meta) => {
-				todo!("regexp")
-			}
+			Meta(treeldr::value::Literal::RegExp(e), meta) => Ok(Meta(e, meta)),
 			_ => panic!("expected regular expression"),
 		}
 	}
@@ -119,7 +124,7 @@ pub trait MetaValueExt<M>: Sized {
 				Ok(name) => Ok(Meta(name, meta)),
 				Err(_) => panic!("invalid name"),
 			},
-			_ => panic!("expected regular expression"),
+			_ => panic!("expected name"),
 		}
 	}
 }

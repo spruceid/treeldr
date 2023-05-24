@@ -1,15 +1,15 @@
 use crate::ty;
 
-pub trait MinInclusive<T> {
+pub trait MaxInclusive<T> {
 	fn check(&self, value: &T) -> bool;
 }
 
 macro_rules! impl_for {
 	{ $($ty:ty),* } => {
 		$(
-			impl MinInclusive<$ty> for $ty {
+			impl MaxInclusive<$ty> for $ty {
 				fn check(&self, value: &$ty) -> bool {
-					self >= value
+					self <= value
 				}
 			}
 		)*

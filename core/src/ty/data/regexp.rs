@@ -1,6 +1,8 @@
 use btree_range_map::RangeSet;
 use std::fmt;
 
+use crate::utils::{Automaton, DetAutomaton};
+
 /// Regular expression.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RegExp {
@@ -196,6 +198,126 @@ impl RegExp {
 			0 => unreachable!(),
 			1 => Ok(RegExp::Union(stack.into_iter().next().unwrap()).simplified()),
 			_ => Err(ParseError::MissingClosingParenthesis),
+		}
+	}
+
+	pub fn build(&self) -> DetAutomaton<usize> {
+		let nd = self.build_non_deterministic();
+		let dt = nd.determinize();
+		debug_assert!(!dt.final_states().is_empty());
+
+		let mut n = 0;
+		dt.map(
+			|_| {
+				let r = n;
+				n += 1;
+				r
+			},
+			|label| *label,
+		)
+	}
+
+	fn build_non_deterministic(&self) -> Automaton<usize> {
+		let mut result = Automaton::new();
+
+		let mut n = 0;
+		let mut new_state = move || {
+			let r = n;
+			n += 1;
+			r
+		};
+
+		let (a, b) = self.build_into(&mut new_state, &mut result);
+		result.add_initial_state(a);
+		result.add_final_state(b);
+		debug_assert!(!result.final_states().is_empty());
+
+		result
+	}
+
+	fn build_into(
+		&self,
+		new_state: &mut impl FnMut() -> usize,
+		automaton: &mut Automaton<usize>,
+	) -> (usize, usize) {
+		match self {
+			Self::Any => {
+				let mut charset = RangeSet::new();
+				charset.insert('\u{0}'..='\u{d7ff}');
+				charset.insert('\u{e000}'..='\u{10ffff}');
+				let a = new_state();
+				let b = new_state();
+				automaton.add(a, Some(charset), b);
+				(a, b)
+			}
+			Self::Repeat(exp, min, max) => exp.build_repeat_into(new_state, automaton, *min, *max),
+			Self::Sequence(exps) => {
+				let mut a = new_state();
+
+				for e in exps {
+					let (ea, eb) = e.build_into(new_state, automaton);
+					automaton.add(a, None, ea);
+					a = eb;
+				}
+
+				let b = new_state();
+				automaton.add(a, None, b);
+
+				(a, b)
+			}
+			Self::Set(charset) => {
+				let a = new_state();
+				let b = new_state();
+
+				automaton.add(a, Some(charset.clone()), b);
+				(a, b)
+			}
+			Self::Union(exps) => {
+				let a = new_state();
+				let b = new_state();
+
+				for e in exps {
+					let (ea, eb) = e.build_into(new_state, automaton);
+					automaton.add(a, None, ea);
+					automaton.add(eb, None, b);
+				}
+
+				(a, b)
+			}
+		}
+	}
+
+	fn build_repeat_into(
+		&self,
+		new_state: &mut impl FnMut() -> usize,
+		automaton: &mut Automaton<usize>,
+		min: u32,
+		max: u32,
+	) -> (usize, usize) {
+		if max == 0 {
+			let a = new_state();
+			(a, a)
+		} else if min > 0 {
+			let (a, b) = self.build_into(new_state, automaton);
+			let (rest_a, rest_b) = self.build_repeat_into(
+				new_state,
+				automaton,
+				min - 1,
+				if max < u32::MAX { max - 1 } else { u32::MAX },
+			);
+			automaton.add(b, None, rest_a);
+			(a, rest_b)
+		} else if max < u32::MAX {
+			let (a, b) = self.build_into(new_state, automaton);
+			let (c, d) = self.build_repeat_into(new_state, automaton, 0, max - 1);
+			automaton.add(a, None, d);
+			automaton.add(b, None, c);
+			(a, d)
+		} else {
+			let (a, b) = self.build_into(new_state, automaton);
+			automaton.add(a, None, b);
+			automaton.add(b, None, a);
+			(a, b)
 		}
 	}
 }

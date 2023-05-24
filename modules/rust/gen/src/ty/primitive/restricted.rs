@@ -1,7 +1,7 @@
 use locspan::Meta;
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use treeldr::TId;
+use treeldr::{utils::DetAutomaton, TId};
 
 use crate::{syntax, GenerateSyntax};
 
@@ -59,6 +59,7 @@ pub enum Restriction {
 	MaxExclusive(syn::Type, TokenStream),
 	MinLength(syn::Type, TokenStream),
 	MaxLength(syn::Type, TokenStream),
+	Pattern(DetAutomaton<usize>),
 }
 
 impl Restriction {
@@ -143,8 +144,8 @@ impl Restriction {
 							let ty = syn::parse2(quote!(treeldr_rust_prelude::ty::NonNegativeInteger)).unwrap();
 							Self::MaxLength(ty, quote!(unsafe { $ty::new_unchecked(#lexical) }))
 						},
-						RestrictionRef::Pattern(_) => {
-							unimplemented!("string pattern constraint")
+						RestrictionRef::Pattern(regexp) => {
+							Self::Pattern(regexp.build())
 						}
 					}
 				}
@@ -245,6 +246,52 @@ impl<M> GenerateSyntax<M> for Restriction {
 				quote!(treeldr_rust_prelude::restriction::MaxLength::<#ty>::check(value, &#value)),
 			)
 			.unwrap()),
+			Self::Pattern(automaton) => {
+				let initial_state = *automaton.initial_state();
+
+				let cases = automaton.transitions().iter().map(|(q, transitions)| {
+					let cases = transitions.iter().map(|(range, r)| {
+						let a = range.first().unwrap();
+						let b = range.last().unwrap();
+						quote!(#a..=#b => Some(#r))
+					});
+
+					quote! {
+						#q => match c {
+							#(#cases,)*
+							_ => None
+						}
+					}
+				});
+
+				let final_states = automaton.final_states().iter().map(|q| quote!(#q));
+
+				Ok(syn::parse2(quote! {
+					{
+						struct Automaton;
+
+						impl treeldr_rust_prelude::restriction::pattern::Automaton for Automaton {
+							fn initial_state(&self) -> usize {
+								#initial_state
+							}
+
+							fn next_state(&self, state: usize, c: char) -> Option<usize> {
+								match state {
+									#(#cases,)*
+									_ => panic!("invalid state")
+								}
+							}
+
+							fn is_final_state(&self, state: usize) -> bool {
+								matches!(state, #(#final_states)|*)
+							}
+						}
+
+						treeldr_rust_prelude::restriction::Pattern::<Automaton>::check(value, &Automaton)
+					}
+				})
+				.unwrap())
+			}
 		}
 	}
 }
