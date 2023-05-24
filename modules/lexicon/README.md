@@ -7,20 +7,24 @@ For instance, consider the following Lexicon document:
 {
   "lexicon": 1,
   "id": "com.example.getProfile",
-  "type": "query",
-  "parameters": {
-    "user": {"type": "string", "required": true}
-  },
-  "output": {
-    "encoding": "application/json",
-    "schema": {
-      "type": "object",
-      "required": ["did", "name"],
-      "properties": {
-        "did": {"type": "string"},
-        "name": {"type": "string"},
-        "displayName": {"type": "string", "maxLength": 64},
-        "description": {"type": "string", "maxLength": 256}
+  "defs": {
+    "main": {
+      "type": "query",
+      "parameters": {
+        "user": {"type": "string", "required": true}
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["did", "name"],
+          "properties": {
+            "did": {"type": "string"},
+            "name": {"type": "string"},
+            "displayName": {"type": "string", "maxLength": 64},
+            "description": {"type": "string", "maxLength": 256}
+          }
+        }
       }
     }
   }
@@ -35,25 +39,25 @@ treeldr-rust-cli --no-rdf -i lexicon_doc.json -m example="lexicon:com.example" |
 The `--no-rdf` flag is important to prevent the Rust code generator to generate code related to RDF type definitions (there are none). The output should have the following structure:
 ```rust
 pub struct GetProfile {
-	user: get_profile::User;
+  user: get_profile::User;
 }
 
 pub mod get_profile {
-	pub type User = String;
+  pub type User = String;
 
-	pub mod output {
-		pub type Did = String;
-		pub type Name = String;
-		pub struct DisplayName(...);
-		pub struct Description(...);
-	}
+  pub mod output {
+    pub type Did = String;
+    pub type Name = String;
+    pub struct DisplayName(...);
+    pub struct Description(...);
+  }
 
-	pub struct Output {
-		did: output::Did,
-		name: output::Name,
-		display_name: Option<output::DisplayName>,
-		description: Option<output::Description>
-	}
+  pub struct Output {
+    did: output::Did,
+    name: output::Name,
+    display_name: Option<output::DisplayName>,
+    description: Option<output::Description>
+  }
 }
 ```
 Each Lexicon schema defined in the document has an equivalent Rust type definition. The generated code is dependent on the `treeldr_rust_prelude` crate.
@@ -71,8 +75,8 @@ use treeldr_rust_macros::tldr;
 
 #[tldr("path/to/lexicon_doc.json", no_rdf)]
 pub mod schema {
-	#[prefix("lexicon:com.example")]
-	pub mod example {}
+  #[prefix("lexicon:com.example")]
+  pub mod example {}
 }
 
 schema::example::get_profile::output::DisplayName::new("John Snow".to_string()).except("invalid display name")
