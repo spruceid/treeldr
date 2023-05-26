@@ -1,6 +1,7 @@
 [workspace]
 members = [
 	"core",
+	"primitives",
 	"build",
 	"syntax",
 	"load",
@@ -21,6 +22,7 @@ authors = ["Spruce Systems Inc."]
 
 [workspace.dependencies]
 treeldr = { path = "core", version = "0.1.0" }
+treeldr-primitives = { path = "primitives", version = "0.1.0" }
 treeldr-build = { path = "build", version = "0.1.0" }
 treeldr-syntax = { path = "syntax", version = "0.1.0" }
 treeldr-load = { path = "load", version = "0.1.0" }
@@ -37,7 +39,7 @@ static-iref = "2.0"
 locspan = "0.7.11"
 locspan-derive = "0.6"
 codespan-reporting = "0.11"
-rdf-types = "0.14.3"
+rdf-types = "0.14.9"
 xsd-types = "0.7.4"
 langtag = "0.3.2"
 grdf = "0.18.0"

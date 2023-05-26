@@ -319,3 +319,63 @@ impl AsRdfLiteral for Literal {
 		}
 	}
 }
+
+/// Literal value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LiteralRef<'a> {
+	Numeric(NumericRef<'a>),
+	LangString(&'a LangString),
+	String(&'a str),
+	RegExp(&'a RegExp),
+	Other(&'a str, IriIndex),
+}
+
+impl<'a> fmt::Display for LiteralRef<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		// match self {
+		// 	Self::Numeric(n) => n.fmt(f),
+		// 	Self::LangString(s) => s.fmt(f),
+		// 	Self::String(s) => s.fmt(f),
+		// 	Self::RegExp(e) => e.fmt(f),
+		// 	Self::Other(s, _) => s.fmt(f),
+		// }
+		todo!("impl Display for LiteralRef")
+	}
+}
+
+impl<'a, V: IriVocabulary<Iri = IriIndex>> rdf_types::RdfDisplayWithContext<V> for LiteralRef<'a> {
+	fn rdf_fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
+		// use fmt::Display;
+		// use rdf_types::RdfDisplay;
+		// match self {
+		// 	Self::Numeric(n) => n.rdf_fmt_with(vocabulary, f),
+		// 	Self::LangString(s) => s.rdf_fmt(f),
+		// 	Self::String(s) => s.fmt(f),
+		// 	Self::RegExp(e) => write!(f, "{e}^^{}", vocab::TreeLdr::RegularExpression.as_iri()),
+		// 	Self::Other(s, ty) => write!(f, "{s}^^{}", vocabulary.iri(ty).unwrap()),
+		// }
+		todo!("impl RdfDisplayWithContext for LiteralRef")
+	}
+}
+
+impl<'a> AsRdfLiteral for LiteralRef<'a> {
+	fn language(&self) -> Option<LanguageTag> {
+		match self {
+			Self::LangString(s) => Some(s.language()),
+			_ => None,
+		}
+	}
+
+	fn rdf_type(&self) -> IriIndex {
+		// match self {
+		// 	Self::Numeric(n) => n.rdf_type(),
+		// 	Self::LangString(s) => s.rdf_type(),
+		// 	Self::String(s) => s.rdf_type(),
+		// 	Self::RegExp(_) => {
+		// 		IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::RegularExpression))
+		// 	}
+		// 	Self::Other(_, ty) => *ty,
+		// }
+		todo!("impl AsRefLiteral for LiteralRef")
+	}
+}

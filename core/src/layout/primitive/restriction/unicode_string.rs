@@ -1,12 +1,24 @@
-use crate::{metadata::Merge, ty::data::RegExp, MetaOption};
+use crate::{metadata::Merge, ty::data::RegExp, MetaOption, layout::primitive::RestrictionSet};
 use derivative::Derivative;
 use locspan::Meta;
 use xsd_types::NonNegativeInteger;
+
+use super::RestrictionsTemplate;
+
+pub struct Template;
+
+impl<T> RestrictionsTemplate<T> for Template {
+	type Ref<'a> = RestrictionRef<'a> where T: 'a;
+	type Set<M> = Restrictions<M>;
+	type Iter<'a, M> = Iter<'a, M> where T: 'a, M: 'a;
+}
 
 #[derive(Debug)]
 pub enum Restriction {
 	MinLength(NonNegativeInteger),
 	MaxLength(NonNegativeInteger),
+	MinGrapheme(NonNegativeInteger),
+	MaxGrapheme(NonNegativeInteger),
 	Pattern(RegExp),
 }
 
@@ -17,6 +29,8 @@ pub struct Conflict<M>(pub Restriction, pub Meta<Restriction, M>);
 pub struct Restrictions<M> {
 	len_min: MetaOption<NonNegativeInteger, M>,
 	len_max: MetaOption<NonNegativeInteger, M>,
+	grapheme_min: MetaOption<NonNegativeInteger, M>,
+	grapheme_max: MetaOption<NonNegativeInteger, M>,
 	pattern: MetaOption<RegExp, M>,
 }
 
@@ -25,6 +39,8 @@ impl<M> Default for Restrictions<M> {
 		Self {
 			len_min: MetaOption::default(),
 			len_max: MetaOption::default(),
+			grapheme_min: MetaOption::default(),
+			grapheme_max: MetaOption::default(),
 			pattern: MetaOption::default(),
 		}
 	}
@@ -122,6 +138,89 @@ impl<M> Restrictions<M> {
 		Ok(())
 	}
 
+	pub fn grapheme_min_with_metadata(&self) -> &MetaOption<NonNegativeInteger, M> {
+		&self.grapheme_min
+	}
+
+	pub fn grapheme_min(&self) -> NonNegativeInteger {
+		self.len_min
+			.value()
+			.cloned()
+			.unwrap_or_else(NonNegativeInteger::zero)
+	}
+
+	pub fn insert_grapheme_min(
+		&mut self,
+		Meta(min, meta): Meta<NonNegativeInteger, M>,
+	) -> Result<(), Meta<Conflict<M>, M>>
+	where
+		M: Clone + Merge,
+	{
+		if let Some(Meta(max, max_meta)) = self.grapheme_max.as_ref() {
+			if min > *max {
+				return Err(Meta(
+					Conflict(
+						Restriction::MinLength(min),
+						Meta(Restriction::MaxLength(max.clone()), max_meta.clone()),
+					),
+					meta,
+				));
+			}
+		}
+
+		match self.grapheme_min.as_mut() {
+			Some(Meta(current, current_meta)) => {
+				if *current <= min {
+					*current = min;
+					current_meta.merge_with(meta)
+				}
+			}
+			None => self.grapheme_min = MetaOption::new(min, meta),
+		}
+
+		Ok(())
+	}
+
+	pub fn grapheme_max_with_metadata(&self) -> &MetaOption<NonNegativeInteger, M> {
+		&self.grapheme_max
+	}
+
+	pub fn grapheme_max(&self) -> Option<&NonNegativeInteger> {
+		self.grapheme_max.value()
+	}
+
+	pub fn insert_grapheme_max(
+		&mut self,
+		Meta(max, meta): Meta<NonNegativeInteger, M>,
+	) -> Result<(), Meta<Conflict<M>, M>>
+	where
+		M: Clone + Merge,
+	{
+		if let Some(Meta(min, min_meta)) = self.grapheme_min.as_ref() {
+			if max < *min {
+				return Err(Meta(
+					Conflict(
+						Restriction::MaxGrapheme(max),
+						Meta(Restriction::MinGrapheme(min.clone()), min_meta.clone()),
+					),
+					meta,
+				));
+			}
+		}
+
+		match self.grapheme_max.as_mut() {
+			Some(Meta(current, current_meta)) => {
+				if *current >= max {
+					*current = max;
+					current_meta.merge_with(meta)
+				}
+			}
+			None => self.grapheme_max = MetaOption::new(max, meta),
+		}
+
+		Ok(())
+	}
+
 	pub fn pattern(&self) -> Option<&Meta<RegExp, M>> {
 		self.pattern.as_ref()
 	}
@@ -158,8 +257,16 @@ impl<M> Restrictions<M> {
 		Iter {
 			len_min: self.len_min.as_ref().filter(|v| !v.is_zero()),
 			len_max: self.len_max.as_ref(),
+			grapheme_min: self.grapheme_min.as_ref().filter(|v| !v.is_zero()),
+			grapheme_max: self.grapheme_max.as_ref(),
 			pattern: self.pattern.as_ref(),
 		}
+	}
+}
+
+impl<M> RestrictionSet for Restrictions<M> {
+	fn is_restricted(&self) -> bool {
+		self.is_restricted()
 	}
 }
 
@@ -168,12 +275,16 @@ impl<M> Restrictions<M> {
 pub enum RestrictionRef<'a> {
 	MinLength(&'a NonNegativeInteger),
 	MaxLength(&'a NonNegativeInteger),
+	MinGrapheme(&'a NonNegativeInteger),
+	MaxGrapheme(&'a NonNegativeInteger),
 	Pattern(&'a RegExp),
 }
 
 pub struct Iter<'a, M> {
 	len_min: Option<&'a Meta<NonNegativeInteger, M>>,
 	len_max: Option<&'a Meta<NonNegativeInteger, M>>,
+	grapheme_min: Option<&'a Meta<NonNegativeInteger, M>>,
+	grapheme_max: Option<&'a Meta<NonNegativeInteger, M>>,
 	pattern: Option<&'a Meta<RegExp, M>>,
 }
 
@@ -188,6 +299,16 @@ impl<'a, M> Iterator for Iter<'a, M> {
 				self.len_max
 					.take()
 					.map(|m| m.borrow().map(RestrictionRef::MaxLength))
+			})
+			.or_else(|| {
+				self.grapheme_min
+					.take()
+					.map(|m| m.borrow().map(RestrictionRef::MinGrapheme))
+			})
+			.or_else(|| {
+				self.grapheme_max
+					.take()
+					.map(|m| m.borrow().map(RestrictionRef::MaxGrapheme))
 			})
 			.or_else(|| {
 				self.pattern
@@ -211,6 +332,16 @@ impl<'a, M> DoubleEndedIterator for Iter<'a, M> {
 				self.len_min
 					.take()
 					.map(|m| m.borrow().map(RestrictionRef::MinLength))
+			})
+			.or_else(|| {
+				self.grapheme_min
+					.take()
+					.map(|m| m.borrow().map(RestrictionRef::MinGrapheme))
+			})
+			.or_else(|| {
+				self.grapheme_max
+					.take()
+					.map(|m| m.borrow().map(RestrictionRef::MaxGrapheme))
 			})
 	}
 }

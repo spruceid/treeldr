@@ -166,6 +166,7 @@ impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 			}
 			Self::NonNegativeInteger(u) => Object::Literal(u.as_rdf_literal()),
 			Self::Literal(l) => Object::Literal(l.as_rdf_literal()),
+			Self::LiteralRef(l) => Object::Literal(l.as_rdf_literal()),
 			Self::Name(n) => Object::Literal(Literal::String(n.to_string())),
 			Self::Id(id) => id.into_term(),
 			Self::Type(t) => t.id().into_term(),
@@ -551,19 +552,19 @@ impl<'a> IntoRdf for layout::primitive::RestrictionRef<'a> {
 			Self::U32(r) => r.into_rdf_with(vocabulary, generator, quads, options),
 			Self::U16(r) => r.into_rdf_with(vocabulary, generator, quads, options),
 			Self::U8(r) => r.into_rdf_with(vocabulary, generator, quads, options),
-			Self::Float(r) => r.into_rdf_with(vocabulary, generator, quads, options),
-			Self::Double(r) => r.into_rdf_with(vocabulary, generator, quads, options),
-			Self::Base64Bytes(r) => r.into_rdf_with(vocabulary, generator, quads, options),
-			Self::HexBytes(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::F32(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::F64(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::Base64BytesBuf(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::HexBytesBuf(r) => r.into_rdf_with(vocabulary, generator, quads, options),
 			Self::String(r) => r.into_rdf_with(vocabulary, generator, quads, options),
 			Self::Date(r) => r.into_rdf_with(vocabulary, generator, quads, options),
 			Self::Time(r) => r.into_rdf_with(vocabulary, generator, quads, options),
 			Self::DateTime(r) => r.into_rdf_with(vocabulary, generator, quads, options),
-			Self::Iri(r) => r.into_rdf_with(vocabulary, generator, quads, options),
-			Self::Uri(r) => r.into_rdf_with(vocabulary, generator, quads, options),
-			Self::Url(r) => r.into_rdf_with(vocabulary, generator, quads, options),
-			Self::Bytes(r) => r.into_rdf_with(vocabulary, generator, quads, options),
-			Self::Cid(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::IriBuf(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::UriBuf(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::UrlBuf(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::BytesBuf(r) => r.into_rdf_with(vocabulary, generator, quads, options),
+			Self::CidBuf(r) => r.into_rdf_with(vocabulary, generator, quads, options),
 		}
 	}
 }
@@ -625,7 +626,7 @@ impl<'a> IntoRdf for layout::restriction::cardinal::RestrictionRef<'a> {
 	}
 }
 
-impl<'a, T> IntoRdf for layout::primitive::restriction::template::none::RestrictionRef<'a, T> {
+impl<'a, T> IntoRdf for layout::primitive::restriction::none::RestrictionRef<'a, T> {
 	type Target = Id;
 
 	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -640,7 +641,7 @@ impl<'a, T> IntoRdf for layout::primitive::restriction::template::none::Restrict
 }
 
 impl<'a, T: ToString> IntoRdf
-	for layout::primitive::restriction::template::integer::RestrictionRef<'a, T>
+	for layout::primitive::restriction::integer::RestrictionRef<'a, T>
 {
 	type Target = Id;
 
@@ -683,7 +684,7 @@ impl<'a, T: ToString> IntoRdf
 }
 
 impl<'a, T: AsRdfLiteral> IntoRdf
-	for layout::primitive::restriction::template::float::RestrictionRef<'a, T>
+	for layout::primitive::restriction::float::RestrictionRef<'a, T>
 {
 	type Target = Id;
 
@@ -696,7 +697,7 @@ impl<'a, T: AsRdfLiteral> IntoRdf
 	) -> Self::Target {
 		let id = generator.next(vocabulary);
 
-		use layout::primitive::restriction::template::float::{Max, Min};
+		use layout::primitive::restriction::float::{Max, Min};
 		match self {
 			Self::Min(Min::Included(min)) => {
 				quads.push(Quad(
@@ -736,7 +737,7 @@ impl<'a, T: AsRdfLiteral> IntoRdf
 	}
 }
 
-impl<'a> IntoRdf for layout::primitive::restriction::template::string::RestrictionRef<'a> {
+impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> {
 	type Target = Id;
 
 	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -779,7 +780,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::template::string::Restricti
 	}
 }
 
-impl<'a> IntoRdf for layout::primitive::restriction::template::unicode_string::RestrictionRef<'a> {
+impl<'a> IntoRdf for layout::primitive::restriction::unicode_string::RestrictionRef<'a> {
 	type Target = Id;
 
 	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(

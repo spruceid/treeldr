@@ -41,15 +41,15 @@ impl<M> GenerateSyntax<M> for treeldr::layout::Primitive {
 			Self::U32 => Ok(syn::parse2(quote! { u32 }).unwrap()),
 			Self::U16 => Ok(syn::parse2(quote! { u16 }).unwrap()),
 			Self::U8 => Ok(syn::parse2(quote! { u8 }).unwrap()),
-			Self::Float => Ok(syn::parse2(quote! { f32 }).unwrap()),
-			Self::Double => Ok(syn::parse2(quote! { f64 }).unwrap()),
-			Self::Base64Bytes => {
+			Self::F32 => Ok(syn::parse2(quote! { f32 }).unwrap()),
+			Self::F64 => Ok(syn::parse2(quote! { f64 }).unwrap()),
+			Self::Base64BytesBuf => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Base64BytesBuf }).unwrap())
 			}
-			Self::HexBytes => {
+			Self::HexBytesBuf => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::HexBytesBuf }).unwrap())
 			}
-			Self::Bytes => {
+			Self::BytesBuf => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::BytesBuf }).unwrap())
 			}
 			Self::String => Ok(syn::parse2(quote! { ::std::string::String }).unwrap()),
@@ -63,10 +63,10 @@ impl<M> GenerateSyntax<M> for treeldr::layout::Primitive {
 			Self::Time => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::chrono::NaiveTime }).unwrap())
 			}
-			Self::Url => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
-			Self::Uri => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
-			Self::Iri => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
-			Self::Cid => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::CidBuf }).unwrap()),
+			Self::UrlBuf => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
+			Self::UriBuf => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
+			Self::IriBuf => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
+			Self::CidBuf => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::CidBuf }).unwrap()),
 		}
 	}
 }
@@ -106,15 +106,15 @@ impl<M> GenerateSyntax<M> for Referenced<treeldr::layout::Primitive> {
 			Primitive::U32 => Ok(syn::parse2(quote! { u32 }).unwrap()),
 			Primitive::U16 => Ok(syn::parse2(quote! { u16 }).unwrap()),
 			Primitive::U8 => Ok(syn::parse2(quote! { u8 }).unwrap()),
-			Primitive::Float => Ok(syn::parse2(quote! { f32 }).unwrap()),
-			Primitive::Double => Ok(syn::parse2(quote! { f64 }).unwrap()),
-			Primitive::Base64Bytes => {
+			Primitive::F32 => Ok(syn::parse2(quote! { f32 }).unwrap()),
+			Primitive::F64 => Ok(syn::parse2(quote! { f64 }).unwrap()),
+			Primitive::Base64BytesBuf => {
 				Ok(syn::parse2(quote! { &::treeldr_rust_prelude::ty::Base64Bytes }).unwrap())
 			}
-			Primitive::HexBytes => {
+			Primitive::HexBytesBuf => {
 				Ok(syn::parse2(quote! { &::treeldr_rust_prelude::ty::HexBytes }).unwrap())
 			}
-			Primitive::Bytes => {
+			Primitive::BytesBuf => {
 				Ok(syn::parse2(quote! { &::treeldr_rust_prelude::ty::Bytes }).unwrap())
 			}
 			Primitive::String => Ok(syn::parse2(quote! { &str }).unwrap()),
@@ -128,16 +128,16 @@ impl<M> GenerateSyntax<M> for Referenced<treeldr::layout::Primitive> {
 			Primitive::Time => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::chrono::NaiveTime }).unwrap())
 			}
-			Primitive::Url => {
+			Primitive::UrlBuf => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::Iri }).unwrap())
 			}
-			Primitive::Uri => {
+			Primitive::UriBuf => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::Iri }).unwrap())
 			}
-			Primitive::Iri => {
+			Primitive::IriBuf => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::Iri }).unwrap())
 			}
-			Primitive::Cid => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Cid }).unwrap()),
+			Primitive::CidBuf => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Cid }).unwrap()),
 		}
 	}
 }

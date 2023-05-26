@@ -2,7 +2,7 @@ use crate::{
 	component, doc, error, layout, list, multiple,
 	prop::{self, PropertyName, UnknownProperty},
 	property_values, ty,
-	value::Literal,
+	value::{Literal, LiteralRef},
 	vocab::{self, Term},
 	Documentation, Error, Id, IriIndex, MetaOption, Multiple, MutableModel, Name, PropertyValueRef,
 	PropertyValues, ResourceType, TId,
@@ -258,7 +258,7 @@ pub enum Property {
 }
 
 impl Property {
-	pub const ALL: [Self; 60] = [
+	pub const ALL: [Self; 61] = [
 		Self::Self_(None),
 		Self::Type(None),
 		Self::Label(None),
@@ -323,6 +323,9 @@ impl Property {
 		)),
 		Self::Component(component::Property::Layout(
 			layout::Property::WithRestrictions(None),
+		)),
+		Self::Component(component::Property::Layout(
+			layout::Property::DefaultValue(None),
 		)),
 		Self::Component(component::Property::Layout(layout::Property::Description(
 			layout::DescriptionProperty::Alias(None),
@@ -498,6 +501,11 @@ impl Property {
 			Self::Component(component::Property::Layout(layout::Property::WithRestrictions(_))) => {
 				Self::Component(component::Property::Layout(
 					layout::Property::WithRestrictions(sub_prop),
+				))
+			}
+			Self::Component(component::Property::Layout(layout::Property::DefaultValue(_))) => {
+				Self::Component(component::Property::Layout(
+					layout::Property::DefaultValue(sub_prop),
 				))
 			}
 			Self::Component(component::Property::Layout(layout::Property::Description(
@@ -779,6 +787,7 @@ pub enum BindingValueRef<'a, M> {
 	SchemaBoolean(bool),
 	NonNegativeInteger(&'a NonNegativeInteger),
 	Literal(&'a Literal),
+	LiteralRef(LiteralRef<'a>),
 	Name(&'a Name),
 	Id(Id),
 	Type(TId<crate::Type>),

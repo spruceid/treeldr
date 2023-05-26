@@ -71,16 +71,16 @@ impl<M: Clone + Merge> BuildPrimitive<M> for Primitive {
 			Primitive::U8 => Ok(treeldr::layout::RestrictedPrimitive::U8(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
-			Primitive::Float => Ok(treeldr::layout::RestrictedPrimitive::Float(
+			Primitive::F32 => Ok(treeldr::layout::RestrictedPrimitive::Float(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
-			Primitive::Double => Ok(treeldr::layout::RestrictedPrimitive::Double(
+			Primitive::F64 => Ok(treeldr::layout::RestrictedPrimitive::Double(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
-			Primitive::Base64Bytes => Ok(treeldr::layout::RestrictedPrimitive::Base64Bytes(
+			Primitive::Base64BytesBuf => Ok(treeldr::layout::RestrictedPrimitive::Base64Bytes(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
-			Primitive::HexBytes => Ok(treeldr::layout::RestrictedPrimitive::HexBytes(
+			Primitive::HexBytesBuf => Ok(treeldr::layout::RestrictedPrimitive::HexBytes(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
 			Primitive::String => Ok(treeldr::layout::RestrictedPrimitive::String(
@@ -95,19 +95,19 @@ impl<M: Clone + Merge> BuildPrimitive<M> for Primitive {
 			Primitive::DateTime => Ok(treeldr::layout::RestrictedPrimitive::DateTime(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
-			Primitive::Iri => Ok(treeldr::layout::RestrictedPrimitive::Iri(
+			Primitive::IriBuf => Ok(treeldr::layout::RestrictedPrimitive::Iri(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
-			Primitive::Uri => Ok(treeldr::layout::RestrictedPrimitive::Uri(
+			Primitive::UriBuf => Ok(treeldr::layout::RestrictedPrimitive::Uri(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
-			Primitive::Url => Ok(treeldr::layout::RestrictedPrimitive::Url(
+			Primitive::UrlBuf => Ok(treeldr::layout::RestrictedPrimitive::Url(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
-			Primitive::Bytes => Ok(treeldr::layout::RestrictedPrimitive::Bytes(
+			Primitive::BytesBuf => Ok(treeldr::layout::RestrictedPrimitive::Bytes(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
-			Primitive::Cid => Ok(treeldr::layout::RestrictedPrimitive::Cid(
+			Primitive::CidBuf => Ok(treeldr::layout::RestrictedPrimitive::Cid(
 				restrictions.try_map(|r| r.build(id))?,
 			)),
 		}

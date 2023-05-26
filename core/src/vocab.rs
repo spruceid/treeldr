@@ -42,6 +42,10 @@ pub enum TreeLdr {
 	#[iri("tldr:withRestrictions")]
 	WithRestrictions,
 
+	/// Derived primitive default value.
+	#[iri("tldr:defaultValue")]
+	DefaultValue,
+
 	/// Layout alias.
 	#[iri("tldr:alias")]
 	Alias,

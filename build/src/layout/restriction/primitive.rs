@@ -2,7 +2,7 @@ use crate::{error, resource::BindingValueRef, Error};
 use locspan::{MapLocErr, Meta};
 use std::collections::BTreeMap;
 use treeldr::{
-	layout::primitive::restriction::{template::float::FloatType, RestrainableType},
+	layout::primitive::{restriction::float::FloatType, PrimitiveLayoutType},
 	metadata::Merge,
 	prop::UnknownProperty,
 	vocab::{Term, Xsd},
@@ -32,40 +32,40 @@ impl Restriction {
 	}
 }
 
-impl<T: Into<value::Numeric>> From<restriction::template::integer::Restriction<T>> for Restriction {
-	fn from(value: restriction::template::integer::Restriction<T>) -> Self {
+impl<T: Into<value::Numeric>> From<restriction::integer::Restriction<T>> for Restriction {
+	fn from(value: restriction::integer::Restriction<T>) -> Self {
 		Self::Numeric(value.into())
 	}
 }
 
-impl<T: Into<value::Numeric>> From<restriction::template::float::Restriction<T>> for Restriction {
-	fn from(value: restriction::template::float::Restriction<T>) -> Self {
+impl<T: Into<value::Numeric>> From<restriction::float::Restriction<T>> for Restriction {
+	fn from(value: restriction::float::Restriction<T>) -> Self {
 		Self::Numeric(value.into())
 	}
 }
 
-impl From<restriction::template::string::Restriction> for Restriction {
-	fn from(value: restriction::template::string::Restriction) -> Self {
+impl From<restriction::string::Restriction> for Restriction {
+	fn from(value: restriction::string::Restriction) -> Self {
 		Self::String(value.into())
 	}
 }
 
-impl From<restriction::template::unicode_string::Restriction> for Restriction {
-	fn from(value: restriction::template::unicode_string::Restriction) -> Self {
+impl From<restriction::unicode_string::Restriction> for Restriction {
+	fn from(value: restriction::unicode_string::Restriction) -> Self {
 		match value {
-			restriction::template::unicode_string::Restriction::MinLength(v) => {
+			restriction::unicode_string::Restriction::MinLength(v) => {
 				Self::String(String::MinLength(v))
 			}
-			restriction::template::unicode_string::Restriction::MaxLength(v) => {
+			restriction::unicode_string::Restriction::MaxLength(v) => {
 				Self::String(String::MaxLength(v))
 			}
-			restriction::template::unicode_string::Restriction::MinGrapheme(v) => {
+			restriction::unicode_string::Restriction::MinGrapheme(v) => {
 				Self::UnicodeString(UnicodeString::MinGrapheme(v))
 			}
-			restriction::template::unicode_string::Restriction::MaxGrapheme(v) => {
+			restriction::unicode_string::Restriction::MaxGrapheme(v) => {
 				Self::UnicodeString(UnicodeString::MaxGrapheme(v))
 			}
-			restriction::template::unicode_string::Restriction::Pattern(v) => {
+			restriction::unicode_string::Restriction::Pattern(v) => {
 				Self::String(String::Pattern(v))
 			}
 		}
@@ -75,30 +75,30 @@ impl From<restriction::template::unicode_string::Restriction> for Restriction {
 #[derive(Debug)]
 pub struct Conflict<M>(pub Restriction, pub Meta<Restriction, M>);
 
-impl<T: Into<value::Numeric>, M> From<restriction::template::integer::Conflict<T, M>>
+impl<T: Into<value::Numeric>, M> From<restriction::integer::Conflict<T, M>>
 	for Conflict<M>
 {
-	fn from(value: restriction::template::integer::Conflict<T, M>) -> Self {
+	fn from(value: restriction::integer::Conflict<T, M>) -> Self {
 		Self(value.0.into(), value.1.cast())
 	}
 }
 
-impl<T: Into<value::Numeric>, M> From<restriction::template::float::Conflict<T, M>>
+impl<T: Into<value::Numeric>, M> From<restriction::float::Conflict<T, M>>
 	for Conflict<M>
 {
-	fn from(value: restriction::template::float::Conflict<T, M>) -> Self {
+	fn from(value: restriction::float::Conflict<T, M>) -> Self {
 		Self(value.0.into(), value.1.cast())
 	}
 }
 
-impl<M> From<restriction::template::string::Conflict<M>> for Conflict<M> {
-	fn from(value: restriction::template::string::Conflict<M>) -> Self {
+impl<M> From<restriction::string::Conflict<M>> for Conflict<M> {
+	fn from(value: restriction::string::Conflict<M>) -> Self {
 		Self(value.0.into(), value.1.cast())
 	}
 }
 
-impl<M> From<restriction::template::unicode_string::Conflict<M>> for Conflict<M> {
-	fn from(value: restriction::template::unicode_string::Conflict<M>) -> Self {
+impl<M> From<restriction::unicode_string::Conflict<M>> for Conflict<M> {
+	fn from(value: restriction::unicode_string::Conflict<M>) -> Self {
 		Self(value.0.into(), value.1.cast())
 	}
 }
@@ -123,33 +123,33 @@ impl Numeric {
 	}
 }
 
-impl<T: Into<value::Numeric>> From<restriction::template::integer::Restriction<T>> for Numeric {
-	fn from(value: restriction::template::integer::Restriction<T>) -> Self {
+impl<T: Into<value::Numeric>> From<restriction::integer::Restriction<T>> for Numeric {
+	fn from(value: restriction::integer::Restriction<T>) -> Self {
 		match value {
-			restriction::template::integer::Restriction::MinInclusive(v) => {
+			restriction::integer::Restriction::MinInclusive(v) => {
 				Self::InclusiveMinimum(v.into())
 			}
-			restriction::template::integer::Restriction::MaxInclusive(v) => {
+			restriction::integer::Restriction::MaxInclusive(v) => {
 				Self::InclusiveMaximum(v.into())
 			}
 		}
 	}
 }
 
-impl<T: Into<value::Numeric>> From<restriction::template::float::Restriction<T>> for Numeric {
-	fn from(value: restriction::template::float::Restriction<T>) -> Self {
-		use restriction::template::float::{Max, Min};
+impl<T: Into<value::Numeric>> From<restriction::float::Restriction<T>> for Numeric {
+	fn from(value: restriction::float::Restriction<T>) -> Self {
+		use restriction::float::{Max, Min};
 		match value {
-			restriction::template::float::Restriction::Min(Min::Included(v)) => {
+			restriction::float::Restriction::Min(Min::Included(v)) => {
 				Self::InclusiveMinimum(v.into())
 			}
-			restriction::template::float::Restriction::Min(Min::Excluded(v)) => {
+			restriction::float::Restriction::Min(Min::Excluded(v)) => {
 				Self::ExclusiveMinimum(v.into())
 			}
-			restriction::template::float::Restriction::Max(Max::Included(v)) => {
+			restriction::float::Restriction::Max(Max::Included(v)) => {
 				Self::InclusiveMaximum(v.into())
 			}
-			restriction::template::float::Restriction::Max(Max::Excluded(v)) => {
+			restriction::float::Restriction::Max(Max::Excluded(v)) => {
 				Self::ExclusiveMaximum(v.into())
 			}
 		}
@@ -196,12 +196,12 @@ impl String {
 	}
 }
 
-impl From<restriction::template::string::Restriction> for String {
-	fn from(value: restriction::template::string::Restriction) -> Self {
+impl From<restriction::string::Restriction> for String {
+	fn from(value: restriction::string::Restriction) -> Self {
 		match value {
-			restriction::template::string::Restriction::MinLength(v) => Self::MinLength(v),
-			restriction::template::string::Restriction::MaxLength(v) => Self::MaxLength(v),
-			restriction::template::string::Restriction::Pattern(v) => Self::Pattern(v),
+			restriction::string::Restriction::MinLength(v) => Self::MinLength(v),
+			restriction::string::Restriction::MaxLength(v) => Self::MaxLength(v),
+			restriction::string::Restriction::Pattern(v) => Self::Pattern(v),
 		}
 	}
 }
@@ -287,7 +287,7 @@ pub trait BuildRestrictions<M>: Sized {
 	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>>;
 }
 
-impl<T, M: Merge> BuildRestrictions<M> for restriction::template::none::Restrictions<T, M> {
+impl<T, M: Merge> BuildRestrictions<M> for restriction::none::Restrictions<T, M> {
 	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
 		match restrictions.map.into_iter().next() {
 			Some((restriction, causes)) => Err(Error::new(
@@ -353,13 +353,13 @@ impl_integer_type! {
 
 impl<
 		T: IntegerType
-			+ RestrainableType
+			+ PrimitiveLayoutType
 			+ Clone
 			+ PartialOrd
 			+ TryFrom<value::Numeric>
 			+ Into<value::Numeric>,
 		M: Clone + Merge,
-	> BuildRestrictions<M> for restriction::template::integer::Restrictions<T, M>
+	> BuildRestrictions<M> for restriction::integer::Restrictions<T, M>
 {
 	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
 		let mut r = Self::default();
@@ -439,10 +439,10 @@ impl<
 impl<
 		T: FloatType + Clone + PartialOrd + TryFrom<value::Numeric> + Into<value::Numeric>,
 		M: Clone + Merge,
-	> BuildRestrictions<M> for restriction::template::float::Restrictions<T, M>
+	> BuildRestrictions<M> for restriction::float::Restrictions<T, M>
 {
 	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
-		use restriction::template::float::{Max, Min};
+		use restriction::float::{Max, Min};
 		let mut r = Self::default();
 
 		for (restriction, causes) in restrictions.map {
@@ -503,9 +503,9 @@ impl<
 	}
 }
 
-impl<M: Clone + Merge> BuildRestrictions<M> for restriction::template::string::Restrictions<M> {
+impl<M: Clone + Merge> BuildRestrictions<M> for restriction::string::Restrictions<M> {
 	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
-		let mut p = restriction::template::string::Restrictions::default();
+		let mut p = restriction::string::Restrictions::default();
 
 		for (restriction, causes) in restrictions.map.into_iter() {
 			match restriction {
@@ -541,10 +541,10 @@ impl<M: Clone + Merge> BuildRestrictions<M> for restriction::template::string::R
 }
 
 impl<M: Clone + Merge> BuildRestrictions<M>
-	for restriction::template::unicode_string::Restrictions<M>
+	for restriction::unicode_string::Restrictions<M>
 {
 	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
-		let mut p = restriction::template::unicode_string::Restrictions::default();
+		let mut p = restriction::unicode_string::Restrictions::default();
 
 		for (restriction, causes) in restrictions.map.into_iter() {
 			match restriction {

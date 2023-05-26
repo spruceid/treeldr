@@ -187,3 +187,9 @@ impl TryFrom<Real> for NonNegativeInteger {
 		}
 	}
 }
+
+/// Real number value.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum RealRef<'a> {
+	Rational(&'a Rational),
+}

@@ -71,7 +71,7 @@ impl Restriction {
 		macro_rules! integer_lexical {
 			( $r:ident : $ty:ty ) => {
 				{
-					use treeldr::layout::primitive::restriction::template::integer::RestrictionRef;
+					use treeldr::layout::primitive::restriction::integer::RestrictionRef;
 					let ty = syn::parse2(quote!($ty)).unwrap();
 					match $r {
 						RestrictionRef::MinInclusive(min) => {
@@ -90,7 +90,7 @@ impl Restriction {
 		macro_rules! integer_non_lexical {
 			( $r:ident : $ty:ty ) => {
 				{
-					use treeldr::layout::primitive::restriction::template::integer::RestrictionRef;
+					use treeldr::layout::primitive::restriction::integer::RestrictionRef;
 					let ty = syn::parse2(quote!($ty)).unwrap();
 					match $r {
 						RestrictionRef::MinInclusive(min) => {
@@ -107,7 +107,7 @@ impl Restriction {
 		macro_rules! float {
 			( $r:ident : $ty:ty, $fty:ty ) => {
 				{
-					use treeldr::layout::primitive::restriction::template::float::{RestrictionRef, Min, Max};
+					use treeldr::layout::primitive::restriction::float::{RestrictionRef, Min, Max};
 					let ty = syn::parse2(quote!($fty)).unwrap();
 					match $r {
 						RestrictionRef::Min(Min::Included(min)) => {
@@ -134,7 +134,7 @@ impl Restriction {
 		macro_rules! string {
 			( $r:ident ) => {
 				{
-					use treeldr::layout::primitive::restriction::template::string::RestrictionRef;
+					use treeldr::layout::primitive::restriction::string::RestrictionRef;
 					match $r {
 						RestrictionRef::MinLength(min) => {
 							let bytes = min.to_bytes_be().1;
@@ -156,7 +156,7 @@ impl Restriction {
 
 		match r {
 			RestrictionRef::Integer(r) => {
-				use treeldr::layout::primitive::restriction::template::integer::RestrictionRef;
+				use treeldr::layout::primitive::restriction::integer::RestrictionRef;
 				let ty = syn::parse2(quote!(treeldr_rust_prelude::ty::Integer)).unwrap();
 				match r {
 					RestrictionRef::MinInclusive(min) => {
@@ -195,12 +195,12 @@ impl Restriction {
 			RestrictionRef::U32(r) => integer_non_lexical!(r: treeldr_rust_prelude::ty::U32),
 			RestrictionRef::U16(r) => integer_non_lexical!(r: treeldr_rust_prelude::ty::U16),
 			RestrictionRef::U8(r) => integer_non_lexical!(r: treeldr_rust_prelude::ty::U8),
-			RestrictionRef::Float(r) => float!(r: treeldr_rust_prelude::ty::Float, f32),
-			RestrictionRef::Double(r) => float!(r: treeldr_rust_prelude::ty::Double, f64),
-			RestrictionRef::Base64Bytes(r) => string!(r),
-			RestrictionRef::HexBytes(r) => string!(r),
+			RestrictionRef::F32(r) => float!(r: treeldr_rust_prelude::ty::Float, f32),
+			RestrictionRef::F64(r) => float!(r: treeldr_rust_prelude::ty::Double, f64),
+			RestrictionRef::Base64BytesBuf(r) => string!(r),
+			RestrictionRef::HexBytesBuf(r) => string!(r),
 			RestrictionRef::String(r) => {
-				use treeldr::layout::primitive::restriction::template::unicode_string::RestrictionRef;
+				use treeldr::layout::primitive::restriction::unicode_string::RestrictionRef;
 				match r {
 					RestrictionRef::MinLength(min) => {
 						let bytes = min.to_bytes_be().1;
@@ -245,11 +245,11 @@ impl Restriction {
 			| RestrictionRef::Time(_)
 			| RestrictionRef::Date(_)
 			| RestrictionRef::DateTime(_)
-			| RestrictionRef::Iri(_)
-			| RestrictionRef::Uri(_)
-			| RestrictionRef::Url(_)
-			| RestrictionRef::Bytes(_)
-			| RestrictionRef::Cid(_) => unreachable!(),
+			| RestrictionRef::IriBuf(_)
+			| RestrictionRef::UriBuf(_)
+			| RestrictionRef::UrlBuf(_)
+			| RestrictionRef::BytesBuf(_)
+			| RestrictionRef::CidBuf(_) => unreachable!(),
 		}
 	}
 }

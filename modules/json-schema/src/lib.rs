@@ -783,16 +783,16 @@ fn generate_primitive_type(p: treeldr::layout::Primitive) -> json_syntax::Value 
 			def.insert(Meta("minimum".into(), ()), Meta(u8::MIN.into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(u8::MAX.into(), ()));
 		}
-		Primitive::Float => {
+		Primitive::F32 => {
 			def.insert(Meta("type".into(), ()), Meta("number".into(), ()));
 		}
-		Primitive::Double => {
+		Primitive::F64 => {
 			def.insert(Meta("type".into(), ()), Meta("number".into(), ()));
 		}
-		Primitive::Base64Bytes => {
+		Primitive::Base64BytesBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
-		Primitive::HexBytes => {
+		Primitive::HexBytesBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
 		Primitive::String => {
@@ -814,18 +814,18 @@ fn generate_primitive_type(p: treeldr::layout::Primitive) -> json_syntax::Value 
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("iri".into(), ()));
 		}
-		Primitive::Uri => {
+		Primitive::UriBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("uri".into(), ()));
 		}
-		Primitive::Url => {
+		Primitive::UrlBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("uri".into(), ()));
 		}
-		Primitive::Bytes => {
+		Primitive::BytesBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
-		Primitive::Cid => {
+		Primitive::CidBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
 	}

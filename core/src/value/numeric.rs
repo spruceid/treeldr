@@ -357,3 +357,10 @@ impl TryFrom<Numeric> for UnsignedByte {
 		}
 	}
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum NumericRef<'a> {
+	Real(RealRef<'a>),
+	Float(Float),
+	Double(Double),
+}

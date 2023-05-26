@@ -44,7 +44,7 @@ impl<V: VocabularyMut> Process<V> for LexCidLink {
 		triples.push(Triple(
 			id,
 			vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
-			Object::Id(Id::Iri(vocabulary.insert(vocab::Primitive::Cid.as_iri()))),
+			Object::Id(Id::Iri(vocabulary.insert(vocab::Primitive::CidBuf.as_iri()))),
 		));
 	}
 }
