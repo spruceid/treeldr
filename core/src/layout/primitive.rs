@@ -248,6 +248,18 @@ pub struct DerivedFrom<T: PrimitiveLayoutType, M> {
 	default: FunctionalPropertyValue<T, M>
 }
 
+impl<T: PrimitiveLayoutType, M> DerivedFrom<T, M> {
+	pub fn new(
+		restrictions: MetaOption<T::Restrictions<M>, M>,
+		default: FunctionalPropertyValue<T, M>
+	) -> Self {
+		Self {
+			restrictions,
+			default
+		}
+	}
+}
+
 impl<T: PrimitiveLayoutType, M> Default for DerivedFrom<T, M> {
 	fn default() -> Self {
 		Self {

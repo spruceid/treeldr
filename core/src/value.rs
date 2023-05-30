@@ -29,6 +29,56 @@ impl Value {
 			Self::Literal(_) => None,
 		}
 	}
+	
+	pub fn into_id(self) -> Result<Id, Literal> {
+		match self {
+			Self::Node(id) => Ok(id),
+			Self::Literal(l) => Err(l)
+		}
+	}
+
+	pub fn into_literal(self) -> Result<Literal, Id> {
+		match self {
+			Self::Node(id) => Err(id),
+			Self::Literal(l) => Ok(l)
+		}
+	}
+
+	pub fn into_boolean(self) -> Result<Boolean, Self> {
+		self.into_literal().map_err(Self::Node)?.into_boolean().map_err(Self::Literal)
+	}
+
+	pub fn into_numeric(self) -> Result<Numeric, Self> {
+		self.into_literal().map_err(Self::Node)?.into_numeric().map_err(Self::Literal)
+	}
+
+	pub fn into_integer(self) -> Result<Integer, Self> {
+		self.into_numeric()?.into_integer().map_err(|v| Self::Literal(Literal::Numeric(v)))
+	}
+
+	pub fn into_non_negative_integer(self) -> Result<NonNegativeInteger, Self> {
+		self.into_numeric()?.into_non_negative_integer().map_err(|v| Self::Literal(Literal::Numeric(v)))
+	}
+
+	pub fn into_float(self) -> Result<Float, Self> {
+		self.into_numeric()?.into_float().map_err(|v| Self::Literal(Literal::Numeric(v)))
+	}
+
+	pub fn into_double(self) -> Result<Double, Self> {
+		self.into_numeric()?.into_double().map_err(|v| Self::Literal(Literal::Numeric(v)))
+	}
+
+	pub fn into_lang_string(self) -> Result<LangString, Self> {
+		self.into_literal().map_err(Self::Node)?.into_lang_string().map_err(Self::Literal)
+	}
+
+	pub fn into_string(self) -> Result<String, Self> {
+		self.into_literal().map_err(Self::Node)?.into_string().map_err(Self::Literal)
+	}
+
+	pub fn into_regexp(self) -> Result<RegExp, Self> {
+		self.into_literal().map_err(Self::Node)?.into_regexp().map_err(Self::Literal)
+	}
 }
 
 impl<M> TryFrom<vocab::Object<M>> for Value {
@@ -45,9 +95,12 @@ impl<M> TryFrom<vocab::Object<M>> for Value {
 /// Literal value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Literal {
+	Boolean(Boolean),
 	Numeric(Numeric),
 	LangString(LangString),
 	String(String),
+	Base64Binary(Base64BinaryBuf),
+	HexBinary(HexBinaryBuf),
 	RegExp(RegExp),
 	Other(String, IriIndex),
 }
@@ -55,11 +108,124 @@ pub enum Literal {
 impl Literal {
 	pub fn lexical_form(&self) -> Cow<str> {
 		match self {
+			Self::Boolean(true) => Cow::Borrowed("true"),
+			Self::Boolean(false) => Cow::Borrowed("false"),
 			Self::Numeric(n) => Cow::Owned(n.to_string()),
 			Self::LangString(s) => Cow::Borrowed(s.as_str()),
 			Self::String(s) => Cow::Borrowed(s.as_str()),
+			Self::Base64Binary(b) => Cow::Owned(b.to_string()),
+			Self::HexBinary(b) => Cow::Owned(b.to_string()),
 			Self::RegExp(e) => Cow::Owned(e.to_string()),
 			Self::Other(s, _) => Cow::Borrowed(s.as_str()),
+		}
+	}
+
+	pub fn into_boolean(self) -> Result<Boolean, Self> {
+		match self {
+			Self::Boolean(b) => Ok(b),
+			v => Err(v)
+		}
+	}
+
+	pub fn into_numeric(self) -> Result<Numeric, Self> {
+		match self {
+			Self::Numeric(n) => Ok(n),
+			v => Err(v)
+		}
+	}
+
+	pub fn into_integer(self) -> Result<Integer, Self> {
+		self.into_numeric()?.into_integer().map_err(Self::Numeric)
+	}
+
+	pub fn into_non_negative_integer(self) -> Result<NonNegativeInteger, Self> {
+		self.into_numeric()?.into_non_negative_integer().map_err(Self::Numeric)
+	}
+
+	pub fn into_non_positive_integer(self) -> Result<NonPositiveInteger, Self> {
+		self.into_numeric()?.into_non_positive_integer().map_err(Self::Numeric)
+	}
+	
+	pub fn into_positive_integer(self) -> Result<PositiveInteger, Self> {
+		self.into_numeric()?.into_positive_integer().map_err(Self::Numeric)
+	}
+
+	pub fn into_negative_integer(self) -> Result<NegativeInteger, Self> {
+		self.into_numeric()?.into_negative_integer().map_err(Self::Numeric)
+	}
+
+	pub fn into_unsigned_long(self) -> Result<UnsignedLong, Self> {
+		self.into_numeric()?.into_unsigned_long().map_err(Self::Numeric)
+	}
+	
+	pub fn into_unsigned_int(self) -> Result<UnsignedInt, Self> {
+		self.into_numeric()?.into_unsigned_int().map_err(Self::Numeric)
+	}
+
+	pub fn into_unsigned_short(self) -> Result<UnsignedShort, Self> {
+		self.into_numeric()?.into_unsigned_short().map_err(Self::Numeric)
+	}
+
+	pub fn into_unsigned_byte(self) -> Result<UnsignedByte, Self> {
+		self.into_numeric()?.into_unsigned_byte().map_err(Self::Numeric)
+	}
+
+	pub fn into_long(self) -> Result<Long, Self> {
+		self.into_numeric()?.into_long().map_err(Self::Numeric)
+	}
+	
+	pub fn into_int(self) -> Result<Int, Self> {
+		self.into_numeric()?.into_int().map_err(Self::Numeric)
+	}
+
+	pub fn into_short(self) -> Result<Short, Self> {
+		self.into_numeric()?.into_short().map_err(Self::Numeric)
+	}
+
+	pub fn into_byte(self) -> Result<Byte, Self> {
+		self.into_numeric()?.into_byte().map_err(Self::Numeric)
+	}
+
+	pub fn into_float(self) -> Result<Float, Self> {
+		self.into_numeric()?.into_float().map_err(Self::Numeric)
+	}
+
+	pub fn into_double(self) -> Result<Double, Self> {
+		self.into_numeric()?.into_double().map_err(Self::Numeric)
+	}
+
+	pub fn into_lang_string(self) -> Result<LangString, Self> {
+		match self {
+			Self::LangString(s) => Ok(s),
+			v => Err(v)
+		}
+	}
+
+	pub fn into_string(self) -> Result<String, Self> {
+		match self {
+			Self::String(s) => Ok(s),
+			v => Err(v)
+		}
+	}
+
+	pub fn into_base64_binary(self) -> Result<Base64BinaryBuf, Self> {
+		match self {
+			Self::Base64Binary(b) => Ok(b),
+			v => Err(v)
+		}
+	}
+
+	pub fn into_hex_binary(self) -> Result<HexBinaryBuf, Self> {
+		match self {
+			Self::HexBinary(b) => Ok(b),
+			v => Err(v)
+		}
+	}
+
+	pub fn into_regexp(self) -> Result<RegExp, Self> {
+		match self {
+			Self::RegExp(e) => Ok(e),
+			v => Err(v)
 		}
 	}
 }
@@ -102,9 +268,13 @@ impl From<String> for Literal {
 impl fmt::Display for Literal {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
+			Self::Boolean(true) => write!(f, "true"),
+			Self::Boolean(false) => write!(f, "false"),
 			Self::Numeric(n) => n.fmt(f),
 			Self::LangString(s) => s.fmt(f),
 			Self::String(s) => s.fmt(f),
+			Self::Base64Binary(b) => b.fmt(f),
+			Self::HexBinary(b) => b.fmt(f),
 			Self::RegExp(e) => e.fmt(f),
 			Self::Other(s, _) => s.fmt(f),
 		}
@@ -116,9 +286,13 @@ impl<V: IriVocabulary<Iri = IriIndex>> rdf_types::RdfDisplayWithContext<V> for L
 		use fmt::Display;
 		use rdf_types::RdfDisplay;
 		match self {
+			Self::Boolean(true) => write!(f, "\"true\"^^{}", vocab::Xsd::Boolean.as_iri()),
+			Self::Boolean(false) => write!(f, "\"false\"^^{}", vocab::Xsd::Boolean.as_iri()),
 			Self::Numeric(n) => n.rdf_fmt_with(vocabulary, f),
 			Self::LangString(s) => s.rdf_fmt(f),
 			Self::String(s) => s.fmt(f),
+			Self::Base64Binary(b) => write!(f, "\"{b}\"^^{}", vocab::Xsd::Base64Binary.as_iri()),
+			Self::HexBinary(b) => write!(f, "\"{b}\"^^{}", vocab::Xsd::HexBinary.as_iri()),
 			Self::RegExp(e) => write!(f, "{e}^^{}", vocab::TreeLdr::RegularExpression.as_iri()),
 			Self::Other(s, ty) => write!(f, "{s}^^{}", vocabulary.iri(ty).unwrap()),
 		}
@@ -141,8 +315,26 @@ impl<M> TryFrom<vocab::Literal<M>> for Literal {
 		macro_rules! match_type {
 			( ($s:ident, $ty:ident): $($term:ident),* ) => {
 				match $ty {
+					IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::Boolean)) => {
+						match xsd_types::lexical::Boolean::new($s.as_str()) {
+							Ok(b) => Ok(Literal::Boolean(b.value())),
+							Err(_) => Err(InvalidLiteral::InvalidLexicalValue($ty))
+						}
+					}
 					IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String)) => {
 						Ok(Literal::String($s.into_value()))
+					}
+					IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::Base64Binary)) => {
+						match Base64BinaryBuf::decode($s.as_str()) {
+							Ok(b) => Ok(Literal::Base64Binary(b)),
+							Err(_) => Err(InvalidLiteral::InvalidLexicalValue($ty))
+						}
+					}
+					IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::HexBinary)) => {
+						match HexBinaryBuf::decode($s.as_str()) {
+							Ok(b) => Ok(Literal::HexBinary(b)),
+							Err(_) => Err(InvalidLiteral::InvalidLexicalValue($ty))
+						}
 					}
 					IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::LangString)) => {
 						Err(InvalidLiteral::MissingLanguageTag)
@@ -206,6 +398,12 @@ pub trait AsRdfLiteral: Sized + fmt::Display {
 			}
 			ty => rdf_types::Literal::TypedString(self.to_string(), ty),
 		}
+	}
+}
+
+impl AsRdfLiteral for Boolean {
+	fn rdf_type(&self) -> IriIndex {
+		IriIndex::Iri(crate::vocab::Term::Xsd(crate::vocab::Xsd::Boolean))
 	}
 }
 
@@ -299,6 +497,18 @@ impl AsRdfLiteral for String {
 	}
 }
 
+impl AsRdfLiteral for Base64BinaryBuf {
+	fn rdf_type(&self) -> IriIndex {
+		IriIndex::Iri(crate::vocab::Term::Xsd(crate::vocab::Xsd::Base64Binary))
+	}
+}
+
+impl AsRdfLiteral for HexBinaryBuf {
+	fn rdf_type(&self) -> IriIndex {
+		IriIndex::Iri(crate::vocab::Term::Xsd(crate::vocab::Xsd::HexBinary))
+	}
+}
+
 impl AsRdfLiteral for Literal {
 	fn language(&self) -> Option<LanguageTag> {
 		match self {
@@ -309,9 +519,12 @@ impl AsRdfLiteral for Literal {
 
 	fn rdf_type(&self) -> IriIndex {
 		match self {
+			Self::Boolean(b) => b.rdf_type(),
 			Self::Numeric(n) => n.rdf_type(),
 			Self::LangString(s) => s.rdf_type(),
 			Self::String(s) => s.rdf_type(),
+			Self::Base64Binary(b) => b.rdf_type(),
+			Self::HexBinary(b) => b.rdf_type(),
 			Self::RegExp(_) => {
 				IriIndex::Iri(vocab::Term::TreeLdr(vocab::TreeLdr::RegularExpression))
 			}

@@ -110,6 +110,7 @@ errors! {
 	literal_unexpected::LiteralUnexpected,
 	literal_expected::LiteralExpected,
 	literal_invalid::LiteralInvalid,
+	literal_type_mismatch::LiteralTypeMismatch,
 	subclass_cycle::SubClassCycle<M>,
 	subproperty_cycle::SubPropertyCycle<M>
 }

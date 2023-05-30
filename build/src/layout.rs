@@ -2,8 +2,8 @@ use std::cmp::Ordering;
 
 use crate::{
 	context::{MapIds, MapIdsIn},
-	error,
-	functional_property_value::{self, FunctionalPropertyValue},
+	error::{self, node_binding_functional_conflict::ConflictValues},
+	functional_property_value::{self, FunctionalPropertyValue, Conflict},
 	resource::{self, BindingValueRef},
 	utils::TryCollect,
 	Context, Error, MetaValueExt,
@@ -14,7 +14,7 @@ use rdf_types::IriVocabulary;
 pub use treeldr::layout::{DescriptionProperty, Property};
 use treeldr::{
 	metadata::Merge, prop::UnknownProperty, Id, IriIndex, MetaOption, Multiple, Name,
-	PropertyValueRef, PropertyValues, TId, Value,
+	PropertyValueRef, PropertyValues, TId, Value, PropertyValue, value,
 };
 
 pub mod array;
@@ -101,6 +101,7 @@ impl<'a, M> SingleDescriptionPropertyRef<'a, M> {
 		context: &Context<M>,
 		id: Id,
 		restrictions: MetaOption<Restrictions<M>, M>,
+		default: treeldr::FunctionalPropertyValue<value::Literal, M>,
 		array_semantics: &array::Semantics<M>,
 		map_value: FunctionalPropertyValue<Id, M>,
 	) -> Result<treeldr::layout::Description<M>, Error<M>>
@@ -117,7 +118,7 @@ impl<'a, M> SingleDescriptionPropertyRef<'a, M> {
 						.into_required()
 						.unwrap()
 						.try_map_borrow_metadata(|id, meta| match Primitive::from_id(id) {
-							Some(p) => p.build(id, restrictions.map(Restrictions::into_primitive)),
+							Some(p) => p.build(id, restrictions.map(Restrictions::into_primitive), default),
 							None => {
 								let meta = meta.first().unwrap().value.into_metadata();
 								Err(Meta(error::LayoutNotPrimitive(id).into(), meta.clone()))
@@ -776,6 +777,7 @@ impl<M> DescriptionProperties<M> {
 		context: &Context<M>,
 		id: Id,
 		restrictions: MetaOption<Restrictions<M>, M>,
+		default: treeldr::FunctionalPropertyValue<value::Literal, M>,
 		array_semantics: &array::Semantics<M>,
 		map_value: FunctionalPropertyValue<Id, M>,
 	) -> Result<treeldr::layout::Description<M>, Error<M>>
@@ -783,7 +785,7 @@ impl<M> DescriptionProperties<M> {
 		M: Clone + Merge,
 	{
 		match self.single_description() {
-			Ok(Some(desc)) => desc.build(context, id, restrictions, array_semantics, map_value),
+			Ok(Some(desc)) => desc.build(context, id, restrictions, default, array_semantics, map_value),
 			Ok(None) => match Primitive::from_id(id) {
 				Some(p) => Ok(treeldr::layout::Description::Primitive(p)),
 				None => Ok(treeldr::layout::Description::Never),
@@ -1008,6 +1010,9 @@ pub struct Definition<M> {
 	/// List of restrictions.
 	restrictions: FunctionalPropertyValue<Id, M>,
 
+	/// Default primitive value.
+	default_value: FunctionalPropertyValue<value::Literal, M>,
+
 	/// List semantics.
 	array_semantics: array::Semantics<M>,
 
@@ -1040,6 +1045,7 @@ impl<M> Default for Definition<M> {
 			desc: DescriptionProperties::default(),
 			intersection_of: FunctionalPropertyValue::default(),
 			restrictions: FunctionalPropertyValue::default(),
+			default_value: FunctionalPropertyValue::default(),
 			array_semantics: array::Semantics::default(),
 			map_value: FunctionalPropertyValue::default(),
 		}
@@ -1084,6 +1090,14 @@ impl<M> Definition<M> {
 		&mut self.restrictions
 	}
 
+	pub fn default_value(&self) -> &FunctionalPropertyValue<value::Literal, M> {
+		&self.default_value
+	}
+
+	pub fn default_value_mut(&mut self) -> &mut FunctionalPropertyValue<value::Literal, M> {
+		&mut self.default_value
+	}
+
 	pub fn is_included_in(&self, context: &Context<M>, other: &Self) -> bool {
 		self.desc.is_included_in(context, &other.desc)
 	}
@@ -1103,6 +1117,10 @@ impl<M> Definition<M> {
 			Property::WithRestrictions(p) => {
 				self.restrictions_mut()
 					.insert(p, prop_cmp, value.into_expected_id()?)
+			}
+			Property::DefaultValue(p) => {
+				self.default_value_mut()
+					.insert(p, prop_cmp, value.into_expected_literal()?)
 			}
 			Property::IntersectionOf(p) => {
 				self.intersection_of_mut()
@@ -1394,10 +1412,20 @@ impl<M: Clone> Definition<M> {
 			.transpose()?
 			.into();
 
+		let default_value = self.default_value.clone().try_unwrap().map_err(|Conflict(PropertyValue { sub_property, value: Meta(a, meta), .. }, b)| Meta(
+			error::NodeBindingFunctionalConflict {
+				id: as_resource.id,
+				property: Property::DefaultValue(sub_property).into(),
+				values: ConflictValues::Literal(a, b)
+			}.into(),
+			meta
+		))?;
+
 		self.desc.build(
 			context,
 			as_resource.id,
 			restrictions,
+			default_value,
 			&self.array_semantics,
 			self.map_value.clone(),
 		)
