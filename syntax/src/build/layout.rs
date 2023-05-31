@@ -299,7 +299,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 				let layout = context.get_mut(id).unwrap().as_layout_mut();
 				layout.ty_mut().insert_base(Meta(deref_ty, deref_loc));
 				let id_layout = Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::Primitive(
-					treeldr::layout::Primitive::Iri,
+					treeldr::layout::Primitive::IriBuf,
 				))));
 				layout.set_reference(Meta(id_layout, loc.clone()));
 

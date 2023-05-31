@@ -1,6 +1,6 @@
 use locspan::{MaybeLocated, Span};
 use rdf_types::Vocabulary;
-use treeldr::{Id, IriIndex, BlankIdIndex, Name, PropertyValue, Value};
+use treeldr::{Id, IriIndex, BlankIdIndex, Name, PropertyValue, Value, value::Literal};
 use contextual::WithContext;
 use crate::Property;
 
@@ -19,6 +19,7 @@ pub struct NodeBindingFunctionalConflict<M> {
 pub enum ConflictValues<M> {
 	Id(Id, PropertyValue<Id, M>),
 	Value(Value, PropertyValue<Value, M>),
+	Literal(Literal, PropertyValue<Literal, M>),
 	Name(Name, PropertyValue<Name, M>),
 	Boolean(bool, PropertyValue<bool, M>)
 }
@@ -32,6 +33,12 @@ impl<M> From<(Id, PropertyValue<Id, M>)> for ConflictValues<M> {
 impl<M> From<(Value, PropertyValue<Value, M>)> for ConflictValues<M> {
 	fn from((a, b): (Value, PropertyValue<Value, M>)) -> Self {
 		Self::Value(a, b)
+	}
+}
+
+impl<M> From<(Literal, PropertyValue<Literal, M>)> for ConflictValues<M> {
+	fn from((a, b): (Literal, PropertyValue<Literal, M>)) -> Self {
+		Self::Literal(a, b)
 	}
 }
 

@@ -3,6 +3,18 @@ use std::{cmp::Ordering, hash::Hash, marker::PhantomData};
 use derivative::Derivative;
 use locspan::{Meta, StrippedEq, StrippedHash, StrippedOrd, StrippedPartialEq, StrippedPartialOrd};
 
+use crate::layout::primitive::RestrictionSet;
+
+use super::RestrictionsTemplate;
+
+pub struct Template;
+
+impl<T> RestrictionsTemplate<T> for Template {
+	type Ref<'a> = RestrictionRef<'a, T> where T: 'a;
+	type Set<M> = Restrictions<T, M>;
+	type Iter<'a, M> = Iter<'a, T, M> where T: 'a, M: 'a;
+}
+
 #[derive(Debug, Derivative)]
 #[derivative(Clone(bound = ""), Copy(bound = ""))]
 pub struct Restriction<T>(PhantomData<T>);
@@ -57,6 +69,12 @@ impl<T, M> Restrictions<T, M> {
 
 	pub fn iter(&self) -> Iter<T, M> {
 		Iter(PhantomData)
+	}
+}
+
+impl<T, M> RestrictionSet for Restrictions<T, M> {
+	fn is_restricted(&self) -> bool {
+		self.is_restricted()
 	}
 }
 

@@ -91,7 +91,7 @@ impl<'a, M> Restrictions<'a, M> {
 }
 
 pub struct RestrictionsIter<'a, M> {
-	primitive: super::primitive::restriction::RestrictionsIter<'a, M>,
+	primitive: super::primitive::RestrictionsIter<'a, M>,
 	container: ContainerRestrictionsIter<'a, M>,
 }
 

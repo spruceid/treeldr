@@ -26,8 +26,8 @@
 <https://treeldr.org/NonNegativeInteger> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 <https://treeldr.org/PositiveInteger> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 <https://treeldr.org/NegativeInteger> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
-<https://treeldr.org/Float> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
-<https://treeldr.org/Double> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<https://treeldr.org/F32> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
+<https://treeldr.org/F64> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 <https://treeldr.org/String> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 <https://treeldr.org/Time> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 <https://treeldr.org/Date> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
@@ -55,6 +55,10 @@
 <https://treeldr.org/mapValue> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
 <https://treeldr.org/mapValue> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/Layout> .
 <https://treeldr.org/mapValue> <http://www.w3.org/2000/01/rdf-schema#range> <https://treeldr.org/Layout> .
+
+<https://treeldr.org/defaultValue> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/defaultValue> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/Layout> .
+<https://treeldr.org/defaultValue> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2000/01/rdf-schema#Literal> .
 
 <https://treeldr.org/pattern> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
 <https://treeldr.org/pattern> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .

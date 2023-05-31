@@ -783,16 +783,16 @@ fn generate_primitive_type(p: treeldr::layout::Primitive) -> json_syntax::Value 
 			def.insert(Meta("minimum".into(), ()), Meta(u8::MIN.into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(u8::MAX.into(), ()));
 		}
-		Primitive::Float => {
+		Primitive::F32 => {
 			def.insert(Meta("type".into(), ()), Meta("number".into(), ()));
 		}
-		Primitive::Double => {
+		Primitive::F64 => {
 			def.insert(Meta("type".into(), ()), Meta("number".into(), ()));
 		}
-		Primitive::Base64Bytes => {
+		Primitive::Base64BytesBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
-		Primitive::HexBytes => {
+		Primitive::HexBytesBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
 		Primitive::String => {
@@ -810,22 +810,22 @@ fn generate_primitive_type(p: treeldr::layout::Primitive) -> json_syntax::Value 
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("date-time".into(), ()));
 		}
-		Primitive::Iri => {
+		Primitive::IriBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("iri".into(), ()));
 		}
-		Primitive::Uri => {
+		Primitive::UriBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("uri".into(), ()));
 		}
-		Primitive::Url => {
+		Primitive::UrlBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("uri".into(), ()));
 		}
-		Primitive::Bytes => {
+		Primitive::BytesBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
-		Primitive::Cid => {
+		Primitive::CidBuf => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
 	}
@@ -833,82 +833,294 @@ fn generate_primitive_type(p: treeldr::layout::Primitive) -> json_syntax::Value 
 	def.into()
 }
 
-fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> json_syntax::Value {
-	use treeldr::layout::RestrictedPrimitive;
+fn json_number<N: ToString>(n: &N) -> json_syntax::NumberBuf {
+	json_syntax::NumberBuf::new(n.to_string().into_bytes().into()).unwrap()
+}
+
+fn generate_derived_type<M>(n: &treeldr::layout::primitive::Derived<M>) -> json_syntax::Value {
+	use treeldr::layout::primitive::Derived;
 	let mut def = json_syntax::Object::new();
 
 	match n {
-		RestrictedPrimitive::Boolean(_) => {
+		Derived::Boolean(_) => {
 			def.insert(Meta("type".into(), ()), Meta("bool".into(), ()));
 		}
-		RestrictedPrimitive::Integer(_) => {
+		Derived::Integer(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::NonNegativeInteger(_) => {
+		Derived::NonNegativeInteger(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("minimum".into(), ()), Meta(0.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::NonPositiveInteger(_) => {
+		Derived::NonPositiveInteger(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(0.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::PositiveInteger(_) => {
+		Derived::PositiveInteger(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("minimum".into(), ()), Meta(1.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::NegativeInteger(_) => {
+		Derived::NegativeInteger(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta((-1).into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::I64(_) => {
+		Derived::I64(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("minimum".into(), ()), Meta(i64::MIN.into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(i64::MAX.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::I32(_) => {
+		Derived::I32(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("minimum".into(), ()), Meta(i32::MIN.into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(i32::MAX.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::I16(_) => {
+		Derived::I16(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("minimum".into(), ()), Meta(i16::MIN.into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(i16::MAX.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::I8(_) => {
+		Derived::I8(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("minimum".into(), ()), Meta(i8::MIN.into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(i8::MAX.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::U64(_) => {
+		Derived::U64(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("minimum".into(), ()), Meta(u64::MIN.into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(u64::MAX.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::U32(_) => {
+		Derived::U32(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("minimum".into(), ()), Meta(u32::MIN.into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(u32::MAX.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::U16(_) => {
+		Derived::U16(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("minimum".into(), ()), Meta(u16::MIN.into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(u16::MAX.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::U8(_) => {
+		Derived::U8(d) => {
 			def.insert(Meta("type".into(), ()), Meta("integer".into(), ()));
 			def.insert(Meta("minimum".into(), ()), Meta(u8::MIN.into(), ()));
 			def.insert(Meta("maximum".into(), ()), Meta(u8::MAX.into(), ()));
+
+			if let Some(r) = d.restrictions().as_ref() {
+				if let Some(min) = r.min() {
+					def.insert(
+						Meta("minimum".into(), ()),
+						Meta(json_number(min).into(), ()),
+					);
+				}
+
+				if let Some(max) = r.max() {
+					def.insert(
+						Meta("maximum".into(), ()),
+						Meta(json_number(max).into(), ()),
+					);
+				}
+			}
 		}
-		RestrictedPrimitive::Float(_) => {
+		Derived::F32(_) => {
 			def.insert(Meta("type".into(), ()), Meta("number".into(), ()));
 		}
-		RestrictedPrimitive::Double(_) => {
+		Derived::F64(_) => {
 			def.insert(Meta("type".into(), ()), Meta("number".into(), ()));
 		}
-		RestrictedPrimitive::Base64Bytes(restrictions) => {
+		Derived::Base64BytesBuf(d) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
-			if let Some(r) = restrictions.as_ref() {
+			if let Some(r) = d.restrictions().as_ref() {
 				if let Some(pattern) = r.pattern() {
 					match pattern.as_singleton() {
 						Some(singleton) => {
@@ -924,9 +1136,9 @@ fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> js
 				}
 			}
 		}
-		RestrictedPrimitive::HexBytes(restrictions) => {
+		Derived::HexBytesBuf(d) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
-			if let Some(r) = restrictions.as_ref() {
+			if let Some(r) = d.restrictions().as_ref() {
 				if let Some(pattern) = r.pattern() {
 					match pattern.as_singleton() {
 						Some(singleton) => {
@@ -942,9 +1154,9 @@ fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> js
 				}
 			}
 		}
-		RestrictedPrimitive::String(restrictions) => {
+		Derived::String(d) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
-			if let Some(r) = restrictions.as_ref() {
+			if let Some(r) = d.restrictions().as_ref() {
 				if let Some(pattern) = r.pattern() {
 					match pattern.as_singleton() {
 						Some(singleton) => {
@@ -960,34 +1172,34 @@ fn generate_derived_type<M>(n: &treeldr::layout::primitive::Restricted<M>) -> js
 				}
 			}
 		}
-		RestrictedPrimitive::Time(_) => {
+		Derived::Time(_) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("time".into(), ()));
 		}
-		RestrictedPrimitive::Date(_) => {
+		Derived::Date(_) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("date".into(), ()));
 		}
-		RestrictedPrimitive::DateTime(_) => {
+		Derived::DateTime(_) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("date-time".into(), ()));
 		}
-		RestrictedPrimitive::Iri(_) => {
+		Derived::IriBuf(_) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("iri".into(), ()));
 		}
-		RestrictedPrimitive::Uri(_) => {
+		Derived::UriBuf(_) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("uri".into(), ()));
 		}
-		RestrictedPrimitive::Url(_) => {
+		Derived::UrlBuf(_) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 			def.insert(Meta("format".into(), ()), Meta("uri".into(), ()));
 		}
-		RestrictedPrimitive::Bytes(_) => {
+		Derived::BytesBuf(_) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
-		RestrictedPrimitive::Cid(_) => {
+		Derived::CidBuf(_) => {
 			def.insert(Meta("type".into(), ()), Meta("string".into(), ()));
 		}
 	}

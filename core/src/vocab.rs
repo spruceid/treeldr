@@ -42,6 +42,10 @@ pub enum TreeLdr {
 	#[iri("tldr:withRestrictions")]
 	WithRestrictions,
 
+	/// Derived primitive default value.
+	#[iri("tldr:defaultValue")]
+	DefaultValue,
+
 	/// Layout alias.
 	#[iri("tldr:alias")]
 	Alias,
@@ -518,6 +522,15 @@ pub enum IriIndex {
 
 	/// Non indexed IRI.
 	Iri(Term),
+}
+
+impl IriIndex {
+	pub fn into_term(self) -> Result<Term, usize> {
+		match self {
+			Self::Iri(term) => Ok(term),
+			Self::Index(i) => Err(i),
+		}
+	}
 }
 
 impl From<usize> for IriIndex {

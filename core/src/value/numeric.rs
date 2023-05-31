@@ -5,7 +5,7 @@ use std::fmt;
 use rdf_types::{IriVocabulary, RdfDisplayWithContext};
 pub use real::*;
 use xsd_types::{
-	Byte, Double, Float, Int, Integer, Long, NegativeInteger, NonNegativeInteger,
+	Byte, Decimal, Double, Float, Int, Integer, Long, NegativeInteger, NonNegativeInteger,
 	NonPositiveInteger, PositiveInteger, Short, UnsignedByte, UnsignedInt, UnsignedLong,
 	UnsignedShort,
 };
@@ -32,6 +32,83 @@ impl Numeric {
 	pub fn into_non_negative_integer(self) -> Result<NonNegativeInteger, Self> {
 		match self {
 			Self::Real(r) => r.into_non_negative_integer().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_non_positive_integer(self) -> Result<NonPositiveInteger, Self> {
+		match self {
+			Self::Real(r) => r.into_non_positive_integer().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_positive_integer(self) -> Result<PositiveInteger, Self> {
+		match self {
+			Self::Real(r) => r.into_positive_integer().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_negative_integer(self) -> Result<NegativeInteger, Self> {
+		match self {
+			Self::Real(r) => r.into_negative_integer().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_unsigned_long(self) -> Result<UnsignedLong, Self> {
+		match self {
+			Self::Real(r) => r.into_unsigned_long().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_unsigned_int(self) -> Result<UnsignedInt, Self> {
+		match self {
+			Self::Real(r) => r.into_unsigned_int().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_unsigned_short(self) -> Result<UnsignedShort, Self> {
+		match self {
+			Self::Real(r) => r.into_unsigned_short().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_unsigned_byte(self) -> Result<UnsignedByte, Self> {
+		match self {
+			Self::Real(r) => r.into_unsigned_byte().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_long(self) -> Result<Long, Self> {
+		match self {
+			Self::Real(r) => r.into_long().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_int(self) -> Result<Int, Self> {
+		match self {
+			Self::Real(r) => r.into_int().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_short(self) -> Result<Short, Self> {
+		match self {
+			Self::Real(r) => r.into_short().map_err(Self::Real),
+			other => Err(other),
+		}
+	}
+
+	pub fn into_byte(self) -> Result<Byte, Self> {
+		match self {
+			Self::Real(r) => r.into_byte().map_err(Self::Real),
 			other => Err(other),
 		}
 	}
@@ -74,6 +151,12 @@ impl fmt::Display for Numeric {
 impl From<Real> for Numeric {
 	fn from(value: Real) -> Self {
 		Self::Real(value)
+	}
+}
+
+impl From<Decimal> for Numeric {
+	fn from(value: Decimal) -> Self {
+		Self::Real(value.into())
 	}
 }
 

@@ -62,7 +62,7 @@ impl Type {
 			Description::Primitive(_) => {
 				todo!()
 			}
-			Description::RestrictedPrimitive(r) => r.ident().clone(),
+			Description::DerivedPrimitive(r) => r.ident().clone(),
 			Description::BuiltIn(_) => {
 				todo!()
 			}
@@ -82,9 +82,9 @@ impl Type {
 			Description::Struct(s) => s.compute_params(dependency_params),
 			Description::Enum(e) => e.compute_params(dependency_params),
 			Description::BuiltIn(p) => p.compute_params(dependency_params),
-			Description::Never
-			| Description::Primitive(_)
-			| Description::RestrictedPrimitive(_) => Parameters::default(),
+			Description::Never | Description::Primitive(_) | Description::DerivedPrimitive(_) => {
+				Parameters::default()
+			}
 		}
 	}
 
@@ -201,7 +201,7 @@ pub enum Description {
 	Alias(Alias),
 	Reference(TId<treeldr::Type>),
 	Primitive(Primitive),
-	RestrictedPrimitive(primitive::Restricted),
+	DerivedPrimitive(primitive::Derived),
 	Struct(Struct),
 	Enum(Enum),
 }
@@ -217,7 +217,7 @@ impl Description {
 			}
 			Self::Reference(_) => false,
 			Self::Primitive(_) => false,
-			Self::RestrictedPrimitive(_) => false,
+			Self::DerivedPrimitive(_) => false,
 			Self::Struct(s) => s.impl_default(context),
 			Self::Enum(_) => false,
 		}
@@ -240,21 +240,22 @@ impl Description {
 			}
 			treeldr::layout::Description::Primitive(p) => Self::Primitive(*p),
 			treeldr::layout::Description::Derived(p) => {
-				if p.is_restricted() {
+				let default_value = p.default_value();
+				if p.is_restricted() || default_value.is_some() {
 					let ident = layout
 						.as_component()
 						.name()
 						.map(type_ident_of_name)
 						.unwrap_or_else(|| context.next_anonymous_type_ident());
 
-					Self::RestrictedPrimitive(primitive::Restricted::new(
+					Self::DerivedPrimitive(primitive::Derived::new(
 						ident,
 						p.primitive().layout(),
 						p.restrictions()
-							.unwrap()
-							.iter()
-							.map(primitive::Restriction::new)
+							.into_iter()
+							.flat_map(|r| r.iter().map(primitive::Restriction::new))
 							.collect(),
+						default_value.clone_into_literal(),
 					))
 				} else {
 					Self::Primitive(p.primitive())
@@ -346,7 +347,7 @@ impl<M> GenerateSyntax<M> for Type {
 			Description::Enum(e) => Ok(Some(syntax::LayoutTypeDefinition::Enum(
 				e.generate_syntax(context, scope)?,
 			))),
-			Description::RestrictedPrimitive(r) => {
+			Description::DerivedPrimitive(r) => {
 				Ok(Some(syntax::LayoutTypeDefinition::RestrictedPrimitive(
 					r.generate_syntax(context, scope)?,
 				)))
@@ -368,9 +369,9 @@ impl<M> GenerateSyntax<M> for TId<treeldr::Layout> {
 			.layout_type(*self)
 			.expect("undefined generated layout");
 		match ty.description() {
-			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Never => Ok(syn::parse2(quote!(::std::convert::Infallible)).unwrap()),
 			Description::Primitive(p) => p.generate_syntax(context, scope),
-			Description::RestrictedPrimitive(r) => {
+			Description::DerivedPrimitive(r) => {
 				let path = context
 					.module_path(scope.module)
 					.to(&ty
@@ -434,9 +435,9 @@ impl<M> GenerateSyntax<M> for Referenced<TId<treeldr::Layout>> {
 			.layout_type(self.0)
 			.expect("undefined generated layout");
 		match ty.description() {
-			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Never => Ok(syn::parse2(quote!(::std::convert::Infallible)).unwrap()),
 			Description::Primitive(p) => Referenced(*p).generate_syntax(context, scope),
-			Description::RestrictedPrimitive(r) => {
+			Description::DerivedPrimitive(r) => {
 				let path = context
 					.module_path(scope.module)
 					.to(&ty
@@ -502,9 +503,9 @@ impl<M> GenerateSyntax<M> for InContext<TId<treeldr::Layout>> {
 			.layout_type(self.0)
 			.expect("undefined generated layout");
 		match ty.description() {
-			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Never => Ok(syn::parse2(quote!(::std::convert::Infallible)).unwrap()),
 			Description::Primitive(p) => p.generate_syntax(context, scope),
-			Description::RestrictedPrimitive(r) => {
+			Description::DerivedPrimitive(r) => {
 				let path = context
 					.module_path(scope.module)
 					.to(&ty

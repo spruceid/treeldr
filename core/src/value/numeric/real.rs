@@ -30,6 +30,72 @@ impl Real {
 		}
 	}
 
+	pub fn into_non_positive_integer(self) -> Result<NonPositiveInteger, Self> {
+		match self {
+			Self::Rational(r) => r.into_non_positive_integer().map_err(Self::Rational),
+		}
+	}
+
+	pub fn into_positive_integer(self) -> Result<PositiveInteger, Self> {
+		match self {
+			Self::Rational(r) => r.into_positive_integer().map_err(Self::Rational),
+		}
+	}
+
+	pub fn into_negative_integer(self) -> Result<NegativeInteger, Self> {
+		match self {
+			Self::Rational(r) => r.into_negative_integer().map_err(Self::Rational),
+		}
+	}
+
+	pub fn into_unsigned_long(self) -> Result<UnsignedLong, Self> {
+		match self {
+			Self::Rational(r) => r.into_unsigned_long().map_err(Self::Rational),
+		}
+	}
+
+	pub fn into_unsigned_int(self) -> Result<UnsignedInt, Self> {
+		match self {
+			Self::Rational(r) => r.into_unsigned_int().map_err(Self::Rational),
+		}
+	}
+
+	pub fn into_unsigned_short(self) -> Result<UnsignedShort, Self> {
+		match self {
+			Self::Rational(r) => r.into_unsigned_short().map_err(Self::Rational),
+		}
+	}
+
+	pub fn into_unsigned_byte(self) -> Result<UnsignedByte, Self> {
+		match self {
+			Self::Rational(r) => r.into_unsigned_byte().map_err(Self::Rational),
+		}
+	}
+
+	pub fn into_long(self) -> Result<Long, Self> {
+		match self {
+			Self::Rational(r) => r.into_long().map_err(Self::Rational),
+		}
+	}
+
+	pub fn into_int(self) -> Result<Int, Self> {
+		match self {
+			Self::Rational(r) => r.into_int().map_err(Self::Rational),
+		}
+	}
+
+	pub fn into_short(self) -> Result<Short, Self> {
+		match self {
+			Self::Rational(r) => r.into_short().map_err(Self::Rational),
+		}
+	}
+
+	pub fn into_byte(self) -> Result<Byte, Self> {
+		match self {
+			Self::Rational(r) => r.into_byte().map_err(Self::Rational),
+		}
+	}
+
 	pub fn literal(&self) -> StrippedLiteral {
 		match self {
 			Self::Rational(r) => r.literal(),

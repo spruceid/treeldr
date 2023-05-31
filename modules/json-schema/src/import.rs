@@ -281,8 +281,8 @@ fn into_numeric(
 ) -> treeldr::value::Numeric {
 	use treeldr::value;
 	match primitive {
-		treeldr::layout::Primitive::Float => value::Float::new(n.as_f64_lossy() as f32).into(),
-		treeldr::layout::Primitive::Double => value::Double::new(n.as_f64_lossy()).into(),
+		treeldr::layout::Primitive::F32 => value::Float::new(n.as_f64_lossy() as f32).into(),
+		treeldr::layout::Primitive::F64 => value::Double::new(n.as_f64_lossy()).into(),
 		treeldr::layout::Primitive::Integer => match xsd_types::Integer::from_str(n) {
 			Ok(n) => n.into(),
 			Err(_) => todo!(),
@@ -337,7 +337,7 @@ fn import_layout_description<
 		match kind {
 			LayoutKind::Boolean => Some(treeldr::layout::Primitive::Boolean),
 			LayoutKind::Integer => Some(treeldr::layout::Primitive::Integer),
-			LayoutKind::Number => Some(treeldr::layout::Primitive::Double),
+			LayoutKind::Number => Some(treeldr::layout::Primitive::F64),
 			LayoutKind::String => Some(treeldr::layout::Primitive::String),
 			_ => None,
 		}
@@ -610,7 +610,7 @@ fn format_layout<M>(format: schema::Format) -> Result<treeldr::layout::Primitive
 		schema::Format::IdnHostname => todo!(),
 		schema::Format::Ipv4 => todo!(),
 		schema::Format::Ipv6 => todo!(),
-		schema::Format::Uri => Primitive::Uri,
+		schema::Format::Uri => Primitive::UriBuf,
 		schema::Format::UriReference => todo!(),
 		schema::Format::Iri => todo!(),
 		schema::Format::IriReference => todo!(),

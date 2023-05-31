@@ -461,7 +461,7 @@ impl<'a, V, M> Builder<'a, V, M> {
 				generate_id_type,
 			),
 			Description::Primitive(p) => match p {
-				vocab::Primitive::Iri | vocab::Primitive::Uri | vocab::Primitive::Url => {
+				vocab::Primitive::IriBuf | vocab::Primitive::UriBuf | vocab::Primitive::UrlBuf => {
 					Some(json_ld::Type::Id)
 				}
 				_ => match type_ref.id() {
@@ -471,7 +471,7 @@ impl<'a, V, M> Builder<'a, V, M> {
 				},
 			},
 			Description::Derived(p) => match p.primitive() {
-				vocab::Primitive::Iri | vocab::Primitive::Uri | vocab::Primitive::Url => {
+				vocab::Primitive::IriBuf | vocab::Primitive::UriBuf | vocab::Primitive::UrlBuf => {
 					Some(json_ld::Type::Id)
 				}
 				_ => match type_ref.id() {

@@ -521,7 +521,7 @@ impl<M: Clone + Merge> Context<M> {
 		layout.ty_mut().insert_base(Meta(target_ty, deref_cause));
 		layout.set_reference(Meta(
 			Id::Iri(IriIndex::Iri(vocab::Term::TreeLdr(
-				vocab::TreeLdr::Primitive(treeldr::layout::Primitive::Iri),
+				vocab::TreeLdr::Primitive(treeldr::layout::Primitive::IriBuf),
 			))),
 			cause,
 		));

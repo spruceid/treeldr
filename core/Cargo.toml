@@ -6,6 +6,7 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
+treeldr-primitives.workspace = true
 iref.workspace = true
 static-iref.workspace = true
 log.workspace = true

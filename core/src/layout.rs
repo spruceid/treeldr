@@ -4,7 +4,7 @@ use crate::{
 	component,
 	node::{self, BindingValueRef},
 	prop::{PropertyName, UnknownProperty},
-	property_values, vocab, FunctionalPropertyValue, Id, IriIndex, Multiple, PropertyValue,
+	property_values, value, vocab, FunctionalPropertyValue, Id, IriIndex, Multiple, PropertyValue,
 	PropertyValues, RequiredFunctionalPropertyValue, ResourceType, TId, Type,
 };
 use derivative::Derivative;
@@ -33,7 +33,7 @@ pub use field::Field;
 pub use map::Map;
 pub use one_or_many::OneOrMany;
 pub use optional::Optional;
-pub use primitive::{restriction::Restricted as RestrictedPrimitive, Primitive};
+pub use primitive::Primitive;
 pub use reference::Reference;
 pub use required::Required;
 pub use restriction::{ContainerRestriction, ContainerRestrictions, Restrictions};
@@ -107,7 +107,7 @@ pub enum Description<M> {
 	Primitive(Primitive),
 
 	/// Derived primitive layout.
-	Derived(RequiredFunctionalPropertyValue<RestrictedPrimitive<M>, M>),
+	Derived(RequiredFunctionalPropertyValue<primitive::Derived<M>, M>),
 
 	/// Reference.
 	Reference(RequiredFunctionalPropertyValue<Reference<M>, M>),
@@ -236,6 +236,13 @@ impl<M> Description<M> {
 
 	pub fn with_restrictions(&self) -> Option<WithRestrictions<M>> {
 		self.restrictions().and_then(WithRestrictions::new)
+	}
+
+	pub fn default_value(&self) -> Option<primitive::DefaultValue<M>> {
+		match self {
+			Self::Derived(d) => Some(d.default_value()),
+			_ => None,
+		}
 	}
 
 	pub fn as_map(&self) -> Option<&Map<M>> {
@@ -524,6 +531,10 @@ impl<M> Definition<M> {
 				.desc
 				.with_restrictions()
 				.map(WithRestrictions::into_iter),
+			default_value: self
+				.desc
+				.default_value()
+				.map(primitive::DefaultValue::into_iter),
 			array_semantics: self
 				.desc
 				.array_semantics()
@@ -565,6 +576,7 @@ pub enum Property {
 	Description(DescriptionProperty),
 	IntersectionOf(Option<TId<UnknownProperty>>),
 	WithRestrictions(Option<TId<UnknownProperty>>),
+	DefaultValue(Option<TId<UnknownProperty>>),
 	ArrayListFirst(Option<TId<UnknownProperty>>),
 	ArrayListRest(Option<TId<UnknownProperty>>),
 	ArrayListNil(Option<TId<UnknownProperty>>),
@@ -601,6 +613,10 @@ impl Property {
 				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::WithRestrictions)))
 			}
 			Self::WithRestrictions(Some(p)) => p.id(),
+			Self::DefaultValue(None) => {
+				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::DefaultValue)))
+			}
+			Self::DefaultValue(Some(p)) => p.id(),
 			Self::ArrayListFirst(None) => {
 				Id::Iri(IriIndex::Iri(Term::TreeLdr(TreeLdr::ArrayListFirst)))
 			}
@@ -625,6 +641,7 @@ impl Property {
 			Self::Description(p) => p.term(),
 			Self::IntersectionOf(None) => Some(Term::TreeLdr(TreeLdr::IntersectionOf)),
 			Self::WithRestrictions(None) => Some(Term::TreeLdr(TreeLdr::WithRestrictions)),
+			Self::DefaultValue(None) => Some(Term::TreeLdr(TreeLdr::DefaultValue)),
 			Self::ArrayListFirst(None) => Some(Term::TreeLdr(TreeLdr::ArrayListFirst)),
 			Self::ArrayListRest(None) => Some(Term::TreeLdr(TreeLdr::ArrayListRest)),
 			Self::ArrayListNil(None) => Some(Term::TreeLdr(TreeLdr::ArrayListNil)),
@@ -641,6 +658,8 @@ impl Property {
 			Self::IntersectionOf(Some(p)) => PropertyName::Other(*p),
 			Self::WithRestrictions(None) => PropertyName::Resource("layout restrictions"),
 			Self::WithRestrictions(Some(p)) => PropertyName::Other(*p),
+			Self::DefaultValue(None) => PropertyName::Resource("default value"),
+			Self::DefaultValue(Some(p)) => PropertyName::Other(*p),
 			Self::ArrayListFirst(None) => {
 				PropertyName::Resource("\"array as list\" `first` property")
 			}
@@ -819,6 +838,7 @@ pub enum ClassBindingRef<'a, M> {
 	Description(DescriptionBindingRef<'a, M>),
 	IntersectionOf(Option<TId<UnknownProperty>>, &'a Multiple<TId<Layout>, M>),
 	WithRestrictions(Option<TId<UnknownProperty>>, Restrictions<'a, M>),
+	DefaultValue(Option<TId<UnknownProperty>>, value::LiteralRef<'a>),
 	ArraySemantics(array::Binding),
 	MapValue(Option<TId<UnknownProperty>>, TId<Layout>),
 }
@@ -832,6 +852,7 @@ impl<'a, M> ClassBindingRef<'a, M> {
 			Self::Description(d) => Property::Description(d.property()),
 			Self::IntersectionOf(p, _) => Property::IntersectionOf(*p),
 			Self::WithRestrictions(p, _) => Property::WithRestrictions(*p),
+			Self::DefaultValue(p, _) => Property::DefaultValue(*p),
 			Self::ArraySemantics(b) => b.property(),
 			Self::MapValue(p, _) => Property::MapValue(*p),
 		}
@@ -845,6 +866,7 @@ impl<'a, M> ClassBindingRef<'a, M> {
 				BindingValueRef::LayoutList(node::MultipleIdValueRef::Multiple(*v))
 			}
 			Self::WithRestrictions(_, v) => BindingValueRef::LayoutRestrictions(*v),
+			Self::DefaultValue(_, v) => BindingValueRef::LiteralRef(v.clone()),
 			Self::ArraySemantics(b) => b.value(),
 			Self::MapValue(_, v) => BindingValueRef::Layout(*v),
 		}
@@ -856,6 +878,7 @@ pub struct ClassBindings<'a, M> {
 	desc: Option<DescriptionPropertyValueIter<'a, M>>,
 	intersection_of: property_values::functional::Iter<'a, Multiple<TId<crate::Layout>, M>, M>,
 	restrictions: Option<WithRestrictionsIter<'a, M>>,
+	default_value: Option<primitive::DefaultValueIter<'a, M>>,
 	array_semantics: array::Bindings<'a, M>,
 	map_value: Option<property_values::required_functional::Iter<'a, TId<Layout>, M>>,
 }
@@ -874,34 +897,34 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 					.as_mut()
 					.and_then(DescriptionPropertyValueIter::next)
 					.map(|d| d.map(ClassBindingRef::Description))
-					.or_else(|| {
-						self.intersection_of
-							.next()
-							.map(|v| v.into_class_binding(ClassBindingRef::IntersectionOf))
-							.or_else(|| {
-								self.restrictions
-									.as_mut()
-									.and_then(|v| {
-										v.next().map(|v| {
-											v.into_class_binding(ClassBindingRef::WithRestrictions)
-										})
-									})
-									.or_else(|| {
-										self.array_semantics
-											.next()
-											.map(|v| v.map(ClassBindingRef::ArraySemantics))
-											.or_else(|| {
-												self.map_value.as_mut().and_then(|m| {
-													m.next().map(|v| {
-														v.into_cloned_class_binding(
-															ClassBindingRef::MapValue,
-														)
-													})
-												})
-											})
-									})
-							})
-					})
+			})
+			.or_else(|| {
+				self.intersection_of
+					.next()
+					.map(|v| v.into_class_binding(ClassBindingRef::IntersectionOf))
+			})
+			.or_else(|| {
+				self.restrictions.as_mut().and_then(|v| {
+					v.next()
+						.map(|v| v.into_class_binding(ClassBindingRef::WithRestrictions))
+				})
+			})
+			.or_else(|| {
+				self.default_value.as_mut().and_then(|d| {
+					d.next()
+						.map(|(p, Meta(v, meta))| Meta(ClassBindingRef::DefaultValue(p, v), meta))
+				})
+			})
+			.or_else(|| {
+				self.array_semantics
+					.next()
+					.map(|v| v.map(ClassBindingRef::ArraySemantics))
+			})
+			.or_else(|| {
+				self.map_value.as_mut().and_then(|m| {
+					m.next()
+						.map(|v| v.into_cloned_class_binding(ClassBindingRef::MapValue))
+				})
 			})
 	}
 }

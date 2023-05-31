@@ -52,7 +52,9 @@ impl<V: VocabularyMut> Process<V> for LexBlob {
 		triples.push(Triple(
 			id,
 			vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
-			Object::Id(Id::Iri(vocabulary.insert(vocab::Primitive::Bytes.as_iri()))),
+			Object::Id(Id::Iri(
+				vocabulary.insert(vocab::Primitive::BytesBuf.as_iri()),
+			)),
 		));
 	}
 }
