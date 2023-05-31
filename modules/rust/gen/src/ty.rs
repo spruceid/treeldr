@@ -368,7 +368,7 @@ impl<M> GenerateSyntax<M> for TId<treeldr::Layout> {
 			.layout_type(*self)
 			.expect("undefined generated layout");
 		match ty.description() {
-			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Never => Ok(syn::parse2(quote!(::std::convert::Infallible)).unwrap()),
 			Description::Primitive(p) => p.generate_syntax(context, scope),
 			Description::RestrictedPrimitive(r) => {
 				let path = context
@@ -434,7 +434,7 @@ impl<M> GenerateSyntax<M> for Referenced<TId<treeldr::Layout>> {
 			.layout_type(self.0)
 			.expect("undefined generated layout");
 		match ty.description() {
-			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Never => Ok(syn::parse2(quote!(::std::convert::Infallible)).unwrap()),
 			Description::Primitive(p) => Referenced(*p).generate_syntax(context, scope),
 			Description::RestrictedPrimitive(r) => {
 				let path = context
@@ -502,7 +502,7 @@ impl<M> GenerateSyntax<M> for InContext<TId<treeldr::Layout>> {
 			.layout_type(self.0)
 			.expect("undefined generated layout");
 		match ty.description() {
-			Description::Never => Ok(syn::parse2(quote!(!)).unwrap()),
+			Description::Never => Ok(syn::parse2(quote!(::std::convert::Infallible)).unwrap()),
 			Description::Primitive(p) => p.generate_syntax(context, scope),
 			Description::RestrictedPrimitive(r) => {
 				let path = context

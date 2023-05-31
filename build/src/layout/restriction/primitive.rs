@@ -75,17 +75,13 @@ impl From<restriction::unicode_string::Restriction> for Restriction {
 #[derive(Debug)]
 pub struct Conflict<M>(pub Restriction, pub Meta<Restriction, M>);
 
-impl<T: Into<value::Numeric>, M> From<restriction::integer::Conflict<T, M>>
-	for Conflict<M>
-{
+impl<T: Into<value::Numeric>, M> From<restriction::integer::Conflict<T, M>> for Conflict<M> {
 	fn from(value: restriction::integer::Conflict<T, M>) -> Self {
 		Self(value.0.into(), value.1.cast())
 	}
 }
 
-impl<T: Into<value::Numeric>, M> From<restriction::float::Conflict<T, M>>
-	for Conflict<M>
-{
+impl<T: Into<value::Numeric>, M> From<restriction::float::Conflict<T, M>> for Conflict<M> {
 	fn from(value: restriction::float::Conflict<T, M>) -> Self {
 		Self(value.0.into(), value.1.cast())
 	}
@@ -126,12 +122,8 @@ impl Numeric {
 impl<T: Into<value::Numeric>> From<restriction::integer::Restriction<T>> for Numeric {
 	fn from(value: restriction::integer::Restriction<T>) -> Self {
 		match value {
-			restriction::integer::Restriction::MinInclusive(v) => {
-				Self::InclusiveMinimum(v.into())
-			}
-			restriction::integer::Restriction::MaxInclusive(v) => {
-				Self::InclusiveMaximum(v.into())
-			}
+			restriction::integer::Restriction::MinInclusive(v) => Self::InclusiveMinimum(v.into()),
+			restriction::integer::Restriction::MaxInclusive(v) => Self::InclusiveMaximum(v.into()),
 		}
 	}
 }
@@ -540,9 +532,7 @@ impl<M: Clone + Merge> BuildRestrictions<M> for restriction::string::Restriction
 	}
 }
 
-impl<M: Clone + Merge> BuildRestrictions<M>
-	for restriction::unicode_string::Restrictions<M>
-{
+impl<M: Clone + Merge> BuildRestrictions<M> for restriction::unicode_string::Restrictions<M> {
 	fn build(restrictions: Restrictions<M>, id: Id) -> Result<Self, Error<M>> {
 		let mut p = restriction::unicode_string::Restrictions::default();
 

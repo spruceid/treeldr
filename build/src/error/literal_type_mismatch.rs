@@ -13,6 +13,6 @@ pub struct LiteralTypeMismatch {
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LiteralTypeMismatch {
 	fn message(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
-		format!("invalid literal type")
+		"invalid literal type".to_string()
 	}
 }

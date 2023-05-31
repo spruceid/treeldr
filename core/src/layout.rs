@@ -4,9 +4,8 @@ use crate::{
 	component,
 	node::{self, BindingValueRef},
 	prop::{PropertyName, UnknownProperty},
-	property_values, vocab, FunctionalPropertyValue, Id, IriIndex, Multiple, PropertyValue,
+	property_values, value, vocab, FunctionalPropertyValue, Id, IriIndex, Multiple, PropertyValue,
 	PropertyValues, RequiredFunctionalPropertyValue, ResourceType, TId, Type,
-	value
 };
 use derivative::Derivative;
 use locspan::Meta;
@@ -242,7 +241,7 @@ impl<M> Description<M> {
 	pub fn default_value(&self) -> Option<primitive::DefaultValue<M>> {
 		match self {
 			Self::Derived(d) => Some(d.default_value()),
-			_ => None
+			_ => None,
 		}
 	}
 
@@ -532,7 +531,8 @@ impl<M> Definition<M> {
 				.desc
 				.with_restrictions()
 				.map(WithRestrictions::into_iter),
-			default_value: self.desc
+			default_value: self
+				.desc
 				.default_value()
 				.map(primitive::DefaultValue::into_iter),
 			array_semantics: self
@@ -866,7 +866,7 @@ impl<'a, M> ClassBindingRef<'a, M> {
 				BindingValueRef::LayoutList(node::MultipleIdValueRef::Multiple(*v))
 			}
 			Self::WithRestrictions(_, v) => BindingValueRef::LayoutRestrictions(*v),
-			Self::DefaultValue(_, v) => BindingValueRef::LiteralRef(*v),
+			Self::DefaultValue(_, v) => BindingValueRef::LiteralRef(v.clone()),
 			Self::ArraySemantics(b) => b.value(),
 			Self::MapValue(_, v) => BindingValueRef::Layout(*v),
 		}
@@ -904,22 +904,16 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 					.map(|v| v.into_class_binding(ClassBindingRef::IntersectionOf))
 			})
 			.or_else(|| {
-				self.restrictions
-					.as_mut()
-					.and_then(|v| {
-						v.next().map(|v| {
-							v.into_class_binding(ClassBindingRef::WithRestrictions)
-						})
-					})
+				self.restrictions.as_mut().and_then(|v| {
+					v.next()
+						.map(|v| v.into_class_binding(ClassBindingRef::WithRestrictions))
+				})
 			})
 			.or_else(|| {
-				self.default_value
-					.as_mut()
-					.and_then(|d| {
-						d.next().map(|(p, Meta(v, meta))| {
-							Meta(ClassBindingRef::DefaultValue(p, v), meta)
-						})
-					})
+				self.default_value.as_mut().and_then(|d| {
+					d.next()
+						.map(|(p, Meta(v, meta))| Meta(ClassBindingRef::DefaultValue(p, v), meta))
+				})
 			})
 			.or_else(|| {
 				self.array_semantics
@@ -928,11 +922,8 @@ impl<'a, M> Iterator for ClassBindings<'a, M> {
 			})
 			.or_else(|| {
 				self.map_value.as_mut().and_then(|m| {
-					m.next().map(|v| {
-						v.into_cloned_class_binding(
-							ClassBindingRef::MapValue,
-						)
-					})
+					m.next()
+						.map(|v| v.into_cloned_class_binding(ClassBindingRef::MapValue))
 				})
 			})
 	}

@@ -1,26 +1,19 @@
 pub use xsd_types::{
-	Boolean,
-	Base64Binary as Base64Bytes, Base64BinaryBuf as Base64BytesBuf, Byte as I8, Double as F64,
-	Float as F32, HexBinary as HexBytes, HexBinaryBuf as HexBytesBuf, Int as I32, Integer,
-	Long as I64, NegativeInteger, NonNegativeInteger, NonPositiveInteger, PositiveInteger,
-	Short as I16, UnsignedByte as U8, UnsignedInt as U32, UnsignedLong as U64,
-	UnsignedShort as U16,
-	Float,
-	Double,
-	String,
-	Time,
-	Date,
-	DateTime
+	Base64Binary as Base64Bytes, Base64BinaryBuf as Base64BytesBuf, Boolean, Byte as I8, Date,
+	DateTime, Double as F64, Double, Float as F32, Float, HexBinary as HexBytes,
+	HexBinaryBuf as HexBytesBuf, Int as I32, Integer, Long as I64, NegativeInteger,
+	NonNegativeInteger, NonPositiveInteger, PositiveInteger, Short as I16, String, Time,
+	UnsignedByte as U8, UnsignedInt as U32, UnsignedLong as U64, UnsignedShort as U16,
 };
 
 pub use iref::{Iri, IriBuf, IriRef, IriRefBuf};
 
 mod bytes;
+mod cid;
 mod uri;
 mod url;
-mod cid;
 
 pub use bytes::*;
+pub use cid::*;
 pub use uri::*;
 pub use url::*;
-pub use cid::*;

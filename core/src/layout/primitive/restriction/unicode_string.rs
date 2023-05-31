@@ -1,4 +1,4 @@
-use crate::{metadata::Merge, ty::data::RegExp, MetaOption, layout::primitive::RestrictionSet};
+use crate::{layout::primitive::RestrictionSet, metadata::Merge, ty::data::RegExp, MetaOption};
 use derivative::Derivative;
 use locspan::Meta;
 use xsd_types::NonNegativeInteger;

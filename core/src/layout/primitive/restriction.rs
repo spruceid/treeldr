@@ -3,17 +3,19 @@ use crate::PropertyValue;
 use super::RestrictionSet;
 use locspan::Meta;
 
-pub mod none;
-pub mod integer;
 pub mod float;
+pub mod integer;
+pub mod none;
 pub mod string;
 pub mod unicode_string;
 
 use super::Restrictions;
 
 pub trait RestrictionsTemplate<T> {
-	type Ref<'a> where T: 'a;
-	
+	type Ref<'a>
+	where
+		T: 'a;
+
 	type Set<M>: RestrictionSet;
 
 	type Iter<'a, M>

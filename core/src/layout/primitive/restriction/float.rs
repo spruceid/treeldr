@@ -1,4 +1,4 @@
-use crate::{metadata::Merge, MetaOption, layout::primitive::RestrictionSet};
+use crate::{layout::primitive::RestrictionSet, metadata::Merge, MetaOption};
 use derivative::Derivative;
 use locspan::{Meta, StrippedEq, StrippedHash, StrippedOrd, StrippedPartialEq, StrippedPartialOrd};
 use std::{

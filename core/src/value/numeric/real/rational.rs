@@ -12,9 +12,16 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[repr(transparent)]
 pub struct Rational(BigRational);
 
 impl Rational {
+	pub fn from_big_rational_ref(r: &BigRational) -> &Self {
+		// Safety: `Rational` uses the `transparent` representation around a
+		// `BigRational`.
+		unsafe { std::mem::transmute(r) }
+	}
+
 	pub fn numer(&self) -> &Integer {
 		Integer::from_bigint_ref(self.0.numer())
 	}

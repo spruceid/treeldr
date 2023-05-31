@@ -63,9 +63,15 @@ impl<M> GenerateSyntax<M> for treeldr::layout::Primitive {
 			Self::Time => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::chrono::NaiveTime }).unwrap())
 			}
-			Self::UrlBuf => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
-			Self::UriBuf => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
-			Self::IriBuf => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap()),
+			Self::UrlBuf => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap())
+			}
+			Self::UriBuf => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap())
+			}
+			Self::IriBuf => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::IriBuf }).unwrap())
+			}
 			Self::CidBuf => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::CidBuf }).unwrap()),
 		}
 	}
@@ -137,7 +143,9 @@ impl<M> GenerateSyntax<M> for Referenced<treeldr::layout::Primitive> {
 			Primitive::IriBuf => {
 				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::iref::Iri }).unwrap())
 			}
-			Primitive::CidBuf => Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Cid }).unwrap()),
+			Primitive::CidBuf => {
+				Ok(syn::parse2(quote! { ::treeldr_rust_prelude::ty::Cid }).unwrap())
+			}
 		}
 	}
 }

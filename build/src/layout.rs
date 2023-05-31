@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use crate::{
 	context::{MapIds, MapIdsIn},
 	error::{self, node_binding_functional_conflict::ConflictValues},
-	functional_property_value::{self, FunctionalPropertyValue, Conflict},
+	functional_property_value::{self, Conflict, FunctionalPropertyValue},
 	resource::{self, BindingValueRef},
 	utils::TryCollect,
 	Context, Error, MetaValueExt,
@@ -13,8 +13,8 @@ use locspan::Meta;
 use rdf_types::IriVocabulary;
 pub use treeldr::layout::{DescriptionProperty, Property};
 use treeldr::{
-	metadata::Merge, prop::UnknownProperty, Id, IriIndex, MetaOption, Multiple, Name,
-	PropertyValueRef, PropertyValues, TId, Value, PropertyValue, value,
+	metadata::Merge, prop::UnknownProperty, value, Id, IriIndex, MetaOption, Multiple, Name,
+	PropertyValue, PropertyValueRef, PropertyValues, TId, Value,
 };
 
 pub mod array;
@@ -118,7 +118,9 @@ impl<'a, M> SingleDescriptionPropertyRef<'a, M> {
 						.into_required()
 						.unwrap()
 						.try_map_borrow_metadata(|id, meta| match Primitive::from_id(id) {
-							Some(p) => p.build(id, restrictions.map(Restrictions::into_primitive), default),
+							Some(p) => {
+								p.build(id, restrictions.map(Restrictions::into_primitive), default)
+							}
 							None => {
 								let meta = meta.first().unwrap().value.into_metadata();
 								Err(Meta(error::LayoutNotPrimitive(id).into(), meta.clone()))
@@ -785,7 +787,14 @@ impl<M> DescriptionProperties<M> {
 		M: Clone + Merge,
 	{
 		match self.single_description() {
-			Ok(Some(desc)) => desc.build(context, id, restrictions, default, array_semantics, map_value),
+			Ok(Some(desc)) => desc.build(
+				context,
+				id,
+				restrictions,
+				default,
+				array_semantics,
+				map_value,
+			),
 			Ok(None) => match Primitive::from_id(id) {
 				Some(p) => Ok(treeldr::layout::Description::Primitive(p)),
 				None => Ok(treeldr::layout::Description::Never),
@@ -1412,14 +1421,26 @@ impl<M: Clone> Definition<M> {
 			.transpose()?
 			.into();
 
-		let default_value = self.default_value.clone().try_unwrap().map_err(|Conflict(PropertyValue { sub_property, value: Meta(a, meta), .. }, b)| Meta(
-			error::NodeBindingFunctionalConflict {
-				id: as_resource.id,
-				property: Property::DefaultValue(sub_property).into(),
-				values: ConflictValues::Literal(a, b)
-			}.into(),
-			meta
-		))?;
+		let default_value = self.default_value.clone().try_unwrap().map_err(
+			|Conflict(
+				PropertyValue {
+					sub_property,
+					value: Meta(a, meta),
+					..
+				},
+				b,
+			)| {
+				Meta(
+					error::NodeBindingFunctionalConflict {
+						id: as_resource.id,
+						property: Property::DefaultValue(sub_property).into(),
+						values: ConflictValues::Literal(a, b),
+					}
+					.into(),
+					meta,
+				)
+			},
+		)?;
 
 		self.desc.build(
 			context,

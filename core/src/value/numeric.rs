@@ -5,7 +5,7 @@ use std::fmt;
 use rdf_types::{IriVocabulary, RdfDisplayWithContext};
 pub use real::*;
 use xsd_types::{
-	Byte, Double, Float, Int, Integer, Long, NegativeInteger, NonNegativeInteger,
+	Byte, Decimal, Double, Float, Int, Integer, Long, NegativeInteger, NonNegativeInteger,
 	NonPositiveInteger, PositiveInteger, Short, UnsignedByte, UnsignedInt, UnsignedLong,
 	UnsignedShort,
 };
@@ -151,6 +151,12 @@ impl fmt::Display for Numeric {
 impl From<Real> for Numeric {
 	fn from(value: Real) -> Self {
 		Self::Real(value)
+	}
+}
+
+impl From<Decimal> for Numeric {
+	fn from(value: Decimal) -> Self {
+		Self::Real(value.into())
 	}
 }
 
@@ -433,11 +439,4 @@ impl TryFrom<Numeric> for UnsignedByte {
 			n => Err(n),
 		}
 	}
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub enum NumericRef<'a> {
-	Real(RealRef<'a>),
-	Float(Float),
-	Double(Double),
 }

@@ -324,9 +324,9 @@ impl Property {
 		Self::Component(component::Property::Layout(
 			layout::Property::WithRestrictions(None),
 		)),
-		Self::Component(component::Property::Layout(
-			layout::Property::DefaultValue(None),
-		)),
+		Self::Component(component::Property::Layout(layout::Property::DefaultValue(
+			None,
+		))),
 		Self::Component(component::Property::Layout(layout::Property::Description(
 			layout::DescriptionProperty::Alias(None),
 		))),
@@ -504,9 +504,9 @@ impl Property {
 				))
 			}
 			Self::Component(component::Property::Layout(layout::Property::DefaultValue(_))) => {
-				Self::Component(component::Property::Layout(
-					layout::Property::DefaultValue(sub_prop),
-				))
+				Self::Component(component::Property::Layout(layout::Property::DefaultValue(
+					sub_prop,
+				)))
 			}
 			Self::Component(component::Property::Layout(layout::Property::Description(
 				layout::DescriptionProperty::Alias(_),

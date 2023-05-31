@@ -640,9 +640,7 @@ impl<'a, T> IntoRdf for layout::primitive::restriction::none::RestrictionRef<'a,
 	}
 }
 
-impl<'a, T: ToString> IntoRdf
-	for layout::primitive::restriction::integer::RestrictionRef<'a, T>
-{
+impl<'a, T: ToString> IntoRdf for layout::primitive::restriction::integer::RestrictionRef<'a, T> {
 	type Target = Id;
 
 	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
@@ -683,9 +681,7 @@ impl<'a, T: ToString> IntoRdf
 	}
 }
 
-impl<'a, T: AsRdfLiteral> IntoRdf
-	for layout::primitive::restriction::float::RestrictionRef<'a, T>
-{
+impl<'a, T: AsRdfLiteral> IntoRdf for layout::primitive::restriction::float::RestrictionRef<'a, T> {
 	type Target = Id;
 
 	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(

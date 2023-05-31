@@ -18,7 +18,7 @@ _:5 <https://treeldr.org/required> _:4 .
 
 _:4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
 _:4 <http://www.w3.org/2000/01/rdf-schema#comment> "The price of the product" .
-_:4 <https://treeldr.org/derivedFrom> <https://treeldr.org/Double> .
+_:4 <https://treeldr.org/derivedFrom> <https://treeldr.org/F64> .
 _:4 <https://treeldr.org/withRestrictions> _:19 .
 _:4 <https://treeldr.org/name> "product_price" .
 

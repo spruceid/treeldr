@@ -1,12 +1,19 @@
 use super::restriction::primitive::Restrictions;
-use crate::{Error, error};
+use crate::{error, Error};
 use locspan::Meta;
-use treeldr::{metadata::Merge, layout::primitive::{Derived, DerivedFrom, PrimitiveLayoutType}};
+use treeldr::{
+	layout::primitive::{Derived, DerivedFrom, PrimitiveLayoutType},
+	metadata::Merge,
+};
 pub use treeldr::{
 	layout::{primitive::RegExp, Primitive},
 	Id, MetaOption, Metadata,
 };
-use xsd_types::{Boolean, Integer, NonNegativeInteger, NonPositiveInteger, PositiveInteger, NegativeInteger, UnsignedLong, UnsignedInt, UnsignedShort, UnsignedByte, Long, Int, Short, Byte, Float, Double, Base64BinaryBuf, HexBinaryBuf};
+use xsd_types::{
+	Base64BinaryBuf, Boolean, Byte, Double, Float, HexBinaryBuf, Int, Integer, Long,
+	NegativeInteger, NonNegativeInteger, NonPositiveInteger, PositiveInteger, Short, UnsignedByte,
+	UnsignedInt, UnsignedLong, UnsignedShort,
+};
 
 macro_rules! import_literals {
 	( $($f:ident ($m:ident) : $ty:ty),* ) => {
@@ -59,7 +66,7 @@ pub trait BuildPrimitive<M>: Sized {
 		self,
 		id: Id,
 		restrictions: MetaOption<Restrictions<M>, M>,
-		default: treeldr::FunctionalPropertyValue<treeldr::value::Literal, M>
+		default: treeldr::FunctionalPropertyValue<treeldr::value::Literal, M>,
 	) -> Result<treeldr::layout::primitive::Derived<M>, Error<M>>;
 }
 
@@ -68,171 +75,117 @@ impl<M: Clone + Merge> BuildPrimitive<M> for Primitive {
 		self,
 		id: Id,
 		restrictions: MetaOption<Restrictions<M>, M>,
-		default: treeldr::FunctionalPropertyValue<treeldr::value::Literal, M>
+		default: treeldr::FunctionalPropertyValue<treeldr::value::Literal, M>,
 	) -> Result<treeldr::layout::primitive::Derived<M>, Error<M>> {
 		match self {
-			Primitive::Boolean => Ok(Derived::Boolean(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_boolean()?
-				)
-			)),
-			Primitive::Integer => Ok(Derived::Integer(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_integer()?
-				)
-			)),
-			Primitive::NonNegativeInteger => Ok(Derived::NonNegativeInteger(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_non_negative_integer()?
-				)
-			)),
-			Primitive::NonPositiveInteger => Ok(Derived::NonPositiveInteger(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_non_positive_integer()?
-				)
-			)),
-			Primitive::PositiveInteger => Ok(Derived::PositiveInteger(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_positive_integer()?
-				)
-			)),
-			Primitive::NegativeInteger => Ok(Derived::NegativeInteger(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_negative_integer()?
-				)
-			)),
-			Primitive::I64 => Ok(Derived::I64(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_long()?
-				)
-			)),
-			Primitive::I32 => Ok(Derived::I32(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_int()?
-				)
-			)),
-			Primitive::I16 => Ok(Derived::I16(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_short()?
-				)
-			)),
-			Primitive::I8 => Ok(Derived::I8(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_byte()?
-				)
-			)),
-			Primitive::U64 => Ok(Derived::U64(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_unsigned_long()?
-				)
-			)),
-			Primitive::U32 => Ok(Derived::U32(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_unsigned_int()?
-				)
-			)),
-			Primitive::U16 => Ok(Derived::U16(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_unsigned_short()?
-				)
-			)),
-			Primitive::U8 => Ok(Derived::U8(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_unsigned_byte()?
-				)
-			)),
-			Primitive::F32 => Ok(Derived::F32(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_float()?
-				)
-			)),
-			Primitive::F64 => Ok(Derived::F64(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_double()?
-				)
-			)),
-			Primitive::Base64BytesBuf => Ok(Derived::Base64BytesBuf(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_base64_binary()?
-				)
-			)),
-			Primitive::HexBytesBuf => Ok(Derived::HexBytesBuf(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_hex_binary()?
-				)
-			)),
-			Primitive::String => Ok(Derived::String(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.into_optional_string()?
-				)
-			)),
-			Primitive::Time => Ok(Derived::Time(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.try_map_borrow_metadata(|_, _| unimplemented!("time default"))?
-				)
-			)),
-			Primitive::Date => Ok(Derived::Date(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.try_map_borrow_metadata(|_, _| unimplemented!("date default"))?
-				)
-			)),
-			Primitive::DateTime => Ok(Derived::DateTime(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.try_map_borrow_metadata(|_, _| unimplemented!("datetime default"))?
-				)
-			)),
-			Primitive::IriBuf => Ok(Derived::IriBuf(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.try_map_borrow_metadata(|_, _| unimplemented!("IRI default"))?
-				)
-			)),
-			Primitive::UriBuf => Ok(Derived::UriBuf(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.try_map_borrow_metadata(|_, _| unimplemented!("URI default"))?
-				)
-			)),
-			Primitive::UrlBuf => Ok(Derived::UrlBuf(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.try_map_borrow_metadata(|_, _| unimplemented!("URL default"))?
-				)
-			)),
-			Primitive::BytesBuf => Ok(Derived::BytesBuf(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.try_map_borrow_metadata(|_, _| unimplemented!("bytes default"))?
-				)
-			)),
-			Primitive::CidBuf => Ok(Derived::CidBuf(
-				DerivedFrom::new(
-					restrictions.try_map(|r| r.build(id))?,
-					default.try_map_borrow_metadata(|_, _| unimplemented!("CID default"))?
-				)
-			))
+			Primitive::Boolean => Ok(Derived::Boolean(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_boolean()?,
+			))),
+			Primitive::Integer => Ok(Derived::Integer(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_integer()?,
+			))),
+			Primitive::NonNegativeInteger => Ok(Derived::NonNegativeInteger(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_non_negative_integer()?,
+			))),
+			Primitive::NonPositiveInteger => Ok(Derived::NonPositiveInteger(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_non_positive_integer()?,
+			))),
+			Primitive::PositiveInteger => Ok(Derived::PositiveInteger(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_positive_integer()?,
+			))),
+			Primitive::NegativeInteger => Ok(Derived::NegativeInteger(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_negative_integer()?,
+			))),
+			Primitive::I64 => Ok(Derived::I64(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_long()?,
+			))),
+			Primitive::I32 => Ok(Derived::I32(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_int()?,
+			))),
+			Primitive::I16 => Ok(Derived::I16(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_short()?,
+			))),
+			Primitive::I8 => Ok(Derived::I8(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_byte()?,
+			))),
+			Primitive::U64 => Ok(Derived::U64(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_unsigned_long()?,
+			))),
+			Primitive::U32 => Ok(Derived::U32(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_unsigned_int()?,
+			))),
+			Primitive::U16 => Ok(Derived::U16(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_unsigned_short()?,
+			))),
+			Primitive::U8 => Ok(Derived::U8(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_unsigned_byte()?,
+			))),
+			Primitive::F32 => Ok(Derived::F32(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_float()?,
+			))),
+			Primitive::F64 => Ok(Derived::F64(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_double()?,
+			))),
+			Primitive::Base64BytesBuf => Ok(Derived::Base64BytesBuf(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_base64_binary()?,
+			))),
+			Primitive::HexBytesBuf => Ok(Derived::HexBytesBuf(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_hex_binary()?,
+			))),
+			Primitive::String => Ok(Derived::String(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.into_optional_string()?,
+			))),
+			Primitive::Time => Ok(Derived::Time(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.try_map_borrow_metadata(|_, _| unimplemented!("time default"))?,
+			))),
+			Primitive::Date => Ok(Derived::Date(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.try_map_borrow_metadata(|_, _| unimplemented!("date default"))?,
+			))),
+			Primitive::DateTime => Ok(Derived::DateTime(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.try_map_borrow_metadata(|_, _| unimplemented!("datetime default"))?,
+			))),
+			Primitive::IriBuf => Ok(Derived::IriBuf(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.try_map_borrow_metadata(|_, _| unimplemented!("IRI default"))?,
+			))),
+			Primitive::UriBuf => Ok(Derived::UriBuf(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.try_map_borrow_metadata(|_, _| unimplemented!("URI default"))?,
+			))),
+			Primitive::UrlBuf => Ok(Derived::UrlBuf(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.try_map_borrow_metadata(|_, _| unimplemented!("URL default"))?,
+			))),
+			Primitive::BytesBuf => Ok(Derived::BytesBuf(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.try_map_borrow_metadata(|_, _| unimplemented!("bytes default"))?,
+			))),
+			Primitive::CidBuf => Ok(Derived::CidBuf(DerivedFrom::new(
+				restrictions.try_map(|r| r.build(id))?,
+				default.try_map_borrow_metadata(|_, _| unimplemented!("CID default"))?,
+			))),
 		}
 	}
 }

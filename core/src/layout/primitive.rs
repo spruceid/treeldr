@@ -1,14 +1,12 @@
-use crate::{vocab, Id, IriIndex, TId, MetaOption, FunctionalPropertyValue, prop::UnknownProperty};
+use crate::{prop::UnknownProperty, vocab, FunctionalPropertyValue, Id, IriIndex, MetaOption, TId};
 use iref_enum::IriEnum;
-use std::fmt;
 use locspan::Meta;
+use std::fmt;
 
 pub mod restriction;
 
 pub use crate::ty::data::RegExp;
-pub use restriction::{
-	WithRestrictions, WithRestrictionsIter,
-};
+pub use restriction::{WithRestrictions, WithRestrictionsIter};
 
 pub trait RestrictionSet {
 	fn is_restricted(&self) -> bool;
@@ -245,17 +243,17 @@ impl From<Primitive> for Id {
 #[derive(Clone, Debug)]
 pub struct DerivedFrom<T: PrimitiveLayoutType, M> {
 	restrictions: MetaOption<T::Restrictions<M>, M>,
-	default: FunctionalPropertyValue<T, M>
+	default: FunctionalPropertyValue<T, M>,
 }
 
 impl<T: PrimitiveLayoutType, M> DerivedFrom<T, M> {
 	pub fn new(
 		restrictions: MetaOption<T::Restrictions<M>, M>,
-		default: FunctionalPropertyValue<T, M>
+		default: FunctionalPropertyValue<T, M>,
 	) -> Self {
 		Self {
 			restrictions,
-			default
+			default,
 		}
 	}
 }
@@ -264,7 +262,7 @@ impl<T: PrimitiveLayoutType, M> Default for DerivedFrom<T, M> {
 	fn default() -> Self {
 		Self {
 			restrictions: MetaOption::default(),
-			default: FunctionalPropertyValue::default()
+			default: FunctionalPropertyValue::default(),
 		}
 	}
 }
@@ -286,17 +284,17 @@ impl<T: PrimitiveLayoutType, M> DerivedFrom<T, M> {
 macro_rules! restricted_type {
 	{ @lft $t:lifetime } => { 'a };
 	{ $( $id:ident : $template:ident ),* } => {
-		
+
 		$(
 			impl PrimitiveLayoutType for treeldr_primitives::$id {
 				type RestrictionRef<'a> = <restriction::$template::Template as restriction::RestrictionsTemplate<Self>>::Ref<'a>;
-	
+
 				type Restrictions<M> = <restriction::$template::Template as restriction::RestrictionsTemplate<Self>>::Set<M>;
-	
+
 				type RestrictionsIter<'a, M> = <restriction::$template::Template as restriction::RestrictionsTemplate<Self>>::Iter<'a, M>
 				where
 					M: 'a;
-	
+
 				const PRIMITIVE: Primitive = Primitive::$id;
 			}
 		)*
@@ -392,7 +390,11 @@ macro_rules! restricted_type {
 			type Item = (Option<TId<UnknownProperty>>, Meta<crate::value::LiteralRef<'a>, &'a M>);
 
 			fn next(&mut self) -> Option<Self::Item> {
-				todo!("default value to literal ref")
+				match self {
+					$(
+						Self::$id(iter) => iter.next().map(|v| (v.sub_property, v.value.cast())),
+					)*
+				}
 			}
 		}
 
