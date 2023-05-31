@@ -524,6 +524,15 @@ pub enum IriIndex {
 	Iri(Term),
 }
 
+impl IriIndex {
+	pub fn into_term(self) -> Result<Term, usize> {
+		match self {
+			Self::Iri(term) => Ok(term),
+			Self::Index(i) => Err(i),
+		}
+	}
+}
+
 impl From<usize> for IriIndex {
 	fn from(i: usize) -> Self {
 		Self::Index(i)

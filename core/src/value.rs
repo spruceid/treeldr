@@ -270,6 +270,24 @@ impl Literal {
 	}
 }
 
+impl From<Boolean> for Literal {
+	fn from(value: Boolean) -> Self {
+		Self::Boolean(value)
+	}
+}
+
+impl From<Float> for Literal {
+	fn from(value: Float) -> Self {
+		Self::Numeric(Numeric::Float(value))
+	}
+}
+
+impl From<Double> for Literal {
+	fn from(value: Double) -> Self {
+		Self::Numeric(Numeric::Double(value))
+	}
+}
+
 macro_rules! from_rational {
 	( $($ty:ty),* ) => {
 		$(
@@ -302,6 +320,66 @@ from_rational! {
 impl From<String> for Literal {
 	fn from(value: String) -> Self {
 		Self::String(value)
+	}
+}
+
+impl From<Base64BinaryBuf> for Literal {
+	fn from(value: Base64BinaryBuf) -> Self {
+		Self::Base64Binary(value)
+	}
+}
+
+impl From<HexBinaryBuf> for Literal {
+	fn from(value: HexBinaryBuf) -> Self {
+		Self::HexBinary(value)
+	}
+}
+
+impl From<Date> for Literal {
+	fn from(_value: Date) -> Self {
+		todo!("xsd:date literal")
+	}
+}
+
+impl From<Time> for Literal {
+	fn from(_value: Time) -> Self {
+		todo!("xsd:time literal")
+	}
+}
+
+impl From<DateTime> for Literal {
+	fn from(_value: DateTime) -> Self {
+		todo!("xsd:dateTime literal")
+	}
+}
+
+impl From<IriBuf> for Literal {
+	fn from(_value: IriBuf) -> Self {
+		todo!("tldr:Iri literal")
+	}
+}
+
+impl From<UriBuf> for Literal {
+	fn from(_value: UriBuf) -> Self {
+		todo!("tldr:Uri literal")
+	}
+}
+
+impl From<UrlBuf> for Literal {
+	fn from(_value: UrlBuf) -> Self {
+		todo!("tldr:Url literal")
+	}
+}
+
+impl From<BytesBuf> for Literal {
+	fn from(_value: BytesBuf) -> Self {
+		todo!("tldr:Bytes literal")
+	}
+}
+
+impl From<CidBuf> for Literal {
+	fn from(_value: CidBuf) -> Self {
+		todo!("tldr:Cid literal")
 	}
 }
 

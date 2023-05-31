@@ -362,6 +362,22 @@ macro_rules! restricted_type {
 		}
 
 		impl<'a, M: 'a> DefaultValue<'a, M> {
+			pub fn is_some(&self) -> bool {
+				match self {
+					$(
+						Self::$id(v) => v.is_some(),
+					)*
+				}
+			}
+
+			pub fn clone_into_literal(&self) -> Option<crate::value::Literal> {
+				match self {
+					$(
+						Self::$id(v) => v.value().map(|v| v.clone().into()),
+					)*
+				}
+			}
+
 			pub fn iter(&self) -> DefaultValueIter<'a, M> {
 				match self {
 					$(

@@ -1,0 +1,20 @@
+{
+  "lexicon": 1,
+  "id": "com.example",
+  "defs": {
+    "main": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "default": "foo"
+    },
+    "integer": {
+      "type": "integer",
+      "default": 12
+    },
+    "boolean": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

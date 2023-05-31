@@ -3,20 +3,27 @@ use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use treeldr::{utils::DetAutomaton, TId};
 
-use crate::{syntax, GenerateSyntax};
+use crate::{syntax, GenerateSyntax, WithLayout};
 
-pub struct Restricted {
+pub struct Derived {
 	ident: Ident,
 	base: TId<treeldr::Layout>,
 	restrictions: Vec<Restriction>,
+	default_value: Option<treeldr::value::Literal>,
 }
 
-impl Restricted {
-	pub fn new(ident: Ident, base: TId<treeldr::Layout>, restrictions: Vec<Restriction>) -> Self {
+impl Derived {
+	pub fn new(
+		ident: Ident,
+		base: TId<treeldr::Layout>,
+		restrictions: Vec<Restriction>,
+		default_value: Option<treeldr::value::Literal>,
+	) -> Self {
 		Self {
 			ident,
 			base,
 			restrictions,
+			default_value,
 		}
 	}
 
@@ -29,8 +36,8 @@ impl Restricted {
 	}
 }
 
-impl<M> GenerateSyntax<M> for Restricted {
-	type Output = syntax::ty::primitive::Restricted;
+impl<M> GenerateSyntax<M> for Derived {
+	type Output = syntax::ty::primitive::Derived;
 
 	fn generate_syntax<
 		V: rdf_types::Vocabulary<Iri = treeldr::IriIndex, BlankId = treeldr::BlankIdIndex>,
@@ -44,10 +51,15 @@ impl<M> GenerateSyntax<M> for Restricted {
 			restrictions.push(r.generate_syntax(context, scope)?)
 		}
 
-		Ok(syntax::ty::primitive::Restricted {
+		Ok(syntax::ty::primitive::Derived {
 			ident: self.ident.clone(),
 			base: self.base.generate_syntax(context, scope)?,
 			restrictions,
+			default_value: self
+				.default_value
+				.as_ref()
+				.map(|l| WithLayout::new(l, self.base))
+				.generate_syntax(context, scope)?,
 		})
 	}
 }

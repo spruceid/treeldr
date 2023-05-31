@@ -69,17 +69,33 @@ impl<V: VocabularyMut> Process<V> for LexBoolean {
 			log::warn!("boolean `const` constraint not yet supported")
 		}
 
-		if self.default.is_some() {
-			log::warn!("boolean `default` constraint not yet supported")
-		}
+		match self.default {
+			Some(default_value) => {
+				triples.push(Triple(
+					id.clone(),
+					vocabulary.insert(vocab::TreeLdr::DerivedFrom.as_iri()),
+					Object::Id(Id::Iri(
+						vocabulary.insert(vocab::Primitive::Boolean.as_iri()),
+					)),
+				));
 
-		triples.push(Triple(
-			id,
-			vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
-			Object::Id(Id::Iri(
-				vocabulary.insert(vocab::Primitive::Boolean.as_iri()),
+				triples.push(Triple(
+					id,
+					vocabulary.insert(vocab::TreeLdr::DefaultValue.as_iri()),
+					Object::Literal(Literal::TypedString(
+						default_value.to_string(),
+						vocabulary.insert(vocab::Xsd::Boolean.as_iri()),
+					)),
+				));
+			}
+			None => triples.push(Triple(
+				id,
+				vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
+				Object::Id(Id::Iri(
+					vocabulary.insert(vocab::Primitive::Boolean.as_iri()),
+				)),
 			)),
-		));
+		}
 	}
 }
 
@@ -114,24 +130,44 @@ impl<V: VocabularyMut> Process<V> for LexInteger {
 			log::warn!("integer `const` constraint not yet supported")
 		}
 
-		if self.default.is_some() {
-			log::warn!("integer `default` constraint not yet supported")
-		}
-
 		if self.enum_.is_some() {
 			log::warn!("integer `enum` constraint not yet supported")
 		}
 
 		let primitive = self.best_primitive();
-		match self.bounds_constraints(primitive) {
-			(None, None) => {
+		let (min, max) = self.bounds_constraints(primitive);
+
+		let derived = self.default.is_some() || min.is_some() || max.is_some();
+
+		if derived {
+			triples.push(Triple(
+				id.clone(),
+				vocabulary.insert(vocab::TreeLdr::DerivedFrom.as_iri()),
+				Object::Id(Id::Iri(vocabulary.insert(primitive.as_iri()))),
+			));
+
+			if let Some(default_value) = self.default {
 				triples.push(Triple(
-					id,
-					vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(primitive.as_iri()))),
-				));
+					id.clone(),
+					vocabulary.insert(vocab::TreeLdr::DefaultValue.as_iri()),
+					Object::Literal(Literal::TypedString(
+						default_value.to_string(),
+						vocabulary.insert(
+							primitive
+								.natural_type()
+								.unwrap()
+								.id()
+								.into_iri()
+								.unwrap()
+								.into_term()
+								.unwrap()
+								.iri(),
+						),
+					)),
+				))
 			}
-			(min, max) => {
+
+			if min.is_some() || max.is_some() {
 				let constraits = min
 					.into_iter()
 					.map(|m| (vocab::TreeLdr::InclusiveMinimum, m))
@@ -170,17 +206,17 @@ impl<V: VocabularyMut> Process<V> for LexInteger {
 				);
 
 				triples.push(Triple(
-					id.clone(),
-					vocabulary.insert(vocab::TreeLdr::DerivedFrom.as_iri()),
-					Object::Id(Id::Iri(vocabulary.insert(primitive.as_iri()))),
-				));
-
-				triples.push(Triple(
 					id,
 					vocabulary.insert(vocab::TreeLdr::WithRestrictions.as_iri()),
 					Object::Id(constraints_id),
 				));
 			}
+		} else {
+			triples.push(Triple(
+				id,
+				vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
+				Object::Id(Id::Iri(vocabulary.insert(primitive.as_iri()))),
+			))
 		}
 	}
 }
@@ -222,10 +258,6 @@ impl<V: VocabularyMut> Process<V> for LexString {
 
 		if self.const_.is_some() {
 			log::warn!("string `const` constraint not yet supported")
-		}
-
-		if self.default.is_some() {
-			log::warn!("string `default` constraint not yet supported")
 		}
 
 		if self.enum_.is_some() {
@@ -330,7 +362,7 @@ impl<V: VocabularyMut> Process<V> for LexString {
 			restrictions.push(Object::Id(c_id))
 		}
 
-		if restrictions.is_empty() {
+		if restrictions.is_empty() && self.default.is_none() {
 			triples.push(Triple(
 				id,
 				vocabulary.insert(vocab::TreeLdr::Alias.as_iri()),
@@ -339,14 +371,6 @@ impl<V: VocabularyMut> Process<V> for LexString {
 				)),
 			));
 		} else {
-			let restrictions_id = build_rdf_list(
-				vocabulary,
-				generator,
-				triples,
-				restrictions,
-				|_, _, _, value| value,
-			);
-
 			triples.push(Triple(
 				id.clone(),
 				vocabulary.insert(vocab::TreeLdr::DerivedFrom.as_iri()),
@@ -355,11 +379,29 @@ impl<V: VocabularyMut> Process<V> for LexString {
 				)),
 			));
 
-			triples.push(Triple(
-				id,
-				vocabulary.insert(vocab::TreeLdr::WithRestrictions.as_iri()),
-				Object::Id(restrictions_id),
-			));
+			if let Some(default_value) = self.default {
+				triples.push(Triple(
+					id.clone(),
+					vocabulary.insert(vocab::TreeLdr::DefaultValue.as_iri()),
+					Object::Literal(Literal::String(default_value)),
+				))
+			}
+
+			if !restrictions.is_empty() {
+				let restrictions_id = build_rdf_list(
+					vocabulary,
+					generator,
+					triples,
+					restrictions,
+					|_, _, _, value| value,
+				);
+
+				triples.push(Triple(
+					id,
+					vocabulary.insert(vocab::TreeLdr::WithRestrictions.as_iri()),
+					Object::Id(restrictions_id),
+				));
+			}
 		}
 	}
 }

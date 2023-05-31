@@ -56,6 +56,10 @@
 <https://treeldr.org/mapValue> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/Layout> .
 <https://treeldr.org/mapValue> <http://www.w3.org/2000/01/rdf-schema#range> <https://treeldr.org/Layout> .
 
+<https://treeldr.org/defaultValue> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
+<https://treeldr.org/defaultValue> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/Layout> .
+<https://treeldr.org/defaultValue> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2000/01/rdf-schema#Literal> .
+
 <https://treeldr.org/pattern> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .
 <https://treeldr.org/pattern> <http://www.w3.org/2000/01/rdf-schema#domain> <https://treeldr.org/LayoutRestriction> .
 <https://treeldr.org/pattern> <http://www.w3.org/2000/01/rdf-schema#range> <https://treeldr.org/RegularExpression> .

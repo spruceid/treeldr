@@ -26,7 +26,7 @@ impl ToTokens for TypeDefinition {
 /// Layout type definition.
 pub enum LayoutTypeDefinition {
 	Alias(Alias),
-	RestrictedPrimitive(primitive::Restricted),
+	RestrictedPrimitive(primitive::Derived),
 	Struct(Struct),
 	Enum(Enum),
 }
