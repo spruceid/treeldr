@@ -1,3 +1,4 @@
+#![cfg(feature = "unicode-segmentation")]
 use treeldr_rust_macros::tldr;
 
 #[tldr("modules/rust/macros/tests/t07.ttl")]

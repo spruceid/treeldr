@@ -4,6 +4,9 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
+[features]
+unicode-segmentation = []
+
 [lib]
 proc-macro = true
 
