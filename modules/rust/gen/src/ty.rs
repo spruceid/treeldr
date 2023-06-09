@@ -134,6 +134,7 @@ impl Type {
 			Description::Struct(s) => Some(s.layout()),
 			Description::Enum(e) => Some(e.layout()),
 			Description::Primitive(p) => Some(TId::new(p.id())),
+			Description::DerivedPrimitive(d) => Some(d.layout()),
 			_ => None,
 		};
 
@@ -249,6 +250,7 @@ impl Description {
 						.unwrap_or_else(|| context.next_anonymous_type_ident());
 
 					Self::DerivedPrimitive(primitive::Derived::new(
+						layout_ref,
 						ident,
 						p.primitive().layout(),
 						p.restrictions()

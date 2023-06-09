@@ -28,6 +28,12 @@ impl ToTokens for Derived {
 						Self(value)
 					}
 				}
+
+				impl From<#base> for #ident {
+					fn from(value: #base) -> Self {
+						Self::new(value)
+					}
+				}
 			})
 		} else {
 			tokens.extend(quote! {
@@ -45,6 +51,14 @@ impl ToTokens for Derived {
 
 					fn check(value: &#base) -> bool {
 						#(#checks)&&*
+					}
+				}
+
+				impl TryFrom<#base> for #ident {
+					type Error = #error_ident;
+
+					fn try_from(value: #base) -> Result<Self, Self::Error> {
+						Self::new(value)
 					}
 				}
 			})

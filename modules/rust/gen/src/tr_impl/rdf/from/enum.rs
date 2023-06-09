@@ -93,12 +93,14 @@ impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Enum> {
 			bounds.push(b.generate_syntax(context, &scope)?)
 		}
 
-		Ok(syntax::tr_impl::rdf::FromRdfImpl {
-			type_path: self.ty_ref.generate_syntax(context, &scope)?,
-			bounds,
-			from_id: id_branch,
-			from_literal: literal_branch,
-		})
+		Ok(syntax::tr_impl::rdf::FromRdfImpl::Value(
+			syntax::tr_impl::rdf::FromRdfValueImpl {
+				type_path: self.ty_ref.generate_syntax(context, &scope)?,
+				bounds,
+				from_id: id_branch,
+				from_literal: literal_branch,
+			},
+		))
 	}
 }
 
@@ -474,10 +476,8 @@ impl Condition for LiteralCondition {
 				let iri_index = type_ref.id().into_iri().unwrap();
 				let iri = context.vocabulary().iri(&iri_index).unwrap().into_str();
 				quote! {
-					::treeldr_rust_prelude::TypeCheck::<N::Id>::has_type(literal, &::treeldr_rust_prelude::rdf_types::FromIri::from_iri(
-						namespace.insert(::treeldr_rust_prelude::static_iref::iri!(
-							#iri
-						))
+					::treeldr_rust_prelude::TypeCheck::has_type(literal, namespace, ::treeldr_rust_prelude::static_iref::iri!(
+						#iri
 					))
 				}
 			}
