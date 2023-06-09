@@ -1,16 +1,15 @@
-use langtag::{LanguageTag, LanguageTagBuf};
-use rdf_types::RdfDisplay;
+use rdf_types::{vocabulary::LanguageTagIndex, RdfDisplayWithContext, LanguageTagVocabulary};
 use std::{borrow::Borrow, fmt, ops::Deref};
 
 /// Language tagged string.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LangString {
 	value: String,
-	language: LanguageTagBuf,
+	language: LanguageTagIndex,
 }
 
 impl LangString {
-	pub fn new(value: String, language: LanguageTagBuf) -> Self {
+	pub fn new(value: String, language: LanguageTagIndex) -> Self {
 		Self { value, language }
 	}
 
@@ -18,8 +17,8 @@ impl LangString {
 		&self.value
 	}
 
-	pub fn language(&self) -> LanguageTag {
-		self.language.as_ref()
+	pub fn language(&self) -> LanguageTagIndex {
+		self.language
 	}
 }
 
@@ -29,9 +28,9 @@ impl fmt::Display for LangString {
 	}
 }
 
-impl RdfDisplay for LangString {
-	fn rdf_fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{}@{}", self.value, self.language)
+impl<V: LanguageTagVocabulary<LanguageTag = LanguageTagIndex>> RdfDisplayWithContext<V> for LangString {
+	fn rdf_fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}@{}", self.value, vocabulary.language_tag(&self.language).unwrap())
 	}
 }
 

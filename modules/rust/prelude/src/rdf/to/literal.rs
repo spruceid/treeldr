@@ -1,44 +1,50 @@
 use iref::IriBuf;
-use rdf_types::{Generator, IriVocabulary, IriVocabularyMut, Literal, Namespace};
+use json_ld::rdf::XSD_STRING;
+use rdf_types::{IriVocabularyMut, Literal, LiteralVocabulary, LiteralVocabularyMut, LanguageTagVocabularyMut, LanguageTagVocabulary, LiteralInterpretationMut};
 use static_iref::iri;
 
 use crate::rdf::{LiteralValue, ValuesOnly};
 
 use super::QuadsAndValues;
 
-pub trait AsLiteral<N, L> {
-	fn rdf_literal_value(&self, namespace: &mut N) -> L;
+pub trait AsLiteral<V: LiteralVocabulary> {
+	fn rdf_literal_value(
+		&self,
+		vocabulary: &mut V,
+	) -> V::Literal;
 }
 
 macro_rules! impl_as_literal {
 	{ $($ty:ty : $rdf_ty:tt),* } => {
 		$(
-			impl<N: IriVocabularyMut, L> AsLiteral<N, L> for $ty
+			impl<V> AsLiteral<V> for $ty
 			where
-				L: From<Literal<String, N::Iri>>,
+				V: IriVocabularyMut + LanguageTagVocabularyMut + LiteralVocabularyMut<Type = rdf_types::literal::Type<V::Iri, V::LanguageTag>>,
+				V::Value: From<String>
 			{
-				fn rdf_literal_value(&self, namespace: &mut N) -> L {
-					Literal::TypedString(
-						self.to_string(),
-						namespace.insert(iri!($rdf_ty))
-					).into()
+				fn rdf_literal_value(&self, namespace: &mut V) -> V::Literal {
+					let l = Literal::new(
+						self.to_string().into(),
+						rdf_types::literal::Type::Any(namespace.insert(iri!($rdf_ty)))
+					);
+
+					namespace.insert_owned_literal(l)
 				}
 			}
 
-			impl<N: Namespace + IriVocabulary, L> QuadsAndValues<N, L> for $ty
+			impl<V: LiteralVocabulary, N: LiteralInterpretationMut<V::Literal>> QuadsAndValues<V, N> for $ty
 			where
-				Self: AsLiteral<N, L>,
+				Self: AsLiteral<V>,
 			{
-				type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
+				type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self>> where Self: 'a, N::Resource: 'a;
 
-				fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
+				fn unbound_rdf_quads_and_values<'a>(
 					&'a self,
-					_namespace: &mut N,
-					_generator: &mut G,
+					_vocabulary: &mut V,
+					_interpretation: &mut N,
 				) -> Self::QuadsAndValues<'a>
 				where
-					N::Id: 'a,
-					L: 'a,
+					N::Resource: 'a
 				{
 					ValuesOnly::new(LiteralValue::new(self))
 				}
@@ -66,86 +72,83 @@ impl_as_literal! {
 	xsd_types::HexBinaryBuf: "http://www.w3.org/2001/XMLSchema#hexBinary"
 }
 
-impl<N: IriVocabulary, L> AsLiteral<N, L> for String
+impl<V: IriVocabularyMut + LanguageTagVocabulary + LiteralVocabularyMut<Type = rdf_types::literal::Type<V::Iri, V::LanguageTag>>> AsLiteral<V> for String
 where
-	L: From<Literal<String, N::Iri>>,
+	V::Value: From<String>
 {
-	fn rdf_literal_value(&self, _namespace: &mut N) -> L {
-		Literal::String(self.to_owned()).into()
+	fn rdf_literal_value(&self, vocabulary: &mut V) -> V::Literal {
+		let l = Literal::new(self.to_owned().into(), rdf_types::literal::Type::Any(vocabulary.insert(XSD_STRING)));
+		vocabulary.insert_owned_literal(l)
 	}
 }
 
-impl<N: Namespace + IriVocabulary, L> QuadsAndValues<N, L> for String
+impl<V: LiteralVocabulary, I: LiteralInterpretationMut<V::Literal>> QuadsAndValues<V, I> for String
 where
-	Self: AsLiteral<N, L>,
+	Self: AsLiteral<V>,
 {
-	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
+	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self>> where Self: 'a, I::Resource: 'a;
 
-	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
-		_namespace: &mut N,
-		_generator: &mut G,
+		_vocabulary: &mut V,
+		_interpretation: &mut I
 	) -> Self::QuadsAndValues<'a>
 	where
-		N::Id: 'a,
-		L: 'a,
+		I::Resource: 'a
 	{
 		ValuesOnly::new(LiteralValue::new(self))
 	}
 }
 
-impl<N: Namespace + IriVocabulary, L> QuadsAndValues<N, L> for IriBuf
+impl<V: LiteralVocabulary, I: LiteralInterpretationMut<V::Literal>> QuadsAndValues<V, I> for IriBuf
 where
-	Self: AsLiteral<N, L>,
+	Self: AsLiteral<V>,
 {
-	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
+	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self>> where Self: 'a, I::Resource: 'a;
 
-	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
-		_namespace: &mut N,
-		_generator: &mut G,
+		_vocabulary: &mut V,
+		_interpretation: &mut I
 	) -> Self::QuadsAndValues<'a>
 	where
-		N::Id: 'a,
-		L: 'a,
+		I::Resource: 'a
 	{
 		ValuesOnly::new(LiteralValue::new(self))
 	}
 }
 
-impl<N: Namespace + IriVocabulary, L> QuadsAndValues<N, L> for chrono::NaiveDate
+impl<V: LiteralVocabulary, I: LiteralInterpretationMut<V::Literal>> QuadsAndValues<V, I> for chrono::NaiveDate
 where
-	Self: AsLiteral<N, L>,
+	Self: AsLiteral<V>,
 {
-	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
+	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self>> where Self: 'a, I::Resource: 'a;
 
-	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
-		_namespace: &mut N,
-		_generator: &mut G,
+		_vocabulary: &mut V,
+		_interpretation: &mut I
 	) -> Self::QuadsAndValues<'a>
 	where
-		N::Id: 'a,
-		L: 'a,
+		I::Resource: 'a
 	{
 		ValuesOnly::new(LiteralValue::new(self))
 	}
 }
 
-impl<N: Namespace + IriVocabulary, L> QuadsAndValues<N, L> for chrono::DateTime<chrono::Utc>
+impl<V: LiteralVocabulary, I: LiteralInterpretationMut<V::Literal>> QuadsAndValues<V, I> for chrono::DateTime<chrono::Utc>
 where
-	Self: AsLiteral<N, L>,
+	Self: AsLiteral<V>,
 {
-	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self, N::Id, L>> where Self: 'a, N::Id: 'a, L: 'a;
+	type QuadsAndValues<'a> = ValuesOnly<LiteralValue<'a, Self>> where Self: 'a, I::Resource: 'a;
 
-	fn unbound_rdf_quads_and_values<'a, G: Generator<N>>(
+	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
-		_namespace: &mut N,
-		_generator: &mut G,
+		_vocabulary: &mut V,
+		_interpretation: &mut I
 	) -> Self::QuadsAndValues<'a>
 	where
-		N::Id: 'a,
-		L: 'a,
+		I::Resource: 'a
 	{
 		ValuesOnly::new(LiteralValue::new(self))
 	}

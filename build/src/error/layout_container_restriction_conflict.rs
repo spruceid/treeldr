@@ -1,11 +1,11 @@
 use locspan::{Span, MaybeLocated};
-use rdf_types::Vocabulary;
+use rdf_types::{Vocabulary, vocabulary::LanguageTagIndex};
 use treeldr::{IriIndex, BlankIdIndex};
 
 pub type LayoutContainerRestrictionConflict<M> = treeldr::layout::restriction::Conflict<M>;
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutContainerRestrictionConflict<M> where M::File: Clone {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>) -> String {
 		match self {
 			Self::Cardinal(c) => c.message(vocab)
 		}
@@ -13,7 +13,7 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutContainerRestricti
 
 	fn primary_label(
 			&self,
-			vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+			vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
 		) -> Option<String> {
 		match self {
 			Self::Cardinal(c) => c.primary_label(vocab)
@@ -22,7 +22,7 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutContainerRestricti
 
 	fn other_labels(
 			&self,
-			vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+			vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
 		) -> Vec<codespan_reporting::diagnostic::Label<<M as MaybeLocated>::File>> {
 		match self {
 			Self::Cardinal(c) => c.other_labels(vocab)

@@ -4,7 +4,7 @@ use std::str::FromStr;
 use crate::schema::{self, RegularSchema, Schema};
 use iref::{Iri, IriBuf};
 use locspan::{MaybeLocated, Meta, Span};
-use rdf_types::{Generator, Quad, Vocabulary, VocabularyMut};
+use rdf_types::{Generator, Quad, Vocabulary, VocabularyMut, vocabulary::LanguageTagIndex};
 use treeldr::{metadata::Merge, vocab, BlankIdIndex, Id, IriIndex, Name};
 use treeldr_build::{layout::Restrictions, Context};
 use vocab::{LocQuad, Object, Term};
@@ -37,7 +37,7 @@ where
 {
 	fn message(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
 	) -> String {
 		match self {
 			Self::UnsupportedType => "unsupported schema `type` value.".to_string(),

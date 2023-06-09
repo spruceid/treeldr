@@ -98,16 +98,15 @@ pub trait TypeCheck<V> {
 	fn has_type(&self, vocabulary: &V, iri: Iri) -> bool;
 }
 
-impl<V: IriVocabulary, S, L> TypeCheck<V> for Literal<S, V::Iri, L> {
+impl<V: IriVocabulary, S, L> TypeCheck<V> for Literal<rdf_types::literal::Type<V::Iri, L>, S> {
 	fn has_type(&self, vocabulary: &V, iri: Iri) -> bool {
-		match self {
-			Literal::String(_) => {
-				iri == static_iref::iri!("http://www.w3.org/2001/XMLSchema#string")
+		match self.type_() {
+			rdf_types::literal::Type::Any(t) => {
+				iri == vocabulary.iri(t).unwrap()
 			}
-			Literal::LangString(_, _) => {
+			rdf_types::literal::Type::LangString(_) => {
 				iri == static_iref::iri!("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
 			}
-			Literal::TypedString(_, t) => iri == vocabulary.iri(t).unwrap(),
 		}
 	}
 }

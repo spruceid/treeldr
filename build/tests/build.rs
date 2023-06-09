@@ -5,14 +5,14 @@ use rdf_types::VocabularyMut;
 use std::path::Path;
 use treeldr::{
 	to_rdf::ToRdf,
-	vocab::{GraphLabel, Id, Object, StrippedObject},
+	vocab::{GraphLabel, Id, Object, StrippedObject, IndexedVocabulary},
 	BlankIdIndex, IriIndex,
 };
 use treeldr_build::Document;
 
 type BuildContext = treeldr_build::Context<Span>;
 
-fn parse_nquads<P: AsRef<Path>, V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+fn parse_nquads<P: AsRef<Path>, V: IndexedVocabulary + VocabularyMut>(
 	vocabulary: &mut V,
 	path: P,
 ) -> grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel> {
@@ -31,7 +31,7 @@ fn parse_nquads<P: AsRef<Path>, V: VocabularyMut<Iri = IriIndex, BlankId = Blank
 		.collect()
 }
 
-fn parse_meta_nquads<P: AsRef<Path>, V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+fn parse_meta_nquads<P: AsRef<Path>, V: IndexedVocabulary + VocabularyMut>(
 	vocabulary: &mut V,
 	path: P,
 ) -> grdf::meta::BTreeDataset<Id, IriIndex, Object<Span>, GraphLabel, Span> {
@@ -50,7 +50,7 @@ fn parse_meta_nquads<P: AsRef<Path>, V: VocabularyMut<Iri = IriIndex, BlankId = 
 		.collect()
 }
 
-fn build_from_dataset<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+fn build_from_dataset<V: IndexedVocabulary + V>(
 	vocabulary: &mut V,
 	dataset: grdf::meta::BTreeDataset<Id, IriIndex, Object<Span>, GraphLabel, Span>,
 ) -> grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel> {

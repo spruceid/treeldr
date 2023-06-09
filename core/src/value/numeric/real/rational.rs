@@ -222,13 +222,13 @@ impl Rational {
 	pub fn literal(&self) -> StrippedLiteral {
 		use crate::vocab::{Owl, Term, Xsd};
 		match xsd_types::decimal_lexical_representation(&self.0) {
-			Some(decimal) => StrippedLiteral::TypedString(
+			Some(decimal) => StrippedLiteral::new(
 				decimal.into_string(),
-				IriIndex::Iri(Term::Xsd(Xsd::Decimal)),
+				rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(Xsd::Decimal))),
 			),
-			None => StrippedLiteral::TypedString(
+			None => StrippedLiteral::new(
 				self.0.to_string(),
-				IriIndex::Iri(Term::Owl(Owl::Rational)),
+				rdf_types::literal::Type::Any(IriIndex::Iri(Term::Owl(Owl::Rational))),
 			),
 		}
 	}

@@ -1,13 +1,15 @@
 use std::fmt;
 
+use iref::IriBuf;
+use treeldr::vocab::IndexedVocabulary;
 use ::treeldr::{
 	metadata::Merge,
 	vocab::{GraphLabel, Object},
-	BlankIdIndex, Id, IriIndex,
+	Id
 };
 use locspan::{Meta, Span};
 use nquads_syntax::Parse;
-use rdf_types::{generator::Unscoped, vocabulary::Scoped, Generator, VocabularyMut};
+use rdf_types::{generator::Unscoped, vocabulary::Scoped, Generator, VocabularyMut, InsertIntoVocabulary, Quad};
 
 use crate::Document;
 
@@ -44,8 +46,26 @@ impl fmt::Display for Scope {
 	}
 }
 
+type RdfTerm<M> = rdf_types::Term<rdf_types::Id, rdf_types::Literal<Meta<rdf_types::literal::Type, M>, Meta<String, M>>>;
+type RdfQuad<M> = Quad<Meta<rdf_types::Id, M>, Meta<IriBuf, M>, Meta<RdfTerm<M>, M>, Meta<rdf_types::Id, M>>;
+
+fn import_quad<M>(
+	vocabulary: &mut (impl IndexedVocabulary + VocabularyMut),
+	Meta(Quad(s, p, o, g), meta): Meta<RdfQuad<M>, M>
+) -> Meta<Quad<Meta<Id, M>, Meta<Id, M>, Meta<Object<M>, M>, Meta<GraphLabel, M>>, M> {
+	Meta(Quad(
+		s.insert_into_vocabulary(vocabulary),
+		p.insert_into_vocabulary(vocabulary).map(Id::Iri),
+		match o {
+			Meta(rdf_types::Term::Id(id), m) => Meta(Object::Id(id.insert_into_vocabulary(vocabulary)), m),
+			Meta(rdf_types::Term::Literal(l), m) => Meta(Object::Literal(l.insert_type_into_vocabulary(vocabulary)), m)
+		},
+		g.insert_into_vocabulary(vocabulary)
+	), meta)
+}
+
 impl<M> Context<M> {
-	pub fn import_nquads<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn import_nquads<V: IndexedVocabulary + VocabularyMut>(
 		&mut self,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,
@@ -64,13 +84,7 @@ impl<M> Context<M> {
 		let dataset: grdf::meta::BTreeDataset<Id, Id, Object<M>, GraphLabel, M> = doc
 			.into_value()
 			.into_iter()
-			.map(|Meta(quad, meta)| {
-				Meta(
-					quad.insert_into(&mut scoped_vocabulary)
-						.map_predicate(|p| p.map(Id::Iri)),
-					meta,
-				)
-			})
+			.map(|quad| import_quad(&mut scoped_vocabulary, quad))
 			.collect();
 
 		dataset
@@ -94,7 +108,7 @@ impl<M> Context<M> {
 	}
 
 	pub fn apply_built_in_definitions_with<
-		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+		V: IndexedVocabulary + VocabularyMut,
 	>(
 		&mut self,
 		vocabulary: &mut V,
@@ -160,7 +174,7 @@ impl<M> Context<M> {
 		);
 	}
 
-	pub fn apply_built_in_definitions<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn apply_built_in_definitions<V: IndexedVocabulary + VocabularyMut>(
 		&mut self,
 		vocabulary: &mut V,
 		generator: &mut impl Generator<V>,

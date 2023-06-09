@@ -28,7 +28,7 @@ nquads-syntax.workspace = true
 serde = { version = "1.0.154", features = ["derive"], optional = true }
 
 # Extensions.
-turtle-syntax = { version = "5.0.4", optional = true }
+turtle-syntax = { version = "6", optional = true }
 treeldr-json-schema = { workspace = true, optional = true }
 json-syntax = { workspace = true, features = ["serde"], optional = true }
 treeldr-json-ld-context = { workspace = true, optional = true }

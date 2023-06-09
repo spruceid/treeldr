@@ -1,14 +1,12 @@
 use std::{borrow::Cow, fmt};
 
 use iref::{AsIri, IriBuf};
-use langtag::LanguageTag;
-use locspan::Meta;
-use rdf_types::IriVocabulary;
+use rdf_types::{IriVocabulary, LanguageTagVocabulary, vocabulary::LanguageTagIndex};
 use treeldr_primitives::{BytesBuf, CidBuf, UriBuf, UrlBuf};
 pub use xsd_types::value::*;
 use xsd_types::ParseRdf;
 
-use crate::{layout::primitive::RegExp, vocab, Id, IriIndex};
+use crate::{layout::primitive::RegExp, vocab::{self, StrippedLiteral}, Id, IriIndex};
 
 mod lang_string;
 mod numeric;
@@ -399,15 +397,14 @@ impl fmt::Display for Literal {
 	}
 }
 
-impl<V: IriVocabulary<Iri = IriIndex>> rdf_types::RdfDisplayWithContext<V> for Literal {
+impl<V: IriVocabulary<Iri = IriIndex> + LanguageTagVocabulary<LanguageTag = LanguageTagIndex>> rdf_types::RdfDisplayWithContext<V> for Literal {
 	fn rdf_fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
 		use fmt::Display;
-		use rdf_types::RdfDisplay;
 		match self {
 			Self::Boolean(true) => write!(f, "\"true\"^^{}", vocab::Xsd::Boolean.as_iri()),
 			Self::Boolean(false) => write!(f, "\"false\"^^{}", vocab::Xsd::Boolean.as_iri()),
 			Self::Numeric(n) => n.rdf_fmt_with(vocabulary, f),
-			Self::LangString(s) => s.rdf_fmt(f),
+			Self::LangString(s) => s.rdf_fmt_with(vocabulary, f),
 			Self::String(s) => s.fmt(f),
 			Self::Base64Binary(b) => write!(f, "\"{b}\"^^{}", vocab::Xsd::Base64Binary.as_iri()),
 			Self::HexBinary(b) => write!(f, "\"{b}\"^^{}", vocab::Xsd::HexBinary.as_iri()),
@@ -473,9 +470,9 @@ impl<M> TryFrom<vocab::Literal<M>> for Literal {
 			};
 		}
 
-		match value {
-			vocab::Literal::String(s) => Ok(Literal::String(s.into_value())),
-			vocab::Literal::TypedString(s, Meta(ty, _)) => match_type! { (s, ty):
+		let (s, ty) = value.into_parts();
+		match ty.into_value() {
+			rdf_types::literal::Type::Any(ty) => match_type! { (s, ty):
 				Decimal,
 				Integer,
 				NonNegativeInteger,
@@ -491,9 +488,9 @@ impl<M> TryFrom<vocab::Literal<M>> for Literal {
 				UnsignedShort,
 				UnsignedByte
 			},
-			vocab::Literal::LangString(s, tag) => Ok(Literal::LangString(LangString::new(
+			rdf_types::literal::Type::LangString(tag) => Ok(Literal::LangString(LangString::new(
 				s.into_value(),
-				tag.into_value(),
+				tag,
 			))),
 		}
 	}
@@ -502,20 +499,19 @@ impl<M> TryFrom<vocab::Literal<M>> for Literal {
 pub trait AsRdfLiteral: fmt::Display {
 	fn rdf_type(&self) -> IriIndex;
 
-	fn language(&self) -> Option<LanguageTag> {
+	fn language(&self) -> Option<LanguageTagIndex> {
 		None
 	}
 
-	fn as_rdf_literal(&self) -> rdf_types::Literal<String, IriIndex> {
-		match self.rdf_type() {
-			IriIndex::Iri(crate::vocab::Term::Xsd(crate::vocab::Xsd::String)) => {
-				rdf_types::Literal::String(self.to_string())
-			}
+	fn as_rdf_literal(&self) -> StrippedLiteral {
+		let ty = match self.rdf_type() {
 			IriIndex::Iri(crate::vocab::Term::Rdf(crate::vocab::Rdf::LangString)) => {
-				rdf_types::Literal::LangString(self.to_string(), self.language().unwrap().cloned())
+				rdf_types::literal::Type::LangString(self.language().unwrap())
 			}
-			ty => rdf_types::Literal::TypedString(self.to_string(), ty),
-		}
+			ty => rdf_types::literal::Type::Any(ty)
+		};
+
+		StrippedLiteral::new(self.to_string(), ty)
 	}
 }
 
@@ -604,7 +600,7 @@ impl AsRdfLiteral for LangString {
 		IriIndex::Iri(crate::vocab::Term::Rdf(crate::vocab::Rdf::LangString))
 	}
 
-	fn language(&self) -> Option<LanguageTag> {
+	fn language(&self) -> Option<LanguageTagIndex> {
 		Some(self.language())
 	}
 }
@@ -646,7 +642,7 @@ impl AsRdfLiteral for HexBinary {
 }
 
 impl AsRdfLiteral for Literal {
-	fn language(&self) -> Option<LanguageTag> {
+	fn language(&self) -> Option<LanguageTagIndex> {
 		match self {
 			Self::LangString(s) => Some(s.language()),
 			_ => None,
@@ -905,15 +901,14 @@ impl<'a> fmt::Display for LiteralRef<'a> {
 	}
 }
 
-impl<'a, V: IriVocabulary<Iri = IriIndex>> rdf_types::RdfDisplayWithContext<V> for LiteralRef<'a> {
+impl<'a, V: IriVocabulary<Iri = IriIndex> + LanguageTagVocabulary<LanguageTag = LanguageTagIndex>> rdf_types::RdfDisplayWithContext<V> for LiteralRef<'a> {
 	fn rdf_fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
 		use fmt::Display;
-		use rdf_types::RdfDisplay;
 		match self {
 			Self::Boolean(true) => write!(f, "\"true\"^^{}", vocab::Xsd::Boolean.as_iri()),
 			Self::Boolean(false) => write!(f, "\"false\"^^{}", vocab::Xsd::Boolean.as_iri()),
 			Self::Numeric(n) => n.rdf_fmt_with(vocabulary, f),
-			Self::LangString(s) => s.rdf_fmt(f),
+			Self::LangString(s) => s.rdf_fmt_with(vocabulary, f),
 			Self::String(s) => s.fmt(f),
 			Self::Base64Binary(b) => write!(f, "\"{b}\"^^{}", vocab::Xsd::Base64Binary.as_iri()),
 			Self::HexBinary(b) => write!(f, "\"{b}\"^^{}", vocab::Xsd::HexBinary.as_iri()),
@@ -924,7 +919,7 @@ impl<'a, V: IriVocabulary<Iri = IriIndex>> rdf_types::RdfDisplayWithContext<V> f
 }
 
 impl<'a> AsRdfLiteral for LiteralRef<'a> {
-	fn language(&self) -> Option<LanguageTag> {
+	fn language(&self) -> Option<LanguageTagIndex> {
 		match self {
 			Self::LangString(s) => Some(s.language()),
 			_ => None,

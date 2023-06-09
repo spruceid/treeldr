@@ -5,7 +5,7 @@ use crate::{
 	node::BindingValueRef,
 	ty,
 	value::AsRdfLiteral,
-	vocab::{self, StrippedObject, StrippedQuad, Term},
+	vocab::{self, StrippedObject, StrippedQuad, Term, StrippedLiteral},
 	BlankIdIndex, Id, IriIndex, MutableModel,
 };
 use locspan::Meta;
@@ -167,7 +167,7 @@ impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 			Self::NonNegativeInteger(u) => Object::Literal(u.as_rdf_literal()),
 			Self::Literal(l) => Object::Literal(l.as_rdf_literal()),
 			Self::LiteralRef(l) => Object::Literal(l.as_rdf_literal()),
-			Self::Name(n) => Object::Literal(Literal::String(n.to_string())),
+			Self::Name(n) => Object::Literal(StrippedLiteral::new(n.to_string(), rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String))))),
 			Self::Id(id) => id.into_term(),
 			Self::Type(t) => t.id().into_term(),
 			Self::TypeList(types) => types
@@ -478,9 +478,9 @@ impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinLength)),
-					Object::Literal(Literal::TypedString(
+					Object::Literal(Literal::new(
 						min.to_string(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
 					)),
 					None,
 				));
@@ -489,9 +489,9 @@ impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxLength)),
-					Object::Literal(Literal::TypedString(
+					Object::Literal(Literal::new(
 						max.to_string(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
 					)),
 					None,
 				));
@@ -500,7 +500,10 @@ impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::Pattern)),
-					Object::Literal(Literal::String(regexp.to_string())),
+					Object::Literal(Literal::new(
+						regexp.to_string(),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String))),
+					)),
 					None,
 				));
 			}
@@ -602,9 +605,9 @@ impl<'a> IntoRdf for layout::restriction::cardinal::RestrictionRef<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinCardinality)),
-					Object::Literal(Literal::TypedString(
+					Object::Literal(Literal::new(
 						min.to_string(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
 					)),
 					None,
 				));
@@ -613,9 +616,9 @@ impl<'a> IntoRdf for layout::restriction::cardinal::RestrictionRef<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxCardinality)),
-					Object::Literal(Literal::TypedString(
+					Object::Literal(Literal::new(
 						min.to_string(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
 					)),
 					None,
 				));
@@ -657,9 +660,9 @@ impl<'a, T: ToString> IntoRdf for layout::primitive::restriction::integer::Restr
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
-					Object::Literal(Literal::TypedString(
+					Object::Literal(Literal::new(
 						min.to_string(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
 					)),
 					None,
 				));
@@ -668,9 +671,9 @@ impl<'a, T: ToString> IntoRdf for layout::primitive::restriction::integer::Restr
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
-					Object::Literal(Literal::TypedString(
+					Object::Literal(Literal::new(
 						min.to_string(),
-						IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
 					)),
 					None,
 				));
@@ -766,7 +769,10 @@ impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> 
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Pattern)),
-					Object::Literal(Literal::String(regexp.to_string())),
+					Object::Literal(Literal::new(
+						regexp.to_string(),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String)))
+					)),
 					None,
 				));
 			}
@@ -825,7 +831,10 @@ impl<'a> IntoRdf for layout::primitive::restriction::unicode_string::Restriction
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Pattern)),
-					Object::Literal(Literal::String(regexp.to_string())),
+					Object::Literal(Literal::new(
+						regexp.to_string(),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String)))
+					)),
 					None,
 				));
 			}

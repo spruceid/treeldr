@@ -1,6 +1,6 @@
 use iref::IriBuf;
 use locspan::{MaybeLocated, Meta, Span};
-use rdf_types::Vocabulary;
+use rdf_types::{Vocabulary, vocabulary::LanguageTagIndex};
 use thiserror::Error;
 use treeldr::{reporting, BlankIdIndex, Id, IriIndex};
 
@@ -14,7 +14,7 @@ impl<M: Clone + MaybeLocated<Span = Span>> reporting::DiagnoseWithVocabulary<M> 
 where
 	M::File: Clone,
 {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>) -> String {
 		match self {
 			Self::Global(e) => e.message(vocab),
 			Self::Local(e) => reporting::Diagnose::message(e),
@@ -23,7 +23,7 @@ where
 
 	fn labels(
 		&self,
-		vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
 	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		match self {
 			Self::Global(e) => e.labels(vocab),

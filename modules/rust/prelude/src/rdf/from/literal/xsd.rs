@@ -9,22 +9,22 @@ use super::{type_check, FromLiteral};
 macro_rules! impl_from_literal {
 	{ $($ty:ty : $rdf_ty:tt),* } => {
 		$(
-			impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V> for $ty {
-				fn from_literal_type_unchecked(literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-					match <$ty>::parse_rdf(literal.string_literal().as_ref()) {
+			impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<rdf_types::literal::Type<T, L>, S>, V> for $ty {
+				fn from_literal_type_unchecked(literal: &Literal<rdf_types::literal::Type<T, L>, S>) -> Result<Self, FromRdfError> {
+					match <$ty>::parse_rdf(literal.as_ref()) {
 						Ok(i) => Ok(i),
 						Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
 					}
 				}
 
-				fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+				fn from_literal(vocabulary: &V, literal: &Literal<rdf_types::literal::Type<T, L>, S>) -> Result<Self, FromRdfError> {
 					type_check(
 						vocabulary,
 						literal,
 						iri!($rdf_ty),
 					)?;
 
-					FromLiteral::<Literal<S, T, L>, V>::from_literal_type_unchecked(literal)
+					FromLiteral::<Literal<rdf_types::literal::Type<T, L>, S>, V>::from_literal_type_unchecked(literal)
 				}
 			}
 		)*
@@ -54,65 +54,68 @@ impl_from_literal! {
 	xsd_types::HexBinaryBuf: "http://www.w3.org/2001/XMLSchema#hexBinary"
 }
 
-impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V>
+impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<rdf_types::literal::Type<T, L>, S>, V>
 	for ::chrono::NaiveDate
 {
-	fn from_literal_type_unchecked(literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-		match literal.string_literal().as_ref().parse::<Self>() {
+	fn from_literal_type_unchecked(literal: &Literal<rdf_types::literal::Type<T, L>, S>) -> Result<Self, FromRdfError> {
+		match literal.as_ref().parse::<Self>() {
 			Ok(d) => Ok(d),
 			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
 		}
 	}
 
-	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+	fn from_literal(vocabulary: &V, literal: &Literal<rdf_types::literal::Type<T, L>, S>) -> Result<Self, FromRdfError> {
 		type_check(
 			vocabulary,
 			literal,
 			iri!("http://www.w3.org/2001/XMLSchema#date"),
 		)?;
 
-		FromLiteral::<Literal<S, T, L>, V>::from_literal_type_unchecked(literal)
+		FromLiteral::<Literal<rdf_types::literal::Type<T, L>, S>, V>::from_literal_type_unchecked(literal)
 	}
 }
 
-impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V>
+impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<rdf_types::literal::Type<T, L>, S>, V>
 	for ::chrono::DateTime<::chrono::Utc>
 {
-	fn from_literal_type_unchecked(literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-		match literal.string_literal().as_ref().parse::<Self>() {
+	fn from_literal_type_unchecked(literal: &Literal<rdf_types::literal::Type<T, L>, S>) -> Result<Self, FromRdfError> {
+		match literal.as_ref().parse::<Self>() {
 			Ok(d) => Ok(d),
 			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
 		}
 	}
 
-	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+	fn from_literal(vocabulary: &V, literal: &Literal<rdf_types::literal::Type<T, L>, S>) -> Result<Self, FromRdfError> {
 		type_check(
 			vocabulary,
 			literal,
 			iri!("http://www.w3.org/2001/XMLSchema#dateTime"),
 		)?;
 
-		FromLiteral::<Literal<S, T, L>, V>::from_literal_type_unchecked(literal)
+		FromLiteral::<Literal<rdf_types::literal::Type<T, L>, S>, V>::from_literal_type_unchecked(literal)
 	}
 }
 
-impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V>
+impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<rdf_types::literal::Type<T, L>, S>, V>
 	for iref::IriBuf
 {
-	fn from_literal_type_unchecked(literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-		match literal.string_literal().as_ref().parse::<Self>() {
+	fn from_literal_type_unchecked(literal: &Literal<rdf_types::literal::Type<T, L>, S>) -> Result<Self, FromRdfError> {
+		match literal.as_ref().parse::<Self>() {
 			Ok(d) => Ok(d),
 			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
 		}
 	}
 
-	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+	fn from_literal(vocabulary: &V, literal: &Literal<rdf_types::literal::Type<T, L>, S>) -> Result<Self, FromRdfError> {
 		type_check(
 			vocabulary,
 			literal,
 			iri!("http://www.w3.org/2001/XMLSchema#anyURI"),
 		)?;
 
-		FromLiteral::<Literal<S, T, L>, V>::from_literal_type_unchecked(literal)
+		match literal.as_ref().parse::<Self>() {
+			Ok(d) => Ok(d),
+			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
+		}
 	}
 }
