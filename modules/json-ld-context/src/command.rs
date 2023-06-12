@@ -1,6 +1,6 @@
 use crate::Options;
 use iref::{Iri, IriBuf};
-use json_ld::{Context, ContextLoader, Process};
+use json_ld::{syntax::Parse, Context, ContextLoader, Print, Process};
 use locspan::Span;
 use rdf_types::{Vocabulary, VocabularyMut};
 use std::{
@@ -51,6 +51,11 @@ pub struct Command {
 	/// Define a prefix using the syntax `prefix=IRI`.
 	#[clap(short = 'p', long = "prefix")]
 	prefixes: Vec<PrefixBinding>,
+
+	/// Generate a standalone JSON-LD document for this context, declared with
+	/// a toplevel `@context` binding.
+	#[clap(short, long)]
+	standalone: bool,
 }
 
 #[derive(Debug)]
@@ -251,8 +256,21 @@ impl Command {
 
 		match crate::generate(vocabulary, model, options, &layouts) {
 			Ok(definition) => {
-				use json_ld::syntax::Print;
-				println!("{}", definition.pretty_print());
+				if self.standalone {
+					// TODO fix this when a conversion context to JSON is provided.
+					let value = json_ld::syntax::Value::parse_str(
+						&definition.compact_print().to_string(),
+						|_| (),
+					)
+					.unwrap();
+					let doc = json_ld::syntax::json! {{
+						"@context": value
+					}};
+
+					println!("{}", doc.pretty_print());
+				} else {
+					println!("{}", definition.pretty_print());
+				}
 
 				Ok(())
 			}
