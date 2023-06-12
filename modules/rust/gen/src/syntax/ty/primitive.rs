@@ -19,6 +19,30 @@ impl ToTokens for Derived {
 		tokens.extend(quote! {
 			#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 			pub struct #ident(#base);
+
+			impl #ident {
+				pub fn into_base(self) -> #base {
+					self.0
+				}
+
+				pub fn as_base(&self) -> &#base {
+					&self.0
+				}
+			}
+
+			impl ::std::fmt::Display for #ident {
+				fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+					self.0.fmt(f)
+				}
+			}
+
+			impl ::std::ops::Deref for #ident {
+				type Target = #base;
+
+				fn deref(&self) -> &Self::Target {
+					&self.0
+				}
+			}
 		});
 
 		if self.restrictions.is_empty() {
