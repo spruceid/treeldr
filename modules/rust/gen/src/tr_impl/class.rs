@@ -101,6 +101,13 @@ impl<M> GenerateSyntax<M> for TraitImpl {
 					.map(Some),
 				_ => Ok(None),
 			},
+			ty::Description::DerivedPrimitive(p) => match self.tr {
+				TraitId::FromRdf => super::rdf::from::FromRdfImpl::new(self.ty, p)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::FromRdf)
+					.map(Some),
+				_ => Ok(None),
+			},
 			_ => {
 				panic!("unable to implement trait for non enum/struct type")
 			}

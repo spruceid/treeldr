@@ -138,17 +138,19 @@ impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Struct> {
 			bounds.push(b.generate_syntax(context, &scope)?)
 		}
 
-		Ok(syntax::tr_impl::rdf::FromRdfImpl {
-			type_path: self.ty_ref.generate_syntax(context, &scope)?,
-			bounds,
-			from_id: quote! {
-				Ok(Self {
-					#(#fields_init),*
-				})
+		Ok(syntax::tr_impl::rdf::FromRdfImpl::Value(
+			syntax::tr_impl::rdf::FromRdfValueImpl {
+				type_path: self.ty_ref.generate_syntax(context, &scope)?,
+				bounds,
+				from_id: quote! {
+					Ok(Self {
+						#(#fields_init),*
+					})
+				},
+				from_literal: quote!(Err(
+					::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue
+				)),
 			},
-			from_literal: quote!(Err(
-				::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue
-			)),
-		})
+		))
 	}
 }

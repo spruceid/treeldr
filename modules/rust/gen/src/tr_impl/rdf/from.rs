@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-	ty::{self, BuiltIn, Description, Primitive, Type},
+	ty::{self, BuiltIn, Description, Type},
 	Error, GenerateSyntax,
 };
 use proc_macro2::TokenStream;
@@ -10,6 +10,7 @@ use rdf_types::Vocabulary;
 use treeldr::{BlankIdIndex, IriIndex, TId};
 
 mod r#enum;
+mod primitive;
 mod r#struct;
 
 /// `FromRdf` trait implementation.
@@ -26,7 +27,7 @@ impl<'a, T> FromRdfImpl<'a, T> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Bound {
-	FromLiteral(Primitive),
+	FromLiteral(TId<treeldr::Layout>),
 }
 
 impl<M> GenerateSyntax<M> for Bound {
@@ -66,8 +67,8 @@ fn collect_bounds<V, M>(
 			match ty.description() {
 				ty::Description::Never => (),
 				ty::Description::Alias(a) => stack.push(a.target()),
-				ty::Description::Primitive(p) => bound(Bound::FromLiteral(*p)),
-				ty::Description::DerivedPrimitive(r) => stack.push(r.base()),
+				ty::Description::Primitive(_) => bound(Bound::FromLiteral(layout)),
+				ty::Description::DerivedPrimitive(_) => bound(Bound::FromLiteral(layout)),
 				ty::Description::BuiltIn(b) => match b {
 					ty::BuiltIn::BTreeMap(key_layout, value_layout) => {
 						stack.push(*key_layout);

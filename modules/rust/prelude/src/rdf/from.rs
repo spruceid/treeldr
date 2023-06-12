@@ -1,4 +1,5 @@
-use rdf_types::Namespace;
+use iref::Iri;
+use rdf_types::{IriVocabulary, Namespace};
 pub use rdf_types::{Literal, Object, Subject};
 
 mod literal;
@@ -93,54 +94,20 @@ from_rdf_literal! {
 }
 
 /// Literal value type check.
-pub trait TypeCheck<T> {
-	fn has_type(&self, ty: &T) -> bool;
+pub trait TypeCheck<V> {
+	fn has_type(&self, vocabulary: &V, iri: Iri) -> bool;
 }
 
-impl<S, I: RdfType, L> TypeCheck<I> for Literal<S, I, L> {
-	fn has_type(&self, ty: &I) -> bool {
+impl<V: IriVocabulary, S, L> TypeCheck<V> for Literal<S, V::Iri, L> {
+	fn has_type(&self, vocabulary: &V, iri: Iri) -> bool {
 		match self {
-			Literal::String(_) => ty.is_string(),
-			Literal::LangString(_, _) => ty.is_lang_string(),
-			Literal::TypedString(_, t) => t == ty,
+			Literal::String(_) => {
+				iri == static_iref::iri!("http://www.w3.org/2001/XMLSchema#string")
+			}
+			Literal::LangString(_, _) => {
+				iri == static_iref::iri!("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+			}
+			Literal::TypedString(_, t) => iri == vocabulary.iri(t).unwrap(),
 		}
-	}
-}
-
-impl<S, I: RdfType, B, L> TypeCheck<rdf_types::Id<I, B>> for Literal<S, I, L> {
-	fn has_type(&self, ty: &rdf_types::Id<I, B>) -> bool {
-		match ty {
-			rdf_types::Id::Iri(ty) => match self {
-				Literal::String(_) => ty.is_string(),
-				Literal::LangString(_, _) => ty.is_lang_string(),
-				Literal::TypedString(_, t) => t == ty,
-			},
-			rdf_types::Id::Blank(_) => false,
-		}
-	}
-}
-pub trait RdfType: PartialEq {
-	fn is_string(&self) -> bool;
-
-	fn is_lang_string(&self) -> bool;
-}
-
-impl<'a> RdfType for iref::Iri<'a> {
-	fn is_string(&self) -> bool {
-		*self == static_iref::iri!("http://www.w3.org/2001/XMLSchema#string")
-	}
-
-	fn is_lang_string(&self) -> bool {
-		*self == static_iref::iri!("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
-	}
-}
-
-impl RdfType for iref::IriBuf {
-	fn is_string(&self) -> bool {
-		*self == static_iref::iri!("http://www.w3.org/2001/XMLSchema#string")
-	}
-
-	fn is_lang_string(&self) -> bool {
-		*self == static_iref::iri!("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
 	}
 }

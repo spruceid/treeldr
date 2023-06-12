@@ -6,6 +6,7 @@ use treeldr::{utils::DetAutomaton, TId};
 use crate::{syntax, GenerateSyntax, WithLayout};
 
 pub struct Derived {
+	layout: TId<treeldr::Layout>,
 	ident: Ident,
 	base: TId<treeldr::Layout>,
 	restrictions: Vec<Restriction>,
@@ -14,17 +15,23 @@ pub struct Derived {
 
 impl Derived {
 	pub fn new(
+		layout: TId<treeldr::Layout>,
 		ident: Ident,
 		base: TId<treeldr::Layout>,
 		restrictions: Vec<Restriction>,
 		default_value: Option<treeldr::value::Literal>,
 	) -> Self {
 		Self {
+			layout,
 			ident,
 			base,
 			restrictions,
 			default_value,
 		}
+	}
+
+	pub fn layout(&self) -> TId<treeldr::Layout> {
+		self.layout
 	}
 
 	pub fn ident(&self) -> &Ident {

@@ -7,6 +7,8 @@ mod xsd;
 
 /// Convert from an RDF literal value.
 pub trait FromLiteral<L, N>: Sized {
+	fn from_literal_type_unchecked(literal: &L) -> Result<Self, FromRdfError>;
+
 	fn from_literal(namespace: &N, literal: &L) -> Result<Self, FromRdfError>;
 }
 

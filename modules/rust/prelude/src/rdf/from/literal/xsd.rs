@@ -10,17 +10,21 @@ macro_rules! impl_from_literal {
 	{ $($ty:ty : $rdf_ty:tt),* } => {
 		$(
 			impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V> for $ty {
+				fn from_literal_type_unchecked(literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+					match <$ty>::parse_rdf(literal.string_literal().as_ref()) {
+						Ok(i) => Ok(i),
+						Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
+					}
+				}
+
 				fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-					let lexical = type_check(
+					type_check(
 						vocabulary,
 						literal,
 						iri!($rdf_ty),
 					)?;
 
-					match <$ty>::parse_rdf(lexical.as_ref()) {
-						Ok(i) => Ok(i),
-						Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
-					}
+					FromLiteral::<Literal<S, T, L>, V>::from_literal_type_unchecked(literal)
 				}
 			}
 		)*
@@ -53,47 +57,62 @@ impl_from_literal! {
 impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V>
 	for ::chrono::NaiveDate
 {
+	fn from_literal_type_unchecked(literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+		match literal.string_literal().as_ref().parse::<Self>() {
+			Ok(d) => Ok(d),
+			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
+		}
+	}
+
 	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-		let lexical = type_check(
+		type_check(
 			vocabulary,
 			literal,
 			iri!("http://www.w3.org/2001/XMLSchema#date"),
 		)?;
-		match lexical.as_ref().parse::<Self>() {
-			Ok(d) => Ok(d),
-			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
-		}
+
+		FromLiteral::<Literal<S, T, L>, V>::from_literal_type_unchecked(literal)
 	}
 }
 
 impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V>
 	for ::chrono::DateTime<::chrono::Utc>
 {
+	fn from_literal_type_unchecked(literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+		match literal.string_literal().as_ref().parse::<Self>() {
+			Ok(d) => Ok(d),
+			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
+		}
+	}
+
 	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-		let lexical = type_check(
+		type_check(
 			vocabulary,
 			literal,
 			iri!("http://www.w3.org/2001/XMLSchema#dateTime"),
 		)?;
-		match lexical.as_ref().parse::<Self>() {
-			Ok(d) => Ok(d),
-			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
-		}
+
+		FromLiteral::<Literal<S, T, L>, V>::from_literal_type_unchecked(literal)
 	}
 }
 
 impl<S: AsRef<str>, T, L, V: IriVocabularyMut<Iri = T>> FromLiteral<Literal<S, T, L>, V>
 	for iref::IriBuf
 {
+	fn from_literal_type_unchecked(literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
+		match literal.string_literal().as_ref().parse::<Self>() {
+			Ok(d) => Ok(d),
+			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
+		}
+	}
+
 	fn from_literal(vocabulary: &V, literal: &Literal<S, T, L>) -> Result<Self, FromRdfError> {
-		let lexical = type_check(
+		type_check(
 			vocabulary,
 			literal,
 			iri!("http://www.w3.org/2001/XMLSchema#anyURI"),
 		)?;
-		match lexical.as_ref().parse::<Self>() {
-			Ok(d) => Ok(d),
-			Err(_) => Err(FromRdfError::InvalidLexicalRepresentation),
-		}
+
+		FromLiteral::<Literal<S, T, L>, V>::from_literal_type_unchecked(literal)
 	}
 }
