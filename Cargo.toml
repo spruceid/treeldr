@@ -16,22 +16,22 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1-beta"
 edition = "2021"
 authors = ["Spruce Systems Inc."]
 
 [workspace.dependencies]
-treeldr = { path = "core", version = "0.1.0" }
-treeldr-primitives = { path = "primitives", version = "0.1.0" }
-treeldr-build = { path = "build", version = "0.1.0" }
-treeldr-syntax = { path = "syntax", version = "0.1.0" }
-treeldr-load = { path = "load", version = "0.1.0" }
-treeldr-json-schema = { path = "modules/json-schema", version = "0.1.0" }
-treeldr-json-ld-context = { path = "modules/json-ld-context", version = "0.1.0" }
-treeldr-rust-gen = { path = "modules/rust/gen", version = "0.1.0" }
-treeldr-rust-macros = { path = "modules/rust/macros", version = "0.1.0" }
-treeldr-rust-prelude = { path = "modules/rust/prelude", version = "0.1.0" }
-treeldr-lexicon = { path = "modules/lexicon", version = "0.1.0" }
+treeldr = { path = "core", version = "0.1.1-beta" }
+treeldr-primitives = { path = "primitives", version = "0.1.1-beta" }
+treeldr-build = { path = "build", version = "0.1.1-beta" }
+treeldr-syntax = { path = "syntax", version = "0.1.1-beta" }
+treeldr-load = { path = "load", version = "0.1.1-beta" }
+treeldr-json-schema = { path = "modules/json-schema", version = "0.1.1-beta" }
+treeldr-json-ld-context = { path = "modules/json-ld-context", version = "0.1.1-beta" }
+treeldr-rust-gen = { path = "modules/rust/gen", version = "0.1.1-beta" }
+treeldr-rust-macros = { path = "modules/rust/macros", version = "0.1.1-beta" }
+treeldr-rust-prelude = { path = "modules/rust/prelude", version = "0.1.1-beta" }
+treeldr-lexicon = { path = "modules/lexicon", version = "0.1.1-beta" }
 
 log = "0.4"
 iref = "2.2"
