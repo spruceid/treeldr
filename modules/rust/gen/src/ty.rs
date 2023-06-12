@@ -241,27 +241,22 @@ impl Description {
 			}
 			treeldr::layout::Description::Primitive(p) => Self::Primitive(*p),
 			treeldr::layout::Description::Derived(p) => {
-				let default_value = p.default_value();
-				if p.is_restricted() || default_value.is_some() {
-					let ident = layout
-						.as_component()
-						.name()
-						.map(type_ident_of_name)
-						.unwrap_or_else(|| context.next_anonymous_type_ident());
+				let ident = layout
+					.as_component()
+					.name()
+					.map(type_ident_of_name)
+					.unwrap_or_else(|| context.next_anonymous_type_ident());
 
-					Self::DerivedPrimitive(primitive::Derived::new(
-						layout_ref,
-						ident,
-						p.primitive().layout(),
-						p.restrictions()
-							.into_iter()
-							.flat_map(|r| r.iter().map(primitive::Restriction::new))
-							.collect(),
-						default_value.clone_into_literal(),
-					))
-				} else {
-					Self::Primitive(p.primitive())
-				}
+				Self::DerivedPrimitive(primitive::Derived::new(
+					layout_ref,
+					ident,
+					p.primitive().layout(),
+					p.restrictions()
+						.into_iter()
+						.flat_map(|r| r.iter().map(primitive::Restriction::new))
+						.collect(),
+					p.default_value().clone_into_literal(),
+				))
 			}
 			treeldr::layout::Description::Reference(_) => {
 				Self::Reference(**layout.as_layout().ty().first().unwrap().value)
