@@ -59,6 +59,10 @@ impl<M> GenerateSyntax<M> for TraitImpl {
 					.generate_syntax(context, scope)
 					.map(syntax::TraitImplementation::RdfQuads)
 					.map(Some),
+				TraitId::AsJsonLd => super::json_ld::AsJsonLdImpl::new(self.ty, s)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::AsJsonLd)
+					.map(Some),
 				TraitId::IntoJsonLd => super::json_ld::IntoJsonLdImpl::new(self.ty, s)
 					.generate_syntax(context, scope)
 					.map(syntax::TraitImplementation::IntoJsonLd)
@@ -84,6 +88,10 @@ impl<M> GenerateSyntax<M> for TraitImpl {
 				TraitId::IntoJsonLd => super::json_ld::IntoJsonLdImpl::new(self.ty, e)
 					.generate_syntax(context, scope)
 					.map(syntax::TraitImplementation::IntoJsonLd)
+					.map(Some),
+				TraitId::AsJsonLd => super::json_ld::AsJsonLdImpl::new(self.ty, e)
+					.generate_syntax(context, scope)
+					.map(syntax::TraitImplementation::AsJsonLd)
 					.map(Some),
 				TraitId::IntoJsonLdSyntax => super::json_ld::IntoJsonLdSyntaxImpl::new(self.ty, e)
 					.generate_syntax(context, scope)

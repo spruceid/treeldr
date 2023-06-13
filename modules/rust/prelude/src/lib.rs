@@ -25,7 +25,10 @@ pub mod restriction;
 pub use rdf::{FromRdf, FromRdfError, RdfIterator};
 
 #[cfg(feature = "json-ld")]
-pub use crate::ld::{IntoJsonLdObject, IntoJsonLdObjectMeta, IntoJsonLdSyntax};
+pub use crate::ld::{
+	AsJsonLd, AsJsonLdObject, AsJsonLdObjectMeta, IntoJsonLd, IntoJsonLdObject,
+	IntoJsonLdObjectMeta, IntoJsonLdSyntax,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id<I>(pub I);

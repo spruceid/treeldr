@@ -143,6 +143,7 @@ impl Type {
 
 			if context.options().impl_rdf {
 				f(TraitId::FromRdf.impl_for(layout_ref));
+				f(TraitId::AsJsonLd.impl_for(layout_ref));
 				f(TraitId::IntoJsonLd.impl_for(layout_ref));
 				f(TraitId::TriplesAndValues.impl_for(layout_ref));
 			}

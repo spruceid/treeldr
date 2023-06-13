@@ -9,6 +9,7 @@ use treeldr::{BlankIdIndex, IriIndex, TId};
 pub enum TraitId {
 	FromRdf,
 	TriplesAndValues,
+	AsJsonLd,
 	IntoJsonLd,
 	IntoJsonLdSyntax,
 	Class(TId<treeldr::Type>),

@@ -8,6 +8,7 @@ pub enum TraitImplementation {
 	ClassTrait(class::TraitImpl),
 	RdfQuads(rdf::QuadsImpl),
 	FromRdf(rdf::FromRdfImpl),
+	AsJsonLd(json_ld::AsJsonLdImpl),
 	IntoJsonLd(json_ld::IntoJsonLdImpl),
 	IntoJsonLdSyntax(json_ld::IntoJsonLdSyntaxImpl),
 }
@@ -18,6 +19,7 @@ impl ToTokens for TraitImplementation {
 			Self::ClassTrait(i) => i.to_tokens(tokens),
 			Self::RdfQuads(i) => i.to_tokens(tokens),
 			Self::FromRdf(i) => i.to_tokens(tokens),
+			Self::AsJsonLd(i) => i.to_tokens(tokens),
 			Self::IntoJsonLd(i) => i.to_tokens(tokens),
 			Self::IntoJsonLdSyntax(i) => i.to_tokens(tokens),
 		}
