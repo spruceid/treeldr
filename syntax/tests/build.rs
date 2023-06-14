@@ -1,19 +1,19 @@
 use contextual::WithContext;
 use locspan::{Meta, Span};
 use nquads_syntax::BlankIdBuf;
-use rdf_types::VocabularyMut;
+use rdf_types::BlankIdVocabularyMut;
 use static_iref::iri;
 use std::path::Path;
 use treeldr::{
 	to_rdf::ToRdf,
-	vocab::{GraphLabel, Id, StrippedObject},
+	vocab::{GraphLabel, Id, StrippedObject, TldrVocabulary},
 	BlankIdIndex, IriIndex,
 };
 
 type BuildContext = treeldr_build::Context<Span>;
 
-fn parse_nquads<P: AsRef<Path>, V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
-	vocabulary: &mut V,
+fn parse_nquads<P: AsRef<Path>>(
+	vocabulary: &mut TldrVocabulary,
 	path: P,
 ) -> grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel> {
 	use nquads_syntax::{Document, Parse};
@@ -21,8 +21,8 @@ fn parse_nquads<P: AsRef<Path>, V: VocabularyMut<Iri = IriIndex, BlankId = Blank
 	let buffer = std::fs::read_to_string(path).expect("unable to read file");
 	let Meta(quads, _) = Document::parse_str(&buffer, |span| span).expect("parse error");
 
-	let generate = move |vocabulary: &mut V, label: BlankIdBuf| {
-		vocabulary.insert_blank_id(label.as_blank_id_ref())
+	let generate = move |vocabulary: &mut TldrVocabulary, label: BlankIdBuf| {
+		vocabulary.insert_owned_blank_id(label)
 	};
 
 	quads
@@ -32,7 +32,7 @@ fn parse_nquads<P: AsRef<Path>, V: VocabularyMut<Iri = IriIndex, BlankId = Blank
 }
 
 fn parse_treeldr<P: AsRef<Path>>(
-	vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
+	vocabulary: &mut TldrVocabulary,
 	path: P,
 ) -> grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel> {
 	use treeldr_build::Document;

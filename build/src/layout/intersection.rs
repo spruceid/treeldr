@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 
 use locspan::{Meta, StrippedOrd, StrippedPartialEq, StrippedPartialOrd};
 use locspan_derive::{StrippedEq, StrippedOrd, StrippedPartialEq, StrippedPartialOrd};
-use rdf_types::{Generator, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
+use rdf_types::Generator;
+use treeldr::{metadata::Merge, vocab::TldrVocabulary, Id};
 
 use crate::{Context, Error, Single};
 
@@ -99,10 +99,10 @@ impl<M> Definition<M> {
 	/// Compute the actual layout definition from the intersection definition.
 	///
 	/// Newly created intersection sub-layouts are added to the `stack`.
-	pub fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn build(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
 	) -> Result<BuiltDefinition<M>, Error<M>>
@@ -251,10 +251,10 @@ impl<M> Description<M> {
 		}
 	}
 
-	pub fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn build(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
 		meta: M,

@@ -1,10 +1,10 @@
 use rdf_types::{Generator, VocabularyMut};
 
-use crate::{LexXrpcBody, LexXrpcBodySchema};
+use crate::{import::OutputLiteralType, LexXrpcBody, LexXrpcBodySchema};
 
 use super::super::{Context, Item, OutputSubject, OutputTriple, Process};
 
-impl<V: VocabularyMut> Process<V> for LexXrpcBody {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexXrpcBody {
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -23,7 +23,9 @@ impl<V: VocabularyMut> Process<V> for LexXrpcBody {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexXrpcBodySchema {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V>
+	for LexXrpcBodySchema
+{
 	fn process(
 		self,
 		vocabulary: &mut V,

@@ -1,16 +1,16 @@
 use contextual::WithContext;
 use iref::AsIri;
-use rdf_types::{Generator, Id, Literal, Object, Triple, Vocabulary, VocabularyMut};
+use rdf_types::{literal, Generator, Id, Literal, Object, Triple, Vocabulary, VocabularyMut};
 use treeldr::vocab;
 
 use crate::{LexBoolean, LexInteger, LexPrimitive, LexString, LexUnknown};
 
 use super::{
-	build_rdf_list, nsid_name, Context, IntoItem, Item, OutputObject, OutputSubject, OutputTriple,
-	Process,
+	build_rdf_list, nsid_name, Context, IntoItem, Item, OutputLiteralType, OutputObject,
+	OutputSubject, OutputTriple, Process,
 };
 
-impl<V: VocabularyMut> Process<V> for LexPrimitive {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexPrimitive {
 	fn process(
 		self,
 		_vocabulary: &mut V,
@@ -38,7 +38,7 @@ impl<V: Vocabulary> IntoItem<V> for LexPrimitive {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexBoolean {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexBoolean {
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -57,12 +57,14 @@ impl<V: VocabularyMut> Process<V> for LexBoolean {
 			Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 		));
 
+		let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 		triples.push(Triple(
 			id.clone(),
 			vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-			Object::Literal(Literal::String(
+			Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 				nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str()).to_string(),
-			)),
+				literal::Type::Any(xsd_string),
+			))),
 		));
 
 		if self.const_.is_some() {
@@ -79,13 +81,14 @@ impl<V: VocabularyMut> Process<V> for LexBoolean {
 					)),
 				));
 
+				let xsd_boolean = vocabulary.insert(vocab::Xsd::Boolean.as_iri());
 				triples.push(Triple(
 					id,
 					vocabulary.insert(vocab::TreeLdr::DefaultValue.as_iri()),
-					Object::Literal(Literal::TypedString(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						default_value.to_string(),
-						vocabulary.insert(vocab::Xsd::Boolean.as_iri()),
-					)),
+						literal::Type::Any(xsd_boolean),
+					))),
 				));
 			}
 			None => triples.push(Triple(
@@ -99,7 +102,7 @@ impl<V: VocabularyMut> Process<V> for LexBoolean {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexInteger {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexInteger {
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -118,12 +121,14 @@ impl<V: VocabularyMut> Process<V> for LexInteger {
 			Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 		));
 
+		let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 		triples.push(Triple(
 			id.clone(),
 			vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-			Object::Literal(Literal::String(
+			Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 				nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str()).to_string(),
-			)),
+				literal::Type::Any(xsd_string),
+			))),
 		));
 
 		if self.const_.is_some() {
@@ -147,23 +152,25 @@ impl<V: VocabularyMut> Process<V> for LexInteger {
 			));
 
 			if let Some(default_value) = self.default {
+				let ty_iri = vocabulary.insert(
+					primitive
+						.natural_type()
+						.unwrap()
+						.id()
+						.into_iri()
+						.unwrap()
+						.into_term()
+						.unwrap()
+						.iri(),
+				);
+
 				triples.push(Triple(
 					id.clone(),
 					vocabulary.insert(vocab::TreeLdr::DefaultValue.as_iri()),
-					Object::Literal(Literal::TypedString(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						default_value.to_string(),
-						vocabulary.insert(
-							primitive
-								.natural_type()
-								.unwrap()
-								.id()
-								.into_iri()
-								.unwrap()
-								.into_term()
-								.unwrap()
-								.iri(),
-						),
-					)),
+						literal::Type::Any(ty_iri),
+					))),
 				))
 			}
 
@@ -192,13 +199,15 @@ impl<V: VocabularyMut> Process<V> for LexInteger {
 							)),
 						));
 
+						let ty_iri =
+							vocabulary.insert(primitive.natural_type_term().unwrap().as_iri());
 						triples.push(Triple(
 							c_id.clone(),
 							vocabulary.insert(prop.as_iri()),
-							Object::Literal(Literal::TypedString(
+							Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 								value.to_string(),
-								vocabulary.insert(primitive.natural_type_term().unwrap().as_iri()),
-							)),
+								literal::Type::Any(ty_iri),
+							))),
 						));
 
 						Object::Id(c_id)
@@ -221,7 +230,7 @@ impl<V: VocabularyMut> Process<V> for LexInteger {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexString {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexString {
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -240,19 +249,25 @@ impl<V: VocabularyMut> Process<V> for LexString {
 			Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 		));
 
+		let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 		triples.push(Triple(
 			id.clone(),
 			vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-			Object::Literal(Literal::String(
+			Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 				nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str()).to_string(),
-			)),
+				literal::Type::Any(xsd_string),
+			))),
 		));
 
 		if let Some(desc) = self.description {
+			let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 			triples.push(Triple(
 				id.clone(),
 				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
-				Object::Literal(Literal::String(desc)),
+				Object::Literal(
+					vocabulary
+						.insert_owned_literal(Literal::new(desc, literal::Type::Any(xsd_string))),
+				),
 			));
 		}
 
@@ -281,13 +296,15 @@ impl<V: VocabularyMut> Process<V> for LexString {
 				)),
 			));
 
+			let xsd_non_negative_integer =
+				vocabulary.insert(vocab::Xsd::NonNegativeInteger.as_iri());
 			triples.push(Triple(
 				c_id.clone(),
 				vocabulary.insert(vocab::TreeLdr::MinLength.as_iri()),
-				Object::Literal(Literal::TypedString(
+				Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 					value.to_string(),
-					vocabulary.insert(vocab::Xsd::NonNegativeInteger.as_iri()),
-				)),
+					literal::Type::Any(xsd_non_negative_integer),
+				))),
 			));
 
 			restrictions.push(Object::Id(c_id))
@@ -304,13 +321,15 @@ impl<V: VocabularyMut> Process<V> for LexString {
 				)),
 			));
 
+			let xsd_non_negative_integer =
+				vocabulary.insert(vocab::Xsd::NonNegativeInteger.as_iri());
 			triples.push(Triple(
 				c_id.clone(),
 				vocabulary.insert(vocab::TreeLdr::MaxLength.as_iri()),
-				Object::Literal(Literal::TypedString(
+				Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 					value.to_string(),
-					vocabulary.insert(vocab::Xsd::NonNegativeInteger.as_iri()),
-				)),
+					literal::Type::Any(xsd_non_negative_integer),
+				))),
 			));
 
 			restrictions.push(Object::Id(c_id))
@@ -327,13 +346,15 @@ impl<V: VocabularyMut> Process<V> for LexString {
 				)),
 			));
 
+			let xsd_non_negative_integer =
+				vocabulary.insert(vocab::Xsd::NonNegativeInteger.as_iri());
 			triples.push(Triple(
 				c_id.clone(),
 				vocabulary.insert(vocab::TreeLdr::MinGrapheme.as_iri()),
-				Object::Literal(Literal::TypedString(
+				Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 					value.to_string(),
-					vocabulary.insert(vocab::Xsd::NonNegativeInteger.as_iri()),
-				)),
+					literal::Type::Any(xsd_non_negative_integer),
+				))),
 			));
 
 			restrictions.push(Object::Id(c_id))
@@ -350,13 +371,15 @@ impl<V: VocabularyMut> Process<V> for LexString {
 				)),
 			));
 
+			let xsd_non_negative_integer =
+				vocabulary.insert(vocab::Xsd::NonNegativeInteger.as_iri());
 			triples.push(Triple(
 				c_id.clone(),
 				vocabulary.insert(vocab::TreeLdr::MaxGrapheme.as_iri()),
-				Object::Literal(Literal::TypedString(
+				Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 					value.to_string(),
-					vocabulary.insert(vocab::Xsd::NonNegativeInteger.as_iri()),
-				)),
+					literal::Type::Any(xsd_non_negative_integer),
+				))),
 			));
 
 			restrictions.push(Object::Id(c_id))
@@ -380,10 +403,14 @@ impl<V: VocabularyMut> Process<V> for LexString {
 			));
 
 			if let Some(default_value) = self.default {
+				let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 				triples.push(Triple(
 					id.clone(),
 					vocabulary.insert(vocab::TreeLdr::DefaultValue.as_iri()),
-					Object::Literal(Literal::String(default_value)),
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+						default_value,
+						literal::Type::Any(xsd_string),
+					))),
 				))
 			}
 
@@ -406,7 +433,7 @@ impl<V: VocabularyMut> Process<V> for LexString {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexUnknown {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexUnknown {
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -426,12 +453,14 @@ impl<V: VocabularyMut> Process<V> for LexUnknown {
 			Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 		));
 
+		let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 		triples.push(Triple(
 			id.clone(),
 			vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-			Object::Literal(Literal::String(
+			Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 				nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str()).to_string(),
-			)),
+				literal::Type::Any(xsd_string),
+			))),
 		));
 	}
 }

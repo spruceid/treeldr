@@ -1,5 +1,4 @@
-use treeldr::{Id, IriIndex, BlankIdIndex};
-use rdf_types::Vocabulary;
+use treeldr::{Id, vocab::TldrVocabulary};
 use locspan::{Span, MaybeLocated};
 use contextual::WithContext;
 
@@ -13,7 +12,7 @@ pub struct LayoutDescriptionMismatch<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutDescriptionMismatch<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("implementation mismatch for layout `{}`", self.id.with(vocab))
 	}
 }

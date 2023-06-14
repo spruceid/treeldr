@@ -12,8 +12,11 @@ use std::{
 	collections::{btree_map::Entry, BTreeMap, HashMap, HashSet},
 };
 use treeldr::{
-	metadata::Merge, node::Type, ty::SubClass, vocab, BlankIdIndex, Id, Multiple, PropertyValueRef,
-	TId, Value,
+	metadata::Merge,
+	node::Type,
+	ty::SubClass,
+	vocab::{self, TldrVocabulary},
+	BlankIdIndex, Id, Multiple, PropertyValueRef, TId, Value,
 };
 
 pub mod build;
@@ -528,13 +531,10 @@ impl<M: Clone + Merge> Context<M> {
 		id
 	}
 
-	pub fn create_list<
-		I: IntoIterator<Item = Meta<vocab::Object<M>, M>>,
-		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
-	>(
+	pub fn create_list<I: IntoIterator<Item = Meta<vocab::StrippedObject, M>>>(
 		&mut self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		list: I,
 	) -> Id
 	where
@@ -548,8 +548,10 @@ impl<M: Clone + Merge> Context<M> {
 			let node = self
 				.declare_with(id, Type::List, cause.clone())
 				.as_list_mut();
-			node.first_mut()
-				.insert_base(Meta(item.try_into().unwrap(), cause.clone()));
+			node.first_mut().insert_base(Meta(
+				treeldr::Value::from_rdf(vocabulary, item).unwrap(),
+				cause.clone(),
+			));
 			node.rest_mut().insert_base(Meta(head, cause));
 			head = id;
 		}
@@ -557,18 +559,17 @@ impl<M: Clone + Merge> Context<M> {
 		head
 	}
 
-	pub fn create_list_with<I: IntoIterator, C, V, G>(
+	pub fn create_list_with<I: IntoIterator, C, G>(
 		&mut self,
-		vocabulary: &mut V,
+		vocabulary: &mut TldrVocabulary,
 		generator: &mut G,
 		list: I,
 		mut f: C,
 	) -> Id
 	where
 		I::IntoIter: DoubleEndedIterator,
-		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
-		G: Generator<V>,
-		C: FnMut(I::Item, &mut Self, &mut V, &mut G) -> Meta<vocab::Object<M>, M>,
+		G: Generator<TldrVocabulary>,
+		C: FnMut(I::Item, &mut Self, &mut TldrVocabulary, &mut G) -> Meta<vocab::StrippedObject, M>,
 	{
 		let mut head = Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)));
 
@@ -579,8 +580,10 @@ impl<M: Clone + Merge> Context<M> {
 			let node = self
 				.declare_with(id, Type::List, cause.clone())
 				.as_list_mut();
-			node.first_mut()
-				.insert_base(Meta(item.try_into().unwrap(), cause.clone()));
+			node.first_mut().insert_base(Meta(
+				treeldr::Value::from_rdf(vocabulary, item).unwrap(),
+				cause.clone(),
+			));
 			node.rest_mut().insert_base(Meta(head, cause));
 			head = id;
 		}
@@ -588,9 +591,9 @@ impl<M: Clone + Merge> Context<M> {
 		head
 	}
 
-	pub fn try_create_list_with<E, I: IntoIterator, C, V, G>(
+	pub fn try_create_list_with<E, I: IntoIterator, C, G>(
 		&mut self,
-		vocabulary: &mut V,
+		vocabulary: &mut TldrVocabulary,
 		generator: &mut G,
 		list: I,
 		mut f: C,
@@ -598,9 +601,13 @@ impl<M: Clone + Merge> Context<M> {
 	where
 		E: From<Error<M>>,
 		I::IntoIter: DoubleEndedIterator,
-		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
-		G: Generator<V>,
-		C: FnMut(I::Item, &mut Self, &mut V, &mut G) -> Result<Meta<vocab::Object<M>, M>, E>,
+		G: Generator<TldrVocabulary>,
+		C: FnMut(
+			I::Item,
+			&mut Self,
+			&mut TldrVocabulary,
+			&mut G,
+		) -> Result<Meta<vocab::StrippedObject, M>, E>,
 	{
 		let mut head = Id::Iri(IriIndex::Iri(vocab::Term::Rdf(vocab::Rdf::Nil)));
 
@@ -611,8 +618,10 @@ impl<M: Clone + Merge> Context<M> {
 			let node = self
 				.declare_with(id, Type::List, cause.clone())
 				.as_list_mut();
-			node.first_mut()
-				.insert_base(Meta(item.try_into().unwrap(), cause.clone()));
+			node.first_mut().insert_base(Meta(
+				treeldr::Value::from_rdf(vocabulary, item).unwrap(),
+				cause.clone(),
+			));
 			node.rest_mut().insert_base(Meta(head, cause));
 			head = id;
 		}

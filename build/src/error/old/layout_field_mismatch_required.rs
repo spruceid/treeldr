@@ -12,7 +12,7 @@ pub struct LayoutFieldMismatchRequired<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutFieldMismatchRequired<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("required status mismatch for layout field `{}`", self.id.with(vocab))
 	}
 }

@@ -1,6 +1,5 @@
-use treeldr::{Id, IriIndex, BlankIdIndex, layout::Primitive};
+use treeldr::{Id, layout::Primitive, vocab::TldrVocabulary};
 use locspan::{Span, MaybeLocated};
-use rdf_types::Vocabulary;
 use contextual::WithContext;
 use crate::layout::restriction::primitive::Restriction;
 
@@ -12,7 +11,7 @@ pub struct LayoutDatatypeRestrictionInvalid {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutDatatypeRestrictionInvalid {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("invalid datatype restriction of layout `{}`", self.id.with(vocab))
 	}
 }

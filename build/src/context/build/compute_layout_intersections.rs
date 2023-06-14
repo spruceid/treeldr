@@ -1,17 +1,15 @@
 use std::collections::VecDeque;
 
-use rdf_types::{Generator, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, IriIndex};
+use rdf_types::Generator;
+use treeldr::{metadata::Merge, vocab::TldrVocabulary};
 
 use crate::{component, Context, Error};
 
 impl<M> Context<M> {
-	pub(crate) fn compute_layout_intersections<
-		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
-	>(
+	pub(crate) fn compute_layout_intersections(
 		&mut self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>>
 	where
 		M: Clone + Merge,

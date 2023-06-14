@@ -28,11 +28,11 @@ impl NodeTypeName for node::Type {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeInvalidType<M> where M::File: Clone {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("invalid type for {}", self.id.with(vocab))
 	}
 
-	fn other_labels(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+	fn other_labels(&self, _vocab: &TldrVocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		let mut labels = Vec::new();
 
 		for Meta(ty, ty_meta) in self.found.iter() {
@@ -44,7 +44,7 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeInvalidType<M> where
 		labels
 	}
 
-	fn notes(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<String> {
+	fn notes(&self, _vocab: &TldrVocabulary) -> Vec<String> {
 		let mut notes = Vec::new();
 
 		notes.push(format!("expected a {}", self.expected.name()));

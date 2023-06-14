@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use locspan::MapLocErr;
-use rdf_types::{Generator, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, IriIndex, Model, MutableModel};
+use rdf_types::Generator;
+use treeldr::{metadata::Merge, vocab::TldrVocabulary, Model, MutableModel};
 
 use crate::{error, ty::ClassHierarchy, Context, Error};
 
@@ -20,10 +20,10 @@ mod unify;
 pub use compute_layouts_relations::LayoutRelations;
 
 impl<M: Clone> Context<M> {
-	pub fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn build(
 		&mut self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Model<M>, Error<M>>
 	where
 		M: Clone + Merge,

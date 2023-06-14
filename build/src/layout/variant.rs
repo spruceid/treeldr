@@ -4,8 +4,8 @@ use crate::{
 	resource, Context, Error,
 };
 use locspan::Meta;
-use rdf_types::Vocabulary;
-use treeldr::{BlankIdIndex, Id, IriIndex, Name};
+use rdf_types::IriVocabulary;
+use treeldr::{vocab::TldrVocabulary, Id, Name};
 
 /// Layout variant definition.
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ impl Definition {
 	pub fn default_name<M>(
 		&self,
 		context: &Context<M>,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		as_resource: &resource::Data<M>,
 		as_formatted: &component::formatted::Data<M>,
 	) -> Option<Meta<Name, M>>

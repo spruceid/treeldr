@@ -1,9 +1,9 @@
 use std::{hash::Hash, path::Path};
 
 use iref::IriBuf;
-use locspan::Meta;
-use rdf_types::{Generator, Id, VocabularyMut};
-use treeldr::{BlankIdIndex, IriIndex};
+use locspan::{Meta, Strip};
+use rdf_types::{Generator, Id, InsertIntoVocabulary, LiteralVocabularyMut, MapLiteral, Object};
+use treeldr::vocab::TldrVocabulary;
 
 use crate::{source, BuildContext, Dataset, DisplayPath, FileId, LangError, LoadError, MimeType};
 
@@ -93,11 +93,11 @@ impl Document {
 		}
 	}
 
-	pub fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn declare(
 		self,
 		context: &mut BuildContext,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<DeclaredDocument, LangError> {
 		match self {
 			Self::TreeLdr(mut d) => {
@@ -109,7 +109,8 @@ impl Document {
 					.into_iter()
 					.map(|Meta(quad, meta)| {
 						Meta(
-							quad.insert_into(vocabulary)
+							quad.map_literal(|l| l.strip().insert_type_into_vocabulary(vocabulary))
+								.insert_into_vocabulary(vocabulary)
 								.map_predicate(|Meta(p, m)| Meta(Id::Iri(p), m)),
 							meta,
 						)
@@ -130,6 +131,13 @@ impl Document {
 					.map(|Meta(triple, meta)| {
 						Meta(
 							triple
+								.map_object(|Meta(o, m)| match o {
+									Object::Id(id) => Meta(Object::Id(id), m),
+									Object::Literal(l) => {
+										let l = vocabulary.insert_owned_literal(l.strip());
+										Meta(Object::Literal(l), m)
+									}
+								})
 								.map_predicate(|Meta(p, m)| Meta(Id::Iri(p), m))
 								.into_quad(None),
 							meta,
@@ -149,11 +157,11 @@ impl Document {
 }
 
 impl DeclaredDocument {
-	pub fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn build(
 		self,
 		context: &mut BuildContext,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), LangError> {
 		match self {
 			Self::TreeLdr(d) => {

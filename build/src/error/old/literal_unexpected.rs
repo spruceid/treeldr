@@ -11,7 +11,7 @@ use contextual::WithContext;
 pub struct LiteralUnexpected<M>(pub Literal<M>);
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LiteralUnexpected<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("unexpected literal `{}`", self.0.with(vocab))
 	}
 }

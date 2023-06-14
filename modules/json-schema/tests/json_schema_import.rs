@@ -2,24 +2,24 @@ use contextual::WithContext;
 use iref::Iri;
 use json_syntax::Parse;
 use locspan::Meta;
-use rdf_types::{BlankIdBuf, IriVocabularyMut, VocabularyMut};
+use rdf_types::{BlankIdBuf, BlankIdVocabularyMut, IriVocabularyMut};
 use treeldr::{
 	to_rdf::ToRdf,
-	vocab::{GraphLabel, Id, StrippedObject},
+	vocab::{GraphLabel, Id, StrippedObject, TldrVocabulary},
 	BlankIdIndex, IriIndex,
 };
 use treeldr_build::Context;
 
-fn parse_nquads<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
-	vocabulary: &mut V,
+fn parse_nquads(
+	vocabulary: &mut TldrVocabulary,
 	content: &str,
 ) -> grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel> {
 	use nquads_syntax::{Document, Parse};
 
 	let Meta(quads, _) = Document::parse_str(content, |span| span).expect("parse error");
 
-	let generate = move |vocabulary: &mut V, label: BlankIdBuf| {
-		vocabulary.insert_blank_id(label.as_blank_id_ref())
+	let generate = move |vocabulary: &mut TldrVocabulary, label: BlankIdBuf| {
+		vocabulary.insert_owned_blank_id(label)
 	};
 
 	quads
@@ -28,8 +28,8 @@ fn parse_nquads<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 		.collect()
 }
 
-fn import_json_schema<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
-	vocabulary: &mut V,
+fn import_json_schema(
+	vocabulary: &mut TldrVocabulary,
 	content: &str,
 ) -> (
 	grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel>,

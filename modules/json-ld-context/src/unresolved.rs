@@ -10,9 +10,9 @@ use json_ld::{
 	syntax::context::term_definition::{Index, TypeKeyword},
 	Direction, LenientLanguageTagBuf, Nullable,
 };
-use rdf_types::{BlankIdBuf, IriVocabularyMut, Vocabulary, VocabularyMut};
+use rdf_types::{BlankIdBuf, IriVocabularyMut, VocabularyMut};
 use shelves::{Ref, Shelf};
-use treeldr::{BlankIdIndex, Id, IriIndex};
+use treeldr::{vocab::TldrVocabulary, BlankIdIndex, Id, IriIndex};
 
 use crate::resolved;
 
@@ -653,7 +653,7 @@ impl LocalContexts {
 
 	fn compute_prefixes_for<'a>(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		relations: &Relations,
 		state: &'a mut HashMap<Ref<LocalContext>, Option<Prefixes>>,
 		r: Ref<LocalContext>,
@@ -715,7 +715,7 @@ impl LocalContexts {
 
 	pub fn compute_prefixes(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		relations: &Relations,
 	) -> HashMap<Ref<LocalContext>, Prefixes> {
 		let mut result = HashMap::new();
@@ -727,10 +727,7 @@ impl LocalContexts {
 		result.into_iter().map(|(r, v)| (r, v.unwrap())).collect()
 	}
 
-	pub fn resolve(
-		self,
-		vocabulary: &mut impl VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
-	) -> resolved::LocalContexts {
+	pub fn resolve(self, vocabulary: &mut TldrVocabulary) -> resolved::LocalContexts {
 		let relations = self.compute_relations();
 		let base_iris = self.compute_base_iris(vocabulary, &relations);
 		let prefixes = self.compute_prefixes(vocabulary, &relations);

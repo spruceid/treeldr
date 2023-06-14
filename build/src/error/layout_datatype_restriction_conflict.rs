@@ -1,24 +1,23 @@
 use locspan::{Span, MaybeLocated};
-use rdf_types::Vocabulary;
-use treeldr::{IriIndex, BlankIdIndex};
+use treeldr::vocab::TldrVocabulary;
 
 pub type LayoutDatatypeRestrictionConflict<M> = crate::layout::restriction::primitive::Conflict<M>;
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutDatatypeRestrictionConflict<M> where M::File: Clone {
-	fn message(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, _vocab: &TldrVocabulary) -> String {
 		"conflicting restrictions".to_string()
 	}
 
 	fn primary_label(
 			&self,
-			_vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+			_vocab: &TldrVocabulary,
 		) -> Option<String> {
 		Some("this restriction...".to_string())
 	}
 
 	fn other_labels(
 			&self,
-			_vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+			_vocab: &TldrVocabulary,
 		) -> Vec<codespan_reporting::diagnostic::Label<<M as MaybeLocated>::File>> {
 		match self.1.metadata().optional_location() {
 			Some(loc) => vec![

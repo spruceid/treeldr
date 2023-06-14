@@ -1,6 +1,5 @@
 use locspan::{MaybeLocated, Span};
-use rdf_types::Vocabulary;
-use treeldr::{Id, IriIndex, BlankIdIndex, Type, PropertyValues};
+use treeldr::{Id, Type, PropertyValues, vocab::TldrVocabulary};
 use contextual::WithContext;
 use crate::Property;
 
@@ -14,7 +13,7 @@ pub struct NodeBindingTypeInvalid<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeBindingTypeInvalid<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("invalid {} value type for `{}`", self.property.name().with(vocab), self.subject.with(vocab))
 	}
 }

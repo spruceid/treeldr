@@ -1,7 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
-
-use rdf_types::Vocabulary;
-use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
+use treeldr::{metadata::Merge, vocab::TldrVocabulary, Id};
 
 use super::LayoutRelations;
 use crate::{component, Context};
@@ -10,7 +8,7 @@ impl<M: Clone + Merge> Context<M> {
 	/// Assigns default name for layouts/variants that don't have a name yet.
 	pub fn assign_default_names(
 		&mut self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		layout_relations: &HashMap<Id, LayoutRelations<M>>,
 	) {
 		// Start with the fields.

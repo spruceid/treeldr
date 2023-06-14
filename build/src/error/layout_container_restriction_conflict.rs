@@ -1,11 +1,10 @@
 use locspan::{Span, MaybeLocated};
-use rdf_types::{Vocabulary, vocabulary::LanguageTagIndex};
-use treeldr::{IriIndex, BlankIdIndex};
+use treeldr::vocab::TldrVocabulary;
 
 pub type LayoutContainerRestrictionConflict<M> = treeldr::layout::restriction::Conflict<M>;
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutContainerRestrictionConflict<M> where M::File: Clone {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		match self {
 			Self::Cardinal(c) => c.message(vocab)
 		}
@@ -13,7 +12,7 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutContainerRestricti
 
 	fn primary_label(
 			&self,
-			vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
+			vocab: &TldrVocabulary,
 		) -> Option<String> {
 		match self {
 			Self::Cardinal(c) => c.primary_label(vocab)
@@ -22,7 +21,7 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutContainerRestricti
 
 	fn other_labels(
 			&self,
-			vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
+			vocab: &TldrVocabulary,
 		) -> Vec<codespan_reporting::diagnostic::Label<<M as MaybeLocated>::File>> {
 		match self {
 			Self::Cardinal(c) => c.other_labels(vocab)
@@ -31,20 +30,20 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutContainerRestricti
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for treeldr::layout::restriction::cardinal::Conflict<M> where M::File: Clone {
-	fn message(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, _vocab: &TldrVocabulary) -> String {
 		"conflicting restrictions".to_string()
 	}
 
 	fn primary_label(
 			&self,
-			_vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+			_vocab: &TldrVocabulary,
 		) -> Option<String> {
 		Some("this restriction...".to_string())
 	}
 
 	fn other_labels(
 			&self,
-			_vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+			_vocab: &TldrVocabulary,
 		) -> Vec<codespan_reporting::diagnostic::Label<<M as MaybeLocated>::File>> {
 			match self.1.metadata().optional_location() {
 				Some(loc) => vec![

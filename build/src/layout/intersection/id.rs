@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use locspan::Meta;
-use rdf_types::{Generator, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
+use rdf_types::Generator;
+use treeldr::{metadata::Merge, vocab::TldrVocabulary, Id};
 
 use crate::Context;
 
@@ -73,10 +73,10 @@ impl<M: Merge> IdIntersection<M> {
 		self
 	}
 
-	pub fn prepare_layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn prepare_layout(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
 		meta: M,

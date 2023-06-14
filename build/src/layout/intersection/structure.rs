@@ -1,18 +1,15 @@
 use std::collections::VecDeque;
 
 use locspan::{Meta, StrippedEq, StrippedOrd, StrippedPartialEq, StrippedPartialOrd};
-use rdf_types::{Generator, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, Name};
+use rdf_types::Generator;
+use treeldr::{metadata::Merge, vocab::TldrVocabulary, Id, Name};
 
 use super::{build_lists, list::IntersectionListItem, list_intersection, IdIntersection};
 use crate::{Context, Error, Single};
 
-pub fn struct_intersection<
-	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
-	M: Clone + Merge,
->(
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+pub fn struct_intersection<M: Clone + Merge>(
+	vocabulary: &mut TldrVocabulary,
+	generator: &mut impl Generator<TldrVocabulary>,
 	context: &mut Context<M>,
 	stack: &mut VecDeque<Id>,
 	lists: &IdIntersection<M>,
@@ -187,10 +184,10 @@ impl<M: Clone + Merge> IntersectionListItem<M> for Field<M> {
 		}
 	}
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
 		meta: M,

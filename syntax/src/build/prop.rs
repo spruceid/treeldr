@@ -1,17 +1,17 @@
 use locspan::Meta;
-use rdf_types::{Generator, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex};
+use rdf_types::Generator;
+use treeldr::{metadata::Merge, vocab::TldrVocabulary, Id};
 use treeldr_build::Context;
 
 use super::{Build, Declare, Error, LocalContext};
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::PropertyDefinition<M>, M> {
-	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn declare(
 		&self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		let Meta(id, _) = self
 			.id
@@ -25,12 +25,12 @@ impl<M: Clone + Merge> Declare<M> for Meta<crate::PropertyDefinition<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::PropertyDefinition<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(def, _) = self;
 		let Meta(id, id_loc) = def

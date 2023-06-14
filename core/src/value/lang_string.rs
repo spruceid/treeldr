@@ -1,4 +1,4 @@
-use rdf_types::{vocabulary::LanguageTagIndex, RdfDisplayWithContext, LanguageTagVocabulary};
+use rdf_types::{vocabulary::LanguageTagIndex, LanguageTagVocabulary, RdfDisplayWithContext};
 use std::{borrow::Borrow, fmt, ops::Deref};
 
 /// Language tagged string.
@@ -28,9 +28,16 @@ impl fmt::Display for LangString {
 	}
 }
 
-impl<V: LanguageTagVocabulary<LanguageTag = LanguageTagIndex>> RdfDisplayWithContext<V> for LangString {
+impl<V: LanguageTagVocabulary<LanguageTag = LanguageTagIndex>> RdfDisplayWithContext<V>
+	for LangString
+{
 	fn rdf_fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{}@{}", self.value, vocabulary.language_tag(&self.language).unwrap())
+		write!(
+			f,
+			"{}@{}",
+			self.value,
+			vocabulary.language_tag(&self.language).unwrap()
+		)
 	}
 }
 

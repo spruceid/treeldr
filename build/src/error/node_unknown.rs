@@ -1,6 +1,5 @@
-use treeldr::{Id, IriIndex, BlankIdIndex, Type};
+use treeldr::{Id, Type, vocab::TldrVocabulary};
 use locspan::{Span, MaybeLocated, Meta};
-use rdf_types::Vocabulary;
 use contextual::WithContext;
 
 use crate::Error;
@@ -18,7 +17,7 @@ impl NodeUnknown {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeUnknown {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("unknown node {}", self.id.with(vocab))
 	}
 }

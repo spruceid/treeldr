@@ -1,6 +1,5 @@
-use crate::{Id, IriIndex, BlankIdIndex, component, Type, ty::SubClass, prop, node, TId, PropertyValues, PropertyValueRef};
+use crate::{Id, component, Type, ty::SubClass, prop, node, TId, PropertyValues, PropertyValueRef, vocab::TldrVocabulary};
 use locspan::{MaybeLocated, Span, Meta};
-use rdf_types::Vocabulary;
 use contextual::WithContext;
 
 #[derive(Debug)]
@@ -78,11 +77,11 @@ impl NodeTypeName for component::formatted::Type {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeInvalidType<M> where M::File: Clone {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("invalid type for {}", self.id.with(vocab))
 	}
 
-	fn labels(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
+	fn labels(&self, _vocab: &TldrVocabulary) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		let mut labels = Vec::new();
 
 		for PropertyValueRef { value: Meta(ty, metadata), .. } in self.found.iter() {
@@ -95,7 +94,7 @@ impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeInvalidType<M> where
 		labels
 	}
 
-	fn notes(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<String> {
+	fn notes(&self, _vocab: &TldrVocabulary) -> Vec<String> {
 		let mut notes = Vec::new();
 
 		let expected: Type = self.expected.into();

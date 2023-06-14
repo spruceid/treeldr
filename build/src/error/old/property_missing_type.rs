@@ -7,7 +7,7 @@ use contextual::WithContext;
 pub struct PropertyMissingType(pub Id);
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for PropertyMissingType {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("no range defined for property `{}`", self.0.with(vocab))
 	}
 }

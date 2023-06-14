@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use rdf_types::{Quad, Interpretation, LiteralInterpretationMut, LiteralVocabulary};
+use rdf_types::{Interpretation, LiteralInterpretationMut, LiteralVocabulary, Quad};
 
 use crate::{Id, RdfIterator};
 
@@ -27,7 +27,7 @@ pub trait QuadsAndValues<V, I: Interpretation> {
 	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
 		vocabulary: &mut V,
-		interpretation: &mut I
+		interpretation: &mut I,
 	) -> Self::QuadsAndValues<'a>
 	where
 		I::Resource: 'a;
@@ -39,7 +39,7 @@ pub trait QuadsAndValues<V, I: Interpretation> {
 		graph: Option<&'t I::Resource>,
 	) -> iter::Bound<'v, 'i, 't, Self::QuadsAndValues<'a>, V, I>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		let inner = self.unbound_rdf_quads_and_values(vocabulary, interpretation);
 		iter::Bound::new(inner, vocabulary, interpretation, graph)
@@ -52,10 +52,10 @@ impl<'t, V, T: QuadsAndValues<V, I>, I: Interpretation> QuadsAndValues<V, I> for
 	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
 		vocabulary: &mut V,
-		interpretation: &mut I
+		interpretation: &mut I,
 	) -> Self::QuadsAndValues<'a>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		T::unbound_rdf_quads_and_values(self, vocabulary, interpretation)
 	}
@@ -70,10 +70,10 @@ where
 	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
 		_vocabulary: &mut V,
-		_interpretation: &mut I
+		_interpretation: &mut I,
 	) -> Self::QuadsAndValues<'a>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		ValuesOnly::new(IdValue::new(&self.0))
 	}
@@ -88,7 +88,7 @@ impl<T: QuadsAndValues<V, I>, V, I: Interpretation> QuadsAndValues<V, I> for Opt
 		interpretation: &mut I,
 	) -> Self::QuadsAndValues<'a>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		super::iter::Optional::new(
 			self.as_ref()
@@ -99,7 +99,7 @@ impl<T: QuadsAndValues<V, I>, V, I: Interpretation> QuadsAndValues<V, I> for Opt
 
 pub struct FlattenQuadsAndValues<I, U> {
 	current: Option<Box<U>>,
-	rest: I
+	rest: I,
 }
 
 impl<'a, I: Iterator<Item = &'a T>, T: QuadsAndValues<V, N>, V, N: Interpretation> RdfIterator<V, N>
@@ -141,14 +141,14 @@ impl<T: QuadsAndValues<V, I>, V, I: Interpretation> QuadsAndValues<V, I> for BTr
 	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
 		_vocabulary: &mut V,
-		_interpretation: &mut I
+		_interpretation: &mut I,
 	) -> Self::QuadsAndValues<'a>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		FlattenQuadsAndValues {
 			current: None,
-			rest: self.iter()
+			rest: self.iter(),
 		}
 	}
 }
@@ -159,7 +159,8 @@ impl<T: QuadsAndValues<V, I>, V, I: Interpretation> QuadsAndValues<V, I> for BTr
 /// The type parameter `L` is the type of literal values.
 pub trait Quads<V, I: Interpretation> {
 	/// Triples iterator.
-	type Quads<'a>: 'a + RdfIterator<V, I, Item = Quad<I::Resource, I::Resource, I::Resource, I::Resource>>
+	type Quads<'a>: 'a
+		+ RdfIterator<V, I, Item = Quad<I::Resource, I::Resource, I::Resource, I::Resource>>
 	where
 		Self: 'a,
 		I::Resource: 'a;
@@ -179,7 +180,7 @@ pub trait Quads<V, I: Interpretation> {
 		graph: Option<&'g I::Resource>,
 	) -> iter::Bound<'v, 'i, 'g, Self::Quads<'_>, V, I>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		let inner = self.unbound_rdf_quads(vocabulary, interpretation);
 		iter::Bound::new(inner, vocabulary, interpretation, graph)
@@ -195,7 +196,7 @@ impl<T: QuadsAndValues<V, I>, V, I: Interpretation> Quads<V, I> for T {
 		interpretation: &mut I,
 	) -> Self::Quads<'a>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		FilterQuads(self.unbound_rdf_quads_and_values(vocabulary, interpretation))
 	}
@@ -234,7 +235,9 @@ impl<'a, T> LiteralValue<'a, T> {
 	}
 }
 
-impl<'a, T: AsLiteral<V>, V: LiteralVocabulary, I: LiteralInterpretationMut<V::Literal>> RdfIterator<V, I> for LiteralValue<'a, T> {
+impl<'a, T: AsLiteral<V>, V: LiteralVocabulary, I: LiteralInterpretationMut<V::Literal>>
+	RdfIterator<V, I> for LiteralValue<'a, T>
+{
 	type Item = I::Resource;
 
 	fn next_with(
@@ -282,7 +285,9 @@ impl<T> ValuesOnly<T> {
 	}
 }
 
-impl<T: RdfIterator<V, I, Item = I::Resource>, V, I: Interpretation> RdfIterator<V, I> for ValuesOnly<T> {
+impl<T: RdfIterator<V, I, Item = I::Resource>, V, I: Interpretation> RdfIterator<V, I>
+	for ValuesOnly<T>
+{
 	type Item = QuadOrValue<I::Resource>;
 
 	fn next_with(

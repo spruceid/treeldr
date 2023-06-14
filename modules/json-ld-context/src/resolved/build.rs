@@ -10,9 +10,9 @@ use json_ld::{
 	Nullable,
 };
 use locspan::Meta;
-use rdf_types::Vocabulary;
+use rdf_types::IriVocabulary;
 use shelves::Ref;
-use treeldr::{BlankIdIndex, IriIndex};
+use treeldr::{vocab::TldrVocabulary, BlankIdIndex, IriIndex};
 
 use super::{
 	CompareTermDefinition, LocalContext, LocalContextComparison, LocalContexts, TermDefinition,
@@ -26,7 +26,7 @@ pub struct Prefixes(HashMap<String, IriIndex>);
 impl Prefixes {
 	pub fn compact(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		id: json_ld::Id<IriIndex, BlankIdIndex>,
 	) -> String {
 		let mut term = id.with(vocabulary).to_string();
@@ -52,7 +52,7 @@ impl From<HashMap<String, IriIndex>> for Prefixes {
 impl TermDefinition {
 	pub fn build(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		prefixes: &Prefixes,
 		local_contexts: &LocalContexts,
 		context_comparison: &LocalContextComparison,
@@ -79,9 +79,9 @@ impl TermDefinition {
 		Some(Entry::new((), c))
 	}
 
-	pub fn build_id<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn build_id(
 		&self,
-		vocabulary: &V,
+		vocabulary: &TldrVocabulary,
 		prefixes: &Prefixes,
 	) -> Option<Entry<Nullable<term_definition::Id>, ()>> {
 		let syntax_id = match self.id.clone()? {
@@ -95,9 +95,9 @@ impl TermDefinition {
 		Some(Entry::new((), Meta(syntax_id, ())))
 	}
 
-	pub fn build_type<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn build_type(
 		&self,
-		vocabulary: &V,
+		vocabulary: &TldrVocabulary,
 		prefixes: &Prefixes,
 	) -> Option<Entry<Nullable<term_definition::Type>, ()>> {
 		let syntax_type = self.type_.clone()?.map(|t| match t {
@@ -123,7 +123,7 @@ impl TermDefinition {
 impl LocalContext {
 	pub fn build(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		prefixes: &Prefixes,
 		local_contexts: &LocalContexts,
 		context_comparison: &LocalContextComparison,
@@ -211,7 +211,7 @@ impl LocalContexts {
 
 	pub fn build(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		prefixes: &Prefixes,
 		context_comparison: &LocalContextComparison,
 		r: Ref<LocalContext>,

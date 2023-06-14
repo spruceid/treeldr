@@ -1,15 +1,20 @@
 use iref::AsIri;
-use rdf_types::{Generator, Id, Literal, Object, Triple, VocabularyMut};
+use rdf_types::{literal, Generator, Id, Literal, Object, Triple, VocabularyMut};
 use treeldr::vocab;
 
-use crate::{import::sub_id, LexXrpcSubscription, LexXrpcSubscriptionMessage};
+use crate::{
+	import::{sub_id, OutputLiteralType},
+	LexXrpcSubscription, LexXrpcSubscriptionMessage,
+};
 
 use super::{
 	super::{build_rdf_list, nsid_name, Context, Item, OutputSubject, OutputTriple, Process},
 	process_xrpc_parameters,
 };
 
-impl<V: VocabularyMut> Process<V> for LexXrpcSubscription {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V>
+	for LexXrpcSubscription
+{
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -28,19 +33,25 @@ impl<V: VocabularyMut> Process<V> for LexXrpcSubscription {
 			Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 		));
 
+		let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 		triples.push(Triple(
 			id.clone(),
 			vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-			Object::Literal(Literal::String(
+			Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 				nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str()).to_string(),
-			)),
+				literal::Type::Any(xsd_string),
+			))),
 		));
 
 		if let Some(desc) = self.description {
+			let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 			triples.push(Triple(
 				id.clone(),
 				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
-				Object::Literal(Literal::String(desc)),
+				Object::Literal(
+					vocabulary
+						.insert_owned_literal(Literal::new(desc, literal::Type::Any(xsd_string))),
+				),
 			));
 		}
 
@@ -58,18 +69,26 @@ impl<V: VocabularyMut> Process<V> for LexXrpcSubscription {
 				Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 			));
 
+			let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 			triples.push(Triple(
 				error_id.clone(),
 				vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-				Object::Literal(Literal::String("error".to_string())),
+				Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+					"error".to_string(),
+					literal::Type::Any(xsd_string),
+				))),
 			));
 
+			let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 			triples.push(Triple(
 				error_id.clone(),
 				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
-				Object::Literal(Literal::String(format!(
-					"Errors of <{}>.",
-					vocabulary.iri(id.as_iri().unwrap()).unwrap()
+				Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+					format!(
+						"Errors of <{}>.",
+						vocabulary.iri(id.as_iri().unwrap()).unwrap()
+					),
+					literal::Type::Any(xsd_string),
 				))),
 			));
 
@@ -87,10 +106,14 @@ impl<V: VocabularyMut> Process<V> for LexXrpcSubscription {
 						Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Variant.as_iri()))),
 					));
 
+					let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 					triples.push(Triple(
 						v_id.clone(),
 						vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-						Object::Literal(Literal::String(e.name)),
+						Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+							e.name,
+							literal::Type::Any(xsd_string),
+						))),
 					));
 
 					Object::Id(v_id)
@@ -113,18 +136,26 @@ impl<V: VocabularyMut> Process<V> for LexXrpcSubscription {
 				Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 			));
 
+			let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 			triples.push(Triple(
 				info_id.clone(),
 				vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-				Object::Literal(Literal::String("info".to_string())),
+				Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+					"info".to_string(),
+					literal::Type::Any(xsd_string),
+				))),
 			));
 
+			let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 			triples.push(Triple(
 				info_id.clone(),
 				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
-				Object::Literal(Literal::String(format!(
-					"Infos of <{}>.",
-					vocabulary.iri(id.as_iri().unwrap()).unwrap()
+				Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+					format!(
+						"Infos of <{}>.",
+						vocabulary.iri(id.as_iri().unwrap()).unwrap()
+					),
+					literal::Type::Any(xsd_string),
 				))),
 			));
 
@@ -142,10 +173,14 @@ impl<V: VocabularyMut> Process<V> for LexXrpcSubscription {
 						Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Variant.as_iri()))),
 					));
 
+					let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 					triples.push(Triple(
 						v_id.clone(),
 						vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-						Object::Literal(Literal::String(i.name)),
+						Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+							i.name,
+							literal::Type::Any(xsd_string),
+						))),
 					));
 
 					Object::Id(v_id)
@@ -170,7 +205,9 @@ impl<V: VocabularyMut> Process<V> for LexXrpcSubscription {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexXrpcSubscriptionMessage {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V>
+	for LexXrpcSubscriptionMessage
+{
 	fn process(
 		self,
 		vocabulary: &mut V,

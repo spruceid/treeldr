@@ -1,7 +1,6 @@
-use crate::{BlankIdIndex, IriIndex};
+use crate::vocab::TldrVocabulary;
 use contextual::Contextual;
 use locspan::{MaybeLocated, Meta};
-use rdf_types::{Vocabulary, vocabulary::LanguageTagIndex};
 
 /// Error with diagnostic reporting support.
 pub trait Diagnose<M: MaybeLocated> {
@@ -45,32 +44,24 @@ pub trait DiagnoseWithMetadata<M: MaybeLocated> {
 
 /// Error with diagnostic reporting support.
 pub trait DiagnoseWithMetadataAndVocabulary<M: MaybeLocated> {
-	fn message(
-		&self,
-		metadata: &M,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
-	) -> String;
+	fn message(&self, metadata: &M, vocabulary: &TldrVocabulary) -> String;
 
 	fn labels(
 		&self,
 		_metadata: &M,
-		_vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
+		_vocabulary: &TldrVocabulary,
 	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
-	fn notes(
-		&self,
-		_metadata: &M,
-		_vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
-	) -> Vec<String> {
+	fn notes(&self, _metadata: &M, _vocabulary: &TldrVocabulary) -> Vec<String> {
 		Vec::new()
 	}
 
 	fn diagnostic(
 		&self,
 		metadata: &M,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
+		vocabulary: &TldrVocabulary,
 	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message(metadata, vocabulary))
@@ -82,34 +73,26 @@ pub trait DiagnoseWithMetadataAndVocabulary<M: MaybeLocated> {
 impl<M: MaybeLocated, T: DiagnoseWithMetadataAndVocabulary<M>> DiagnoseWithMetadataAndVocabulary<M>
 	for Box<T>
 {
-	fn message(
-		&self,
-		metadata: &M,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
-	) -> String {
+	fn message(&self, metadata: &M, vocabulary: &TldrVocabulary) -> String {
 		T::message(self, metadata, vocabulary)
 	}
 
 	fn labels(
 		&self,
 		metadata: &M,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
+		vocabulary: &TldrVocabulary,
 	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		T::labels(self, metadata, vocabulary)
 	}
 
-	fn notes(
-		&self,
-		metadata: &M,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
-	) -> Vec<String> {
+	fn notes(&self, metadata: &M, vocabulary: &TldrVocabulary) -> Vec<String> {
 		T::notes(self, metadata, vocabulary)
 	}
 
 	fn diagnostic(
 		&self,
 		metadata: &M,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
+		vocabulary: &TldrVocabulary,
 	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		T::diagnostic(self, metadata, vocabulary)
 	}
@@ -117,28 +100,22 @@ impl<M: MaybeLocated, T: DiagnoseWithMetadataAndVocabulary<M>> DiagnoseWithMetad
 
 /// Error with diagnostic reporting support.
 pub trait DiagnoseWithVocabulary<M: MaybeLocated> {
-	fn message(
-		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
-	) -> String;
+	fn message(&self, vocabulary: &TldrVocabulary) -> String;
 
 	fn labels(
 		&self,
-		_vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
+		_vocabulary: &TldrVocabulary,
 	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
-	fn notes(
-		&self,
-		_vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
-	) -> Vec<String> {
+	fn notes(&self, _vocabulary: &TldrVocabulary) -> Vec<String> {
 		Vec::new()
 	}
 
 	fn diagnostic(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
+		vocabulary: &TldrVocabulary,
 	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		codespan_reporting::diagnostic::Diagnostic::error()
 			.with_message(self.message(vocabulary))
@@ -165,13 +142,8 @@ impl<M: MaybeLocated, T: DiagnoseWithMetadata<M>> DiagnoseWithMetadata<M> for Bo
 	}
 }
 
-impl<
-		't,
-		'v,
-		M: MaybeLocated,
-		T: DiagnoseWithVocabulary<M>,
-		V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
-	> Diagnose<M> for Contextual<&'t T, &'v V>
+impl<'t, 'v, M: MaybeLocated, T: DiagnoseWithVocabulary<M>> Diagnose<M>
+	for Contextual<&'t T, &'v TldrVocabulary>
 {
 	fn message(&self) -> String {
 		self.0.message(self.1)
@@ -211,30 +183,24 @@ impl<M: MaybeLocated, T: DiagnoseWithMetadata<M>> Diagnose<M> for Meta<T, M> {
 impl<M: MaybeLocated, T: DiagnoseWithMetadataAndVocabulary<M>> DiagnoseWithVocabulary<M>
 	for Meta<T, M>
 {
-	fn message(
-		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
-	) -> String {
+	fn message(&self, vocabulary: &TldrVocabulary) -> String {
 		self.value().message(self.metadata(), vocabulary)
 	}
 
 	fn labels(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
+		vocabulary: &TldrVocabulary,
 	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		self.value().labels(self.metadata(), vocabulary)
 	}
 
-	fn notes(
-		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
-	) -> Vec<String> {
+	fn notes(&self, vocabulary: &TldrVocabulary) -> Vec<String> {
 		self.value().notes(self.metadata(), vocabulary)
 	}
 
 	fn diagnostic(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
+		vocabulary: &TldrVocabulary,
 	) -> codespan_reporting::diagnostic::Diagnostic<M::File> {
 		self.value().diagnostic(self.metadata(), vocabulary)
 	}

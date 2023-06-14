@@ -10,7 +10,7 @@ pub struct NodeUnknown {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeUnknown {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("unknown node {}", self.id.with(vocab))
 	}
 }

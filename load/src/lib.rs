@@ -1,7 +1,7 @@
-use rdf_types::{Generator, VocabularyMut};
+use rdf_types::Generator;
 use treeldr::{
-	vocab::{GraphLabel, Object},
-	BlankIdIndex, Id, IriIndex,
+	vocab::{GraphLabel, StrippedObject, TldrVocabulary},
+	Id,
 };
 
 mod document;
@@ -16,9 +16,9 @@ pub use treeldr::reporting;
 pub type BuildContext = treeldr_build::Context<source::Metadata>;
 
 /// Declare all the given documents.
-pub fn declare_all<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+pub fn declare_all(
+	vocabulary: &mut TldrVocabulary,
+	generator: &mut impl Generator<TldrVocabulary>,
 	build_context: &mut BuildContext,
 	documents: Vec<Document>,
 ) -> Result<(), BuildAllError> {
@@ -41,9 +41,9 @@ pub fn declare_all<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 }
 
 /// Build all the given documents.
-pub fn build_all<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+pub fn build_all(
+	vocabulary: &mut TldrVocabulary,
+	generator: &mut impl Generator<TldrVocabulary>,
 	build_context: &mut BuildContext,
 	documents: Vec<Document>,
 ) -> Result<treeldr::Model<source::Metadata>, BuildAllError> {
@@ -55,5 +55,4 @@ pub fn build_all<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
 }
 
 /// RDF dataset.
-pub type Dataset =
-	grdf::meta::BTreeDataset<Id, Id, Object<source::Metadata>, GraphLabel, source::Metadata>;
+pub type Dataset = grdf::meta::BTreeDataset<Id, Id, StrippedObject, GraphLabel, source::Metadata>;

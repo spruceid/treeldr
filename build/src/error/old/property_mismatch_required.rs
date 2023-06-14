@@ -12,7 +12,7 @@ pub struct PropertyMismatchRequired<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for PropertyMismatchRequired<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("functional status mismatch for property `{}`", self.id.with(vocab))
 	}
 }

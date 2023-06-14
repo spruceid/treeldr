@@ -12,7 +12,7 @@ pub struct LayoutMismatchPrimitive<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutMismatchPrimitive<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("datatype primitive mismatch for layout `{}`", self.id.with(vocab))
 	}
 }

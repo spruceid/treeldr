@@ -12,7 +12,7 @@ pub struct ListMismatchRest<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for ListMismatchRest<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("rest mismatch for list `{}`", self.id.with(vocab))
 	}
 }

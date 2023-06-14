@@ -16,11 +16,7 @@ pub trait IntoRdfIterator<V, I: Interpretation> {
 	type Item;
 	type IntoIter: RdfIterator<V, I, Item = Self::Item>;
 
-	fn into_rdf_iter(
-		self,
-		vocabulary: &mut V,
-		interpretation: &mut I
-	) -> Option<Self::IntoIter>;
+	fn into_rdf_iter(self, vocabulary: &mut V, interpretation: &mut I) -> Option<Self::IntoIter>;
 }
 
 /// Iterator bound to a namespace and generator.

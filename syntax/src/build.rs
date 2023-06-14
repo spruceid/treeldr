@@ -1,6 +1,6 @@
 use iref::IriRefBuf;
 use locspan::Meta;
-use rdf_types::{Generator, VocabularyMut};
+use rdf_types::{Generator, IriVocabularyMut};
 use thiserror::Error;
 use treeldr::{metadata::Merge, vocab::*, Id};
 use treeldr_build::Context;
@@ -18,12 +18,12 @@ impl<M: Clone + Merge> treeldr_build::Document<M> for crate::Document<M> {
 	type LocalContext = LocalContext<M>;
 	type Error = Error<M>;
 
-	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn declare(
 		&self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		let mut declared_base_iri = None;
 		for Meta(base_iri, loc) in &self.bases {
@@ -67,12 +67,12 @@ impl<M: Clone + Merge> treeldr_build::Document<M> for crate::Document<M> {
 		Ok(())
 	}
 
-	fn define<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn define(
 		self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		for ty in self.types {
 			ty.build(local_context, context, vocabulary, generator)?
@@ -91,36 +91,36 @@ impl<M: Clone + Merge> treeldr_build::Document<M> for crate::Document<M> {
 }
 
 pub trait Declare<M: Clone + Merge> {
-	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn declare(
 		&self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>>;
 }
 
 pub trait Build<M: Clone + Merge> {
 	type Target;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>>;
 }
 
 impl<M: Clone + Merge> Build<M> for Meta<crate::Documentation<M>, M> {
 	type Target = Option<Meta<String, M>>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		_local_context: &mut LocalContext<M>,
 		_context: &mut Context<M>,
-		_vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
+		_vocabulary: &mut TldrVocabulary,
+		_generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(doc, loc) = self;
 
@@ -147,12 +147,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::Documentation<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::Id, M> {
 	type Target = Meta<Id, M>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		_context: &mut Context<M>,
-		vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		_generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(id, loc) = self;
 		let iri = match id {
@@ -169,17 +169,17 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::Id, M> {
 			}
 		};
 
-		Ok(Meta(Id::Iri(vocabulary.insert(iri.as_iri())), loc))
+		Ok(Meta(Id::Iri(vocabulary.insert_owned(iri)), loc))
 	}
 }
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::Use<M>, M> {
-	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn declare(
 		&self,
 		local_context: &mut LocalContext<M>,
 		_context: &mut Context<M>,
-		_vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
+		_vocabulary: &mut TldrVocabulary,
+		_generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		local_context
 			.declare_prefix(
@@ -194,12 +194,12 @@ impl<M: Clone + Merge> Declare<M> for Meta<crate::Use<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::Alias, M> {
 	type Target = Meta<treeldr::Name, M>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		_local_context: &mut LocalContext<M>,
 		_context: &mut Context<M>,
-		_vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
+		_vocabulary: &mut TldrVocabulary,
+		_generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(name, loc) = self;
 		match treeldr::Name::new(name.as_str()) {

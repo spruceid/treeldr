@@ -1,21 +1,21 @@
 use locspan::Meta;
-use rdf_types::{Generator, VocabularyMut};
+use rdf_types::Generator;
 use treeldr::{
 	metadata::Merge,
-	vocab::{Object, Rdf, Term},
-	BlankIdIndex, Id, IriIndex,
+	vocab::{Rdf, StrippedObject, Term, TldrVocabulary},
+	Id, IriIndex,
 };
 use treeldr_build::Context;
 
 use super::{Build, Declare, Error, LocalContext, LocalError};
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::TypeDefinition<M>, M> {
-	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn declare(
 		&self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		let Meta(id, _) = self
 			.id
@@ -38,12 +38,12 @@ impl<M: Clone + Merge> Declare<M> for Meta<crate::TypeDefinition<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 	type Target = ();
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		let implicit_layout = Meta(self.implicit_layout_definition(), self.metadata().clone());
 
@@ -93,12 +93,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::TypeDefinition<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::OuterTypeExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(ty, loc) = self;
 
@@ -113,7 +113,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterTypeExpr<M>, M> {
 					context.declare_type(id, loc.clone());
 				}
 
-				let options_list = context.try_create_list_with::<Error<M>, _, _, _, _>(
+				let options_list = context.try_create_list_with::<Error<M>, _, _, _>(
 					vocabulary,
 					generator,
 					options,
@@ -137,7 +137,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterTypeExpr<M>, M> {
 					context.declare_type(id, loc.clone());
 				}
 
-				let types_list = context.try_create_list_with::<Error<M>, _, _, _, _>(
+				let types_list = context.try_create_list_with::<Error<M>, _, _, _>(
 					vocabulary,
 					generator,
 					types,
@@ -161,12 +161,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterTypeExpr<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::NamedInnerTypeExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		self.into_value()
 			.expr
@@ -177,12 +177,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::NamedInnerTypeExpr<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(ty, loc) = self;
 
@@ -328,7 +328,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerTypeExpr<M>, M> {
 					generator,
 					[
 						Meta(
-							Object::Id(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List)))),
+							StrippedObject::Id(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List)))),
 							loc.clone(),
 						),
 						Meta(first_restriction_id.into_term(), loc.clone()),

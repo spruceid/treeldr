@@ -6,7 +6,7 @@ use locspan::{Span, MaybeLocated};
 pub struct UnimplementedFeature(pub Feature);
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for UnimplementedFeature {
-	fn message(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, _vocab: &TldrVocabulary) -> String {
 		format!("unimplemented feature `{}`", self.0)
 	}
 }

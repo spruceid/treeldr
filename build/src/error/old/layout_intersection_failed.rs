@@ -9,7 +9,7 @@ pub struct LayoutIntersectionFailed {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutIntersectionFailed {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("intersection `{}` failed", self.id.with(vocab))
 	}
 }

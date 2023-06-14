@@ -10,11 +10,11 @@ use crate::{
 
 use super::Error;
 use locspan::Meta;
-use rdf_types::{Generator, Vocabulary, VocabularyMut};
+use rdf_types::{Generator, IriVocabulary, VocabularyMut};
 pub use treeldr::layout::field::Property;
 use treeldr::{
-	metadata::Merge, prop::UnknownProperty, BlankIdIndex, Id, IriIndex, Name, PropertyValueRef,
-	TId, Value,
+	metadata::Merge, prop::UnknownProperty, vocab::TldrVocabulary, BlankIdIndex, Id, IriIndex,
+	Name, PropertyValueRef, TId, Value,
 };
 
 /// Layout field definition.
@@ -113,7 +113,7 @@ impl<M> Definition<M> {
 
 	pub fn default_name(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		as_resource: &resource::Data<M>,
 	) -> Option<Meta<Name, M>>
 	where

@@ -1,6 +1,9 @@
 use iref::IriBuf;
 use json_ld::rdf::XSD_STRING;
-use rdf_types::{IriVocabularyMut, Literal, LiteralVocabulary, LiteralVocabularyMut, LanguageTagVocabularyMut, LanguageTagVocabulary, LiteralInterpretationMut};
+use rdf_types::{
+	IriVocabularyMut, LanguageTagVocabulary, LanguageTagVocabularyMut, Literal,
+	LiteralInterpretationMut, LiteralVocabulary, LiteralVocabularyMut,
+};
 use static_iref::iri;
 
 use crate::rdf::{LiteralValue, ValuesOnly};
@@ -8,10 +11,7 @@ use crate::rdf::{LiteralValue, ValuesOnly};
 use super::QuadsAndValues;
 
 pub trait AsLiteral<V: LiteralVocabulary> {
-	fn rdf_literal_value(
-		&self,
-		vocabulary: &mut V,
-	) -> V::Literal;
+	fn rdf_literal_value(&self, vocabulary: &mut V) -> V::Literal;
 }
 
 macro_rules! impl_as_literal {
@@ -72,12 +72,19 @@ impl_as_literal! {
 	xsd_types::HexBinaryBuf: "http://www.w3.org/2001/XMLSchema#hexBinary"
 }
 
-impl<V: IriVocabularyMut + LanguageTagVocabulary + LiteralVocabularyMut<Type = rdf_types::literal::Type<V::Iri, V::LanguageTag>>> AsLiteral<V> for String
+impl<
+		V: IriVocabularyMut
+			+ LanguageTagVocabulary
+			+ LiteralVocabularyMut<Type = rdf_types::literal::Type<V::Iri, V::LanguageTag>>,
+	> AsLiteral<V> for String
 where
-	V::Value: From<String>
+	V::Value: From<String>,
 {
 	fn rdf_literal_value(&self, vocabulary: &mut V) -> V::Literal {
-		let l = Literal::new(self.to_owned().into(), rdf_types::literal::Type::Any(vocabulary.insert(XSD_STRING)));
+		let l = Literal::new(
+			self.to_owned().into(),
+			rdf_types::literal::Type::Any(vocabulary.insert(XSD_STRING)),
+		);
 		vocabulary.insert_owned_literal(l)
 	}
 }
@@ -91,10 +98,10 @@ where
 	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
 		_vocabulary: &mut V,
-		_interpretation: &mut I
+		_interpretation: &mut I,
 	) -> Self::QuadsAndValues<'a>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		ValuesOnly::new(LiteralValue::new(self))
 	}
@@ -109,16 +116,17 @@ where
 	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
 		_vocabulary: &mut V,
-		_interpretation: &mut I
+		_interpretation: &mut I,
 	) -> Self::QuadsAndValues<'a>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		ValuesOnly::new(LiteralValue::new(self))
 	}
 }
 
-impl<V: LiteralVocabulary, I: LiteralInterpretationMut<V::Literal>> QuadsAndValues<V, I> for chrono::NaiveDate
+impl<V: LiteralVocabulary, I: LiteralInterpretationMut<V::Literal>> QuadsAndValues<V, I>
+	for chrono::NaiveDate
 where
 	Self: AsLiteral<V>,
 {
@@ -127,16 +135,17 @@ where
 	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
 		_vocabulary: &mut V,
-		_interpretation: &mut I
+		_interpretation: &mut I,
 	) -> Self::QuadsAndValues<'a>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		ValuesOnly::new(LiteralValue::new(self))
 	}
 }
 
-impl<V: LiteralVocabulary, I: LiteralInterpretationMut<V::Literal>> QuadsAndValues<V, I> for chrono::DateTime<chrono::Utc>
+impl<V: LiteralVocabulary, I: LiteralInterpretationMut<V::Literal>> QuadsAndValues<V, I>
+	for chrono::DateTime<chrono::Utc>
 where
 	Self: AsLiteral<V>,
 {
@@ -145,10 +154,10 @@ where
 	fn unbound_rdf_quads_and_values<'a>(
 		&'a self,
 		_vocabulary: &mut V,
-		_interpretation: &mut I
+		_interpretation: &mut I,
 	) -> Self::QuadsAndValues<'a>
 	where
-		I::Resource: 'a
+		I::Resource: 'a,
 	{
 		ValuesOnly::new(LiteralValue::new(self))
 	}

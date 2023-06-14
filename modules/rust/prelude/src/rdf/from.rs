@@ -101,9 +101,7 @@ pub trait TypeCheck<V> {
 impl<V: IriVocabulary, S, L> TypeCheck<V> for Literal<rdf_types::literal::Type<V::Iri, L>, S> {
 	fn has_type(&self, vocabulary: &V, iri: Iri) -> bool {
 		match self.type_() {
-			rdf_types::literal::Type::Any(t) => {
-				iri == vocabulary.iri(t).unwrap()
-			}
+			rdf_types::literal::Type::Any(t) => iri == vocabulary.iri(t).unwrap(),
 			rdf_types::literal::Type::LangString(_) => {
 				iri == static_iref::iri!("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
 			}

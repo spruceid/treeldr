@@ -1,8 +1,6 @@
 use treeldr::{
-	IriIndex,
-	BlankIdIndex, value::Literal, Id
+	value::Literal, Id, vocab::TldrVocabulary
 };
-use rdf_types::Vocabulary;
 use locspan::{Span, MaybeLocated};
 
 #[derive(Debug)]
@@ -12,7 +10,7 @@ pub struct LiteralTypeMismatch {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LiteralTypeMismatch {
-	fn message(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, _vocab: &TldrVocabulary) -> String {
 		"invalid literal type".to_string()
 	}
 }

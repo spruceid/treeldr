@@ -7,11 +7,11 @@ use contextual::WithContext;
 pub struct LayoutVariantMissingName(pub Id);
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutVariantMissingName {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("no name defined for variant `{}`", self.0.with(vocab))
 	}
 
-	fn notes(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> Vec<String> {
+	fn notes(&self, _vocab: &TldrVocabulary) -> Vec<String> {
 		match self.0 {
 			Id::Blank(_) => {
 				vec!["variant name could not be derived from a blank node identifier.".to_string()]

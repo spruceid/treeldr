@@ -1,6 +1,6 @@
 use locspan::{Location, Meta};
-use rdf_types::{Generator, VocabularyMut};
-use treeldr::{BlankIdIndex, IriIndex};
+use rdf_types::Generator;
+use treeldr::vocab::TldrVocabulary;
 use treeldr_syntax as syntax;
 
 use crate::{source, BuildContext, DisplayPath, LangError, ParseError};
@@ -12,22 +12,22 @@ pub struct Document {
 }
 
 impl Document {
-	pub fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn declare(
 		&mut self,
 		context: &mut BuildContext,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), syntax::build::Error<source::Metadata>> {
 		use treeldr_build::Document;
 		self.doc
 			.declare(&mut self.local_context, context, vocabulary, generator)
 	}
 
-	pub fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn build(
 		mut self,
 		context: &mut BuildContext,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), syntax::build::Error<source::Metadata>> {
 		use treeldr_build::Document;
 		self.doc

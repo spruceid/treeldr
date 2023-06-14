@@ -1,14 +1,12 @@
 use treeldr::{
-	IriIndex,
-	BlankIdIndex, value::InvalidLiteral
+	value::InvalidLiteral, vocab::TldrVocabulary
 };
-use rdf_types::Vocabulary;
 use locspan::{Span, MaybeLocated};
 
 pub type LiteralInvalid = InvalidLiteral;
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LiteralInvalid {
-	fn message(&self, _vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, _vocab: &TldrVocabulary) -> String {
 		format!("invalid literal: {self}")
 	}
 }

@@ -1,15 +1,18 @@
 use std::fmt;
 
-use iref::IriBuf;
-use treeldr::vocab::IndexedVocabulary;
 use ::treeldr::{
 	metadata::Merge,
-	vocab::{GraphLabel, Object},
-	Id
+	vocab::{GraphLabel, StrippedObject},
+	Id,
 };
-use locspan::{Meta, Span};
+use iref::IriBuf;
+use locspan::{Meta, Span, Strip};
 use nquads_syntax::Parse;
-use rdf_types::{generator::Unscoped, vocabulary::Scoped, Generator, VocabularyMut, InsertIntoVocabulary, Quad};
+use rdf_types::{
+	BlankIdBuf, BlankIdVocabularyMut, Generator, InsertIntoVocabulary, IriVocabularyMut,
+	LiteralVocabularyMut, Quad,
+};
+use treeldr::vocab::TldrVocabulary;
 
 use crate::Document;
 
@@ -46,73 +49,95 @@ impl fmt::Display for Scope {
 	}
 }
 
-type RdfTerm<M> = rdf_types::Term<rdf_types::Id, rdf_types::Literal<Meta<rdf_types::literal::Type, M>, Meta<String, M>>>;
-type RdfQuad<M> = Quad<Meta<rdf_types::Id, M>, Meta<IriBuf, M>, Meta<RdfTerm<M>, M>, Meta<rdf_types::Id, M>>;
+type RdfTerm<M> = rdf_types::Term<
+	rdf_types::Id,
+	rdf_types::Literal<Meta<rdf_types::literal::Type, M>, Meta<String, M>>,
+>;
+type RdfQuad<M> =
+	Quad<Meta<rdf_types::Id, M>, Meta<IriBuf, M>, Meta<RdfTerm<M>, M>, Meta<rdf_types::Id, M>>;
+
+fn import_meta_id<M>(
+	vocabulary: &mut TldrVocabulary,
+	scope: Scope,
+	Meta(id, meta): Meta<rdf_types::Id, M>,
+) -> Meta<Id, M> {
+	Meta(import_id(vocabulary, scope, id), meta)
+}
+
+fn import_id(vocabulary: &mut TldrVocabulary, scope: Scope, id: rdf_types::Id) -> Id {
+	match id {
+		rdf_types::Id::Iri(i) => Id::Iri(vocabulary.insert_owned(i)),
+		rdf_types::Id::Blank(b) => {
+			let b = BlankIdBuf::new(format!("_:{}:{}", scope, b.suffix())).unwrap();
+			Id::Blank(vocabulary.insert_owned_blank_id(b))
+		}
+	}
+}
+
+type ImportedQuad<M> =
+	Meta<Quad<Meta<Id, M>, Meta<Id, M>, Meta<StrippedObject, M>, Meta<GraphLabel, M>>, M>;
 
 fn import_quad<M>(
-	vocabulary: &mut (impl IndexedVocabulary + VocabularyMut),
-	Meta(Quad(s, p, o, g), meta): Meta<RdfQuad<M>, M>
-) -> Meta<Quad<Meta<Id, M>, Meta<Id, M>, Meta<Object<M>, M>, Meta<GraphLabel, M>>, M> {
-	Meta(Quad(
-		s.insert_into_vocabulary(vocabulary),
-		p.insert_into_vocabulary(vocabulary).map(Id::Iri),
-		match o {
-			Meta(rdf_types::Term::Id(id), m) => Meta(Object::Id(id.insert_into_vocabulary(vocabulary)), m),
-			Meta(rdf_types::Term::Literal(l), m) => Meta(Object::Literal(l.insert_type_into_vocabulary(vocabulary)), m)
-		},
-		g.insert_into_vocabulary(vocabulary)
-	), meta)
+	vocabulary: &mut TldrVocabulary,
+	scope: Scope,
+	Meta(Quad(s, p, o, g), meta): Meta<RdfQuad<M>, M>,
+) -> ImportedQuad<M> {
+	Meta(
+		Quad(
+			import_meta_id(vocabulary, scope, s),
+			p.insert_into_vocabulary(vocabulary).map(Id::Iri),
+			match o {
+				Meta(rdf_types::Term::Id(id), m) => {
+					Meta(StrippedObject::Id(import_id(vocabulary, scope, id)), m)
+				}
+				Meta(rdf_types::Term::Literal(l), m) => {
+					let l = l.insert_type_into_vocabulary(vocabulary).strip();
+					Meta(
+						StrippedObject::Literal(vocabulary.insert_owned_literal(l)),
+						m,
+					)
+				}
+			},
+			g.map(|g| import_meta_id(vocabulary, scope, g)),
+		),
+		meta,
+	)
 }
 
 impl<M> Context<M> {
-	pub fn import_nquads<V: IndexedVocabulary + VocabularyMut>(
+	pub fn import_nquads(
 		&mut self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		scope: Scope,
 		content: &str,
 		metadata: impl FnMut(Span) -> M,
 	) where
 		M: Clone + Ord + Merge,
 	{
-		let mut scoped_vocabulary = Scoped::new(vocabulary, scope);
-		let mut unscoped_generator = Unscoped(generator);
-
 		let doc = nquads_syntax::Document::parse_str(content, metadata)
 			.ok()
 			.unwrap();
-		let dataset: grdf::meta::BTreeDataset<Id, Id, Object<M>, GraphLabel, M> = doc
+		let dataset: grdf::meta::BTreeDataset<Id, Id, StrippedObject, GraphLabel, M> = doc
 			.into_value()
 			.into_iter()
-			.map(|quad| import_quad(&mut scoped_vocabulary, quad))
+			.map(|quad| import_quad(vocabulary, scope, quad))
 			.collect();
 
 		dataset
-			.declare(
-				&mut (),
-				self,
-				&mut scoped_vocabulary,
-				&mut unscoped_generator,
-			)
+			.declare(&mut (), self, vocabulary, generator)
 			.ok()
 			.unwrap();
 		dataset
-			.define(
-				&mut (),
-				self,
-				&mut scoped_vocabulary,
-				&mut unscoped_generator,
-			)
+			.define(&mut (), self, vocabulary, generator)
 			.ok()
 			.unwrap();
 	}
 
-	pub fn apply_built_in_definitions_with<
-		V: IndexedVocabulary + VocabularyMut,
-	>(
+	pub fn apply_built_in_definitions_with(
 		&mut self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		metadata: M,
 	) where
 		M: Clone + Ord + Merge,
@@ -174,10 +199,10 @@ impl<M> Context<M> {
 		);
 	}
 
-	pub fn apply_built_in_definitions<V: IndexedVocabulary + VocabularyMut>(
+	pub fn apply_built_in_definitions(
 		&mut self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) where
 		M: Default + Ord + Clone + Merge,
 	{

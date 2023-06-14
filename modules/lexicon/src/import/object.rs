@@ -1,14 +1,15 @@
 use iref::AsIri;
-use rdf_types::{Generator, Id, Literal, Object, Triple, VocabularyMut};
+use rdf_types::{literal, Generator, Id, Literal, Object, Triple, VocabularyMut};
 use treeldr::vocab;
 
 use crate::{LexObject, ObjectNonPrimitiveProperty, ObjectProperty};
 
 use super::{
-	build_rdf_list, nsid_name, sub_id, Context, Item, OutputSubject, OutputTriple, Process,
+	build_rdf_list, nsid_name, sub_id, Context, Item, OutputLiteralType, OutputSubject,
+	OutputTriple, Process,
 };
 
-impl<V: VocabularyMut> Process<V> for LexObject {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexObject {
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -27,12 +28,14 @@ impl<V: VocabularyMut> Process<V> for LexObject {
 			Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 		));
 
+		let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 		triples.push(Triple(
 			id.clone(),
 			vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-			Object::Literal(Literal::String(
+			Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 				nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str()).to_string(),
-			)),
+				literal::Type::Any(xsd_string),
+			))),
 		));
 
 		if !self.nullable.is_empty() {
@@ -53,10 +56,14 @@ impl<V: VocabularyMut> Process<V> for LexObject {
 					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Field.as_iri()))),
 				));
 
+				let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 				triples.push(Triple(
 					f_id.clone(),
 					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(name.clone())),
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+						name.clone(),
+						literal::Type::Any(xsd_string),
+					))),
 				));
 
 				let item_id = sub_id(vocabulary, &id, &name);
@@ -101,7 +108,7 @@ impl<V: VocabularyMut> Process<V> for LexObject {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for ObjectProperty {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for ObjectProperty {
 	fn process(
 		self,
 		vocabulary: &mut V,

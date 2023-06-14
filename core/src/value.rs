@@ -1,12 +1,18 @@
 use std::{borrow::Cow, fmt};
 
 use iref::{AsIri, IriBuf};
-use rdf_types::{IriVocabulary, LanguageTagVocabulary, vocabulary::LanguageTagIndex};
+use rdf_types::{
+	vocabulary::LanguageTagIndex, IriVocabulary, LanguageTagVocabulary, LiteralVocabulary,
+};
 use treeldr_primitives::{BytesBuf, CidBuf, UriBuf, UrlBuf};
 pub use xsd_types::value::*;
 use xsd_types::ParseRdf;
 
-use crate::{layout::primitive::RegExp, vocab::{self, StrippedLiteral}, Id, IriIndex};
+use crate::{
+	layout::primitive::RegExp,
+	vocab::{self, StrippedLiteral, TldrVocabulary},
+	Id, IriIndex,
+};
 
 mod lang_string;
 mod numeric;
@@ -22,6 +28,19 @@ pub enum Value {
 }
 
 impl Value {
+	pub fn from_rdf(
+		vocabulary: &TldrVocabulary,
+		value: vocab::StrippedObject,
+	) -> Result<Self, InvalidLiteral> {
+		match value {
+			vocab::StrippedObject::Literal(l) => {
+				let literal = vocabulary.literal(&l).unwrap().clone();
+				Ok(Value::Literal(literal.try_into()?))
+			}
+			vocab::StrippedObject::Id(id) => Ok(Value::Node(id)),
+		}
+	}
+
 	pub fn as_id(&self) -> Option<Id> {
 		match self {
 			Self::Node(id) => Some(*id),
@@ -100,17 +119,6 @@ impl Value {
 			.map_err(Self::Node)?
 			.into_regexp()
 			.map_err(Self::Literal)
-	}
-}
-
-impl<M> TryFrom<vocab::Object<M>> for Value {
-	type Error = InvalidLiteral;
-
-	fn try_from(value: vocab::Object<M>) -> Result<Self, Self::Error> {
-		match value {
-			vocab::Object::Literal(l) => Ok(Value::Literal(l.try_into()?)),
-			vocab::Object::Id(id) => Ok(Value::Node(id)),
-		}
 	}
 }
 
@@ -397,7 +405,9 @@ impl fmt::Display for Literal {
 	}
 }
 
-impl<V: IriVocabulary<Iri = IriIndex> + LanguageTagVocabulary<LanguageTag = LanguageTagIndex>> rdf_types::RdfDisplayWithContext<V> for Literal {
+impl<V: IriVocabulary<Iri = IriIndex> + LanguageTagVocabulary<LanguageTag = LanguageTagIndex>>
+	rdf_types::RdfDisplayWithContext<V> for Literal
+{
 	fn rdf_fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
 		use fmt::Display;
 		match self {
@@ -423,10 +433,10 @@ pub enum InvalidLiteral {
 	InvalidLexicalValue(IriIndex),
 }
 
-impl<M> TryFrom<vocab::Literal<M>> for Literal {
+impl TryFrom<vocab::StrippedLiteral> for Literal {
 	type Error = InvalidLiteral;
 
-	fn try_from(value: vocab::Literal<M>) -> Result<Self, Self::Error> {
+	fn try_from(value: vocab::StrippedLiteral) -> Result<Self, Self::Error> {
 		macro_rules! match_type {
 			( ($s:ident, $ty:ident): $($term:ident),* ) => {
 				match $ty {
@@ -437,7 +447,7 @@ impl<M> TryFrom<vocab::Literal<M>> for Literal {
 						}
 					}
 					IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::String)) => {
-						Ok(Literal::String($s.into_value()))
+						Ok(Literal::String($s))
 					}
 					IriIndex::Iri(vocab::Term::Xsd(vocab::Xsd::Base64Binary)) => {
 						match Base64BinaryBuf::decode($s.as_str()) {
@@ -465,13 +475,13 @@ impl<M> TryFrom<vocab::Literal<M>> for Literal {
 							Ok(Integer::parse_rdf(&$s).map_err(|_| InvalidLiteral::InvalidLexicalValue($ty))?.into())
 						}
 					)*
-					ty => Ok(Literal::Other($s.into_value(), ty)),
+					ty => Ok(Literal::Other($s, ty)),
 				}
 			};
 		}
 
 		let (s, ty) = value.into_parts();
-		match ty.into_value() {
+		match ty {
 			rdf_types::literal::Type::Any(ty) => match_type! { (s, ty):
 				Decimal,
 				Integer,
@@ -488,10 +498,9 @@ impl<M> TryFrom<vocab::Literal<M>> for Literal {
 				UnsignedShort,
 				UnsignedByte
 			},
-			rdf_types::literal::Type::LangString(tag) => Ok(Literal::LangString(LangString::new(
-				s.into_value(),
-				tag,
-			))),
+			rdf_types::literal::Type::LangString(tag) => {
+				Ok(Literal::LangString(LangString::new(s, tag)))
+			}
 		}
 	}
 }
@@ -508,7 +517,7 @@ pub trait AsRdfLiteral: fmt::Display {
 			IriIndex::Iri(crate::vocab::Term::Rdf(crate::vocab::Rdf::LangString)) => {
 				rdf_types::literal::Type::LangString(self.language().unwrap())
 			}
-			ty => rdf_types::literal::Type::Any(ty)
+			ty => rdf_types::literal::Type::Any(ty),
 		};
 
 		StrippedLiteral::new(self.to_string(), ty)
@@ -901,7 +910,11 @@ impl<'a> fmt::Display for LiteralRef<'a> {
 	}
 }
 
-impl<'a, V: IriVocabulary<Iri = IriIndex> + LanguageTagVocabulary<LanguageTag = LanguageTagIndex>> rdf_types::RdfDisplayWithContext<V> for LiteralRef<'a> {
+impl<
+		'a,
+		V: IriVocabulary<Iri = IriIndex> + LanguageTagVocabulary<LanguageTag = LanguageTagIndex>,
+	> rdf_types::RdfDisplayWithContext<V> for LiteralRef<'a>
+{
 	fn rdf_fmt_with(&self, vocabulary: &V, f: &mut fmt::Formatter) -> fmt::Result {
 		use fmt::Display;
 		match self {

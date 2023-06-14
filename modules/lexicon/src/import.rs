@@ -1,8 +1,8 @@
 use contextual::DisplayWithContext;
 use iref::{AsIri, Iri, IriBuf};
 use rdf_types::{
-	BlankIdVocabulary, Generator, Id, IriVocabulary, Literal, Object, Triple, Vocabulary,
-	VocabularyMut,
+	literal, BlankIdVocabulary, Generator, Id, IriVocabulary, LanguageTagVocabulary, Literal,
+	LiteralVocabulary, Object, Triple, Vocabulary, VocabularyMut,
 };
 use treeldr::vocab;
 
@@ -38,7 +38,10 @@ pub fn is_lexicon_document<M>(json: &json_syntax::Value<M>) -> bool {
 
 pub type OutputSubject<V> = Id<<V as IriVocabulary>::Iri, <V as BlankIdVocabulary>::BlankId>;
 pub type OutputPredicate<V> = <V as IriVocabulary>::Iri;
-pub type OutputObject<V> = Object<OutputSubject<V>, Literal<String, <V as IriVocabulary>::Iri>>;
+pub type OutputLiteralType<V> =
+	literal::Type<<V as IriVocabulary>::Iri, <V as LanguageTagVocabulary>::LanguageTag>;
+pub type OutputLiteral<V> = Literal<OutputLiteralType<V>>;
+pub type OutputObject<V> = Object<OutputSubject<V>, <V as LiteralVocabulary>::Literal>;
 pub type OutputTriple<V> = Triple<OutputSubject<V>, OutputPredicate<V>, OutputObject<V>>;
 
 trait RdfId<V: VocabularyMut> {
@@ -90,17 +93,14 @@ impl<'v, V: Vocabulary, G> IntoTriples<'v, V, G> {
 	}
 }
 
-impl<'v, V: VocabularyMut, G: Generator<V>> Iterator for IntoTriples<'v, V, G>
+impl<'v, V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>, G: Generator<V>> Iterator
+	for IntoTriples<'v, V, G>
 where
 	V::Iri: Clone,
 	V::BlankId: Clone,
 	OutputTriple<V>: DisplayWithContext<V>,
 {
-	type Item = Triple<
-		Id<V::Iri, V::BlankId>,
-		V::Iri,
-		Object<Id<V::Iri, V::BlankId>, Literal<String, V::Iri>>,
-	>;
+	type Item = OutputTriple<V>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		if let Some(triple) = self.pending.pop() {
@@ -166,7 +166,7 @@ trait Process<V: VocabularyMut> {
 		V::BlankId: Clone;
 }
 
-impl<V: VocabularyMut> Item<V> {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Item<V> {
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -226,7 +226,7 @@ impl<V: VocabularyMut> Item<V> {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexAnyUserType {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexAnyUserType {
 	fn process(
 		self,
 		vocabulary: &mut V,

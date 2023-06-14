@@ -1,12 +1,16 @@
 use iref::{AsIri, IriBuf};
-use rdf_types::{Generator, Id, Literal, Object, Triple, Vocabulary, VocabularyMut};
+use rdf_types::{literal, Generator, Id, Literal, Object, Triple, Vocabulary, VocabularyMut};
 use treeldr::vocab;
 
 use crate::{ArrayItem, ArrayNonPrimitiveItem, LexArray};
 
-use super::{nsid_name, Context, IntoItem, Item, OutputSubject, OutputTriple, Process};
+use super::{
+	nsid_name, Context, IntoItem, Item, OutputLiteralType, OutputSubject, OutputTriple, Process,
+};
 
-impl<V: VocabularyMut, T: IntoItem<V>> Process<V> for LexArray<T> {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>, T: IntoItem<V>> Process<V>
+	for LexArray<T>
+{
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -25,19 +29,25 @@ impl<V: VocabularyMut, T: IntoItem<V>> Process<V> for LexArray<T> {
 			Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 		));
 
+		let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 		triples.push(Triple(
 			id.clone(),
 			vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-			Object::Literal(Literal::String(
+			Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 				nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str()).to_string(),
-			)),
+				literal::Type::Any(xsd_string),
+			))),
 		));
 
 		if let Some(desc) = self.description {
+			let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 			triples.push(Triple(
 				id.clone(),
 				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
-				Object::Literal(Literal::String(desc)),
+				Object::Literal(
+					vocabulary
+						.insert_owned_literal(Literal::new(desc, literal::Type::Any(xsd_string))),
+				),
 			));
 		}
 

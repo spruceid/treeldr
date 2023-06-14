@@ -1,17 +1,17 @@
 use iref::AsIri;
-use rdf_types::{Generator, Id, Literal, Object, Triple, VocabularyMut};
+use rdf_types::{literal, Generator, Id, Literal, Object, Triple, VocabularyMut};
 use treeldr::vocab;
 
 use crate::LexXrpcParameters;
 
-use super::{build_rdf_list, sub_id, Item, OutputSubject, OutputTriple};
+use super::{build_rdf_list, sub_id, Item, OutputLiteralType, OutputSubject, OutputTriple};
 
 mod body;
 mod procedure;
 mod query;
 mod subscription;
 
-fn process_xrpc_parameters<V: VocabularyMut>(
+fn process_xrpc_parameters<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>>(
 	vocabulary: &mut V,
 	generator: &mut impl Generator<V>,
 	stack: &mut Vec<Item<V>>,
@@ -38,17 +38,25 @@ where
 					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Field.as_iri()))),
 				));
 
+				let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 				triples.push(Triple(
 					f_id.clone(),
 					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(name.clone())),
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+						name.clone(),
+						literal::Type::Any(xsd_string),
+					))),
 				));
 
 				if let Some(desc) = p.description() {
+					let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 					triples.push(Triple(
 						f_id.clone(),
 						vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
-						Object::Literal(Literal::String(desc.to_string())),
+						Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+							desc.to_string(),
+							literal::Type::Any(xsd_string),
+						))),
 					));
 				}
 

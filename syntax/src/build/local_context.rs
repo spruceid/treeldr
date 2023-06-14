@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 use iref::{IriBuf, IriRef};
 use locspan::Meta;
-use rdf_types::{Generator, Vocabulary, VocabularyMut};
+use rdf_types::{Generator, IriVocabulary, VocabularyMut};
 use treeldr::{
 	metadata::Merge,
-	vocab::{Term, Xsd},
+	vocab::{Term, TldrVocabulary, Xsd},
 	BlankIdIndex, Id, IriIndex,
 };
 use treeldr_build::Context;
@@ -79,7 +79,7 @@ impl<M> LocalContext<M> {
 impl<M: Clone> LocalContext<M> {
 	pub fn base_iri(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		loc: M,
 	) -> Result<IriBuf, Meta<LocalError<M>, M>> {
 		match &self.scope {
@@ -143,12 +143,12 @@ impl<M: Clone> LocalContext<M> {
 	}
 
 	/// Generate a literal type with the given `id`.
-	pub fn generate_literal_type<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn generate_literal_type(
 		&self,
 		Meta(id, _): &Meta<Id, M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		Meta(lit, loc): Meta<crate::Literal, M>,
 	) -> Result<(), Error<M>>
 	where
@@ -213,12 +213,12 @@ impl<M: Clone> LocalContext<M> {
 	}
 
 	/// Generate a literal layout with the given `id`.
-	pub fn generate_literal_layout<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	pub fn generate_literal_layout(
 		&self,
 		Meta(id, _): &Meta<Id, M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		Meta(lit, loc): Meta<crate::Literal, M>,
 	) -> Result<(), Error<M>>
 	where

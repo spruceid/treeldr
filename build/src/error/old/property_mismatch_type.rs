@@ -12,7 +12,7 @@ pub struct PropertyMismatchType<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for PropertyMismatchType<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("type mismatch for property `{}`", self.id.with(vocab))
 	}
 }

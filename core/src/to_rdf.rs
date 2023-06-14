@@ -5,11 +5,11 @@ use crate::{
 	node::BindingValueRef,
 	ty,
 	value::AsRdfLiteral,
-	vocab::{self, StrippedObject, StrippedQuad, Term, StrippedLiteral},
-	BlankIdIndex, Id, IriIndex, MutableModel,
+	vocab::{self, StrippedLiteral, StrippedObject, StrippedQuad, Term, TldrVocabulary},
+	Id, IriIndex, MutableModel,
 };
 use locspan::Meta;
-use rdf_types::{Generator, Literal, Object, Quad, Vocabulary};
+use rdf_types::{Generator, Literal, LiteralVocabularyMut, Object, Quad};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Options {
@@ -34,19 +34,19 @@ fn is_standard_vocabulary(id: Id) -> bool {
 pub trait ToRdf {
 	type Target;
 
-	fn to_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn to_rdf(
 		&self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 	) -> Self::Target {
 		self.to_rdf_with(vocabulary, generator, quads, Options::default())
 	}
 
-	fn to_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn to_rdf_with(
 		&self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) -> Self::Target;
@@ -55,19 +55,19 @@ pub trait ToRdf {
 pub trait IntoRdf: Sized {
 	type Target;
 
-	fn into_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 	) -> Self::Target {
 		self.into_rdf_with(vocabulary, generator, quads, Options::default())
 	}
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) -> Self::Target;
@@ -76,33 +76,45 @@ pub trait IntoRdf: Sized {
 pub trait MapIntoRdf: Sized + DoubleEndedIterator {
 	type Target;
 
-	fn map_into_rdf<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, G: Generator<V>>(
+	fn map_into_rdf<G: Generator<TldrVocabulary>>(
 		self,
-		vocabulary: &mut V,
+		vocabulary: &mut TldrVocabulary,
 		generator: &mut G,
 		quads: &mut Vec<StrippedQuad>,
-		f: impl Fn(&mut V, &mut G, &mut Vec<StrippedQuad>, Options, Self::Item) -> StrippedObject,
+		f: impl Fn(
+			&mut TldrVocabulary,
+			&mut G,
+			&mut Vec<StrippedQuad>,
+			Options,
+			Self::Item,
+		) -> StrippedObject,
 	) -> Self::Target {
 		self.map_into_rdf_with(vocabulary, generator, quads, Options::default(), f)
 	}
 
-	fn map_into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, G: Generator<V>>(
+	fn map_into_rdf_with<G: Generator<TldrVocabulary>>(
 		self,
-		vocabulary: &mut V,
+		vocabulary: &mut TldrVocabulary,
 		generator: &mut G,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
-		f: impl Fn(&mut V, &mut G, &mut Vec<StrippedQuad>, Options, Self::Item) -> StrippedObject,
+		f: impl Fn(
+			&mut TldrVocabulary,
+			&mut G,
+			&mut Vec<StrippedQuad>,
+			Options,
+			Self::Item,
+		) -> StrippedObject,
 	) -> Self::Target;
 }
 
 impl<M> ToRdf for MutableModel<M> {
 	type Target = ();
 
-	fn to_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn to_rdf_with(
 		&self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) {
@@ -147,10 +159,10 @@ impl<M> ToRdf for MutableModel<M> {
 impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 	type Target = StrippedObject;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) -> StrippedObject {
@@ -164,10 +176,21 @@ impl<'a, M> IntoRdf for BindingValueRef<'a, M> {
 
 				Object::Id(Id::Iri(IriIndex::Iri(term)))
 			}
-			Self::NonNegativeInteger(u) => Object::Literal(u.as_rdf_literal()),
-			Self::Literal(l) => Object::Literal(l.as_rdf_literal()),
-			Self::LiteralRef(l) => Object::Literal(l.as_rdf_literal()),
-			Self::Name(n) => Object::Literal(StrippedLiteral::new(n.to_string(), rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String))))),
+			Self::NonNegativeInteger(u) => {
+				Object::Literal(vocabulary.insert_owned_literal(u.as_rdf_literal()))
+			}
+			Self::Literal(l) => {
+				Object::Literal(vocabulary.insert_owned_literal(l.as_rdf_literal()))
+			}
+			Self::LiteralRef(l) => {
+				Object::Literal(vocabulary.insert_owned_literal(l.as_rdf_literal()))
+			}
+			Self::Name(n) => {
+				Object::Literal(vocabulary.insert_owned_literal(StrippedLiteral::new(
+					n.to_string(),
+					rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String))),
+				)))
+			}
 			Self::Id(id) => id.into_term(),
 			Self::Type(t) => t.id().into_term(),
 			Self::TypeList(types) => types
@@ -229,10 +252,10 @@ where
 {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) -> Self::Target {
@@ -246,13 +269,19 @@ where
 {
 	type Target = Id;
 
-	fn map_into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>, G: Generator<V>>(
+	fn map_into_rdf_with<G: Generator<TldrVocabulary>>(
 		self,
-		vocabulary: &mut V,
+		vocabulary: &mut TldrVocabulary,
 		generator: &mut G,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
-		f: impl Fn(&mut V, &mut G, &mut Vec<StrippedQuad>, Options, Self::Item) -> StrippedObject,
+		f: impl Fn(
+			&mut TldrVocabulary,
+			&mut G,
+			&mut Vec<StrippedQuad>,
+			Options,
+			Self::Item,
+		) -> StrippedObject,
 	) -> Self::Target {
 		let mut head = Id::Iri(IriIndex::Iri(Term::Rdf(vocab::Rdf::Nil)));
 
@@ -289,10 +318,10 @@ where
 impl<'a> IntoRdf for ty::data::Restriction<'a> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) -> Self::Target {
@@ -308,10 +337,10 @@ impl<'a> IntoRdf for ty::data::Restriction<'a> {
 impl<'a> IntoRdf for ty::data::restriction::real::Restriction<'a> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		_options: Options,
 	) -> Self::Target {
@@ -323,7 +352,7 @@ impl<'a> IntoRdf for ty::data::restriction::real::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
-					Object::Literal(min.literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.literal())),
 					None,
 				));
 			}
@@ -331,7 +360,7 @@ impl<'a> IntoRdf for ty::data::restriction::real::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
-					Object::Literal(min.literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.literal())),
 					None,
 				));
 			}
@@ -339,7 +368,7 @@ impl<'a> IntoRdf for ty::data::restriction::real::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
-					Object::Literal(max.literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.literal())),
 					None,
 				));
 			}
@@ -347,7 +376,7 @@ impl<'a> IntoRdf for ty::data::restriction::real::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
-					Object::Literal(max.literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.literal())),
 					None,
 				));
 			}
@@ -360,10 +389,10 @@ impl<'a> IntoRdf for ty::data::restriction::real::Restriction<'a> {
 impl IntoRdf for ty::data::restriction::float::Restriction {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		_options: Options,
 	) -> Self::Target {
@@ -375,7 +404,7 @@ impl IntoRdf for ty::data::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
-					Object::Literal(min.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.as_rdf_literal())),
 					None,
 				));
 			}
@@ -383,7 +412,7 @@ impl IntoRdf for ty::data::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
-					Object::Literal(min.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.as_rdf_literal())),
 					None,
 				));
 			}
@@ -391,7 +420,7 @@ impl IntoRdf for ty::data::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
-					Object::Literal(max.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.as_rdf_literal())),
 					None,
 				));
 			}
@@ -399,7 +428,7 @@ impl IntoRdf for ty::data::restriction::float::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
-					Object::Literal(max.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.as_rdf_literal())),
 					None,
 				));
 			}
@@ -412,10 +441,10 @@ impl IntoRdf for ty::data::restriction::float::Restriction {
 impl IntoRdf for ty::data::restriction::double::Restriction {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		_options: Options,
 	) -> Self::Target {
@@ -427,7 +456,7 @@ impl IntoRdf for ty::data::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinInclusive)),
-					Object::Literal(min.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.as_rdf_literal())),
 					None,
 				));
 			}
@@ -435,7 +464,7 @@ impl IntoRdf for ty::data::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinExclusive)),
-					Object::Literal(min.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.as_rdf_literal())),
 					None,
 				));
 			}
@@ -443,7 +472,7 @@ impl IntoRdf for ty::data::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxInclusive)),
-					Object::Literal(max.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.as_rdf_literal())),
 					None,
 				));
 			}
@@ -451,7 +480,7 @@ impl IntoRdf for ty::data::restriction::double::Restriction {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxExclusive)),
-					Object::Literal(max.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.as_rdf_literal())),
 					None,
 				));
 			}
@@ -464,10 +493,10 @@ impl IntoRdf for ty::data::restriction::double::Restriction {
 impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		_options: Options,
 	) -> Self::Target {
@@ -478,10 +507,12 @@ impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MinLength)),
-					Object::Literal(Literal::new(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						min.to_string(),
-						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
-					)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(
+							vocab::Xsd::Integer,
+						))),
+					))),
 					None,
 				));
 			}
@@ -489,10 +520,12 @@ impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::MaxLength)),
-					Object::Literal(Literal::new(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						max.to_string(),
-						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
-					)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(
+							vocab::Xsd::Integer,
+						))),
+					))),
 					None,
 				));
 			}
@@ -500,10 +533,10 @@ impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::Xsd(vocab::Xsd::Pattern)),
-					Object::Literal(Literal::new(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						regexp.to_string(),
 						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String))),
-					)),
+					))),
 					None,
 				));
 			}
@@ -516,10 +549,10 @@ impl<'a> IntoRdf for ty::data::restriction::string::Restriction<'a> {
 impl<'a> IntoRdf for layout::restriction::RestrictionRef<'a> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) -> Self::Target {
@@ -533,10 +566,10 @@ impl<'a> IntoRdf for layout::restriction::RestrictionRef<'a> {
 impl<'a> IntoRdf for layout::primitive::RestrictionRef<'a> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) -> Self::Target {
@@ -575,10 +608,10 @@ impl<'a> IntoRdf for layout::primitive::RestrictionRef<'a> {
 impl<'a> IntoRdf for layout::restriction::ContainerRestrictionRef<'a> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		options: Options,
 	) -> Self::Target {
@@ -591,10 +624,10 @@ impl<'a> IntoRdf for layout::restriction::ContainerRestrictionRef<'a> {
 impl<'a> IntoRdf for layout::restriction::cardinal::RestrictionRef<'a> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		_options: Options,
 	) -> Self::Target {
@@ -605,10 +638,12 @@ impl<'a> IntoRdf for layout::restriction::cardinal::RestrictionRef<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinCardinality)),
-					Object::Literal(Literal::new(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						min.to_string(),
-						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
-					)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(
+							vocab::Xsd::Integer,
+						))),
+					))),
 					None,
 				));
 			}
@@ -616,10 +651,12 @@ impl<'a> IntoRdf for layout::restriction::cardinal::RestrictionRef<'a> {
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxCardinality)),
-					Object::Literal(Literal::new(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						min.to_string(),
-						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
-					)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(
+							vocab::Xsd::Integer,
+						))),
+					))),
 					None,
 				));
 			}
@@ -632,10 +669,10 @@ impl<'a> IntoRdf for layout::restriction::cardinal::RestrictionRef<'a> {
 impl<'a, T> IntoRdf for layout::primitive::restriction::none::RestrictionRef<'a, T> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		_quads: &mut Vec<StrippedQuad>,
 		_options: Options,
 	) -> Self::Target {
@@ -646,10 +683,10 @@ impl<'a, T> IntoRdf for layout::primitive::restriction::none::RestrictionRef<'a,
 impl<'a, T: ToString> IntoRdf for layout::primitive::restriction::integer::RestrictionRef<'a, T> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		_options: Options,
 	) -> Self::Target {
@@ -660,10 +697,12 @@ impl<'a, T: ToString> IntoRdf for layout::primitive::restriction::integer::Restr
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
-					Object::Literal(Literal::new(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						min.to_string(),
-						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
-					)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(
+							vocab::Xsd::Integer,
+						))),
+					))),
 					None,
 				));
 			}
@@ -671,10 +710,12 @@ impl<'a, T: ToString> IntoRdf for layout::primitive::restriction::integer::Restr
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
-					Object::Literal(Literal::new(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						min.to_string(),
-						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::Integer))),
-					)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(
+							vocab::Xsd::Integer,
+						))),
+					))),
 					None,
 				));
 			}
@@ -687,10 +728,10 @@ impl<'a, T: ToString> IntoRdf for layout::primitive::restriction::integer::Restr
 impl<'a, T: AsRdfLiteral> IntoRdf for layout::primitive::restriction::float::RestrictionRef<'a, T> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		_options: Options,
 	) -> Self::Target {
@@ -702,7 +743,7 @@ impl<'a, T: AsRdfLiteral> IntoRdf for layout::primitive::restriction::float::Res
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMinimum)),
-					Object::Literal(min.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.as_rdf_literal())),
 					None,
 				));
 			}
@@ -710,7 +751,7 @@ impl<'a, T: AsRdfLiteral> IntoRdf for layout::primitive::restriction::float::Res
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ExclusiveMinimum)),
-					Object::Literal(min.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.as_rdf_literal())),
 					None,
 				));
 			}
@@ -718,7 +759,7 @@ impl<'a, T: AsRdfLiteral> IntoRdf for layout::primitive::restriction::float::Res
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::InclusiveMaximum)),
-					Object::Literal(max.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.as_rdf_literal())),
 					None,
 				));
 			}
@@ -726,7 +767,7 @@ impl<'a, T: AsRdfLiteral> IntoRdf for layout::primitive::restriction::float::Res
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::ExclusiveMaximum)),
-					Object::Literal(max.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.as_rdf_literal())),
 					None,
 				));
 			}
@@ -739,10 +780,10 @@ impl<'a, T: AsRdfLiteral> IntoRdf for layout::primitive::restriction::float::Res
 impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		_options: Options,
 	) -> Self::Target {
@@ -753,7 +794,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> 
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinLength)),
-					Object::Literal(min.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.as_rdf_literal())),
 					None,
 				));
 			}
@@ -761,7 +802,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> 
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxLength)),
-					Object::Literal(max.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.as_rdf_literal())),
 					None,
 				));
 			}
@@ -769,10 +810,10 @@ impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> 
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Pattern)),
-					Object::Literal(Literal::new(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						regexp.to_string(),
-						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String)))
-					)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String))),
+					))),
 					None,
 				));
 			}
@@ -785,10 +826,10 @@ impl<'a> IntoRdf for layout::primitive::restriction::string::RestrictionRef<'a> 
 impl<'a> IntoRdf for layout::primitive::restriction::unicode_string::RestrictionRef<'a> {
 	type Target = Id;
 
-	fn into_rdf_with<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn into_rdf_with(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		quads: &mut Vec<StrippedQuad>,
 		_options: Options,
 	) -> Self::Target {
@@ -799,7 +840,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::unicode_string::Restriction
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinLength)),
-					Object::Literal(min.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.as_rdf_literal())),
 					None,
 				));
 			}
@@ -807,7 +848,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::unicode_string::Restriction
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxLength)),
-					Object::Literal(max.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.as_rdf_literal())),
 					None,
 				));
 			}
@@ -815,7 +856,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::unicode_string::Restriction
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MinGrapheme)),
-					Object::Literal(min.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(min.as_rdf_literal())),
 					None,
 				));
 			}
@@ -823,7 +864,7 @@ impl<'a> IntoRdf for layout::primitive::restriction::unicode_string::Restriction
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::MaxGrapheme)),
-					Object::Literal(max.as_rdf_literal()),
+					Object::Literal(vocabulary.insert_owned_literal(max.as_rdf_literal())),
 					None,
 				));
 			}
@@ -831,10 +872,10 @@ impl<'a> IntoRdf for layout::primitive::restriction::unicode_string::Restriction
 				quads.push(Quad(
 					id,
 					IriIndex::Iri(Term::TreeLdr(vocab::TreeLdr::Pattern)),
-					Object::Literal(Literal::new(
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 						regexp.to_string(),
-						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String)))
-					)),
+						rdf_types::literal::Type::Any(IriIndex::Iri(Term::Xsd(vocab::Xsd::String))),
+					))),
 					None,
 				));
 			}

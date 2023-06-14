@@ -9,7 +9,7 @@ pub struct LayoutInfiniteSize {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutInfiniteSize {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("the size of layout `{}` is infinite", self.id.with(vocab))
 	}
 }

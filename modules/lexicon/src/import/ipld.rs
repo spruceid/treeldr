@@ -2,12 +2,12 @@ use rdf_types::{Generator, VocabularyMut};
 
 use crate::LexIpldType;
 
-use super::{Context, Item, OutputSubject, OutputTriple, Process};
+use super::{Context, Item, OutputLiteralType, OutputSubject, OutputTriple, Process};
 
 mod bytes;
 mod cid_link;
 
-impl<V: VocabularyMut> Process<V> for LexIpldType {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexIpldType {
 	fn process(
 		self,
 		vocabulary: &mut V,

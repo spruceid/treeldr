@@ -3,9 +3,9 @@ use contextual::WithContext;
 use embedding::Embedding;
 use iref::{Iri, IriBuf};
 use json_syntax::Print;
-use rdf_types::Vocabulary;
+use rdf_types::IriVocabulary;
 use std::fmt;
-use treeldr::{BlankIdIndex, IriIndex, TId};
+use treeldr::{vocab::TldrVocabulary, TId};
 
 #[derive(clap::Args)]
 /// Generate a JSON Schema from a TreeLDR model.
@@ -48,7 +48,7 @@ impl<F> fmt::Display for Error<F> {
 }
 
 fn find_layout<F: Clone>(
-	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	vocabulary: &TldrVocabulary,
 	model: &treeldr::MutableModel<F>,
 	iri: Iri,
 ) -> Result<TId<treeldr::Layout>, Box<Error<F>>> {
@@ -66,11 +66,7 @@ fn find_layout<F: Clone>(
 }
 
 impl Command {
-	pub fn execute<F: Clone>(
-		self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-		model: &treeldr::MutableModel<F>,
-	) {
+	pub fn execute<F: Clone>(self, vocabulary: &TldrVocabulary, model: &treeldr::MutableModel<F>) {
 		log::info!("generating JSON Schema.");
 		match self.try_execute(vocabulary, model) {
 			Ok(()) => (),
@@ -83,7 +79,7 @@ impl Command {
 
 	fn try_execute<F: Clone>(
 		self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 		model: &treeldr::MutableModel<F>,
 	) -> Result<(), Box<Error<F>>> {
 		// Find the layouts to generate.

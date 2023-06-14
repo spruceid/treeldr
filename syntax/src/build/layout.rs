@@ -1,9 +1,9 @@
 use locspan::Meta;
-use rdf_types::{Generator, VocabularyMut};
+use rdf_types::{Generator, IriVocabulary};
 use treeldr::{
 	metadata::Merge,
-	vocab::{Term, TreeLdr},
-	BlankIdIndex, Id, IriIndex,
+	vocab::{Term, TldrVocabulary, TreeLdr},
+	Id, IriIndex,
 };
 use treeldr_build::Context;
 
@@ -12,12 +12,12 @@ use crate::{LayoutFieldRangeRestriction, LayoutFieldRestriction};
 use super::{Build, Declare, Error, LocalContext, LocalError};
 
 impl<M: Clone + Merge> Declare<M> for Meta<crate::LayoutDefinition<M>, M> {
-	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn declare(
 		&self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		let Meta(id, _) = self
 			.id
@@ -31,12 +31,12 @@ impl<M: Clone + Merge> Declare<M> for Meta<crate::LayoutDefinition<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 	type Target = ();
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		let Meta(def, _) = self;
 		let Meta(id, id_loc) = def
@@ -70,7 +70,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 
 		match def.description {
 			Meta(crate::LayoutDescription::Normal(fields), fields_loc) => {
-				let fields_list = context.try_create_list_with::<Error<M>, _, _, _, _>(
+				let fields_list = context.try_create_list_with::<Error<M>, _, _, _>(
 					vocabulary,
 					generator,
 					fields,
@@ -107,12 +107,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::LayoutDefinition<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(ty, loc) = self;
 
@@ -127,7 +127,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 					context.declare_layout(id, loc.clone());
 				}
 
-				let variants = context.try_create_list_with::<Error<M>, _, _, _, _>(
+				let variants = context.try_create_list_with::<Error<M>, _, _, _>(
 					vocabulary,
 					generator,
 					options,
@@ -188,7 +188,7 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 					context.declare_layout(id, loc.clone());
 				}
 
-				let layouts_list = context.try_create_list_with::<Error<M>, _, _, _, _>(
+				let layouts_list = context.try_create_list_with::<Error<M>, _, _, _>(
 					vocabulary,
 					generator,
 					layouts,
@@ -216,12 +216,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::OuterLayoutExpr<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::NamedInnerLayoutExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(this, loc) = self;
 		let is_namable = this.expr.is_namable();
@@ -250,12 +250,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::NamedInnerLayoutExpr<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(expr, loc) = self;
 
@@ -402,12 +402,12 @@ impl<M: Clone + Merge> Build<M> for Meta<crate::InnerLayoutExpr<M>, M> {
 impl<M: Clone + Merge> Build<M> for Meta<crate::FieldDefinition<M>, M> {
 	type Target = Meta<Id, M>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
 		local_context: &mut LocalContext<M>,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<Self::Target, Error<M>> {
 		let Meta(def, loc) = self;
 

@@ -1,6 +1,5 @@
 use locspan::{MaybeLocated, Span};
-use rdf_types::Vocabulary;
-use treeldr::{Id, IriIndex, BlankIdIndex, Name, PropertyValue, Value, value::Literal};
+use treeldr::{Id, Name, PropertyValue, Value, value::Literal, vocab::TldrVocabulary};
 use contextual::WithContext;
 use crate::Property;
 
@@ -55,7 +54,7 @@ impl<M> From<(bool, PropertyValue<bool, M>)> for ConflictValues<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeBindingFunctionalConflict<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("conflicting {} value for `{}`", self.property.name().with(vocab), self.id.with(vocab))
 	}
 }

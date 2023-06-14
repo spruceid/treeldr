@@ -24,6 +24,6 @@ fn type_check<'l, V: IriVocabularyMut<Iri = T>, S, T, L>(
 				Err(FromRdfError::UnexpectedType)
 			}
 		}
-		_ => Err(FromRdfError::UnexpectedType)
+		_ => Err(FromRdfError::UnexpectedType),
 	}
 }

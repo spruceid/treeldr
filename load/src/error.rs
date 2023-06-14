@@ -2,9 +2,8 @@ use std::path::PathBuf;
 
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use locspan::{MaybeLocated, Meta};
-use rdf_types::Vocabulary;
 use thiserror::Error;
-use treeldr::{reporting::Diagnose, BlankIdIndex, IriIndex};
+use treeldr::{reporting::Diagnose, vocab::TldrVocabulary};
 
 use crate::source;
 
@@ -31,10 +30,7 @@ pub enum BuildAllError {
 }
 
 impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllError {
-	fn message(
-		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	) -> String {
+	fn message(&self, vocabulary: &TldrVocabulary) -> String {
 		match self {
 			Self::Declaration(e) => e.message(vocabulary),
 			Self::Link(e) => e.message(vocabulary),
@@ -44,7 +40,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllEr
 
 	fn labels(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 	) -> Vec<codespan_reporting::diagnostic::Label<source::FileId>> {
 		match self {
 			Self::Declaration(e) => e.labels(vocabulary),
@@ -53,10 +49,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for BuildAllEr
 		}
 	}
 
-	fn notes(
-		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	) -> Vec<String> {
+	fn notes(&self, vocabulary: &TldrVocabulary) -> Vec<String> {
 		match self {
 			Self::Declaration(e) => e.notes(vocabulary),
 			Self::Link(e) => e.notes(vocabulary),
@@ -76,10 +69,7 @@ pub enum LangError {
 }
 
 impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError {
-	fn message(
-		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	) -> String {
+	fn message(&self, vocabulary: &TldrVocabulary) -> String {
 		match self {
 			Self::TreeLdr(e) => e.message(vocabulary),
 			Self::NQuads(e) => e.message(vocabulary),
@@ -92,7 +82,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 
 	fn labels(
 		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		vocabulary: &TldrVocabulary,
 	) -> Vec<codespan_reporting::diagnostic::Label<source::FileId>> {
 		match self {
 			Self::TreeLdr(e) => e.labels(vocabulary),
@@ -104,10 +94,7 @@ impl treeldr::reporting::DiagnoseWithVocabulary<source::Metadata> for LangError 
 		}
 	}
 
-	fn notes(
-		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	) -> Vec<String> {
+	fn notes(&self, vocabulary: &TldrVocabulary) -> Vec<String> {
 		match self {
 			Self::TreeLdr(e) => e.notes(vocabulary),
 			Self::NQuads(e) => e.notes(vocabulary),

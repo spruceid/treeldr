@@ -1,7 +1,10 @@
 use locspan::Meta;
-use rdf_types::{Generator, VocabularyMut};
+use rdf_types::Generator;
 pub use treeldr::{multiple, property_values};
-use treeldr::{vocab, BlankIdIndex, IriIndex, Value};
+use treeldr::{
+	vocab::{self, TldrVocabulary},
+	IriIndex, Value,
+};
 
 pub mod component;
 pub mod context;
@@ -32,21 +35,21 @@ pub trait Document<M> {
 	type Error;
 
 	/// Declare in `context` all the node declared in the document.
-	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn declare(
 		&self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Self::Error>;
 
 	/// Define in `context` all the statements of the document.
-	fn define<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn define(
 		self,
 		local_context: &mut Self::LocalContext,
 		context: &mut Context<M>,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Self::Error>;
 }
 

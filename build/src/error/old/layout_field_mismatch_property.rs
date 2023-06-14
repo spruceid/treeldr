@@ -12,7 +12,7 @@ pub struct LayoutFieldMismatchProperty<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutFieldMismatchProperty<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("property mismatch for layout field `{}`", self.id.with(vocab))
 	}
 }

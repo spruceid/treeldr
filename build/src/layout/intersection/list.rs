@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 
 use locspan::Meta;
-use rdf_types::{Generator, VocabularyMut};
-use treeldr::{metadata::Merge, BlankIdIndex, Id, IriIndex, PropertyValueRef};
+use rdf_types::Generator;
+use treeldr::{metadata::Merge, vocab::TldrVocabulary, Id, PropertyValueRef};
 
 use crate::{utils::TryCollect, Context, Error, MetaValueExt};
 
@@ -16,10 +16,10 @@ pub trait IntersectionListItem<M>: Clone {
 		b: &[Meta<Self, M>],
 	) -> Result<Option<Vec<Meta<Self, M>>>, Error<M>>;
 
-	fn build<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn build(
 		self,
-		vocabulary: &mut V,
-		generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		generator: &mut impl Generator<TldrVocabulary>,
 		context: &mut Context<M>,
 		stack: &mut VecDeque<Id>,
 		meta: M,
@@ -71,13 +71,9 @@ pub fn list_intersection<T: IntersectionListItem<M>, M: Clone + Merge>(
 	Ok(result)
 }
 
-pub fn build_lists<
-	T: IntersectionListItem<M>,
-	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
-	M: Clone + Merge,
->(
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+pub fn build_lists<T: IntersectionListItem<M>, M: Clone + Merge>(
+	vocabulary: &mut TldrVocabulary,
+	generator: &mut impl Generator<TldrVocabulary>,
 	context: &mut Context<M>,
 	stack: &mut VecDeque<Id>,
 	result: Vec<Option<Vec<Meta<T, M>>>>,

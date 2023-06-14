@@ -1,12 +1,15 @@
 use iref::AsIri;
-use rdf_types::{Generator, Id, Literal, Object, Triple, VocabularyMut};
+use rdf_types::{literal, Generator, Id, Literal, Object, Triple, VocabularyMut};
 use treeldr::vocab;
 
 use crate::{LexRef, LexRefUnion, LexRefVariant};
 
-use super::{build_rdf_list, nsid_name, Context, Item, OutputSubject, OutputTriple, Process};
+use super::{
+	build_rdf_list, nsid_name, Context, Item, OutputLiteralType, OutputSubject, OutputTriple,
+	Process,
+};
 
-impl<V: VocabularyMut> Process<V> for LexRefVariant {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexRefVariant {
 	fn process(
 		self,
 		_vocabulary: &mut V,
@@ -26,7 +29,7 @@ impl<V: VocabularyMut> Process<V> for LexRefVariant {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexRef {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexRef {
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -45,12 +48,14 @@ impl<V: VocabularyMut> Process<V> for LexRef {
 			Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 		));
 
+		let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 		triples.push(Triple(
 			id.clone(),
 			vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-			Object::Literal(Literal::String(
+			Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 				nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str()).to_string(),
-			)),
+				literal::Type::Any(xsd_string),
+			))),
 		));
 
 		let iri = context.resolve_reference(&self.ref_);
@@ -63,7 +68,7 @@ impl<V: VocabularyMut> Process<V> for LexRef {
 	}
 }
 
-impl<V: VocabularyMut> Process<V> for LexRefUnion {
+impl<V: VocabularyMut<Type = OutputLiteralType<V>, Value = String>> Process<V> for LexRefUnion {
 	fn process(
 		self,
 		vocabulary: &mut V,
@@ -82,19 +87,25 @@ impl<V: VocabularyMut> Process<V> for LexRefUnion {
 			Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Layout.as_iri()))),
 		));
 
+		let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 		triples.push(Triple(
 			id.clone(),
 			vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-			Object::Literal(Literal::String(
+			Object::Literal(vocabulary.insert_owned_literal(Literal::new(
 				nsid_name(vocabulary.iri(id.as_iri().unwrap()).unwrap().as_str()).to_string(),
-			)),
+				literal::Type::Any(xsd_string),
+			))),
 		));
 
 		if let Some(desc) = self.description {
+			let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 			triples.push(Triple(
 				id.clone(),
 				vocabulary.insert(vocab::Rdfs::Comment.as_iri()),
-				Object::Literal(Literal::String(desc)),
+				Object::Literal(
+					vocabulary
+						.insert_owned_literal(Literal::new(desc, literal::Type::Any(xsd_string))),
+				),
 			));
 		}
 
@@ -116,10 +127,14 @@ impl<V: VocabularyMut> Process<V> for LexRefUnion {
 					Object::Id(Id::Iri(vocabulary.insert(vocab::TreeLdr::Variant.as_iri()))),
 				));
 
+				let xsd_string = vocabulary.insert(vocab::Xsd::String.as_iri());
 				triples.push(Triple(
 					v_id.clone(),
 					vocabulary.insert(vocab::TreeLdr::Name.as_iri()),
-					Object::Literal(Literal::String(nsid_name(&r).to_string())),
+					Object::Literal(vocabulary.insert_owned_literal(Literal::new(
+						nsid_name(&r).to_string(),
+						literal::Type::Any(xsd_string),
+					))),
 				));
 
 				let format_iri = context.resolve_reference(&r);

@@ -7,7 +7,7 @@ use contextual::WithContext;
 pub struct ListMissingRest(pub Id);
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for ListMissingRest {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("missing rest for list `{}`", self.0.with(vocab))
 	}
 }

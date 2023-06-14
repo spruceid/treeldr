@@ -2,14 +2,14 @@ use crate::Options;
 use iref::{Iri, IriBuf};
 use json_ld::{syntax::Parse, Context, ContextLoader, Print, Process};
 use locspan::Span;
-use rdf_types::{Vocabulary, VocabularyMut};
+use rdf_types::{IriVocabulary, IriVocabularyMut};
 use std::{
 	collections::HashMap,
 	fmt, io,
 	path::{Path, PathBuf},
 	str::FromStr,
 };
-use treeldr::{BlankIdIndex, IriIndex, TId};
+use treeldr::{vocab::TldrVocabulary, TId};
 
 mod loader;
 pub use loader::FsLoader;
@@ -161,7 +161,7 @@ impl<M> fmt::Display for Error<M> {
 }
 
 fn find_layout<M: Clone>(
-	vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+	vocabulary: &TldrVocabulary,
 	model: &treeldr::MutableModel<M>,
 	iri: Iri,
 ) -> Result<TId<treeldr::Layout>, Box<Error<M>>> {
@@ -177,13 +177,12 @@ fn find_layout<M: Clone>(
 }
 
 impl Command {
-	pub async fn execute<V, M>(
+	pub async fn execute<M>(
 		self,
-		vocabulary: &mut V,
+		vocabulary: &mut TldrVocabulary,
 		files: &mut impl Files<Metadata = M>,
 		model: &treeldr::MutableModel<M>,
 	) where
-		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
 		M: Clone + Send + Sync,
 	{
 		log::info!("generating JSON-LD context...");
@@ -196,14 +195,13 @@ impl Command {
 		}
 	}
 
-	async fn try_execute<V, M>(
+	async fn try_execute<M>(
 		self,
-		vocabulary: &mut V,
+		vocabulary: &mut TldrVocabulary,
 		files: &mut impl Files<Metadata = M>,
 		model: &treeldr::MutableModel<M>,
 	) -> Result<(), Box<Error<M>>>
 	where
-		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex> + Send + Sync,
 		M: Clone + Send + Sync,
 	{
 		let mut layouts = Vec::with_capacity(self.layouts.len());
@@ -214,7 +212,7 @@ impl Command {
 		let mut loader = FsLoader::new(files);
 
 		for m in self.mount_points {
-			loader.mount(vocabulary.insert(m.iri.as_iri()), m.path);
+			loader.mount(vocabulary.insert_owned(m.iri), m.path);
 		}
 
 		let mut prefixes = HashMap::new();

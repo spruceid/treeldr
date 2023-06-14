@@ -3,26 +3,26 @@ use std::cmp::Ordering;
 use crate::{error, Context, Document, Error};
 use grdf::{Dataset, Quad};
 use locspan::Meta;
-use rdf_types::{Generator, VocabularyMut};
+use rdf_types::Generator;
 use treeldr::{
 	metadata::Merge,
 	prop::UnknownProperty,
-	vocab::{self, GraphLabel, Object, Term},
-	BlankIdIndex, Id, IriIndex, TId,
+	vocab::{self, GraphLabel, StrippedObject, Term, TldrVocabulary},
+	Id, IriIndex, TId,
 };
 
 impl<M: Clone + Ord + Merge> Document<M>
-	for grdf::meta::BTreeDataset<Id, Id, Object<M>, GraphLabel, M>
+	for grdf::meta::BTreeDataset<Id, Id, StrippedObject, GraphLabel, M>
 {
 	type LocalContext = ();
 	type Error = Error<M>;
 
-	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn declare(
 		&self,
 		_: &mut (),
 		context: &mut Context<M>,
-		_vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
+		_vocabulary: &mut TldrVocabulary,
+		_generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		for Quad(id, _, ty, _) in self.pattern_matching(Quad(
 			None,
@@ -38,12 +38,12 @@ impl<M: Clone + Ord + Merge> Document<M>
 		Ok(())
 	}
 
-	fn define<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn define(
 		self,
 		_: &mut (),
 		context: &mut Context<M>,
-		_vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		_generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		fn no_sub_prop(_: TId<UnknownProperty>, _: TId<UnknownProperty>) -> Option<Ordering> {
 			unreachable!()
@@ -64,8 +64,7 @@ impl<M: Clone + Ord + Merge> Document<M>
 				let node = context
 					.require_mut(subject)
 					.map_err(|e| Meta(e.into(), subject_meta))?;
-				let value = object
-					.try_into()
+				let value = treeldr::Value::from_rdf(vocabulary, object)
 					.map_err(|e| Meta(error::Description::from(e), value_meta.clone()))?;
 				node.set(predicate.into_value(), no_sub_prop, Meta(value, value_meta))?
 			}
@@ -76,17 +75,17 @@ impl<M: Clone + Ord + Merge> Document<M>
 }
 
 impl<M: Clone + Ord + Merge> Document<M>
-	for grdf::meta::BTreeDataset<Id, IriIndex, Object<M>, GraphLabel, M>
+	for grdf::meta::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel, M>
 {
 	type LocalContext = ();
 	type Error = Error<M>;
 
-	fn declare<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn declare(
 		&self,
 		_: &mut (),
 		context: &mut Context<M>,
-		_vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
+		_vocabulary: &mut TldrVocabulary,
+		_generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		for Quad(id, _, ty, _) in self.pattern_matching(Quad(
 			None,
@@ -102,12 +101,12 @@ impl<M: Clone + Ord + Merge> Document<M>
 		Ok(())
 	}
 
-	fn define<V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>>(
+	fn define(
 		self,
 		_: &mut (),
 		context: &mut Context<M>,
-		_vocabulary: &mut V,
-		_generator: &mut impl Generator<V>,
+		vocabulary: &mut TldrVocabulary,
+		_generator: &mut impl Generator<TldrVocabulary>,
 	) -> Result<(), Error<M>> {
 		fn no_sub_prop(_: TId<UnknownProperty>, _: TId<UnknownProperty>) -> Option<Ordering> {
 			unreachable!()
@@ -128,8 +127,7 @@ impl<M: Clone + Ord + Merge> Document<M>
 				let node = context
 					.require_mut(subject)
 					.map_err(|e| Meta(e.into(), subject_meta))?;
-				let value = object
-					.try_into()
+				let value = treeldr::Value::from_rdf(vocabulary, object)
 					.map_err(|e| Meta(error::Description::from(e), value_meta.clone()))?;
 				node.set(
 					Id::Iri(predicate.into_value()),

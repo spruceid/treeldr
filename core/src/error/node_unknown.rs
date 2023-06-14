@@ -1,6 +1,5 @@
-use crate::{Id, IriIndex, BlankIdIndex, Type};
+use crate::{Id, Type, vocab::TldrVocabulary};
 use locspan::{Span, MaybeLocated};
-use rdf_types::Vocabulary;
 use contextual::WithContext;
 
 #[derive(Debug)]
@@ -10,7 +9,7 @@ pub struct NodeUnknown {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeUnknown {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("unknown node {}", self.id.with(vocab))
 	}
 }

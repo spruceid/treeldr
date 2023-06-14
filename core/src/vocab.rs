@@ -2,13 +2,16 @@ pub use crate::layout::Primitive;
 use iref::Iri;
 use iref_enum::IriEnum;
 use locspan::Meta;
-use rdf_types::{IriVocabularyMut, vocabulary::{LanguageTagIndex}, LanguageTagVocabularyMut, Vocabulary};
+use rdf_types::{
+	vocabulary::{LanguageTagIndex, LiteralIndex},
+	IndexVocabulary, IriVocabularyMut, LanguageTagVocabularyMut, Literal, LiteralVocabularyMut,
+};
 
 pub type BlankIdIndex = rdf_types::vocabulary::BlankIdIndex;
 
-pub trait IndexedVocabulary: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex, Literal = StrippedLiteral, Type = rdf_types::literal::Type<IriIndex, LanguageTagIndex>, Value = String> {}
+// pub struct BlankIdIndex(rdf_types::vocabulary::BlankIdIndex);
 
-impl<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex, Literal = StrippedLiteral, Type = rdf_types::literal::Type<IriIndex, LanguageTagIndex>, Value = String>> IndexedVocabulary for V {}
+pub type TldrVocabulary = IndexVocabulary<IriIndex, BlankIdIndex, LiteralIndex, LanguageTagIndex>;
 
 #[derive(IriEnum, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[iri_prefix("tldr" = "https://treeldr.org/")]
@@ -639,49 +642,42 @@ impl<'a> TryFrom<Iri<'a>> for Term {
 	}
 }
 
-pub type Literal<M> = rdf_types::meta::Literal<M, rdf_types::literal::Type<IriIndex, LanguageTagIndex>>;
-
 pub type Id = rdf_types::Subject<IriIndex, BlankIdIndex>;
 
 pub type GraphLabel = rdf_types::GraphLabel<IriIndex, BlankIdIndex>;
 
-pub type Object<M> = rdf_types::Object<Id, Literal<M>>;
-
-pub type LocQuad<M> = rdf_types::meta::MetaQuad<Id, IriIndex, Object<M>, GraphLabel, M>;
+pub type LocQuad<M> = rdf_types::meta::MetaQuad<Id, IriIndex, StrippedObject, GraphLabel, M>;
 
 pub type StrippedLiteral = rdf_types::Literal<rdf_types::literal::Type<IriIndex, LanguageTagIndex>>;
 
 pub type StrippedSubject = rdf_types::Subject<IriIndex, BlankIdIndex>;
 
-pub type StrippedObject = rdf_types::Object<Id, StrippedLiteral>;
+pub type StrippedObject = rdf_types::Object<Id, LiteralIndex>;
 
 pub type StrippedQuad = rdf_types::Quad<Id, IriIndex, StrippedObject, GraphLabel>;
 
 pub fn strip_quad<M>(Meta(rdf_types::Quad(s, p, o, g), _): LocQuad<M>) -> StrippedQuad {
-	use locspan::Strip;
 	rdf_types::Quad(
 		s.into_value(),
 		p.into_value(),
-		o.strip(),
+		o.into_value(),
 		g.map(|g| g.into_value()),
 	)
 }
 
 pub fn literal_from_rdf<M>(
 	literal: rdf_types::meta::Literal<M>,
-	ns: &mut (impl IriVocabularyMut<Iri = IriIndex> + LanguageTagVocabularyMut<LanguageTag = LanguageTagIndex>),
-) -> Literal<M> {
-	let (value, Meta(type_, ty_meta)) = literal.into_parts();
+	ns: &mut TldrVocabulary,
+) -> LiteralIndex {
+	let (Meta(value, _), Meta(type_, _)) = literal.into_parts();
 	let ty = match type_ {
-		rdf_types::literal::Type::Any(ty) => {
-			rdf_types::literal::Type::Any(ns.insert_owned(ty))
-		}
+		rdf_types::literal::Type::Any(ty) => rdf_types::literal::Type::Any(ns.insert_owned(ty)),
 		rdf_types::literal::Type::LangString(tag) => {
 			rdf_types::literal::Type::LangString(ns.insert_owned_language_tag(tag))
 		}
 	};
 
-	Literal::new(value, Meta(ty, ty_meta))
+	ns.insert_owned_literal(Literal::new(value, ty))
 }
 
 pub fn subject_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
@@ -695,26 +691,24 @@ pub fn subject_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
 	}
 }
 
-pub fn object_from_rdf<M, V: IriVocabularyMut<Iri = IriIndex> + LanguageTagVocabularyMut<LanguageTag = LanguageTagIndex>>(
+pub fn object_from_rdf<M>(
 	object: rdf_types::meta::Object<M>,
-	ns: &mut V,
-	blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
-) -> Object<M> {
+	ns: &mut TldrVocabulary,
+	blank_label: impl FnMut(&mut TldrVocabulary, rdf_types::BlankIdBuf) -> BlankIdIndex,
+) -> StrippedObject {
 	match object {
-		rdf_types::Object::Id(id) => Object::Id(subject_from_rdf(id, ns, blank_label)),
-		rdf_types::Object::Literal(lit) => Object::Literal(literal_from_rdf(lit, ns)),
+		rdf_types::Object::Id(id) => StrippedObject::Id(subject_from_rdf(id, ns, blank_label)),
+		rdf_types::Object::Literal(lit) => StrippedObject::Literal(literal_from_rdf(lit, ns)),
 	}
 }
 
 pub fn stripped_literal_from_rdf(
 	literal: rdf_types::Literal,
-	ns: &mut (impl IriVocabularyMut<Iri = IriIndex> + LanguageTagVocabularyMut<LanguageTag = LanguageTagIndex>),
+	ns: &mut TldrVocabulary,
 ) -> StrippedLiteral {
 	let (value, type_) = literal.into_parts();
 	let ty = match type_ {
-		rdf_types::literal::Type::Any(ty) => {
-			rdf_types::literal::Type::Any(ns.insert_owned(ty))
-		}
+		rdf_types::literal::Type::Any(ty) => rdf_types::literal::Type::Any(ns.insert_owned(ty)),
 		rdf_types::literal::Type::LangString(tag) => {
 			rdf_types::literal::Type::LangString(ns.insert_owned_language_tag(tag))
 		}
@@ -723,10 +717,10 @@ pub fn stripped_literal_from_rdf(
 	StrippedLiteral::new(value, ty)
 }
 
-pub fn stripped_subject_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
+pub fn stripped_subject_from_rdf(
 	object: rdf_types::Subject,
-	ns: &mut V,
-	mut blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
+	ns: &mut TldrVocabulary,
+	mut blank_label: impl FnMut(&mut TldrVocabulary, rdf_types::BlankIdBuf) -> BlankIdIndex,
 ) -> StrippedSubject {
 	match object {
 		rdf_types::Subject::Iri(iri) => StrippedSubject::Iri(ns.insert(iri.as_iri())),
@@ -734,25 +728,26 @@ pub fn stripped_subject_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
 	}
 }
 
-pub fn stripped_object_from_rdf<V: IriVocabularyMut<Iri = IriIndex> + LanguageTagVocabularyMut<LanguageTag = LanguageTagIndex>>(
+pub fn stripped_object_from_rdf(
 	object: rdf_types::Object,
-	ns: &mut V,
-	blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
+	ns: &mut TldrVocabulary,
+	blank_label: impl FnMut(&mut TldrVocabulary, rdf_types::BlankIdBuf) -> BlankIdIndex,
 ) -> StrippedObject {
 	match object {
 		rdf_types::Object::Id(id) => {
 			StrippedObject::Id(stripped_subject_from_rdf(id, ns, blank_label))
 		}
 		rdf_types::Object::Literal(lit) => {
-			StrippedObject::Literal(stripped_literal_from_rdf(lit, ns))
+			let lit = stripped_literal_from_rdf(lit, ns);
+			StrippedObject::Literal(ns.insert_owned_literal(lit))
 		}
 	}
 }
 
-pub fn graph_label_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
+pub fn graph_label_from_rdf(
 	graph_label: rdf_types::GraphLabel,
-	ns: &mut V,
-	mut blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
+	ns: &mut TldrVocabulary,
+	mut blank_label: impl FnMut(&mut TldrVocabulary, rdf_types::BlankIdBuf) -> BlankIdIndex,
 ) -> Id {
 	match graph_label {
 		rdf_types::GraphLabel::Iri(iri) => GraphLabel::Iri(ns.insert(iri.as_iri())),
@@ -760,10 +755,10 @@ pub fn graph_label_from_rdf<V: IriVocabularyMut<Iri = IriIndex>>(
 	}
 }
 
-pub fn loc_quad_from_rdf<M, V: IriVocabularyMut<Iri = IriIndex> + LanguageTagVocabularyMut<LanguageTag = LanguageTagIndex>>(
+pub fn loc_quad_from_rdf<M>(
 	Meta(rdf_types::Quad(s, p, o, g), loc): rdf_types::meta::MetaRdfQuad<M>,
-	ns: &mut V,
-	mut blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
+	ns: &mut TldrVocabulary,
+	mut blank_label: impl FnMut(&mut TldrVocabulary, rdf_types::BlankIdBuf) -> BlankIdIndex,
 ) -> LocQuad<M> {
 	Meta(
 		rdf_types::Quad(
@@ -776,10 +771,10 @@ pub fn loc_quad_from_rdf<M, V: IriVocabularyMut<Iri = IriIndex> + LanguageTagVoc
 	)
 }
 
-pub fn stripped_loc_quad_from_rdf<M, V: IriVocabularyMut<Iri = IriIndex> + LanguageTagVocabularyMut<LanguageTag = LanguageTagIndex>>(
+pub fn stripped_loc_quad_from_rdf<M>(
 	Meta(rdf_types::Quad(s, p, o, g), _): rdf_types::meta::MetaRdfQuad<M>,
-	ns: &mut V,
-	mut blank_label: impl FnMut(&mut V, rdf_types::BlankIdBuf) -> BlankIdIndex,
+	ns: &mut TldrVocabulary,
+	mut blank_label: impl FnMut(&mut TldrVocabulary, rdf_types::BlankIdBuf) -> BlankIdIndex,
 ) -> StrippedQuad {
 	use locspan::Strip;
 	rdf_types::Quad(

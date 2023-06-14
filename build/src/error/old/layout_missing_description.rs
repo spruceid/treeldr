@@ -7,7 +7,7 @@ use contextual::WithContext;
 pub struct LayoutMissingDescription(pub Id);
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for LayoutMissingDescription {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("no implementation for layout `{}`", self.0.with(vocab))
 	}
 }

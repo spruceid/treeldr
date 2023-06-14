@@ -1,6 +1,5 @@
 use locspan::{MaybeLocated, Span};
-use rdf_types::Vocabulary;
-use treeldr::{Id, IriIndex, BlankIdIndex};
+use treeldr::{Id, vocab::TldrVocabulary};
 use contextual::WithContext;
 use crate::Property;
 
@@ -22,7 +21,7 @@ impl NodeBindingMissing {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for NodeBindingMissing {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("missing {} for `{}`", self.property.name().with(vocab), self.id.with(vocab))
 	}
 }

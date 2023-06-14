@@ -12,7 +12,7 @@ pub struct ListMismatchItem<M> {
 }
 
 impl<M: MaybeLocated<Span=Span>> super::AnyError<M> for ListMismatchItem<M> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String {
+	fn message(&self, vocab: &TldrVocabulary) -> String {
 		format!("item mismatch for list `{}`", self.id.with(vocab))
 	}
 }

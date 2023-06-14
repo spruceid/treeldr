@@ -1,19 +1,19 @@
 use contextual::WithContext;
 use locspan::{Meta, Span};
 use nquads_syntax::BlankIdBuf;
-use rdf_types::VocabularyMut;
+use rdf_types::BlankIdVocabularyMut;
 use std::path::Path;
 use treeldr::{
 	to_rdf::ToRdf,
-	vocab::{GraphLabel, Id, Object, StrippedObject, IndexedVocabulary},
-	BlankIdIndex, IriIndex,
+	vocab::{GraphLabel, Id, StrippedObject, TldrVocabulary},
+	IriIndex,
 };
 use treeldr_build::Document;
 
 type BuildContext = treeldr_build::Context<Span>;
 
-fn parse_nquads<P: AsRef<Path>, V: IndexedVocabulary + VocabularyMut>(
-	vocabulary: &mut V,
+fn parse_nquads<P: AsRef<Path>>(
+	vocabulary: &mut TldrVocabulary,
 	path: P,
 ) -> grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel> {
 	use nquads_syntax::{Document, Parse};
@@ -21,7 +21,7 @@ fn parse_nquads<P: AsRef<Path>, V: IndexedVocabulary + VocabularyMut>(
 	let buffer = std::fs::read_to_string(path).expect("unable to read file");
 	let Meta(quads, _) = Document::parse_str(&buffer, |span| span).expect("parse error");
 
-	let generate = move |vocabulary: &mut V, label: BlankIdBuf| {
+	let generate = move |vocabulary: &mut TldrVocabulary, label: BlankIdBuf| {
 		vocabulary.insert_blank_id(label.as_blank_id_ref())
 	};
 
@@ -31,17 +31,17 @@ fn parse_nquads<P: AsRef<Path>, V: IndexedVocabulary + VocabularyMut>(
 		.collect()
 }
 
-fn parse_meta_nquads<P: AsRef<Path>, V: IndexedVocabulary + VocabularyMut>(
-	vocabulary: &mut V,
+fn parse_meta_nquads<P: AsRef<Path>>(
+	vocabulary: &mut TldrVocabulary,
 	path: P,
-) -> grdf::meta::BTreeDataset<Id, IriIndex, Object<Span>, GraphLabel, Span> {
+) -> grdf::meta::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel, Span> {
 	use nquads_syntax::{Document, Parse};
 
 	let buffer = std::fs::read_to_string(path).expect("unable to read file");
 	let Meta(quads, _) = Document::parse_str(&buffer, |span| span).expect("parse error");
 
-	let generate = move |vocabulary: &mut V, label: BlankIdBuf| {
-		vocabulary.insert_blank_id(label.as_blank_id_ref())
+	let generate = move |vocabulary: &mut TldrVocabulary, label: BlankIdBuf| {
+		vocabulary.insert_owned_blank_id(label)
 	};
 
 	quads
@@ -50,9 +50,9 @@ fn parse_meta_nquads<P: AsRef<Path>, V: IndexedVocabulary + VocabularyMut>(
 		.collect()
 }
 
-fn build_from_dataset<V: IndexedVocabulary + V>(
-	vocabulary: &mut V,
-	dataset: grdf::meta::BTreeDataset<Id, IriIndex, Object<Span>, GraphLabel, Span>,
+fn build_from_dataset(
+	vocabulary: &mut TldrVocabulary,
+	dataset: grdf::meta::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel, Span>,
 ) -> grdf::BTreeDataset<Id, IriIndex, StrippedObject, GraphLabel> {
 	let mut context = BuildContext::new();
 	let mut generator = rdf_types::generator::Blank::new_with_prefix("t".to_string());
@@ -90,7 +90,7 @@ impl Test {
 				input,
 				expected_output,
 			} => {
-				let mut vocabulary = rdf_types::IndexVocabulary::<IriIndex, BlankIdIndex>::new();
+				let mut vocabulary = TldrVocabulary::new();
 				let input_dataset = parse_meta_nquads(&mut vocabulary, input);
 				let output = build_from_dataset(&mut vocabulary, input_dataset);
 				let expected_output = parse_nquads(&mut vocabulary, expected_output);
@@ -102,7 +102,7 @@ impl Test {
 				assert!(output.is_isomorphic_to(&expected_output))
 			}
 			Self::Negative { input } => {
-				let mut vocabulary = rdf_types::IndexVocabulary::<IriIndex, BlankIdIndex>::new();
+				let mut vocabulary = TldrVocabulary::new();
 				let input_dataset = parse_meta_nquads(&mut vocabulary, input);
 				let output = build_from_dataset(&mut vocabulary, input_dataset);
 				for quad in output.quads() {

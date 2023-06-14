@@ -4,10 +4,14 @@ use std::str::FromStr;
 use crate::schema::{self, RegularSchema, Schema};
 use iref::{Iri, IriBuf};
 use locspan::{MaybeLocated, Meta, Span};
-use rdf_types::{Generator, Quad, Vocabulary, VocabularyMut, vocabulary::LanguageTagIndex};
-use treeldr::{metadata::Merge, vocab, BlankIdIndex, Id, IriIndex, Name};
+use rdf_types::{Generator, IriVocabularyMut, Quad, VocabularyMut};
+use treeldr::{
+	metadata::Merge,
+	vocab::{self, TldrVocabulary},
+	BlankIdIndex, Id, IriIndex, Name,
+};
 use treeldr_build::{layout::Restrictions, Context};
-use vocab::{LocQuad, Object, Term};
+use vocab::{LocQuad, StrippedObject, Term};
 
 /// Checks if the given JSON document is a JSON Schema.
 pub fn is_json_schema<M>(json: &json_syntax::Value<M>) -> bool {
@@ -35,10 +39,7 @@ impl<M: MaybeLocated<Span = Span>> treeldr::reporting::DiagnoseWithVocabulary<M>
 where
 	M::File: Clone,
 {
-	fn message(
-		&self,
-		vocabulary: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex, LanguageTag = LanguageTagIndex>,
-	) -> String {
+	fn message(&self, vocabulary: &TldrVocabulary) -> String {
 		match self {
 			Self::UnsupportedType => "unsupported schema `type` value.".to_string(),
 			Self::InvalidPropertyName(name) => format!("invalid property name `{name}`"),
@@ -47,15 +48,12 @@ where
 	}
 }
 
-pub fn import_schema<
-	M: Default + Clone + Merge,
-	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
->(
+pub fn import_schema<M: Default + Clone + Merge>(
 	schema: &Schema,
 	base_iri: Option<Iri>,
 	context: &mut Context<M>,
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+	vocabulary: &mut TldrVocabulary,
+	generator: &mut impl Generator<TldrVocabulary>,
 ) -> Result<Id, Error<M>> {
 	match schema {
 		Schema::Boolean(true) => todo!(),
@@ -76,15 +74,12 @@ pub fn import_schema<
 	}
 }
 
-pub fn import_sub_schema<
-	M: Default + Clone + Merge,
-	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
->(
+pub fn import_sub_schema<M: Default + Clone + Merge>(
 	schema: &Schema,
 	base_iri: Option<Iri>,
 	context: &mut Context<M>,
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+	vocabulary: &mut TldrVocabulary,
+	generator: &mut impl Generator<TldrVocabulary>,
 ) -> Result<Id, Error<M>> {
 	match schema {
 		Schema::Boolean(true) => todo!(),
@@ -151,16 +146,13 @@ impl LayoutKind {
 	}
 }
 
-pub fn import_regular_schema<
-	M: Default + Clone + Merge,
-	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
->(
+pub fn import_regular_schema<M: Default + Clone + Merge>(
 	schema: &RegularSchema,
 	_top_level: bool,
 	base_iri: Option<Iri>,
 	context: &mut Context<M>,
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+	vocabulary: &mut TldrVocabulary,
+	generator: &mut impl Generator<TldrVocabulary>,
 ) -> Result<Id, Error<M>> {
 	if let Some(defs) = &schema.defs {
 		for schema in defs.values() {
@@ -297,15 +289,12 @@ fn into_numeric(
 	}
 }
 
-fn import_layout_description<
-	M: Default + Clone + Merge,
-	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
->(
+fn import_layout_description<M: Default + Clone + Merge>(
 	schema: &RegularSchema,
 	base_iri: Option<Iri>,
 	context: &mut Context<M>,
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+	vocabulary: &mut TldrVocabulary,
+	generator: &mut impl Generator<TldrVocabulary>,
 ) -> Result<
 	(
 		treeldr_build::layout::BaseDescriptionBinding,
@@ -477,18 +466,15 @@ fn import_layout_description<
 }
 
 #[allow(clippy::too_many_arguments)]
-fn import_array_schema<
-	M: Default + Clone + Merge,
-	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
->(
+fn import_array_schema<M: Default + Clone + Merge>(
 	schema: &RegularSchema,
 	_top_level: bool,
 	array: &schema::ArraySchema,
 	kind: &mut LayoutKind,
 	base_iri: Option<Iri>,
 	context: &mut Context<M>,
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+	vocabulary: &mut TldrVocabulary,
+	generator: &mut impl Generator<TldrVocabulary>,
 ) -> Result<
 	(
 		treeldr_build::layout::BaseDescriptionBinding,
@@ -516,17 +502,14 @@ fn import_array_schema<
 	}
 }
 
-fn import_object_schema<
-	M: Default + Clone + Merge,
-	V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
->(
+fn import_object_schema<M: Default + Clone + Merge>(
 	schema: &RegularSchema,
 	_top_level: bool,
 	object: &schema::ObjectSchema,
 	base_iri: Option<Iri>,
 	context: &mut Context<M>,
-	vocabulary: &mut V,
-	generator: &mut impl Generator<V>,
+	vocabulary: &mut TldrVocabulary,
+	generator: &mut impl Generator<TldrVocabulary>,
 ) -> Result<
 	(
 		treeldr_build::layout::BaseDescriptionBinding,
@@ -534,7 +517,7 @@ fn import_object_schema<
 	),
 	Error<M>,
 > {
-	let mut fields: Vec<Meta<Object<M>, M>> = Vec::new();
+	let mut fields: Vec<Meta<StrippedObject, M>> = Vec::new();
 
 	if let Some(properties) = &object.properties {
 		fields.reserve(properties.len());
@@ -633,9 +616,15 @@ pub trait TryIntoRdfList<M, C, T> {
 		quads: &mut Vec<LocQuad<M>>,
 		meta: M,
 		f: K,
-	) -> Result<Meta<Object<M>, M>, E>
+	) -> Result<Meta<StrippedObject, M>, E>
 	where
-		K: FnMut(T, &mut C, &mut V, &mut G, &mut Vec<LocQuad<M>>) -> Result<Meta<Object<M>, M>, E>,
+		K: FnMut(
+			T,
+			&mut C,
+			&mut V,
+			&mut G,
+			&mut Vec<LocQuad<M>>,
+		) -> Result<Meta<StrippedObject, M>, E>,
 		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
 		G: Generator<V>;
 }
@@ -649,7 +638,7 @@ impl<M: Clone + Merge, C, I: DoubleEndedIterator> TryIntoRdfList<M, C, I::Item> 
 		quads: &mut Vec<LocQuad<M>>,
 		meta: M,
 		mut f: K,
-	) -> Result<Meta<Object<M>, M>, E>
+	) -> Result<Meta<StrippedObject, M>, E>
 	where
 		K: FnMut(
 			I::Item,
@@ -657,13 +646,13 @@ impl<M: Clone + Merge, C, I: DoubleEndedIterator> TryIntoRdfList<M, C, I::Item> 
 			&mut V,
 			&mut G,
 			&mut Vec<LocQuad<M>>,
-		) -> Result<Meta<Object<M>, M>, E>,
+		) -> Result<Meta<StrippedObject, M>, E>,
 		V: VocabularyMut<Iri = IriIndex, BlankId = BlankIdIndex>,
 		G: Generator<V>,
 	{
 		use vocab::Rdf;
 		let mut head = Meta(
-			Object::Id(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Nil)))),
+			StrippedObject::Id(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::Nil)))),
 			meta.clone(),
 		);
 		for item in self.rev() {
@@ -676,7 +665,7 @@ impl<M: Clone + Merge, C, I: DoubleEndedIterator> TryIntoRdfList<M, C, I::Item> 
 					Meta(item_label, item_loc.clone()),
 					Meta(IriIndex::Iri(Term::Rdf(Rdf::Type)), item_loc.clone()),
 					Meta(
-						Object::Id(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List)))),
+						StrippedObject::Id(Id::Iri(IriIndex::Iri(Term::Rdf(Rdf::List)))),
 						item_loc.clone(),
 					),
 					None,

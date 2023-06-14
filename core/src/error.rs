@@ -1,21 +1,17 @@
-use crate::{reporting::Diagnose, BlankIdIndex, IriIndex};
+use crate::{reporting::Diagnose, vocab::TldrVocabulary};
 use locspan::{MaybeLocated, Span};
-use rdf_types::Vocabulary;
 
 pub trait AnyError<M: MaybeLocated<Span = Span>> {
-	fn message(&self, vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>) -> String;
+	fn message(&self, vocab: &TldrVocabulary) -> String;
 
 	fn labels(
 		&self,
-		_vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
+		_vocab: &TldrVocabulary,
 	) -> Vec<codespan_reporting::diagnostic::Label<M::File>> {
 		Vec::new()
 	}
 
-	fn notes(
-		&self,
-		_vocab: &impl Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>,
-	) -> Vec<String> {
+	fn notes(&self, _vocab: &TldrVocabulary) -> Vec<String> {
 		Vec::new()
 	}
 }
@@ -42,7 +38,7 @@ macro_rules! errors {
 			}
 		)*
 
-		impl<'c, 'a, M: MaybeLocated<Span=Span>, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>> Diagnose<M> for WithVocabulary<'c, 'a, M, V> where M::File: Clone {
+		impl<'c, 'a, M: MaybeLocated<Span=Span>> Diagnose<M> for WithVocabulary<'c, 'a, M> where M::File: Clone {
 			fn message(&self) -> String {
 				match self.error() {
 					$(
@@ -76,19 +72,16 @@ errors! {
 }
 
 impl<M> Error<M> {
-	pub fn with_vocabulary<'c, V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		vocab: &'c V,
-	) -> WithVocabulary<'c, '_, M, V> {
+	pub fn with_vocabulary<'c>(&self, vocab: &'c TldrVocabulary) -> WithVocabulary<'c, '_, M> {
 		WithVocabulary(vocab, self)
 	}
 }
 
 /// Caused error with contextual information.
-pub struct WithVocabulary<'c, 'a, M, V>(&'c V, &'a Error<M>);
+pub struct WithVocabulary<'c, 'a, M>(&'c TldrVocabulary, &'a Error<M>);
 
-impl<'c, 'a, M, V> WithVocabulary<'c, 'a, M, V> {
-	fn vocabulary(&self) -> &'c V {
+impl<'c, 'a, M> WithVocabulary<'c, 'a, M> {
+	fn vocabulary(&self) -> &'c TldrVocabulary {
 		self.0
 	}
 
