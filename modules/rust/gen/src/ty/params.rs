@@ -6,9 +6,6 @@ pub struct Parameters {
 	/// Lifetime parameter.
 	pub lifetime: bool,
 
-	/// Context type parameter.
-	pub context: bool,
-
 	/// Identifier type parameter.
 	pub identifier: bool,
 }
@@ -17,7 +14,6 @@ impl Parameters {
 	pub fn identifier_parameter() -> Self {
 		Self {
 			lifetime: false,
-			context: false,
 			identifier: true,
 		}
 	}
@@ -25,16 +21,7 @@ impl Parameters {
 	pub fn context_parameter() -> Self {
 		Self {
 			lifetime: false,
-			context: true,
 			identifier: false,
-		}
-	}
-
-	pub fn with_context(self) -> Self {
-		Self {
-			lifetime: false,
-			context: true,
-			..self
 		}
 	}
 
@@ -42,10 +29,6 @@ impl Parameters {
 		let mut l = 0;
 
 		if self.lifetime {
-			l += 1
-		}
-
-		if self.context {
 			l += 1
 		}
 
@@ -57,13 +40,12 @@ impl Parameters {
 	}
 
 	pub fn is_empty(&self) -> bool {
-		!self.lifetime && !self.context && !self.identifier
+		!self.lifetime && !self.identifier
 	}
 
 	pub fn iter(&self) -> Iter {
 		Iter {
 			lifetime: self.lifetime,
-			context: self.context,
 			identifier: self.identifier,
 		}
 	}
@@ -77,7 +59,6 @@ impl Parameters {
 
 	pub fn append(&mut self, other: Self) {
 		self.lifetime |= other.lifetime;
-		self.context |= other.context;
 		self.identifier |= other.identifier
 	}
 
@@ -98,7 +79,6 @@ impl IntoIterator for Parameters {
 
 pub struct Iter {
 	lifetime: bool,
-	context: bool,
 	identifier: bool,
 }
 
@@ -108,10 +88,6 @@ impl Iterator for Iter {
 	fn next(&mut self) -> Option<Self::Item> {
 		if std::mem::take(&mut self.lifetime) {
 			return Some(Parameter::Lifetime);
-		}
-
-		if std::mem::take(&mut self.context) {
-			return Some(Parameter::Context);
 		}
 
 		if std::mem::take(&mut self.identifier) {

@@ -12,18 +12,19 @@ impl ToTokens for AsJsonLdImpl {
 		let body = &self.body;
 
 		tokens.extend(quote! {
-			impl<N: ::treeldr_rust_prelude::rdf_types::VocabularyMut> ::treeldr_rust_prelude::AsJsonLdObjectMeta<N> for #type_path
+			impl<V, I> ::treeldr_rust_prelude::AsJsonLdObjectMeta<V, I> for #type_path
 			where
-				N: treeldr_rust_prelude::rdf_types::Namespace,
-				N::Id: Clone + ::treeldr_rust_prelude::rdf_types::IntoId<Iri = N::Iri, BlankId = N::BlankId>,
-				N::Iri: ::core::cmp::Eq + ::std::hash::Hash,
-				N::BlankId: ::core::cmp::Eq + ::std::hash::Hash
+				V: ::treeldr_rust_prelude::rdf_types::VocabularyMut,
+				V::Iri: Clone + Eq + ::std::hash::Hash,
+				V::BlankId: Clone + Eq + ::std::hash::Hash,
+				I: ::treeldr_rust_prelude::rdf_types::ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>
 			{
 				fn as_json_ld_object_meta(
 					&self,
-					namespace: &mut N,
+					vocabulary: &mut V,
+					interpretation: &I,
 					meta: ()
-				) -> ::treeldr_rust_prelude::json_ld::IndexedObject<N::Iri, N::BlankId, ()> {
+				) -> ::treeldr_rust_prelude::json_ld::IndexedObject<V::Iri, V::BlankId, ()> {
 					#body
 				}
 			}
@@ -42,18 +43,19 @@ impl ToTokens for IntoJsonLdImpl {
 		let body = &self.body;
 
 		tokens.extend(quote! {
-			impl<N: ::treeldr_rust_prelude::rdf_types::VocabularyMut> ::treeldr_rust_prelude::IntoJsonLdObjectMeta<N> for #type_path
+			impl<V: ::treeldr_rust_prelude::rdf_types::VocabularyMut, I> ::treeldr_rust_prelude::IntoJsonLdObjectMeta<V, I> for #type_path
 			where
-				N: treeldr_rust_prelude::rdf_types::Namespace,
-				N::Id: ::treeldr_rust_prelude::rdf_types::IntoId<Iri = N::Iri, BlankId = N::BlankId>,
-				N::Iri: ::core::cmp::Eq + ::std::hash::Hash,
-				N::BlankId: ::core::cmp::Eq + ::std::hash::Hash
+			V: ::treeldr_rust_prelude::rdf_types::VocabularyMut,
+			V::Iri: Clone + Eq + ::std::hash::Hash,
+			V::BlankId: Clone + Eq + ::std::hash::Hash,
+			I: ::treeldr_rust_prelude::rdf_types::ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>
 			{
 				fn into_json_ld_object_meta(
 					self,
-					namespace: &mut N,
+					vocabulary: &mut V,
+					interpretation: &I,
 					meta: ()
-				) -> ::treeldr_rust_prelude::json_ld::IndexedObject<N::Iri, N::BlankId, ()> {
+				) -> ::treeldr_rust_prelude::json_ld::IndexedObject<V::Iri, V::BlankId, ()> {
 					#body
 				}
 			}
@@ -72,10 +74,14 @@ impl ToTokens for IntoJsonLdSyntaxImpl {
 		let body = &self.body;
 
 		tokens.extend(quote! {
-			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace> ::treeldr_rust_prelude::IntoJsonLdSyntax<N> for #type_path where N::Id: ::treeldr_rust_prelude::contextual::DisplayWithContext<N> {
+			impl<V: ::treeldr_rust_prelude::rdf_types::Vocabulary, I: ::treeldr_rust_prelude::rdf_types::ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>> ::treeldr_rust_prelude::IntoJsonLdSyntax<V, I> for #type_path
+			where
+				V::Value: ::std::convert::AsRef<str>
+			{
 				fn into_json_ld_syntax(
 					self,
-					namespace: &N
+					vocabulary: &V,
+					interpretation: &I
 				) -> ::treeldr_rust_prelude::json_ld::syntax::Value {
 					#body
 				}

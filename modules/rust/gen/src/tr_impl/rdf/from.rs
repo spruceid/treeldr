@@ -41,10 +41,7 @@ impl<M> GenerateSyntax<M> for Bound {
 		match self {
 			Self::FromLiteral(p) => {
 				let ty = p.generate_syntax(context, scope)?;
-				Ok(
-					syn::parse2(quote!(#ty: ::treeldr_rust_prelude::rdf::FromLiteral<V, N>))
-						.unwrap(),
-				)
+				Ok(syn::parse2(quote!(#ty: ::treeldr_rust_prelude::rdf::FromRdf<V, I>)).unwrap())
 			}
 		}
 	}
@@ -98,31 +95,36 @@ fn collect_bounds<V, M>(
 	}
 }
 
-fn from_objects(ty: &Type, objects: TokenStream) -> TokenStream {
+fn from_objects(ty: &Type, objects: TokenStream) -> (TokenStream, TokenStream) {
 	match ty.description() {
-		Description::BuiltIn(BuiltIn::Vec(_item)) => {
+		Description::BuiltIn(BuiltIn::Vec(_item)) => (
 			quote! {
 				let mut result = ::std::vec::Vec::new();
 				for object in #objects {
-					result.push(::treeldr_rust_prelude::FromRdf::from_rdf(namespace, object, graph)?)
+					result.push(::treeldr_rust_prelude::FromRdf::from_rdf(vocabulary, interpretation, graph, object)?)
 				}
 				result
-			}
-		}
-		Description::BuiltIn(BuiltIn::BTreeSet(_item)) => {
+			},
+			quote!(::std::vec::Vec::new()),
+		),
+		Description::BuiltIn(BuiltIn::BTreeSet(_item)) => (
 			quote! {
 				let mut result = ::std::collections::btree_set::BTreeSet::new();
 				for object in #objects {
-					result.insert(::treeldr_rust_prelude::FromRdf::from_rdf(namespace, object, graph)?);
+					result.insert(::treeldr_rust_prelude::FromRdf::from_rdf(vocabulary, interpretation, graph, object)?);
 				}
 				result
-			}
-		}
-		Description::Alias(_) => {
+			},
+			quote!(::std::collections::btree_set::BTreeSet::new()),
+		),
+		Description::Alias(_) => (
 			quote! {
 				todo!("alias from RDF")
-			}
-		}
+			},
+			quote! {
+				todo!("alias from RDF")
+			},
+		),
 		_ => panic!("not a collection type"),
 	}
 }

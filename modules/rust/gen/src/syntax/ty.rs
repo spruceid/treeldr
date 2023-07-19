@@ -346,25 +346,25 @@ impl ToTokens for ClassDynTable {
 		};
 
 		tokens.extend(quote! {
-			pub struct #ident <C: ?Sized>(std::marker::PhantomData<C>);
+			pub struct #ident <I, C: ?Sized>(std::marker::PhantomData<(I, C)>);
 
-			impl<C: ?Sized> ::treeldr_rust_prelude::Table for #ident <C> {
-				type Instance<'r> = #instance_ident <'r, C> where Self: 'r;
+			impl<I, C: ?Sized> ::treeldr_rust_prelude::Table for #ident <I, C> {
+				type Instance<'r> = #instance_ident <'r, I, C> where Self: 'r;
 			}
 
-			pub struct #instance_ident <'r, C: ?Sized> {
+			pub struct #instance_ident <'r, I, C: ?Sized> {
 				#fields
 			}
 
-			impl<'r, C: ?Sized> Clone for #instance_ident <'r, C> {
+			impl<'r, I, C: ?Sized> Clone for #instance_ident <'r, I, C> {
 				fn clone(&self) -> Self {
 					*self
 				}
 			}
 
-			impl<'r, C: ?Sized> Copy for #instance_ident <'r, C> {}
+			impl<'r, I, C: ?Sized> Copy for #instance_ident <'r, I, C> {}
 
-			impl<'r, C: ?Sized> #instance_ident <'r, C> {
+			impl<'r, I, C: ?Sized> #instance_ident <'r, I, C> {
 				pub fn new<T: 'r + #trait_path>() -> Self {
 					Self {
 						#fields_init
@@ -407,10 +407,10 @@ impl ToTokens for ClassAssociatedTypeTraitObject {
 		let trait_impls = &self.trait_impls;
 
 		let fields = if tables.is_empty() {
-			quote!(_p: ::std::marker::PhantomData<&'d C>)
+			quote!(_p: ::std::marker::PhantomData<&'d (I, C)>)
 		} else {
 			quote! {
-				_p: ::std::marker::PhantomData<&'d C>,
+				_p: ::std::marker::PhantomData<&'d (I, C)>,
 				ptr: *const u8,
 				tables: (#(#tables,)*)
 			}
@@ -442,23 +442,23 @@ impl ToTokens for ClassAssociatedTypeTraitObject {
 		};
 
 		tokens.extend(quote! {
-			pub struct #ident <'d, C: ?Sized> {
+			pub struct #ident <'d, I> {
 				#fields
 			}
 
-			impl<'d, C: ?Sized> #ident <'d, C> {
+			impl<'d, I> #ident <'d, I> {
 				#constructor
 			}
 
-			impl<'d, C: ?Sized> Clone for #ident <'d, C> {
+			impl<'d, I> Clone for #ident <'d, I> {
 				fn clone(&self) -> Self {
 					*self
 				}
 			}
 
-			impl<'d, C: ?Sized> Copy for #ident <'d, C> {}
+			impl<'d, I, C: ?Sized> Copy for #ident <'d, I, C> {}
 
-			impl<'d, C: ?Sized> ::treeldr_rust_prelude::Reference<'d> for #ident <'d, C> {}
+			impl<'d, I, C: ?Sized> ::treeldr_rust_prelude::Reference<'d> for #ident <'d, I, C> {}
 
 			#(#trait_impls)*
 		})
@@ -494,7 +494,7 @@ impl ToTokens for ClassAssociatedTypeTraitObjectTraitImpl {
 		let assoc_types = self
 			.associated_types
 			.iter()
-			.map(|(id, ty)| quote!(type #id <'r> = #ty where Self: 'r, C: 'r;));
+			.map(|(id, ty)| quote!(type #id <'r> = #ty where Self: 'r;));
 
 		let methods = &self.methods;
 		let table_path = &self.table_path;
@@ -502,12 +502,12 @@ impl ToTokens for ClassAssociatedTypeTraitObjectTraitImpl {
 		let index = syn::Index::from(self.table_index);
 
 		tokens.extend(quote! {
-			impl <'d, C: ?Sized> #tr_path for #ident <'d, C> {
+			impl <'d, I> #tr_path for #ident <'d, I> {
 				#(#assoc_types)*
 				#(#methods)*
 			}
 
-			unsafe impl <'d, C: ?Sized> ::treeldr_rust_prelude::AsTraitObject<#table_path> for #ident <'d, C> {
+			unsafe impl <'d, I> ::treeldr_rust_prelude::AsTraitObject<I, #table_path> for #ident <'d, I> {
 				fn as_trait_object<'r>(&'r self) -> (*const u8, #table_instance_path) {
 					(self.ptr, self.tables.#index)
 				}
@@ -532,8 +532,8 @@ impl ToTokens for ClassAssociatedTypeTraitObjectTraitImplMethod {
 		let index = syn::Index::from(self.table_index);
 
 		tokens.extend(quote! {
-			fn #ident <'r> (&'r self, context: &'r C) -> #return_ty {
-				unsafe { (self.tables.#index.#ident)(self.ptr, ::treeldr_rust_prelude::ContravariantReference::new(context)) }
+			fn #ident <'r> (&'r self) -> #return_ty {
+				unsafe { (self.tables.#index.#ident)(self.ptr) }
 			}
 		})
 	}

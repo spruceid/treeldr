@@ -42,11 +42,11 @@ macro_rules! impl_as_literal {
 					&'a self,
 					_vocabulary: &mut V,
 					_interpretation: &mut N,
-				) -> Self::QuadsAndValues<'a>
+				) -> (Option<N::Resource>, Self::QuadsAndValues<'a>)
 				where
 					N::Resource: 'a
 				{
-					ValuesOnly::new(LiteralValue::new(self))
+					(None, ValuesOnly::new(LiteralValue::new(self)))
 				}
 			}
 		)*
@@ -99,11 +99,11 @@ where
 		&'a self,
 		_vocabulary: &mut V,
 		_interpretation: &mut I,
-	) -> Self::QuadsAndValues<'a>
+	) -> (Option<I::Resource>, Self::QuadsAndValues<'a>)
 	where
 		I::Resource: 'a,
 	{
-		ValuesOnly::new(LiteralValue::new(self))
+		(None, ValuesOnly::new(LiteralValue::new(self)))
 	}
 }
 
@@ -117,11 +117,11 @@ where
 		&'a self,
 		_vocabulary: &mut V,
 		_interpretation: &mut I,
-	) -> Self::QuadsAndValues<'a>
+	) -> (Option<I::Resource>, Self::QuadsAndValues<'a>)
 	where
 		I::Resource: 'a,
 	{
-		ValuesOnly::new(LiteralValue::new(self))
+		(None, ValuesOnly::new(LiteralValue::new(self)))
 	}
 }
 
@@ -136,11 +136,11 @@ where
 		&'a self,
 		_vocabulary: &mut V,
 		_interpretation: &mut I,
-	) -> Self::QuadsAndValues<'a>
+	) -> (Option<I::Resource>, Self::QuadsAndValues<'a>)
 	where
 		I::Resource: 'a,
 	{
-		ValuesOnly::new(LiteralValue::new(self))
+		(None, ValuesOnly::new(LiteralValue::new(self)))
 	}
 }
 
@@ -155,10 +155,10 @@ where
 		&'a self,
 		_vocabulary: &mut V,
 		_interpretation: &mut I,
-	) -> Self::QuadsAndValues<'a>
+	) -> (Option<I::Resource>, Self::QuadsAndValues<'a>)
 	where
 		I::Resource: 'a,
 	{
-		ValuesOnly::new(LiteralValue::new(self))
+		(None, ValuesOnly::new(LiteralValue::new(self)))
 	}
 }

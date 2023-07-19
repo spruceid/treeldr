@@ -4,7 +4,7 @@ use treeldr::TId;
 use crate::{
 	syntax,
 	tr::{CollectContextBounds, MethodType},
-	ty::{structure::Struct, InContext},
+	ty::structure::Struct,
 	Context, Error, GenerateSyntax,
 };
 
@@ -45,41 +45,43 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitAssociatedTypePath<'a> {
 	) -> Result<Self::Output, Error> {
 		match self.ty.field_for(self.prop) {
 			Some(f) => {
+				let layout = context.model().get(f.layout()).unwrap();
+				let item_layout = layout.as_layout().description().collection_item().unwrap();
+				let is_reference = context
+					.model()
+					.get(**item_layout)
+					.unwrap()
+					.as_layout()
+					.description()
+					.is_reference();
+
 				if self.collection {
-					let iter_expr = collection_iterator(context, scope, f.layout())?;
-					let layout = context.model().get(f.layout()).unwrap();
-					let item_layout = **layout.as_layout().description().collection_item().unwrap();
-					if context
-						.model()
-						.get(item_layout)
-						.unwrap()
-						.as_layout()
-						.description()
-						.is_reference()
-					{
-						let ty_expr = InContext(item_layout).generate_syntax(context, scope)?;
-						Ok(syn::parse2(
-							quote!(::treeldr_rust_prelude::iter::Fetch <'r, C, #ty_expr, #iter_expr>),
-						)
-						.unwrap())
+					let ty = collection_iterator(context, scope, f.layout())?;
+					if is_reference {
+						Ok(syn::parse2(quote!(::treeldr_rust_prelude::iter::Ids<#ty>)).unwrap())
 					} else {
-						Ok(iter_expr)
+						Ok(
+							syn::parse2(quote!(::treeldr_rust_prelude::iter::Values<I, #ty>))
+								.unwrap(),
+						)
 					}
+				} else if is_reference {
+					Ok(syn::parse2(quote!(::std::convert::Infallible)).unwrap())
 				} else {
-					let layout = context.model().get(f.layout()).unwrap();
-					let item_layout = **layout.as_layout().description().collection_item().unwrap();
-					let path = InContext(item_layout).generate_syntax(context, scope)?;
-					Ok(syn::parse2(quote!(&'r #path)).unwrap())
+					let item_layout = layout.as_layout().description().collection_item().unwrap();
+					Ok(item_layout.generate_syntax(context, scope)?)
 				}
 			}
 			None => {
 				if self.collection {
-					Ok(
-						syn::parse2(quote!(::std::iter::Empty<&'r ::std::convert::Infallible>))
-							.unwrap(),
-					)
+					Ok(syn::parse2(quote!(
+						::std::iter::Empty<
+							::treeldr_rust_prelude::Ref<'r, I, ::std::convert::Infallible>,
+						>
+					))
+					.unwrap())
 				} else {
-					Ok(syn::parse2(quote!(&'r ::std::convert::Infallible)).unwrap())
+					Ok(syn::parse2(quote!(::std::convert::Infallible)).unwrap())
 				}
 			}
 		}
@@ -108,17 +110,23 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Struct> {
 			.ty
 			.generate_context_bounds(context, self.tr_ref, &scope)?;
 
-		let mut associated_types = Vec::new();
+		let mut associated_types = Vec::with_capacity(tr.associated_types().len() * 2);
 		for a in tr.associated_types() {
-			let ty_expr = ClassTraitAssociatedTypePath::new(
-				self.ty,
-				// self.0,
-				a.property(),
-				a.bound().is_collection(),
-			)
-			.generate_syntax(context, &scope)?;
+			associated_types.push(syntax::tr_impl::class::AssociatedType {
+				ident: a.ident().clone(),
+				lifetime: None,
+				value: ClassTraitAssociatedTypePath::new(self.ty, a.property(), false)
+					.generate_syntax(context, &scope)?,
+			});
 
-			associated_types.push((a.ident().clone(), ty_expr));
+			if let Some(collection_ident) = a.collection_ident() {
+				associated_types.push(syntax::tr_impl::class::AssociatedType {
+					ident: collection_ident.clone(),
+					lifetime: Some(syn::parse2(quote!('r)).unwrap()),
+					value: ClassTraitAssociatedTypePath::new(self.ty, a.property(), true)
+						.generate_syntax(context, &scope)?,
+				});
+			}
 		}
 
 		let mut methods = Vec::new();
@@ -140,9 +148,9 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Struct> {
 									.description()
 									.is_reference()
 								{
-									quote!(::treeldr_rust_prelude::iter::Fetch::new(context, self.#f_ident.iter()))
+									quote!(::treeldr_rust_prelude::iter::Ids::new(self.#f_ident.iter()))
 								} else {
-									quote!(self.#f_ident.iter())
+									quote!(::treeldr_rust_prelude::iter::Values::new(self.#f_ident.iter()))
 								}
 							} else {
 								quote!(&self.#f_ident)
@@ -174,33 +182,12 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Struct> {
 			})
 		}
 
-		let dyn_table_path = context
-			.module_path(scope.module)
-			.to(&tr.dyn_table_path(context).unwrap())
-			.generate_syntax(context, &scope)?;
-		let dyn_table_instance_path = {
-			let mut scope = scope.clone();
-			scope.params.lifetime = Some(syn::Lifetime::new("'r", proc_macro2::Span::call_site()));
-			context
-				.module_path(scope.module)
-				.to(&tr.dyn_table_instance_path(context).unwrap())
-				.generate_syntax(context, &scope)?
-		};
-
-		let mut type_params = Vec::new();
-		if self.ty.params().identifier {
-			type_params.push(syn::parse2(quote!(I)).unwrap());
-		}
-
 		Ok(syntax::tr_impl::class::TraitImpl {
 			type_path,
-			type_params,
 			trait_path,
 			context_bounds,
 			associated_types,
 			methods,
-			dyn_table_path,
-			dyn_table_instance_path,
 		})
 	}
 }

@@ -28,7 +28,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdSyntaxImpl<'a, Struct> {
 		scope: &crate::Scope,
 	) -> Result<Self::Output, Error> {
 		let mut scope = scope.clone();
-		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
+		scope.params.identifier = Some(syn::parse2(quote!(I::Resource)).unwrap());
 
 		let mut insert_field = Vec::new();
 		for field in self.ty.fields() {
@@ -43,7 +43,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdSyntaxImpl<'a, Struct> {
 					quote! {
 						result.insert(
 							::treeldr_rust_prelude::locspan::Meta(#key.into(), ()),
-							::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::IntoJsonLdSyntax::into_json_ld_syntax(self.#id, namespace), ())
+							::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::IntoJsonLdSyntax::into_json_ld_syntax(self.#id, vocabulary, interpretation), ())
 						);
 					}
 				}
@@ -52,7 +52,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdSyntaxImpl<'a, Struct> {
 						if let Some(value) = self.#id {
 							result.insert(
 								::treeldr_rust_prelude::locspan::Meta(#key.into(), ()),
-								::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::IntoJsonLdSyntax::into_json_ld_syntax(value, namespace), ())
+								::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::IntoJsonLdSyntax::into_json_ld_syntax(value, vocabulary, interpretation), ())
 							);
 						}
 					}
@@ -64,7 +64,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdSyntaxImpl<'a, Struct> {
 								::treeldr_rust_prelude::locspan::Meta(#key.into(), ()),
 								::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::json_ld::syntax::Value::Array(
 									self.#id.into_iter()
-										.map(|v| ::locspan::Meta(::treeldr_rust_prelude::IntoJsonLdSyntax::into_json_ld_syntax(v, namespace), ())).collect()
+										.map(|v| ::locspan::Meta(::treeldr_rust_prelude::IntoJsonLdSyntax::into_json_ld_syntax(v, vocabulary, interpretation), ())).collect()
 								), ())
 							);
 						}
@@ -95,14 +95,14 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdSyntaxImpl<'a, Enum> {
 		scope: &crate::Scope,
 	) -> Result<Self::Output, Error> {
 		let mut scope = scope.clone();
-		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
+		scope.params.identifier = Some(syn::parse2(quote!(I::Resource)).unwrap());
 
 		let variants = self.ty.variants().iter().map(|variant| {
 			let v_ident = variant.ident();
 			if variant.ty().is_some() {
 				quote! {
 					Self::#v_ident(value) => {
-						value.into_json_ld_syntax(namespace)
+						value.into_json_ld_syntax(vocabulary, interpretation)
 					}
 				}
 			} else {

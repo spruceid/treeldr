@@ -2,26 +2,26 @@ use std::hash::Hash;
 
 use json_ld::{object::LiteralString, syntax::Entry};
 use locspan::Meta;
-use rdf_types::{IntoId, Namespace, Subject, VocabularyMut};
+use rdf_types::{ReverseTermInterpretation, Subject, VocabularyMut};
 use static_iref::iri;
 
-use crate::Id;
-
 /// JSON-LD document serialization.
-pub trait IntoJsonLd<V: VocabularyMut, M = ()> {
+pub trait IntoJsonLd<V: VocabularyMut, I, M = ()> {
 	/// Converts the value into a JSON-LD document.
 	fn into_json_ld(
 		self,
 		vocabulary: &mut V,
+		interpretation: &I,
 	) -> Meta<json_ld::ExpandedDocument<V::Iri, V::BlankId, M>, M>;
 }
 
 /// JSON-LD object serialization.
-pub trait IntoJsonLdObject<V: VocabularyMut, M = ()> {
+pub trait IntoJsonLdObject<V: VocabularyMut, I, M = ()> {
 	/// Converts the value into a JSON-LD object.
 	fn into_json_ld_object(
 		self,
 		vocabulary: &mut V,
+		interpretation: &I,
 	) -> json_ld::IndexedObject<V::Iri, V::BlankId, M>;
 }
 
@@ -29,25 +29,61 @@ pub trait IntoJsonLdObject<V: VocabularyMut, M = ()> {
 ///
 /// The [`IntoJsonLdObject`] trait should be used instead, which is implemented
 /// for `Meta<T, M>` where `T: IntoJsonLdObjectMeta`.
-pub trait IntoJsonLdObjectMeta<V: VocabularyMut, M = ()> {
+pub trait IntoJsonLdObjectMeta<V: VocabularyMut, I, M = ()> {
 	/// Converts the value into a JSON-LD object with the given metadata.
 	fn into_json_ld_object_meta(
 		self,
 		vocabulary: &mut V,
+		interpretation: &I,
 		meta: M,
 	) -> json_ld::IndexedObject<V::Iri, V::BlankId, M>;
 }
 
-impl<V: VocabularyMut, M, T: IntoJsonLdObjectMeta<V, M>> IntoJsonLdObject<V, M> for Meta<T, M> {
-	fn into_json_ld_object(
+impl<
+		V: VocabularyMut,
+		I: ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
+		M: Clone,
+	> IntoJsonLdObjectMeta<V, I, M> for crate::Id<I::Resource>
+where
+	V::Iri: Clone,
+	V::BlankId: Clone,
+{
+	fn into_json_ld_object_meta(
 		self,
-		vocabulary: &mut V,
-	) -> json_ld::IndexedObject<<V>::Iri, <V>::BlankId, M> {
-		self.0.into_json_ld_object_meta(vocabulary, self.1)
+		_vocabulary: &mut V,
+		interpretation: &I,
+		meta: M,
+	) -> json_ld::IndexedObject<V::Iri, V::BlankId, M> {
+		let mut node = json_ld::Node::<V::Iri, V::BlankId, M>::new();
+
+		if let Some(id) = interpretation.ids_of(&self.0).next() {
+			node.set_id(Some(json_ld::syntax::Entry::new(
+				meta.clone(),
+				Meta(json_ld::Id::Valid(id.cloned()), meta.clone()),
+			)));
+		}
+
+		Meta(
+			json_ld::Indexed::new(json_ld::Object::Node(Box::new(node)), None),
+			meta,
+		)
 	}
 }
 
-impl<V: VocabularyMut, T: IntoJsonLdObject<V, M>, M> IntoJsonLd<V, M> for T
+impl<V: VocabularyMut, I, M, T: IntoJsonLdObjectMeta<V, I, M>> IntoJsonLdObject<V, I, M>
+	for Meta<T, M>
+{
+	fn into_json_ld_object(
+		self,
+		vocabulary: &mut V,
+		interpretation: &I,
+	) -> json_ld::IndexedObject<<V>::Iri, <V>::BlankId, M> {
+		self.0
+			.into_json_ld_object_meta(vocabulary, interpretation, self.1)
+	}
+}
+
+impl<V: VocabularyMut, I, T: IntoJsonLdObject<V, I, M>, M> IntoJsonLd<V, I, M> for T
 where
 	V::Iri: Eq + Hash,
 	V::BlankId: Eq + Hash,
@@ -56,8 +92,9 @@ where
 	fn into_json_ld(
 		self,
 		vocabulary: &mut V,
+		interpretation: &I,
 	) -> Meta<json_ld::ExpandedDocument<V::Iri, V::BlankId, M>, M> {
-		let object = self.into_json_ld_object(vocabulary);
+		let object = self.into_json_ld_object(vocabulary, interpretation);
 		let mut result = json_ld::ExpandedDocument::new();
 		let meta = object.metadata().clone();
 		result.insert(object);
@@ -65,10 +102,11 @@ where
 	}
 }
 
-impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for bool {
+impl<V: VocabularyMut, I, M> IntoJsonLdObjectMeta<V, I, M> for bool {
 	fn into_json_ld_object_meta(
 		self,
 		vocabulary: &mut V,
+		_interpretation: &I,
 		meta: M,
 	) -> json_ld::IndexedObject<V::Iri, V::BlankId, M> {
 		Meta(
@@ -87,10 +125,11 @@ impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for bool {
 macro_rules! impl_into_json_ld_syntax_literal {
 	{ $($ty:ty : $rdf_ty:tt),* } => {
 		$(
-			impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for $ty {
+			impl<V: VocabularyMut, I, M> IntoJsonLdObjectMeta<V, I, M> for $ty {
 				fn into_json_ld_object_meta(
 					self,
 					vocabulary: &mut V,
+					_interpretation: &I,
 					meta: M,
 				) -> json_ld::IndexedObject<V::Iri, V::BlankId, M> {
 					Meta(
@@ -130,10 +169,11 @@ impl_into_json_ld_syntax_literal! {
 	xsd_types::HexBinaryBuf: "http://www.w3.org/2001/XMLSchema#hexBinary"
 }
 
-impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for String {
+impl<V: VocabularyMut, I, M> IntoJsonLdObjectMeta<V, I, M> for String {
 	fn into_json_ld_object_meta(
 		self,
 		_vocabulary: &mut V,
+		_interpretation: &I,
 		meta: M,
 	) -> json_ld::IndexedObject<V::Iri, V::BlankId, M> {
 		Meta(
@@ -149,10 +189,11 @@ impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for String {
 	}
 }
 
-impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for chrono::NaiveDate {
+impl<V: VocabularyMut, I, M> IntoJsonLdObjectMeta<V, I, M> for chrono::NaiveDate {
 	fn into_json_ld_object_meta(
 		self,
 		vocabulary: &mut V,
+		_interpretation: &I,
 		meta: M,
 	) -> json_ld::IndexedObject<V::Iri, V::BlankId, M> {
 		Meta(
@@ -168,10 +209,11 @@ impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for chrono::NaiveDate {
 	}
 }
 
-impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for chrono::DateTime<chrono::Utc> {
+impl<V: VocabularyMut, I, M> IntoJsonLdObjectMeta<V, I, M> for chrono::DateTime<chrono::Utc> {
 	fn into_json_ld_object_meta(
 		self,
 		vocabulary: &mut V,
+		_interpretation: &I,
 		meta: M,
 	) -> json_ld::IndexedObject<V::Iri, V::BlankId, M> {
 		Meta(
@@ -187,10 +229,11 @@ impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for chrono::DateTime<chrono
 	}
 }
 
-impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for iref::IriBuf {
+impl<V: VocabularyMut, I, M> IntoJsonLdObjectMeta<V, I, M> for iref::IriBuf {
 	fn into_json_ld_object_meta(
 		self,
 		vocabulary: &mut V,
+		_interpretation: &I,
 		meta: M,
 	) -> json_ld::IndexedObject<V::Iri, V::BlankId, M> {
 		Meta(
@@ -206,10 +249,11 @@ impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for iref::IriBuf {
 	}
 }
 
-impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for iref::IriRefBuf {
+impl<V: VocabularyMut, I, M> IntoJsonLdObjectMeta<V, I, M> for iref::IriRefBuf {
 	fn into_json_ld_object_meta(
 		self,
 		vocabulary: &mut V,
+		_interpretation: &I,
 		meta: M,
 	) -> json_ld::IndexedObject<V::Iri, V::BlankId, M> {
 		Meta(
@@ -225,10 +269,11 @@ impl<V: VocabularyMut, M> IntoJsonLdObjectMeta<V, M> for iref::IriRefBuf {
 	}
 }
 
-impl<V: VocabularyMut> IntoJsonLdObjectMeta<V> for Subject<V::Iri, V::BlankId> {
+impl<V: VocabularyMut, I> IntoJsonLdObjectMeta<V, I> for Subject<V::Iri, V::BlankId> {
 	fn into_json_ld_object_meta(
 		self,
 		_vocabulary: &mut V,
+		_interpretation: &I,
 		meta: (),
 	) -> json_ld::IndexedObject<V::Iri, V::BlankId, ()> {
 		Meta(
@@ -244,16 +289,16 @@ impl<V: VocabularyMut> IntoJsonLdObjectMeta<V> for Subject<V::Iri, V::BlankId> {
 	}
 }
 
-impl<N: VocabularyMut> IntoJsonLdObjectMeta<N> for Id<N::Id>
-where
-	N: Namespace,
-	N::Id: IntoId<Iri = N::Iri, BlankId = N::BlankId>,
-{
-	fn into_json_ld_object_meta(
-		self,
-		vocabulary: &mut N,
-		meta: (),
-	) -> json_ld::IndexedObject<N::Iri, N::BlankId, ()> {
-		self.0.into_id().into_json_ld_object_meta(vocabulary, meta)
-	}
-}
+// impl<N: VocabularyMut> IntoJsonLdObjectMeta<N> for Id<N::Id>
+// where
+// 	N: Namespace,
+// 	N::Id: IntoId<Iri = N::Iri, BlankId = N::BlankId>,
+// {
+// 	fn into_json_ld_object_meta(
+// 		self,
+// 		vocabulary: &mut N,
+// 		meta: (),
+// 	) -> json_ld::IndexedObject<N::Iri, N::BlankId, ()> {
+// 		self.0.into_id().into_json_ld_object_meta(vocabulary, meta)
+// 	}
+// }

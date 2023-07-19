@@ -70,12 +70,7 @@ impl BoundParameters {
 		params: ty::Parameters,
 		lifetime: impl FnOnce() -> syn::Lifetime,
 		identifier: impl FnOnce() -> syn::Type,
-		context: impl FnOnce() -> syn::Type,
 	) {
-		if params.context {
-			self.context = Some(context())
-		}
-
 		if params.identifier {
 			self.identifier = Some(identifier())
 		}

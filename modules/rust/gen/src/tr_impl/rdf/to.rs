@@ -40,7 +40,7 @@ impl<M> GenerateSyntax<M> for Bound {
 		match self {
 			Self::AsLiteral(p) => {
 				let ty = p.generate_syntax(context, scope)?;
-				Ok(syn::parse2(quote!(#ty: ::treeldr_rust_prelude::rdf::AsLiteral<N, V>)).unwrap())
+				Ok(syn::parse2(quote!(#ty: ::treeldr_rust_prelude::rdf::AsLiteral<V>)).unwrap())
 			}
 		}
 	}
@@ -71,13 +71,13 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 		ty::Description::Primitive(p) => {
 			let p_ty = p.generate_syntax(context, scope)?;
 			Ok(
-				syn::parse2(quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'r, #p_ty, I, V>>)).unwrap(),
+				syn::parse2(quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'r, #p_ty>>)).unwrap(),
 			)
 		}
 		ty::Description::DerivedPrimitive(_) => {
 			let p_ty = layout.generate_syntax(context, scope)?;
 			Ok(
-				syn::parse2(quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'r, #p_ty, I, V>>)).unwrap(),
+				syn::parse2(quote!(::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::LiteralValue<'r, #p_ty>>)).unwrap(),
 			)
 		}
 		ty::Description::BuiltIn(b) => match b {
@@ -88,8 +88,7 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 				Ok(
 					syn::parse2(quote!(::treeldr_rust_prelude::rdf::FlattenQuadsAndValues<
 					::std::collections::btree_set::Iter<#lifetime, #item_ty_expr>,
-					#inner,
-					V
+					#inner
 				>))
 					.unwrap(),
 				)
@@ -124,7 +123,7 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 				.to(&context.parent_module_path(ty.module()).unwrap());
 			path.push(quads_and_values_iterator_name_from(s.ident()));
 			let path = path.generate_syntax(context, scope)?;
-			Ok(syn::parse2(quote!(#path<#lifetime, I, V>)).unwrap())
+			Ok(syn::parse2(quote!(#path<#lifetime, R>)).unwrap())
 		}
 		ty::Description::Enum(e) => {
 			let mut path = context
@@ -132,10 +131,10 @@ fn quads_and_values_iterator_of<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdI
 				.to(&context.parent_module_path(ty.module()).unwrap());
 			path.push(quads_and_values_iterator_name_from(e.ident()));
 			let path = path.generate_syntax(context, scope)?;
-			Ok(syn::parse2(quote!(#path<#lifetime, I, V>)).unwrap())
+			Ok(syn::parse2(quote!(#path<#lifetime, R>)).unwrap())
 		}
 		ty::Description::Reference(_) => Ok(syn::parse2(quote!(
-			::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::IdValue<'r, I, V>>
+			::treeldr_rust_prelude::rdf::ValuesOnly<::treeldr_rust_prelude::rdf::IdValue<'r, R>>
 		))
 		.unwrap()),
 	}

@@ -1,32 +1,35 @@
-use std::marker::PhantomData;
+use std::{convert::Infallible, marker::PhantomData};
 
-use crate::{Id, Provider};
+use crate::Ref;
 
-pub struct Fetch<'a, C: ?Sized, T, I> {
-	context: &'a C,
-	iter: I,
-	t: PhantomData<T>,
-}
+pub struct Ids<I>(I);
 
-impl<'a, C: ?Sized, T, I> Fetch<'a, C, T, I> {
-	pub fn new(context: &'a C, iter: I) -> Self {
-		Self {
-			context,
-			iter,
-			t: PhantomData,
-		}
+impl<I> Ids<I> {
+	pub fn new(iter: I) -> Self {
+		Self(iter)
 	}
 }
 
-impl<'a, 'd, C: ?Sized, T, I, D: 'd> Iterator for Fetch<'a, C, T, I>
-where
-	I: Iterator<Item = &'d Id<D>>,
-	C: Provider<D, T>,
-	T: 'a,
-{
-	type Item = &'a T;
+impl<'r, Id: 'r, I: Iterator<Item = &'r crate::Id<Id>>> Iterator for Ids<I> {
+	type Item = Ref<'r, Id, Infallible>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.iter.next().map(|id| self.context.get(&id.0).unwrap())
+		self.0.next().map(|id| Ref::Id(&id.0))
+	}
+}
+
+pub struct Values<Id, I>(I, PhantomData<Id>);
+
+impl<Id, I> Values<Id, I> {
+	pub fn new(iter: I) -> Self {
+		Self(iter, PhantomData)
+	}
+}
+
+impl<'r, Id: 'r, T: 'r, I: Iterator<Item = &'r T>> Iterator for Values<Id, I> {
+	type Item = Ref<'r, Id, T>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.0.next().map(Ref::Value)
 	}
 }

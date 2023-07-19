@@ -21,25 +21,22 @@ impl ToTokens for QuadsImpl {
 			#iterator_ty
 			#iterator_impl
 
-			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::rdf::QuadsAndValues<N, V> for #type_path
+			impl<V, I> ::treeldr_rust_prelude::rdf::QuadsAndValues<V, I> for #type_path
 			where
-				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
+				V: ::treeldr_rust_prelude::rdf_types::VocabularyMut,
+				I: ::treeldr_rust_prelude::rdf_types::InterpretationMut + ::treeldr_rust_prelude::rdf_types::IriInterpretationMut<V::Iri> + ::treeldr_rust_prelude::rdf_types::LiteralInterpretationMut<V::Literal>,
+				I::Resource: Clone,
 				#(#bounds),*
 			{
-				type QuadsAndValues<'r> = #iterator_ident<'r, N::Id, V> where Self: 'r, N::Id: 'r, V: 'r;
+				type QuadsAndValues<'r> = #iterator_ident<'r, I::Resource> where Self: 'r, I::Resource: 'r;
 
-				fn unbound_rdf_quads_and_values<
-					'r,
-					G: ::treeldr_rust_prelude::rdf_types::Generator<N>
-				>(
+				fn unbound_rdf_quads_and_values<'r>(
 					&'r self,
-					namespace: &mut N,
-					generator: &mut G
-				) -> Self::QuadsAndValues<'r>
+					vocabulary: &mut V,
+					interpretation: &mut I
+				) -> (Option<I::Resource>, Self::QuadsAndValues<'r>)
 				where
-					N::Id: 'r,
-					V: 'r
+					I::Resource: 'r
 				{
 					#iterator_init
 				}
@@ -106,8 +103,8 @@ impl ToTokens for IteratorStruct {
 		let fields = &self.fields;
 
 		tokens.extend(quote! {
-			pub struct #ident<'r, I, V> {
-				id_: Option<I>,
+			pub struct #ident<'r, R> {
+				id_: Option<R>,
 				#(#fields),*
 			}
 		})
@@ -125,10 +122,14 @@ impl<'a> ToTokens for Init<'a, IteratorStruct> {
 		});
 
 		tokens.extend(quote! {
-			#ident {
-				id_: Some(#id_init),
-				#(#fields_init),*
-			}
+			let id = #id_init;
+			(
+				Some(id.clone()),
+				#ident {
+					id_: Some(id),
+					#(#fields_init),*
+				}
+			)
 		})
 	}
 }
@@ -140,21 +141,20 @@ impl<'a> ToTokens for IteratorImpl<'a, IteratorStruct> {
 		let next_body = &self.0.next_body;
 
 		tokens.extend(quote! {
-			impl<'r, N: ::treeldr_rust_prelude::rdf_types::Namespace, V: 'r> ::treeldr_rust_prelude::RdfIterator<N> for #ident<'r, N::Id, V>
+			impl<'r, V, I> ::treeldr_rust_prelude::RdfIterator<V, I> for #ident<'r, I::Resource>
 			where
-				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: 'r + Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
+				V: ::treeldr_rust_prelude::rdf_types::VocabularyMut,
+				I: ::treeldr_rust_prelude::rdf_types::InterpretationMut + ::treeldr_rust_prelude::rdf_types::IriInterpretationMut<V::Iri> + ::treeldr_rust_prelude::rdf_types::LiteralInterpretationMut<V::Literal>,
+				I::Resource: 'r + Clone,
 				#(#bounds),*
 			{
-				type Item = ::treeldr_rust_prelude::rdf::QuadOrValue<N::Id, V>;
+				type Item = ::treeldr_rust_prelude::rdf::QuadOrValue<I::Resource>;
 
-				fn next_with<
-					G: ::treeldr_rust_prelude::rdf_types::Generator<N>
-				>(
+				fn next_with(
 					&mut self,
-					namespace: &mut N,
-					generator: &mut G,
-					graph: Option<&N::Id>
+					vocabulary: &mut V,
+					interpretation: &mut I,
+					graph: Option<&I::Resource>
 				) -> Option<Self::Item> {
 					#next_body
 				}
@@ -174,7 +174,7 @@ impl ToTokens for IteratorEnum {
 		let variants = &self.variants;
 
 		tokens.extend(quote! {
-			pub enum #ident<'r, I, V> {
+			pub enum #ident<'r, R> {
 				#(#variants),*
 			}
 		})
@@ -187,9 +187,12 @@ impl<'a> ToTokens for Init<'a, IteratorEnum> {
 		let variants_init = self.0.variants.iter().map(|v| {
 			let v_ident = &v.ident;
 			if v.ty.is_some() {
-				quote!(Self::#v_ident(value) => #ident::#v_ident(value.unbound_rdf_quads_and_values(namespace, generator)))
+				quote!(Self::#v_ident(value) => {
+					let (id, inner) = value.unbound_rdf_quads_and_values(vocabulary, interpretation);
+					(id, #ident::#v_ident(inner))
+				})
 			} else {
-				quote!(Self::#v_ident => #ident::#v_ident)
+				quote!(Self::#v_ident => (None, #ident::#v_ident))
 			}
 		});
 
@@ -208,28 +211,27 @@ impl<'a> ToTokens for IteratorImpl<'a, IteratorEnum> {
 		let variants_next = self.0.variants.iter().map(|v| {
 			let v_ident = &v.ident;
 			if v.ty.is_some() {
-				quote!(Self::#v_ident(inner) => inner.next_with(namespace, generator, graph))
+				quote!(Self::#v_ident(inner) => inner.next_with(vocabulary, interpretation, graph))
 			} else {
 				quote!(Self::#v_ident => None)
 			}
 		});
 
 		tokens.extend(quote! {
-			impl<'r, N: ::treeldr_rust_prelude::rdf_types::Namespace, V: 'r> ::treeldr_rust_prelude::RdfIterator<N> for #ident<'r, N::Id, V>
+			impl<'r, V, I> ::treeldr_rust_prelude::RdfIterator<V, I> for #ident<'r, I::Resource>
 			where
-				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: 'r + Clone + ::treeldr_rust_prelude::rdf_types::FromIri<Iri = N::Iri>,
+				V: ::treeldr_rust_prelude::rdf_types::VocabularyMut,
+				I: ::treeldr_rust_prelude::rdf_types::InterpretationMut + ::treeldr_rust_prelude::rdf_types::IriInterpretationMut<V::Iri> + ::treeldr_rust_prelude::rdf_types::LiteralInterpretationMut<V::Literal>,
+				I::Resource: 'r + Clone,
 				#(#bounds),*
 			{
-				type Item = ::treeldr_rust_prelude::rdf::QuadOrValue<N::Id, V>;
+				type Item = ::treeldr_rust_prelude::rdf::QuadOrValue<I::Resource>;
 
-				fn next_with<
-					G: ::treeldr_rust_prelude::rdf_types::Generator<N>
-				>(
+				fn next_with(
 					&mut self,
-					namespace: &mut N,
-					generator: &mut G,
-					graph: Option<&N::Id>
+					vocabulary: &mut V,
+					interpretation: &mut I,
+					graph: Option<&I::Resource>
 				) -> Option<Self::Item> {
 					match self {
 						#(#variants_next),*

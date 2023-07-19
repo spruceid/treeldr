@@ -20,7 +20,7 @@ pub struct FromRdfValueImpl {
 	pub type_path: syn::Type,
 	pub bounds: Vec<syn::WherePredicate>,
 	pub from_id: TokenStream,
-	pub from_literal: TokenStream,
+	pub from_literal: Option<TokenStream>,
 }
 
 impl ToTokens for FromRdfValueImpl {
@@ -28,36 +28,48 @@ impl ToTokens for FromRdfValueImpl {
 		let type_path = &self.type_path;
 		let bounds = &self.bounds;
 		let from_id = &self.from_id;
-		let from_literal = &self.from_literal;
+
+		let body = match &self.from_literal {
+			Some(from_literal) => {
+				quote! {
+					match interpretation.literals_of(id).next() {
+						Some(literal) => {
+							#from_literal
+						}
+						None => {
+							#from_id
+						}
+					}
+				}
+			}
+			None => {
+				quote!(#from_id)
+			}
+		};
 
 		tokens.extend(quote! {
-			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, V> ::treeldr_rust_prelude::FromRdf<N, V> for #type_path
+			impl<V, I> ::treeldr_rust_prelude::FromRdf<V, I> for #type_path
 			where
-				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: Clone + Ord + ::treeldr_rust_prelude::rdf_types::FromIri<Iri=N::Iri>,
-				V: ::treeldr_rust_prelude::rdf::TypeCheck<N>,
+				V: ::treeldr_rust_prelude::rdf_types::Vocabulary,
+				I: ::treeldr_rust_prelude::rdf_types::IriInterpretation<V::Iri> +
+					::treeldr_rust_prelude::rdf_types::ReverseLiteralInterpretation<Literal = V::Literal>,
+				I::Resource: Clone + Ord,
 				#(#bounds),*
 			{
 				fn from_rdf<G>(
-					namespace: &mut N,
-					value: &::treeldr_rust_prelude::rdf_types::Object<N::Id, V>,
-					graph: &G
+					vocabulary: &V,
+					interpretation: &I,
+					graph: &G,
+					id: &I::Resource
 				) -> Result<Self, ::treeldr_rust_prelude::FromRdfError>
 				where
 					G: ::treeldr_rust_prelude::grdf::Graph<
-						Subject=N::Id,
-						Predicate=N::Id,
-						Object=::treeldr_rust_prelude::rdf_types::Object<N::Id, V>
+						Subject=I::Resource,
+						Predicate=I::Resource,
+						Object=I::Resource
 					>
 				{
-					match value {
-						::treeldr_rust_prelude::rdf_types::Object::Id(id) => {
-							#from_id
-						}
-						::treeldr_rust_prelude::rdf_types::Object::Literal(literal) => {
-							#from_literal
-						}
-					}
+					#body
 				}
 			}
 		})
@@ -80,8 +92,8 @@ impl ToTokens for FromRdfLiteralImpl {
 				let ty_iri = ty_iri.as_str();
 
 				quote! {
-					if ::treeldr_rust_prelude::rdf::TypeCheck::has_type(literal, namespace, ::treeldr_rust_prelude::static_iref::iri!(#ty_iri)) {
-						::treeldr_rust_prelude::rdf::FromLiteral::<L, N>::from_literal_type_unchecked(literal)
+					if ::treeldr_rust_prelude::rdf::TypeCheck::has_type(literal, vocabulary, ::treeldr_rust_prelude::static_iref::iri!(#ty_iri)) {
+						::treeldr_rust_prelude::rdf::FromRdfLiteral::<V>::from_rdf_literal_value(literal.value())
 					} else {
 						Err(::treeldr_rust_prelude::FromRdfError::UnexpectedType)
 					}
@@ -89,7 +101,7 @@ impl ToTokens for FromRdfLiteralImpl {
 			}
 			None => {
 				quote! {
-					let base: #base = ::treeldr_rust_prelude::rdf::FromLiteral::<L, N>::from_literal(namespace, literal)?;
+					let base: #base = ::treeldr_rust_prelude::rdf::FromRdfLiteral::<V>::from_literal(vocabulary, literal)?;
 
 					match Self::try_from(base) {
 						Ok(value) => Ok(value),
@@ -100,24 +112,44 @@ impl ToTokens for FromRdfLiteralImpl {
 		};
 
 		tokens.extend(quote! {
-			impl<N: ::treeldr_rust_prelude::rdf_types::Namespace, L> ::treeldr_rust_prelude::rdf::FromLiteral<L, N> for #type_path
+			impl<V> ::treeldr_rust_prelude::rdf::FromRdfLiteral<V> for #type_path
 			where
-				N: ::treeldr_rust_prelude::rdf_types::IriVocabularyMut,
-				N::Id: Clone + Ord + ::treeldr_rust_prelude::rdf_types::FromIri<Iri=N::Iri>,
-				L: ::treeldr_rust_prelude::rdf::TypeCheck<N>,
-				#base: ::treeldr_rust_prelude::rdf::FromLiteral<L, N>
+				V: ::treeldr_rust_prelude::rdf_types::Vocabulary<Type = ::treeldr_rust_prelude::rdf_types::literal::Type<<V as ::treeldr_rust_prelude::rdf_types::IriVocabulary>::Iri, <V as ::treeldr_rust_prelude::rdf_types::LanguageTagVocabulary>::LanguageTag>>,
+				V::Value: AsRef<str>
 			{
-				fn from_literal_type_unchecked(literal: &L) -> Result<Self, ::treeldr_rust_prelude::FromRdfError> {
-					let base: #base = ::treeldr_rust_prelude::rdf::FromLiteral::<L, N>::from_literal_type_unchecked(literal)?;
+				fn from_rdf_literal_value(literal: &V::Value) -> Result<Self, ::treeldr_rust_prelude::FromRdfError> {
+					let base: #base = ::treeldr_rust_prelude::rdf::FromRdfLiteral::<V>::from_rdf_literal_value(literal)?;
 
 					match Self::try_from(base) {
 						Ok(value) => Ok(value),
-						Err(_) => Err(::treeldr_rust_prelude::FromRdfError::InvalidLexicalRepresentation)
+						Err(_) => Err(::treeldr_rust_prelude::rdf::FromRdfError::InvalidLexicalRepresentation)
 					}
 				}
 
-				fn from_literal(namespace: &N, literal: &L) -> Result<Self, ::treeldr_rust_prelude::FromRdfError> {
+				fn from_rdf_literal(
+					vocabulary: &V,
+					literal: &::treeldr_rust_prelude::rdf_types::Literal<V::Type, V::Value>
+				) -> Result<Self, ::treeldr_rust_prelude::FromRdfError> {
 					#body
+				}
+			}
+
+			impl<V: ::treeldr_rust_prelude::rdf_types::LiteralVocabulary, I: ::treeldr_rust_prelude::rdf_types::ReverseLiteralInterpretation<Literal = V::Literal>> ::treeldr_rust_prelude::rdf::FromRdf<V, I> for #type_path
+			where
+				#type_path: ::treeldr_rust_prelude::rdf::FromRdfLiteral<V>
+			{
+				fn from_rdf<G>(
+					vocabulary: &V,
+					interpretation: &I,
+					_graph: &G,
+					id: &<I as ::treeldr_rust_prelude::rdf_types::Interpretation>::Resource
+				) -> Result<Self, ::treeldr_rust_prelude::rdf::FromRdfError>
+				where
+					G: ::treeldr_rust_prelude::grdf::Graph<Subject = <I as ::treeldr_rust_prelude::rdf_types::Interpretation>::Resource, Predicate = <I as ::treeldr_rust_prelude::rdf_types::Interpretation>::Resource, Object = <I as ::treeldr_rust_prelude::rdf_types::Interpretation>::Resource>
+				{
+					let literal_id = interpretation.literals_of(id).next().ok_or(::treeldr_rust_prelude::rdf::FromRdfError::ExpectedLiteralValue)?;
+					let literal = vocabulary.literal(literal_id).unwrap();
+					<Self as ::treeldr_rust_prelude::rdf::FromRdfLiteral<V>>::from_rdf_literal(vocabulary, literal)
 				}
 			}
 		})

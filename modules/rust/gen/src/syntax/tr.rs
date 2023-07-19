@@ -83,7 +83,9 @@ impl ToTokens for ClassTraitDefinition {
 		let never_associated_types = self.associated_types.iter().map(|t| {
 			let t_ident = &t.ident;
 			let value = &t.never_value;
-			quote!(type #t_ident <'r> = #value where Self: 'r, C: 'r;)
+			let lft1 = t.lifetime.iter();
+			let lft2 = t.lifetime.iter();
+			quote!(type #t_ident #(<#lft1>)* = #value where #(Self: #lft2, I: #lft2)*;)
 		});
 
 		let never_methods = self.methods.iter().map(|m| {
@@ -91,7 +93,7 @@ impl ToTokens for ClassTraitDefinition {
 			let return_type = &m.return_type;
 			let body = &m.never_body;
 
-			quote!(fn #m_ident <'r> (&'r self, context: &'r C) -> #return_type {
+			quote!(fn #m_ident <'r> (&'r self) -> #return_type where I: 'r {
 				#body
 			})
 		});
@@ -99,7 +101,9 @@ impl ToTokens for ClassTraitDefinition {
 		let ref_associated_types = self.associated_types.iter().map(|t| {
 			let t_ident = &t.ident;
 			let value = &t.ref_value;
-			quote!(type #t_ident <'r> = #value where Self: 'r, C: 'r;)
+			let lft1 = t.lifetime.iter();
+			let lft2 = t.lifetime.iter();
+			quote!(type #t_ident #(<#lft1>)* = #value where #(Self: #lft2, I: #lft2)*;)
 		});
 
 		let ref_methods = self.methods.iter().map(|m| {
@@ -107,23 +111,23 @@ impl ToTokens for ClassTraitDefinition {
 			let return_type = &m.return_type;
 			let body = &m.ref_body;
 
-			quote!(fn #m_ident <'r> (&'r self, context: &'r C) -> #return_type {
+			quote!(fn #m_ident <'r> (&'r self) -> #return_type where I: 'r {
 				#body
 			})
 		});
 
 		tokens.extend(quote! {
-			pub trait #ident <C: ?Sized> : #(#super_traits)+* {
+			pub trait #ident<I: ?Sized> : #(#super_traits)+* {
 				#(#associated_types)*
 				#(#methods)*
 			}
 
-			impl <C: ?Sized> #ident <C> for ::std::convert::Infallible {
+			impl<I: ?Sized> #ident<I> for ::std::convert::Infallible {
 				#(#never_associated_types)*
 				#(#never_methods)*
 			}
 
-			impl<'d, C: ?Sized, T: #ident<C>> #ident <C> for &'d T {
+			impl<'d, I: ?Sized, T: #ident<I>> #ident<I> for &'d T {
 				#(#ref_associated_types)*
 				#(#ref_methods)*
 			}
@@ -133,6 +137,7 @@ impl ToTokens for ClassTraitDefinition {
 
 pub struct TraitAssociatedType {
 	pub ident: Ident,
+	pub lifetime: Option<syn::Lifetime>,
 	pub bounds: Vec<syn::TypeParamBound>,
 	pub never_value: syn::Type,
 	pub ref_value: syn::Type,
@@ -141,10 +146,12 @@ pub struct TraitAssociatedType {
 impl ToTokens for TraitAssociatedType {
 	fn to_tokens(&self, tokens: &mut TokenStream) {
 		let ident = &self.ident;
+		let lft1 = self.lifetime.iter();
+		let lft2 = self.lifetime.iter();
 		let bounds = &self.bounds;
 
 		tokens.extend(quote! {
-			type #ident <'r> : #(#bounds)+* where Self: 'r, C: 'r;
+			type #ident #(<#lft1>)* : #(#bounds)+* #(where Self: #lft2, I: #lft2)*;
 		})
 	}
 }
@@ -162,7 +169,7 @@ impl ToTokens for TraitMethod {
 		let ty = &self.return_type;
 
 		tokens.extend(quote! {
-			fn #ident <'r> (&'r self, context: &'r C) -> #ty;
+			fn #ident <'r> (&'r self) -> #ty where I: 'r;
 		})
 	}
 }

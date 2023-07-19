@@ -8,7 +8,7 @@ use treeldr::{BlankIdIndex, IriIndex, TId};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TraitId {
 	FromRdf,
-	TriplesAndValues,
+	QuadsAndValues,
 	AsJsonLd,
 	IntoJsonLd,
 	IntoJsonLdSyntax,
@@ -163,7 +163,6 @@ pub struct Module {
 	layouts: HashSet<TId<treeldr::Layout>>,
 	types: HashSet<TId<treeldr::Type>>,
 	types_providers: HashSet<crate::tr::ProviderOf>,
-	types_trait_objects: HashSet<crate::tr::TraitObjectsOf>,
 	trait_impls: HashSet<TraitImpl>,
 }
 
@@ -183,7 +182,6 @@ impl Module {
 			layouts: HashSet::new(),
 			types: HashSet::new(),
 			types_providers: HashSet::new(),
-			types_trait_objects: HashSet::new(),
 			trait_impls: HashSet::new(),
 		}
 	}
@@ -238,14 +236,6 @@ impl Module {
 		&mut self.types_providers
 	}
 
-	pub fn types_trait_objects(&self) -> &HashSet<crate::tr::TraitObjectsOf> {
-		&self.types_trait_objects
-	}
-
-	pub fn types_trait_objects_mut(&mut self) -> &mut HashSet<crate::tr::TraitObjectsOf> {
-		&mut self.types_trait_objects
-	}
-
 	pub fn trait_impls(&self) -> &HashSet<TraitImpl> {
 		&self.trait_impls
 	}
@@ -281,14 +271,6 @@ impl<M> GenerateSyntax<M> for Module {
 		for provider in &self.types_providers {
 			items.push(syntax::ModuleItem::Trait(
 				syntax::TraitDefinition::ClassProvider(provider.generate_syntax(context, scope)?),
-			));
-		}
-
-		for trait_objects in &self.types_trait_objects {
-			items.push(syntax::ModuleItem::Type(
-				syntax::TypeDefinition::ClassTraitObject(
-					trait_objects.generate_syntax(context, scope)?,
-				),
 			));
 		}
 

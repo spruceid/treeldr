@@ -3,7 +3,7 @@ use json_ld::{syntax::Parse, JsonLdProcessor};
 use locspan::Span;
 use rdf_types::{Id, Term};
 use treeldr_rust_macros::tldr;
-use treeldr_rust_prelude::{ld::import_quad, static_iref::iri, FromRdf};
+use treeldr_rust_prelude::{ld::import_grdf_quad, static_iref::iri, FromRdf};
 
 #[tldr]
 pub mod base_schema {
@@ -39,16 +39,17 @@ async fn t05() {
 		.to_rdf(&mut generator, &mut loader)
 		.await
 		.expect("expansion failed");
-	let dataset: grdf::HashDataset<_, _, _, _> = to_rdf.quads().map(import_quad).collect();
+	let dataset: grdf::HashDataset<_, _, _, _> = to_rdf.quads().map(import_grdf_quad).collect();
 
 	for triple in dataset.default_graph() {
 		eprintln!("{} .", triple)
 	}
 
 	let value = schema::test::layout::Foo::from_rdf(
-		&mut (),
-		&Term::Id(Id::Iri(iri!("https://example.com/subject").to_owned())),
+		&(),
+		&(),
 		dataset.default_graph(),
+		&Term::Id(Id::Iri(iri!("https://example.com/subject").to_owned())),
 	)
 	.expect("invalid value");
 

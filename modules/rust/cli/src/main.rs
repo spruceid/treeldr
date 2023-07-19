@@ -166,13 +166,6 @@ pub fn main() {
 												Some(DedicatedSubModule::ClassProviders),
 											),
 										)),
-										trait_object: Some(treeldr_rust_gen::module::Parent::Ref(
-											sub_modules.get(
-												&mut gen_context,
-												path,
-												Some(DedicatedSubModule::TraitObjects),
-											),
-										)),
 									},
 								);
 							}

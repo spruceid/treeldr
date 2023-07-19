@@ -21,7 +21,7 @@ impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Struct> {
 		scope: &crate::Scope,
 	) -> Result<Self::Output, Error> {
 		let mut scope = scope.clone();
-		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
+		scope.params.identifier = Some(syn::parse2(quote!(I::Resource)).unwrap());
 
 		let mut fields_init = Vec::with_capacity(self.ty.fields().len());
 		let mut bound_set = BTreeSet::new();
@@ -61,24 +61,22 @@ impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Struct> {
 							}
 						}
 					} else {
-						let prop_id = match prop_ref.id() {
+						let prop_iri = match prop_ref.id() {
 							Id::Iri(i) => {
 								let iri = context.vocabulary().iri(&i).unwrap().into_str();
 								quote! {
-									::treeldr_rust_prelude::rdf_types::FromIri::from_iri(
-										namespace.insert(::treeldr_rust_prelude::static_iref::iri!(
-											#iri
-										))
+									::treeldr_rust_prelude::static_iref::iri!(
+										#iri
 									)
 								}
 							}
 							Id::Blank(_) => return Err(Error::BlankProperty(prop_ref)),
 						};
 
-						let objects = quote! { graph.objects(&id, &#prop_id) };
+						let objects = quote!(graph.objects(&id, &prop_id));
 
-						match field_layout.as_layout().description() {
-							treeldr::layout::Description::Required(_) => {
+						let (some, none) = match field_layout.as_layout().description() {
+							treeldr::layout::Description::Required(_) => (
 								quote! {
 									let mut objects = #objects;
 
@@ -88,19 +86,23 @@ impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Struct> {
 												panic!("multiples values on functional property")
 											}
 
-											::treeldr_rust_prelude::FromRdf::from_rdf(namespace, object, graph)?
+											::treeldr_rust_prelude::FromRdf::from_rdf(vocabulary, interpretation, graph, object)?
 										}
 										None => {
 											return Err(::treeldr_rust_prelude::FromRdfError::MissingRequiredPropertyValue)
 										}
 									}
-								}
-							}
+								},
+								quote! {
+									return Err(::treeldr_rust_prelude::FromRdfError::MissingRequiredPropertyValue)
+								},
+							),
 							treeldr::layout::Description::Option(_) => {
 								match field.ty(context).description() {
-									Description::BuiltIn(BuiltIn::Option(_)) => {
+									Description::BuiltIn(BuiltIn::Option(_)) => (
 										quote! {
 											let mut objects = #objects;
+
 											let object = objects.next();
 											if objects.next().is_some() {
 												panic!("multiples values on functional property")
@@ -108,16 +110,28 @@ impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Struct> {
 
 											match object {
 												Some(object) => Some({
-													::treeldr_rust_prelude::FromRdf::from_rdf(namespace, object, graph)?
+													::treeldr_rust_prelude::FromRdf::from_rdf(vocabulary, interpretation, graph, object)?
 												}),
 												None => None
 											}
-										}
-									}
+										},
+										quote!(None),
+									),
 									_ => panic!("not an option"),
 								}
 							}
 							_ => from_objects(field.ty(context), objects),
+						};
+
+						quote! {
+							match vocabulary.get(#prop_iri).and_then(|i| interpretation.iri_interpretation(&i)) {
+								Some(prop_id) => {
+									#some
+								}
+								None => {
+									#none
+								}
+							}
 						}
 					}
 				}
@@ -147,9 +161,7 @@ impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Struct> {
 						#(#fields_init),*
 					})
 				},
-				from_literal: quote!(Err(
-					::treeldr_rust_prelude::FromRdfError::UnexpectedLiteralValue
-				)),
+				from_literal: None,
 			},
 		))
 	}

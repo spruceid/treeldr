@@ -19,7 +19,7 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Enum> {
 		scope: &crate::Scope,
 	) -> Result<Self::Output, crate::Error> {
 		let mut scope = scope.clone();
-		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
+		scope.params.identifier = Some(syn::parse2(quote!(I::Resource)).unwrap());
 
 		let ident = self.ty.ident();
 		let iterator_ident = quads_and_values_iterator_name_from(ident);

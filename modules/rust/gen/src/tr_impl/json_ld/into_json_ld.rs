@@ -29,7 +29,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Struct> {
 		scope: &crate::Scope,
 	) -> Result<Self::Output, Error> {
 		let mut scope = scope.clone();
-		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
+		scope.params.identifier = Some(syn::parse2(quote!(I::Resource)).unwrap());
 
 		let mut insert_field = Vec::new();
 		for field in self.ty.fields() {
@@ -38,13 +38,13 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Struct> {
 					Id::Iri(iri) => {
 						let iri = context.vocabulary().iri(&iri).unwrap().to_string();
 						quote!(::treeldr_rust_prelude::json_ld::ValidId::Iri(
-							namespace.insert(::treeldr_rust_prelude::iref::Iri::new(#iri).unwrap())
+							vocabulary.insert(::treeldr_rust_prelude::iref::Iri::new(#iri).unwrap())
 						))
 					}
 					Id::Blank(blank) => {
 						let blank = context.vocabulary().blank_id(&blank).unwrap().to_string();
 						quote!(::treeldr_rust_prelude::json_ld::ValidId::Blank(
-							namespace.insert_blank_id(::treeldr_rust_prelude::rdf_types::BlankId::new(#blank).unwrap())
+							vocabulary.insert_blank_id(::treeldr_rust_prelude::rdf_types::BlankId::new(#blank).unwrap())
 						))
 					}
 				};
@@ -60,7 +60,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Struct> {
 						quote! {
 							result.properties_mut().insert(
 								::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::json_ld::Id::Valid(#rust_prop_id), ()),
-								::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(self.#id, namespace, meta)
+								::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(self.#id, vocabulary, interpretation, meta)
 							);
 						}
 					}
@@ -69,7 +69,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Struct> {
 							if let Some(value) = self.#id {
 								result.properties_mut().insert(
 									::treeldr_rust_prelude::locspan::Meta(::treeldr_rust_prelude::json_ld::Id::Valid(#rust_prop_id), ()),
-									::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(value, namespace, meta)
+									::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(value, vocabulary, interpretation, meta)
 								);
 							}
 						}
@@ -81,7 +81,7 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Struct> {
 									(),
 									::treeldr_rust_prelude::locspan::Meta(
 										self.#id.into_iter()
-											.map(|v| ::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(v, namespace, meta)).collect(),
+											.map(|v| ::treeldr_rust_prelude::IntoJsonLdObjectMeta::into_json_ld_object_meta(v, vocabulary, interpretation, meta)).collect(),
 										()
 									)
 								);
@@ -122,14 +122,14 @@ impl<'a, M> GenerateSyntax<M> for IntoJsonLdImpl<'a, Enum> {
 		scope: &crate::Scope,
 	) -> Result<Self::Output, Error> {
 		let mut scope = scope.clone();
-		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
+		scope.params.identifier = Some(syn::parse2(quote!(I::Resource)).unwrap());
 
 		let variants = self.ty.variants().iter().map(|variant| {
 			let v_ident = variant.ident();
 			if variant.ty().is_some() {
 				quote! {
 					Self::#v_ident(value) => {
-						value.into_json_ld_object_meta(namespace, meta)
+						value.into_json_ld_object_meta(vocabulary, interpretation, meta)
 					}
 				}
 			} else {

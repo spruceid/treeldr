@@ -145,7 +145,7 @@ impl Type {
 				f(TraitId::FromRdf.impl_for(layout_ref));
 				f(TraitId::AsJsonLd.impl_for(layout_ref));
 				f(TraitId::IntoJsonLd.impl_for(layout_ref));
-				f(TraitId::TriplesAndValues.impl_for(layout_ref));
+				f(TraitId::QuadsAndValues.impl_for(layout_ref));
 			}
 
 			f(TraitId::IntoJsonLdSyntax.impl_for(layout_ref));
@@ -483,78 +483,6 @@ impl<M> GenerateSyntax<M> for Referenced<TId<treeldr::Layout>> {
 				Ok(syn::parse2(quote!(&::treeldr_rust_prelude::Id<#id>)).unwrap())
 			}
 			Description::BuiltIn(b) => Referenced(*b).generate_syntax(context, scope),
-		}
-	}
-}
-
-pub struct InContext<T>(pub T);
-
-impl<M> GenerateSyntax<M> for InContext<TId<treeldr::Layout>> {
-	type Output = syn::Type;
-
-	fn generate_syntax<V: Vocabulary<Iri = IriIndex, BlankId = BlankIdIndex>>(
-		&self,
-		context: &Context<V, M>,
-		scope: &Scope,
-	) -> Result<Self::Output, Error> {
-		let ty = context
-			.layout_type(self.0)
-			.expect("undefined generated layout");
-		match ty.description() {
-			Description::Never => Ok(syn::parse2(quote!(::std::convert::Infallible)).unwrap()),
-			Description::Primitive(p) => p.generate_syntax(context, scope),
-			Description::DerivedPrimitive(r) => {
-				let path = context
-					.module_path(scope.module)
-					.to(&ty
-						.path(context, r.ident().clone())
-						.ok_or(Error::UnreachableType(self.0))?)
-					.generate_syntax(context, scope)?;
-
-				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
-			}
-			Description::Alias(a) => {
-				let path = context
-					.module_path(scope.module)
-					.to(&ty
-						.path(context, a.ident().clone())
-						.ok_or(Error::UnreachableType(self.0))?)
-					.generate_syntax(context, scope)?;
-
-				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
-			}
-			Description::Struct(s) => {
-				let path = context
-					.module_path(scope.module)
-					.to(&ty
-						.path(context, s.ident().clone())
-						.ok_or(Error::UnreachableType(self.0))?)
-					.generate_syntax(context, scope)?;
-
-				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
-			}
-			Description::Enum(e) => {
-				let path = context
-					.module_path(scope.module)
-					.to(&ty
-						.path(context, e.ident().clone())
-						.ok_or(Error::UnreachableType(self.0))?)
-					.generate_syntax(context, scope)?;
-
-				Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
-			}
-			Description::Reference(ty_id) => {
-				let tr = context.type_trait(*ty_id).unwrap();
-				let ident = tr.ident();
-				let context_path = context
-					.module_path(scope.module)
-					.to(&tr
-						.context_path(context)
-						.ok_or_else(|| Error::unreachable_trait(*ty_id))?)
-					.generate_syntax(context, scope)?;
-				Ok(syn::parse2(quote! { <C as #context_path >::#ident }).unwrap())
-			}
-			Description::BuiltIn(b) => b.generate_syntax(context, scope),
 		}
 	}
 }

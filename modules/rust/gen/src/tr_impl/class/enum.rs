@@ -35,50 +35,68 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 
 		let mut associated_types = Vec::new();
 		for a in tr.associated_types() {
-			let a_expr = match a.trait_object_path(context, tr) {
-				Some(path) => {
-					let path = context
-						.module_path(scope.module)
-						.to(&path)
-						.generate_syntax(context, &scope)?;
-					syn::parse2(quote!(#path)).unwrap()
-				}
-				None => {
-					let item_path = tr.associated_types()[a.collection_item_type().unwrap()]
-						.trait_object_path(context, tr)
-						.unwrap();
-					let item_path = context
-						.module_path(scope.module)
-						.to(&item_path)
-						.generate_syntax(context, &scope)?;
-					syn::parse2(quote!(Box<dyn 'r + Iterator<Item = #item_path>>)).unwrap()
-				}
-			};
+			// let a_expr = match a.trait_object_path(context, tr) {
+			// 	Some(path) => {
+			// 		let path = context
+			// 			.module_path(scope.module)
+			// 			.to(&path)
+			// 			.generate_syntax(context, &scope)?;
+			// 		syn::parse2(quote!(#path)).unwrap()
+			// 	}
+			// 	None => {
+			// 		let item_path = tr.associated_types()[a.collection_item_type().unwrap()]
+			// 			.trait_object_path(context, tr)
+			// 			.unwrap();
+			// 		let item_path = context
+			// 			.module_path(scope.module)
+			// 			.to(&item_path)
+			// 			.generate_syntax(context, &scope)?;
+			// 		syn::parse2(quote!(Box<dyn 'r + Iterator<Item = #item_path>>)).unwrap()
+			// 	}
+			// };
+			associated_types.push(syntax::tr_impl::class::AssociatedType {
+				ident: a.ident().clone(),
+				lifetime: None,
+				value: syn::parse2(quote!(::std::convert::Infallible)).unwrap(),
+			});
 
-			associated_types.push((a.ident().clone(), a_expr))
+			if let Some(collection_ident) = a.collection_ident() {
+				associated_types.push(syntax::tr_impl::class::AssociatedType {
+					ident: collection_ident.clone(),
+					lifetime: Some(syn::parse2(quote!('r)).unwrap()),
+					value: syn::parse2(quote!(
+						::std::iter::Empty<
+							::treeldr_rust_prelude::Ref<'r, I, ::std::convert::Infallible>,
+						>
+					))
+					.unwrap(),
+				});
+			}
 		}
 
 		let mut methods = Vec::new();
 		for m in tr.methods() {
-			let m_ident = m.ident();
+			let _m_ident = m.ident();
 			let return_ty = m.return_type_expr(tr);
 
 			let mut cases = Vec::with_capacity(self.ty.variants().len());
 			for v in self.ty.variants() {
 				let v_ident = v.ident();
 				let case = match m.type_() {
-					MethodType::Option(i) => {
-						let m_a = &tr.associated_types()[*i];
-						let m_path = context
-							.module_path(scope.module)
-							.to(&m_a.trait_object_path(context, tr).unwrap())
-							.generate_syntax(context, &scope)?;
-
+					MethodType::Option(_i) => {
 						if v.ty().is_some() {
+							// let m_a = &tr.associated_types()[*i];
+							// let m_path = context
+							// 	.module_path(scope.module)
+							// 	.to(&m_a.trait_object_path(context, tr).unwrap())
+							// 	.generate_syntax(context, &scope)?;
+							// quote! {
+							// 	Self::#v_ident (value) => {
+							// 		value.#m_ident(context).map(#m_path::new)
+							// 	}
+							// }
 							quote! {
-								Self::#v_ident (value) => {
-									value.#m_ident(context).map(#m_path::new)
-								}
+								Self::#v_ident (value) => { todo!() }
 							}
 						} else {
 							quote! {
@@ -88,35 +106,37 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 							}
 						}
 					}
-					MethodType::Required(i) => {
+					MethodType::Required(_i) => {
 						if v.ty().is_some() {
-							let m_a = &tr.associated_types()[*i];
-
-							match m_a.trait_object_path(context, tr) {
-								Some(path) => {
-									let path = context
-										.module_path(scope.module)
-										.to(&path)
-										.generate_syntax(context, &scope)?;
-									quote! {
-										Self::#v_ident (value) => {
-											#path::new(value.#m_ident(context))
-										}
-									}
-								}
-								None => {
-									let item_a =
-										&tr.associated_types()[m_a.collection_item_type().unwrap()];
-									let path = context
-										.module_path(scope.module)
-										.to(&item_a.trait_object_path(context, tr).unwrap())
-										.generate_syntax(context, &scope)?;
-									quote! {
-										Self::#v_ident (value) => {
-											Box::new(value.#m_ident(context).map(#path::new))
-										}
-									}
-								}
+							// let m_a = &tr.associated_types()[*i];
+							// match m_a.trait_object_path(context, tr) {
+							// 	Some(path) => {
+							// 		let path = context
+							// 			.module_path(scope.module)
+							// 			.to(&path)
+							// 			.generate_syntax(context, &scope)?;
+							// 		quote! {
+							// 			Self::#v_ident (value) => {
+							// 				#path::new(value.#m_ident(context))
+							// 			}
+							// 		}
+							// 	}
+							// 	None => {
+							// 		let item_a =
+							// 			&tr.associated_types()[m_a.collection_item_type().unwrap()];
+							// 		let path = context
+							// 			.module_path(scope.module)
+							// 			.to(&item_a.trait_object_path(context, tr).unwrap())
+							// 			.generate_syntax(context, &scope)?;
+							// 		quote! {
+							// 			Self::#v_ident (value) => {
+							// 				Box::new(value.#m_ident(context).map(#path::new))
+							// 			}
+							// 		}
+							// 	}
+							// }
+							quote! {
+								Self::#v_ident (value) => { todo!() }
 							}
 						} else {
 							quote! {
@@ -142,29 +162,12 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Enum> {
 			});
 		}
 
-		let dyn_table_path = context
-			.module_path(scope.module)
-			.to(&tr.dyn_table_path(context).unwrap())
-			.generate_syntax(context, &scope)?;
-		let dyn_table_instance_path = context
-			.module_path(scope.module)
-			.to(&tr.dyn_table_instance_path(context).unwrap())
-			.generate_syntax(context, &scope)?;
-
-		let mut type_params = Vec::new();
-		if self.ty.params().identifier {
-			type_params.push(syn::parse2(quote!(I)).unwrap());
-		}
-
 		Ok(syntax::tr_impl::class::TraitImpl {
 			type_path,
-			type_params,
 			trait_path,
 			context_bounds,
 			associated_types,
 			methods,
-			dyn_table_path,
-			dyn_table_instance_path,
 		})
 	}
 }

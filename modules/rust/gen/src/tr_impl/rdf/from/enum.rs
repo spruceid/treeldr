@@ -23,7 +23,7 @@ impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Enum> {
 		scope: &crate::Scope,
 	) -> Result<Self::Output, Error> {
 		let mut scope = scope.clone();
-		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
+		scope.params.identifier = Some(syn::parse2(quote!(I::Resource)).unwrap());
 
 		let mut bound_set = BTreeSet::new();
 		let mut id_set = BTreeSet::new();
@@ -98,7 +98,7 @@ impl<'a, M> GenerateSyntax<M> for FromRdfImpl<'a, Enum> {
 				type_path: self.ty_ref.generate_syntax(context, &scope)?,
 				bounds,
 				from_id: id_branch,
-				from_literal: literal_branch,
+				from_literal: Some(literal_branch),
 			},
 		))
 	}
@@ -387,7 +387,7 @@ impl<C: Condition> DecisionTree<C> {
 					match variant.ty() {
 						Some(_) => {
 							quote! {
-								Ok(Self::#v_ident(::treeldr_rust_prelude::rdf::FromRdf::from_rdf(namespace, value, graph)?))
+								Ok(Self::#v_ident(::treeldr_rust_prelude::rdf::FromRdf::from_rdf(vocabulary, interpretation, graph, id)?))
 							}
 						}
 						None => {
@@ -420,41 +420,50 @@ impl Condition for IdCondition {
 	) -> TokenStream {
 		match *self {
 			Self::Type(ty_ref) => {
-				let property = quote! {
-					::treeldr_rust_prelude::rdf_types::FromIri::from_iri(
-						namespace.insert(::treeldr_rust_prelude::static_iref::iri!(
-							"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-						))
+				let property_iri = quote! {
+					::treeldr_rust_prelude::static_iref::iri!(
+						"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 					)
 				};
 
 				let ty_iri_index = ty_ref.id().into_iri().unwrap();
 				let ty_iri = context.vocabulary().iri(&ty_iri_index).unwrap().into_str();
-				let ty_id = quote! {
-					::treeldr_rust_prelude::rdf_types::FromIri::from_iri(
-						namespace.insert(::treeldr_rust_prelude::static_iref::iri!(
-							#ty_iri
-						))
+				let ty_iri = quote! {
+					::treeldr_rust_prelude::static_iref::iri!(
+						#ty_iri
 					)
 				};
 
 				quote! {
-					graph.any_match(::treeldr_rust_prelude::rdf_types::Triple(Some(id), Some(&#property), Some(&#ty_id))).is_some()
+					vocabulary
+						.get(#property_iri)
+						.and_then(|i| interpretation.iri_interpretation(&i))
+						.and_then(|p| {
+							vocabulary
+								.get(#ty_iri)
+								.and_then(|i| interpretation.iri_interpretation(&i))
+								.map(|t| (p, t))
+						})
+						.and_then(|(p, t)| {
+							graph.any_match(::treeldr_rust_prelude::rdf_types::Triple(Some(id), Some(&p), Some(&t)))
+						}).is_some()
 				}
 			}
 			Self::Property(prop_ref) => {
 				let iri_index = prop_ref.id().into_iri().unwrap();
 				let iri = context.vocabulary().iri(&iri_index).unwrap().into_str();
-				let property = quote! {
-					::treeldr_rust_prelude::rdf_types::FromIri::from_iri(
-						namespace.insert(::treeldr_rust_prelude::static_iref::iri!(
-							#iri
-						))
+				let property_iri = quote! {
+					::treeldr_rust_prelude::static_iref::iri!(
+						#iri
 					)
 				};
 
 				quote! {
-					graph.any_match(::treeldr_rust_prelude::rdf_types::Triple(Some(id), Some(&#property), None)).is_some()
+					vocabulary
+						.get(#property_iri)
+						.and_then(|i| interpretation.iri_interpretation(&i))
+						.and_then(|p| graph.any_match(::treeldr_rust_prelude::rdf_types::Triple(Some(id), Some(&p), None)))
+						.is_some()
 				}
 			}
 		}

@@ -9,10 +9,8 @@ use crate::{module, path, Context, GenerateSyntax, Path};
 
 mod class_provider;
 mod generate;
-mod trait_objects;
 
 pub use class_provider::ProviderOf;
-pub use trait_objects::TraitObjectsOf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ContextBound(pub TId<treeldr::Type>);
@@ -80,9 +78,6 @@ pub struct TraitModules {
 
 	/// Where the `*Provider` trait is defined.
 	pub provider: Option<module::Parent>,
-
-	/// Where the
-	pub trait_object: Option<module::Parent>,
 }
 
 impl Default for TraitModules {
@@ -90,7 +85,6 @@ impl Default for TraitModules {
 		Self {
 			main: Some(module::Parent::Extern),
 			provider: Some(module::Parent::Extern),
-			trait_object: Some(module::Parent::Extern),
 		}
 	}
 }
@@ -201,7 +195,7 @@ impl Trait {
 	pub fn path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
 		let mut path = context.parent_module_path(self.modules.main)?;
 		path.push(path::Segment::Ident(self.ident.clone()));
-		path.parameters_mut().context = true;
+		path.parameters_mut().identifier = true;
 		Some(path)
 	}
 
@@ -212,27 +206,8 @@ impl Trait {
 		Some(path)
 	}
 
-	pub fn dyn_table_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
-		let mut path = context.parent_module_path(self.modules.trait_object)?;
-		path.push(path::Segment::Ident(self.dyn_table_ident()));
-		path.parameters_mut().context = true;
-		Some(path)
-	}
-
-	pub fn dyn_table_instance_path<V, M>(&self, context: &Context<V, M>) -> Option<Path> {
-		let mut path = context.parent_module_path(self.modules.trait_object)?;
-		path.push(path::Segment::Ident(self.dyn_table_instance_ident()));
-		path.parameters_mut().context = true;
-		path.parameters_mut().lifetime = true;
-		Some(path)
-	}
-
 	pub fn module(&self) -> Option<module::Parent> {
 		self.modules.main
-	}
-
-	pub fn trait_objects_module(&self) -> Option<module::Parent> {
-		self.modules.trait_object
 	}
 
 	pub fn ident(&self) -> &Ident {
@@ -241,14 +216,6 @@ impl Trait {
 
 	pub fn context_ident(&self) -> Ident {
 		format_ident!("{}Provider", self.ident)
-	}
-
-	pub fn dyn_table_ident(&self) -> Ident {
-		format_ident!("{}DynTable", self.ident)
-	}
-
-	pub fn dyn_table_instance_ident(&self) -> Ident {
-		format_ident!("{}DynTableInstance", self.ident)
 	}
 
 	pub fn label(&self) -> Option<&str> {
@@ -267,14 +234,8 @@ impl Trait {
 		&self.associated_types
 	}
 
-	pub fn associated_type_for(
-		&self,
-		prop: TId<treeldr::Property>,
-		collection: bool,
-	) -> Option<&AssociatedType> {
-		self.associated_types
-			.iter()
-			.find(|a| a.prop == prop && a.is_collection() == collection)
+	pub fn associated_type_for(&self, prop: TId<treeldr::Property>) -> Option<&AssociatedType> {
+		self.associated_types.iter().find(|a| a.prop == prop)
 	}
 
 	pub fn methods(&self) -> &[Method] {
@@ -287,8 +248,9 @@ pub struct AssociatedType {
 	/// Property.
 	prop: TId<treeldr::Property>,
 
-	/// Associated type definition.
 	ident: Ident,
+
+	collection_ident: Option<Ident>,
 
 	/// Label.
 	label: Option<String>,
@@ -296,30 +258,30 @@ pub struct AssociatedType {
 	/// Documentation.
 	doc: treeldr::StrippedDocumentation,
 
-	/// Trait bound.
-	bound: AssociatedTypeBound,
+	bounds: AssociatedPropertyTypeBounds,
 }
 
 impl AssociatedType {
 	pub fn new(
 		prop: TId<treeldr::Property>,
 		ident: Ident,
+		collection_ident: Option<Ident>,
 		label: Option<String>,
 		doc: treeldr::StrippedDocumentation,
-		bound: AssociatedTypeBound,
+		bounds: AssociatedPropertyTypeBounds,
 	) -> Self {
 		Self {
 			prop,
 			ident,
+			collection_ident,
 			label,
 			doc,
-			bound,
+			bounds,
 		}
 	}
 
 	pub fn build<V, M>(
 		context: &Context<V, M>,
-		associated_types: &mut Vec<AssociatedType>,
 		name: &Name,
 		p: treeldr::ty::properties::RestrictedProperty<M>,
 	) -> Self {
@@ -327,35 +289,27 @@ impl AssociatedType {
 		let prop = context.model().get(p.property()).unwrap();
 		let label = prop.preferred_label().map(Literal::to_string);
 		let doc = prop.comment().clone_stripped();
-		let assoc_ty = Self::new(
+
+		let collection_ident = if prop.as_property().is_functional() {
+			None
+		} else {
+			Some(format_ident!("{}s", name.to_pascal_case()))
+		};
+
+		Self::new(
 			p.property(),
 			ident,
+			collection_ident,
 			label,
 			doc,
-			AssociatedTypeBound::Types(
+			AssociatedPropertyTypeBounds(
 				prop.as_property()
 					.range()
 					.iter()
 					.map(|r| **r.value)
 					.collect(),
 			),
-		);
-
-		if prop.as_property().is_functional() {
-			assoc_ty
-		} else {
-			let i = associated_types.len();
-			associated_types.push(assoc_ty);
-
-			let ident = format_ident!("{}s", name.to_pascal_case());
-			Self::new(
-				p.property(),
-				ident,
-				None,
-				treeldr::StrippedDocumentation::default(),
-				AssociatedTypeBound::Collection(i),
-			)
-		}
+		)
 	}
 
 	pub fn property(&self) -> TId<treeldr::Property> {
@@ -366,25 +320,12 @@ impl AssociatedType {
 		&self.ident
 	}
 
-	/// Identifier of the trait object for this associated type.
-	pub fn trait_object_ident(&self, tr: &Trait) -> Option<Ident> {
-		if self.is_collection() {
-			None
-		} else {
-			Some(format_ident!("Dyn{}{}", tr.ident(), &self.ident))
-		}
+	pub fn collection_ident(&self) -> Option<&Ident> {
+		self.collection_ident.as_ref()
 	}
 
-	pub fn trait_object_path<V, M>(&self, context: &Context<V, M>, tr: &Trait) -> Option<Path> {
-		self.trait_object_ident(tr).map(|ident| {
-			let mut path = context
-				.parent_module_path(tr.trait_objects_module())
-				.unwrap();
-			path.push(ident);
-			path.parameters_mut().lifetime = true;
-			path.parameters_mut().context = true;
-			path
-		})
+	pub fn is_collection(&self) -> bool {
+		self.collection_ident.is_some()
 	}
 
 	pub fn label(&self) -> Option<&str> {
@@ -395,40 +336,28 @@ impl AssociatedType {
 		&self.doc
 	}
 
-	pub fn bound(&self) -> &AssociatedTypeBound {
-		&self.bound
+	pub fn bounds(&self) -> &AssociatedPropertyTypeBounds {
+		&self.bounds
 	}
 
-	pub fn is_collection(&self) -> bool {
-		self.bound.is_collection()
-	}
-
-	pub fn collection_item_type(&self) -> Option<usize> {
-		self.bound.collection_item_type()
+	pub fn collection_bound(&self) -> AssociatedCollectionTypeBound {
+		AssociatedCollectionTypeBound(&self.ident)
 	}
 }
 
-/// Associated type bound.
-pub enum AssociatedTypeBound {
-	/// RDF type.
-	Types(Vec<TId<treeldr::Type>>),
+pub struct AssociatedPropertyTypeBounds(Vec<TId<treeldr::Type>>);
 
-	/// Collection of the other associated type (given by its index).
-	///
-	/// The actual bound will be `Iterator<Item = &'a Self::T>`.
-	Collection(usize),
+impl AssociatedPropertyTypeBounds {
+	pub fn traits(&self) -> &[TId<treeldr::Type>] {
+		&self.0
+	}
 }
 
-impl AssociatedTypeBound {
-	pub fn is_collection(&self) -> bool {
-		matches!(self, Self::Collection(_))
-	}
+pub struct AssociatedCollectionTypeBound<'a>(&'a Ident);
 
-	pub fn collection_item_type(&self) -> Option<usize> {
-		match self {
-			Self::Collection(item_ty) => Some(*item_ty),
-			Self::Types(_) => None,
-		}
+impl<'a> AssociatedCollectionTypeBound<'a> {
+	pub fn item_ident(&self) -> &'a Ident {
+		self.0
 	}
 }
 
@@ -473,7 +402,7 @@ impl Method {
 		name: &Name,
 		p: treeldr::ty::properties::RestrictedProperty<M>,
 	) -> Self {
-		let assoc_ty = AssociatedType::build(context, associated_types, name, p);
+		let assoc_ty = AssociatedType::build(context, name, p);
 		let i = associated_types.len();
 		associated_types.push(assoc_ty);
 
@@ -523,12 +452,28 @@ impl Method {
 	pub fn return_type_expr(&self, tr: &Trait) -> syn::Type {
 		match &self.ty {
 			MethodType::Required(i) => {
-				let a_ident = tr.associated_types()[*i].ident();
-				syn::parse2(quote!(Self::#a_ident<'r>)).unwrap()
+				let a = &tr.associated_types()[*i];
+				match a.collection_ident() {
+					Some(collection_ident) => {
+						syn::parse2(quote!(Self::#collection_ident<'r>)).unwrap()
+					}
+					None => {
+						let ident = a.ident();
+						syn::parse2(quote!(&'r Self::#ident)).unwrap()
+					}
+				}
 			}
 			MethodType::Option(i) => {
-				let a_ident = tr.associated_types()[*i].ident();
-				syn::parse2(quote!(Option<Self::#a_ident<'r>>)).unwrap()
+				let a = &tr.associated_types()[*i];
+				match a.collection_ident() {
+					Some(collection_ident) => {
+						syn::parse2(quote!(Option<Self::#collection_ident<'r>>)).unwrap()
+					}
+					None => {
+						let ident = a.ident();
+						syn::parse2(quote!(Option<&'r Self::#ident>)).unwrap()
+					}
+				}
 			}
 		}
 	}

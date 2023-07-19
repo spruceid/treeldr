@@ -25,21 +25,26 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Primitive> {
 		let trait_path = self.tr_ref.generate_syntax(context, &scope)?;
 
 		let tr = context.type_trait(self.tr_ref).unwrap();
-		let associated_types = tr
-			.associated_types()
-			.iter()
-			.map(|a| {
-				let ty_expr = if a.is_collection() {
-					let item_a = &tr.associated_types()[a.collection_item_type().unwrap()];
-					let item_ident = item_a.ident();
-					syn::parse2(quote!(::std::iter::Empty<Self::#item_ident <'r>>)).unwrap()
-				} else {
-					syn::parse2(quote!(&'r ::std::convert::Infallible)).unwrap()
-				};
+		let mut associated_types = Vec::with_capacity(tr.associated_types().len() * 2);
+		for a in tr.associated_types() {
+			let ident = a.ident();
+			associated_types.push(syntax::tr_impl::class::AssociatedType {
+				ident: ident.clone(),
+				lifetime: None,
+				value: syn::parse2(quote!(::std::convert::Infallible)).unwrap(),
+			});
 
-				(a.ident().clone(), ty_expr)
-			})
-			.collect();
+			if let Some(collection_ident) = a.collection_ident() {
+				associated_types.push(syntax::tr_impl::class::AssociatedType {
+					ident: collection_ident.clone(),
+					lifetime: Some(syn::parse2(quote!('r)).unwrap()),
+					value: syn::parse2(
+						quote!(::std::iter::Empty<::treeldr_rust_prelude::Ref<'r, I, Self::#ident>>),
+					)
+					.unwrap(),
+				});
+			}
+		}
 
 		let methods: Vec<_> = tr
 			.methods()
@@ -73,24 +78,12 @@ impl<'a, M> GenerateSyntax<M> for ClassTraitImpl<'a, Primitive> {
 			})
 			.collect();
 
-		let dyn_table_path = context
-			.module_path(scope.module)
-			.to(&tr.dyn_table_path(context).unwrap())
-			.generate_syntax(context, &scope)?;
-		let dyn_table_instance_path = context
-			.module_path(scope.module)
-			.to(&tr.dyn_table_instance_path(context).unwrap())
-			.generate_syntax(context, &scope)?;
-
 		Ok(syntax::tr_impl::class::TraitImpl {
 			type_path,
-			type_params: Vec::new(),
 			trait_path,
 			context_bounds: Vec::new(),
 			associated_types,
 			methods,
-			dyn_table_path,
-			dyn_table_instance_path,
 		})
 	}
 }

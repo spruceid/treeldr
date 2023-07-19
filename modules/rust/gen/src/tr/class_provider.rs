@@ -17,8 +17,7 @@ impl<M> GenerateSyntax<M> for ProviderOf {
 		scope: &crate::Scope,
 	) -> Result<Self::Output, crate::Error> {
 		let mut scope = scope.clone();
-		scope.params.context = Some(syn::parse2(quote!(Self)).unwrap());
-
+		scope.params.identifier = Some(syn::parse2(quote!(I)).unwrap());
 		let tr = context.type_trait(self.0).unwrap();
 
 		Ok(syntax::ClassProviderTraitDefinition {

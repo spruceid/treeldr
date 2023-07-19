@@ -1,19 +1,47 @@
 use std::borrow::Cow;
 
-use contextual::WithContext;
-use rdf_types::{Literal, Namespace, Object, Quad, Subject};
+use rdf_types::{Object, Quad, ReverseTermInterpretation, Subject, Term, Vocabulary};
 
-use crate::Id;
+pub trait IntoJsonLdSyntax<V, I, M = ()> {
+	fn into_json_ld_syntax(self, vocabulary: &V, interpretation: &I) -> json_ld::syntax::Value<M>;
+}
 
-pub trait IntoJsonLdSyntax<N, M = ()> {
-	fn into_json_ld_syntax(self, namespace: &N) -> json_ld::syntax::Value<M>;
+impl<
+		V: Vocabulary,
+		I: ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
+		M,
+	> IntoJsonLdSyntax<V, I, M> for crate::Id<I::Resource>
+where
+	V::Value: AsRef<str>,
+{
+	fn into_json_ld_syntax(self, vocabulary: &V, interpretation: &I) -> json_ld::syntax::Value<M> {
+		match interpretation.iris_of(&self.0).next() {
+			Some(i) => {
+				let iri = vocabulary.iri(i).unwrap();
+				json_ld::syntax::Value::String(iri.as_str().into())
+			}
+			None => match interpretation.blank_ids_of(&self.0).next() {
+				Some(b) => {
+					let blank_id = vocabulary.blank_id(b).unwrap();
+					json_ld::syntax::Value::String(blank_id.as_str().into())
+				}
+				None => match interpretation.literals_of(&self.0).next() {
+					Some(l) => {
+						let literal = vocabulary.literal(l).unwrap();
+						json_ld::syntax::Value::String(literal.value().as_ref().into())
+					}
+					None => json_ld::syntax::Value::Null,
+				},
+			},
+		}
+	}
 }
 
 macro_rules! impl_into_json_ld_syntax_literal {
 	{ $($ty:ty : $rdf_ty:tt),* } => {
 		$(
-			impl<N, M> IntoJsonLdSyntax<N, M> for $ty {
-				fn into_json_ld_syntax(self, _namespace: &N) -> json_ld::syntax::Value<M> {
+			impl<V, I, M> IntoJsonLdSyntax<V, I, M> for $ty {
+				fn into_json_ld_syntax(self, _vocabulary: &V, _interpretation: &I) -> json_ld::syntax::Value<M> {
 					json_ld::syntax::Value::String(self.to_string().into())
 				}
 			}
@@ -41,35 +69,21 @@ impl_into_json_ld_syntax_literal! {
 	xsd_types::Float: "http://www.w3.org/2001/XMLSchema#float",
 	xsd_types::String: "http://www.w3.org/2001/XMLSchema#string",
 	xsd_types::Base64BinaryBuf: "http://www.w3.org/2001/XMLSchema#base64Binary",
-	xsd_types::HexBinaryBuf: "http://www.w3.org/2001/XMLSchema#hexBinary"
+	xsd_types::HexBinaryBuf: "http://www.w3.org/2001/XMLSchema#hexBinary",
+	chrono::NaiveDate: "http://www.w3.org/2001/XMLSchema#date",
+	chrono::DateTime<chrono::Utc>: "http://www.w3.org/2001/XMLSchema#dateTime",
+	iref::IriBuf: "http://www.w3.org/2001/XMLSchema#anyURI",
+	iref::IriRefBuf: "http://www.w3.org/2001/XMLSchema#anyURI"
 }
 
-impl<N, M> IntoJsonLdSyntax<N, M> for chrono::NaiveDate {
-	fn into_json_ld_syntax(self, _namespace: &N) -> json_ld::syntax::Value<M> {
-		json_ld::syntax::Value::String(self.to_string().into())
-	}
-}
-
-impl<N, M> IntoJsonLdSyntax<N, M> for chrono::DateTime<chrono::Utc> {
-	fn into_json_ld_syntax(self, _namespace: &N) -> json_ld::syntax::Value<M> {
-		json_ld::syntax::Value::String(self.to_string().into())
-	}
-}
-
-impl<N, M> IntoJsonLdSyntax<N, M> for iref::IriBuf {
-	fn into_json_ld_syntax(self, _namespace: &N) -> json_ld::syntax::Value<M> {
-		json_ld::syntax::Value::String(self.to_string().into())
-	}
-}
-
-impl<N, M> IntoJsonLdSyntax<N, M> for iref::IriRefBuf {
-	fn into_json_ld_syntax(self, _namespace: &N) -> json_ld::syntax::Value<M> {
-		json_ld::syntax::Value::String(self.to_string().into())
-	}
-}
-
-impl<N, I: std::fmt::Display, B: std::fmt::Display, M> IntoJsonLdSyntax<N, M> for Subject<I, B> {
-	fn into_json_ld_syntax(self, _namespace: &N) -> json_ld::syntax::Value<M> {
+impl<V, I, T: std::fmt::Display, B: std::fmt::Display, M> IntoJsonLdSyntax<V, I, M>
+	for Subject<T, B>
+{
+	fn into_json_ld_syntax(
+		self,
+		_vocabulary: &V,
+		_interpretation: &I,
+	) -> json_ld::syntax::Value<M> {
 		match self {
 			Subject::Iri(i) => json_ld::syntax::Value::String(i.to_string().into()),
 			Subject::Blank(b) => json_ld::syntax::Value::String(b.to_string().into()),
@@ -77,38 +91,58 @@ impl<N, I: std::fmt::Display, B: std::fmt::Display, M> IntoJsonLdSyntax<N, M> fo
 	}
 }
 
-impl<N: Namespace, M> IntoJsonLdSyntax<N, M> for Id<N::Id>
-where
-	N::Id: contextual::DisplayWithContext<N>,
-{
-	fn into_json_ld_syntax(self, namespace: &N) -> json_ld::syntax::Value<M> {
-		json_ld::syntax::Value::String(self.0.with(namespace).to_string().into())
-	}
-}
+// impl<N: Namespace, M> IntoJsonLdSyntax<V, M> for Id<N::Id>
+// where
+// 	N::Id: contextual::DisplayWithContext<N>,
+// {
+// 	fn into_json_ld_syntax(self, namespace: &N) -> json_ld::syntax::Value<M> {
+// 		json_ld::syntax::Value::String(self.0.with(namespace).to_string().into())
+// 	}
+// }
 
 /// RDF Quad imported from the `json_ld` library by using the [`import_quad`]
 /// function to clone the components of a `GeneratedQuad`.
-pub type ImportedQuad<'a, I, B> = Quad<
+pub type ImportedQuad<I, B, L> = Quad<
 	rdf_types::Id<I, B>,
 	rdf_types::Id<I, B>,
-	Object<rdf_types::Id<I, B>, Literal<String, I>>,
-	&'a rdf_types::Id<I, B>,
+	Object<rdf_types::Id<I, B>, L>,
+	rdf_types::Id<I, B>,
+>;
+
+/// gRDF Quad imported from the `json_ld` library by using the [`import_grdf_quad`]
+/// function to clone the components of a `GeneratedQuad`.
+pub type ImportedGrdfQuad<I, B, L> = Quad<
+	Term<rdf_types::Id<I, B>, L>,
+	Term<rdf_types::Id<I, B>, L>,
+	Term<rdf_types::Id<I, B>, L>,
+	Term<rdf_types::Id<I, B>, L>,
 >;
 
 /// RDF Quad generated by the `json_ld` library.
-pub type GeneratedQuad<'a, I, B> = rdf_types::Quad<
+pub type GeneratedQuad<'a, I, B, L> = rdf_types::Quad<
 	Cow<'a, rdf_types::Id<I, B>>,
 	Cow<'a, rdf_types::Id<I, B>>,
-	Object<rdf_types::Id<I, B>, Literal<String, I>>,
+	Object<rdf_types::Id<I, B>, L>,
 	&'a rdf_types::Id<I, B>,
 >;
 
 /// Converts a `GeneratedQuad` into an `ImportedQuad` by copying the borrowed
-/// subject and predicate.
-pub fn import_quad<I: Clone, B: Clone>(
-	Quad(subject, predicate, object, graph): GeneratedQuad<I, B>,
-) -> ImportedQuad<I, B> {
+/// subject, predicate and graph.
+pub fn import_quad<I: Clone, B: Clone, L>(
+	Quad(subject, predicate, object, graph): GeneratedQuad<I, B, L>,
+) -> ImportedQuad<I, B, L> {
 	let subject = subject.as_ref().clone();
 	let predicate = predicate.as_ref().clone();
+	Quad(subject, predicate, object, graph.cloned())
+}
+
+/// Converts a `GeneratedQuad` into an `ImportedGrdfQuad` by copying the borrowed
+/// subject, predicate and graph and converting them to terms.
+pub fn import_grdf_quad<I: Clone, B: Clone, L>(
+	Quad(subject, predicate, object, graph): GeneratedQuad<I, B, L>,
+) -> ImportedGrdfQuad<I, B, L> {
+	let subject = Term::Id(subject.as_ref().clone());
+	let predicate = Term::Id(predicate.as_ref().clone());
+	let graph = graph.cloned().map(Term::Id);
 	Quad(subject, predicate, object, graph)
 }

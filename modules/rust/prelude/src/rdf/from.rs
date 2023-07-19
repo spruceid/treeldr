@@ -1,5 +1,5 @@
 use iref::Iri;
-use rdf_types::{IriVocabulary, Namespace};
+use rdf_types::{Interpretation, IriVocabulary, LiteralVocabulary};
 pub use rdf_types::{Literal, Object, Subject};
 
 mod literal;
@@ -17,80 +17,45 @@ pub enum FromRdfError {
 }
 
 /// Import from an RDF graph.
-pub trait FromRdf<N: Namespace, L>: Sized {
+pub trait FromRdf<V, I: Interpretation>: Sized {
 	fn from_rdf<G>(
-		namespace: &mut N,
-		value: &Object<N::Id, L>,
+		vocabulary: &V,
+		interpretation: &I,
 		graph: &G,
+		id: &I::Resource,
 	) -> Result<Self, FromRdfError>
 	where
-		G: grdf::Graph<Subject = N::Id, Predicate = N::Id, Object = Object<N::Id, L>>;
+		G: grdf::Graph<Subject = I::Resource, Predicate = I::Resource, Object = I::Resource>;
 }
 
-impl<N: Namespace, L> FromRdf<N, L> for crate::Id<N::Id>
+impl<V, I: Interpretation> FromRdf<V, I> for crate::Id<I::Resource>
 where
-	N::Id: Clone,
+	I::Resource: Clone,
 {
 	fn from_rdf<G>(
-		_namespace: &mut N,
-		value: &Object<<N as Namespace>::Id, L>,
+		_vocabulary: &V,
+		_interpretation: &I,
 		_graph: &G,
+		id: &<I as Interpretation>::Resource,
 	) -> Result<Self, FromRdfError>
 	where
 		G: grdf::Graph<
-			Subject = <N as Namespace>::Id,
-			Predicate = <N as Namespace>::Id,
-			Object = Object<<N as Namespace>::Id, L>,
+			Subject = <I as Interpretation>::Resource,
+			Predicate = <I as Interpretation>::Resource,
+			Object = <I as Interpretation>::Resource,
 		>,
 	{
-		match value {
-			Object::Id(id) => Ok(Self(id.clone())),
-			_ => Err(FromRdfError::UnexpectedLiteralValue),
-		}
+		Ok(crate::Id(id.clone()))
 	}
 }
 
-macro_rules! from_rdf_literal {
-	($($ty:ty),*) => {
-		$(
-			impl<N: Namespace, L> FromRdf<N, L> for $ty where $ty: FromLiteral<L, N> {
-				fn from_rdf<G>(namespace: &mut N, value: &Object<<N as Namespace>::Id, L>, _graph: &G) -> Result<Self, FromRdfError>
-					where
-						G: grdf::Graph<Subject = <N as Namespace>::Id, Predicate = <N as Namespace>::Id, Object = Object<<N as Namespace>::Id, L>> {
-					match value {
-						Object::Literal(l) => Self::from_literal(namespace, l),
-						Object::Id(_) => Err(FromRdfError::ExpectedLiteralValue)
-					}
-				}
-			}
-		)*
-	};
-}
+pub trait FromRdfLiteral<V: LiteralVocabulary>: Sized {
+	fn from_rdf_literal_value(value: &V::Value) -> Result<Self, FromRdfError>;
 
-from_rdf_literal! {
-	xsd_types::Boolean,
-	xsd_types::Decimal,
-	xsd_types::Integer,
-	xsd_types::Long,
-	xsd_types::Int,
-	xsd_types::Short,
-	xsd_types::Byte,
-	xsd_types::NonNegativeInteger,
-	xsd_types::PositiveInteger,
-	xsd_types::UnsignedLong,
-	xsd_types::UnsignedInt,
-	xsd_types::UnsignedShort,
-	xsd_types::UnsignedByte,
-	xsd_types::NonPositiveInteger,
-	xsd_types::NegativeInteger,
-	xsd_types::Float,
-	xsd_types::Double,
-	xsd_types::String,
-	xsd_types::Base64BinaryBuf,
-	xsd_types::HexBinaryBuf,
-	iref::IriBuf,
-	::chrono::NaiveDate,
-	::chrono::DateTime<::chrono::Utc>
+	fn from_rdf_literal(
+		vocabulary: &V,
+		literal: &Literal<V::Type, V::Value>,
+	) -> Result<Self, FromRdfError>;
 }
 
 /// Literal value type check.

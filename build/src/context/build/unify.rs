@@ -210,7 +210,6 @@ impl<M> Context<M> {
 			match result.entry(id) {
 				Entry::Occupied(entry) => *entry.get(),
 				Entry::Vacant(entry) => {
-					eprintln!("{id:?}");
 					let node = context.get(Id::Blank(id)).unwrap();
 					if node.has_type(context, resource::Type::Property(None)) {
 						let c = colors.len();

@@ -184,13 +184,6 @@ impl Module {
 											Some(DedicatedSubModule::ClassProviders),
 										),
 									)),
-									trait_object: Some(treeldr_rust_gen::module::Parent::Ref(
-										sub_modules.get(
-											context,
-											path,
-											Some(DedicatedSubModule::TraitObjects),
-										),
-									)),
 								},
 							);
 						}

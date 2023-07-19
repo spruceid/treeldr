@@ -27,8 +27,8 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 		let mut scope = scope.clone();
 		let mut iter_scope = scope.clone();
 
-		scope.params.identifier = Some(syn::parse2(quote!(N::Id)).unwrap());
-		iter_scope.params.identifier = Some(syn::parse2(quote!(I)).unwrap());
+		scope.params.identifier = Some(syn::parse2(quote!(I::Resource)).unwrap());
+		iter_scope.params.identifier = Some(syn::parse2(quote!(R)).unwrap());
 
 		let ident = self.ty.ident();
 		let iterator_ident = quads_and_values_iterator_name_from(ident);
@@ -39,7 +39,6 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 		let mut next_body = quote!(self
 			.id_
 			.take()
-			.map(::treeldr_rust_prelude::rdf_types::Object::Id)
 			.map(::treeldr_rust_prelude::rdf::QuadOrValue::Value));
 
 		let mut bounds_set = BTreeSet::new();
@@ -50,9 +49,7 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 				iterator_id_init = Some(match ty.description() {
 					ty::Description::BuiltIn(ty::BuiltIn::Option(_)) => {
 						quote! {
-							self.#field_ident.clone().map(::treeldr_rust_prelude::Id::unwrap).unwrap_or_else(|| {
-								generator.next(namespace)
-							})
+							self.#field_ident.clone().map(::treeldr_rust_prelude::Id::unwrap).unwrap_or_else(|| interpretation.new_resource())
 						}
 					}
 					ty::Description::BuiltIn(ty::BuiltIn::Required(_)) => {
@@ -74,7 +71,7 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 					ident: field_ident.clone(),
 					ty: iter_ty,
 					init: quote! {
-						self.#field_ident.unbound_rdf_quads_and_values(namespace, generator)
+						self.#field_ident.unbound_rdf_quads_and_values(vocabulary, interpretation).1
 					},
 				});
 
@@ -96,9 +93,7 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 								treeldr_rust_prelude::rdf::QuadOrValue::Value(value) => {
 									treeldr_rust_prelude::rdf::QuadOrValue::Quad(::rdf_types::Quad(
 										self.id_.clone().unwrap(),
-										treeldr_rust_prelude::rdf_types::FromIri::from_iri(
-											namespace.insert(::treeldr_rust_prelude::static_iref::iri!(#prop_iri))
-										),
+										interpretation.interpret_iri(vocabulary.insert(::treeldr_rust_prelude::static_iref::iri!(#prop_iri))),
 										value,
 										graph.cloned()
 									))
@@ -119,8 +114,8 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 				next_body = quote! {
 					self.#field_ident
 						.next_with(
-							namespace,
-							generator,
+							vocabulary,
+							interpretation,
 							graph
 						)
 						#map_prop_item
@@ -132,14 +127,14 @@ impl<'a, M> GenerateSyntax<M> for RdfQuadsImpl<'a, Struct> {
 		if iterator_fields.is_empty() {
 			iterator_fields.push(syntax::tr_impl::rdf::IteratorField {
 				ident: Ident::new("_v", proc_macro2::Span::call_site()),
-				ty: syn::parse2(quote!(::std::marker::PhantomData<&'r V>)).unwrap(),
+				ty: syn::parse2(quote!(::std::marker::PhantomData<&'r ()>)).unwrap(),
 				init: quote!(::std::marker::PhantomData),
 			})
 		}
 
 		let iterator_id_init = iterator_id_init.unwrap_or_else(|| {
 			quote! {
-				generator.next(namespace)
+				interpretation.new_resource()
 			}
 		});
 

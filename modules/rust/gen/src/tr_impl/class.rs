@@ -55,7 +55,7 @@ impl<M> GenerateSyntax<M> for TraitImpl {
 					.generate_syntax(context, scope)
 					.map(syntax::TraitImplementation::FromRdf)
 					.map(Some),
-				TraitId::TriplesAndValues => super::rdf::to::RdfQuadsImpl::new(self.ty, s)
+				TraitId::QuadsAndValues => super::rdf::to::RdfQuadsImpl::new(self.ty, s)
 					.generate_syntax(context, scope)
 					.map(syntax::TraitImplementation::RdfQuads)
 					.map(Some),
@@ -81,7 +81,7 @@ impl<M> GenerateSyntax<M> for TraitImpl {
 					.generate_syntax(context, scope)
 					.map(syntax::TraitImplementation::FromRdf)
 					.map(Some),
-				TraitId::TriplesAndValues => super::rdf::to::RdfQuadsImpl::new(self.ty, e)
+				TraitId::QuadsAndValues => super::rdf::to::RdfQuadsImpl::new(self.ty, e)
 					.generate_syntax(context, scope)
 					.map(syntax::TraitImplementation::RdfQuads)
 					.map(Some),

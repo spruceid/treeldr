@@ -173,14 +173,6 @@ impl<'a, V, M> Context<'a, V, M> {
 						.insert(crate::tr::ProviderOf(type_ref));
 				}
 
-				if let Some(module::Parent::Ref(module)) = modules.trait_object {
-					self.modules
-						.get_mut(module)
-						.expect("undefined module")
-						.types_trait_objects_mut()
-						.insert(crate::tr::TraitObjectsOf(type_ref));
-				}
-
 				true
 			}
 			None => false,
@@ -323,7 +315,6 @@ impl ModulePathBuilder {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DedicatedSubModule {
 	ClassProviders,
-	TraitObjects,
 	Layouts,
 }
 
@@ -331,7 +322,6 @@ impl DedicatedSubModule {
 	fn name(&self) -> &'static str {
 		match self {
 			Self::ClassProviders => "provider",
-			Self::TraitObjects => "trait_object",
 			Self::Layouts => "layout",
 		}
 	}
