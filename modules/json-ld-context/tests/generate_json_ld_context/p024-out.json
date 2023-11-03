@@ -1,9 +1,0 @@
-{
-	"Foo": "http://www.example.com/Foo",
-	"Bar": "http://www.example.com/Bar",
-	"a": "http://www.example.com/a",
-	"b": {
-		"@id": "http://www.example.com/b",
-		"@type": "@id"
-	}
-}

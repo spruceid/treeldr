@@ -1,8 +1,0 @@
-use <https://treeldr.org/> as tldr;
-
-type URI with tldr:URI;
-
-/// Foo.
-type Foo {
-	bar: URI
-}

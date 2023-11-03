@@ -1,67 +1,70 @@
 [workspace]
 members = [
 	"core",
-	"primitives",
-	"build",
-	"syntax",
-	"load",
-	"tldrc",
-	"modules/json-schema",
-	"modules/json-ld-context",
-	"modules/rust/gen",
-	"modules/rust/macros",
-	"modules/rust/cli",
-	"modules/rust/prelude",
-	"modules/lexicon"
+	# "primitives",
+	# "build",
+	# "syntax",
+	# "load",
+	# "tldrc",
+	# "modules/json-schema",
+	# "modules/json-ld-context",
+	# "modules/rust/gen",
+	# "modules/rust/macros",
+	# "modules/rust/cli",
+	# "modules/rust/prelude",
+	# "modules/lexicon"
 ]
+resolver = "2"
 
 [workspace.package]
-version = "0.1.1-beta"
+version = "0.2.0"
 edition = "2021"
 authors = ["Spruce Systems Inc."]
 
 [workspace.dependencies]
-treeldr = { path = "core", version = "0.1.1-beta" }
-treeldr-primitives = { path = "primitives", version = "0.1.1-beta" }
-treeldr-build = { path = "build", version = "0.1.1-beta" }
-treeldr-syntax = { path = "syntax", version = "0.1.1-beta" }
-treeldr-load = { path = "load", version = "0.1.1-beta" }
-treeldr-json-schema = { path = "modules/json-schema", version = "0.1.1-beta" }
-treeldr-json-ld-context = { path = "modules/json-ld-context", version = "0.1.1-beta" }
-treeldr-rust-gen = { path = "modules/rust/gen", version = "0.1.1-beta" }
-treeldr-rust-macros = { path = "modules/rust/macros", version = "0.1.1-beta" }
-treeldr-rust-prelude = { path = "modules/rust/prelude", version = "0.1.1-beta" }
-treeldr-lexicon = { path = "modules/lexicon", version = "0.1.1-beta" }
+treeldr = { path = "core", version = "0.2.0" }
+# treeldr-primitives = { path = "primitives", version = "0.1.1-beta" }
+# treeldr-build = { path = "build", version = "0.1.1-beta" }
+# treeldr-syntax = { path = "syntax", version = "0.1.1-beta" }
+# treeldr-load = { path = "load", version = "0.1.1-beta" }
+# treeldr-json-schema = { path = "modules/json-schema", version = "0.1.1-beta" }
+# treeldr-json-ld-context = { path = "modules/json-ld-context", version = "0.1.1-beta" }
+# treeldr-rust-gen = { path = "modules/rust/gen", version = "0.1.1-beta" }
+# treeldr-rust-macros = { path = "modules/rust/macros", version = "0.1.1-beta" }
+# treeldr-rust-prelude = { path = "modules/rust/prelude", version = "0.1.1-beta" }
+# treeldr-lexicon = { path = "modules/lexicon", version = "0.1.1-beta" }
 
-log = "0.4"
-iref = "2.2"
-static-iref = "2.0"
-locspan = "0.7.11"
-locspan-derive = "0.6"
-codespan-reporting = "0.11"
-rdf-types = "0.14.9"
-xsd-types = "0.7.6"
-langtag = "0.3.2"
-grdf = "0.18.0"
-shelves = "1"
-derivative = "2.2.0"
-thiserror = "1.0.31"
-decoded-char = "0.1.1"
-contextual = "0.1.3"
-json-ld = "0.14.0"
-json-syntax = "0.9.4"
-serde = "1.0"
+inferdf = { git = "ssh://git@github.com/spruceid/inferdf-rs" }
 
-chrono = "0.4.19"
-quote = "1.0"
-proc-macro2 = "1.0"
-syn = "2.0.15"
+# log = "0.4"
+# iref = "2.2"
+# static-iref = "2.0"
+# locspan = "0.7.11"
+# locspan-derive = "0.6"
+# codespan-reporting = "0.11"
+# rdf-types = "0.14.9"
+# xsd-types = "0.7.6"
+# langtag = "0.3.2"
+# grdf = "0.18.0"
+# shelves = "1"
+# derivative = "2.2.0"
+# thiserror = "1.0.31"
+# decoded-char = "0.1.1"
+# contextual = "0.1.3"
+# json-ld = "0.14.0"
+# json-syntax = "0.9.4"
+# serde = "1.0"
 
-clap = "4.0"
-async-std = "1.12.0"
-nquads-syntax = "0.12.0"
+# chrono = "0.4.19"
+# quote = "1.0"
+# proc-macro2 = "1.0"
+# syn = "2.0.15"
 
-serde_json = "1.0.81"
+# clap = "4.0"
+# async-std = "1.12.0"
+# nquads-syntax = "0.12.0"
 
-env_logger = "0.10.0"
-test-log = "0.2.11"
+# serde_json = "1.0.81"
+
+# env_logger = "0.10.0"
+# test-log = "0.2.11"

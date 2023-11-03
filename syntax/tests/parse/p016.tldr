@@ -1,1 +1,0 @@
-type Union = A | B;

@@ -1,3 +1,0 @@
-use <https://treeldr.org/> as tldr;
-
-layout Primitive = tldr:Integer;

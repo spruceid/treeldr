@@ -1,3 +1,0 @@
-<http://www.example.com/Primitive> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
-<http://www.example.com/Primitive> <https://treeldr.org/alias> <https://treeldr.org/Integer> .
-<http://www.example.com/Primitive> <https://treeldr.org/name> "Primitive" .

@@ -1,9 +1,0 @@
-{
-	"@context": {
-		"@vocab": "https://schema.org/"
-	},
-	"@id": "https://example.com/#MyPost",
-	"@type": "BlogPosting",
-	"title": "Title",
-	"body": "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
-}
