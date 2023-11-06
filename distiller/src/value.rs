@@ -17,5 +17,5 @@ pub enum TypedValue<R> {
 	Literal(Vec<u8>, Ref<R, LiteralLayout<R>>),
 	Variant(Box<Self>, Ref<R, SumLayout<R>>),
 	Record(BTreeMap<String, Self>, Ref<R, ProductLayout<R>>),
-	List(Vec<Self>, Ref<R, ListLayout>),
+	List(Vec<Self>, Ref<R, ListLayout<R>>),
 }

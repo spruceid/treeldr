@@ -1,8 +1,7 @@
-use std::collections::BTreeMap;
+use std::{collections::{BTreeMap, HashMap}, marker::PhantomData};
 
-use grdf::Dataset;
 use rdf_types::{Interpretation, ReverseIriInterpretation, ReverseLiteralInterpretation};
-use treeldr::{Ref, Context, Layout, layout::{LiteralLayout, ListLayout, LayoutType}};
+use treeldr::{Ref, Context, Layout, layout::{LiteralLayout, ListLayout, LayoutType}, graph::Dataset, Pattern};
 
 use crate::TypedValue;
 
@@ -23,12 +22,12 @@ pub fn hydrate<V, I: Interpretation, D>(
 	context: &Context<I::Resource>,
 	dataset: &D,
 	layout_ref: &Ref<I::Resource, LayoutType>,
-	inputs: &[&I::Resource]
+	inputs: &[I::Resource]
 ) -> Result<TypedValue<I::Resource>, Error>
 where
 	I: ReverseIriInterpretation + ReverseLiteralInterpretation,
 	I::Resource: Clone,
-	D: Dataset<Subject = I::Resource, Predicate = I::Resource, Object = I::Resource, GraphLabel = I::Resource>
+	D: grdf::Dataset<Subject = I::Resource, Predicate = I::Resource, Object = I::Resource, GraphLabel = I::Resource>
 {
 	match context.get(layout_ref).unwrap() {
 		Layout::Never => {
@@ -36,7 +35,7 @@ where
 		},
 		Layout::Literal(layout) => {
 			if inputs.len() == 1 {
-				let id = inputs[0];
+				let id = &inputs[0];
 
 				match layout {
 					LiteralLayout::Data(_) => {
@@ -62,7 +61,7 @@ where
 			}
 		}
 		Layout::Sum(layout) => {
-			let tree = context.serialization_tree(layout_ref.id()).unwrap();
+			let discriminants = context.serialization_discriminants(layout_ref.id()).unwrap();
 
 			// ...
 			
@@ -71,7 +70,7 @@ where
 		Layout::Product(layout) => {
 			let mut value = BTreeMap::new();
 					
-			for (name, field) in &layout.fields {
+			for field in &layout.fields {
 				// ...
 			}
 
@@ -79,16 +78,90 @@ where
 		}
 		Layout::List(layout) => {
 			match layout {
-				ListLayout::Unsized(_) => {
-					todo!()
+				ListLayout::Unsized(layout) => {
+					if layout.input == inputs.len() as u32 {
+						let mut substitution = Substitution::from_inputs(inputs);
+						substitution.intro(layout.intro);
+						
+						match &layout.sequence {
+							Some(s) => {
+								// let mut substitution = substitution.clone();
+								// substitution.intro(layout.item);
+								// let matching = Matching::new(
+								// 	substitution,
+								// 	layout.graph.iter().chain(layout.item.graph)
+								// );
+
+								todo!()
+							}
+							None => {
+								todo!()
+							}
+						}
+					} else {
+						Err(Error::InvalidInputCount {
+							expected: layout.input,
+							found: inputs.len() as u32
+						})
+					}
 				}
-				ListLayout::Sized(_) => {
-					todo!()
+				ListLayout::Sized(layout) => {
+					if layout.input == inputs.len() as u32 {
+						todo!()
+					} else {
+						Err(Error::InvalidInputCount {
+							expected: layout.input,
+							found: inputs.len() as u32
+						})
+					}
 				}
 			}
 		}
 		Layout::Always => {
 			Err(Error::AbstractLayout)
 		}
+	}
+}
+
+#[derive(Clone)]
+pub struct Substitution<R>(Vec<Option<R>>);
+
+impl<R> Substitution<R> {
+	pub fn new() -> Self {
+		Self(Vec::new())
+	}
+
+	pub fn from_inputs(inputs: &[R]) -> Self where R: Clone {
+		Self(inputs.iter().cloned().map(Some).collect())
+	}
+
+	pub fn len(&self) -> u32 {
+		self.0.len() as u32
+	}
+
+	pub fn intro(&mut self, count: u32) {
+		self.0.resize_with(self.0.len() + count as usize, || None)
+	}
+}
+
+impl<R> Default for Substitution<R> {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+pub struct Matching<R>(PhantomData<R>);
+
+impl<R> Matching<R> {
+	pub fn new() -> Self {
+		todo!()
+	}
+}
+
+impl<R> Iterator for Matching<R> {
+	type Item = Substitution<R>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		todo!()
 	}
 }

@@ -1,7 +1,9 @@
+pub mod utils;
 pub mod format;
 pub mod graph;
 pub mod layout;
 pub mod pattern;
+pub mod regexp;
 
 use std::marker::PhantomData;
 
@@ -10,6 +12,7 @@ pub use format::Format;
 pub use graph::Graph;
 pub use layout::Layout;
 pub use pattern::Pattern;
+pub use regexp::RegExp;
 
 /// Typed RDF resource identifier.
 #[derive(Educe)]
@@ -43,7 +46,11 @@ impl<R> Context<R> {
 		todo!()
 	}
 
-	pub fn serialization_tree(&self, id: &R) -> Option<&layout::sum::serialization::Tree> {
+	pub fn serialization_discriminants(&self, id: &R) -> Option<&layout::sum::serialization::Discriminant<R>> {
+		todo!()
+	}
+
+	pub fn deserialization_discriminants(&self, id: &R) -> Option<&layout::sum::deserialization::Discriminant> {
 		todo!()
 	}
 

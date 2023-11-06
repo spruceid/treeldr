@@ -28,7 +28,7 @@ pub enum Layout<R> {
 	Never,
 	Literal(LiteralLayout<R>),
 	Product(ProductLayout<R>),
-	List(ListLayout),
+	List(ListLayout<R>),
 	Sum(SumLayout<R>),
 	Always
 }

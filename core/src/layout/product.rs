@@ -1,13 +1,14 @@
-use std::collections::BTreeMap;
-
 use crate::{Format, Graph};
 
 pub struct ProductLayout<R> {
+	/// Number of inputs.
+	pub input: u32,
+
 	/// Number of introduced variables.
 	pub intro: u32,
 
 	/// Fields.
-	pub fields: BTreeMap<String, Field<R>>,
+	pub fields: Vec<Field<R>>,
 }
 
 pub struct Field<R> {
@@ -16,6 +17,9 @@ pub struct Field<R> {
 
 	/// Name.
 	pub name: String,
+
+	/// Intros.
+	pub intro: u32,
 
 	/// Format.
 	pub format: Format<R>,
