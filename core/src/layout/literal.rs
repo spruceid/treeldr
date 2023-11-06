@@ -1,11 +1,10 @@
-use inferdf::Id;
+pub mod data;
+pub mod id;
 
-use crate::Ref;
+pub use data::DataLayout;
+pub use id::IdLayout;
 
-/// Literal layout.
-pub struct LiteralLayout {
-	/// Identifier.
-	pub id: Id,
-
-	pub derived_from: Option<Ref<LiteralLayout>>
+pub enum LiteralLayout<R> {
+	Data(DataLayout<R>),
+	Id(IdLayout<R>),
 }

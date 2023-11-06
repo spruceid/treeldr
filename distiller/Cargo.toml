@@ -1,0 +1,11 @@
+[package]
+name = "treeldr-distiller"
+description = "Data serializer and deserializer using TreeLDR layouts"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+treeldr.workspace = true
+rdf-types.workspace = true
+grdf.workspace = true

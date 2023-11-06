@@ -1,6 +1,7 @@
 [workspace]
 members = [
 	"core",
+	"distiller"
 	# "primitives",
 	# "build",
 	# "syntax",
@@ -36,16 +37,17 @@ treeldr = { path = "core", version = "0.2.0" }
 
 inferdf = { git = "ssh://git@github.com/spruceid/inferdf-rs" }
 
+educe = "0.4.23"
 # log = "0.4"
 # iref = "2.2"
 # static-iref = "2.0"
 # locspan = "0.7.11"
 # locspan-derive = "0.6"
 # codespan-reporting = "0.11"
-# rdf-types = "0.14.9"
+rdf-types = "0.18.1"
 # xsd-types = "0.7.6"
 # langtag = "0.3.2"
-# grdf = "0.18.0"
+grdf = "0.22.0"
 # shelves = "1"
 # derivative = "2.2.0"
 # thiserror = "1.0.31"

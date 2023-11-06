@@ -1,5 +1,5 @@
 [package]
-name = "treeldr"
+name = "treeldr-build"
 description = "Schema definition language."
 version.workspace = true
 authors.workspace = true

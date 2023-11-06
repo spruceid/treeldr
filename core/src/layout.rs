@@ -1,14 +1,34 @@
+mod list;
 mod literal;
-mod record;
-mod union;
+pub mod sum;
+mod product;
+mod r#union;
+mod intersection;
 
-pub use literal::LiteralLayout;
+pub use list::ListLayout;
+pub use literal::{DataLayout, IdLayout, LiteralLayout};
+pub use sum::SumLayout;
+pub use product::ProductLayout;
 
-pub enum Layout {
+use crate::{GetFromContext, Context};
+
+/// Layout type.
+pub struct LayoutType;
+
+impl<R> GetFromContext<Context<R>, R> for LayoutType {
+	type Target<'c> = &'c Layout<R> where R: 'c;
+	
+	fn get_from_context<'c>(context: &'c crate::Context<R>, r: &crate::Ref<R, Self>) -> Option<Self::Target<'c>> {
+		context.layout(&r.0)
+	}
+}
+
+/// Layout value.
+pub enum Layout<R> {
 	Never,
-	Literal(LiteralLayout),
-	Id,
-	Record,
-	Union,
+	Literal(LiteralLayout<R>),
+	Product(ProductLayout<R>),
+	List(ListLayout),
+	Sum(SumLayout<R>),
 	Always
 }
