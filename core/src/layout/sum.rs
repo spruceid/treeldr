@@ -1,7 +1,7 @@
 use crate::{Format, Graph};
 
-pub mod serialization;
 pub mod deserialization;
+pub mod serialization;
 
 pub struct SumLayout<R> {
 	/// Number of introduced variables.

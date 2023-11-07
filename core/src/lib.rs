@@ -1,22 +1,30 @@
-pub mod utils;
 pub mod format;
 pub mod graph;
 pub mod layout;
 pub mod pattern;
 pub mod regexp;
+pub mod utils;
 
 use std::marker::PhantomData;
 
 use educe::Educe;
 pub use format::Format;
-pub use graph::Graph;
+pub use graph::{Dataset, Graph};
 pub use layout::Layout;
 pub use pattern::Pattern;
 pub use regexp::RegExp;
 
 /// Typed RDF resource identifier.
 #[derive(Educe)]
-#[educe(Debug(bound = "R: std::fmt::Debug"), Clone(bound = "R: Clone"), PartialEq(bound = "R: PartialEq"), Eq(bound = "R: Eq"), PartialOrd(bound = "R: PartialOrd"), Ord(bound = "R: Ord"), Hash(bound = "R: std::hash::Hash"))]
+#[educe(
+	Debug(bound = "R: std::fmt::Debug"),
+	Clone(bound = "R: Clone"),
+	PartialEq(bound = "R: PartialEq"),
+	Eq(bound = "R: Eq"),
+	PartialOrd(bound = "R: PartialOrd"),
+	Ord(bound = "R: Ord"),
+	Hash(bound = "R: std::hash::Hash")
+)]
 pub struct Ref<R, T>(R, PhantomData<T>);
 
 impl<R: Copy, T> Copy for Ref<R, T> {}
@@ -26,19 +34,25 @@ impl<R, T> Ref<R, T> {
 		&self.0
 	}
 
-	pub fn casted<U>(&self) -> Ref<R, U> where R: Clone {
+	pub fn casted<U>(&self) -> Ref<R, U>
+	where
+		R: Clone,
+	{
 		Ref(self.0.clone(), PhantomData)
 	}
 }
 
 pub trait GetFromContext<C, R>: Sized {
-	type Target<'c> where C: 'c, R: 'c;
+	type Target<'c>
+	where
+		C: 'c,
+		R: 'c;
 
 	fn get_from_context<'c>(context: &'c C, r: &Ref<R, Self>) -> Option<Self::Target<'c>>;
 }
 
 pub struct Context<R> {
-	r: PhantomData<R>
+	r: PhantomData<R>,
 }
 
 impl<R> Context<R> {
@@ -46,11 +60,17 @@ impl<R> Context<R> {
 		todo!()
 	}
 
-	pub fn serialization_discriminants(&self, id: &R) -> Option<&layout::sum::serialization::Discriminant<R>> {
+	pub fn serialization_discriminants(
+		&self,
+		id: &R,
+	) -> Option<&layout::sum::serialization::Discriminant<R>> {
 		todo!()
 	}
 
-	pub fn deserialization_discriminants(&self, id: &R) -> Option<&layout::sum::deserialization::Discriminant> {
+	pub fn deserialization_discriminants(
+		&self,
+		id: &R,
+	) -> Option<&layout::sum::deserialization::Discriminant> {
 		todo!()
 	}
 

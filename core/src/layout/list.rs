@@ -1,14 +1,19 @@
-pub mod r#unsized;
+pub mod ordered;
 pub mod sized;
+pub mod unordered;
 
-pub use r#unsized::UnsizedListLayout;
+pub use ordered::OrderedListLayout;
 pub use sized::SizedListLayout;
+pub use unordered::UnorderedListLayout;
 
-use crate::{Format, Graph};
+use crate::{graph::Dataset, Format};
+
+pub struct ListLayoutType;
 
 pub enum ListLayout<R> {
-	Unsized(UnsizedListLayout<R>),
-	Sized(SizedListLayout<R>)
+	Unordered(UnorderedListLayout<R>),
+	Ordered(OrderedListLayout<R>),
+	Sized(SizedListLayout<R>),
 }
 
 pub struct ItemLayout<R> {
@@ -18,6 +23,6 @@ pub struct ItemLayout<R> {
 	/// Format.
 	pub format: Format<R>,
 
-	/// Graph.
-	pub graph: Graph<R>,
+	/// Dataset.
+	pub dataset: Dataset<R>,
 }

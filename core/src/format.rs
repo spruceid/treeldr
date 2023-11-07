@@ -1,4 +1,4 @@
-use crate::{Pattern, Ref, layout::LayoutType};
+use crate::{layout::LayoutType, Pattern, Ref};
 
 pub struct Format<R> {
 	/// Layout.

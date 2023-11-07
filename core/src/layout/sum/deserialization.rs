@@ -16,27 +16,27 @@ pub enum Discriminant {
 	Literal(LiteralDiscriminant),
 	Record(RecordDiscriminant),
 	List(ListDiscriminant),
-	Any
+	Any,
 }
 
 pub struct LiteralDiscriminant {
 	/// Automaton recognizing the literal value.
-	pub automaton: DetAutomaton<usize>
+	pub automaton: DetAutomaton<usize>,
 }
 
 pub struct RecordDiscriminant {
-	pub fields: HashMap<String, Discriminant>
+	pub fields: HashMap<String, Discriminant>,
 }
 
 pub enum ListDiscriminant {
 	Sized(SizedListDiscriminant),
-	UnsizedListDiscriminant(UnsizedListDiscriminant)
+	UnsizedListDiscriminant(UnsizedListDiscriminant),
 }
 
 pub struct SizedListDiscriminant {
-	pub items: Vec<Discriminant>
+	pub items: Vec<Discriminant>,
 }
 
 pub struct UnsizedListDiscriminant {
-	pub item: Box<Discriminant>
+	pub item: Box<Discriminant>,
 }

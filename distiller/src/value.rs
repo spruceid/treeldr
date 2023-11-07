@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use treeldr::{
-	layout::{ListLayout, LiteralLayout, ProductLayout, SumLayout},
+	layout::{ListLayoutType, LiteralLayout, ProductLayout, SumLayout},
 	Ref,
 };
 
@@ -17,5 +17,5 @@ pub enum TypedValue<R> {
 	Literal(Vec<u8>, Ref<R, LiteralLayout<R>>),
 	Variant(Box<Self>, Ref<R, SumLayout<R>>),
 	Record(BTreeMap<String, Self>, Ref<R, ProductLayout<R>>),
-	List(Vec<Self>, Ref<R, ListLayout<R>>),
+	List(Vec<Self>, Ref<R, ListLayoutType>),
 }

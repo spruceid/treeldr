@@ -1,11 +1,11 @@
 use rdf_types::Interpretation;
-use treeldr::{Layout, Ref, Context, layout::LayoutType};
+use treeldr::{layout::LayoutType, Context, Layout, Ref};
 
 use crate::Value;
 
 pub enum Error {
 	IncompatibleLayout,
-	AbstractLayout
+	AbstractLayout,
 }
 
 /// Deserialize the given `value` according to the provided `layout`, returning
@@ -15,12 +15,10 @@ pub fn dehydrate<V, I: Interpretation>(
 	interpretation: &I,
 	context: &Context<I::Resource>,
 	value: &Value,
-	layout_ref: &Ref<I::Resource, LayoutType>
+	layout_ref: &Ref<I::Resource, LayoutType>,
 ) -> Result<(grdf::BTreeDataset<I::Resource>, Vec<I::Resource>), Error> {
 	match context.get(layout_ref).unwrap() {
-		Layout::Never => {
-			Err(Error::IncompatibleLayout)
-		}
+		Layout::Never => Err(Error::IncompatibleLayout),
 		Layout::Literal(_) => {
 			todo!()
 		}
@@ -33,8 +31,6 @@ pub fn dehydrate<V, I: Interpretation>(
 		Layout::List(_) => {
 			todo!()
 		}
-		Layout::Always => {
-			Err(Error::AbstractLayout)
-		}
+		Layout::Always => Err(Error::AbstractLayout),
 	}
 }

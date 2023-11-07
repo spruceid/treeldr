@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{utils::DetAutomaton, graph::Dataset};
+use crate::{graph::Dataset, utils::DetAutomaton};
 
 use super::SumLayout;
 
@@ -17,20 +17,20 @@ pub struct Discriminant<R> {
 	pub bindings: HashMap<u32, Constraints>,
 
 	/// Matching dataset.
-	pub dataset: Dataset<R>
+	pub dataset: Dataset<R>,
 }
 
 pub struct Constraints {
 	pub iri: IriConstraints,
-	pub literal: LiteralConstraints
+	pub literal: LiteralConstraints,
 }
 
 pub struct IriConstraints {
 	/// Automaton recognizing the IRI representation of the resource.
-	pub automaton: Option<DetAutomaton<usize>>
+	pub automaton: Option<DetAutomaton<usize>>,
 }
 
 pub struct LiteralConstraints {
 	/// Automaton recognizing the literal representation of the resource.
-	pub automaton: Option<DetAutomaton<usize>>
+	pub automaton: Option<DetAutomaton<usize>>,
 }
