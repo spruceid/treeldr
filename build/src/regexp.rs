@@ -1,7 +1,7 @@
 use btree_range_map::RangeSet;
 use std::fmt;
 
-use crate::utils::{Automaton, DetAutomaton};
+use treeldr::utils::{Automaton, DetAutomaton};
 
 /// Regular expression.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

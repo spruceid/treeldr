@@ -10,6 +10,7 @@ use crate::{graph::Dataset, Format};
 
 pub struct ListLayoutType;
 
+#[derive(Clone)]
 pub enum ListLayout<R> {
 	Unordered(UnorderedListLayout<R>),
 	Ordered(OrderedListLayout<R>),
@@ -26,6 +27,7 @@ impl<R> ListLayout<R> {
 	}
 }
 
+#[derive(Clone)]
 pub struct ItemLayout<R> {
 	/// Intros.
 	pub intro: u32,

@@ -2,6 +2,7 @@ use crate::Dataset;
 
 use super::ItemLayout;
 
+#[derive(Clone)]
 pub struct UnorderedListLayout<R> {
 	pub input: u32,
 

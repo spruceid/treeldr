@@ -8,7 +8,7 @@ use treeldr::{
 	matching,
 	pattern::Substitution,
 	utils::QuadsExt,
-	Context, Layout, Matching, Pattern, Ref, TypedLiteral, TypedValue,
+	Layout, Layouts, Matching, Pattern, Ref, TypedLiteral, TypedValue,
 };
 
 mod data;
@@ -37,7 +37,7 @@ impl From<matching::Error> for Error {
 pub fn hydrate<V, I: Interpretation, D>(
 	vocabulary: &V,
 	interpretation: &I,
-	context: &Context<I::Resource>,
+	context: &Layouts<I::Resource>,
 	dataset: &D,
 	current_graph: Option<&I::Resource>,
 	layout_ref: &Ref<LayoutType, I::Resource>,
@@ -48,7 +48,7 @@ where
 	V::Iri: PartialEq,
 	V::Value: AsRef<str>,
 	I: ReverseIriInterpretation<Iri = V::Iri> + ReverseLiteralInterpretation<Literal = V::Literal>,
-	I::Resource: Clone + PartialEq,
+	I::Resource: Clone + Ord,
 	D: grdf::Dataset<
 		Subject = I::Resource,
 		Predicate = I::Resource,

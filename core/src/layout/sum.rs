@@ -5,6 +5,7 @@ pub mod serialization;
 
 pub struct SumLayoutType;
 
+#[derive(Clone)]
 pub struct SumLayout<R> {
 	pub input: u32,
 
@@ -18,6 +19,7 @@ pub struct SumLayout<R> {
 	pub dataset: Dataset<R>,
 }
 
+#[derive(Clone)]
 pub struct Variant<R> {
 	/// Variant identifier.
 	pub id: R,

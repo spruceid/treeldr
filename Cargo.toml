@@ -1,9 +1,8 @@
 [workspace]
 members = [
 	"core",
-	"distiller"
-	# "primitives",
-	# "build",
+	"distiller",
+	"build"
 	# "syntax",
 	# "load",
 	# "tldrc",
@@ -49,14 +48,7 @@ rdf-types = "0.18.1"
 xsd-types = "0.8.2"
 # langtag = "0.3.2"
 grdf = "0.22.0"
-# shelves = "1"
-# derivative = "2.2.0"
-# thiserror = "1.0.31"
-# decoded-char = "0.1.1"
-# contextual = "0.1.3"
-# json-ld = "0.14.0"
-# json-syntax = "0.9.4"
-# serde = "1.0"
+btree-range-map = "0.7.2"
 
 # chrono = "0.4.19"
 # quote = "1.0"

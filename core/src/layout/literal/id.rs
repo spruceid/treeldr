@@ -9,7 +9,7 @@ pub struct IdLayout<R> {
 
 	pub dataset: Dataset<R>,
 
-	pub automaton: Option<DetAutomaton<usize>>,
+	pub pattern: Option<DetAutomaton<usize>>,
 
 	pub resource: Pattern<R>,
 }

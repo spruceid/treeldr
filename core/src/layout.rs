@@ -1,11 +1,11 @@
-mod intersection;
-mod list;
-mod literal;
-mod product;
+pub mod list;
+pub mod literal;
+pub mod product;
 pub mod sum;
-mod r#union;
 
-pub use list::{ListLayout, ListLayoutType};
+pub use list::{
+	ListLayout, ListLayoutType, OrderedListLayout, SizedListLayout, UnorderedListLayout,
+};
 pub use literal::{
 	BooleanLayout, BooleanLayoutType, ByteStringLayout, ByteStringLayoutType, DataLayout,
 	DataLayoutType, IdLayout, IdLayoutType, LiteralLayout, LiteralLayoutType, NumberLayout,
@@ -14,19 +14,19 @@ pub use literal::{
 pub use product::{ProductLayout, ProductLayoutType};
 pub use sum::{SumLayout, SumLayoutType};
 
-use crate::{Context, GetFromContext};
+use crate::{GetFromLayouts, Layouts};
 
 /// Layout type.
 pub struct LayoutType;
 
-impl<R> GetFromContext<Context<R>, R> for LayoutType {
+impl<R: Ord> GetFromLayouts<Layouts<R>, R> for LayoutType {
 	type Target<'c> = &'c Layout<R> where R: 'c;
 
-	fn get_from_context<'c>(
-		context: &'c crate::Context<R>,
+	fn get_from_layouts<'c>(
+		context: &'c crate::Layouts<R>,
 		r: &crate::Ref<Self, R>,
 	) -> Option<Self::Target<'c>> {
-		context.layout(&r.0)
+		context.layout(r.id())
 	}
 }
 
