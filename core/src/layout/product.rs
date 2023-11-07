@@ -1,4 +1,4 @@
-use crate::{Format, Dataset};
+use crate::{Dataset, Format};
 
 pub struct ProductLayoutType;
 

@@ -1,7 +1,15 @@
-use crate::Ref;
+use crate::{utils::DetAutomaton, Dataset, Pattern};
 
-use super::LiteralLayout;
+pub struct IdLayoutType;
 
 pub struct IdLayout<R> {
-	pub data: Ref<R, LiteralLayout<R>>,
+	pub input: u32,
+
+	pub intro: u32,
+
+	pub dataset: Dataset<R>,
+
+	pub automaton: Option<DetAutomaton<usize>>,
+
+	pub resource: Pattern<R>,
 }

@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 
 use treeldr::{
-	layout::{ListLayoutType, ProductLayoutType, SumLayoutType, UnitLayoutType, BooleanLayoutType, NumberLayoutType, ByteStringLayoutType, TextStringLayoutType},
+	layout::{
+		BooleanLayoutType, ByteStringLayoutType, IdLayoutType, ListLayoutType, NumberLayoutType,
+		ProductLayoutType, SumLayoutType, TextStringLayoutType, UnitLayoutType,
+	},
 	Ref,
 };
 
@@ -35,25 +38,28 @@ pub enum Value {
 
 pub enum TypedLiteral<R> {
 	/// Unit.
-	Unit(Ref<R, UnitLayoutType>),
+	Unit(Ref<UnitLayoutType, R>),
 
 	/// Boolean value.
-	Boolean(bool, Ref<R, BooleanLayoutType>),
+	Boolean(bool, Ref<BooleanLayoutType, R>),
 
 	/// Any rational number.
-	Number(Number, Ref<R, NumberLayoutType>),
+	Number(Number, Ref<NumberLayoutType, R>),
 
 	/// Byte string.
-	ByteString(Vec<u8>, Ref<R, ByteStringLayoutType>),
+	ByteString(Vec<u8>, Ref<ByteStringLayoutType, R>),
 
 	/// Text string.
-	TextString(String, Ref<R, TextStringLayoutType>),
+	TextString(String, Ref<TextStringLayoutType, R>),
+
+	/// Identifier.
+	Id(String, Ref<IdLayoutType, R>),
 }
 
 /// Typed value.
 pub enum TypedValue<R> {
 	Literal(TypedLiteral<R>),
-	Variant(Box<Self>, Ref<R, SumLayoutType>, u32),
-	Record(BTreeMap<String, Self>, Ref<R, ProductLayoutType>),
-	List(Vec<Self>, Ref<R, ListLayoutType>),
+	Variant(Box<Self>, Ref<SumLayoutType, R>, u32),
+	Record(BTreeMap<String, Self>, Ref<ProductLayoutType, R>),
+	List(Vec<Self>, Ref<ListLayoutType, R>),
 }

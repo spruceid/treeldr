@@ -15,7 +15,7 @@ pub fn dehydrate<V, I: Interpretation>(
 	interpretation: &I,
 	context: &Context<I::Resource>,
 	value: &Value,
-	layout_ref: &Ref<I::Resource, LayoutType>,
+	layout_ref: &Ref<LayoutType, I::Resource>,
 ) -> Result<(grdf::BTreeDataset<I::Resource>, Vec<I::Resource>), Error> {
 	match context.get(layout_ref).unwrap() {
 		Layout::Never => Err(Error::IncompatibleLayout),

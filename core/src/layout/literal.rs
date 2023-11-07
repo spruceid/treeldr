@@ -1,8 +1,12 @@
 pub mod data;
 pub mod id;
 
-pub use data::{DataLayout, UnitLayout, BooleanLayout, NumberLayout, ByteStringLayout, TextStringLayout, DataLayoutType, UnitLayoutType, BooleanLayoutType, NumberLayoutType, ByteStringLayoutType, TextStringLayoutType};
-pub use id::IdLayout;
+pub use data::{
+	BooleanLayout, BooleanLayoutType, ByteStringLayout, ByteStringLayoutType, DataLayout,
+	DataLayoutType, NumberLayout, NumberLayoutType, TextStringLayout, TextStringLayoutType,
+	UnitLayout, UnitLayoutType,
+};
+pub use id::{IdLayout, IdLayoutType};
 
 pub struct LiteralLayoutType;
 

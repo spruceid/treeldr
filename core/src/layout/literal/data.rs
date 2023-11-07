@@ -1,6 +1,4 @@
-use iref::IriBuf;
-
-use crate::{Dataset, utils::DetAutomaton, Pattern};
+use crate::{utils::DetAutomaton, Dataset, Pattern};
 
 pub struct DataLayoutType;
 
@@ -20,7 +18,7 @@ pub enum DataLayout<R> {
 	Boolean(BooleanLayout<R>),
 	Number(NumberLayout<R>),
 	ByteString(ByteStringLayout<R>),
-	TextString(TextStringLayout<R>)
+	TextString(TextStringLayout<R>),
 }
 
 pub struct UnitLayout<R> {
@@ -28,7 +26,7 @@ pub struct UnitLayout<R> {
 
 	pub intro: u32,
 
-	pub dataset: Dataset<R>
+	pub dataset: Dataset<R>,
 }
 
 pub struct BooleanLayout<R> {
@@ -38,7 +36,9 @@ pub struct BooleanLayout<R> {
 
 	pub dataset: Dataset<R>,
 
-	pub literal: LiteralRepresentation<R>
+	pub resource: Pattern<R>,
+
+	pub type_: R,
 }
 
 pub struct NumberLayout<R> {
@@ -48,7 +48,9 @@ pub struct NumberLayout<R> {
 
 	pub dataset: Dataset<R>,
 
-	pub literal: LiteralRepresentation<R>
+	pub resource: Pattern<R>,
+
+	pub type_: R,
 }
 
 pub struct ByteStringLayout<R> {
@@ -58,7 +60,9 @@ pub struct ByteStringLayout<R> {
 
 	pub dataset: Dataset<R>,
 
-	pub literal: LiteralRepresentation<R>
+	pub resource: Pattern<R>,
+
+	pub type_: R,
 }
 
 pub struct TextStringLayout<R> {
@@ -70,11 +74,7 @@ pub struct TextStringLayout<R> {
 
 	pub dataset: Dataset<R>,
 
-	pub literal: LiteralRepresentation<R>
-}
-
-pub struct LiteralRepresentation<R> {
 	pub resource: Pattern<R>,
 
-	pub type_: R
+	pub type_: R,
 }

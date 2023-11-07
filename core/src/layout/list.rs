@@ -21,7 +21,7 @@ impl<R> ListLayout<R> {
 		match self {
 			Self::Unordered(l) => l.input,
 			Self::Ordered(l) => l.input,
-			Self::Sized(l) => l.input
+			Self::Sized(l) => l.input,
 		}
 	}
 }

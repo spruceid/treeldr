@@ -8,6 +8,8 @@ edition.workspace = true
 [dependencies]
 treeldr.workspace = true
 iref.workspace = true
+static-iref.workspace = true
 rdf-types.workspace = true
+xsd-types.workspace = true
 grdf.workspace = true
 num-rational.workspace = true

@@ -25,16 +25,20 @@ pub use regexp::RegExp;
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: std::hash::Hash")
 )]
-pub struct Ref<R, T>(R, PhantomData<T>);
+pub struct Ref<T, R>(R, PhantomData<T>);
 
-impl<R: Copy, T> Copy for Ref<R, T> {}
+impl<R: Copy, T> Copy for Ref<T, R> {}
 
-impl<R, T> Ref<R, T> {
+impl<T, R> Ref<T, R> {
 	pub fn id(&self) -> &R {
 		&self.0
 	}
 
-	pub fn casted<U>(&self) -> Ref<R, U>
+	pub fn cast<U>(self) -> Ref<U, R> {
+		Ref(self.0, PhantomData)
+	}
+
+	pub fn casted<U>(&self) -> Ref<U, R>
 	where
 		R: Clone,
 	{
@@ -48,7 +52,7 @@ pub trait GetFromContext<C, R>: Sized {
 		C: 'c,
 		R: 'c;
 
-	fn get_from_context<'c>(context: &'c C, r: &Ref<R, Self>) -> Option<Self::Target<'c>>;
+	fn get_from_context<'c>(context: &'c C, r: &Ref<Self, R>) -> Option<Self::Target<'c>>;
 }
 
 pub struct Context<R> {
@@ -60,7 +64,7 @@ impl<R> Context<R> {
 		todo!()
 	}
 
-	pub fn get<T: GetFromContext<Self, R>>(&self, r: &Ref<R, T>) -> Option<T::Target<'_>> {
+	pub fn get<T: GetFromContext<Self, R>>(&self, r: &Ref<T, R>) -> Option<T::Target<'_>> {
 		T::get_from_context(self, r)
 	}
 }

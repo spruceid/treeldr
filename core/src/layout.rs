@@ -6,7 +6,11 @@ pub mod sum;
 mod r#union;
 
 pub use list::{ListLayout, ListLayoutType};
-pub use literal::{DataLayout, IdLayout, LiteralLayout, UnitLayout, BooleanLayout, NumberLayout, ByteStringLayout, TextStringLayout, LiteralLayoutType, DataLayoutType, UnitLayoutType, BooleanLayoutType, NumberLayoutType, ByteStringLayoutType, TextStringLayoutType};
+pub use literal::{
+	BooleanLayout, BooleanLayoutType, ByteStringLayout, ByteStringLayoutType, DataLayout,
+	DataLayoutType, IdLayout, IdLayoutType, LiteralLayout, LiteralLayoutType, NumberLayout,
+	NumberLayoutType, TextStringLayout, TextStringLayoutType, UnitLayout, UnitLayoutType,
+};
 pub use product::{ProductLayout, ProductLayoutType};
 pub use sum::{SumLayout, SumLayoutType};
 
@@ -20,7 +24,7 @@ impl<R> GetFromContext<Context<R>, R> for LayoutType {
 
 	fn get_from_context<'c>(
 		context: &'c crate::Context<R>,
-		r: &crate::Ref<R, Self>,
+		r: &crate::Ref<Self, R>,
 	) -> Option<Self::Target<'c>> {
 		context.layout(&r.0)
 	}
@@ -44,7 +48,7 @@ impl<R> Layout<R> {
 			Self::Product(p) => Some(p.input),
 			Self::List(l) => Some(l.input_count()),
 			Self::Sum(s) => Some(s.input),
-			Self::Always => None
+			Self::Always => None,
 		}
 	}
 }

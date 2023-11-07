@@ -2,7 +2,7 @@ use crate::{layout::LayoutType, Pattern, Ref};
 
 pub struct Format<R> {
 	/// Layout.
-	pub layout: Ref<R, LayoutType>,
+	pub layout: Ref<LayoutType, R>,
 
 	/// Layout inputs.
 	pub inputs: Vec<Pattern<R>>,
