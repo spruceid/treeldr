@@ -1,23 +1,25 @@
 use std::{
-	collections::{BTreeMap, HashMap},
+	collections::BTreeMap,
 	marker::PhantomData,
 };
 
-use rdf_types::{Interpretation, Quad, ReverseIriInterpretation, ReverseLiteralInterpretation};
+use iref::Iri;
+use rdf_types::{Interpretation, Quad, ReverseIriInterpretation, ReverseLiteralInterpretation, Vocabulary, IriVocabulary, LanguageTagVocabulary};
 use treeldr::{
-	graph::Dataset,
-	layout::{LayoutType, ListLayout, LiteralLayout},
+	layout::{LayoutType, ListLayout, LiteralLayout, DataLayout},
 	pattern::Substitution,
 	Context, Layout, Pattern, Ref,
 };
 
-use crate::TypedValue;
+use crate::{TypedValue, TypedLiteral};
 
 pub enum Error {
 	IncompatibleLayout,
 	AbstractLayout,
 	InvalidInputCount { expected: u32, found: u32 },
 }
+
+pub type RdfLiteralType<V> = rdf_types::literal::Type<<V as IriVocabulary>::Iri, <V as LanguageTagVocabulary>::LanguageTag>;
 
 /// Serialize the given RDF `dataset` using the provided `layout`, returning
 /// a typed value.
@@ -31,7 +33,10 @@ pub fn hydrate<V, I: Interpretation, D>(
 	inputs: &[I::Resource],
 ) -> Result<TypedValue<I::Resource>, Error>
 where
-	I: ReverseIriInterpretation + ReverseLiteralInterpretation,
+	V: Vocabulary<Type = RdfLiteralType<V>>,
+	V::Iri: PartialEq,
+	V::Value: AsRef<str>,
+	I: ReverseIriInterpretation<Iri = V::Iri> + ReverseLiteralInterpretation<Literal = V::Literal>,
 	I::Resource: Clone + PartialEq,
 	D: grdf::Dataset<
 		Subject = I::Resource,
@@ -40,220 +45,303 @@ where
 		GraphLabel = I::Resource,
 	>,
 {
+	let layout = context.get(layout_ref).unwrap();
+
+	if let Some(expected) = layout.input_count().filter(|&i| i != inputs.len() as u32) {
+		return Err(Error::InvalidInputCount {
+			expected,
+			found: inputs.len() as u32,
+		})
+	}
+
 	match context.get(layout_ref).unwrap() {
 		Layout::Never => Err(Error::IncompatibleLayout),
 		Layout::Literal(layout) => {
-			if inputs.len() == 1 {
-				let id = &inputs[0];
+			let id = &inputs[0];
 
-				match layout {
-					LiteralLayout::Data(_) => {
-						for l in interpretation.literals_of(id) {
-							// ...
-						}
-
-						todo!() // Error: no literal matching the layout
-					}
-					LiteralLayout::Id(_) => {
-						for i in interpretation.iris_of(id) {
-							// ...
-						}
-
-						todo!() // Error no IRI matching the layout
-					}
+			match layout {
+				LiteralLayout::Data(layout) => {
+					hydrate_data(layout)
 				}
-			} else {
-				Err(Error::InvalidInputCount {
-					expected: 1,
-					found: inputs.len() as u32,
-				})
+				LiteralLayout::Id(_) => {
+					for i in interpretation.iris_of(id) {
+						// ...
+					}
+
+					todo!() // Error no IRI matching the layout
+				}
 			}
 		}
 		Layout::Sum(layout) => {
-			let discriminants = context
-				.serialization_discriminants(layout_ref.id())
-				.unwrap();
+			let mut substitution = Substitution::from_inputs(inputs);
+			substitution.intro(layout.intro);
+			let substitution = Matching::new(
+				substitution.clone(),
+				layout.dataset.quads().with_default_graph(current_graph)
+			).into_required_unique()?;
 
-			// ...
+			let mut failures = Vec::new();
+			let mut selected = None;
 
-			todo!()
-		}
-		Layout::Product(layout) => {
-			let mut value = BTreeMap::new();
+			for (i, variant) in layout.variants.iter().enumerate() {
+				let mut variant_substitution = substitution.clone();
+				variant_substitution.intro(variant.intro);
 
-			for field in &layout.fields {
-				// ...
+				let variant_substitution = Matching::new(
+					substitution.clone(),
+					variant.dataset.quads().with_default_graph(current_graph),
+				).into_unique()?;
+
+				match variant_substitution {
+					Some(variant_substitution) => {
+						let variant_inputs = select_inputs(
+							&variant.format.inputs,
+							&variant_substitution
+						);
+		
+						let variant_graph = select_graph(
+							current_graph,
+							&variant.format.graph,
+							&variant_substitution,
+						);
+		
+						let value = hydrate(
+							vocabulary,
+							interpretation,
+							context,
+							dataset,
+							variant_graph.as_ref(),
+							&variant.format.layout,
+							&variant_inputs,
+						);
+	
+						match value {
+							Ok(value) => {
+								match selected.take() {
+									Some((j, other_value)) => {
+										todo!() // Error: variant ambiguity
+									}
+									None => {
+										selected = Some((i, value))
+									}
+								}
+							}
+							Err(e) => {
+								failures.push(Some(e))
+							}
+						}
+					}
+					None => {
+						failures.push(None)
+					}
+				}
 			}
 
-			Ok(TypedValue::Record(value, layout_ref.casted()))
+			match selected {
+				Some((i, value)) => {
+					Ok(TypedValue::Variant(Box::new(value), layout_ref.casted(), i as u32))
+				}
+				None => {
+					todo!() // Error: no variant found
+				}
+			}
+		}
+		Layout::Product(layout) => {
+			let mut substitution = Substitution::from_inputs(inputs);
+			substitution.intro(layout.intro);
+			let substitution = Matching::new(
+				substitution.clone(),
+				layout.dataset.quads().with_default_graph(current_graph)
+			).into_required_unique()?;
+
+			let mut record = BTreeMap::new();
+
+			for field in &layout.fields {
+				let mut field_substitution = substitution.clone();
+				field_substitution.intro(field.intro);
+
+				let field_substitution = Matching::new(
+					substitution.clone(),
+					field.dataset.quads().with_default_graph(current_graph),
+				).into_unique()?;
+
+				match field_substitution {
+					Some(field_substitution) => {
+						let field_inputs = select_inputs(
+							&field.format.inputs,
+							&field_substitution
+						);
+		
+						let item_graph = select_graph(
+							current_graph,
+							&field.format.graph,
+							&field_substitution,
+						);
+		
+						let value = hydrate(
+							vocabulary,
+							interpretation,
+							context,
+							dataset,
+							item_graph.as_ref(),
+							&field.format.layout,
+							&field_inputs,
+						)?;
+		
+						record.insert(field.name.clone(), value);
+					}
+					None => {
+						// TODO check required fields
+					}
+				}
+			}
+
+			Ok(TypedValue::Record(record, layout_ref.casted()))
 		}
 		Layout::List(layout) => {
 			match layout {
 				ListLayout::Unordered(layout) => {
-					if layout.input == inputs.len() as u32 {
-						let mut substitution = Substitution::from_inputs(inputs);
-						substitution.intro(layout.intro);
+					let mut substitution = Substitution::from_inputs(inputs);
+					substitution.intro(layout.intro);
 
-						let mut matching = Matching::new(
-							substitution,
-							layout.dataset.quads().chain(&layout.item.dataset),
+					let mut item_substitution = Matching::new(
+						substitution,
+						layout.dataset.quads().with_default_graph(current_graph),
+					).into_required_unique()?;
+
+					item_substitution.intro(layout.item.intro);
+					let matching = Matching::new(
+						item_substitution,
+						layout
+							.item
+							.dataset
+							.quads()
+							.with_default_graph(current_graph),
+					);
+
+					let mut items = Vec::new();
+
+					for item_substitution in matching {
+						let item_inputs = select_inputs(
+							&layout.item.format.inputs,
+							&item_substitution
 						);
 
-						for m in matching {
-							// TODO build item
-						}
+						let item_graph = select_graph(
+							current_graph,
+							&layout.item.format.graph,
+							&item_substitution,
+						);
 
-						todo!()
-					} else {
-						Err(Error::InvalidInputCount {
-							expected: layout.input,
-							found: inputs.len() as u32,
-						})
+						let item = hydrate(
+							vocabulary,
+							interpretation,
+							context,
+							dataset,
+							item_graph.as_ref(),
+							&layout.item.format.layout,
+							&item_inputs,
+						)?;
+
+						items.push(item);
 					}
+
+					Ok(TypedValue::List(items, layout_ref.casted()))
 				}
 				ListLayout::Ordered(layout) => {
-					if layout.input == inputs.len() as u32 {
-						let mut substitution = Substitution::from_inputs(inputs);
-						substitution.intro(layout.intro);
+					let mut substitution = Substitution::from_inputs(inputs);
+					substitution.intro(layout.intro);
 
-						let mut head = layout.head.apply(&substitution).into_resource().unwrap();
-						let tail = layout.tail.apply(&substitution).into_resource().unwrap();
+					let substitution = Matching::new(
+						substitution,
+						layout.dataset.quads().with_default_graph(current_graph),
+					).into_required_unique()?;
 
-						let mut items = Vec::new();
+					let mut head = layout.head.apply(&substitution).into_resource().unwrap();
+					let tail = layout.tail.apply(&substitution).into_resource().unwrap();
 
-						while head != tail {
-							let mut item_substitution = substitution.clone();
-							item_substitution.push(Some(head)); // the head
-							let rest = item_substitution.intro(1 + layout.node.intro); // the rest, and other intro variables.
+					let mut items = Vec::new();
 
-							let mut matching = Matching::new(
-								item_substitution,
-								layout
-									.dataset
-									.quads()
-									.chain(&layout.node.dataset)
-									.with_graph(current_graph),
-							);
+					while head != tail {
+						let mut item_substitution = substitution.clone();
+						item_substitution.push(Some(head)); // the head
+						let rest = item_substitution.intro(1 + layout.node.intro); // the rest, and other intro variables.
 
-							match matching.next() {
-								Some(item_substitution) => {
-									match matching.next() {
-										Some(_) => {
-											todo!() // Error: ambiguity
-										}
-										None => {
-											constrain_outer_substitution(
-												&mut substitution,
-												&item_substitution,
-												layout.input,
-												layout.intro,
-											);
+						let item_substitution = Matching::new(
+							item_substitution,
+							layout
+								.node
+								.dataset
+								.quads()
+								.with_default_graph(current_graph),
+						).into_required_unique()?;
 
-											// let rest = item_substitution.get(rest).unwrap().clone();
-											let item_inputs: Vec<_> = layout
-												.node
-												.format
-												.inputs
-												.iter()
-												.map(|p| {
-													p.apply(&item_substitution)
-														.into_resource()
-														.unwrap()
-												})
-												.collect();
-
-											let item_graph = select_graph(
-												current_graph,
-												&layout.node.format.graph,
-												&item_substitution,
-											);
-
-											let item = hydrate(
-												vocabulary,
-												interpretation,
-												context,
-												dataset,
-												item_graph.as_ref(),
-												&layout.node.format.layout,
-												&item_inputs,
-											)?;
-
-											items.push(item);
-
-											head = item_substitution.get(rest).unwrap().clone();
-										}
-									}
-								}
-								None => {
-									todo!() // Error: missing item.
-								}
-							}
-						}
-
-						Ok(TypedValue::List(items, layout_ref.casted()))
-					} else {
-						Err(Error::InvalidInputCount {
-							expected: layout.input,
-							found: inputs.len() as u32,
-						})
-					}
-				}
-				ListLayout::Sized(layout) => {
-					if layout.input == inputs.len() as u32 {
-						let mut substitution = Substitution::from_inputs(inputs);
-						substitution.intro(layout.intro);
-
-						let mut matching = Matching::new(
-							substitution,
-							layout.dataset.quads().with_graph(current_graph),
+						let item_inputs = select_inputs(
+							&layout.node.format.inputs,
+							&item_substitution
 						);
 
-						match matching.next() {
-							Some(m) => {
-								match matching.next() {
-									Some(_) => {
-										todo!() // Error: ambiguity
-									}
-									None => {
-										let mut items = Vec::with_capacity(layout.formats.len());
+						let item_graph = select_graph(
+							current_graph,
+							&layout.node.format.graph,
+							&item_substitution,
+						);
 
-										for item_format in &layout.formats {
-											let item_inputs: Vec<_> = item_format
-												.inputs
-												.iter()
-												.map(|p| p.apply(&m).into_resource().unwrap())
-												.collect();
+						let item = hydrate(
+							vocabulary,
+							interpretation,
+							context,
+							dataset,
+							item_graph.as_ref(),
+							&layout.node.format.layout,
+							&item_inputs,
+						)?;
 
-											let item_graph =
-												select_graph(current_graph, &item_format.graph, &m);
+						items.push(item);
 
-											let item = hydrate(
-												vocabulary,
-												interpretation,
-												context,
-												dataset,
-												item_graph.as_ref(),
-												&item_format.layout,
-												&item_inputs,
-											)?;
-
-											items.push(item)
-										}
-
-										Ok(TypedValue::List(items, layout_ref.casted()))
-									}
-								}
-							}
-							None => {
-								todo!() // Error: not found
-							}
-						}
-					} else {
-						Err(Error::InvalidInputCount {
-							expected: layout.input,
-							found: inputs.len() as u32,
-						})
+						head = item_substitution.get(rest).unwrap().clone();
 					}
+
+					Ok(TypedValue::List(items, layout_ref.casted()))
+				}
+				ListLayout::Sized(layout) => {
+					let mut substitution = Substitution::from_inputs(inputs);
+					substitution.intro(layout.intro);
+
+					let substitution = Matching::new(
+						substitution,
+						layout.dataset.quads().with_default_graph(current_graph),
+					).into_required_unique()?;
+
+					let mut items = Vec::with_capacity(layout.items.len());
+
+					for item in &layout.items {
+						let mut item_substitution = substitution.clone();
+						item_substitution.intro(item.intro);
+
+						let item_substitution = Matching::new(
+							item_substitution,
+							item.dataset.quads().with_default_graph(current_graph)
+						).into_required_unique()?;
+
+						let item_inputs = select_inputs(&item.format.inputs, &item_substitution);
+						let item_graph =
+							select_graph(current_graph, &item.format.graph, &item_substitution);
+
+						let item = hydrate(
+							vocabulary,
+							interpretation,
+							context,
+							dataset,
+							item_graph.as_ref(),
+							&item.format.layout,
+							&item_inputs,
+						)?;
+
+						items.push(item)
+					}
+
+					Ok(TypedValue::List(items, layout_ref.casted()))
 				}
 			}
 		}
@@ -261,15 +349,98 @@ where
 	}
 }
 
-fn constrain_outer_substitution<R: Clone>(
-	outer: &mut Substitution<R>,
-	inner: &Substitution<R>,
-	offset: u32,
-	len: u32,
-) {
-	for x in offset..(offset + len) {
-		outer.set(x, inner.get(x).cloned())
-	}
+fn hydrate_data<V, I: Interpretation>(
+	vocabulary: &V,
+	interpretation: &I,
+	context: &Context<I::Resource>,
+	dataset: &D,
+	current_graph: Option<&I::Resource>,
+	layout: &DataLayout<R>,
+	inputs: &[I::Resource],
+) -> Result<TypedLiteral<R>, Error>
+
+{
+	let value = match layout {
+		DataLayout::Unit(layout) => {
+			let mut substitution = Substitution::from_inputs(inputs);
+			substitution.intro(layout.intro);
+			
+			Matching::new(
+				substitution.clone(),
+				layout.dataset.quads().with_default_graph(current_graph)
+			).into_required_unique()?;
+
+			TypedLiteral::Unit(layout_ref.casted())
+		}
+		DataLayout::Boolean(layout) => {
+			let mut substitution = Substitution::from_inputs(inputs);
+			substitution.intro(layout.intro);
+
+			let substitution = Matching::new(
+				substitution.clone(),
+				layout.dataset.quads().with_default_graph(current_graph)
+			).into_required_unique()?;
+
+			let resource = layout.literal.resource.apply(&substitution).into_resource().unwrap();
+
+			let mut value = None;
+
+			for l in interpretation.literals_of(&resource) {
+				let literal = vocabulary.literal(l).unwrap();
+				let i = match literal.type_() {
+					rdf_types::literal::Type::Any(i) => {
+						i
+					}
+					rdf_types::literal::Type::LangString(_) => {
+						todo!() // Lang string
+					}
+				};
+
+				if interpretation.iris_of(&layout.literal.type_).any(|j| i == j) {
+					let v = hydrate_boolean_value(
+						literal.value().as_ref(),
+						vocabulary.iri(i).unwrap(),
+					)?;
+
+					if value.replace(v).is_some() {
+						todo!() // Ambiguity
+					}
+				}
+			}
+
+			match value {
+				Some(value) => TypedLiteral::Boolean(value, layout_ref.casted()),
+				None => {
+					todo!() // No matching literal representation found
+				}
+			}
+		}
+		DataLayout::Number(_) => {
+			todo!()
+		}
+		DataLayout::ByteString(_) => {
+			todo!()
+		}
+		DataLayout::TextString(_) => {
+			todo!()
+		}
+	};
+
+	Ok(TypedValue::Literal(value))
+}
+
+fn select_inputs<R: Clone>(
+	inputs: &[Pattern<R>],
+	substitution: &Substitution<R>
+) -> Vec<R> {
+	inputs
+	.iter()
+	.map(|p| {
+		p.apply(substitution)
+			.into_resource()
+			.unwrap()
+	})
+	.collect()
 }
 
 fn select_graph<R: Clone>(
@@ -287,14 +458,14 @@ fn select_graph<R: Clone>(
 }
 
 pub trait QuadsWithGraphExt<'a, R>: Sized {
-	fn with_graph(self, graph: Option<&'a R>) -> QuadsWithGraph<'a, R, Self>;
+	fn with_default_graph(self, graph: Option<&'a R>) -> QuadsWithGraph<'a, R, Self>;
 }
 
 impl<'a, R: 'a, I> QuadsWithGraphExt<'a, R> for I
 where
 	I: Iterator<Item = Quad<&'a Pattern<R>, &'a Pattern<R>, &'a Pattern<R>, &'a Pattern<R>>>,
 {
-	fn with_graph(self, graph: Option<&'a R>) -> QuadsWithGraph<'a, R, Self> {
+	fn with_default_graph(self, graph: Option<&'a R>) -> QuadsWithGraph<'a, R, Self> {
 		QuadsWithGraph { quads: self, graph }
 	}
 }
@@ -324,6 +495,14 @@ impl<R, D> Matching<R, D> {
 	pub fn new(substitution: Substitution<R>, quads: D) -> Self {
 		todo!()
 	}
+
+	pub fn into_unique(self) -> Result<Option<Substitution<R>>, Error> {
+		todo!()
+	}
+
+	pub fn into_required_unique(self) -> Result<Substitution<R>, Error> {
+		todo!()
+	}
 }
 
 impl<R, D> Iterator for Matching<R, D> {
@@ -332,4 +511,11 @@ impl<R, D> Iterator for Matching<R, D> {
 	fn next(&mut self) -> Option<Self::Item> {
 		todo!()
 	}
+}
+
+fn hydrate_boolean_value(
+	value: &str,
+	type_: &Iri
+) -> Result<bool, Error> {
+	todo!()
 }

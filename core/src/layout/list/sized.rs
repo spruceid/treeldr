@@ -1,11 +1,13 @@
-use crate::{Dataset, Format};
+use crate::Dataset;
+
+use super::ItemLayout;
 
 pub struct SizedListLayout<R> {
 	pub input: u32,
 
 	pub intro: u32,
 
-	pub formats: Vec<Format<R>>,
+	pub items: Vec<ItemLayout<R>>,
 
 	pub dataset: Dataset<R>,
 }

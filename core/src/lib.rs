@@ -60,20 +60,6 @@ impl<R> Context<R> {
 		todo!()
 	}
 
-	pub fn serialization_discriminants(
-		&self,
-		id: &R,
-	) -> Option<&layout::sum::serialization::Discriminant<R>> {
-		todo!()
-	}
-
-	pub fn deserialization_discriminants(
-		&self,
-		id: &R,
-	) -> Option<&layout::sum::deserialization::Discriminant> {
-		todo!()
-	}
-
 	pub fn get<T: GetFromContext<Self, R>>(&self, r: &Ref<R, T>) -> Option<T::Target<'_>> {
 		T::get_from_context(self, r)
 	}

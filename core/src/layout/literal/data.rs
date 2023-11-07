@@ -1,9 +1,80 @@
-use crate::Ref;
+use iref::IriBuf;
+
+use crate::{Dataset, utils::DetAutomaton, Pattern};
+
+pub struct DataLayoutType;
+
+pub struct UnitLayoutType;
+
+pub struct BooleanLayoutType;
+
+pub struct NumberLayoutType;
+
+pub struct ByteStringLayoutType;
+
+pub struct TextStringLayoutType;
 
 /// Data layout.
-pub struct DataLayout<R> {
-	/// Identifier.
-	pub id: R,
+pub enum DataLayout<R> {
+	Unit(UnitLayout<R>),
+	Boolean(BooleanLayout<R>),
+	Number(NumberLayout<R>),
+	ByteString(ByteStringLayout<R>),
+	TextString(TextStringLayout<R>)
+}
 
-	pub derived_from: Option<Ref<R, Self>>,
+pub struct UnitLayout<R> {
+	pub input: u32,
+
+	pub intro: u32,
+
+	pub dataset: Dataset<R>
+}
+
+pub struct BooleanLayout<R> {
+	pub input: u32,
+
+	pub intro: u32,
+
+	pub dataset: Dataset<R>,
+
+	pub literal: LiteralRepresentation<R>
+}
+
+pub struct NumberLayout<R> {
+	pub input: u32,
+
+	pub intro: u32,
+
+	pub dataset: Dataset<R>,
+
+	pub literal: LiteralRepresentation<R>
+}
+
+pub struct ByteStringLayout<R> {
+	pub input: u32,
+
+	pub intro: u32,
+
+	pub dataset: Dataset<R>,
+
+	pub literal: LiteralRepresentation<R>
+}
+
+pub struct TextStringLayout<R> {
+	pub input: u32,
+
+	pub intro: u32,
+
+	pub automaton: Option<DetAutomaton<usize>>,
+
+	pub dataset: Dataset<R>,
+
+	pub literal: LiteralRepresentation<R>
+}
+
+pub struct LiteralRepresentation<R> {
+	pub resource: Pattern<R>,
+
+	pub type_: R
 }

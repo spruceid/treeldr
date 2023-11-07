@@ -16,6 +16,16 @@ pub enum ListLayout<R> {
 	Sized(SizedListLayout<R>),
 }
 
+impl<R> ListLayout<R> {
+	pub fn input_count(&self) -> u32 {
+		match self {
+			Self::Unordered(l) => l.input,
+			Self::Ordered(l) => l.input,
+			Self::Sized(l) => l.input
+		}
+	}
+}
+
 pub struct ItemLayout<R> {
 	/// Intros.
 	pub intro: u32,

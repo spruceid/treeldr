@@ -10,7 +10,7 @@ impl<R> SumLayout<R> {
 	}
 }
 
-pub struct Discriminants<R>(Vec<Discriminant<R>>);
+pub type Discriminants<R> = Vec<Discriminant<R>>;
 
 pub struct Discriminant<R> {
 	/// Variable bindings.

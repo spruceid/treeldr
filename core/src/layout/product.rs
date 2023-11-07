@@ -1,4 +1,6 @@
-use crate::{Format, Graph};
+use crate::{Format, Dataset};
+
+pub struct ProductLayoutType;
 
 pub struct ProductLayout<R> {
 	/// Number of inputs.
@@ -9,6 +11,9 @@ pub struct ProductLayout<R> {
 
 	/// Fields.
 	pub fields: Vec<Field<R>>,
+
+	/// Dataset.
+	pub dataset: Dataset<R>,
 }
 
 pub struct Field<R> {
@@ -24,6 +29,6 @@ pub struct Field<R> {
 	/// Format.
 	pub format: Format<R>,
 
-	/// Graph.
-	pub graph: Graph<R>,
+	/// Dataset.
+	pub dataset: Dataset<R>,
 }

@@ -7,8 +7,9 @@ edition.workspace = true
 
 [dependencies]
 educe.workspace = true
+num-rational.workspace = true
 # treeldr-primitives.workspace = true
-# iref.workspace = true
+iref.workspace = true
 # static-iref.workspace = true
 # log.workspace = true
 # derivative.workspace = true

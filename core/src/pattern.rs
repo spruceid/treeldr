@@ -70,8 +70,8 @@ impl<R> Substitution<R> {
 		i
 	}
 
-	pub fn set(&mut self, x: u32, value: Option<R>) {
-		self.0[x as usize] = value
+	pub fn set(&mut self, x: u32, value: Option<R>) -> Option<R> {
+		std::mem::replace(&mut self.0[x as usize], value)
 	}
 }
 

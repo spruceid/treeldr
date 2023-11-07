@@ -6,9 +6,9 @@ pub mod sum;
 mod r#union;
 
 pub use list::{ListLayout, ListLayoutType};
-pub use literal::{DataLayout, IdLayout, LiteralLayout};
-pub use product::ProductLayout;
-pub use sum::SumLayout;
+pub use literal::{DataLayout, IdLayout, LiteralLayout, UnitLayout, BooleanLayout, NumberLayout, ByteStringLayout, TextStringLayout, LiteralLayoutType, DataLayoutType, UnitLayoutType, BooleanLayoutType, NumberLayoutType, ByteStringLayoutType, TextStringLayoutType};
+pub use product::{ProductLayout, ProductLayoutType};
+pub use sum::{SumLayout, SumLayoutType};
 
 use crate::{Context, GetFromContext};
 
@@ -34,4 +34,17 @@ pub enum Layout<R> {
 	List(ListLayout<R>),
 	Sum(SumLayout<R>),
 	Always,
+}
+
+impl<R> Layout<R> {
+	pub fn input_count(&self) -> Option<u32> {
+		match self {
+			Self::Never => None,
+			Self::Literal(_) => Some(1),
+			Self::Product(p) => Some(p.input),
+			Self::List(l) => Some(l.input_count()),
+			Self::Sum(s) => Some(s.input),
+			Self::Always => None
+		}
+	}
 }
