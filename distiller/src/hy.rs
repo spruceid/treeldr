@@ -1,26 +1,36 @@
-use std::{collections::BTreeMap, marker::PhantomData};
+use std::collections::BTreeMap;
 
-use iref::Iri;
 use rdf_types::{
-	Interpretation, IriVocabulary, LanguageTagVocabulary, Quad, ReverseIriInterpretation,
-	ReverseLiteralInterpretation, Vocabulary,
+	Interpretation, ReverseIriInterpretation, ReverseLiteralInterpretation, Vocabulary,
 };
 use treeldr::{
-	layout::{DataLayout, DataLayoutType, LayoutType, ListLayout, LiteralLayout},
+	layout::{LayoutType, ListLayout, LiteralLayout},
+	matching,
 	pattern::Substitution,
-	Context, Layout, Pattern, Ref,
+	utils::QuadsExt,
+	Context, Layout, Matching, Pattern, Ref, TypedLiteral, TypedValue,
 };
 
-use crate::{value::Number, TypedLiteral, TypedValue};
+mod data;
+
+use data::*;
 
 pub enum Error {
 	IncompatibleLayout,
 	AbstractLayout,
 	InvalidInputCount { expected: u32, found: u32 },
+	DataAmbiguity,
+	MissingData,
 }
 
-pub type RdfLiteralType<V> =
-	rdf_types::literal::Type<<V as IriVocabulary>::Iri, <V as LanguageTagVocabulary>::LanguageTag>;
+impl From<matching::Error> for Error {
+	fn from(value: matching::Error) -> Self {
+		match value {
+			matching::Error::Ambiguity => Self::DataAmbiguity,
+			matching::Error::Empty => Self::MissingData,
+		}
+	}
+}
 
 /// Serialize the given RDF `dataset` using the provided `layout`, returning
 /// a typed value.
@@ -63,6 +73,7 @@ where
 					let value = hydrate_data(
 						vocabulary,
 						interpretation,
+						dataset,
 						current_graph,
 						layout_ref.casted(),
 						layout,
@@ -75,6 +86,7 @@ where
 					let mut substitution = Substitution::from_inputs(inputs);
 					substitution.intro(layout.intro);
 					let substitution = Matching::new(
+						dataset,
 						substitution.clone(),
 						layout.dataset.quads().with_default_graph(current_graph),
 					)
@@ -114,6 +126,7 @@ where
 			let mut substitution = Substitution::from_inputs(inputs);
 			substitution.intro(layout.intro);
 			let substitution = Matching::new(
+				dataset,
 				substitution.clone(),
 				layout.dataset.quads().with_default_graph(current_graph),
 			)
@@ -127,6 +140,7 @@ where
 				variant_substitution.intro(variant.intro);
 
 				let variant_substitution = Matching::new(
+					dataset,
 					substitution.clone(),
 					variant.dataset.quads().with_default_graph(current_graph),
 				)
@@ -184,6 +198,7 @@ where
 			let mut substitution = Substitution::from_inputs(inputs);
 			substitution.intro(layout.intro);
 			let substitution = Matching::new(
+				dataset,
 				substitution.clone(),
 				layout.dataset.quads().with_default_graph(current_graph),
 			)
@@ -196,6 +211,7 @@ where
 				field_substitution.intro(field.intro);
 
 				let field_substitution = Matching::new(
+					dataset,
 					substitution.clone(),
 					field.dataset.quads().with_default_graph(current_graph),
 				)
@@ -235,6 +251,7 @@ where
 					substitution.intro(layout.intro);
 
 					let mut item_substitution = Matching::new(
+						dataset,
 						substitution,
 						layout.dataset.quads().with_default_graph(current_graph),
 					)
@@ -242,6 +259,7 @@ where
 
 					item_substitution.intro(layout.item.intro);
 					let matching = Matching::new(
+						dataset,
 						item_substitution,
 						layout
 							.item
@@ -282,6 +300,7 @@ where
 					substitution.intro(layout.intro);
 
 					let substitution = Matching::new(
+						dataset,
 						substitution,
 						layout.dataset.quads().with_default_graph(current_graph),
 					)
@@ -298,6 +317,7 @@ where
 						let rest = item_substitution.intro(1 + layout.node.intro); // the rest, and other intro variables.
 
 						let item_substitution = Matching::new(
+							dataset,
 							item_substitution,
 							layout
 								.node
@@ -338,6 +358,7 @@ where
 					substitution.intro(layout.intro);
 
 					let substitution = Matching::new(
+						dataset,
 						substitution,
 						layout.dataset.quads().with_default_graph(current_graph),
 					)
@@ -350,6 +371,7 @@ where
 						item_substitution.intro(item.intro);
 
 						let item_substitution = Matching::new(
+							dataset,
 							item_substitution,
 							item.dataset.quads().with_default_graph(current_graph),
 						)
@@ -380,219 +402,6 @@ where
 	}
 }
 
-fn hydrate_data<V, I: Interpretation>(
-	vocabulary: &V,
-	interpretation: &I,
-	current_graph: Option<&I::Resource>,
-	layout_ref: Ref<DataLayoutType, I::Resource>,
-	layout: &DataLayout<I::Resource>,
-	inputs: &[I::Resource],
-) -> Result<TypedLiteral<I::Resource>, Error>
-where
-	V: Vocabulary<Type = RdfLiteralType<V>>,
-	V::Iri: PartialEq,
-	V::Value: AsRef<str>,
-	I: ReverseIriInterpretation<Iri = V::Iri> + ReverseLiteralInterpretation<Literal = V::Literal>,
-	I::Resource: Clone + PartialEq,
-{
-	match layout {
-		DataLayout::Unit(layout) => {
-			let mut substitution = Substitution::from_inputs(inputs);
-			substitution.intro(layout.intro);
-
-			Matching::new(
-				substitution.clone(),
-				layout.dataset.quads().with_default_graph(current_graph),
-			)
-			.into_required_unique()?;
-
-			Ok(TypedLiteral::Unit(layout_ref.cast()))
-		}
-		DataLayout::Boolean(layout) => {
-			let mut substitution = Substitution::from_inputs(inputs);
-			substitution.intro(layout.intro);
-
-			let substitution = Matching::new(
-				substitution.clone(),
-				layout.dataset.quads().with_default_graph(current_graph),
-			)
-			.into_required_unique()?;
-
-			let resource = layout
-				.resource
-				.apply(&substitution)
-				.into_resource()
-				.unwrap();
-
-			let mut value = None;
-
-			for l in interpretation.literals_of(&resource) {
-				let literal = vocabulary.literal(l).unwrap();
-				let i = match literal.type_() {
-					rdf_types::literal::Type::Any(i) => i,
-					rdf_types::literal::Type::LangString(_) => {
-						todo!() // Lang string
-					}
-				};
-
-				if interpretation.iris_of(&layout.type_).any(|j| i == j) {
-					let v = hydrate_boolean_value(
-						literal.value().as_ref(),
-						vocabulary.iri(i).unwrap(),
-					)?;
-
-					if value.replace(v).is_some() {
-						todo!() // Ambiguity
-					}
-				}
-			}
-
-			match value {
-				Some(value) => Ok(TypedLiteral::Boolean(value, layout_ref.casted())),
-				None => {
-					todo!() // No matching literal representation found
-				}
-			}
-		}
-		DataLayout::Number(layout) => {
-			let mut substitution = Substitution::from_inputs(inputs);
-			substitution.intro(layout.intro);
-
-			let substitution = Matching::new(
-				substitution.clone(),
-				layout.dataset.quads().with_default_graph(current_graph),
-			)
-			.into_required_unique()?;
-
-			let resource = layout
-				.resource
-				.apply(&substitution)
-				.into_resource()
-				.unwrap();
-
-			let mut value = None;
-
-			for l in interpretation.literals_of(&resource) {
-				let literal = vocabulary.literal(l).unwrap();
-				let i = match literal.type_() {
-					rdf_types::literal::Type::Any(i) => i,
-					rdf_types::literal::Type::LangString(_) => {
-						todo!() // Lang string
-					}
-				};
-
-				if interpretation.iris_of(&layout.type_).any(|j| i == j) {
-					let v =
-						hydrate_number_value(literal.value().as_ref(), vocabulary.iri(i).unwrap())?;
-
-					if value.replace(v).is_some() {
-						todo!() // Ambiguity
-					}
-				}
-			}
-
-			match value {
-				Some(value) => Ok(TypedLiteral::Number(value, layout_ref.casted())),
-				None => {
-					todo!() // No matching literal representation found
-				}
-			}
-		}
-		DataLayout::ByteString(layout) => {
-			let mut substitution = Substitution::from_inputs(inputs);
-			substitution.intro(layout.intro);
-
-			let substitution = Matching::new(
-				substitution.clone(),
-				layout.dataset.quads().with_default_graph(current_graph),
-			)
-			.into_required_unique()?;
-
-			let resource = layout
-				.resource
-				.apply(&substitution)
-				.into_resource()
-				.unwrap();
-
-			let mut value = None;
-
-			for l in interpretation.literals_of(&resource) {
-				let literal = vocabulary.literal(l).unwrap();
-				let i = match literal.type_() {
-					rdf_types::literal::Type::Any(i) => i,
-					rdf_types::literal::Type::LangString(_) => {
-						todo!() // Lang string
-					}
-				};
-
-				if interpretation.iris_of(&layout.type_).any(|j| i == j) {
-					let v = hydrate_byte_string_value(
-						literal.value().as_ref(),
-						vocabulary.iri(i).unwrap(),
-					)?;
-
-					if value.replace(v).is_some() {
-						todo!() // Ambiguity
-					}
-				}
-			}
-
-			match value {
-				Some(value) => Ok(TypedLiteral::ByteString(value, layout_ref.casted())),
-				None => {
-					todo!() // No matching literal representation found
-				}
-			}
-		}
-		DataLayout::TextString(layout) => {
-			let mut substitution = Substitution::from_inputs(inputs);
-			substitution.intro(layout.intro);
-
-			let substitution = Matching::new(
-				substitution.clone(),
-				layout.dataset.quads().with_default_graph(current_graph),
-			)
-			.into_required_unique()?;
-
-			let resource = layout
-				.resource
-				.apply(&substitution)
-				.into_resource()
-				.unwrap();
-
-			let mut value = None;
-
-			for l in interpretation.literals_of(&resource) {
-				let literal = vocabulary.literal(l).unwrap();
-				let i = match literal.type_() {
-					rdf_types::literal::Type::Any(i) => i,
-					rdf_types::literal::Type::LangString(_) => {
-						todo!() // Lang string
-					}
-				};
-
-				if interpretation.iris_of(&layout.type_).any(|j| i == j) {
-					let v = hydrate_text_string_value(
-						literal.value().as_ref(),
-						vocabulary.iri(i).unwrap(),
-					)?;
-
-					if value.replace(v).is_some() {
-						todo!() // Ambiguity
-					}
-				}
-			}
-
-			match value {
-				Some(value) => Ok(TypedLiteral::TextString(value, layout_ref.casted())),
-				None => {
-					todo!() // No matching literal representation found
-				}
-			}
-		}
-	}
-}
-
 fn select_inputs<R: Clone>(inputs: &[Pattern<R>], substitution: &Substitution<R>) -> Vec<R> {
 	inputs
 		.iter()
@@ -612,85 +421,4 @@ fn select_graph<R: Clone>(
 				.map(|p| p.apply(substitution).into_resource().unwrap())
 		})
 		.unwrap_or_else(|| current_graph.cloned())
-}
-
-pub trait QuadsWithGraphExt<'a, R>: Sized {
-	fn with_default_graph(self, graph: Option<&'a R>) -> QuadsWithGraph<'a, R, Self>;
-}
-
-impl<'a, R: 'a, I> QuadsWithGraphExt<'a, R> for I
-where
-	I: Iterator<Item = Quad<&'a Pattern<R>, &'a Pattern<R>, &'a Pattern<R>, &'a Pattern<R>>>,
-{
-	fn with_default_graph(self, graph: Option<&'a R>) -> QuadsWithGraph<'a, R, Self> {
-		QuadsWithGraph { quads: self, graph }
-	}
-}
-
-pub struct QuadsWithGraph<'a, R, I> {
-	quads: I,
-	graph: Option<&'a R>,
-}
-
-impl<'a, R, I> Iterator for QuadsWithGraph<'a, R, I>
-where
-	I: Iterator<Item = Quad<&'a Pattern<R>, &'a Pattern<R>, &'a Pattern<R>, &'a Pattern<R>>>,
-{
-	type Item = Quad<Pattern<&'a R>, Pattern<&'a R>, Pattern<&'a R>, Pattern<&'a R>>;
-
-	fn next(&mut self) -> Option<Self::Item> {
-		todo!()
-	}
-}
-
-pub struct Matching<R, D> {
-	quads: D,
-	r: PhantomData<R>,
-}
-
-impl<R, D> Matching<R, D> {
-	pub fn new(substitution: Substitution<R>, quads: D) -> Self {
-		todo!()
-	}
-
-	pub fn into_unique(self) -> Result<Option<Substitution<R>>, Error> {
-		todo!()
-	}
-
-	pub fn into_required_unique(self) -> Result<Substitution<R>, Error> {
-		todo!()
-	}
-}
-
-impl<R, D> Iterator for Matching<R, D> {
-	type Item = Substitution<R>;
-
-	fn next(&mut self) -> Option<Self::Item> {
-		todo!()
-	}
-}
-
-fn hydrate_boolean_value(value: &str, type_: &Iri) -> Result<bool, Error> {
-	use xsd_types::ParseRdf;
-	if type_ == xsd_types::XSD_BOOLEAN {
-		bool::parse_rdf(value).map_err(|_| todo!())
-	} else {
-		todo!() // unknown boolean type.
-	}
-}
-
-fn hydrate_number_value(value: &str, type_: &Iri) -> Result<Number, Error> {
-	todo!()
-}
-
-fn hydrate_byte_string_value(value: &str, type_: &Iri) -> Result<Vec<u8>, Error> {
-	todo!()
-}
-
-fn hydrate_text_string_value(value: &str, type_: &Iri) -> Result<String, Error> {
-	if type_ == xsd_types::XSD_STRING {
-		Ok(value.to_owned())
-	} else {
-		todo!() // unknown string type.
-	}
 }

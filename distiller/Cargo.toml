@@ -13,3 +13,4 @@ rdf-types.workspace = true
 xsd-types.workspace = true
 grdf.workspace = true
 num-rational.workspace = true
+educe.workspace = true

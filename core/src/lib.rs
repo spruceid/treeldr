@@ -1,9 +1,11 @@
 pub mod format;
 pub mod graph;
 pub mod layout;
+pub mod matching;
 pub mod pattern;
 pub mod regexp;
 pub mod utils;
+pub mod value;
 
 use std::marker::PhantomData;
 
@@ -11,8 +13,10 @@ use educe::Educe;
 pub use format::Format;
 pub use graph::{Dataset, Graph};
 pub use layout::Layout;
+pub use matching::Matching;
 pub use pattern::Pattern;
 pub use regexp::RegExp;
+pub use value::{Literal, TypedLiteral, TypedValue, Value};
 
 /// Typed RDF resource identifier.
 #[derive(Educe)]

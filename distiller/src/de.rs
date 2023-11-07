@@ -1,7 +1,5 @@
 use rdf_types::Interpretation;
-use treeldr::{layout::LayoutType, Context, Layout, Ref};
-
-use crate::Value;
+use treeldr::{layout::LayoutType, Context, Layout, Ref, Value};
 
 pub enum Error {
 	IncompatibleLayout,

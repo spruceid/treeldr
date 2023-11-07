@@ -1,7 +1,9 @@
+use grdf::Quad;
+
 /// Pattern.
 ///
 /// Either a resource identifier or a variable.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Pattern<R> {
 	/// Resource.
 	Resource(R),
@@ -15,7 +17,13 @@ impl<R> Pattern<R> {
 	where
 		R: Clone,
 	{
-		todo!()
+		match self {
+			Self::Resource(r) => Self::Resource(r.clone()),
+			Self::Var(x) => match substitution.get(*x) {
+				Some(r) => Self::Resource(r.clone()),
+				None => Self::Var(*x),
+			},
+		}
 	}
 
 	pub fn as_ref(&self) -> Pattern<&R> {
@@ -72,6 +80,52 @@ impl<R> Substitution<R> {
 
 	pub fn set(&mut self, x: u32, value: Option<R>) -> Option<R> {
 		std::mem::replace(&mut self.0[x as usize], value)
+	}
+
+	pub fn with_quad(
+		&self,
+		pattern: Quad<Pattern<&R>, Pattern<&R>, Pattern<&R>, Pattern<&R>>,
+		value: Quad<&R, &R, &R, &R>,
+	) -> Option<Self>
+	where
+		R: Clone + PartialEq,
+	{
+		let mut result = self.clone();
+
+		if let Pattern::Var(x) = pattern.0 {
+			if let Some(old_value) = result.set(x, Some(value.0.clone())) {
+				if old_value != *value.0 {
+					return None;
+				}
+			}
+		}
+
+		if let Pattern::Var(x) = pattern.1 {
+			if let Some(old_value) = result.set(x, Some(value.1.clone())) {
+				if old_value != *value.1 {
+					return None;
+				}
+			}
+		}
+
+		if let Pattern::Var(x) = pattern.2 {
+			if let Some(old_value) = result.set(x, Some(value.2.clone())) {
+				if old_value != *value.2 {
+					return None;
+				}
+			}
+		}
+
+		if let Some(Pattern::Var(x)) = pattern.3 {
+			let g = value.3.unwrap();
+			if let Some(old_value) = result.set(x, Some(g.clone())) {
+				if old_value != *g {
+					return None;
+				}
+			}
+		}
+
+		Some(result)
 	}
 }
 

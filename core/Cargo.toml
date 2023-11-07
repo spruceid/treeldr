@@ -16,7 +16,7 @@ iref.workspace = true
 # locspan = { workspace = true, features = ["reporting"] }
 # locspan-derive.workspace = true
 # codespan-reporting.workspace = true
-# rdf-types = { workspace = true, features = ["meta", "contextual"] }
+rdf-types.workspace = true
 # xsd-types.workspace = true
 # langtag.workspace = true
 grdf = { workspace = true, features = ["meta"] }

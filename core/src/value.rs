@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use treeldr::{
+use crate::{
 	layout::{
 		BooleanLayoutType, ByteStringLayoutType, IdLayoutType, ListLayoutType, NumberLayoutType,
 		ProductLayoutType, SumLayoutType, TextStringLayoutType, UnitLayoutType,
