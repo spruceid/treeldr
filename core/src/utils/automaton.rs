@@ -260,7 +260,7 @@ impl<Q: Ord> Automaton<Q> {
 }
 
 /// Deterministic epsilon-free automaton.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct DetAutomaton<Q, L = AnyRange<char>> {
 	initial_state: Q,
 	final_states: BTreeSet<Q>,

@@ -2,6 +2,7 @@ use crate::{utils::DetAutomaton, Dataset, Pattern};
 
 pub struct IdLayoutType;
 
+#[derive(Debug)]
 pub struct IdLayout<R> {
 	pub input: u32,
 

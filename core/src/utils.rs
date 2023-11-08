@@ -45,6 +45,15 @@ where
 	type Item = Quad<Pattern<&'a R>, Pattern<&'a R>, Pattern<&'a R>, Pattern<&'a R>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		todo!()
+		self.quads.next().map(|quad| {
+			Quad(
+				quad.0.as_ref(),
+				quad.1.as_ref(),
+				quad.2.as_ref(),
+				quad.3
+					.map(Pattern::as_ref)
+					.or_else(|| self.graph.map(Pattern::Resource)),
+			)
+		})
 	}
 }

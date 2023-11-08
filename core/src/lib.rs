@@ -28,6 +28,7 @@ pub trait GetFromLayouts<C, R>: Sized {
 }
 
 /// Layout collection.
+#[derive(Debug)]
 pub struct Layouts<R> {
 	layouts: BTreeMap<R, Layout<R>>,
 }

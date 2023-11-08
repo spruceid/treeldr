@@ -1,0 +1,179 @@
+{
+	"prefixes": {
+		"xsd": "http://www.w3.org/2001/XMLSchema#",
+		"schema": "https://schema.org/",
+		"ex": "https://example.org/#"
+	},
+	"type": "record",
+	"input": ["receipt"],
+	"fields": {
+		"date": {
+			"intro": ["date"],
+			"format": {
+				"input": ["_:date"],
+				"layout": {
+					"type": "string",
+					"input": ["value"],
+					"resource": "_:value",
+					"datatype": "xsd:dateTime"
+				}
+			},
+			"dataset": [
+				["_:receipt", "ex:date", "_:date"]
+			]
+		},
+		"bill": {
+			"intro": ["bill"],
+			"format": {
+				"input": ["_:bill"],
+				"layout": {
+					"type": "record",
+					"input": ["bill"],
+					"fields": {
+						"milk1L": {
+							"intro": ["milk1L"],
+							"format": {
+								"input": ["_:milk1L"],
+								"layout": {
+									"id": "ex:ItemByUnit",
+									"type": "record",
+									"input": ["item"],
+									"fields": {
+										"unitPrice": {
+											"intro": ["unitPrice"],
+											"format": {
+												"input": ["_:unitPrice"],
+												"layout": {
+													"type": "number",
+													"input": ["value"],
+													"datatype": "xsd:decimal",
+													"resource": "_:value"
+												}
+											},
+											"dataset": [
+												["_:item", "ex:unitPrice", "_:unitPrice"]
+											]
+										},
+										"units": {
+											"intro": ["units"],
+											"format": {
+												"input": ["_:units"],
+												"layout": {
+													"type": "number",
+													"input": ["value"],
+													"datatype": "xsd:nonNegativeInteger",
+													"resource": "_:value"
+												}
+											},
+											"dataset": [
+												["_:item", "ex:units", "_:units"]
+											]
+										}
+									}
+								}
+							},
+							"dataset": [
+								["_:bill", "ex:milk1L", "_:milk1L"]
+							]
+						},
+						"beef": {
+							"intro": ["beef"],
+							"format": {
+								"input": ["_:beef"],
+								"layout": {
+									"id": "ex:ItemByVolume",
+									"type": "record",
+									"input": ["item"],
+									"fields": {
+										"volumePrice": {
+											"intro": ["volumePrice"],
+											"format": {
+												"input": ["_:volumePrice"],
+												"layout": {
+													"type": "number",
+													"input": ["value"],
+													"datatype": "xsd:decimal",
+													"resource":"_:value"
+												}
+											},
+											"dataset": [
+												["_:item", "ex:volumePrice", "_:volumePrice"]
+											]
+										},
+										"volume": {
+											"intro": ["volume"],
+											"format": {
+												"input": ["_:volume"],
+												"layout": {
+													"type": "number",
+													"input": ["value"],
+													"datatype": "xsd:decimal",
+													"resource":"_:value"
+												}
+											},
+											"dataset": [
+												["_:item", "ex:volume", "_:volume"]
+											]
+										}
+									}
+								}
+							},
+							"dataset": [
+								["_:bill", "ex:beef", "_:beef"]
+							]
+						}
+					}
+				}
+			},
+			"dataset": [
+				["_:receipt", "ex:bill", "_:bill"]
+			]
+		},
+		"pointOfSale": {
+			"intro": ["pointOfSale"],
+			"format": {
+				"input": ["_:pointOfSale"],
+				"layout": {
+					"id": "ex:PointOfSale",
+					"type": "record",
+					"input": ["pointOfSale"],
+					"fields": {
+						"address": {
+							"intro": ["address"],
+							"format": {
+								"input": ["_:address"],
+								"layout": {
+									"type": "string",
+									"input": ["value"],
+									"resource": "_:value",
+									"datatype": "https://schema.org/Text"
+								}
+							},
+							"dataset": [
+								["_:pointOfSale", "schema:address", "_:address"]
+							]
+						},
+						"till": {
+							"intro": ["till"],
+							"format": {
+								"input": ["_:till"],
+								"layout": {
+									"type": "number",
+									"input": ["value"],
+									"datatype": "xsd:nonNegativeInteger",
+									"resource": "_:value"
+								}
+							},
+							"dataset": [
+								["_:pointOfSale", "ex:till", "_:till"]
+							]
+						}
+					}
+				}
+			},
+			"dataset": [
+				["_:receipt", "ex:pointOfSale", "_:pointOfSale"]
+			]
+		}
+	}
+}

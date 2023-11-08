@@ -250,18 +250,29 @@ fn hydrate_boolean_value(value: &str, type_: &Iri) -> Result<bool, Error> {
 	}
 }
 
-fn hydrate_number_value(_value: &str, _type_: &Iri) -> Result<Number, Error> {
-	todo!()
+fn hydrate_number_value(value: &str, type_: &Iri) -> Result<Number, Error> {
+	match xsd_types::Datatype::from_iri(type_) {
+		Some(xsd_types::Datatype::Decimal(_t)) => {
+			// t.parse(value)
+			// todo!()
+			match value.parse::<i64>() {
+				Ok(v) => Ok(Number::from_integer(v.into())),
+				Err(_) => match value.parse::<f64>() {
+					Ok(v) => Number::from_float(v).ok_or_else(|| todo!()),
+					Err(_) => {
+						todo!()
+					}
+				},
+			}
+		}
+		_ => Err(Error::UnknownNumberDatatype(type_.to_owned())),
+	}
 }
 
 fn hydrate_byte_string_value(_value: &str, _type_: &Iri) -> Result<Vec<u8>, Error> {
 	todo!()
 }
 
-fn hydrate_text_string_value(value: &str, type_: &Iri) -> Result<String, Error> {
-	if type_ == xsd_types::XSD_STRING {
-		Ok(value.to_owned())
-	} else {
-		todo!() // unknown string type.
-	}
+fn hydrate_text_string_value(value: &str, _type_: &Iri) -> Result<String, Error> {
+	Ok(value.to_string())
 }

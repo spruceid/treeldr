@@ -10,6 +10,7 @@ pub use id::{IdLayout, IdLayoutType};
 
 pub struct LiteralLayoutType;
 
+#[derive(Debug)]
 pub enum LiteralLayout<R> {
 	Data(DataLayout<R>),
 	Id(IdLayout<R>),

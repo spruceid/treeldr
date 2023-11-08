@@ -1,5 +1,5 @@
 use iref::{Iri, IriBuf, IriRefBuf};
-use rdf_types::{InterpretationMut, IriInterpretationMut, IriVocabularyMut};
+use rdf_types::{BlankIdBuf, InterpretationMut, IriInterpretationMut, IriVocabularyMut};
 use serde::{Deserialize, Serialize};
 use std::{
 	collections::{BTreeMap, HashMap},
@@ -58,10 +58,18 @@ pub trait Build<C> {
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error>;
 }
 
+impl<C, T: Build<C>> Build<C> for Box<T> {
+	type Target = T::Target;
+
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		T::build(&**self, context, scope)
+	}
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-	#[error("no base IRI")]
-	NoBaseIri,
+	#[error("no base IRI to resolve `{0}`")]
+	NoBaseIri(IriRefBuf),
 
 	#[error("invalid IRI `{0}`")]
 	InvalidIri(String),
@@ -89,7 +97,7 @@ impl CompactIri {
 			},
 			None => match &scope.base_iri {
 				Some(base_iri) => Ok(self.0.resolved(base_iri)),
-				None => Err(Error::NoBaseIri),
+				None => Err(Error::NoBaseIri(self.0.clone())),
 			},
 		}
 	}
@@ -115,7 +123,7 @@ impl Scope {
 	pub fn with_header(&self, header: &LayoutHeader) -> Result<Self, Error> {
 		let mut result = self.clone();
 
-		if let Some(base_iri) = &header.base_iri {
+		if let Some(base_iri) = &header.base {
 			result.base_iri = Some(base_iri.resolve(self)?)
 		}
 
@@ -134,11 +142,11 @@ impl Scope {
 
 	pub fn with_intro<'s>(
 		&self,
-		intros: impl IntoIterator<Item = &'s String>,
+		intro: impl IntoIterator<Item = &'s String>,
 	) -> Result<Self, Error> {
 		let mut result = self.clone();
 
-		for name in intros {
+		for name in intro {
 			result.bind(name)
 		}
 
@@ -167,6 +175,7 @@ impl Scope {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum Layout {
 	/// Matches literal values.
 	Literal(LiteralLayout),
@@ -204,12 +213,12 @@ impl Layout {
 		}
 	}
 
-	fn build<C: Context>(
+	pub fn build<C: Context>(
 		&self,
 		context: &mut C,
-		scope: &Scope,
 	) -> Result<Ref<crate::LayoutType, C::Resource>, Error> {
-		Build::build(self, context, scope)
+		let scope = Scope::default();
+		Build::build(self, context, &scope)
 	}
 }
 
@@ -266,6 +275,7 @@ impl<C: Context> Build<C> for LayoutRef {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Reference {
 	#[serde(rename = "ref")]
 	ref_: CompactIri,
@@ -280,30 +290,94 @@ impl<C: Context> Build<C> for Reference {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub enum Pattern {
 	Var(String),
 	Iri(CompactIri),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LayoutHeader {
-	base_iri: Option<CompactIri>,
+impl Serialize for Pattern {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		match self {
+			Self::Var(name) => format!("_:{name}").serialize(serializer),
+			Self::Iri(compact_iri) => compact_iri.serialize(serializer),
+		}
+	}
+}
 
-	prefixes: HashMap<String, CompactIri>,
+impl<'de> Deserialize<'de> for Pattern {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		struct Visitor;
 
-	id: Option<CompactIri>,
+		impl<'de> serde::de::Visitor<'de> for Visitor {
+			type Value = Pattern;
 
-	input: Vec<String>,
+			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+				write!(formatter, "a compact IRI or blank node identifier")
+			}
 
-	intro: Vec<String>,
+			fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+			where
+				E: serde::de::Error,
+			{
+				self.visit_string(v.to_owned())
+			}
 
-	dataset: Dataset,
+			fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+			where
+				E: serde::de::Error,
+			{
+				match BlankIdBuf::new(v) {
+					Ok(blank_id) => Ok(Pattern::Var(blank_id.suffix().to_owned())),
+					Err(e) => match IriRefBuf::new(e.0) {
+						Ok(iri_ref) => Ok(Pattern::Iri(CompactIri(iri_ref))),
+						Err(e) => Err(E::invalid_value(serde::de::Unexpected::Str(&e.0), &self)),
+					},
+				}
+			}
+		}
+
+		deserializer.deserialize_string(Visitor)
+	}
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LayoutHeader {
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	base: Option<CompactIri>,
+
+	#[serde(default, skip_serializing_if = "HashMap::is_empty")]
+	prefixes: HashMap<String, CompactIri>,
+
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	id: Option<CompactIri>,
+
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	input: Vec<String>,
+
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	intro: Vec<String>,
+
+	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
+	dataset: Dataset,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Dataset(Vec<Quad>);
+
+impl Dataset {
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+}
 
 impl<C: Context> Build<C> for Dataset {
 	type Target = treeldr::Dataset<C::Resource>;
@@ -362,14 +436,18 @@ impl<C: Context> Build<C> for Quad {
 }
 
 impl<C: Context> Build<C> for LayoutHeader {
-	type Target = BuiltLayoutHeader<C::Resource>;
+	type Target = (BuiltLayoutHeader<C::Resource>, Scope);
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		Ok(BuiltLayoutHeader {
+		let scope = scope.with_header(self)?;
+
+		let header = BuiltLayoutHeader {
 			input: self.input.len() as u32,
 			intro: self.intro.len() as u32,
-			dataset: self.dataset.build(context, scope)?,
-		})
+			dataset: self.dataset.build(context, &scope)?,
+		};
+
+		Ok((header, scope))
 	}
 }
 
@@ -382,11 +460,14 @@ pub struct BuiltLayoutHeader<R> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Format {
 	layout: LayoutRef,
 
-	inputs: Vec<Pattern>,
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	input: Vec<Pattern>,
 
+	#[serde(default, skip_serializing_if = "Option::is_none")]
 	graph: Option<Option<Pattern>>,
 }
 
@@ -394,8 +475,8 @@ impl<C: Context> Build<C> for Format {
 	type Target = treeldr::Format<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let mut inputs = Vec::with_capacity(self.inputs.len());
-		for i in &self.inputs {
+		let mut inputs = Vec::with_capacity(self.input.len());
+		for i in &self.input {
 			inputs.push(i.build(context, scope)?);
 		}
 
@@ -578,6 +659,7 @@ impl<C: Context> Build<C> for DataLayout {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnitLayout {
 	#[serde(rename = "type")]
 	type_: UnitLayoutType,
@@ -590,7 +672,7 @@ impl<C: Context> Build<C> for UnitLayout {
 	type Target = crate::layout::UnitLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let header = self.header.build(context, scope)?;
+		let (header, _) = self.header.build(context, scope)?;
 		Ok(crate::layout::UnitLayout {
 			input: header.input,
 			intro: header.intro,
@@ -600,6 +682,7 @@ impl<C: Context> Build<C> for UnitLayout {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BooleanLayout {
 	#[serde(rename = "type")]
 	type_: BooleanLayoutType,
@@ -609,26 +692,33 @@ pub struct BooleanLayout {
 
 	resource: Pattern,
 
-	datatype: CompactIri,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	datatype: Option<CompactIri>,
 }
 
 impl<C: Context> Build<C> for BooleanLayout {
 	type Target = crate::layout::BooleanLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let header = self.header.build(context, scope)?;
+		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(crate::layout::BooleanLayout {
 			input: header.input,
 			intro: header.intro,
 			dataset: header.dataset,
-			resource: self.resource.build(context, scope)?,
-			datatype: self.datatype.build(context, scope)?,
+			resource: self.resource.build(context, &scope)?,
+			datatype: self
+				.datatype
+				.as_ref()
+				.map(|i| i.build(context, &scope))
+				.transpose()?
+				.unwrap_or_else(|| context.iri_resource(xsd_types::XSD_BOOLEAN)),
 		})
 	}
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NumberLayout {
 	#[serde(rename = "type")]
 	type_: NumberLayoutType,
@@ -645,19 +735,20 @@ impl<C: Context> Build<C> for NumberLayout {
 	type Target = crate::layout::NumberLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let header = self.header.build(context, scope)?;
+		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(crate::layout::NumberLayout {
 			input: header.input,
 			intro: header.intro,
 			dataset: header.dataset,
-			resource: self.resource.build(context, scope)?,
-			datatype: self.datatype.build(context, scope)?,
+			resource: self.resource.build(context, &scope)?,
+			datatype: self.datatype.build(context, &scope)?,
 		})
 	}
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ByteStringLayout {
 	#[serde(rename = "type")]
 	type_: ByteStringLayoutType,
@@ -674,19 +765,20 @@ impl<C: Context> Build<C> for ByteStringLayout {
 	type Target = crate::layout::ByteStringLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let header = self.header.build(context, scope)?;
+		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(crate::layout::ByteStringLayout {
 			input: header.input,
 			intro: header.intro,
 			dataset: header.dataset,
-			resource: self.resource.build(context, scope)?,
-			datatype: self.datatype.build(context, scope)?,
+			resource: self.resource.build(context, &scope)?,
+			datatype: self.datatype.build(context, &scope)?,
 		})
 	}
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TextStringLayout {
 	#[serde(rename = "type")]
 	type_: TextStringLayoutType,
@@ -694,31 +786,39 @@ pub struct TextStringLayout {
 	#[serde(flatten)]
 	header: LayoutHeader,
 
+	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pattern: Option<RegExp>,
 
 	resource: Pattern,
 
-	datatype: CompactIri,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	datatype: Option<CompactIri>,
 }
 
 impl<C: Context> Build<C> for TextStringLayout {
 	type Target = crate::layout::TextStringLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let header = self.header.build(context, scope)?;
+		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(crate::layout::TextStringLayout {
 			input: header.input,
 			intro: header.intro,
 			dataset: header.dataset,
 			pattern: self.pattern.clone(),
-			resource: self.resource.build(context, scope)?,
-			datatype: self.datatype.build(context, scope)?,
+			resource: self.resource.build(context, &scope)?,
+			datatype: self
+				.datatype
+				.as_ref()
+				.map(|i| i.build(context, &scope))
+				.transpose()?
+				.unwrap_or_else(|| context.iri_resource(xsd_types::XSD_STRING)),
 		})
 	}
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct IdLayout {
 	#[serde(rename = "type")]
 	type_: IdLayoutType,
@@ -726,6 +826,7 @@ pub struct IdLayout {
 	#[serde(flatten)]
 	header: LayoutHeader,
 
+	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pattern: Option<RegExp>,
 
 	resource: Pattern,
@@ -735,19 +836,20 @@ impl<C: Context> Build<C> for IdLayout {
 	type Target = crate::layout::IdLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let header = self.header.build(context, scope)?;
+		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(crate::layout::IdLayout {
 			input: header.input,
 			intro: header.intro,
 			dataset: header.dataset,
 			pattern: self.pattern.clone(),
-			resource: self.resource.build(context, scope)?,
+			resource: self.resource.build(context, &scope)?,
 		})
 	}
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProductLayout {
 	#[serde(rename = "type")]
 	type_: ProductLayoutType,
@@ -755,6 +857,7 @@ pub struct ProductLayout {
 	#[serde(flatten)]
 	header: LayoutHeader,
 
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
 	fields: BTreeMap<String, Field>,
 }
 
@@ -762,19 +865,19 @@ impl<C: Context> Build<C> for ProductLayout {
 	type Target = crate::layout::ProductLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		let (header, scope) = self.header.build(context, scope)?;
+
 		let mut fields = Vec::with_capacity(self.fields.len());
 
 		for (name, field) in &self.fields {
-			let scope = scope.with_intro(&field.intros)?;
+			let scope = scope.with_intro(&field.intro)?;
 			fields.push(treeldr::layout::product::Field {
 				name: name.to_owned(),
-				intro: field.intros.len() as u32,
+				intro: field.intro.len() as u32,
 				format: field.format.build(context, &scope)?,
 				dataset: field.dataset.build(context, &scope)?,
 			})
 		}
-
-		let header = self.header.build(context, scope)?;
 
 		Ok(crate::layout::ProductLayout {
 			input: header.input,
@@ -786,15 +889,19 @@ impl<C: Context> Build<C> for ProductLayout {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Field {
-	intros: Vec<String>,
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	intro: Vec<String>,
 
 	format: Format,
 
+	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SumLayout {
 	#[serde(rename = "type")]
 	type_: SumLayoutType,
@@ -802,15 +909,19 @@ pub struct SumLayout {
 	#[serde(flatten)]
 	header: LayoutHeader,
 
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
 	variants: BTreeMap<String, Variant>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Variant {
-	intros: Vec<String>,
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	intro: Vec<String>,
 
 	format: Format,
 
+	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
 }
 
@@ -818,19 +929,19 @@ impl<C: Context> Build<C> for SumLayout {
 	type Target = crate::layout::SumLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		let (header, scope) = self.header.build(context, scope)?;
+
 		let mut variants = Vec::with_capacity(self.variants.len());
 
 		for (name, variant) in &self.variants {
-			let scope = scope.with_intro(&variant.intros)?;
+			let scope = scope.with_intro(&variant.intro)?;
 			variants.push(treeldr::layout::sum::Variant {
 				name: name.to_owned(),
-				intro: variant.intros.len() as u32,
+				intro: variant.intro.len() as u32,
 				format: variant.format.build(context, &scope)?,
 				dataset: variant.dataset.build(context, &scope)?,
 			})
 		}
-
-		let header = self.header.build(context, scope)?;
 
 		Ok(crate::layout::SumLayout {
 			input: header.input,
@@ -878,6 +989,7 @@ impl<C: Context> Build<C> for ListLayout {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OrderedListLayout {
 	#[serde(rename = "type")]
 	type_: OrderedListLayoutType,
@@ -893,15 +1005,18 @@ pub struct OrderedListLayout {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListNode {
 	head: String,
 
 	rest: String,
 
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	intro: Vec<String>,
 
 	format: Format,
 
+	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
 }
 
@@ -909,14 +1024,14 @@ impl<C: Context> Build<C> for OrderedListLayout {
 	type Target = crate::layout::OrderedListLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let header = self.header.build(context, scope)?;
+		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(crate::layout::OrderedListLayout {
 			input: header.input,
 			intro: header.intro,
-			node: self.node.build(context, scope)?,
-			head: self.head.build(context, scope)?,
-			tail: self.tail.build(context, scope)?,
+			node: self.node.build(context, &scope)?,
+			head: self.head.build(context, &scope)?,
+			tail: self.tail.build(context, &scope)?,
 			dataset: header.dataset,
 		})
 	}
@@ -936,6 +1051,7 @@ impl<C: Context> Build<C> for ListNode {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnorderedListLayout {
 	#[serde(rename = "type")]
 	type_: UnorderedListLayoutType,
@@ -947,11 +1063,14 @@ pub struct UnorderedListLayout {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListItem {
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	intro: Vec<String>,
 
 	format: Format,
 
+	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
 }
 
@@ -959,12 +1078,12 @@ impl<C: Context> Build<C> for UnorderedListLayout {
 	type Target = crate::layout::UnorderedListLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let header = self.header.build(context, scope)?;
+		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(crate::layout::UnorderedListLayout {
 			input: header.input,
 			intro: header.intro,
-			item: self.item.build(context, scope)?,
+			item: self.item.build(context, &scope)?,
 			dataset: header.dataset,
 		})
 	}
@@ -984,6 +1103,7 @@ impl<C: Context> Build<C> for ListItem {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SizedListLayout {
 	#[serde(rename = "type")]
 	type_: SizedListLayoutType,
@@ -991,6 +1111,7 @@ pub struct SizedListLayout {
 	#[serde(flatten)]
 	header: LayoutHeader,
 
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	items: Vec<ListItem>,
 }
 
@@ -998,11 +1119,11 @@ impl<C: Context> Build<C> for SizedListLayout {
 	type Target = crate::layout::SizedListLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let header = self.header.build(context, scope)?;
+		let (header, scope) = self.header.build(context, scope)?;
 
 		let mut items = Vec::with_capacity(self.items.len());
 		for item in &self.items {
-			items.push(item.build(context, scope)?)
+			items.push(item.build(context, &scope)?)
 		}
 
 		Ok(crate::layout::SizedListLayout {
@@ -1015,6 +1136,7 @@ impl<C: Context> Build<C> for SizedListLayout {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct IntersectionLayout {
 	#[serde(rename = "type")]
 	type_: IntersectionLayoutType,
@@ -1032,6 +1154,7 @@ impl<C: Context> Build<C> for IntersectionLayout {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnionLayout {
 	#[serde(rename = "type")]
 	type_: UnionLayoutType,

@@ -31,6 +31,7 @@ impl<R: Ord> GetFromLayouts<Layouts<R>, R> for LayoutType {
 }
 
 /// Layout value.
+#[derive(Debug)]
 pub enum Layout<R> {
 	Never,
 	Literal(LiteralLayout<R>),

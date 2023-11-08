@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use iref::IriBuf;
 use rdf_types::{
 	Interpretation, ReverseIriInterpretation, ReverseLiteralInterpretation, Vocabulary,
 };
@@ -15,12 +16,25 @@ mod data;
 
 use data::*;
 
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
+	#[error("incompatible layout")]
 	IncompatibleLayout,
+
+	#[error("abstract layout")]
 	AbstractLayout,
+
+	#[error("invalid input count (expected {expected}, found {found})")]
 	InvalidInputCount { expected: u32, found: u32 },
+
+	#[error("data ambiguity")]
 	DataAmbiguity,
+
+	#[error("missing data")]
 	MissingData,
+
+	#[error("unknown number datatype")]
+	UnknownNumberDatatype(IriBuf),
 }
 
 impl From<matching::Error> for Error {
@@ -197,6 +211,7 @@ where
 		Layout::Product(layout) => {
 			let mut substitution = Substitution::from_inputs(inputs);
 			substitution.intro(layout.intro);
+
 			let substitution = Matching::new(
 				dataset,
 				substitution.clone(),
@@ -212,7 +227,7 @@ where
 
 				let field_substitution = Matching::new(
 					dataset,
-					substitution.clone(),
+					field_substitution,
 					field.dataset.quads().with_default_graph(current_graph),
 				)
 				.into_unique()?;

@@ -1,6 +1,6 @@
 use crate::{graph::Dataset, Format, Pattern};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct OrderedListLayout<R> {
 	pub input: u32,
 
@@ -18,7 +18,7 @@ pub struct OrderedListLayout<R> {
 	pub dataset: Dataset<R>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct NodeLayout<R> {
 	pub intro: u32,
 

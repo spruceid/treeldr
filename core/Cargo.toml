@@ -8,25 +8,8 @@ edition.workspace = true
 [dependencies]
 educe.workspace = true
 num-rational.workspace = true
-# treeldr-primitives.workspace = true
 iref.workspace = true
-# static-iref.workspace = true
-# log.workspace = true
-# derivative.workspace = true
-# locspan = { workspace = true, features = ["reporting"] }
-# locspan-derive.workspace = true
-# codespan-reporting.workspace = true
 rdf-types.workspace = true
-# xsd-types.workspace = true
-# langtag.workspace = true
 grdf = { workspace = true, features = ["meta"] }
-# contextual.workspace = true
-# thiserror.workspace = true
-# shelves.workspace = true
 btree-range-map.workspace = true
-# iref-enum = "2.1"
-# num = "0.4.0"
-# lazy_static = "1.4.0"
-# ordered-float = "3.0.0"
-# permutator = "0.4.3"
-# once_cell = "1.16.0"
+serde.workspace = true

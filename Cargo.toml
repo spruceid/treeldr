@@ -23,6 +23,7 @@ authors = ["Spruce Systems Inc."]
 
 [workspace.dependencies]
 treeldr = { path = "core", version = "0.2.0" }
+treeldr-build = { path = "build", version = "0.2.0" }
 
 educe = "0.4.23"
 num-rational = "0.4"
@@ -33,3 +34,7 @@ xsd-types = "0.8.2"
 grdf = "0.22.0"
 btree-range-map = "0.7.2"
 thiserror = "1.0.50"
+serde = "1.0.192"
+
+locspan = "0.8.2"
+nquads-syntax = "0.17.0"

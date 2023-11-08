@@ -9,8 +9,9 @@ edition.workspace = true
 treeldr.workspace = true
 iref = { workspace = true, features = ["serde"] }
 rdf-types.workspace = true
+xsd-types.workspace = true
 grdf = { workspace = true, features = ["meta"] }
 btree-range-map.workspace = true
 educe.workspace = true
 thiserror.workspace = true
-serde = { version = "1.0.192", features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }

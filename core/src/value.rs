@@ -8,10 +8,14 @@ use crate::{
 	Ref,
 };
 
+pub mod de;
+pub mod ser;
+
 /// Rational number.
 pub type Number = num_rational::BigRational;
 
 /// Literal value.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Literal {
 	/// Unit.
 	Unit,
@@ -30,6 +34,7 @@ pub enum Literal {
 }
 
 /// Untyped value.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Value {
 	Literal(Literal),
 	Record(BTreeMap<String, Self>),
@@ -56,10 +61,40 @@ pub enum TypedLiteral<R> {
 	Id(String, Ref<IdLayoutType, R>),
 }
 
+impl<R> TypedLiteral<R> {
+	pub fn into_untyped(self) -> Literal {
+		match self {
+			Self::Unit(_) => Literal::Unit,
+			Self::Boolean(b, _) => Literal::Boolean(b),
+			Self::Number(n, _) => Literal::Number(n),
+			Self::ByteString(s, _) => Literal::ByteString(s),
+			Self::TextString(s, _) => Literal::TextString(s),
+			Self::Id(i, _) => Literal::TextString(i),
+		}
+	}
+}
+
 /// Typed value.
 pub enum TypedValue<R> {
 	Literal(TypedLiteral<R>),
 	Variant(Box<Self>, Ref<SumLayoutType, R>, u32),
 	Record(BTreeMap<String, Self>, Ref<ProductLayoutType, R>),
 	List(Vec<Self>, Ref<ListLayoutType, R>),
+}
+
+impl<R> TypedValue<R> {
+	pub fn into_untyped(self) -> Value {
+		match self {
+			Self::Literal(l) => Value::Literal(l.into_untyped()),
+			Self::Variant(value, _, _) => value.into_untyped(),
+			Self::Record(map, _) => Value::Record(
+				map.into_iter()
+					.map(|(k, v)| (k, v.into_untyped()))
+					.collect(),
+			),
+			Self::List(items, _) => {
+				Value::List(items.into_iter().map(TypedValue::into_untyped).collect())
+			}
+		}
+	}
 }

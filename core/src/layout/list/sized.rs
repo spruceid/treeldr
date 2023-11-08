@@ -2,7 +2,7 @@ use crate::Dataset;
 
 use super::ItemLayout;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SizedListLayout<R> {
 	pub input: u32,
 

@@ -1,0 +1,20 @@
+{
+	"type": "record",
+	"input": ["subject"],
+	"fields": {
+		"name": {
+			"intro": ["name"],
+			"format": {
+				"layout": {
+					"input": ["name"],
+					"type": "string",
+					"resource": "_:name"
+				},
+				"input": ["_:name"]
+			},
+			"dataset": [
+				["_:subject", "https://schema.org/name", "_:name"]
+			]
+		}
+	}
+}

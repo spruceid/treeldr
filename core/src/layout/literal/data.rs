@@ -13,7 +13,7 @@ pub struct ByteStringLayoutType;
 pub struct TextStringLayoutType;
 
 /// Data layout.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum DataLayout<R> {
 	Unit(UnitLayout<R>),
 	Boolean(BooleanLayout<R>),
@@ -22,7 +22,7 @@ pub enum DataLayout<R> {
 	TextString(TextStringLayout<R>),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct UnitLayout<R> {
 	pub input: u32,
 
@@ -31,7 +31,7 @@ pub struct UnitLayout<R> {
 	pub dataset: Dataset<R>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct BooleanLayout<R> {
 	pub input: u32,
 
@@ -44,7 +44,7 @@ pub struct BooleanLayout<R> {
 	pub datatype: R,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct NumberLayout<R> {
 	pub input: u32,
 
@@ -57,7 +57,7 @@ pub struct NumberLayout<R> {
 	pub datatype: R,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ByteStringLayout<R> {
 	pub input: u32,
 
@@ -70,7 +70,7 @@ pub struct ByteStringLayout<R> {
 	pub datatype: R,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TextStringLayout<R> {
 	pub input: u32,
 

@@ -2,7 +2,7 @@ use crate::{Dataset, Format};
 
 pub struct ProductLayoutType;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ProductLayout<R> {
 	/// Number of inputs.
 	pub input: u32,
@@ -17,7 +17,7 @@ pub struct ProductLayout<R> {
 	pub dataset: Dataset<R>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Field<R> {
 	/// Name.
 	pub name: String,
