@@ -60,8 +60,12 @@ impl<R> Substitution<R> {
 		self.0.len() as u32
 	}
 
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+
 	pub fn get(&self, i: u32) -> Option<&R> {
-		self.0.get(i as usize).map(Option::as_ref).flatten()
+		self.0.get(i as usize).and_then(Option::as_ref)
 	}
 
 	/// Introduce `count` variables to the substitution. Returns the index of

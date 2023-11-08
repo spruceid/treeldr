@@ -21,9 +21,6 @@ pub struct SumLayout<R> {
 
 #[derive(Clone)]
 pub struct Variant<R> {
-	/// Variant identifier.
-	pub id: R,
-
 	/// Name.
 	pub name: String,
 

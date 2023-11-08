@@ -6,15 +6,17 @@ pub enum Error {
 	AbstractLayout,
 }
 
+pub type Dehydrated<R> = (grdf::BTreeDataset<R>, Vec<R>);
+
 /// Deserialize the given `value` according to the provided `layout`, returning
 /// the deserialized RDF dataset.
 pub fn dehydrate<V, I: Interpretation>(
-	vocabulary: &V,
-	interpretation: &I,
+	_vocabulary: &V,
+	_interpretation: &I,
 	context: &Layouts<I::Resource>,
-	value: &Value,
+	_value: &Value,
 	layout_ref: &Ref<LayoutType, I::Resource>,
-) -> Result<(grdf::BTreeDataset<I::Resource>, Vec<I::Resource>), Error>
+) -> Result<Dehydrated<I::Resource>, Error>
 where
 	I::Resource: Ord,
 {

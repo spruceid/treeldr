@@ -80,7 +80,7 @@ where
 					}
 				};
 
-				if interpretation.iris_of(&layout.type_).any(|j| i == j) {
+				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
 					let v = hydrate_boolean_value(
 						literal.value().as_ref(),
 						vocabulary.iri(i).unwrap(),
@@ -127,7 +127,7 @@ where
 					}
 				};
 
-				if interpretation.iris_of(&layout.type_).any(|j| i == j) {
+				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
 					let v =
 						hydrate_number_value(literal.value().as_ref(), vocabulary.iri(i).unwrap())?;
 
@@ -172,7 +172,7 @@ where
 					}
 				};
 
-				if interpretation.iris_of(&layout.type_).any(|j| i == j) {
+				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
 					let v = hydrate_byte_string_value(
 						literal.value().as_ref(),
 						vocabulary.iri(i).unwrap(),
@@ -219,7 +219,7 @@ where
 					}
 				};
 
-				if interpretation.iris_of(&layout.type_).any(|j| i == j) {
+				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
 					let v = hydrate_text_string_value(
 						literal.value().as_ref(),
 						vocabulary.iri(i).unwrap(),

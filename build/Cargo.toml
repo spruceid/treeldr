@@ -7,6 +7,10 @@ edition.workspace = true
 
 [dependencies]
 treeldr.workspace = true
-educe.workspace = true
+iref = { workspace = true, features = ["serde"] }
+rdf-types.workspace = true
 grdf = { workspace = true, features = ["meta"] }
 btree-range-map.workspace = true
+educe.workspace = true
+thiserror.workspace = true
+serde = { version = "1.0.192", features = ["derive"] }

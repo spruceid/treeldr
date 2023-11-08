@@ -19,9 +19,6 @@ pub struct ProductLayout<R> {
 
 #[derive(Clone)]
 pub struct Field<R> {
-	/// Identifier.
-	pub id: R,
-
 	/// Name.
 	pub name: String,
 

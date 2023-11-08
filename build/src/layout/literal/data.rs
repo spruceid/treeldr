@@ -41,7 +41,7 @@ pub struct TextStringLayout<R> {
 
 	pub resource: Pattern<R>,
 
-	pub type_: R,
+	pub datatype: R,
 }
 
 impl<R: Clone> TextStringLayout<R> {
@@ -52,7 +52,7 @@ impl<R: Clone> TextStringLayout<R> {
 			pattern: self.pattern.as_ref().map(|e| e.build()),
 			dataset: self.dataset.clone(),
 			resource: self.resource.clone(),
-			type_: self.type_.clone(),
+			datatype: self.datatype.clone(),
 		}
 	}
 }

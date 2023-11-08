@@ -1,11 +1,13 @@
 mod intersection;
-mod list;
+pub mod list;
 mod literal;
-mod product;
+pub mod product;
 pub mod sum;
 mod r#union;
 
-pub use list::{ListLayout, ListLayoutType};
+pub use list::{
+	ListLayout, ListLayoutType, OrderedListLayout, SizedListLayout, UnorderedListLayout,
+};
 pub use literal::{
 	BooleanLayout, ByteStringLayout, DataLayout, IdLayout, IdLayoutType, LiteralLayout,
 	LiteralLayoutType, NumberLayout, TextStringLayout, UnitLayout,

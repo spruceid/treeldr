@@ -41,7 +41,7 @@ pub struct BooleanLayout<R> {
 
 	pub resource: Pattern<R>,
 
-	pub type_: R,
+	pub datatype: R,
 }
 
 #[derive(Clone)]
@@ -54,7 +54,7 @@ pub struct NumberLayout<R> {
 
 	pub resource: Pattern<R>,
 
-	pub type_: R,
+	pub datatype: R,
 }
 
 #[derive(Clone)]
@@ -67,7 +67,7 @@ pub struct ByteStringLayout<R> {
 
 	pub resource: Pattern<R>,
 
-	pub type_: R,
+	pub datatype: R,
 }
 
 #[derive(Clone)]
@@ -82,5 +82,5 @@ pub struct TextStringLayout<R> {
 
 	pub resource: Pattern<R>,
 
-	pub type_: R,
+	pub datatype: R,
 }

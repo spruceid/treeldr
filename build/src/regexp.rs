@@ -1,5 +1,5 @@
 use btree_range_map::RangeSet;
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 use treeldr::utils::{Automaton, DetAutomaton};
 
@@ -322,23 +322,19 @@ impl RegExp {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParseError {
+	#[error("missing opening `(`")]
 	UnmatchedClosingParenthesis,
-	MissingClosingParenthesis,
-	IncompleteEscapeSequence,
-	IncompleteCharacterSet,
-}
 
-impl fmt::Display for ParseError {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match self {
-			Self::UnmatchedClosingParenthesis => write!(f, "unmatched `)`"),
-			Self::MissingClosingParenthesis => write!(f, "missing closing `)`"),
-			Self::IncompleteEscapeSequence => write!(f, "incomplete escape sequence"),
-			Self::IncompleteCharacterSet => write!(f, "incomplete character set"),
-		}
-	}
+	#[error("missing closing `)`")]
+	MissingClosingParenthesis,
+
+	#[error("incomplete escape sequence")]
+	IncompleteEscapeSequence,
+
+	#[error("incomplete character set")]
+	IncompleteCharacterSet,
 }
 
 fn parse_charset(chars: &mut impl Iterator<Item = char>) -> Result<RangeSet<char>, ParseError> {
@@ -420,6 +416,14 @@ fn parse_escaped_char(chars: &mut impl Iterator<Item = char>) -> Result<char, Pa
 			c => Ok(c),
 		},
 		None => Err(ParseError::IncompleteEscapeSequence),
+	}
+}
+
+impl FromStr for RegExp {
+	type Err = ParseError;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		Self::parse(s)
 	}
 }
 
@@ -560,6 +564,41 @@ fn fmt_char(c: char, f: &mut fmt::Formatter) -> fmt::Result {
 		'\r' => write!(f, "\\r"),
 		'\x1b' => write!(f, "\\e"),
 		_ => fmt::Display::fmt(&c, f),
+	}
+}
+
+impl serde::Serialize for RegExp {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		self.to_string().serialize(serializer)
+	}
+}
+
+impl<'de> serde::Deserialize<'de> for RegExp {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		struct Visitor;
+
+		impl<'de> serde::de::Visitor<'de> for Visitor {
+			type Value = RegExp;
+
+			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+				write!(formatter, "a regular expression")
+			}
+
+			fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+			where
+				E: serde::de::Error,
+			{
+				RegExp::parse(v).map_err(|e| E::custom(e))
+			}
+		}
+
+		deserializer.deserialize_str(Visitor)
 	}
 }
 
