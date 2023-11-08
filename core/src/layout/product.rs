@@ -1,4 +1,4 @@
-use crate::{Dataset, Format};
+use crate::{Dataset, ValueFormat};
 
 pub struct ProductLayoutType;
 
@@ -26,7 +26,7 @@ pub struct Field<R> {
 	pub intro: u32,
 
 	/// Format.
-	pub format: Format<R>,
+	pub value: ValueFormat<R>,
 
 	/// Dataset.
 	pub dataset: Dataset<R>,

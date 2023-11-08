@@ -1,4 +1,4 @@
-use crate::{graph::Dataset, Format, Pattern};
+use crate::{graph::Dataset, ValueFormat, Pattern};
 
 #[derive(Debug, Clone)]
 pub struct OrderedListLayout<R> {
@@ -26,7 +26,7 @@ pub struct NodeLayout<R> {
 	///
 	/// The layout must take one input which corresponds to the list node,
 	/// and intro at least one variable corresponding to the rest of the list.
-	pub format: Format<R>,
+	pub value: ValueFormat<R>,
 
 	pub dataset: Dataset<R>,
 }

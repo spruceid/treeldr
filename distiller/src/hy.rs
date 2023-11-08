@@ -163,11 +163,11 @@ where
 				match variant_substitution {
 					Some(variant_substitution) => {
 						let variant_inputs =
-							select_inputs(&variant.format.inputs, &variant_substitution);
+							select_inputs(&variant.value.inputs, &variant_substitution);
 
 						let variant_graph = select_graph(
 							current_graph,
-							&variant.format.graph,
+							&variant.value.graph,
 							&variant_substitution,
 						);
 
@@ -177,7 +177,7 @@ where
 							context,
 							dataset,
 							variant_graph.as_ref(),
-							&variant.format.layout,
+							&variant.value.layout,
 							&variant_inputs,
 						);
 
@@ -234,10 +234,10 @@ where
 
 				match field_substitution {
 					Some(field_substitution) => {
-						let field_inputs = select_inputs(&field.format.inputs, &field_substitution);
+						let field_inputs = select_inputs(&field.value.inputs, &field_substitution);
 
 						let item_graph =
-							select_graph(current_graph, &field.format.graph, &field_substitution);
+							select_graph(current_graph, &field.value.graph, &field_substitution);
 
 						let value = hydrate(
 							vocabulary,
@@ -245,7 +245,7 @@ where
 							context,
 							dataset,
 							item_graph.as_ref(),
-							&field.format.layout,
+							&field.value.layout,
 							&field_inputs,
 						)?;
 
@@ -287,11 +287,11 @@ where
 
 					for item_substitution in matching {
 						let item_inputs =
-							select_inputs(&layout.item.format.inputs, &item_substitution);
+							select_inputs(&layout.item.value.inputs, &item_substitution);
 
 						let item_graph = select_graph(
 							current_graph,
-							&layout.item.format.graph,
+							&layout.item.value.graph,
 							&item_substitution,
 						);
 
@@ -301,7 +301,7 @@ where
 							context,
 							dataset,
 							item_graph.as_ref(),
-							&layout.item.format.layout,
+							&layout.item.value.layout,
 							&item_inputs,
 						)?;
 
@@ -343,11 +343,11 @@ where
 						.into_required_unique()?;
 
 						let item_inputs =
-							select_inputs(&layout.node.format.inputs, &item_substitution);
+							select_inputs(&layout.node.value.inputs, &item_substitution);
 
 						let item_graph = select_graph(
 							current_graph,
-							&layout.node.format.graph,
+							&layout.node.value.graph,
 							&item_substitution,
 						);
 
@@ -357,7 +357,7 @@ where
 							context,
 							dataset,
 							item_graph.as_ref(),
-							&layout.node.format.layout,
+							&layout.node.value.layout,
 							&item_inputs,
 						)?;
 
@@ -392,9 +392,9 @@ where
 						)
 						.into_required_unique()?;
 
-						let item_inputs = select_inputs(&item.format.inputs, &item_substitution);
+						let item_inputs = select_inputs(&item.value.inputs, &item_substitution);
 						let item_graph =
-							select_graph(current_graph, &item.format.graph, &item_substitution);
+							select_graph(current_graph, &item.value.graph, &item_substitution);
 
 						let item = hydrate(
 							vocabulary,
@@ -402,7 +402,7 @@ where
 							context,
 							dataset,
 							item_graph.as_ref(),
-							&item.format.layout,
+							&item.value.layout,
 							&item_inputs,
 						)?;
 

@@ -461,7 +461,7 @@ pub struct BuiltLayoutHeader<R> {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Format {
+pub struct ValueFormat {
 	layout: LayoutRef,
 
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -471,8 +471,8 @@ pub struct Format {
 	graph: Option<Option<Pattern>>,
 }
 
-impl<C: Context> Build<C> for Format {
-	type Target = treeldr::Format<C::Resource>;
+impl<C: Context> Build<C> for ValueFormat {
+	type Target = treeldr::ValueFormat<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
 		let mut inputs = Vec::with_capacity(self.input.len());
@@ -480,7 +480,7 @@ impl<C: Context> Build<C> for Format {
 			inputs.push(i.build(context, scope)?);
 		}
 
-		Ok(treeldr::Format {
+		Ok(treeldr::ValueFormat {
 			layout: self.layout.build(context, scope)?,
 			inputs,
 			graph: self
@@ -874,7 +874,7 @@ impl<C: Context> Build<C> for ProductLayout {
 			fields.push(treeldr::layout::product::Field {
 				name: name.to_owned(),
 				intro: field.intro.len() as u32,
-				format: field.format.build(context, &scope)?,
+				value: field.value.build(context, &scope)?,
 				dataset: field.dataset.build(context, &scope)?,
 			})
 		}
@@ -894,7 +894,7 @@ pub struct Field {
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	intro: Vec<String>,
 
-	format: Format,
+	value: ValueFormat,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
@@ -919,7 +919,7 @@ pub struct Variant {
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	intro: Vec<String>,
 
-	format: Format,
+	value: ValueFormat,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
@@ -938,7 +938,7 @@ impl<C: Context> Build<C> for SumLayout {
 			variants.push(treeldr::layout::sum::Variant {
 				name: name.to_owned(),
 				intro: variant.intro.len() as u32,
-				format: variant.format.build(context, &scope)?,
+				value: variant.value.build(context, &scope)?,
 				dataset: variant.dataset.build(context, &scope)?,
 			})
 		}
@@ -1014,7 +1014,7 @@ pub struct ListNode {
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	intro: Vec<String>,
 
-	format: Format,
+	value: ValueFormat,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
@@ -1044,7 +1044,7 @@ impl<C: Context> Build<C> for ListNode {
 		let scope = scope.with_intro([&self.head, &self.rest].into_iter().chain(&self.intro))?;
 		Ok(crate::layout::list::ordered::NodeLayout {
 			intro: self.intro.len() as u32,
-			format: self.format.build(context, &scope)?,
+			value: self.value.build(context, &scope)?,
 			dataset: self.dataset.build(context, &scope)?,
 		})
 	}
@@ -1068,7 +1068,7 @@ pub struct ListItem {
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	intro: Vec<String>,
 
-	format: Format,
+	value: ValueFormat,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
@@ -1096,7 +1096,7 @@ impl<C: Context> Build<C> for ListItem {
 		let scope = scope.with_intro(&self.intro)?;
 		Ok(crate::layout::list::ItemLayout {
 			intro: self.intro.len() as u32,
-			format: self.format.build(context, &scope)?,
+			value: self.value.build(context, &scope)?,
 			dataset: self.dataset.build(context, &scope)?,
 		})
 	}

@@ -9,7 +9,7 @@
 	"fields": {
 		"date": {
 			"intro": ["date"],
-			"format": {
+			"value": {
 				"input": ["_:date"],
 				"layout": {
 					"type": "string",
@@ -24,7 +24,7 @@
 		},
 		"bill": {
 			"intro": ["bill"],
-			"format": {
+			"value": {
 				"input": ["_:bill"],
 				"layout": {
 					"type": "record",
@@ -32,7 +32,7 @@
 					"fields": {
 						"milk1L": {
 							"intro": ["milk1L"],
-							"format": {
+							"value": {
 								"input": ["_:milk1L"],
 								"layout": {
 									"id": "ex:ItemByUnit",
@@ -41,7 +41,7 @@
 									"fields": {
 										"unitPrice": {
 											"intro": ["unitPrice"],
-											"format": {
+											"value": {
 												"input": ["_:unitPrice"],
 												"layout": {
 													"type": "number",
@@ -56,7 +56,7 @@
 										},
 										"units": {
 											"intro": ["units"],
-											"format": {
+											"value": {
 												"input": ["_:units"],
 												"layout": {
 													"type": "number",
@@ -78,7 +78,7 @@
 						},
 						"beef": {
 							"intro": ["beef"],
-							"format": {
+							"value": {
 								"input": ["_:beef"],
 								"layout": {
 									"id": "ex:ItemByVolume",
@@ -87,7 +87,7 @@
 									"fields": {
 										"volumePrice": {
 											"intro": ["volumePrice"],
-											"format": {
+											"value": {
 												"input": ["_:volumePrice"],
 												"layout": {
 													"type": "number",
@@ -102,7 +102,7 @@
 										},
 										"volume": {
 											"intro": ["volume"],
-											"format": {
+											"value": {
 												"input": ["_:volume"],
 												"layout": {
 													"type": "number",
@@ -131,7 +131,7 @@
 		},
 		"pointOfSale": {
 			"intro": ["pointOfSale"],
-			"format": {
+			"value": {
 				"input": ["_:pointOfSale"],
 				"layout": {
 					"id": "ex:PointOfSale",
@@ -140,7 +140,7 @@
 					"fields": {
 						"address": {
 							"intro": ["address"],
-							"format": {
+							"value": {
 								"input": ["_:address"],
 								"layout": {
 									"type": "string",
@@ -155,7 +155,7 @@
 						},
 						"till": {
 							"intro": ["till"],
-							"format": {
+							"value": {
 								"input": ["_:till"],
 								"layout": {
 									"type": "number",

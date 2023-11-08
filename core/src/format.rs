@@ -1,7 +1,7 @@
 use crate::{layout::LayoutType, Pattern, Ref};
 
 #[derive(Debug, Clone)]
-pub struct Format<R> {
+pub struct ValueFormat<R> {
 	/// Layout.
 	pub layout: Ref<LayoutType, R>,
 

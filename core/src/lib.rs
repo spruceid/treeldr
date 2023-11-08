@@ -9,7 +9,7 @@ pub mod value;
 
 use std::collections::BTreeMap;
 
-pub use format::Format;
+pub use format::ValueFormat;
 pub use graph::{Dataset, Graph};
 pub use layout::Layout;
 use layout::LayoutType;

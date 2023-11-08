@@ -6,7 +6,7 @@ pub use ordered::OrderedListLayout;
 pub use sized::SizedListLayout;
 pub use unordered::UnorderedListLayout;
 
-use crate::{graph::Dataset, Format};
+use crate::{graph::Dataset, ValueFormat};
 
 pub struct ListLayoutType;
 
@@ -33,7 +33,7 @@ pub struct ItemLayout<R> {
 	pub intro: u32,
 
 	/// Format.
-	pub format: Format<R>,
+	pub value: ValueFormat<R>,
 
 	/// Dataset.
 	pub dataset: Dataset<R>,

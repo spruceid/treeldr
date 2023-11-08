@@ -4,7 +4,7 @@
 	"fields": {
 		"name": {
 			"intro": ["name"],
-			"format": {
+			"value": {
 				"layout": {
 					"input": ["name"],
 					"type": "string",

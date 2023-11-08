@@ -1,4 +1,4 @@
-use crate::{Dataset, Format};
+use crate::{Dataset, ValueFormat};
 
 pub mod deserialization;
 pub mod serialization;
@@ -28,7 +28,7 @@ pub struct Variant<R> {
 	pub intro: u32,
 
 	/// Format.
-	pub format: Format<R>,
+	pub value: ValueFormat<R>,
 
 	/// Graph.
 	pub dataset: Dataset<R>,
