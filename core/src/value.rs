@@ -41,7 +41,7 @@ pub enum Value {
 	List(Vec<Self>),
 }
 
-pub enum TypedLiteral<R> {
+pub enum TypedLiteral<R = rdf_types::Term> {
 	/// Unit.
 	Unit(Ref<UnitLayoutType, R>),
 
@@ -75,7 +75,7 @@ impl<R> TypedLiteral<R> {
 }
 
 /// Typed value.
-pub enum TypedValue<R> {
+pub enum TypedValue<R = rdf_types::Term> {
 	Literal(TypedLiteral<R>),
 	Variant(Box<Self>, Ref<SumLayoutType, R>, u32),
 	Record(BTreeMap<String, Self>, Ref<ProductLayoutType, R>),

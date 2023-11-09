@@ -6,9 +6,7 @@
 			"intro": ["name"],
 			"value": {
 				"layout": {
-					"input": ["name"],
-					"type": "string",
-					"resource": "_:name"
+					"type": "string"
 				},
 				"input": ["_:name"]
 			},

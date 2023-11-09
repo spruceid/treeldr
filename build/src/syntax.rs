@@ -1,5 +1,5 @@
 use iref::{Iri, IriBuf, IriRefBuf};
-use rdf_types::{BlankIdBuf, InterpretationMut, IriInterpretationMut, IriVocabularyMut};
+use rdf_types::{BlankIdBuf, Id, InterpretationMut, IriInterpretationMut, IriVocabularyMut, Term};
 use serde::{Deserialize, Serialize};
 use std::{
 	collections::{BTreeMap, HashMap},
@@ -21,6 +21,32 @@ pub trait Context {
 	fn iri_resource(&mut self, iri: &Iri) -> Self::Resource;
 
 	fn anonymous_resource(&mut self) -> Self::Resource;
+}
+
+impl<'a, G> Context for super::BuilderWithGeneratorMut<'a, G>
+where
+	G: rdf_types::Generator,
+{
+	type Resource = Term;
+
+	fn insert_layout(
+		&mut self,
+		id: Self::Resource,
+		layout: crate::Layout<Self::Resource>,
+	) -> (
+		Ref<crate::LayoutType, Self::Resource>,
+		Option<crate::Layout<Self::Resource>>,
+	) {
+		self.builder.insert(id, layout)
+	}
+
+	fn iri_resource(&mut self, iri: &Iri) -> Self::Resource {
+		Term::Id(Id::Iri(iri.to_owned()))
+	}
+
+	fn anonymous_resource(&mut self) -> Self::Resource {
+		Term::Id(self.generator.next(&mut ()))
+	}
 }
 
 impl<'a, V, I> Context for super::BuilderWithInterpretationMut<'a, V, I>
@@ -79,6 +105,15 @@ pub enum Error {
 
 	#[error("layout redefinition")]
 	LayoutRedefinition,
+
+	#[error("missing literal layout target resource")]
+	MissingLiteralTargetResource,
+
+	#[error("no property subject")]
+	NoPropertySubject,
+
+	#[error("no property object")]
+	NoPropertyObject,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -133,7 +168,12 @@ impl Scope {
 				.insert(name.clone(), prefix.resolve(self)?);
 		}
 
-		for name in header.input.iter().chain(&header.intro) {
+		for name in header
+			.input
+			.as_slice()
+			.iter()
+			.chain(header.intro.as_slice())
+		{
 			result.bind(name)
 		}
 
@@ -258,7 +298,7 @@ impl<C: Context> Build<C> for Layout {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum LayoutRef {
-	Ref(Reference),
+	Ref(CompactIri),
 	Layout(Box<Layout>),
 }
 
@@ -268,25 +308,9 @@ impl<C: Context> Build<C> for LayoutRef {
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
 		let scope = scope.without_variables();
 		match self {
-			Self::Ref(r) => r.build(context, &scope),
+			Self::Ref(r) => r.build(context, &scope).map(treeldr::Ref::new),
 			Self::Layout(l) => l.build(context, &scope),
 		}
-	}
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Reference {
-	#[serde(rename = "ref")]
-	ref_: CompactIri,
-}
-
-impl<C: Context> Build<C> for Reference {
-	type Target = Ref<crate::LayoutType, C::Resource>;
-
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let iri = self.ref_.resolve(scope)?;
-		Ok(treeldr::Ref::new(context.iri_resource(&iri)))
 	}
 }
 
@@ -294,6 +318,15 @@ impl<C: Context> Build<C> for Reference {
 pub enum Pattern {
 	Var(String),
 	Iri(CompactIri),
+}
+
+impl Pattern {
+	pub fn is_variable(&self, name: &str) -> bool {
+		match self {
+			Self::Var(x) => x == name,
+			Self::Iri(_) => false,
+		}
+	}
 }
 
 impl Serialize for Pattern {
@@ -348,6 +381,71 @@ impl<'de> Deserialize<'de> for Pattern {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum OneOrMany<T> {
+	One(T),
+	Many(Vec<T>),
+}
+
+impl<T> OneOrMany<T> {
+	pub fn is_empty(&self) -> bool {
+		match self {
+			Self::One(_) => false,
+			Self::Many(v) => v.is_empty(),
+		}
+	}
+
+	pub fn len(&self) -> usize {
+		match self {
+			Self::One(_) => 1,
+			Self::Many(v) => v.len(),
+		}
+	}
+
+	pub fn as_slice(&self) -> &[T] {
+		match self {
+			Self::One(t) => std::slice::from_ref(t),
+			Self::Many(v) => v.as_slice(),
+		}
+	}
+}
+
+impl<T> Default for OneOrMany<T> {
+	fn default() -> Self {
+		Self::Many(Vec::new())
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct LayoutInput(OneOrMany<String>);
+
+impl LayoutInput {
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	pub fn as_slice(&self) -> &[String] {
+		self.0.as_slice()
+	}
+
+	pub fn is_default(&self) -> bool {
+		let slice = self.0.as_slice();
+		slice.len() == 1 && slice[0] == "self"
+	}
+}
+
+impl Default for LayoutInput {
+	fn default() -> Self {
+		Self(OneOrMany::One("self".to_owned()))
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LayoutHeader {
 	#[serde(default, skip_serializing_if = "Option::is_none")]
@@ -359,11 +457,11 @@ pub struct LayoutHeader {
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	id: Option<CompactIri>,
 
-	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	input: Vec<String>,
+	#[serde(default, skip_serializing_if = "LayoutInput::is_default")]
+	input: LayoutInput,
 
-	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	intro: Vec<String>,
+	#[serde(default, skip_serializing_if = "OneOrMany::is_empty")]
+	intro: OneOrMany<String>,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
@@ -460,12 +558,63 @@ pub struct BuiltLayoutHeader<R> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ValueInput(OneOrMany<Pattern>);
+
+impl ValueInput {
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	pub fn as_slice(&self) -> &[Pattern] {
+		self.0.as_slice()
+	}
+
+	pub fn is_default(&self) -> bool {
+		let slice = self.0.as_slice();
+		slice.len() == 1 && slice[0].is_variable("value")
+	}
+}
+
+impl Default for ValueInput {
+	fn default() -> Self {
+		Self(OneOrMany::One(Pattern::Var("value".to_owned())))
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ValueFormatOrLayout {
+	Format(ValueFormat),
+	Layout(LayoutRef),
+}
+
+impl<C: Context> Build<C> for ValueFormatOrLayout {
+	type Target = treeldr::ValueFormat<C::Resource>;
+
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		match self {
+			Self::Format(f) => f.build(context, scope),
+			Self::Layout(layout) => Ok(treeldr::ValueFormat {
+				layout: layout.build(context, scope)?,
+				input: vec![Pattern::Var("value".to_string()).build(context, scope)?],
+				graph: None,
+			}),
+		}
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValueFormat {
 	layout: LayoutRef,
 
-	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	input: Vec<Pattern>,
+	#[serde(default, skip_serializing_if = "ValueInput::is_default")]
+	input: ValueInput,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	graph: Option<Option<Pattern>>,
@@ -476,13 +625,13 @@ impl<C: Context> Build<C> for ValueFormat {
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
 		let mut inputs = Vec::with_capacity(self.input.len());
-		for i in &self.input {
+		for i in self.input.as_slice() {
 			inputs.push(i.build(context, scope)?);
 		}
 
 		Ok(treeldr::ValueFormat {
 			layout: self.layout.build(context, scope)?,
-			inputs,
+			input: inputs,
 			graph: self
 				.graph
 				.as_ref()
@@ -690,10 +839,28 @@ pub struct BooleanLayout {
 	#[serde(flatten)]
 	header: LayoutHeader,
 
-	resource: Pattern,
+	resource: Option<Pattern>,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	datatype: Option<CompactIri>,
+}
+
+fn literal_resource<C: Context>(
+	context: &mut C,
+	scope: &Scope,
+	input: &LayoutInput,
+	resource: Option<&Pattern>,
+) -> Result<treeldr::Pattern<C::Resource>, Error> {
+	match resource {
+		Some(r) => r.build(context, scope),
+		None => {
+			if input.is_empty() {
+				Err(Error::MissingLiteralTargetResource)
+			} else {
+				Ok(treeldr::Pattern::Var(0))
+			}
+		}
+	}
 }
 
 impl<C: Context> Build<C> for BooleanLayout {
@@ -706,7 +873,12 @@ impl<C: Context> Build<C> for BooleanLayout {
 			input: header.input,
 			intro: header.intro,
 			dataset: header.dataset,
-			resource: self.resource.build(context, &scope)?,
+			resource: literal_resource(
+				context,
+				&scope,
+				&self.header.input,
+				self.resource.as_ref(),
+			)?,
 			datatype: self
 				.datatype
 				.as_ref()
@@ -726,7 +898,7 @@ pub struct NumberLayout {
 	#[serde(flatten)]
 	header: LayoutHeader,
 
-	resource: Pattern,
+	resource: Option<Pattern>,
 
 	datatype: CompactIri,
 }
@@ -741,7 +913,12 @@ impl<C: Context> Build<C> for NumberLayout {
 			input: header.input,
 			intro: header.intro,
 			dataset: header.dataset,
-			resource: self.resource.build(context, &scope)?,
+			resource: literal_resource(
+				context,
+				&scope,
+				&self.header.input,
+				self.resource.as_ref(),
+			)?,
 			datatype: self.datatype.build(context, &scope)?,
 		})
 	}
@@ -756,7 +933,7 @@ pub struct ByteStringLayout {
 	#[serde(flatten)]
 	header: LayoutHeader,
 
-	resource: Pattern,
+	resource: Option<Pattern>,
 
 	datatype: CompactIri,
 }
@@ -771,7 +948,12 @@ impl<C: Context> Build<C> for ByteStringLayout {
 			input: header.input,
 			intro: header.intro,
 			dataset: header.dataset,
-			resource: self.resource.build(context, &scope)?,
+			resource: literal_resource(
+				context,
+				&scope,
+				&self.header.input,
+				self.resource.as_ref(),
+			)?,
 			datatype: self.datatype.build(context, &scope)?,
 		})
 	}
@@ -789,7 +971,7 @@ pub struct TextStringLayout {
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pattern: Option<RegExp>,
 
-	resource: Pattern,
+	resource: Option<Pattern>,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	datatype: Option<CompactIri>,
@@ -806,7 +988,12 @@ impl<C: Context> Build<C> for TextStringLayout {
 			intro: header.intro,
 			dataset: header.dataset,
 			pattern: self.pattern.clone(),
-			resource: self.resource.build(context, &scope)?,
+			resource: literal_resource(
+				context,
+				&scope,
+				&self.header.input,
+				self.resource.as_ref(),
+			)?,
 			datatype: self
 				.datatype
 				.as_ref()
@@ -829,7 +1016,7 @@ pub struct IdLayout {
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pattern: Option<RegExp>,
 
-	resource: Pattern,
+	resource: Option<Pattern>,
 }
 
 impl<C: Context> Build<C> for IdLayout {
@@ -843,7 +1030,12 @@ impl<C: Context> Build<C> for IdLayout {
 			intro: header.intro,
 			dataset: header.dataset,
 			pattern: self.pattern.clone(),
-			resource: self.resource.build(context, &scope)?,
+			resource: literal_resource(
+				context,
+				&scope,
+				&self.header.input,
+				self.resource.as_ref(),
+			)?,
 		})
 	}
 }
@@ -870,12 +1062,32 @@ impl<C: Context> Build<C> for ProductLayout {
 		let mut fields = Vec::with_capacity(self.fields.len());
 
 		for (name, field) in &self.fields {
-			let scope = scope.with_intro(&field.intro)?;
+			let scope = scope.with_intro(field.intro.as_slice())?;
+
+			let mut dataset = field.dataset.build(context, &scope)?;
+
+			if let Some(property) = &field.property {
+				if self.header.input.is_empty() {
+					return Err(Error::NoPropertySubject);
+				} else {
+					let subject = treeldr::Pattern::Var(0);
+					if field.intro.is_empty() {
+						return Err(Error::NoPropertyObject);
+					} else {
+						let object = treeldr::Pattern::Var(
+							(self.header.input.len() + self.header.intro.len()) as u32,
+						);
+						let predicate = property.build(context, &scope)?;
+						dataset.insert(rdf_types::Quad(subject, predicate, object, None));
+					}
+				}
+			}
+
 			fields.push(treeldr::layout::product::Field {
 				name: name.to_owned(),
 				intro: field.intro.len() as u32,
 				value: field.value.build(context, &scope)?,
-				dataset: field.dataset.build(context, &scope)?,
+				dataset,
 			})
 		}
 
@@ -889,15 +1101,46 @@ impl<C: Context> Build<C> for ProductLayout {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ValueIntro(OneOrMany<String>);
+
+impl ValueIntro {
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	pub fn as_slice(&self) -> &[String] {
+		self.0.as_slice()
+	}
+
+	pub fn is_default(&self) -> bool {
+		let slice = self.0.as_slice();
+		slice.len() == 1 && slice[0] == "value"
+	}
+}
+
+impl Default for ValueIntro {
+	fn default() -> Self {
+		Self(OneOrMany::One("value".to_owned()))
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Field {
-	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	intro: Vec<String>,
+	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
+	intro: ValueIntro,
 
-	value: ValueFormat,
+	value: ValueFormatOrLayout,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
+
+	property: Option<Pattern>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -916,10 +1159,10 @@ pub struct SumLayout {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Variant {
-	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	intro: Vec<String>,
+	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
+	intro: ValueIntro,
 
-	value: ValueFormat,
+	value: ValueFormatOrLayout,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
@@ -934,7 +1177,7 @@ impl<C: Context> Build<C> for SumLayout {
 		let mut variants = Vec::with_capacity(self.variants.len());
 
 		for (name, variant) in &self.variants {
-			let scope = scope.with_intro(&variant.intro)?;
+			let scope = scope.with_intro(variant.intro.as_slice())?;
 			variants.push(treeldr::layout::sum::Variant {
 				name: name.to_owned(),
 				intro: variant.intro.len() as u32,
@@ -1011,10 +1254,10 @@ pub struct ListNode {
 
 	rest: String,
 
-	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	intro: Vec<String>,
+	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
+	intro: ValueIntro,
 
-	value: ValueFormat,
+	value: ValueFormatOrLayout,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
@@ -1041,7 +1284,11 @@ impl<C: Context> Build<C> for ListNode {
 	type Target = crate::layout::list::ordered::NodeLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let scope = scope.with_intro([&self.head, &self.rest].into_iter().chain(&self.intro))?;
+		let scope = scope.with_intro(
+			[&self.head, &self.rest]
+				.into_iter()
+				.chain(self.intro.as_slice()),
+		)?;
 		Ok(crate::layout::list::ordered::NodeLayout {
 			intro: self.intro.len() as u32,
 			value: self.value.build(context, &scope)?,
@@ -1065,10 +1312,10 @@ pub struct UnorderedListLayout {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListItem {
-	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	intro: Vec<String>,
+	#[serde(default, skip_serializing_if = "OneOrMany::is_empty")]
+	intro: OneOrMany<String>,
 
-	value: ValueFormat,
+	value: ValueFormatOrLayout,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
@@ -1093,7 +1340,7 @@ impl<C: Context> Build<C> for ListItem {
 	type Target = crate::layout::list::ItemLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let scope = scope.with_intro(&self.intro)?;
+		let scope = scope.with_intro(self.intro.as_slice())?;
 		Ok(crate::layout::list::ItemLayout {
 			intro: self.intro.len() as u32,
 			value: self.value.build(context, &scope)?,

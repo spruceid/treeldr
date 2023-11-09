@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use iref::IriBuf;
 use rdf_types::{
-	Interpretation, ReverseIriInterpretation, ReverseLiteralInterpretation, Vocabulary,
+	Interpretation, ReverseIriInterpretation, ReverseLiteralInterpretation, Term, Vocabulary,
 };
 use treeldr::{
 	layout::{LayoutType, ListLayout, LiteralLayout},
@@ -48,7 +48,21 @@ impl From<matching::Error> for Error {
 
 /// Serialize the given RDF `dataset` using the provided `layout`, returning
 /// a typed value.
-pub fn hydrate<V, I: Interpretation, D>(
+pub fn hydrate<D>(
+	context: &Layouts,
+	dataset: &D,
+	layout_ref: &Ref<LayoutType>,
+	inputs: &[Term],
+) -> Result<TypedValue, Error>
+where
+	D: grdf::Dataset<Subject = Term, Predicate = Term, Object = Term, GraphLabel = Term>,
+{
+	hydrate_with(&(), &(), context, dataset, None, layout_ref, inputs)
+}
+
+/// Serialize the given RDF `dataset` using the provided `layout`, returning
+/// a typed value.
+pub fn hydrate_with<V, I: Interpretation, D>(
 	vocabulary: &V,
 	interpretation: &I,
 	context: &Layouts<I::Resource>,
@@ -163,7 +177,7 @@ where
 				match variant_substitution {
 					Some(variant_substitution) => {
 						let variant_inputs =
-							select_inputs(&variant.value.inputs, &variant_substitution);
+							select_inputs(&variant.value.input, &variant_substitution);
 
 						let variant_graph = select_graph(
 							current_graph,
@@ -171,7 +185,7 @@ where
 							&variant_substitution,
 						);
 
-						let value = hydrate(
+						let value = hydrate_with(
 							vocabulary,
 							interpretation,
 							context,
@@ -234,12 +248,12 @@ where
 
 				match field_substitution {
 					Some(field_substitution) => {
-						let field_inputs = select_inputs(&field.value.inputs, &field_substitution);
+						let field_inputs = select_inputs(&field.value.input, &field_substitution);
 
 						let item_graph =
 							select_graph(current_graph, &field.value.graph, &field_substitution);
 
-						let value = hydrate(
+						let value = hydrate_with(
 							vocabulary,
 							interpretation,
 							context,
@@ -287,7 +301,7 @@ where
 
 					for item_substitution in matching {
 						let item_inputs =
-							select_inputs(&layout.item.value.inputs, &item_substitution);
+							select_inputs(&layout.item.value.input, &item_substitution);
 
 						let item_graph = select_graph(
 							current_graph,
@@ -295,7 +309,7 @@ where
 							&item_substitution,
 						);
 
-						let item = hydrate(
+						let item = hydrate_with(
 							vocabulary,
 							interpretation,
 							context,
@@ -343,7 +357,7 @@ where
 						.into_required_unique()?;
 
 						let item_inputs =
-							select_inputs(&layout.node.value.inputs, &item_substitution);
+							select_inputs(&layout.node.value.input, &item_substitution);
 
 						let item_graph = select_graph(
 							current_graph,
@@ -351,7 +365,7 @@ where
 							&item_substitution,
 						);
 
-						let item = hydrate(
+						let item = hydrate_with(
 							vocabulary,
 							interpretation,
 							context,
@@ -392,11 +406,11 @@ where
 						)
 						.into_required_unique()?;
 
-						let item_inputs = select_inputs(&item.value.inputs, &item_substitution);
+						let item_inputs = select_inputs(&item.value.input, &item_substitution);
 						let item_graph =
 							select_graph(current_graph, &item.value.graph, &item_substitution);
 
-						let item = hydrate(
+						let item = hydrate_with(
 							vocabulary,
 							interpretation,
 							context,

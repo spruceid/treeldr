@@ -6,7 +6,7 @@ pub struct ValueFormat<R> {
 	pub layout: Ref<LayoutType, R>,
 
 	/// Layout inputs.
-	pub inputs: Vec<Pattern<R>>,
+	pub input: Vec<Pattern<R>>,
 
 	/// Graph in which the layout is evaluated.
 	pub graph: Option<Option<Pattern<R>>>,

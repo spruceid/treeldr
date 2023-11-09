@@ -9,7 +9,7 @@ use rdf_types::Interpretation;
 pub use regexp::RegExp;
 use treeldr::{layout::LayoutType, Ref};
 
-pub struct Builder<R> {
+pub struct Builder<R = rdf_types::Term> {
 	layouts: BTreeMap<R, Layout<R>>,
 }
 
@@ -29,6 +29,15 @@ impl<R> Builder<R> {
 			vocabulary,
 			interpretation,
 			builder: self,
+		}
+	}
+}
+
+impl Builder {
+	pub fn with_generator_mut<G>(&mut self, generator: G) -> BuilderWithGeneratorMut<G> {
+		BuilderWithGeneratorMut {
+			builder: self,
+			generator,
 		}
 	}
 }
@@ -78,6 +87,11 @@ impl<R> Default for Builder<R> {
 	fn default() -> Self {
 		Self::new()
 	}
+}
+
+pub struct BuilderWithGeneratorMut<'a, G> {
+	builder: &'a mut Builder,
+	generator: G,
 }
 
 pub struct BuilderWithInterpretationMut<'a, V, I: Interpretation> {

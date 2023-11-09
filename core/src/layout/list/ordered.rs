@@ -1,4 +1,4 @@
-use crate::{graph::Dataset, ValueFormat, Pattern};
+use crate::{graph::Dataset, Pattern, ValueFormat};
 
 #[derive(Debug, Clone)]
 pub struct OrderedListLayout<R> {

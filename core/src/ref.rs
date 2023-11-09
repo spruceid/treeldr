@@ -14,7 +14,7 @@ use educe::Educe;
 	Hash(bound = "R: std::hash::Hash")
 )]
 #[repr(transparent)]
-pub struct Ref<T, R>(R, PhantomData<T>);
+pub struct Ref<T, R = rdf_types::Term>(R, PhantomData<T>);
 
 impl<R: Copy, T> Copy for Ref<T, R> {}
 

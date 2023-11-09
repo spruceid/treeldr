@@ -29,7 +29,7 @@ pub trait GetFromLayouts<C, R>: Sized {
 
 /// Layout collection.
 #[derive(Debug)]
-pub struct Layouts<R> {
+pub struct Layouts<R = rdf_types::Term> {
 	layouts: BTreeMap<R, Layout<R>>,
 }
 

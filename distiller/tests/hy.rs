@@ -1,6 +1,6 @@
 use iref::Iri;
 use nquads_syntax::Parse;
-use rdf_types::{IriInterpretationMut, IriVocabularyMut};
+use rdf_types::{generator, Id, Term};
 use static_iref::iri;
 use std::fs;
 use std::path::PathBuf;
@@ -15,15 +15,6 @@ fn test<const N: usize>(id: &str, inputs: [&Iri; N]) {
 	let layout_path = file_path(id, "-layout.json");
 	let output_path = file_path(id, "-out.json");
 
-	// RDF vocabulary and interpretation.
-	let mut vocabulary = ();
-	let mut interpretation =
-		rdf_types::interpretation::WithGenerator::new((), rdf_types::generator::Blank::new());
-
-	// Preparet the context to parse the layout.
-	let mut builder = treeldr_build::Builder::new();
-	let mut context = builder.with_interpretation_mut(&mut vocabulary, &mut interpretation);
-
 	// Parse the input dataset from N-Quads.
 	let dataset: grdf::BTreeDataset =
 		nquads_syntax::Document::parse_str(&std::fs::read_to_string(input_path).unwrap(), |span| {
@@ -34,6 +25,10 @@ fn test<const N: usize>(id: &str, inputs: [&Iri; N]) {
 		.into_iter()
 		.map(|q| q.into_value().strip_all_but_predicate().into_grdf())
 		.collect();
+
+	// Prepare the context to parse the layout.
+	let mut builder = treeldr_build::Builder::new();
+	let mut context = builder.with_generator_mut(generator::Blank::new());
 
 	// Parse the layout definition.
 	let layout_ref = serde_json::from_str::<treeldr_build::syntax::Layout>(
@@ -53,21 +48,13 @@ fn test<const N: usize>(id: &str, inputs: [&Iri; N]) {
 	// Parse the inputs.
 	let inputs: Vec<_> = inputs
 		.into_iter()
-		.map(|iri| interpretation.interpret_iri(vocabulary.insert(iri)))
+		.map(|iri| Term::Id(Id::Iri(iri.to_owned())))
 		.collect();
 
 	// Hydrate.
-	let output = treeldr_distiller::hydrate(
-		&vocabulary,
-		&interpretation,
-		&layouts,
-		&dataset,
-		None,
-		&layout_ref,
-		&inputs,
-	)
-	.unwrap()
-	.into_untyped();
+	let output = treeldr_distiller::hydrate(&layouts, &dataset, &layout_ref, &inputs)
+		.unwrap()
+		.into_untyped();
 
 	// Test.
 	assert_eq!(output, expected)
@@ -80,5 +67,15 @@ fn t01() {
 
 #[test]
 fn t02() {
-	test("t02", [iri!("https://example.org/#receipt")])
+	test("t02", [iri!("https://example.org/#john.smith")])
+}
+
+#[test]
+fn t03() {
+	test("t03", [iri!("https://example.org/#receipt")])
+}
+
+#[test]
+fn t04() {
+	test("t04", [iri!("https://example.org/#receipt")])
 }

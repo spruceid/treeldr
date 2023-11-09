@@ -1,17 +1,3 @@
 {
-	"date": "2024-01-01T00:00:00Z",
-	"bill": {
-		"milk1L": {
-			"unitPrice": 1.49,
-			"units": 2
-		},
-		"beef": {
-			"volumePrice": 10.99,
-			"volume": 0.8
-		}
-	},
-	"pointOfSale": {
-		"address": "Champ-de-Mars, Paris, France",
-		"till": 2
-	}
+	"name": "John Smith"
 }
