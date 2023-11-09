@@ -1,5 +1,7 @@
 use iref::{Iri, IriBuf, IriRefBuf};
-use rdf_types::{BlankIdBuf, Id, InterpretationMut, IriInterpretationMut, IriVocabularyMut, Term};
+use rdf_types::{
+	generator, BlankIdBuf, Id, InterpretationMut, IriInterpretationMut, IriVocabularyMut, Term,
+};
 use serde::{Deserialize, Serialize};
 use std::{
 	collections::{BTreeMap, HashMap},
@@ -10,6 +12,8 @@ use crate::{
 	abs::{self, InsertResult, LayoutType, RegExp},
 	Ref,
 };
+
+use super::Builder;
 
 pub trait Context {
 	type Resource: Ord;
@@ -255,7 +259,27 @@ impl Layout {
 		}
 	}
 
-	pub fn build<C: Context>(
+	pub fn build(&self, builder: &mut Builder) -> Result<Ref<LayoutType>, Error> {
+		let mut context = builder.with_generator_mut(generator::Blank::new());
+		self.build_with_context(&mut context)
+	}
+
+	pub fn build_with_interpretation<V, I>(
+		&self,
+		vocabulary: &mut V,
+		interpretation: &mut I,
+		builder: &mut Builder<I::Resource>,
+	) -> Result<Ref<LayoutType, I::Resource>, Error>
+	where
+		V: IriVocabularyMut,
+		I: IriInterpretationMut<V::Iri> + InterpretationMut<V>,
+		I::Resource: Clone + Eq + Ord,
+	{
+		let mut context = builder.with_interpretation_mut(vocabulary, interpretation);
+		self.build_with_context(&mut context)
+	}
+
+	pub fn build_with_context<C: Context>(
 		&self,
 		context: &mut C,
 	) -> Result<Ref<LayoutType, C::Resource>, Error> {

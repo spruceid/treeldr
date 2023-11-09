@@ -4,7 +4,8 @@ pub use automaton::{Automaton, DetAutomaton};
 
 use btree_range_map::RangeSet;
 use educe::Educe;
-use rdf_types::Quad;
+use iref::IriBuf;
+use rdf_types::{meta::MetaQuad, Id, Quad};
 
 use crate::Pattern;
 
@@ -56,4 +57,12 @@ where
 			)
 		})
 	}
+}
+
+/// Strips the input RDF `quad` of its metadata information and returns it as a
+/// gRDF quad (a quad where all components are [`Term`](rdf_types::Term)s).
+pub fn strip_rdf_quad<M>(
+	quad: MetaQuad<Id, IriBuf, rdf_types::meta::Term<M>, Id, M>,
+) -> rdf_types::GrdfQuad {
+	quad.into_value().strip_all_but_predicate().into_grdf()
 }

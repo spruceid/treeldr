@@ -1,9 +1,10 @@
 use iref::Iri;
 use nquads_syntax::Parse;
-use rdf_types::{generator, Id, Term};
+use rdf_types::{Id, Term};
 use static_iref::iri;
 use std::fs;
 use std::path::PathBuf;
+use treeldr_layouts::utils::strip_rdf_quad;
 
 fn file_path(id: &str, suffix: &str) -> PathBuf {
 	format!("{}/tests/hy/{id}{suffix}", env!("CARGO_MANIFEST_DIR")).into()
@@ -23,19 +24,18 @@ fn test<const N: usize>(id: &str, inputs: [&Iri; N]) {
 		.unwrap()
 		.into_value()
 		.into_iter()
-		.map(|q| q.into_value().strip_all_but_predicate().into_grdf())
+		.map(strip_rdf_quad)
 		.collect();
 
-	// Prepare the context to parse the layout.
+	// Initialize the layout builder.
 	let mut builder = treeldr_layouts::abs::Builder::new();
-	let mut context = builder.with_generator_mut(generator::Blank::new());
 
 	// Parse the layout definition.
 	let layout_ref = serde_json::from_str::<treeldr_layouts::abs::syntax::Layout>(
 		&fs::read_to_string(layout_path).unwrap(),
 	)
 	.unwrap()
-	.build(&mut context)
+	.build(&mut builder)
 	.unwrap();
 
 	// Parse the expected output.
