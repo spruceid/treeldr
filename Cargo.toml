@@ -1,18 +1,7 @@
 [workspace]
 members = [
-	"core",
-	"distiller",
-	"build"
-	# "syntax",
-	# "load",
-	# "tldrc",
-	# "modules/json-schema",
-	# "modules/json-ld-context",
-	# "modules/rust/gen",
-	# "modules/rust/macros",
-	# "modules/rust/cli",
-	# "modules/rust/prelude",
-	# "modules/lexicon"
+	"layouts",
+	# "layouts/distiller"
 ]
 resolver = "2"
 
@@ -22,8 +11,8 @@ edition = "2021"
 authors = ["Spruce Systems Inc."]
 
 [workspace.dependencies]
-treeldr = { path = "core", version = "0.2.0" }
-treeldr-build = { path = "build", version = "0.2.0" }
+treeldr-layouts = { path = "layouts/core", version = "0.2.0" }
+# treeldr-build = { path = "layouts/build", version = "0.2.0" }
 
 educe = "0.4.23"
 num-rational = "0.4"
