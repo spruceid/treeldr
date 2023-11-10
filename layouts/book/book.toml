@@ -1,0 +1,5 @@
+[book]
+title = "TreeLDR Layouts"
+
+[build]
+build-dir = "target"

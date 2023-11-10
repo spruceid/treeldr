@@ -1,0 +1,23 @@
+# Summary
+
+[Introduction](README.md)
+
+- [RDF Basics](rdf-basics.md)
+- [Data Model](data-model/README.md)
+	- [Values](data-model/values.md)
+	- [Types](data-model/types.md)
+- [Layouts](layouts/README.md)
+	- [Product (Record)](layouts/record.md)
+	- [Sum](layouts/sum.md)
+	- [Literals](layouts/literals.md)
+	- [Lists](layouts/lists.md)
+- [Abstract Layouts](abstract-layouts/README.md)
+	- [Intersection](abstract-layouts/intersection.md)
+	- [Union](abstract-layouts/union.md)
+- [Abstract Syntax](abstract-syntax/README.md)
+- [Algorithms](algorithms/README.md)
+	- [Serialization](algorithms/serialization.md)
+	- [Deserialization](algorithms/deserialization.md)
+- [RDF Vocabulary](rdf-vocabulary/README.md)
+	- [Schema](rdf-vocabulary/schema.md)
+	- [Layouts of Layouts](rdf-vocabulary/layouts-of-layouts.md)
