@@ -5,7 +5,7 @@ use crate::{
 	matching,
 	pattern::Substitution,
 	utils::QuadsExt,
-	Layout, Layouts, Matching, Pattern, Ref, TypedLiteral, TypedValue,
+	Layout, Layouts, Matching, Pattern, Ref, TypedLiteral, TypedValue, Value,
 };
 use iref::IriBuf;
 use rdf_types::{
@@ -20,9 +20,6 @@ use data::*;
 pub enum Error {
 	#[error("incompatible layout")]
 	IncompatibleLayout,
-
-	#[error("abstract layout")]
-	AbstractLayout,
 
 	#[error("invalid input count (expected {expected}, found {found})")]
 	InvalidInputCount { expected: u32, found: u32 },
@@ -235,7 +232,7 @@ where
 
 			let mut record = BTreeMap::new();
 
-			for field in &layout.fields {
+			for (name, field) in &layout.fields {
 				let mut field_substitution = substitution.clone();
 				field_substitution.intro(field.intro);
 
@@ -263,7 +260,7 @@ where
 							&field_inputs,
 						)?;
 
-						record.insert(field.name.clone(), value);
+						record.insert(name.clone(), value);
 					}
 					None => {
 						// TODO check required fields
@@ -427,7 +424,7 @@ where
 				}
 			}
 		}
-		Layout::Always => Err(Error::AbstractLayout),
+		Layout::Always => Ok(TypedValue::Always(Value::unit())),
 	}
 }
 

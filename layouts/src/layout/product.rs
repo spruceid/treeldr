@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{Dataset, ValueFormat};
 
 pub struct ProductLayoutType;
@@ -11,7 +13,7 @@ pub struct ProductLayout<R> {
 	pub intro: u32,
 
 	/// Fields.
-	pub fields: Vec<Field<R>>,
+	pub fields: BTreeMap<String, Field<R>>,
 
 	/// Dataset.
 	pub dataset: Dataset<R>,
@@ -19,9 +21,6 @@ pub struct ProductLayout<R> {
 
 #[derive(Debug, Clone)]
 pub struct Field<R> {
-	/// Name.
-	pub name: String,
-
 	/// Intros.
 	pub intro: u32,
 

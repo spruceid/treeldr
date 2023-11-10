@@ -1083,7 +1083,7 @@ impl<C: Context> Build<C> for ProductLayout {
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
 		let (header, scope) = self.header.build(context, scope)?;
 
-		let mut fields = Vec::with_capacity(self.fields.len());
+		let mut fields = BTreeMap::new();
 
 		for (name, field) in &self.fields {
 			let scope = scope.with_intro(field.intro.as_slice())?;
@@ -1107,12 +1107,14 @@ impl<C: Context> Build<C> for ProductLayout {
 				}
 			}
 
-			fields.push(crate::layout::product::Field {
-				name: name.to_owned(),
-				intro: field.intro.len() as u32,
-				value: field.value.build(context, &scope)?,
-				dataset,
-			})
+			fields.insert(
+				name.to_owned(),
+				crate::layout::product::Field {
+					intro: field.intro.len() as u32,
+					value: field.value.build(context, &scope)?,
+					dataset,
+				},
+			);
 		}
 
 		Ok(abs::layout::ProductLayout {

@@ -41,6 +41,12 @@ pub enum Value {
 	List(Vec<Self>),
 }
 
+impl Value {
+	pub fn unit() -> Self {
+		Self::Literal(Literal::Unit)
+	}
+}
+
 pub enum TypedLiteral<R = rdf_types::Term> {
 	/// Unit.
 	Unit(Ref<UnitLayoutType, R>),
@@ -80,6 +86,7 @@ pub enum TypedValue<R = rdf_types::Term> {
 	Variant(Box<Self>, Ref<SumLayoutType, R>, u32),
 	Record(BTreeMap<String, Self>, Ref<ProductLayoutType, R>),
 	List(Vec<Self>, Ref<ListLayoutType, R>),
+	Always(Value),
 }
 
 impl<R> TypedValue<R> {
@@ -95,6 +102,7 @@ impl<R> TypedValue<R> {
 			Self::List(items, _) => {
 				Value::List(items.into_iter().map(TypedValue::into_untyped).collect())
 			}
+			Self::Always(value) => value,
 		}
 	}
 }
