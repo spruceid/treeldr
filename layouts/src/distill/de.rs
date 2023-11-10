@@ -3,7 +3,19 @@ use crate::{
 	Layout, Layouts, Literal, Pattern, Ref, Value, ValueFormat,
 };
 use grdf::BTreeDataset;
-use rdf_types::{InterpretationMut, Quad};
+use iref::IriBuf;
+use rdf_types::{
+	InterpretationMut, IriVocabulary, LanguageTagVocabulary, LiteralVocabulary, Quad,
+	ReverseIriInterpretationMut, ReverseLiteralInterpretationMut, VocabularyMut,
+};
+
+use super::RdfContextMut;
+
+mod data;
+
+pub type RdfLiteralType<V> =
+	rdf_types::literal::Type<<V as IriVocabulary>::Iri, <V as LanguageTagVocabulary>::LanguageTag>;
+pub type RdfLiteral<V> = rdf_types::Literal<RdfLiteralType<V>, <V as LiteralVocabulary>::Value>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -33,15 +45,14 @@ pub enum Error {
 // where
 // 	I::Resource: Ord,
 // {
-// 	dehydrate_in(vocabulary, interpretation, &mut dataset, layouts, value, layout_ref, inputs)?;
+// 	dehydrate_in(rdf, &mut dataset, layouts, value, layout_ref, inputs)?;
 // 	Ok()
 // }
 
 /// Deserialize the given `value` according to the provided `layout`, returning
 /// the deserialized RDF dataset.
 pub fn dehydrate_with<V, I, D>(
-	vocabulary: &mut V,
-	interpretation: &mut I,
+	rdf: &mut RdfContextMut<V, I>,
 	layouts: &Layouts<I::Resource>,
 	value: &Value,
 	current_graph: Option<&I::Resource>,
@@ -50,7 +61,12 @@ pub fn dehydrate_with<V, I, D>(
 	output: &mut D,
 ) -> Result<(), Error>
 where
-	I: InterpretationMut<V>,
+	V: VocabularyMut<Type = RdfLiteralType<V>>,
+	V::Iri: Clone,
+	V::Value: From<String>,
+	I: InterpretationMut<V>
+		+ ReverseIriInterpretationMut<Iri = V::Iri>
+		+ ReverseLiteralInterpretationMut<Literal = V::Literal>,
 	I::Resource: Clone + Ord,
 	D: grdf::MutableDataset<
 		Subject = I::Resource,
@@ -76,25 +92,70 @@ where
 			Value::Literal(value) => match layout {
 				LiteralLayout::Data(layout) => match (layout, value) {
 					(DataLayout::Unit(layout), Literal::Unit) => {
-						todo!()
+						let env = env.intro(rdf, layout.intro);
+						env.instantiate_dataset(&layout.dataset, output)?;
+						Ok(())
 					}
 					(DataLayout::Boolean(layout), Literal::Boolean(value)) => {
-						todo!()
+						let env = env.intro(rdf, layout.intro);
+						env.instantiate_dataset(&layout.dataset, output)?;
+						let resource = env.instantiate_pattern(&layout.resource)?;
+
+						let literal = data::dehydrate_boolean(rdf, *value, &layout.datatype)?;
+						rdf.interpretation
+							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
+
+						Ok(())
 					}
 					(DataLayout::Number(layout), Literal::Number(value)) => {
-						todo!()
+						let env = env.intro(rdf, layout.intro);
+						env.instantiate_dataset(&layout.dataset, output)?;
+						let resource = env.instantiate_pattern(&layout.resource)?;
+
+						let literal = data::dehydrate_number(rdf, value, &layout.datatype)?;
+						rdf.interpretation
+							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
+
+						Ok(())
 					}
 					(DataLayout::ByteString(layout), Literal::ByteString(value)) => {
-						todo!()
+						let env = env.intro(rdf, layout.intro);
+						env.instantiate_dataset(&layout.dataset, output)?;
+						let resource = env.instantiate_pattern(&layout.resource)?;
+
+						let literal = data::dehydrate_byte_string(rdf, value, &layout.datatype)?;
+						rdf.interpretation
+							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
+
+						Ok(())
 					}
 					(DataLayout::TextString(layout), Literal::TextString(value)) => {
-						todo!()
+						let env = env.intro(rdf, layout.intro);
+						env.instantiate_dataset(&layout.dataset, output)?;
+						let resource = env.instantiate_pattern(&layout.resource)?;
+
+						let literal = data::dehydrate_text_string(rdf, value, &layout.datatype)?;
+						rdf.interpretation
+							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
+
+						Ok(())
 					}
 					_ => Err(Error::IncompatibleLayout),
 				},
-				LiteralLayout::Id(_) => match value {
+				LiteralLayout::Id(layout) => match value {
 					Literal::TextString(value) => {
-						todo!()
+						let env = env.intro(rdf, layout.intro);
+						env.instantiate_dataset(&layout.dataset, output)?;
+						let resource = env.instantiate_pattern(&layout.resource)?;
+
+						match IriBuf::new(value.to_owned()) {
+							Ok(iri) => {
+								let i = rdf.vocabulary.insert_owned(iri);
+								rdf.interpretation.assign_iri(resource, i);
+								Ok(())
+							}
+							Err(_) => Err(Error::IncompatibleLayout), // not an IRI
+						}
 					}
 					_ => Err(Error::IncompatibleLayout),
 				},
@@ -102,19 +163,18 @@ where
 			_ => Err(Error::IncompatibleLayout),
 		},
 		Layout::Sum(layout) => {
-			let env = env.intro(vocabulary, interpretation, layout.intro);
+			let env = env.intro(rdf, layout.intro);
 			env.instantiate_dataset(&layout.dataset, output)?;
 
 			let mut selection = None;
 			for variant in &layout.variants {
 				let mut variant_dataset = BTreeDataset::new();
 
-				let env = env.intro(vocabulary, interpretation, variant.intro);
+				let env = env.intro(rdf, variant.intro);
 				env.instantiate_dataset(&variant.dataset, &mut variant_dataset)?;
 
 				if dehydrate_sub_value(
-					vocabulary,
-					interpretation,
+					rdf,
 					layouts,
 					value,
 					current_graph,
@@ -141,17 +201,16 @@ where
 		}
 		Layout::Product(layout) => match value {
 			Value::Record(value) => {
-				let env = env.intro(vocabulary, interpretation, layout.intro);
+				let env = env.intro(rdf, layout.intro);
 				env.instantiate_dataset(&layout.dataset, output)?;
 
 				for (key, value) in value {
 					match layout.fields.get(key) {
 						Some(field) => {
-							let env = env.intro(vocabulary, interpretation, field.intro);
+							let env = env.intro(rdf, field.intro);
 							env.instantiate_dataset(&field.dataset, output)?;
 							dehydrate_sub_value(
-								vocabulary,
-								interpretation,
+								rdf,
 								layouts,
 								value,
 								current_graph,
@@ -171,14 +230,13 @@ where
 		Layout::List(layout) => match value {
 			Value::List(value) => match layout {
 				ListLayout::Unordered(layout) => {
-					let env = env.intro(vocabulary, interpretation, layout.intro);
+					let env = env.intro(rdf, layout.intro);
 					env.instantiate_dataset(&layout.dataset, output)?;
 
 					for item in value {
-						let env = env.intro(vocabulary, interpretation, layout.item.intro);
+						let env = env.intro(rdf, layout.item.intro);
 						dehydrate_sub_value(
-							vocabulary,
-							interpretation,
+							rdf,
 							layouts,
 							item,
 							current_graph,
@@ -191,7 +249,7 @@ where
 					Ok(())
 				}
 				ListLayout::Ordered(layout) => {
-					let env = env.intro(vocabulary, interpretation, layout.intro);
+					let env = env.intro(rdf, layout.intro);
 					env.instantiate_dataset(&layout.dataset, output)?;
 
 					let mut head = env.instantiate_pattern(&layout.head)?;
@@ -200,16 +258,15 @@ where
 						let rest = if i == value.len() - 1 {
 							env.instantiate_pattern(&layout.tail)?
 						} else {
-							interpretation.new_resource(vocabulary)
+							rdf.interpretation.new_resource(rdf.vocabulary)
 						};
 
 						let env = env.bind([head, rest.clone()]);
-						let env = env.intro(vocabulary, interpretation, layout.node.intro);
+						let env = env.intro(rdf, layout.node.intro);
 
 						let item = &value[i];
 						dehydrate_sub_value(
-							vocabulary,
-							interpretation,
+							rdf,
 							layouts,
 							item,
 							current_graph,
@@ -224,7 +281,7 @@ where
 					Ok(())
 				}
 				ListLayout::Sized(layout) => {
-					let env = env.intro(vocabulary, interpretation, layout.intro);
+					let env = env.intro(rdf, layout.intro);
 					env.instantiate_dataset(&layout.dataset, output)?;
 
 					let mut items = value.iter();
@@ -233,10 +290,9 @@ where
 					loop {
 						match (items.next(), item_layouts.next()) {
 							(Some(item), Some(item_layout)) => {
-								let env = env.intro(vocabulary, interpretation, item_layout.intro);
+								let env = env.intro(rdf, item_layout.intro);
 								dehydrate_sub_value(
-									vocabulary,
-									interpretation,
+									rdf,
 									layouts,
 									item,
 									current_graph,
@@ -260,8 +316,7 @@ where
 }
 
 fn dehydrate_sub_value<V, I, D>(
-	vocabulary: &mut V,
-	interpretation: &mut I,
+	rdf: &mut RdfContextMut<V, I>,
 	layouts: &Layouts<I::Resource>,
 	value: &Value,
 	current_graph: Option<&I::Resource>,
@@ -270,7 +325,12 @@ fn dehydrate_sub_value<V, I, D>(
 	output: &mut D,
 ) -> Result<(), Error>
 where
-	I: InterpretationMut<V>,
+	V: VocabularyMut<Type = RdfLiteralType<V>>,
+	V::Iri: Clone,
+	V::Value: From<String>,
+	I: InterpretationMut<V>
+		+ ReverseIriInterpretationMut<Iri = V::Iri>
+		+ ReverseLiteralInterpretationMut<Literal = V::Literal>,
 	I::Resource: Clone + Ord,
 	D: grdf::MutableDataset<
 		Subject = I::Resource,
@@ -287,8 +347,7 @@ where
 	};
 
 	dehydrate_with(
-		vocabulary,
-		interpretation,
+		rdf,
 		layouts,
 		value,
 		graph.as_ref(),
@@ -320,18 +379,13 @@ impl<'a, R> Environment<'a, R> {
 	}
 
 	#[must_use]
-	pub fn intro<V, I>(
-		&self,
-		vocabulary: &mut V,
-		interpretation: &mut I,
-		count: u32,
-	) -> Environment<R>
+	pub fn intro<V, I>(&self, rdf: &mut RdfContextMut<V, I>, count: u32) -> Environment<R>
 	where
 		I: InterpretationMut<V, Resource = R>,
 	{
 		let mut intros = Vec::with_capacity(count as usize);
 		for _ in 0..count {
-			intros.push(interpretation.new_resource(vocabulary))
+			intros.push(rdf.interpretation.new_resource(rdf.vocabulary))
 		}
 
 		Environment::Child(self, intros)
