@@ -10,6 +10,7 @@ use rdf_types::{
 	Interpretation, IriVocabulary, LanguageTagVocabulary, ReverseIriInterpretation,
 	ReverseLiteralInterpretation, Vocabulary,
 };
+use xsd_types::lexical::Lexical;
 
 use super::Error;
 
@@ -253,16 +254,29 @@ fn hydrate_boolean_value(value: &str, type_: &Iri) -> Result<bool, Error> {
 fn hydrate_number_value(value: &str, type_: &Iri) -> Result<Number, Error> {
 	match xsd_types::Datatype::from_iri(type_) {
 		Some(xsd_types::Datatype::Decimal(_t)) => {
-			// t.parse(value)
-			// todo!()
-			match value.parse::<i64>() {
-				Ok(v) => Ok(Number::from_integer(v.into())),
-				Err(_) => match value.parse::<f64>() {
-					Ok(v) => Number::from_float(v).ok_or_else(|| todo!()),
-					Err(_) => {
-						todo!()
-					}
-				},
+			match xsd_types::lexical::Decimal::parse(value) {
+				Ok(value) => {
+					eprintln!("value 1: {value}");
+					let decimal = value.value();
+					eprintln!("value 2: {decimal}");
+					let result = decimal.into();
+					eprintln!("value 3: {result}");
+					Ok(result)
+					// t.parse(value)
+					// todo!()
+					// match value.parse::<i64>() {
+					// 	Ok(v) => Ok(Number::from_integer(v.into())),
+					// 	Err(_) => match value.parse::<f64>() {
+					// 		Ok(v) => Number::from_float(v).ok_or_else(|| todo!()),
+					// 		Err(_) => {
+					// 			todo!()
+					// 		}
+					// 	},
+					// }
+				}
+				Err(_) => {
+					todo!()
+				}
 			}
 		}
 		_ => Err(Error::UnknownNumberDatatype(type_.to_owned())),

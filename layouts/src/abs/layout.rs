@@ -16,7 +16,14 @@ pub use literal::{
 pub use product::ProductLayout;
 pub use sum::SumLayout;
 
-/// Layout.
+/// Pre-built layout.
+///
+/// This layout representation lays between the abstract syntax representation
+/// and the fully compiled layout representation.
+///
+/// In this representation, variable names a stripped and nested layout are
+/// flattened. However contrarily to fully compiled layouts, intersection and
+/// union layouts are not yet computed.
 pub enum Layout<R> {
 	/// Matches nothing.
 	Never,

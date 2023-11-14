@@ -47,11 +47,13 @@ where
 	for i in rdf.interpretation.iris_of(type_) {
 		let iri = rdf.vocabulary.iri(i).unwrap();
 		if let Some(xsd_types::Datatype::Decimal(_)) = xsd_types::Datatype::from_iri(iri) {
-			// TODO better support for XSD decimal datatype.
-			return Ok(rdf_types::Literal::new(
-				value.to_string().into(),
-				Type::Any(i.clone()),
-			));
+			if let Ok(value) = xsd_types::Decimal::try_from(value.clone()) {
+				// TODO better support for XSD decimal datatype.
+				return Ok(rdf_types::Literal::new(
+					value.to_string().into(),
+					Type::Any(i.clone()),
+				));
+			}
 		}
 	}
 

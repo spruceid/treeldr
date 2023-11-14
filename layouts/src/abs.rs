@@ -1,3 +1,4 @@
+//! Abstract syntax implementation for layouts.
 pub mod layout;
 pub mod regexp;
 pub mod syntax;
@@ -9,17 +10,25 @@ pub use layout::Layout;
 use rdf_types::Interpretation;
 pub use regexp::RegExp;
 
+/// Layout builder.
+///
+/// Stores all the pre-built layouts. Can be used to build a
+/// [`Layouts`](crate::Layouts) collection using the [`build`](Self::build)
+/// method.
 pub struct Builder<R = rdf_types::Term> {
+	/// Pre-built layouts.
 	layouts: BTreeMap<R, Layout<R>>,
 }
 
 impl<R> Builder<R> {
+	/// Creates a new empty layout builder.
 	pub fn new() -> Self {
 		Self {
 			layouts: BTreeMap::new(),
 		}
 	}
 
+	/// Borrows the builder with an RDF interpretation.
 	pub fn with_interpretation_mut<'a, V, I: Interpretation<Resource = R>>(
 		&'a mut self,
 		vocabulary: &'a mut V,
@@ -34,6 +43,8 @@ impl<R> Builder<R> {
 }
 
 impl Builder {
+	/// Borrows the builder with a the lexical RDF interpretation (`()`)
+	/// combined with a node identifier generator.
 	pub fn with_generator_mut<G>(&mut self, generator: G) -> BuilderWithGeneratorMut<G> {
 		BuilderWithGeneratorMut {
 			builder: self,

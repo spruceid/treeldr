@@ -1,17 +1,17 @@
 {
 	"type": "record",
-	"input": ["subject"],
+	"input": ["self"],
 	"fields": {
 		"name": {
-			"intro": ["name"],
+			"intro": ["value"],
 			"value": {
 				"layout": {
 					"type": "string"
 				},
-				"input": ["_:name"]
+				"input": ["value"]
 			},
 			"dataset": [
-				["_:subject", "https://schema.org/name", "_:name"]
+				["_:self", "https://schema.org/name", "_:value"]
 			]
 		}
 	}

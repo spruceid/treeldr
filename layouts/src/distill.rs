@@ -1,6 +1,7 @@
 pub mod de;
 pub mod hy;
 
+pub use de::{dehydrate, dehydrate_with};
 pub use hy::{hydrate, hydrate_with};
 
 pub struct RdfContext<'a, V, I> {

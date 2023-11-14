@@ -119,12 +119,23 @@ pub trait GetFromLayouts<C, R>: Sized {
 }
 
 /// Layout collection.
+///
+/// Stores compiled layouts definitions, which can then be fetched using the
+/// [`Ref<Layout>`](Ref) type.
+///
+/// Users can create a `Layouts` collection manually, or from the abstract
+/// syntax using a layout [`Builder`](abs::Builder).
+///
+/// The `R` type parameter represents (interpreted) RDF resources. By default,
+/// RDF resources are represented using their lexical representation
+/// ([`Term`](rdf_types::Term)).
 #[derive(Debug)]
 pub struct Layouts<R = rdf_types::Term> {
 	layouts: BTreeMap<R, Layout<R>>,
 }
 
 impl<R> Layouts<R> {
+	/// Creates a new empty layout collection.
 	pub fn new() -> Self {
 		Self {
 			layouts: BTreeMap::new(),

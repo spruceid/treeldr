@@ -1,3 +1,8 @@
+use std::{
+	collections::{HashMap, HashSet},
+	hash::Hash,
+};
+
 use crate::{
 	layout::{DataLayout, LayoutType, ListLayout, LiteralLayout},
 	Layout, Layouts, Literal, Pattern, Ref, Value, ValueFormat,
@@ -5,8 +10,9 @@ use crate::{
 use grdf::BTreeDataset;
 use iref::IriBuf;
 use rdf_types::{
-	InterpretationMut, IriVocabulary, LanguageTagVocabulary, LiteralVocabulary, Quad,
-	ReverseIriInterpretationMut, ReverseLiteralInterpretationMut, VocabularyMut,
+	generator, Id, Interpretation, InterpretationMut, IriVocabulary, LanguageTagVocabulary,
+	LiteralVocabulary, Quad, ReverseIriInterpretation, ReverseIriInterpretationMut,
+	ReverseLiteralInterpretation, ReverseLiteralInterpretationMut, Term, VocabularyMut,
 };
 
 use super::RdfContextMut;
@@ -30,33 +36,266 @@ pub enum Error {
 
 	#[error("data ambiguity")]
 	DataAmbiguity,
+
+	#[error(transparent)]
+	TermAmbiguity(Box<TermAmbiguity>),
 }
 
-// /// Deserialize the given `value` according to the provided `layout`, returning
-// /// the deserialized RDF dataset.
-// pub fn dehydrate<V, I: Interpretation>(
-// 	_vocabulary: &mut V,
-// 	_interpretation: &mut I,
-// 	layouts: &Layouts<I::Resource>,
-// 	value: &Value,
-// 	layout_ref: &Ref<LayoutType, I::Resource>,
-// 	inputs: &[I::Resource]
-// ) -> Result<BTreeDataset<I::Resource>, Error>
-// where
-// 	I::Resource: Ord,
-// {
-// 	dehydrate_in(rdf, &mut dataset, layouts, value, layout_ref, inputs)?;
-// 	Ok()
-// }
+#[derive(Debug, thiserror::Error)]
+#[error("term ambiguity ({a} or {b})")]
+pub struct TermAmbiguity {
+	pub a: Term,
+	pub b: Term,
+}
+
+impl TermAmbiguity {
+	pub fn new(a: Term, b: Term) -> Box<Self> {
+		Box::new(Self { a, b })
+	}
+}
 
 /// Deserialize the given `value` according to the provided `layout`, returning
 /// the deserialized RDF dataset.
-pub fn dehydrate_with<V, I, D>(
+pub fn dehydrate(
+	layouts: &Layouts,
+	value: &Value,
+	layout_ref: &Ref<LayoutType>,
+	expected_input_count: Option<u32>,
+) -> Result<(BTreeDataset<Term>, Vec<Term>), Error> {
+	#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+	enum InputResource {
+		Input(usize),
+		Anonymous(usize),
+		Term(Term),
+	}
+
+	impl InputResource {
+		pub fn as_term(&self) -> Option<&Term> {
+			match self {
+				Self::Term(t) => Some(t),
+				_ => None,
+			}
+		}
+	}
+
+	impl From<Term> for InputResource {
+		fn from(value: Term) -> Self {
+			Self::Term(value)
+		}
+	}
+
+	struct InputInterpretation {
+		map: HashMap<InputResource, HashSet<Term>>,
+		anonymous_count: usize,
+	}
+
+	impl Interpretation for InputInterpretation {
+		type Resource = InputResource;
+	}
+
+	impl InterpretationMut<()> for InputInterpretation {
+		fn new_resource(&mut self, _vocabulary: &mut ()) -> Self::Resource {
+			let i = self.anonymous_count;
+			self.anonymous_count += 1;
+			InputResource::Anonymous(i)
+		}
+	}
+
+	impl ReverseIriInterpretation for InputInterpretation {
+		type Iri = IriBuf;
+		type Iris<'a> = IrisOf<'a>;
+
+		fn iris_of<'a>(&'a self, id: &'a Self::Resource) -> Self::Iris<'a> {
+			IrisOf {
+				term: id.as_term(),
+				additional_terms: self.map.get(id).map(|t| t.iter()),
+			}
+		}
+	}
+
+	impl ReverseIriInterpretationMut for InputInterpretation {
+		fn assign_iri(&mut self, id: Self::Resource, iri: Self::Iri) -> bool {
+			self.map.entry(id).or_default().insert(Term::iri(iri))
+		}
+	}
+
+	impl ReverseLiteralInterpretation for InputInterpretation {
+		type Literal = RdfLiteral<()>;
+		type Literals<'a> = LiteralsOf<'a>;
+
+		fn literals_of<'a>(&'a self, id: &'a Self::Resource) -> Self::Literals<'a> {
+			LiteralsOf {
+				term: id.as_term(),
+				additional_terms: self.map.get(id).map(|t| t.iter()),
+			}
+		}
+	}
+
+	impl ReverseLiteralInterpretationMut for InputInterpretation {
+		fn assign_literal(&mut self, id: Self::Resource, literal: Self::Literal) -> bool {
+			self.map
+				.entry(id)
+				.or_default()
+				.insert(Term::Literal(literal))
+		}
+	}
+
+	#[derive(Debug, Clone)]
+	pub struct IrisOf<'a> {
+		term: Option<&'a Term>,
+		additional_terms: Option<std::collections::hash_set::Iter<'a, Term>>,
+	}
+
+	impl<'a> Iterator for IrisOf<'a> {
+		type Item = &'a IriBuf;
+
+		fn next(&mut self) -> Option<Self::Item> {
+			match self.term.take() {
+				Some(Term::Id(Id::Iri(iri))) => Some(iri),
+				_ => match self.additional_terms.as_mut() {
+					Some(terms) => {
+						for term in terms {
+							if let Term::Id(Id::Iri(iri)) = term {
+								return Some(iri);
+							}
+						}
+
+						None
+					}
+					None => None,
+				},
+			}
+		}
+	}
+
+	#[derive(Debug, Clone)]
+	pub struct LiteralsOf<'a> {
+		term: Option<&'a Term>,
+		additional_terms: Option<std::collections::hash_set::Iter<'a, Term>>,
+	}
+
+	impl<'a> Iterator for LiteralsOf<'a> {
+		type Item = &'a RdfLiteral<()>;
+
+		fn next(&mut self) -> Option<Self::Item> {
+			match self.term.take() {
+				Some(Term::Literal(l)) => Some(l),
+				_ => match self.additional_terms.as_mut() {
+					Some(terms) => {
+						for term in terms {
+							if let Term::Literal(l) = term {
+								return Some(l);
+							}
+						}
+
+						None
+					}
+					None => None,
+				},
+			}
+		}
+	}
+
+	let layout = layouts.get(layout_ref).unwrap();
+	let input_count = layout
+		.input_count()
+		.unwrap_or(expected_input_count.unwrap_or(1)) as usize;
+	let mut inputs = Vec::with_capacity(input_count);
+	for i in 0..input_count {
+		inputs.push(InputResource::Input(i))
+	}
+
+	let mut dataset = BTreeDataset::new();
+
+	let mut interpretation = InputInterpretation {
+		map: HashMap::new(),
+		anonymous_count: 0,
+	};
+
+	let mut rdf = RdfContextMut {
+		vocabulary: &mut (),
+		interpretation: &mut interpretation,
+	};
+
+	dehydrate_with(
+		&mut rdf,
+		layouts,
+		value,
+		None,
+		layout_ref,
+		&inputs,
+		&mut dataset,
+	)?;
+
+	let mut map = HashMap::new();
+	let mut generator = generator::Blank::new();
+
+	for (r, terms) in interpretation.map {
+		match r {
+			InputResource::Term(t) => {
+				for u in terms {
+					if t != u {
+						return Err(Error::TermAmbiguity(TermAmbiguity::new(t, u)));
+					}
+				}
+			}
+			r => {
+				let mut value = None;
+
+				for term in terms {
+					if let Some(t) = value.replace(term) {
+						return Err(Error::TermAmbiguity(TermAmbiguity::new(t, value.unwrap())));
+					}
+				}
+
+				if let Some(value) = value {
+					map.insert(r, value);
+				}
+			}
+		}
+	}
+
+	fn map_resource(
+		generator: &mut generator::Blank,
+		map: &mut HashMap<InputResource, Term>,
+		r: InputResource,
+	) -> Term {
+		match r {
+			InputResource::Term(t) => t,
+			r => map
+				.entry(r)
+				.or_insert_with(|| Term::blank(generator.next_blank_id()))
+				.clone(),
+		}
+	}
+
+	let dataset = dataset
+		.into_iter()
+		.map(|quad| {
+			Quad(
+				map_resource(&mut generator, &mut map, quad.0),
+				map_resource(&mut generator, &mut map, quad.1),
+				map_resource(&mut generator, &mut map, quad.2),
+				quad.3.map(|g| map_resource(&mut generator, &mut map, g)),
+			)
+		})
+		.collect();
+
+	let values = (0..input_count)
+		.map(|i| map.get(&InputResource::Input(i)).unwrap().clone())
+		.collect();
+
+	Ok((dataset, values))
+}
+
+/// Deserialize the given `value` according to the provided `layout`, returning
+/// the deserialized RDF dataset.
+pub fn dehydrate_with<V, I, Q, D>(
 	rdf: &mut RdfContextMut<V, I>,
-	layouts: &Layouts<I::Resource>,
+	layouts: &Layouts<Q>,
 	value: &Value,
 	current_graph: Option<&I::Resource>,
-	layout_ref: &Ref<LayoutType, I::Resource>,
+	layout_ref: &Ref<LayoutType, Q>,
 	inputs: &[I::Resource],
 	output: &mut D,
 ) -> Result<(), Error>
@@ -68,6 +307,7 @@ where
 		+ ReverseIriInterpretationMut<Iri = V::Iri>
 		+ ReverseLiteralInterpretationMut<Literal = V::Literal>,
 	I::Resource: Clone + Ord,
+	Q: Clone + Ord + Into<I::Resource>,
 	D: grdf::MutableDataset<
 		Subject = I::Resource,
 		Predicate = I::Resource,
@@ -101,7 +341,8 @@ where
 						env.instantiate_dataset(&layout.dataset, output)?;
 						let resource = env.instantiate_pattern(&layout.resource)?;
 
-						let literal = data::dehydrate_boolean(rdf, *value, &layout.datatype)?;
+						let literal =
+							data::dehydrate_boolean(rdf, *value, &layout.datatype.clone().into())?;
 						rdf.interpretation
 							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
 
@@ -112,7 +353,8 @@ where
 						env.instantiate_dataset(&layout.dataset, output)?;
 						let resource = env.instantiate_pattern(&layout.resource)?;
 
-						let literal = data::dehydrate_number(rdf, value, &layout.datatype)?;
+						let literal =
+							data::dehydrate_number(rdf, value, &layout.datatype.clone().into())?;
 						rdf.interpretation
 							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
 
@@ -123,7 +365,11 @@ where
 						env.instantiate_dataset(&layout.dataset, output)?;
 						let resource = env.instantiate_pattern(&layout.resource)?;
 
-						let literal = data::dehydrate_byte_string(rdf, value, &layout.datatype)?;
+						let literal = data::dehydrate_byte_string(
+							rdf,
+							value,
+							&layout.datatype.clone().into(),
+						)?;
 						rdf.interpretation
 							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
 
@@ -134,7 +380,11 @@ where
 						env.instantiate_dataset(&layout.dataset, output)?;
 						let resource = env.instantiate_pattern(&layout.resource)?;
 
-						let literal = data::dehydrate_text_string(rdf, value, &layout.datatype)?;
+						let literal = data::dehydrate_text_string(
+							rdf,
+							value,
+							&layout.datatype.clone().into(),
+						)?;
 						rdf.interpretation
 							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
 
@@ -315,12 +565,12 @@ where
 	}
 }
 
-fn dehydrate_sub_value<V, I, D>(
+fn dehydrate_sub_value<V, I, Q, D>(
 	rdf: &mut RdfContextMut<V, I>,
-	layouts: &Layouts<I::Resource>,
+	layouts: &Layouts<Q>,
 	value: &Value,
 	current_graph: Option<&I::Resource>,
-	format: &ValueFormat<I::Resource>,
+	format: &ValueFormat<Q>,
 	env: &Environment<I::Resource>,
 	output: &mut D,
 ) -> Result<(), Error>
@@ -332,6 +582,7 @@ where
 		+ ReverseIriInterpretationMut<Iri = V::Iri>
 		+ ReverseLiteralInterpretationMut<Literal = V::Literal>,
 	I::Resource: Clone + Ord,
+	Q: Clone + Ord + Into<I::Resource>,
 	D: grdf::MutableDataset<
 		Subject = I::Resource,
 		Predicate = I::Resource,
@@ -365,10 +616,14 @@ pub enum Environment<'a, R> {
 impl<'a, R> Environment<'a, R> {
 	pub fn get(&self, i: u32) -> Result<&R, u32> {
 		match self {
-			Self::Root(inputs) => inputs.get(i as usize).ok_or(i - inputs.len() as u32),
+			Self::Root(inputs) => inputs
+				.get(i as usize)
+				.ok_or_else(|| i - inputs.len() as u32),
 			Self::Child(parent, intros) => match parent.get(i) {
 				Ok(r) => Ok(r),
-				Err(j) => intros.get(j as usize).ok_or(j - intros.len() as u32),
+				Err(j) => intros
+					.get(j as usize)
+					.ok_or_else(|| j - intros.len() as u32),
 			},
 		}
 	}
@@ -393,17 +648,23 @@ impl<'a, R> Environment<'a, R> {
 }
 
 impl<'a, R: Clone> Environment<'a, R> {
-	pub fn instantiate_pattern(&self, pattern: &Pattern<R>) -> Result<R, Error> {
+	pub fn instantiate_pattern<Q>(&self, pattern: &Pattern<Q>) -> Result<R, Error>
+	where
+		Q: Clone + Into<R>,
+	{
 		match pattern {
 			Pattern::Var(x) => self
 				.get(*x)
 				.cloned()
 				.map_err(|_| Error::UndeclaredVariable(*x)),
-			Pattern::Resource(r) => Ok(r.clone()),
+			Pattern::Resource(r) => Ok(r.clone().into()),
 		}
 	}
 
-	pub fn instantiate_patterns(&self, patterns: &[Pattern<R>]) -> Result<Vec<R>, Error> {
+	pub fn instantiate_patterns<Q>(&self, patterns: &[Pattern<Q>]) -> Result<Vec<R>, Error>
+	where
+		Q: Clone + Into<R>,
+	{
 		let mut result = Vec::with_capacity(patterns.len());
 
 		for p in patterns {
@@ -413,10 +674,13 @@ impl<'a, R: Clone> Environment<'a, R> {
 		Ok(result)
 	}
 
-	pub fn instantiate_quad(
+	pub fn instantiate_quad<Q>(
 		&self,
-		quad: Quad<&Pattern<R>, &Pattern<R>, &Pattern<R>, &Pattern<R>>,
-	) -> Result<Quad<R, R, R, R>, Error> {
+		quad: Quad<&Pattern<Q>, &Pattern<Q>, &Pattern<Q>, &Pattern<Q>>,
+	) -> Result<Quad<R, R, R, R>, Error>
+	where
+		Q: Clone + Into<R>,
+	{
 		Ok(Quad(
 			self.instantiate_pattern(quad.0)?,
 			self.instantiate_pattern(quad.1)?,
@@ -425,12 +689,13 @@ impl<'a, R: Clone> Environment<'a, R> {
 		))
 	}
 
-	pub fn instantiate_dataset<D>(
+	pub fn instantiate_dataset<Q, D>(
 		&self,
-		input: &BTreeDataset<Pattern<R>>,
+		input: &BTreeDataset<Pattern<Q>>,
 		output: &mut D,
 	) -> Result<(), Error>
 	where
+		Q: Clone + Into<R>,
 		D: grdf::MutableDataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
 	{
 		for quad in input.quads() {
