@@ -1,0 +1,20 @@
+{
+	"type": "record",
+	"fields": {
+		"id": {
+			"intro": [],
+			"value": {
+				"layout": {
+					"type": "id"
+				},
+				"input": "_:self"
+			}
+		},
+		"name": {
+			"value": {
+				"type": "string"
+			},
+			"property": "https://schema.org/name"
+		}
+	}
+}

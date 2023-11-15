@@ -1,6 +1,7 @@
 use nquads_syntax::Parse;
 use paste::paste;
 use rdf_types::{BlankIdBuf, Id, Term};
+use static_iref::iri;
 use std::fs;
 use std::path::PathBuf;
 use treeldr_layouts::utils::strip_rdf_quad;
@@ -189,4 +190,9 @@ test! {
 test! {
 	/// Compact simple sized list (equivalent to `t09`).
 	t10 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
+}
+
+test! {
+	/// IRI identifier.
+	t11 (Term::iri(iri!("https://example.org/JohnSmith").to_owned()))
 }
