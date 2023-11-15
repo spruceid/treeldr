@@ -6,9 +6,11 @@
 			"intro": ["value"],
 			"value": {
 				"layout": {
-					"type": "string"
+					"input": ["self"],
+					"type": "string",
+					"resource": "_:self"
 				},
-				"input": ["value"]
+				"input": ["_:value"]
 			},
 			"dataset": [
 				["_:self", "https://schema.org/name", "_:value"]

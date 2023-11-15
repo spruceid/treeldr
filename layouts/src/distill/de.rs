@@ -616,14 +616,16 @@ pub enum Environment<'a, R> {
 impl<'a, R> Environment<'a, R> {
 	pub fn get(&self, i: u32) -> Result<&R, u32> {
 		match self {
-			Self::Root(inputs) => inputs
-				.get(i as usize)
-				.ok_or_else(|| i - inputs.len() as u32),
+			Self::Root(inputs) => match inputs.get(i as usize) {
+				Some(r) => Ok(r),
+				None => Err(i - inputs.len() as u32),
+			},
 			Self::Child(parent, intros) => match parent.get(i) {
 				Ok(r) => Ok(r),
-				Err(j) => intros
-					.get(j as usize)
-					.ok_or_else(|| j - intros.len() as u32),
+				Err(j) => match intros.get(j as usize) {
+					Some(r) => Ok(r),
+					None => Err(j - intros.len() as u32),
+				},
 			},
 		}
 	}

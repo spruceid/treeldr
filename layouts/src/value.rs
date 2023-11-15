@@ -1,4 +1,7 @@
+use core::fmt;
 use std::collections::BTreeMap;
+
+use num_rational::BigRational;
 
 use crate::{
 	layout::{
@@ -12,7 +15,87 @@ pub mod de;
 pub mod ser;
 
 /// Rational number.
-pub type Number = num_rational::BigRational;
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Number(BigRational);
+
+impl Number {
+	pub fn new(rational: BigRational) -> Self {
+		Self(rational)
+	}
+
+	pub fn as_big_rational(&self) -> &BigRational {
+		&self.0
+	}
+
+	pub fn into_big_rational(self) -> BigRational {
+		self.0
+	}
+}
+
+impl From<BigRational> for Number {
+	fn from(value: BigRational) -> Self {
+		Self(value)
+	}
+}
+
+impl From<Number> for BigRational {
+	fn from(value: Number) -> Self {
+		value.into_big_rational()
+	}
+}
+
+macro_rules! number_from_integer {
+	($($ty:ty),*) => {
+		$(
+			impl From<$ty> for Number {
+				fn from(value: $ty) -> Self {
+					Self(BigRational::from_integer(value.into()))
+				}
+			}
+		)*
+	};
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("non finite float value `{0}`")]
+pub struct NonFiniteFloat<T>(pub T);
+
+macro_rules! number_from_float {
+	($($ty:ty),*) => {
+		$(
+			impl TryFrom<$ty> for Number {
+				type Error = NonFiniteFloat<$ty>;
+
+				fn try_from(value: $ty) -> Result<Self, Self::Error> {
+					match BigRational::from_float(value) {
+						Some(v) => Ok(Self(v)),
+						None => Err(NonFiniteFloat(value))
+					}
+				}
+			}
+		)*
+	};
+}
+
+number_from_integer!(u8, u16, u32, u64, i8, i16, i32, i64);
+number_from_float!(f32, f64);
+
+impl fmt::Display for Number {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		self.0.fmt(f)
+	}
+}
+
+impl From<serde_json::Number> for Number {
+	fn from(value: serde_json::Number) -> Self {
+		Self(
+			<xsd_types::Decimal as xsd_types::ParseRdf>::parse_rdf(&value.to_string())
+				.ok()
+				.unwrap()
+				.into(),
+		)
+	}
+}
 
 /// Literal value.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -44,6 +127,26 @@ pub enum Value {
 impl Value {
 	pub fn unit() -> Self {
 		Self::Literal(Literal::Unit)
+	}
+}
+
+impl From<serde_json::Value> for Value {
+	fn from(value: serde_json::Value) -> Self {
+		match value {
+			serde_json::Value::Null => Self::Literal(Literal::Unit),
+			serde_json::Value::Bool(b) => Self::Literal(Literal::Boolean(b)),
+			serde_json::Value::Number(n) => Self::Literal(Literal::Number(n.into())),
+			serde_json::Value::String(s) => Self::Literal(Literal::TextString(s)),
+			serde_json::Value::Array(items) => {
+				Self::List(items.into_iter().map(Into::into).collect())
+			}
+			serde_json::Value::Object(entries) => Self::Record(
+				entries
+					.into_iter()
+					.map(|(key, value)| (key, value.into()))
+					.collect(),
+			),
+		}
 	}
 }
 

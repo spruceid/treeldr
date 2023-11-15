@@ -38,8 +38,9 @@ fn hydrate<const N: usize>(id: &str, inputs: [Term; N]) {
 	.unwrap();
 
 	// Parse the expected output.
-	let expected: treeldr_layouts::Value =
-		serde_json::from_str(&fs::read_to_string(output_path).unwrap()).unwrap();
+	let expected_json: serde_json::Value =
+		fs::read_to_string(output_path).unwrap().parse().unwrap();
+	let expected: treeldr_layouts::Value = expected_json.into();
 
 	// Compile the layouts.
 	let layouts = builder.build();
@@ -60,8 +61,8 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 	let output_path = file_path(id, "-in.nq");
 
 	// Parse the JSON input.
-	let input: treeldr_layouts::Value =
-		serde_json::from_str(&fs::read_to_string(input_path).unwrap()).unwrap();
+	let input_json: serde_json::Value = fs::read_to_string(input_path).unwrap().parse().unwrap();
+	let input: treeldr_layouts::Value = input_json.into();
 
 	// Parse the expected output dataset from N-Quads.
 	let expected_dataset: grdf::BTreeDataset = nquads_syntax::Document::parse_str(

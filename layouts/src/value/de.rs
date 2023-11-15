@@ -24,16 +24,12 @@ impl<'de> serde::Deserialize<'de> for Value {
 
 			#[inline]
 			fn visit_i64<E>(self, value: i64) -> Result<Value, E> {
-				Ok(Value::Literal(Literal::Number(Number::from_integer(
-					value.into(),
-				))))
+				Ok(Value::Literal(Literal::Number(value.into())))
 			}
 
 			#[inline]
 			fn visit_u64<E>(self, value: u64) -> Result<Value, E> {
-				Ok(Value::Literal(Literal::Number(Number::from_integer(
-					value.into(),
-				))))
+				Ok(Value::Literal(Literal::Number(value.into())))
 			}
 
 			#[inline]
@@ -41,9 +37,9 @@ impl<'de> serde::Deserialize<'de> for Value {
 			where
 				E: serde::de::Error,
 			{
-				match Number::from_float(value) {
-					Some(value) => Ok(Value::Literal(Literal::Number(value))),
-					None => Err(E::invalid_value(serde::de::Unexpected::Float(value), &self)),
+				match Number::try_from(value) {
+					Ok(value) => Ok(Value::Literal(Literal::Number(value))),
+					Err(_) => Err(E::invalid_value(serde::de::Unexpected::Float(value), &self)),
 				}
 			}
 
