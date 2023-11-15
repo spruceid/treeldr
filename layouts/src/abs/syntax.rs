@@ -1196,6 +1196,7 @@ pub struct Field {
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
 
+	#[serde(default, skip_serializing_if = "Option::is_none")]
 	property: Option<Pattern>,
 }
 
@@ -1471,39 +1472,77 @@ pub struct UnorderedListLayout {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListItem {
-	#[serde(default, skip_serializing_if = "OneOrMany::is_empty")]
-	intro: OneOrMany<String>,
+	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
+	intro: ValueIntro,
 
 	value: ValueFormatOrLayout,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,
+
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	property: Option<Pattern>,
 }
 
 impl<C: Context> Build<C> for UnorderedListLayout {
 	type Target = abs::layout::UnorderedListLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		let subject = if self.header.input.is_empty() {
+			None
+		} else {
+			Some(0)
+		};
+
 		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(abs::layout::UnorderedListLayout {
 			input: header.input,
 			intro: header.intro,
-			item: self.item.build(context, &scope)?,
+			item: self.item.build(context, &scope, subject)?,
 			dataset: header.dataset,
 		})
 	}
 }
 
-impl<C: Context> Build<C> for ListItem {
-	type Target = abs::layout::list::ItemLayout<C::Resource>;
+impl ListItem {
+	fn build<C: Context>(
+		&self,
+		context: &mut C,
+		scope: &Scope,
+		subject: Option<u32>,
+	) -> Result<abs::layout::list::ItemLayout<C::Resource>, Error> {
+		let object = if self.intro.is_empty() {
+			None
+		} else {
+			Some(scope.variable_count)
+		};
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
 		let scope = scope.with_intro(self.intro.as_slice())?;
+
+		let mut dataset = self.dataset.build(context, &scope)?;
+		if let Some(prop) = &self.property {
+			match subject {
+				Some(subject) => match object {
+					Some(object) => {
+						let prop = prop.build(context, &scope)?;
+						dataset.insert(rdf_types::Quad(
+							crate::Pattern::Var(subject),
+							prop,
+							crate::Pattern::Var(object),
+							None,
+						));
+					}
+					None => return Err(Error::NoPropertyObject),
+				},
+				None => return Err(Error::NoPropertySubject),
+			}
+		}
+
 		Ok(abs::layout::list::ItemLayout {
 			intro: self.intro.len() as u32,
 			value: self.value.build(context, &scope)?,
-			dataset: self.dataset.build(context, &scope)?,
+			dataset,
 		})
 	}
 }
@@ -1525,11 +1564,17 @@ impl<C: Context> Build<C> for SizedListLayout {
 	type Target = abs::layout::SizedListLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		let subject = if self.header.intro.is_empty() {
+			None
+		} else {
+			Some(0)
+		};
+
 		let (header, scope) = self.header.build(context, scope)?;
 
 		let mut items = Vec::with_capacity(self.items.len());
 		for item in &self.items {
-			items.push(item.build(context, &scope)?)
+			items.push(item.build(context, &scope, subject)?)
 		}
 
 		Ok(abs::layout::SizedListLayout {

@@ -1,0 +1,9 @@
+{
+	"type": "set",
+	"item": {
+		"value": {
+			"type": "string"
+		},
+		"property": "http://example.org/prop"
+	}
+}
