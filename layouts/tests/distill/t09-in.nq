@@ -1,0 +1,3 @@
+_:subject <http://example.org/prop1> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+_:subject <http://example.org/prop2> "12"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:subject <http://example.org/prop3> "string" .

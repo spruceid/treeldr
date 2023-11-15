@@ -1564,7 +1564,7 @@ impl<C: Context> Build<C> for SizedListLayout {
 	type Target = abs::layout::SizedListLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
-		let subject = if self.header.intro.is_empty() {
+		let subject = if self.header.input.is_empty() {
 			None
 		} else {
 			Some(0)

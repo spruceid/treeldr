@@ -180,3 +180,13 @@ test! {
 	/// Compact simple set (equivalent to `t07`).
 	t08 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
 }
+
+test! {
+	/// Simple sized list.
+	t09 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
+}
+
+test! {
+	/// Compact simple sized list (equivalent to `t09`).
+	t10 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
+}

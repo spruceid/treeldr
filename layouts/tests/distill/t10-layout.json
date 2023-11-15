@@ -1,0 +1,24 @@
+{
+	"type": "tuple",
+	"items": [
+		{
+			"value": {
+				"type": "boolean"
+			},
+			"property": "http://example.org/prop1"
+		},
+		{
+			"value": {
+				"type": "number",
+				"datatype": "http://www.w3.org/2001/XMLSchema#integer"
+			},
+			"property": "http://example.org/prop2"
+		},
+		{
+			"value": {
+				"type": "string"
+			},
+			"property": "http://example.org/prop3"
+		}
+	]
+}
