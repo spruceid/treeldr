@@ -98,8 +98,9 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 	)
 	.unwrap();
 
+	eprintln!("dataset:");
 	for quad in &output_dataset {
-		println!("{quad} .")
+		eprintln!("{quad} .")
 	}
 
 	// Test.
@@ -121,8 +122,9 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 }
 
 macro_rules! test {
-	($name:ident ($($e:expr),*)) => {
+	($(#[$meta:meta])* $name:ident ($($e:expr),*)) => {
 		paste! {
+			$(#[$meta])*
 			#[test]
 			fn [<hydrate_ $name>] () {
 				hydrate(stringify!($name), [$($e),*])
@@ -130,6 +132,7 @@ macro_rules! test {
 		}
 
 		paste! {
+			$(#[$meta])*
 			#[test]
 			fn [<dehydrate_ $name>] () {
 				dehydrate(stringify!($name), [$($e),*])
@@ -139,17 +142,31 @@ macro_rules! test {
 }
 
 test! {
+	/// Simple record layout.
 	t01 (Term::blank(BlankIdBuf::new("_:john_smith".to_string()).unwrap()))
 }
 
 test! {
+	/// Simple compact record layout (equivalent to `t01`).
 	t02 (Term::blank(BlankIdBuf::new("_:john_smith".to_string()).unwrap()))
 }
 
 test! {
+	/// Record layout.
 	t03 (Term::blank(BlankIdBuf::new("_:receipt".to_string()).unwrap()))
 }
 
 test! {
+	/// Compact record layout (equivalent to `t03`).
 	t04 (Term::blank(BlankIdBuf::new("_:receipt".to_string()).unwrap()))
+}
+
+test! {
+	/// Simple list.
+	t05 (Term::blank(BlankIdBuf::new("_:list".to_string()).unwrap()))
+}
+
+test! {
+	/// Compact simple list (equivalent to `t05`).
+	t06 (Term::blank(BlankIdBuf::new("_:list".to_string()).unwrap()))
 }

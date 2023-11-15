@@ -1,0 +1,6 @@
+{
+	"type": "list",
+	"node": {
+		"type": "string"
+	}
+}

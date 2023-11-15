@@ -282,7 +282,7 @@ pub fn dehydrate(
 		.collect();
 
 	let values = (0..input_count)
-		.map(|i| map.get(&InputResource::Input(i)).unwrap().clone())
+		.map(|i| map_resource(&mut generator, &mut map, InputResource::Input(i)))
 		.collect();
 
 	Ok((dataset, values))
@@ -485,6 +485,7 @@ where
 
 					for item in value {
 						let env = env.intro(rdf, layout.item.intro);
+						env.instantiate_dataset(&layout.item.dataset, output)?;
 						dehydrate_sub_value(
 							rdf,
 							layouts,
@@ -513,6 +514,7 @@ where
 
 						let env = env.bind([head, rest.clone()]);
 						let env = env.intro(rdf, layout.node.intro);
+						env.instantiate_dataset(&layout.node.dataset, output)?;
 
 						let item = &value[i];
 						dehydrate_sub_value(
@@ -541,6 +543,7 @@ where
 						match (items.next(), item_layouts.next()) {
 							(Some(item), Some(item_layout)) => {
 								let env = env.intro(rdf, item_layout.intro);
+								env.instantiate_dataset(&item_layout.dataset, output)?;
 								dehydrate_sub_value(
 									rdf,
 									layouts,

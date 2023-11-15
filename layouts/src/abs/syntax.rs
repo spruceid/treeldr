@@ -1,6 +1,8 @@
+use grdf::BTreeDataset;
 use iref::{Iri, IriBuf, IriRefBuf};
 use rdf_types::{
 	generator, BlankIdBuf, Id, InterpretationMut, IriInterpretationMut, IriVocabularyMut, Term,
+	RDF_FIRST, RDF_NIL, RDF_REST,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -16,7 +18,7 @@ use crate::{
 use super::Builder;
 
 pub trait Context {
-	type Resource: Ord;
+	type Resource: Ord + std::fmt::Debug;
 
 	fn insert_layout(
 		&mut self,
@@ -59,7 +61,7 @@ impl<'a, V, I> Context for super::BuilderWithInterpretationMut<'a, V, I>
 where
 	V: IriVocabularyMut,
 	I: IriInterpretationMut<V::Iri> + InterpretationMut<V>,
-	I::Resource: Clone + Eq + Ord,
+	I::Resource: Clone + Eq + Ord + std::fmt::Debug,
 {
 	type Resource = I::Resource;
 
@@ -158,6 +160,7 @@ pub struct Scope {
 	base_iri: Option<IriBuf>,
 	iri_prefixes: HashMap<String, IriBuf>,
 	variables: HashMap<String, u32>,
+	variable_count: u32,
 }
 
 impl Scope {
@@ -204,12 +207,13 @@ impl Scope {
 			base_iri: self.base_iri.clone(),
 			iri_prefixes: self.iri_prefixes.clone(),
 			variables: HashMap::new(),
+			variable_count: 0,
 		}
 	}
 
 	pub fn bind(&mut self, name: &str) {
-		let i = self.variables.len() as u32;
-		self.variables.insert(name.to_owned(), i);
+		self.variables.insert(name.to_owned(), self.variable_count);
+		self.variable_count += 1;
 	}
 
 	pub fn variable(&self, name: &str) -> Result<u32, Error> {
@@ -273,7 +277,7 @@ impl Layout {
 	where
 		V: IriVocabularyMut,
 		I: IriInterpretationMut<V::Iri> + InterpretationMut<V>,
-		I::Resource: Clone + Eq + Ord,
+		I::Resource: Clone + Eq + Ord + std::fmt::Debug,
 	{
 		let mut context = builder.with_interpretation_mut(vocabulary, interpretation);
 		self.build_with_context(&mut context)
@@ -351,6 +355,28 @@ impl Pattern {
 		match self {
 			Self::Var(x) => x == name,
 			Self::Iri(_) => false,
+		}
+	}
+
+	pub fn default_head() -> Self {
+		Self::Var("self".to_string())
+	}
+
+	pub fn is_default_head(&self) -> bool {
+		match self {
+			Self::Var(x) => x == "self",
+			_ => false,
+		}
+	}
+
+	pub fn default_tail() -> Self {
+		Self::Iri(CompactIri(RDF_NIL.to_owned().into()))
+	}
+
+	pub fn is_default_tail(&self) -> bool {
+		match self {
+			Self::Iri(CompactIri(iri_ref)) => iri_ref == RDF_NIL,
+			_ => false,
 		}
 	}
 }
@@ -603,6 +629,10 @@ impl ValueInput {
 	pub fn is_default(&self) -> bool {
 		let slice = self.0.as_slice();
 		slice.len() == 1 && slice[0].is_variable("value")
+	}
+
+	pub fn first(&self) -> Option<&Pattern> {
+		self.0.as_slice().first()
 	}
 }
 
@@ -1264,18 +1294,88 @@ pub struct OrderedListLayout {
 	#[serde(flatten)]
 	header: LayoutHeader,
 
-	node: ListNode,
+	node: ListNodeOrLayout,
 
+	#[serde(
+		default = "Pattern::default_head",
+		skip_serializing_if = "Pattern::is_default_head"
+	)]
 	head: Pattern,
 
+	#[serde(
+		default = "Pattern::default_tail",
+		skip_serializing_if = "Pattern::is_default_tail"
+	)]
 	tail: Pattern,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ListNodeOrLayout {
+	ListNode(ListNode),
+	Layout(LayoutRef),
+}
+
+fn default_list_dataset<C: Context>(
+	context: &mut C,
+	head: u32,
+	rest: u32,
+	first: crate::Pattern<C::Resource>,
+) -> BTreeDataset<crate::Pattern<C::Resource>> {
+	let mut dataset = BTreeDataset::new();
+
+	dataset.insert(rdf_types::Quad(
+		crate::Pattern::Var(head),
+		crate::Pattern::Resource(context.iri_resource(RDF_FIRST)),
+		first,
+		None,
+	));
+
+	dataset.insert(rdf_types::Quad(
+		crate::Pattern::Var(head),
+		crate::Pattern::Resource(context.iri_resource(RDF_REST)),
+		crate::Pattern::Var(rest),
+		None,
+	));
+
+	dataset
+}
+
+impl<C: Context> Build<C> for ListNodeOrLayout {
+	type Target = abs::layout::list::ordered::NodeLayout<C::Resource>;
+
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		let head = scope.variable_count;
+		let rest = head + 1;
+		let first = rest + 1;
+		match self {
+			Self::ListNode(n) => n.build(context, scope),
+			Self::Layout(layout_ref) => Ok(abs::layout::list::ordered::NodeLayout {
+				intro: 1u32,
+				value: crate::ValueFormat {
+					layout: layout_ref.build(context, scope)?,
+					input: vec![crate::Pattern::Var(first)],
+					graph: None,
+				},
+				dataset: default_list_dataset(context, head, rest, crate::Pattern::Var(first)),
+			}),
+		}
+	}
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListNode {
+	#[serde(
+		default = "ListNode::default_head",
+		skip_serializing_if = "ListNode::is_default_head"
+	)]
 	head: String,
 
+	#[serde(
+		default = "ListNode::default_rest",
+		skip_serializing_if = "ListNode::is_default_rest"
+	)]
 	rest: String,
 
 	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
@@ -1283,8 +1383,26 @@ pub struct ListNode {
 
 	value: ValueFormatOrLayout,
 
-	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
-	dataset: Dataset,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	dataset: Option<Dataset>,
+}
+
+impl ListNode {
+	pub fn default_head() -> String {
+		"head".to_string()
+	}
+
+	pub fn is_default_head(value: &str) -> bool {
+		value == "head"
+	}
+
+	pub fn default_rest() -> String {
+		"rest".to_string()
+	}
+
+	pub fn is_default_rest(value: &str) -> bool {
+		value == "rest"
+	}
 }
 
 impl<C: Context> Build<C> for OrderedListLayout {
@@ -1292,7 +1410,6 @@ impl<C: Context> Build<C> for OrderedListLayout {
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
 		let (header, scope) = self.header.build(context, scope)?;
-
 		Ok(abs::layout::OrderedListLayout {
 			input: header.input,
 			intro: header.intro,
@@ -1308,6 +1425,8 @@ impl<C: Context> Build<C> for ListNode {
 	type Target = abs::layout::list::ordered::NodeLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		let head = scope.variable_count;
+		let rest = head + 1;
 		let scope = scope.with_intro(
 			[&self.head, &self.rest]
 				.into_iter()
@@ -1316,7 +1435,23 @@ impl<C: Context> Build<C> for ListNode {
 		Ok(abs::layout::list::ordered::NodeLayout {
 			intro: self.intro.len() as u32,
 			value: self.value.build(context, &scope)?,
-			dataset: self.dataset.build(context, &scope)?,
+			dataset: match &self.dataset {
+				Some(dataset) => dataset.build(context, &scope)?,
+				None => match &self.value {
+					ValueFormatOrLayout::Format(f) => {
+						if f.input.len() == 1 {
+							let first = f.input.first().unwrap().build(context, &scope)?;
+							default_list_dataset(context, head, rest, first)
+						} else {
+							BTreeDataset::new()
+						}
+					}
+					ValueFormatOrLayout::Layout(_) => {
+						let first = crate::Pattern::Var(scope.variable("value")?);
+						default_list_dataset(context, head, rest, first)
+					}
+				},
+			},
 		})
 	}
 }
