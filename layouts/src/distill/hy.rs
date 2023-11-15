@@ -32,6 +32,9 @@ pub enum Error {
 
 	#[error("unknown number datatype")]
 	UnknownNumberDatatype(IriBuf),
+
+	#[error("no matching literal representation found")]
+	NoMatchingLiteral,
 }
 
 impl From<matching::Error> for Error {
@@ -318,6 +321,8 @@ where
 
 						items.push(item);
 					}
+
+					items.sort_unstable();
 
 					Ok(TypedValue::List(items, layout_ref.casted()))
 				}

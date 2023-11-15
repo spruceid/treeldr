@@ -95,9 +95,7 @@ where
 
 			match value {
 				Some(value) => Ok(TypedLiteral::Boolean(value, layout_ref.casted())),
-				None => {
-					todo!() // No matching literal representation found
-				}
+				None => Err(Error::NoMatchingLiteral),
 			}
 		}
 		DataLayout::Number(layout) => {
@@ -140,9 +138,7 @@ where
 
 			match value {
 				Some(value) => Ok(TypedLiteral::Number(value, layout_ref.casted())),
-				None => {
-					todo!() // No matching literal representation found
-				}
+				None => Err(Error::NoMatchingLiteral),
 			}
 		}
 		DataLayout::ByteString(layout) => {
@@ -187,9 +183,7 @@ where
 
 			match value {
 				Some(value) => Ok(TypedLiteral::ByteString(value, layout_ref.casted())),
-				None => {
-					todo!() // No matching literal representation found
-				}
+				None => Err(Error::NoMatchingLiteral),
 			}
 		}
 		DataLayout::TextString(layout) => {
@@ -234,9 +228,7 @@ where
 
 			match value {
 				Some(value) => Ok(TypedLiteral::TextString(value, layout_ref.casted())),
-				None => {
-					todo!() // No matching literal representation found
-				}
+				None => Err(Error::NoMatchingLiteral),
 			}
 		}
 	}

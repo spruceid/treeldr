@@ -643,6 +643,35 @@ impl Default for ValueInput {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct VariantInput(OneOrMany<Pattern>);
+
+impl VariantInput {
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	pub fn as_slice(&self) -> &[Pattern] {
+		self.0.as_slice()
+	}
+
+	pub fn is_default(&self) -> bool {
+		let slice = self.0.as_slice();
+		slice.len() == 1 && slice[0].is_variable("self")
+	}
+}
+
+impl Default for VariantInput {
+	fn default() -> Self {
+		Self(OneOrMany::One(Pattern::Var("self".to_owned())))
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ValueFormatOrLayout {
 	Format(ValueFormat),
@@ -677,6 +706,61 @@ pub struct ValueFormat {
 }
 
 impl<C: Context> Build<C> for ValueFormat {
+	type Target = crate::ValueFormat<C::Resource>;
+
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		let mut inputs = Vec::with_capacity(self.input.len());
+		for i in self.input.as_slice() {
+			inputs.push(i.build(context, scope)?);
+		}
+
+		Ok(crate::ValueFormat {
+			layout: self.layout.build(context, scope)?,
+			input: inputs,
+			graph: self
+				.graph
+				.as_ref()
+				.map(|g| g.as_ref().map(|g| g.build(context, scope)).transpose())
+				.transpose()?,
+		})
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum VariantFormatOrLayout {
+	Format(VariantFormat),
+	Layout(LayoutRef),
+}
+
+impl<C: Context> Build<C> for VariantFormatOrLayout {
+	type Target = crate::ValueFormat<C::Resource>;
+
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		match self {
+			Self::Format(f) => f.build(context, scope),
+			Self::Layout(layout) => Ok(crate::ValueFormat {
+				layout: layout.build(context, scope)?,
+				input: vec![Pattern::Var("self".to_string()).build(context, scope)?],
+				graph: None,
+			}),
+		}
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VariantFormat {
+	layout: LayoutRef,
+
+	#[serde(default, skip_serializing_if = "VariantInput::is_default")]
+	input: VariantInput,
+
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	graph: Option<Option<Pattern>>,
+}
+
+impl<C: Context> Build<C> for VariantFormat {
 	type Target = crate::ValueFormat<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1216,10 +1300,10 @@ pub struct SumLayout {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Variant {
-	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
-	intro: ValueIntro,
+	#[serde(default, skip_serializing_if = "OneOrMany::is_empty")]
+	intro: OneOrMany<String>,
 
-	value: ValueFormatOrLayout,
+	value: VariantFormatOrLayout,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	dataset: Dataset,

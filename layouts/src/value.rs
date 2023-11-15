@@ -98,7 +98,7 @@ impl From<serde_json::Number> for Number {
 }
 
 /// Literal value.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Literal {
 	/// Unit.
 	Unit,
@@ -117,7 +117,7 @@ pub enum Literal {
 }
 
 /// Untyped value.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Value {
 	Literal(Literal),
 	Record(BTreeMap<String, Self>),
@@ -150,6 +150,7 @@ impl From<serde_json::Value> for Value {
 	}
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedLiteral<R = rdf_types::Term> {
 	/// Unit.
 	Unit(Ref<UnitLayoutType, R>),
@@ -184,6 +185,7 @@ impl<R> TypedLiteral<R> {
 }
 
 /// Typed value.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedValue<R = rdf_types::Term> {
 	Literal(TypedLiteral<R>),
 	Variant(Box<Self>, Ref<SumLayoutType, R>, u32),

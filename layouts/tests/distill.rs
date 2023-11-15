@@ -196,3 +196,8 @@ test! {
 	/// IRI identifier.
 	t11 (Term::iri(iri!("https://example.org/JohnSmith").to_owned()))
 }
+
+test! {
+	/// Sum layout.
+	t12 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
+}
