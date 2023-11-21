@@ -3,6 +3,7 @@ pub mod literal;
 pub mod product;
 pub mod sum;
 
+use educe::Educe;
 pub use list::{
 	ListLayout, ListLayoutType, OrderedListLayout, SizedListLayout, UnorderedListLayout,
 };
@@ -12,6 +13,7 @@ pub use literal::{
 	NumberLayoutType, TextStringLayout, TextStringLayoutType, UnitLayout, UnitLayoutType,
 };
 pub use product::{ProductLayout, ProductLayoutType};
+use std::hash::Hash;
 pub use sum::{SumLayout, SumLayoutType};
 
 use crate::{GetFromLayouts, Layouts};
@@ -31,7 +33,14 @@ impl<R: Ord> GetFromLayouts<Layouts<R>, R> for LayoutType {
 }
 
 /// Layout value.
-#[derive(Debug)]
+#[derive(Debug, Clone, Educe, serde::Serialize, serde::Deserialize)]
+#[educe(
+	PartialEq(bound = "R: Ord"),
+	Eq(bound = "R: Ord"),
+	Ord(bound = "R: Ord"),
+	Hash(bound = "R: Ord + Hash")
+)]
+#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
 pub enum Layout<R> {
 	Never,
 	Literal(LiteralLayout<R>),
@@ -39,6 +48,12 @@ pub enum Layout<R> {
 	List(ListLayout<R>),
 	Sum(SumLayout<R>),
 	Always,
+}
+
+impl<R: Ord> PartialOrd for Layout<R> {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(self.cmp(other))
+	}
 }
 
 impl<R> Layout<R> {

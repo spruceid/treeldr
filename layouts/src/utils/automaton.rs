@@ -2,6 +2,7 @@ use btree_range_map::{AnyRange, RangeMap, RangeSet};
 use std::{
 	collections::{hash_map::Entry, BTreeMap, BTreeSet, HashMap, HashSet},
 	hash::Hash,
+	marker::PhantomData,
 };
 
 use super::charset_intersection;
@@ -181,7 +182,7 @@ impl<Q: Ord> Automaton<Q> {
 		DetAutomaton {
 			initial_state,
 			final_states,
-			transitions,
+			transitions: DetTransitions(transitions),
 		}
 	}
 
@@ -260,11 +261,14 @@ impl<Q: Ord> Automaton<Q> {
 }
 
 /// Deterministic epsilon-free automaton.
-#[derive(Debug, Clone)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(bound(deserialize = "Q: Ord + serde::Deserialize<'de>, L: Ord + serde::Deserialize<'de>"))]
 pub struct DetAutomaton<Q, L = AnyRange<char>> {
 	initial_state: Q,
 	final_states: BTreeSet<Q>,
-	transitions: BTreeMap<Q, BTreeMap<L, Q>>,
+	transitions: DetTransitions<Q, L>,
 }
 
 impl<Q, L> DetAutomaton<Q, L> {
@@ -272,7 +276,7 @@ impl<Q, L> DetAutomaton<Q, L> {
 		Self {
 			initial_state,
 			final_states: BTreeSet::new(),
-			transitions: BTreeMap::new(),
+			transitions: DetTransitions(BTreeMap::new()),
 		}
 	}
 
@@ -284,7 +288,7 @@ impl<Q, L> DetAutomaton<Q, L> {
 		Self {
 			initial_state,
 			final_states,
-			transitions,
+			transitions: DetTransitions(transitions),
 		}
 	}
 
@@ -301,7 +305,7 @@ impl<Q, L> DetAutomaton<Q, L> {
 	}
 
 	pub fn transitions(&self) -> &BTreeMap<Q, BTreeMap<L, Q>> {
-		&self.transitions
+		&self.transitions.0
 	}
 
 	pub fn reachable_states_from<'a>(&'a self, q: &'a Q) -> ReachableStates<'a, Q, L> {
@@ -323,19 +327,20 @@ impl<Q: Ord, L: Ord> DetAutomaton<Q, L> {
 	}
 
 	pub fn declare_state(&mut self, q: Q) {
-		self.transitions.entry(q).or_default();
+		self.transitions.0.entry(q).or_default();
 	}
 
 	pub fn transitions_from(&self, q: &Q) -> impl '_ + Iterator<Item = (&'_ L, &'_ Q)> {
-		self.transitions.get(q).into_iter().flatten()
+		self.transitions.0.get(q).into_iter().flatten()
 	}
 
 	pub fn successors(&self, q: &Q) -> DetSuccessors<Q, L> {
-		DetSuccessors::new(self.transitions.get(q))
+		DetSuccessors::new(self.transitions.0.get(q))
 	}
 
 	pub fn add(&mut self, source: Q, label: L, target: Q) {
 		self.transitions
+			.0
 			.entry(source)
 			.or_default()
 			.insert(label, target);
@@ -445,7 +450,7 @@ impl<Q: Ord, L: Ord> DetAutomaton<Q, L> {
 		while let Some(a) = working.pop_first() {
 			let mut sources_by_label: HashMap<&L, BTreeSet<&Q>> = HashMap::new();
 
-			for (source, targets) in &self.transitions {
+			for (source, targets) in &self.transitions.0 {
 				for (label, target) in targets {
 					if a.contains(target) {
 						if sources_by_label.contains_key(label) {
@@ -494,7 +499,7 @@ impl<Q: Ord, L: Ord> DetAutomaton<Q, L> {
 		}
 
 		let mut result = DetAutomaton::new(map[&self.initial_state].clone());
-		for (source, transitions) in &self.transitions {
+		for (source, transitions) in &self.transitions.0 {
 			for (range, target) in transitions {
 				result.add(map[source].clone(), range, map[target].clone());
 			}
@@ -521,7 +526,7 @@ impl<Q: Ord, L: Ord> DetAutomaton<Q, L> {
 		let mut label_map = HashMap::new();
 
 		let mut result = DetAutomaton::new(mapped_initial_state);
-		for (source, transitions) in &self.transitions {
+		for (source, transitions) in &self.transitions.0 {
 			for (range, target) in transitions {
 				let source = map.entry(source).or_insert_with(|| f(source)).clone();
 				let target = map.entry(target).or_insert_with(|| f(target)).clone();
@@ -556,7 +561,7 @@ impl<Q: Ord, L: Ord> DetAutomaton<Q, L> {
 		let mut label_map: HashMap<&L, M> = HashMap::new();
 
 		let mut result = DetAutomaton::new(mapped_initial_state);
-		for (source, transitions) in &self.transitions {
+		for (source, transitions) in &self.transitions.0 {
 			for (label, target) in transitions {
 				let source = match map.entry(source) {
 					Entry::Occupied(entry) => entry.get().clone(),
@@ -608,7 +613,7 @@ impl<Q: Ord, L: Ord> DetAutomaton<Q, L> {
 					result.add_final_state(q.clone());
 				}
 
-				let transitions = result.transitions.entry(q).or_default();
+				let transitions = result.transitions.0.entry(q).or_default();
 
 				for (a_label, sa) in self.successors(a) {
 					for (b_label, sb) in other.successors(b) {
@@ -650,7 +655,7 @@ impl<Q: Ord, L: Ord> DetAutomaton<Q, L> {
 			if !transitions.contains_key(q) {
 				let mut q_transitions = BTreeMap::new();
 
-				for (label, mut r) in self.transitions.get(q).into_iter().flatten() {
+				for (label, mut r) in self.transitions.0.get(q).into_iter().flatten() {
 					let mut compact_label = M::default();
 					append(&mut compact_label, label);
 
@@ -675,6 +680,81 @@ impl<Q: Ord, L: Ord> DetAutomaton<Q, L> {
 			self.final_states.clone(),
 			transitions,
 		)
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DetTransitions<Q, L>(BTreeMap<Q, BTreeMap<L, Q>>);
+
+impl<Q, L> DetTransitions<Q, L> {
+	pub fn len(&self) -> usize {
+		self.0.values().fold(0, |x, map| x + map.len())
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
+	}
+}
+
+impl<Q, L> serde::Serialize for DetTransitions<Q, L>
+where
+	Q: serde::Serialize,
+	L: serde::Serialize,
+{
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		use serde::ser::SerializeSeq;
+		let mut seq = serializer.serialize_seq(Some(self.len()))?;
+
+		for (source, map) in &self.0 {
+			for (label, target) in map {
+				seq.serialize_element(&(source, label, target))?;
+			}
+		}
+
+		seq.end()
+	}
+}
+
+impl<'de, Q, L> serde::Deserialize<'de> for DetTransitions<Q, L>
+where
+	Q: Ord + serde::Deserialize<'de>,
+	L: Ord + serde::Deserialize<'de>,
+{
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		struct Visitor<Q, L>(PhantomData<(Q, L)>);
+
+		impl<'de, Q, L> serde::de::Visitor<'de> for Visitor<Q, L>
+		where
+			Q: Ord + serde::Deserialize<'de>,
+			L: Ord + serde::Deserialize<'de>,
+		{
+			type Value = DetTransitions<Q, L>;
+
+			fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+				write!(formatter, "deterministic automaton transitions")
+			}
+
+			fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+			where
+				A: serde::de::SeqAccess<'de>,
+			{
+				let mut result: BTreeMap<Q, BTreeMap<L, Q>> = BTreeMap::new();
+
+				while let Some((source, label, target)) = seq.next_element()? {
+					result.entry(source).or_default().insert(label, target);
+				}
+
+				Ok(DetTransitions(result))
+			}
+		}
+
+		deserializer.deserialize_seq(Visitor(PhantomData))
 	}
 }
 
@@ -745,7 +825,7 @@ where
 			match self.stack.pop() {
 				Some(q) => {
 					if self.visited.insert(q) {
-						if let Some(q_transitions) = self.aut.transitions.get(q) {
+						if let Some(q_transitions) = self.aut.transitions.0.get(q) {
 							for target in q_transitions.values() {
 								self.stack.push(target)
 							}

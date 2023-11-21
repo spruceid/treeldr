@@ -1,3 +1,6 @@
+use educe::Educe;
+use std::hash::Hash;
+
 use crate::{utils::DetAutomaton, Dataset, Pattern};
 
 pub struct DataLayoutType;
@@ -13,7 +16,14 @@ pub struct ByteStringLayoutType;
 pub struct TextStringLayoutType;
 
 /// Data layout.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Educe, serde::Serialize, serde::Deserialize)]
+#[educe(
+	PartialEq(bound = "R: Ord"),
+	Eq(bound = "R: Ord"),
+	Ord(bound = "R: Ord"),
+	Hash(bound = "R: Ord + Hash")
+)]
+#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
 pub enum DataLayout<R> {
 	Unit(UnitLayout<R>),
 	Boolean(BooleanLayout<R>),
@@ -22,7 +32,20 @@ pub enum DataLayout<R> {
 	TextString(TextStringLayout<R>),
 }
 
-#[derive(Debug, Clone)]
+impl<R: Ord> PartialOrd for DataLayout<R> {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+#[derive(Debug, Clone, Educe, serde::Serialize, serde::Deserialize)]
+#[educe(
+	PartialEq(bound = "R: Ord"),
+	Eq(bound = "R: Ord"),
+	Ord(bound = "R: Ord"),
+	Hash(bound = "R: Ord + Hash")
+)]
+#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
 pub struct UnitLayout<R> {
 	pub input: u32,
 
@@ -31,7 +54,20 @@ pub struct UnitLayout<R> {
 	pub dataset: Dataset<R>,
 }
 
-#[derive(Debug, Clone)]
+impl<R: Ord> PartialOrd for UnitLayout<R> {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+#[derive(Debug, Clone, Educe, serde::Serialize, serde::Deserialize)]
+#[educe(
+	PartialEq(bound = "R: Ord"),
+	Eq(bound = "R: Ord"),
+	Ord(bound = "R: Ord"),
+	Hash(bound = "R: Ord + Hash")
+)]
+#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
 pub struct BooleanLayout<R> {
 	pub input: u32,
 
@@ -44,7 +80,20 @@ pub struct BooleanLayout<R> {
 	pub datatype: R,
 }
 
-#[derive(Debug, Clone)]
+impl<R: Ord> PartialOrd for BooleanLayout<R> {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+#[derive(Debug, Clone, Educe, serde::Serialize, serde::Deserialize)]
+#[educe(
+	PartialEq(bound = "R: Ord"),
+	Eq(bound = "R: Ord"),
+	Ord(bound = "R: Ord"),
+	Hash(bound = "R: Ord + Hash")
+)]
+#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
 pub struct NumberLayout<R> {
 	pub input: u32,
 
@@ -57,7 +106,20 @@ pub struct NumberLayout<R> {
 	pub datatype: R,
 }
 
-#[derive(Debug, Clone)]
+impl<R: Ord> PartialOrd for NumberLayout<R> {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+#[derive(Debug, Clone, Educe, serde::Serialize, serde::Deserialize)]
+#[educe(
+	PartialEq(bound = "R: Ord"),
+	Eq(bound = "R: Ord"),
+	Ord(bound = "R: Ord"),
+	Hash(bound = "R: Ord + Hash")
+)]
+#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
 pub struct ByteStringLayout<R> {
 	pub input: u32,
 
@@ -70,7 +132,20 @@ pub struct ByteStringLayout<R> {
 	pub datatype: R,
 }
 
-#[derive(Debug, Clone)]
+impl<R: Ord> PartialOrd for ByteStringLayout<R> {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+#[derive(Debug, Clone, Educe, serde::Serialize, serde::Deserialize)]
+#[educe(
+	PartialEq(bound = "R: Ord"),
+	Eq(bound = "R: Ord"),
+	Ord(bound = "R: Ord"),
+	Hash(bound = "R: Ord + Hash")
+)]
+#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
 pub struct TextStringLayout<R> {
 	pub input: u32,
 
@@ -83,4 +158,10 @@ pub struct TextStringLayout<R> {
 	pub resource: Pattern<R>,
 
 	pub datatype: R,
+}
+
+impl<R: Ord> PartialOrd for TextStringLayout<R> {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(self.cmp(other))
+	}
 }

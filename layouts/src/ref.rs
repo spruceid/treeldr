@@ -3,6 +3,9 @@ use std::marker::PhantomData;
 use educe::Educe;
 
 /// Typed RDF resource identifier.
+///
+/// This is a simple wrapper around an RDF resource identifier (`R`), with
+/// the addition of some type information (`T`).
 #[derive(Educe)]
 #[educe(
 	Debug(bound = "R: std::fmt::Debug"),
@@ -14,6 +17,14 @@ use educe::Educe;
 	Hash(bound = "R: std::hash::Hash")
 )]
 #[repr(transparent)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(
+	transparent,
+	bound(
+		serialize = "R: serde::Serialize",
+		deserialize = "R: serde::Deserialize<'de>"
+	)
+)]
 pub struct Ref<T, R = rdf_types::Term>(R, PhantomData<T>);
 
 impl<R: Copy, T> Copy for Ref<T, R> {}
