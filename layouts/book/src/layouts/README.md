@@ -1,10 +1,19 @@
 # Layouts
 
-TODO
+A layout defines a bidirectional transformation from/to RDF datasets and
+structured values (as defined in the [Values](/data-model/values.md) section).
+Using a layout to transform an RDF dataset to a value is called *serialization*.
+The inverse transformation, from value to RDF dataset, is called
+*deserialization*.
+
+TODO illustration
 
 ## Inputs
 
-TODO
+Each layout has a set of inputs specifying which RDF resources are subject to
+the transformation.
+
+TODO example
 
 ## Variable Introduction
 
