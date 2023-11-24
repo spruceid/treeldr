@@ -1,7 +1,7 @@
 use educe::Educe;
 use std::hash::Hash;
 
-use crate::Dataset;
+use crate::{layout::LayoutType, Dataset, Ref};
 
 use super::ItemLayout;
 
@@ -21,6 +21,14 @@ pub struct SizedListLayout<R> {
 	pub items: Vec<ItemLayout<R>>,
 
 	pub dataset: Dataset<R>,
+}
+
+impl<R> SizedListLayout<R> {
+	pub fn visit_dependencies<'a>(&'a self, mut f: impl FnMut(&'a Ref<LayoutType, R>)) {
+		for item in &self.items {
+			item.visit_dependencies(&mut f)
+		}
+	}
 }
 
 impl<R: Ord> PartialOrd for SizedListLayout<R> {

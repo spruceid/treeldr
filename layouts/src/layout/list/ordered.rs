@@ -1,7 +1,7 @@
 use educe::Educe;
 use std::hash::Hash;
 
-use crate::{graph::Dataset, Pattern, ValueFormat};
+use crate::{graph::Dataset, layout::LayoutType, Pattern, Ref, ValueFormat};
 
 #[derive(Debug, Clone, Educe, serde::Serialize, serde::Deserialize)]
 #[educe(
@@ -26,6 +26,12 @@ pub struct OrderedListLayout<R> {
 	pub tail: Pattern<R>,
 
 	pub dataset: Dataset<R>,
+}
+
+impl<R> OrderedListLayout<R> {
+	pub fn visit_dependencies<'a>(&'a self, f: impl FnMut(&'a Ref<LayoutType, R>)) {
+		self.node.value.visit_dependencies(f)
+	}
 }
 
 impl<R: Ord> PartialOrd for OrderedListLayout<R> {

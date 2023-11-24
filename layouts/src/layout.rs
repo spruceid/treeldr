@@ -16,7 +16,7 @@ pub use product::{ProductLayout, ProductLayoutType};
 use std::hash::Hash;
 pub use sum::{SumLayout, SumLayoutType};
 
-use crate::{GetFromLayouts, Layouts};
+use crate::{GetFromLayouts, Layouts, Ref};
 
 /// Layout type.
 pub struct LayoutType;
@@ -57,6 +57,44 @@ impl<R: Ord> PartialOrd for Layout<R> {
 }
 
 impl<R> Layout<R> {
+	/// Visits all the layout references this layout definition uses, calling
+	/// the `f` function for each one of them.
+	///
+	/// The same dependency may be visited multiple times.
+	pub fn visit_dependencies<'a>(&'a self, f: impl FnMut(&'a Ref<LayoutType, R>)) {
+		match self {
+			Self::Never => (),
+			Self::Literal(_) => (),
+			Self::Product(p) => p.visit_dependencies(f),
+			Self::List(l) => l.visit_dependencies(f),
+			Self::Sum(s) => s.visit_dependencies(f),
+			Self::Always => (),
+		}
+	}
+
+	/// Returns the list of all the layout references this layout definition
+	/// uses.
+	///
+	/// The resulting list is sorted and with no duplicates.
+	pub fn dependencies(&self) -> Vec<&Ref<LayoutType, R>>
+	where
+		R: Ord,
+	{
+		let mut result = Vec::new();
+
+		self.visit_dependencies(|r| {
+			result.push(r);
+		});
+
+		result.sort_unstable();
+		result.dedup();
+		result
+	}
+
+	/// Returns the number of inputs this layout requires.
+	///
+	/// For the `Never` and `Always` layouts, this function returns `None` as
+	/// any number of input may be given for those layouts.
 	pub fn input_count(&self) -> Option<u32> {
 		match self {
 			Self::Never => None,

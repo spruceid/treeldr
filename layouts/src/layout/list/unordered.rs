@@ -1,7 +1,7 @@
 use educe::Educe;
 use std::hash::Hash;
 
-use crate::Dataset;
+use crate::{layout::LayoutType, Dataset, Ref};
 
 use super::ItemLayout;
 
@@ -21,6 +21,12 @@ pub struct UnorderedListLayout<R> {
 	pub item: ItemLayout<R>,
 
 	pub dataset: Dataset<R>,
+}
+
+impl<R> UnorderedListLayout<R> {
+	pub fn visit_dependencies<'a>(&'a self, f: impl FnMut(&'a Ref<LayoutType, R>)) {
+		self.item.visit_dependencies(f)
+	}
 }
 
 impl<R: Ord> PartialOrd for UnorderedListLayout<R> {

@@ -2,7 +2,9 @@ use educe::Educe;
 use std::collections::BTreeMap;
 use std::hash::Hash;
 
-use crate::{Dataset, ValueFormat};
+use crate::{Dataset, Ref, ValueFormat};
+
+use super::LayoutType;
 
 pub struct ProductLayoutType;
 
@@ -26,6 +28,14 @@ pub struct ProductLayout<R> {
 
 	/// Dataset.
 	pub dataset: Dataset<R>,
+}
+
+impl<R> ProductLayout<R> {
+	pub fn visit_dependencies<'a>(&'a self, mut f: impl FnMut(&'a Ref<LayoutType, R>)) {
+		for field in self.fields.values() {
+			field.value.visit_dependencies(&mut f)
+		}
+	}
 }
 
 impl<R: Ord> PartialOrd for ProductLayout<R> {

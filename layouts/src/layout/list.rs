@@ -8,7 +8,9 @@ pub use sized::SizedListLayout;
 use std::hash::Hash;
 pub use unordered::UnorderedListLayout;
 
-use crate::{graph::Dataset, ValueFormat};
+use crate::{graph::Dataset, Ref, ValueFormat};
+
+use super::LayoutType;
 
 pub struct ListLayoutType;
 
@@ -27,6 +29,14 @@ pub enum ListLayout<R> {
 }
 
 impl<R> ListLayout<R> {
+	pub fn visit_dependencies<'a>(&'a self, f: impl FnMut(&'a Ref<LayoutType, R>)) {
+		match self {
+			Self::Unordered(l) => l.visit_dependencies(f),
+			Self::Ordered(l) => l.visit_dependencies(f),
+			Self::Sized(l) => l.visit_dependencies(f),
+		}
+	}
+
 	pub fn input_count(&self) -> u32 {
 		match self {
 			Self::Unordered(l) => l.input,
@@ -59,6 +69,12 @@ pub struct ItemLayout<R> {
 
 	/// Dataset.
 	pub dataset: Dataset<R>,
+}
+
+impl<R> ItemLayout<R> {
+	pub fn visit_dependencies<'a>(&'a self, f: impl FnMut(&'a Ref<LayoutType, R>)) {
+		self.value.visit_dependencies(f)
+	}
 }
 
 impl<R: Ord> PartialOrd for ItemLayout<R> {

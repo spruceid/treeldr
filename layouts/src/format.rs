@@ -13,3 +13,9 @@ pub struct ValueFormat<R> {
 	/// Graph in which the layout is evaluated.
 	pub graph: Option<Option<Pattern<R>>>,
 }
+
+impl<R> ValueFormat<R> {
+	pub fn visit_dependencies<'a>(&'a self, mut f: impl FnMut(&'a Ref<LayoutType, R>)) {
+		(f)(&self.layout)
+	}
+}
