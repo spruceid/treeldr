@@ -86,6 +86,7 @@
 //!   - [`Layout`](crate::Layout): the most optimized and compact form, used
 //!     by the distillation functions. Such layouts are stored in a
 //!     [`Layouts`](crate::Layouts) collection.
+#![allow(rustdoc::redundant_explicit_links)]
 pub mod abs;
 pub mod distill;
 pub mod format;
@@ -141,6 +142,12 @@ impl<R> Layouts<R> {
 			layouts: BTreeMap::new(),
 		}
 	}
+
+	/// Returns an iterator over all the layout definitions stored in this
+	/// collection.
+	pub fn iter(&self) -> LayoutsIter<R> {
+		LayoutsIter(self.layouts.iter())
+	}
 }
 
 impl<R> Default for Layouts<R> {
@@ -175,5 +182,49 @@ impl<R: Clone + Ord> Layouts<R> {
 		let old_layout = self.layouts.insert(id, layout);
 
 		(layout_ref, old_layout)
+	}
+}
+
+/// Layout definitions iterator.
+///
+/// Returned by the [`Layouts::iter`] method.
+pub struct LayoutsIter<'a, R>(std::collections::btree_map::Iter<'a, R, Layout<R>>);
+
+impl<'a, R> Iterator for LayoutsIter<'a, R> {
+	type Item = (&'a Ref<LayoutType, R>, &'a Layout<R>);
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.0.next().map(|(r, layout)| (Ref::new_ref(r), layout))
+	}
+}
+
+impl<'a, R> IntoIterator for &'a Layouts<R> {
+	type IntoIter = LayoutsIter<'a, R>;
+	type Item = (&'a Ref<LayoutType, R>, &'a Layout<R>);
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter()
+	}
+}
+
+/// Layout definitions iterator.
+///
+/// Returned by the [`Layouts::into_iter`] method.
+pub struct LayoutsIntoIter<R>(std::collections::btree_map::IntoIter<R, Layout<R>>);
+
+impl<R> Iterator for LayoutsIntoIter<R> {
+	type Item = (Ref<LayoutType, R>, Layout<R>);
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.0.next().map(|(r, layout)| (Ref::new(r), layout))
+	}
+}
+
+impl<R> IntoIterator for Layouts<R> {
+	type IntoIter = LayoutsIntoIter<R>;
+	type Item = (Ref<LayoutType, R>, Layout<R>);
+
+	fn into_iter(self) -> Self::IntoIter {
+		LayoutsIntoIter(self.layouts.into_iter())
 	}
 }
