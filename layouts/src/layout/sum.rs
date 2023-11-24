@@ -1,7 +1,9 @@
 use educe::Educe;
 use std::hash::Hash;
 
-use crate::{Dataset, ValueFormat};
+use crate::{Dataset, Ref, ValueFormat};
+
+use super::LayoutType;
 
 pub mod deserialization;
 pub mod serialization;
@@ -27,6 +29,14 @@ pub struct SumLayout<R> {
 
 	/// Graph.
 	pub dataset: Dataset<R>,
+}
+
+impl<R> SumLayout<R> {
+	pub fn visit_dependencies<'a>(&'a self, mut f: impl FnMut(&'a Ref<LayoutType, R>)) {
+		for variant in &self.variants {
+			variant.value.visit_dependencies(&mut f)
+		}
+	}
 }
 
 impl<R: Ord> PartialOrd for SumLayout<R> {
