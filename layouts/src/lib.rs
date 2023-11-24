@@ -206,3 +206,25 @@ impl<'a, R> IntoIterator for &'a Layouts<R> {
 		self.iter()
 	}
 }
+
+/// Layout definitions iterator.
+///
+/// Returned by the [`Layouts::into_iter`] method.
+pub struct LayoutsIntoIter<R>(std::collections::btree_map::IntoIter<R, Layout<R>>);
+
+impl<R> Iterator for LayoutsIntoIter<R> {
+	type Item = (Ref<LayoutType, R>, Layout<R>);
+
+	fn next(&mut self) -> Option<Self::Item> {
+		self.0.next().map(|(r, layout)| (Ref::new(r), layout))
+	}
+}
+
+impl<R> IntoIterator for Layouts<R> {
+	type IntoIter = LayoutsIntoIter<R>;
+	type Item = (Ref<LayoutType, R>, Layout<R>);
+
+	fn into_iter(self) -> Self::IntoIter {
+		LayoutsIntoIter(self.layouts.into_iter())
+	}
+}
