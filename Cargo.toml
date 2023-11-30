@@ -1,7 +1,9 @@
 [workspace]
 members = [
 	"layouts",
-	# "layouts/distiller"
+	"generators/rust/treeldr-rs",
+	"generators/rust/treeldr-rs-derive",
+	"generators/rust/generator"
 ]
 resolver = "2"
 
@@ -11,9 +13,10 @@ edition = "2021"
 authors = ["Spruce Systems Inc."]
 
 [workspace.dependencies]
-treeldr-layouts = { path = "layouts/core", version = "0.2.0" }
-# treeldr-build = { path = "layouts/build", version = "0.2.0" }
+treeldr-layouts = { path = "layouts", version = "0.2.0" }
+treeldr-derive = { path = "generators/rust/treeldr-rs-derive", version = "0.2.0" }
 
+log = "0.4"
 educe = "0.4.23"
 num-traits = "0.2"
 num-bigint = "0.4"
@@ -29,3 +32,10 @@ serde = "1.0.192"
 
 locspan = "0.8.2"
 nquads-syntax = "0.17.0"
+
+clap = "4.0"
+stderrlog = "0.5"
+
+syn = "2.0.29"
+proc-macro2 = "1.0.66"
+quote = "1.0.33"

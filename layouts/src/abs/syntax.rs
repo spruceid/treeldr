@@ -133,9 +133,9 @@ pub enum Error {
 	NoPropertyObject,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct CompactIri(IriRefBuf);
+pub struct CompactIri(pub IriRefBuf);
 
 impl CompactIri {
 	pub fn resolve(&self, scope: &Scope) -> Result<IriBuf, Error> {
@@ -152,6 +152,12 @@ impl CompactIri {
 				None => Err(Error::NoBaseIri(self.0.clone())),
 			},
 		}
+	}
+}
+
+impl From<IriBuf> for CompactIri {
+	fn from(value: IriBuf) -> Self {
+		Self(value.into())
 	}
 }
 
@@ -414,7 +420,13 @@ impl<C: Context> Build<C> for LayoutRef {
 	}
 }
 
-#[derive(Debug)]
+impl From<IriBuf> for LayoutRef {
+	fn from(value: IriBuf) -> Self {
+		Self::Ref(value.into())
+	}
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Pattern {
 	Var(String),
 	Iri(CompactIri),
@@ -538,6 +550,16 @@ impl<T> Default for OneOrMany<T> {
 	}
 }
 
+impl<T> From<Vec<T>> for OneOrMany<T> {
+	fn from(value: Vec<T>) -> Self {
+		if value.len() == 1 {
+			Self::One(value.into_iter().next().unwrap())
+		} else {
+			Self::Many(value)
+		}
+	}
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct LayoutInput(OneOrMany<String>);
@@ -567,35 +589,47 @@ impl Default for LayoutInput {
 	}
 }
 
+impl From<Vec<String>> for LayoutInput {
+	fn from(value: Vec<String>) -> Self {
+		Self(value.into())
+	}
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LayoutHeader {
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	base: Option<CompactIri>,
+	pub base: Option<CompactIri>,
 
 	#[serde(default, skip_serializing_if = "HashMap::is_empty")]
-	prefixes: HashMap<String, CompactIri>,
+	pub prefixes: HashMap<String, CompactIri>,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	id: Option<CompactIri>,
+	pub id: Option<CompactIri>,
 
 	#[serde(default, skip_serializing_if = "LayoutInput::is_default")]
-	input: LayoutInput,
+	pub input: LayoutInput,
 
 	#[serde(default, skip_serializing_if = "OneOrMany::is_empty")]
-	intro: OneOrMany<String>,
+	pub intro: OneOrMany<String>,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
-	dataset: Dataset,
+	pub dataset: Dataset,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Dataset(Vec<Quad>);
 
 impl Dataset {
 	pub fn is_empty(&self) -> bool {
 		self.0.is_empty()
+	}
+}
+
+impl From<Vec<Quad>> for Dataset {
+	fn from(value: Vec<Quad>) -> Self {
+		Self(value)
 	}
 }
 
@@ -612,12 +646,12 @@ impl<C: Context> Build<C> for Dataset {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Quad(
-	Pattern,
-	Pattern,
-	Pattern,
-	#[serde(default, skip_serializing_if = "Option::is_none")] Option<Pattern>,
+	pub Pattern,
+	pub Pattern,
+	pub Pattern,
+	#[serde(default, skip_serializing_if = "Option::is_none")] pub Option<Pattern>,
 );
 
 impl<C: Context> Build<C> for Pattern {
@@ -712,6 +746,12 @@ impl Default for ValueInput {
 	}
 }
 
+impl From<Vec<Pattern>> for ValueInput {
+	fn from(value: Vec<Pattern>) -> Self {
+		Self(value.into())
+	}
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct VariantInput(OneOrMany<Pattern>);
@@ -741,6 +781,12 @@ impl Default for VariantInput {
 	}
 }
 
+impl From<Vec<Pattern>> for VariantInput {
+	fn from(value: Vec<Pattern>) -> Self {
+		Self(value.into())
+	}
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ValueFormatOrLayout {
@@ -766,13 +812,13 @@ impl<C: Context> Build<C> for ValueFormatOrLayout {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValueFormat {
-	layout: LayoutRef,
+	pub layout: LayoutRef,
 
 	#[serde(default, skip_serializing_if = "ValueInput::is_default")]
-	input: ValueInput,
+	pub input: ValueInput,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	graph: Option<Option<Pattern>>,
+	pub graph: Option<Option<Pattern>>,
 }
 
 impl<C: Context> Build<C> for ValueFormat {
@@ -821,13 +867,13 @@ impl<C: Context> Build<C> for VariantFormatOrLayout {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VariantFormat {
-	layout: LayoutRef,
+	pub layout: LayoutRef,
 
 	#[serde(default, skip_serializing_if = "VariantInput::is_default")]
-	input: VariantInput,
+	pub input: VariantInput,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	graph: Option<Option<Pattern>>,
+	pub graph: Option<Option<Pattern>>,
 }
 
 impl<C: Context> Build<C> for VariantFormat {
@@ -1019,13 +1065,13 @@ impl<C: Context> Build<C> for DataLayout {
 #[serde(deny_unknown_fields)]
 pub struct UnitLayout {
 	#[serde(rename = "type")]
-	type_: UnitLayoutType,
+	pub type_: UnitLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
 	#[serde(rename = "const", default, skip_serializing_if = "Value::is_unit")]
-	const_: Value,
+	pub const_: Value,
 }
 
 impl<C: Context> Build<C> for UnitLayout {
@@ -1046,15 +1092,15 @@ impl<C: Context> Build<C> for UnitLayout {
 #[serde(deny_unknown_fields)]
 pub struct BooleanLayout {
 	#[serde(rename = "type")]
-	type_: BooleanLayoutType,
+	pub type_: BooleanLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
-	resource: Option<Pattern>,
+	pub resource: Option<Pattern>,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	datatype: Option<CompactIri>,
+	pub datatype: Option<CompactIri>,
 }
 
 fn literal_resource<C: Context>(
@@ -1105,14 +1151,14 @@ impl<C: Context> Build<C> for BooleanLayout {
 #[serde(deny_unknown_fields)]
 pub struct NumberLayout {
 	#[serde(rename = "type")]
-	type_: NumberLayoutType,
+	pub type_: NumberLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
-	resource: Option<Pattern>,
+	pub resource: Option<Pattern>,
 
-	datatype: CompactIri,
+	pub datatype: CompactIri,
 }
 
 impl<C: Context> Build<C> for NumberLayout {
@@ -1140,14 +1186,14 @@ impl<C: Context> Build<C> for NumberLayout {
 #[serde(deny_unknown_fields)]
 pub struct ByteStringLayout {
 	#[serde(rename = "type")]
-	type_: ByteStringLayoutType,
+	pub type_: ByteStringLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
-	resource: Option<Pattern>,
+	pub resource: Option<Pattern>,
 
-	datatype: CompactIri,
+	pub datatype: CompactIri,
 }
 
 impl<C: Context> Build<C> for ByteStringLayout {
@@ -1175,18 +1221,18 @@ impl<C: Context> Build<C> for ByteStringLayout {
 #[serde(deny_unknown_fields)]
 pub struct TextStringLayout {
 	#[serde(rename = "type")]
-	type_: TextStringLayoutType,
+	pub type_: TextStringLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	pattern: Option<RegExp>,
+	pub pattern: Option<RegExp>,
 
-	resource: Option<Pattern>,
+	pub resource: Option<Pattern>,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	datatype: Option<CompactIri>,
+	pub datatype: Option<CompactIri>,
 }
 
 impl<C: Context> Build<C> for TextStringLayout {
@@ -1220,15 +1266,15 @@ impl<C: Context> Build<C> for TextStringLayout {
 #[serde(deny_unknown_fields)]
 pub struct IdLayout {
 	#[serde(rename = "type")]
-	type_: IdLayoutType,
+	pub type_: IdLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	pattern: Option<RegExp>,
+	pub pattern: Option<RegExp>,
 
-	resource: Option<Pattern>,
+	pub resource: Option<Pattern>,
 }
 
 impl<C: Context> Build<C> for IdLayout {
@@ -1256,13 +1302,13 @@ impl<C: Context> Build<C> for IdLayout {
 #[serde(deny_unknown_fields)]
 pub struct ProductLayout {
 	#[serde(rename = "type")]
-	type_: ProductLayoutType,
+	pub type_: ProductLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
 	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-	fields: BTreeMap<String, Field>,
+	pub fields: BTreeMap<String, Field>,
 }
 
 impl<C: Context> Build<C> for ProductLayout {
@@ -1343,44 +1389,50 @@ impl Default for ValueIntro {
 	}
 }
 
+impl From<Vec<String>> for ValueIntro {
+	fn from(value: Vec<String>) -> Self {
+		Self(value.into())
+	}
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Field {
 	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
-	intro: ValueIntro,
+	pub intro: ValueIntro,
 
-	value: ValueFormatOrLayout,
+	pub value: ValueFormatOrLayout,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
-	dataset: Dataset,
+	pub dataset: Dataset,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	property: Option<Pattern>,
+	pub property: Option<Pattern>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SumLayout {
 	#[serde(rename = "type")]
-	type_: SumLayoutType,
+	pub type_: SumLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
 	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-	variants: BTreeMap<String, Variant>,
+	pub variants: BTreeMap<String, Variant>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Variant {
 	#[serde(default, skip_serializing_if = "OneOrMany::is_empty")]
-	intro: OneOrMany<String>,
+	pub intro: OneOrMany<String>,
 
-	value: VariantFormatOrLayout,
+	pub value: VariantFormatOrLayout,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
-	dataset: Dataset,
+	pub dataset: Dataset,
 }
 
 impl<C: Context> Build<C> for SumLayout {
@@ -1448,24 +1500,24 @@ impl<C: Context> Build<C> for ListLayout {
 #[serde(deny_unknown_fields)]
 pub struct OrderedListLayout {
 	#[serde(rename = "type")]
-	type_: OrderedListLayoutType,
+	pub type_: OrderedListLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
-	node: ListNodeOrLayout,
+	pub node: ListNodeOrLayout,
 
 	#[serde(
 		default = "Pattern::default_head",
 		skip_serializing_if = "Pattern::is_default_head"
 	)]
-	head: Pattern,
+	pub head: Pattern,
 
 	#[serde(
 		default = "Pattern::default_tail",
 		skip_serializing_if = "Pattern::is_default_tail"
 	)]
-	tail: Pattern,
+	pub tail: Pattern,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1529,21 +1581,21 @@ pub struct ListNode {
 		default = "ListNode::default_head",
 		skip_serializing_if = "ListNode::is_default_head"
 	)]
-	head: String,
+	pub head: String,
 
 	#[serde(
 		default = "ListNode::default_rest",
 		skip_serializing_if = "ListNode::is_default_rest"
 	)]
-	rest: String,
+	pub rest: String,
 
 	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
-	intro: ValueIntro,
+	pub intro: ValueIntro,
 
-	value: ValueFormatOrLayout,
+	pub value: ValueFormatOrLayout,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	dataset: Option<Dataset>,
+	pub dataset: Option<Dataset>,
 }
 
 impl ListNode {
@@ -1619,27 +1671,27 @@ impl<C: Context> Build<C> for ListNode {
 #[serde(deny_unknown_fields)]
 pub struct UnorderedListLayout {
 	#[serde(rename = "type")]
-	type_: UnorderedListLayoutType,
+	pub type_: UnorderedListLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
-	item: ListItem,
+	pub item: ListItem,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListItem {
 	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
-	intro: ValueIntro,
+	pub intro: ValueIntro,
 
-	value: ValueFormatOrLayout,
+	pub value: ValueFormatOrLayout,
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
-	dataset: Dataset,
+	pub dataset: Dataset,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	property: Option<Pattern>,
+	pub property: Option<Pattern>,
 }
 
 impl<C: Context> Build<C> for UnorderedListLayout {
@@ -1709,13 +1761,13 @@ impl ListItem {
 #[serde(deny_unknown_fields)]
 pub struct SizedListLayout {
 	#[serde(rename = "type")]
-	type_: SizedListLayoutType,
+	pub type_: SizedListLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	items: Vec<ListItem>,
+	pub items: Vec<ListItem>,
 }
 
 impl<C: Context> Build<C> for SizedListLayout {
@@ -1748,10 +1800,10 @@ impl<C: Context> Build<C> for SizedListLayout {
 #[serde(deny_unknown_fields)]
 pub struct IntersectionLayout {
 	#[serde(rename = "type")]
-	type_: IntersectionLayoutType,
+	pub type_: IntersectionLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 }
 
 impl<C: Context> Build<C> for IntersectionLayout {
@@ -1766,10 +1818,10 @@ impl<C: Context> Build<C> for IntersectionLayout {
 #[serde(deny_unknown_fields)]
 pub struct UnionLayout {
 	#[serde(rename = "type")]
-	type_: UnionLayoutType,
+	pub type_: UnionLayoutType,
 
 	#[serde(flatten)]
-	header: LayoutHeader,
+	pub header: LayoutHeader,
 }
 
 impl<C: Context> Build<C> for UnionLayout {

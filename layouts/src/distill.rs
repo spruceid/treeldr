@@ -2,9 +2,12 @@ pub mod de;
 pub mod hy;
 
 pub use de::{dehydrate, dehydrate_with};
+use educe::Educe;
 pub use hy::{hydrate, hydrate_with};
 
 /// RDF context, providing the RDF vocabulary and interpretation.
+#[derive(Educe)]
+#[educe(Clone, Copy)]
 pub struct RdfContext<'a, V, I> {
 	/// Vocabulary storing the lexical representations of terms.
 	pub vocabulary: &'a V,

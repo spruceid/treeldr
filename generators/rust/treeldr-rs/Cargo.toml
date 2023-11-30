@@ -1,0 +1,13 @@
+[package]
+name = "treeldr"
+description = "TreeLDR interface with Rust"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[features]
+derive = ["treeldr-derive"]
+
+[dependencies]
+grdf.workspace = true
+treeldr-derive = { workspace = true, optional = true }
