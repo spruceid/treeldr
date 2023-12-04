@@ -1,4 +1,4 @@
-use iref::{IriBuf, iri::PathBuf};
+use iref::{iri::PathBuf, IriBuf};
 
 #[derive(clap::Parser)]
 #[clap(name="treeldr", author, version, about, long_about = None)]

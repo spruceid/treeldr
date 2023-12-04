@@ -3,14 +3,12 @@ use iref::Iri;
 
 pub fn ident_from_iri(iri: &Iri) -> Option<syn::Ident> {
 	match iri.fragment() {
-		Some(fragment) => {
-			syn::parse_str(PascalCase(fragment).to_string().as_str()).ok()
-		}
-		None => {
-			iri.path().segments().last().and_then(|segment| {
-				syn::parse_str(PascalCase(segment).to_string().as_str()).ok()
-			})
-		}
+		Some(fragment) => syn::parse_str(PascalCase(fragment).to_string().as_str()).ok(),
+		None => iri
+			.path()
+			.segments()
+			.last()
+			.and_then(|segment| syn::parse_str(PascalCase(segment).to_string().as_str()).ok()),
 	}
 }
 

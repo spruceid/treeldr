@@ -1,9 +1,7 @@
 /// Pattern.
 ///
 /// Either a resource identifier or a variable.
-#[derive(
-	Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Pattern<R> {
 	/// Resource.
 	Resource(R),

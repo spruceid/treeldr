@@ -5,8 +5,8 @@ use proc_macro::TokenStream;
 use proc_macro_error::{abort, proc_macro_error};
 use syn::DeriveInput;
 
-mod parse;
 mod generate;
+mod parse;
 
 #[proc_macro_derive(SerializeLd, attributes(tldr))]
 #[proc_macro_error]

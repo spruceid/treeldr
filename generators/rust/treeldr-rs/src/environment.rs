@@ -1,5 +1,5 @@
+use crate::{Pattern, RdfContextMut};
 use rdf_types::{InterpretationMut, Quad};
-use crate::{RdfContextMut, Pattern};
 
 pub enum Environment<'a, R> {
 	Root(&'a [R]),
@@ -48,10 +48,7 @@ impl<'a, R: Clone> Environment<'a, R> {
 		Q: Clone + Into<R>,
 	{
 		match pattern {
-			Pattern::Var(x) => self
-				.get(*x)
-				.cloned()
-				.unwrap(),
+			Pattern::Var(x) => self.get(*x).cloned().unwrap(),
 			Pattern::Resource(r) => r.clone().into(),
 		}
 	}
@@ -59,7 +56,7 @@ impl<'a, R: Clone> Environment<'a, R> {
 	pub fn instantiate_patterns<const N: usize>(&self, patterns: &[Pattern<R>; N]) -> [R; N]
 	where
 		// Q: Clone + Into<R>,
-		R: Clone
+		R: Clone,
 	{
 		let mut result = Vec::with_capacity(patterns.len());
 
@@ -76,7 +73,7 @@ impl<'a, R: Clone> Environment<'a, R> {
 	) -> Quad<R, R, R, R>
 	where
 		// Q: Clone + Into<R>,
-		R: Clone
+		R: Clone,
 	{
 		Quad(
 			self.instantiate_pattern(quad.0),
@@ -90,8 +87,7 @@ impl<'a, R: Clone> Environment<'a, R> {
 		&self,
 		input: &[Quad<Pattern<R>, Pattern<R>, Pattern<R>, Pattern<R>>],
 		output: &mut D,
-	)
-	where
+	) where
 		// Q: Clone + Into<R>,
 		R: Clone,
 		D: grdf::MutableDataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,

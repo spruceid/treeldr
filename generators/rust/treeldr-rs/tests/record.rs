@@ -5,6 +5,6 @@ fn record() {
 	#[tldr(prefix("ex" = "http://example.org/#"))]
 	pub struct Record {
 		#[tldr("ex:foo")]
-		foo: String
+		foo: String,
 	}
 }
