@@ -207,8 +207,52 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				Ok(())
 			}
 		}
-		Layout::Sum(_) => {
-			todo!("sum")
+		Layout::Sum(layout) => {
+			let intro = layout.intro;
+			let dataset = dataset_to_array(&layout.dataset);
+
+			let variants = layout.variants.iter().map(|variant| {
+				let variant_ident = syn::Ident::new(&variant.name, Span::call_site());
+				let variant_intro = variant.intro;
+				let variant_dataset = dataset_to_array(&variant.dataset);
+				let variant_layout = input
+					.type_map
+					.get(variant.value.layout.id().as_iri().unwrap())
+					.unwrap();
+				let variant_inputs = inputs_to_array(&variant.value.input);
+				let variant_graph = match &variant.value.graph {
+					Some(None) => quote!(None),
+					Some(Some(g)) => {
+						let g = generate_pattern(g);
+						quote!(Some(env.instantiate_pattern(#g)))
+					}
+					None => quote!(current_graph.cloned()),
+				};
+
+				let m = variant.value.input.len();
+
+				quote! {
+					Self::#variant_ident(value) => {
+						let env = env.intro(rdf, #variant_intro);
+						env.instantiate_dataset(&#variant_dataset, output);
+						<#variant_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
+							value,
+							rdf,
+							&env.instantiate_patterns(&#variant_inputs),
+							#variant_graph.as_ref(),
+							output
+						)
+					}
+				}
+			});
+
+			quote! {
+				let env = env.intro(rdf, #intro);
+				env.instantiate_dataset(&#dataset, output);
+				match self {
+					#(#variants)*
+				}
+			}
 		}
 		Layout::List(_) => {
 			todo!("list")
