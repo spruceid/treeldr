@@ -10,6 +10,7 @@ default = ["derive"]
 derive = ["treeldr-derive"]
 
 [dependencies]
+thiserror.workspace = true
 educe.workspace = true
 iref.workspace = true
 langtag.workspace = true

@@ -425,67 +425,11 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				current_graph: Option<&I::Resource>,
 				output: &mut ::treeldr::grdf::BTreeDataset<I::Resource>
 			) -> Result<(), ::treeldr::SerializeError> {
-				let env = ::treeldr::Environment::Root(inputs);
+				let env = ::treeldr::ser::Environment::Root(inputs);
 				#body
 			}
 		}
 	})
-}
-
-fn dataset_to_array(dataset: &Dataset) -> TokenStream {
-	let quads = dataset.quads().map(|q| {
-		let s = generate_pattern(q.0);
-		let p = generate_pattern(q.1);
-		let o = generate_pattern(q.2);
-		let g = match q.3 {
-			Some(g) => {
-				let g = generate_pattern(g);
-				quote!(Some(#g))
-			}
-			None => quote!(None),
-		};
-
-		quote!(::treeldr::rdf_types::Quad(#s, #p, #o, #g))
-	});
-
-	quote!([#(#quads),*])
-}
-
-fn inputs_to_array(inputs: &[Pattern<Term>]) -> TokenStream {
-	let items = inputs.iter().map(|p| generate_pattern(p));
-	quote!([#(#items),*])
-}
-
-fn generate_pattern(pattern: &Pattern<Term>) -> TokenStream {
-	match pattern {
-		Pattern::Var(i) => quote!(::treeldr::Pattern::Var(#i)),
-		Pattern::Resource(term) => match term {
-			Term::Id(Id::Blank(_)) => panic!(),
-			Term::Id(Id::Iri(iri)) => {
-				let iri = iri.as_str();
-				quote!(::treeldr::Pattern::Resource(
-					rdf.interpret_iri(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) })
-				))
-			}
-			Term::Literal(l) => {
-				use rdf_types::literal;
-				let value = l.value().as_str();
-				let ty = match l.type_() {
-					literal::Type::Any(iri) => {
-						let iri = iri.as_str();
-						quote!(::treeldr::rdf_types::literal::Type::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
-					}
-					literal::Type::LangString(_tag) => {
-						todo!("lang string support")
-					}
-				};
-
-				quote!(::treeldr::Pattern::Resource(
-					rdf.interpret_literal(#value, #ty)
-				))
-			}
-		},
-	}
 }
 
 fn term_interpretation(term: &Term) -> TokenStream {
@@ -547,5 +491,61 @@ fn term_to_datatype_owned(term: &Term) -> Result<TokenStream, Error> {
 			)
 		}
 		other => Err(Error::InvalidDatatype(other.to_string())),
+	}
+}
+
+fn dataset_to_array(dataset: &Dataset) -> TokenStream {
+	let quads = dataset.quads().map(|q| {
+		let s = generate_pattern(q.0);
+		let p = generate_pattern(q.1);
+		let o = generate_pattern(q.2);
+		let g = match q.3 {
+			Some(g) => {
+				let g = generate_pattern(g);
+				quote!(Some(#g))
+			}
+			None => quote!(None),
+		};
+
+		quote!(::treeldr::rdf_types::Quad(#s, #p, #o, #g))
+	});
+
+	quote!([#(#quads),*])
+}
+
+fn inputs_to_array(inputs: &[Pattern<Term>]) -> TokenStream {
+	let items = inputs.iter().map(|p| generate_pattern(p));
+	quote!([#(#items),*])
+}
+
+fn generate_pattern(pattern: &Pattern<Term>) -> TokenStream {
+	match pattern {
+		Pattern::Var(i) => quote!(::treeldr::Pattern::Var(#i)),
+		Pattern::Resource(term) => match term {
+			Term::Id(Id::Blank(_)) => panic!(),
+			Term::Id(Id::Iri(iri)) => {
+				let iri = iri.as_str();
+				quote!(::treeldr::Pattern::Resource(
+					rdf.interpret_iri(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) })
+				))
+			}
+			Term::Literal(l) => {
+				use rdf_types::literal;
+				let value = l.value().as_str();
+				let ty = match l.type_() {
+					literal::Type::Any(iri) => {
+						let iri = iri.as_str();
+						quote!(::treeldr::rdf_types::literal::Type::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
+					}
+					literal::Type::LangString(_tag) => {
+						todo!("lang string support")
+					}
+				};
+
+				quote!(::treeldr::Pattern::Resource(
+					rdf.interpret_literal(#value, #ty)
+				))
+			}
+		},
 	}
 }

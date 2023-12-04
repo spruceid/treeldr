@@ -1,7 +1,3 @@
-use rdf_types::{
-	Interpretation, InterpretationMut, ReverseTermInterpretationMut, TermInterpretationMut,
-	VocabularyMut,
-};
 #[cfg(feature = "derive")]
 pub use treeldr_derive::{DeserializeLd, SerializeLd};
 
@@ -15,39 +11,13 @@ pub use rdf_types;
 pub use grdf;
 
 mod datatypes;
-mod environment;
-mod pattern;
+pub mod de;
+pub mod pattern;
 mod rdf;
+pub mod ser;
+pub mod utils;
 
-pub use environment::Environment;
+pub use de::{DeserializeLd, Error as DeserializeError};
 pub use pattern::Pattern;
 pub use rdf::{RdfContext, RdfContextMut, RdfType};
-
-pub enum SerializeError {
-	InvalidId(String),
-}
-
-pub enum DeserializeError {
-	// ...
-}
-
-pub trait SerializeLd<const N: usize, V, I>: Sized
-where
-	V: VocabularyMut<Value = String, Type = RdfType<V>>,
-	I: InterpretationMut<V>
-		+ TermInterpretationMut<V::Iri, V::BlankId, V::Literal>
-		+ ReverseTermInterpretationMut<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
-	I::Resource: Clone + Ord,
-{
-	fn serialize_ld_with(
-		&self,
-		rdf: &mut RdfContextMut<V, I>,
-		inputs: &[I::Resource; N],
-		current_graph: Option<&I::Resource>,
-		output: &mut grdf::BTreeDataset<I::Resource>,
-	) -> Result<(), SerializeError>;
-}
-
-pub trait DeserializeLd<const N: usize, V, I: Interpretation> {
-	fn deserialize_ld<D>(dataset: &D, inputs: [I::Resource; N]) -> Result<(), DeserializeError>;
-}
+pub use ser::{Error as SerializeError, SerializeLd};

@@ -2,9 +2,10 @@ use educe::Educe;
 use iref::{Iri, IriBuf};
 use langtag::{LanguageTag, LanguageTagBuf};
 use rdf_types::{
-	literal, BlankId, BlankIdInterpretationMut, BlankIdVocabularyMut, IriInterpretationMut,
-	IriVocabulary, IriVocabularyMut, LanguageTagVocabulary, LanguageTagVocabularyMut, Literal,
-	LiteralInterpretationMut, LiteralVocabularyMut,
+	literal, BlankId, BlankIdInterpretationMut, BlankIdVocabularyMut, IriInterpretation,
+	IriInterpretationMut, IriVocabulary, IriVocabularyMut, LanguageTagVocabulary,
+	LanguageTagVocabularyMut, Literal, LiteralInterpretation, LiteralInterpretationMut,
+	LiteralVocabulary, LiteralVocabularyMut,
 };
 
 pub type RdfType<V> =
@@ -23,6 +24,37 @@ impl<'a, V, I> RdfContext<'a, V, I> {
 			vocabulary,
 			interpretation,
 		}
+	}
+
+	pub fn iri_interpretation(&self, iri: &Iri) -> Option<I::Resource>
+	where
+		V: IriVocabulary,
+		I: IriInterpretation<V::Iri>,
+	{
+		self.interpretation
+			.lexical_iri_interpretation(self.vocabulary, iri)
+	}
+
+	pub fn literal_interpretation(
+		&self,
+		literal: Literal<literal::Type<&Iri, LanguageTag>, &str>,
+	) -> Option<I::Resource>
+	where
+		V: IriVocabulary
+			+ LanguageTagVocabulary
+			+ LiteralVocabulary<Value = String, Type = RdfType<V>>,
+		I: IriInterpretation<V::Iri> + LiteralInterpretation<V::Literal>,
+	{
+		let ty = match literal.type_() {
+			literal::Type::Any(iri) => literal::Type::Any(self.vocabulary.get(iri)?),
+			literal::Type::LangString(tag) => {
+				literal::Type::LangString(self.vocabulary.get_language_tag(*tag)?)
+			}
+		};
+
+		let value = literal.value().to_string();
+		let lit = self.vocabulary.get_literal(&Literal::new(value, ty))?;
+		self.interpretation.literal_interpretation(&lit)
 	}
 }
 
