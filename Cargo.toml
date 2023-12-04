@@ -27,6 +27,7 @@ rdf-types = "0.18.1"
 xsd-types = { git = "https://github.com/timothee-haudebourg/xsd-types.git" }
 grdf = { version = "0.22.1", features = ["serde"] }
 btree-range-map = { version = "0.7.2", features = ["serde"] }
+langtag = "0.3.4"
 thiserror = "1.0.50"
 serde = "1.0.192"
 

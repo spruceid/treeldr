@@ -2,7 +2,7 @@ use proc_macro2::{TokenStream, Span};
 use quote::quote;
 use rdf_types::{Term, Id};
 use syn::DeriveInput;
-use treeldr_layouts::{Layout, Dataset, Pattern};
+use treeldr_layouts::{Layout, Dataset, Pattern, layout::{LiteralLayout, DataLayout}};
 
 use crate::parse::parse;
 
@@ -40,8 +40,56 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 		Layout::Always => {
 			unreachable!()
 		},
-		Layout::Literal(_) => {
-			todo!()
+		Layout::Literal(layout) => {
+			match layout {
+				LiteralLayout::Id(layout) => {
+					let intro = layout.intro;
+					let dataset = dataset_to_array(&layout.dataset);
+
+					quote! {
+						let env = env.intro(rdf, #intro);
+						env.instantiate_dataset(&#dataset, output);
+						let value: &str = AsRef::<str>::as_ref(&self.0);
+						
+						match ::treeldr::rdf_types::BlankId::new(value) {
+							Ok(value) => {
+								let id = rdf.vocabulary.insert_blank_id(value);
+								rdf.interpretation.assign_blank_id(inputs[0].clone(), id);
+								Ok(())
+							}
+							Err(_) => match ::treeldr::iref::Iri::new(value) {
+								Ok(value) => {
+									let id = rdf.vocabulary.insert(value);
+									rdf.interpretation.assign_iri(inputs[0].clone(), id);
+									Ok(())
+								}
+								Err(_) => {
+									Err(::treeldr::SerializeError::InvalidId(value.to_owned()))
+								}
+							}
+						}
+					}
+				}
+				LiteralLayout::Data(layout) => {
+					match layout {
+						DataLayout::Unit(layout) => {
+							todo!()
+						}
+						DataLayout::Boolean(layout) => {
+							todo!()
+						}
+						DataLayout::Number(layout) => {
+							todo!()
+						}
+						DataLayout::ByteString(layout) => {
+							todo!()
+						}
+						DataLayout::TextString(layout) => {
+							todo!()
+						}
+					}
+				}
+			}
 		}
 		Layout::Product(layout) => {
 			let intro = layout.intro;
@@ -57,7 +105,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 					Some(None) => quote!(None),
 					Some(Some(g)) => {
 						let g = generate_pattern(g);
-						quote!(Some(env.instantiate_pattern(#g)?))
+						quote!(Some(env.instantiate_pattern(#g)))
 					},
 					None => quote!(current_graph.cloned()),
 				};
@@ -65,21 +113,23 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				let m = field.value.input.len();
 
 				quote! {
-					let env = env.intro(rdf, #field_intro);
-					env.instantiate_dataset(#field_dataset, output)?;
-					<#field_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
-						&self.#field_ident,
-						rdf,
-						env.instantiate_patterns(#field_inputs)?,
-						#field_graph,
-						output
-					)?;
+					{
+						let env = env.intro(rdf, #field_intro);
+						env.instantiate_dataset(&#field_dataset, output);
+						<#field_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
+							&self.#field_ident,
+							rdf,
+							&env.instantiate_patterns(&#field_inputs),
+							#field_graph.as_ref(),
+							output
+						)?;
+					}
 				}
 			});
 
 			quote! {
 				let env = env.intro(rdf, #intro);
-				env.instantiate_dataset(#dataset, output)?;
+				env.instantiate_dataset(&#dataset, output);
 				#(#fields)*
 				Ok(())
 			}
@@ -96,14 +146,19 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 	};
 
 	Ok(quote! {
-		impl<V, I> ::treeldr::SerializeLd<#n, V, I> for #ident {
+		impl<V, I> ::treeldr::SerializeLd<#n, V, I> for #ident
+		where
+			V: ::treeldr::rdf_types::VocabularyMut<Value = String, Type = ::treeldr::RdfType<V>>,
+			I: ::treeldr::rdf_types::InterpretationMut<V> + ::treeldr::rdf_types::TermInterpretationMut<V::Iri, V::BlankId, V::Literal> + ::treeldr::rdf_types::ReverseTermInterpretationMut<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
+			I::Resource: Clone + Ord
+		{
 			fn serialize_ld_with(
 				&self,
-				rdf: ::treeldr::RdfContext<V, I>,
-				inputs: [I::Resource; #n],
+				rdf: &mut ::treeldr::RdfContextMut<V, I>,
+				inputs: &[I::Resource; #n],
 				current_graph: Option<&I::Resource>,
-				output: &mut ::treeldr::grdf::BTreeDataset<R>
-			) -> Result<(), SerializeError> {
+				output: &mut ::treeldr::grdf::BTreeDataset<I::Resource>
+			) -> Result<(), ::treeldr::SerializeError> {
 				let env = ::treeldr::Environment::Root(inputs);
 				#body
 			}
@@ -156,7 +211,7 @@ fn generate_pattern(pattern: &Pattern<Term>) -> TokenStream {
 							quote!(::treeldr::rdf_types::literal::Type::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
 						}
 						literal::Type::LangString(_tag) => {
-							todo!()
+							todo!("lang string support")
 						}
 					};
 

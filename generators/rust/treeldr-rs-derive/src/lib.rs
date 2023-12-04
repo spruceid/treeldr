@@ -8,7 +8,7 @@ use syn::DeriveInput;
 mod parse;
 mod generate;
 
-#[proc_macro_derive(Serialize, attributes(tldr))]
+#[proc_macro_derive(SerializeLd, attributes(tldr))]
 #[proc_macro_error]
 pub fn derive_serialize(item: TokenStream) -> TokenStream {
 	let input = syn::parse_macro_input!(item as DeriveInput);
@@ -24,7 +24,7 @@ pub fn derive_serialize(item: TokenStream) -> TokenStream {
 	output.into()
 }
 
-#[proc_macro_derive(Deserialize, attributes(tldr))]
+#[proc_macro_derive(DeserializeLd, attributes(tldr))]
 #[proc_macro_error]
 pub fn derive_deserialize(item: TokenStream) -> TokenStream {
 	let input = syn::parse_macro_input!(item as DeriveInput);

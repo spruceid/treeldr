@@ -4,7 +4,7 @@ use iref::{IriRefBuf, IriBuf, Iri};
 use proc_macro2::{Span, TokenTree, TokenStream};
 use rdf_types::BlankIdBuf;
 use syn::spanned::Spanned;
-use treeldr_layouts::{abs::syntax::{Pattern, CompactIri, Layout, LiteralLayout, IdLayout, LayoutHeader, Quad, Dataset, DataLayout, UnitLayout, BooleanLayout, NumberLayout, TextStringLayout, ByteStringLayout, ProductLayout, Field, ValueFormatOrLayout, ValueFormat, Variant, VariantFormatOrLayout, VariantFormat, SumLayout, ListLayout, UnorderedListLayout, ListItem, OrderedListLayout, ListNodeOrLayout, ListNode, SizedListLayout}, layout::literal::data};
+use treeldr_layouts::abs::syntax::{Pattern, CompactIri, Layout, LiteralLayout, IdLayout, LayoutHeader, Quad, Dataset, DataLayout, UnitLayout, BooleanLayout, NumberLayout, TextStringLayout, ByteStringLayout, ProductLayout, Field, ValueFormatOrLayout, ValueFormat, Variant, VariantFormatOrLayout, VariantFormat, SumLayout, ListLayout, UnorderedListLayout, ListItem, OrderedListLayout, ListNodeOrLayout, ListNode, SizedListLayout};
 
 #[derive(Default)]
 pub struct TypeMap(HashMap<IriBuf, syn::Type>);
@@ -443,7 +443,7 @@ impl TypeAttributes {
 											}
 
 											if ident == "prefix" {
-												let values = expect_binding_list_argument(&mut tokens, ident.span())?;
+												let values = expect_binding_list_argument(&mut tokens, ident.span())?.0;
 												result.prefixes.extend(values)
 											}
 
@@ -828,7 +828,7 @@ fn parse_list<T>(
 	let mut tokens = tokens.into_iter();
 	while let Some(token) = tokens.next() {
 		let (value, _) = f(token)?;
-		parse_opt_comma(&mut tokens);
+		parse_opt_comma(&mut tokens)?;
 		result.push(value)
 	}
 
@@ -959,8 +959,35 @@ fn parse_graph_value(
 fn expect_binding_list_argument(
 	tokens: &mut impl Iterator<Item = TokenTree>,
 	span: Span
-) -> Result<Vec<(String, CompactIri)>, Error> {
-	todo!()
+) -> Result<(Vec<(String, CompactIri)>, Span), Error> {
+	expect_argument(tokens, span, parse_binding_list)
+}
+
+fn parse_binding_list(
+	tokens: TokenStream,
+	span: Span
+) -> Result<(Vec<(String, CompactIri)>, Span), Error> {
+	let mut tokens = tokens.into_iter();
+	let mut result = Vec::new();
+	while let Some(token) = tokens.next() {
+		let prefix = string_token(token)?.0;
+		match tokens.next() {
+			Some(TokenTree::Punct(p)) if p.as_char() == '=' => {
+				match tokens.next() {
+					Some(token) => {
+						let value = CompactIri(IriRefBuf::new(string_token(token)?.0).map_err(|e| Error::InvalidCompactIri(e.0, span))?);
+						result.push((prefix, value));
+						parse_opt_comma(&mut tokens)?;
+					}
+					None => return Err(Error::MissingToken(span))
+				}
+			}
+			Some(token) => return Err(Error::UnexpectedToken(token)),
+			None => return Err(Error::MissingToken(span))
+		}
+	}
+
+	Ok((result, span))
 }
 
 #[derive(PartialEq, Eq)]
