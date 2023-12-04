@@ -3,7 +3,7 @@ use quote::quote;
 use rdf_types::{Id, Term};
 use syn::DeriveInput;
 use treeldr_layouts::{
-	layout::{DataLayout, LiteralLayout},
+	layout::{DataLayout, ListLayout, LiteralLayout},
 	Dataset, Layout, Pattern,
 };
 
@@ -254,9 +254,158 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				}
 			}
 		}
-		Layout::List(_) => {
-			todo!("list")
-		}
+		Layout::List(layout) => match layout {
+			ListLayout::Unordered(layout) => {
+				let intro = layout.intro;
+				let dataset = dataset_to_array(&layout.dataset);
+
+				let item_intro = layout.item.intro;
+				let item_dataset = dataset_to_array(&layout.item.dataset);
+
+				let item_value_layout = input
+					.type_map
+					.get(layout.item.value.layout.id().as_iri().unwrap())
+					.unwrap();
+				let item_value_inputs = inputs_to_array(&layout.item.value.input);
+				let item_value_graph = match &layout.item.value.graph {
+					Some(None) => quote!(None),
+					Some(Some(g)) => {
+						let g = generate_pattern(g);
+						quote!(Some(env.instantiate_pattern(#g)))
+					}
+					None => quote!(current_graph.cloned()),
+				};
+
+				let m = layout.item.value.input.len();
+
+				quote! {
+					let env = env.intro(rdf, #intro);
+					env.instantiate_dataset(&#dataset, output);
+
+					for item in self.0.iter() {
+						let env = env.intro(rdf, #item_intro);
+						env.instantiate_dataset(&#item_dataset, output);
+
+						<#item_value_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
+							item,
+							rdf,
+							&env.instantiate_patterns(&#item_value_inputs),
+							#item_value_graph.as_ref(),
+							output
+						)?;
+					}
+
+					Ok(())
+				}
+			}
+			ListLayout::Ordered(layout) => {
+				let intro = layout.intro;
+				let dataset = dataset_to_array(&layout.dataset);
+
+				let head = generate_pattern(&layout.head);
+				let tail = generate_pattern(&layout.tail);
+
+				let node_intro = layout.node.intro;
+				let node_dataset = dataset_to_array(&layout.node.dataset);
+
+				let node_value_layout = input
+					.type_map
+					.get(layout.node.value.layout.id().as_iri().unwrap())
+					.unwrap();
+				let node_value_inputs = inputs_to_array(&layout.node.value.input);
+				let node_value_graph = match &layout.node.value.graph {
+					Some(None) => quote!(None),
+					Some(Some(g)) => {
+						let g = generate_pattern(g);
+						quote!(Some(env.instantiate_pattern(#g)))
+					}
+					None => quote!(current_graph.cloned()),
+				};
+
+				let m = layout.node.value.input.len();
+
+				quote! {
+					let env = env.intro(rdf, #intro);
+					env.instantiate_dataset(&#dataset, output);
+
+					let mut head = env.instantiate_pattern(&#head);
+
+					for (i, item) in self.0.iter().enumerate() {
+						let rest = if i == self.0.len() - 1 {
+							env.instantiate_pattern(&#tail)
+						} else {
+							rdf.interpretation.new_resource(rdf.vocabulary)
+						};
+
+						let env = env.bind([head, rest.clone()]);
+						let env = env.intro(rdf, #node_intro);
+						env.instantiate_dataset(&#node_dataset, output);
+
+						<#node_value_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
+							item,
+							rdf,
+							&env.instantiate_patterns(&#node_value_inputs),
+							#node_value_graph.as_ref(),
+							output
+						)?;
+
+						head = rest;
+					}
+
+					Ok(())
+				}
+			}
+			ListLayout::Sized(layout) => {
+				let intro = layout.intro;
+				let dataset = dataset_to_array(&layout.dataset);
+
+				let items = layout.items.iter().enumerate().map(|(i, item)| {
+					let item_intro = item.intro;
+					let item_dataset = dataset_to_array(&item.dataset);
+
+					let item_value_layout = input
+						.type_map
+						.get(item.value.layout.id().as_iri().unwrap())
+						.unwrap();
+					let item_value_inputs = inputs_to_array(&item.value.input);
+					let item_value_graph = match &item.value.graph {
+						Some(None) => quote!(None),
+						Some(Some(g)) => {
+							let g = generate_pattern(g);
+							quote!(Some(env.instantiate_pattern(#g)))
+						}
+						None => quote!(current_graph.cloned()),
+					};
+
+					let m = item.value.input.len();
+					let index: syn::Index = i.into();
+
+					quote! {
+						{
+							let env = env.intro(rdf, #item_intro);
+							env.instantiate_dataset(&#item_dataset, output);
+
+							<#item_value_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
+								&self.#index,
+								rdf,
+								&env.instantiate_patterns(&#item_value_inputs),
+								#item_value_graph.as_ref(),
+								output
+							)?;
+						}
+					}
+				});
+
+				quote! {
+					let env = env.intro(rdf, #intro);
+					env.instantiate_dataset(&#dataset, output);
+
+					#(#items)*
+
+					Ok(())
+				}
+			}
+		},
 		Layout::Never => {
 			unreachable!()
 		}

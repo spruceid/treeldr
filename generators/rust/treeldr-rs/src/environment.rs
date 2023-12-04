@@ -43,9 +43,9 @@ impl<'a, R> Environment<'a, R> {
 }
 
 impl<'a, R: Clone> Environment<'a, R> {
-	pub fn instantiate_pattern<Q>(&self, pattern: &Pattern<Q>) -> R
-	where
-		Q: Clone + Into<R>,
+	pub fn instantiate_pattern(&self, pattern: &Pattern<R>) -> R
+where
+		// Q: Clone + Into<R>,
 	{
 		match pattern {
 			Pattern::Var(x) => self.get(*x).cloned().unwrap(),
@@ -54,9 +54,8 @@ impl<'a, R: Clone> Environment<'a, R> {
 	}
 
 	pub fn instantiate_patterns<const N: usize>(&self, patterns: &[Pattern<R>; N]) -> [R; N]
-	where
+where
 		// Q: Clone + Into<R>,
-		R: Clone,
 	{
 		let mut result = Vec::with_capacity(patterns.len());
 
@@ -71,9 +70,8 @@ impl<'a, R: Clone> Environment<'a, R> {
 		&self,
 		quad: Quad<&Pattern<R>, &Pattern<R>, &Pattern<R>, &Pattern<R>>,
 	) -> Quad<R, R, R, R>
-	where
+where
 		// Q: Clone + Into<R>,
-		R: Clone,
 	{
 		Quad(
 			self.instantiate_pattern(quad.0),
@@ -89,7 +87,6 @@ impl<'a, R: Clone> Environment<'a, R> {
 		output: &mut D,
 	) where
 		// Q: Clone + Into<R>,
-		R: Clone,
 		D: grdf::MutableDataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
 	{
 		for quad in input {
