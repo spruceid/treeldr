@@ -23,6 +23,7 @@ pub type RdfLiteralType<V> =
 	rdf_types::literal::Type<<V as IriVocabulary>::Iri, <V as LanguageTagVocabulary>::LanguageTag>;
 pub type RdfLiteral<V> = rdf_types::Literal<RdfLiteralType<V>, <V as LiteralVocabulary>::Value>;
 
+/// Dehydrate error.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
 	#[error("incompatible layout")]
@@ -54,8 +55,96 @@ impl TermAmbiguity {
 	}
 }
 
-/// Deserialize the given `value` according to the provided `layout`, returning
-/// the deserialized RDF dataset.
+/// Deserialize the given tree `value` into an RDF dataset.
+///
+/// This is a simplified version of [`dehydrate_with`] using the basic unit `()`
+/// RDF interpretation where resources are interpreted as their lexical
+/// representation (a [`Term`]).
+///
+/// Deserialization is performed according to the layout identified by
+/// `layout_ref` in the layout collection `layouts`. The function returns the
+/// RDF dataset represented by the input tree value alongside with a list of
+/// terms corresponding to the lexical representation of the input resources
+/// passed to the deserialization algorithm.
+///
+/// ```
+/// use serde_json::json;
+/// use rdf_types::{Term, Id};
+/// use static_iref::iri;
+///
+/// // Create a layout builder.
+/// let mut builder = treeldr_layouts::abs::Builder::new();
+///
+/// // Create a layout from its abstract (JSON) syntax.
+/// // This layout has a single (implicit) input (`_:self`).
+/// let layout: treeldr_layouts::abs::syntax::Layout = serde_json::from_value(
+///   json!({
+///     "type": "record",
+///     "fields": {
+///       "id": {
+///         "intro": [],
+///         "value": {
+///           "layout": { "type": "id" },
+///           "input": "_:self"
+///         },
+///       },
+///       "name": {
+///         "value": { "type": "string" },
+///         "property": "https://schema.org/name"
+///       }
+///     }
+///   })
+/// ).unwrap();
+///
+/// // Build the layout.
+/// let layout_ref = layout.build(&mut builder).unwrap();
+///
+/// // Get the compiled layouts collection.
+/// let layouts = builder.build();
+///
+/// let value: treeldr_layouts::Value = serde_json::from_value(
+///   json!({
+///     "id": "https://example.org/JohnSmith",
+///     "name": "John Smith"
+///   })
+/// ).unwrap();
+///
+/// // Dehydrate!
+/// let (dataset, subjects) = treeldr_layouts::distill::dehydrate(
+///     &layouts,
+///     &value,
+///     &layout_ref,
+///     None // will be the layout's expected number of inputs by default (1)
+/// ).unwrap();
+///
+/// // The number of subjects is equal to the number of layout inputs.
+/// assert_eq!(subjects.len(), 1);
+///
+/// // The only subject here is <https://example.org/JohnSmith>.
+/// assert_eq!(subjects[0].as_iri().unwrap(), "https://example.org/JohnSmith");
+///
+/// // Fetch the name of our subject.
+/// let mut names = dataset.objects(None, &subjects[0], &Term::Id(Id::Iri(iri!("https://schema.org/name").to_owned()))).unwrap();
+///
+/// // Should match what is defined in the serialized value.
+/// assert_eq!(names.next().unwrap().as_literal().unwrap().value(), "John Smith")
+/// ```
+///
+/// In the more generic [`dehydrate_with`], the input terms are given as input
+/// to the function. However in this simplified version (where resources are
+/// identified by their lexical representation) it is not possible to provide
+/// the input resource in advance, since we don't know their lexical
+/// representation. Instead, this function will create a intermediate
+/// interpretation of resources, allowing the term representation of the input
+/// resources to be collected during deserialization. The collected terms
+/// are then returned along with the RDF dataset.
+///
+/// The number of input resources passed to the deserialization function
+/// (and hence the size of the output `Vec<Term>`) is given by the
+/// `expected_input_count` argument. If `None`, the input count is decided using
+/// the required input count of the layout. For the top and bottom layouts,
+/// that don't have a required input count, only one input resource is passed by
+/// default.
 pub fn dehydrate(
 	layouts: &Layouts,
 	value: &Value,

@@ -116,7 +116,7 @@ pub enum Literal {
 	TextString(String),
 }
 
-/// Untyped value.
+/// Untyped tree value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Value {
 	Literal(Literal),
@@ -150,6 +150,7 @@ impl From<serde_json::Value> for Value {
 	}
 }
 
+/// Typed literal value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedLiteral<R = rdf_types::Term> {
 	/// Unit.
@@ -184,17 +185,35 @@ impl<R> TypedLiteral<R> {
 	}
 }
 
-/// Typed value.
+/// Typed tree value.
+///
+/// The "type" information corresponds to the layout used to serialize the
+/// value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedValue<R = rdf_types::Term> {
+	/// Literal value.
 	Literal(TypedLiteral<R>),
+
+	/// Variant of a sum layout.
+	///
+	/// The third parameter is the index of the variant in the sum layout.
 	Variant(Box<Self>, Ref<SumLayoutType, R>, u32),
+
+	/// Record.
 	Record(BTreeMap<String, Self>, Ref<ProductLayoutType, R>),
+
+	/// List.
 	List(Vec<Self>, Ref<ListLayoutType, R>),
+
+	/// Any.
+	///
+	/// Means that this value has been serialized with the top layout,
+	/// accepting any value.
 	Always(Value),
 }
 
 impl<R> TypedValue<R> {
+	/// Strips the type information and returns a simple tree value.
 	pub fn into_untyped(self) -> Value {
 		match self {
 			Self::Literal(l) => Value::Literal(l.into_untyped()),

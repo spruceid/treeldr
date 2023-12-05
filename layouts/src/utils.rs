@@ -9,6 +9,7 @@ use rdf_types::{meta::MetaQuad, Id, Quad};
 
 use crate::Pattern;
 
+/// Computes the intersection of two character sets.
 pub fn charset_intersection(a: &RangeSet<char>, b: &RangeSet<char>) -> RangeSet<char> {
 	let mut result = a.clone();
 

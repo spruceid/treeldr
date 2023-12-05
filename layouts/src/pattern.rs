@@ -1,5 +1,9 @@
 use grdf::Quad;
 
+/// A quad of patterns referencing their resources.
+pub type PatternRefQuad<'p, R> =
+	Quad<Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>>;
+
 /// Pattern.
 ///
 /// Either a resource identifier or a variable.
@@ -43,14 +47,25 @@ impl<R> Pattern<R> {
 	}
 }
 
+/// Pattern substitution.
+///
+/// Maps some or all variables from `0` to [`Self::len()`] (called the
+/// *declared* variables) to resources (`R`).
+/// If all declared variables are bound to a resource, the substitution is
+/// *complete*, or otherwise *partial*.
 #[derive(Clone)]
 pub struct Substitution<R>(Vec<Option<R>>);
 
 impl<R> Substitution<R> {
+	/// Create a new empty substitution without declared variables.
 	pub fn new() -> Self {
 		Self(Vec::new())
 	}
 
+	/// Creates a new substitution from the given input resources.
+	///
+	/// The resulting substitution has `inputs.len()` declared variables bound
+	/// to there respective resource in `inputs`.
 	pub fn from_inputs(inputs: &[R]) -> Self
 	where
 		R: Clone,
@@ -58,14 +73,17 @@ impl<R> Substitution<R> {
 		Self(inputs.iter().cloned().map(Some).collect())
 	}
 
+	/// Returns the number of variables declared in the substitution.
 	pub fn len(&self) -> u32 {
 		self.0.len() as u32
 	}
 
+	/// Checks if the substitution is empty (no declared variables).
 	pub fn is_empty(&self) -> bool {
 		self.0.is_empty()
 	}
 
+	/// Returns the resource bound to the variable `i`, if any.
 	pub fn get(&self, i: u32) -> Option<&R> {
 		self.0.get(i as usize).and_then(Option::as_ref)
 	}
@@ -78,16 +96,41 @@ impl<R> Substitution<R> {
 		i
 	}
 
+	/// Introduce one more variable to the substitution and bind it to the given
+	/// resource.
+	///
+	/// Returns the index of the newly declared variable.
 	pub fn push(&mut self, value: Option<R>) -> u32 {
 		let i = self.len();
 		self.0.push(value);
 		i
 	}
 
+	/// Sets the binding of the variable `x` to `value`.
+	///
+	/// The variable `x` *must* be declared in the substitution.
+	///
+	/// Returns the previous binding of the variable.
+	///
+	/// ## Panics
+	///
+	/// Panics if the variable `x` if not declared in the substitution.
 	pub fn set(&mut self, x: u32, value: Option<R>) -> Option<R> {
 		std::mem::replace(&mut self.0[x as usize], value)
 	}
 
+	/// Copies and sets the variables of the substitution by matching the
+	/// `value` quad against the given `pattern` quad.
+	///
+	/// For each `pattern` quad component:
+	///   - if the pattern is a variable, sets the variable to the equivalent
+	///     resource in `value` using [`Self::set`]. If the variable was already
+	///     bound to another resource, a mismatch is found.
+	///   - if the pattern is a resource, checks that it is equal to the
+	///     corresponding resource in `value`, otherwise a mismatch is found.
+	///
+	/// Return the updated substitution if no mismatch is found, or `None`
+	/// otherwise.
 	pub fn with_quad(
 		&self,
 		pattern: Quad<Pattern<&R>, Pattern<&R>, Pattern<&R>, Pattern<&R>>,

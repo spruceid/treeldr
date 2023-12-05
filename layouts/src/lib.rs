@@ -107,29 +107,33 @@ pub use layout::Layout;
 use layout::LayoutType;
 pub use matching::Matching;
 pub use pattern::Pattern;
-pub use r#ref::Ref;
+pub use r#ref::{DerefResource, Ref};
 pub use value::{Literal, TypedLiteral, TypedValue, Value};
-
-pub trait GetFromLayouts<C, R>: Sized {
-	type Target<'c>
-	where
-		C: 'c,
-		R: 'c;
-
-	fn get_from_layouts<'c>(context: &'c C, r: &Ref<Self, R>) -> Option<Self::Target<'c>>;
-}
 
 /// Layout collection.
 ///
 /// Stores compiled layouts definitions, which can then be fetched using the
-/// [`Ref<Layout>`](Ref) type.
+/// [`Ref<LayoutType>`](Ref) type.
 ///
 /// Users can create a `Layouts` collection manually, or from the abstract
 /// syntax using a layout [`Builder`](abs::Builder).
 ///
-/// The `R` type parameter represents (interpreted) RDF resources. By default,
-/// RDF resources are represented using their lexical representation
-/// ([`Term`](rdf_types::Term)).
+/// The `R` type parameter represents (interpreted) RDF resources.
+/// The default resource identifier is [`Term`], meaning that the resource is
+/// identified by its lexical RDF representation (an IRI, a blank node
+/// identifier or a literal value). This default parameter is easy to use but
+/// beware of the following:
+///   - A resource may have more than one lexical representation. Hence the
+///     [`Term`] type is not adequate as a unique resource identifier.
+///   - A term is basically a text string, it requires allocation when created
+///     and cloned, and comparison is done in linear time (`O(n)`).
+/// For these reasons, it is advised to use a more optimized/unique identifier
+/// type for resources, using [`Vocabulary`](rdf_types::Vocabulary) to store
+/// the actual lexical representations and
+/// [`Interpretation`](rdf_types::Interpretation) to map lexical representations
+/// to resources.
+///
+/// [`Term`]: rdf_types::Term
 #[derive(Debug)]
 pub struct Layouts<R = rdf_types::Term> {
 	layouts: BTreeMap<R, Layout<R>>,
@@ -157,20 +161,36 @@ impl<R> Default for Layouts<R> {
 }
 
 impl<R: Ord> Layouts<R> {
+	/// Returns the layout definition associated to the untyped resource
+	/// identifier `id`.
 	pub fn layout(&self, id: &R) -> Option<&Layout<R>> {
 		self.layouts.get(id)
 	}
 
-	pub fn get<T: GetFromLayouts<Self, R>>(&self, r: &Ref<T, R>) -> Option<T::Target<'_>> {
-		T::get_from_layouts(self, r)
+	/// Gets the definition associated to the given type resource identifier.
+	pub fn get<T>(&self, r: &Ref<T, R>) -> Option<<Self as DerefResource<T, R>>::Target<'_>>
+	where
+		Self: DerefResource<T, R>,
+	{
+		self.deref_resource(r)
 	}
 }
 
 impl<R: Clone + Ord> Layouts<R> {
+	/// Sets the layout definition for the resource identified by `id`.
+	///
+	/// Returns the typed identifier for the layout alongside with the previous
+	/// layout definition for `id`, if any.
 	pub fn insert(&mut self, id: R, layout: Layout<R>) -> (Ref<LayoutType, R>, Option<Layout<R>>) {
 		self.insert_with(id, |_| layout)
 	}
 
+	/// Sets the layout definition for the resource identified by `id` using a
+	/// function. The function will be called with a typed identifier to the
+	/// layout.
+	///
+	/// Returns the typed identifier for the layout alongside with the previous
+	/// layout definition for `id`, if any.
 	pub fn insert_with(
 		&mut self,
 		id: R,

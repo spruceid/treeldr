@@ -1,18 +1,33 @@
 use grdf::Quad;
 
-use crate::{pattern::Substitution, Pattern};
+use crate::{
+	pattern::{PatternRefQuad, Substitution},
+	Pattern,
+};
 
+/// Pattern matching error.
 pub enum Error {
+	/// The input pattern matches more than one fragment of the dataset, where
+	/// the caller requires at most one match.
 	Ambiguity,
+
+	/// The input pattern does not match any fragment of the dataset, where the
+	/// caller requires at least one match.
 	Empty,
 }
 
+/// Pattern matching.
+///
+/// Iterates over all the substitutions mapping the input pattern to a fragment
+/// of the given RDF dataset.
 pub struct Matching<'a, 'p, R, D, Q>
 where
 	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
 {
+	/// Dataset on which the pattern matching is performed.
 	dataset: &'a D,
-	// quads: Q,
+
+	/// Working stack.
 	stack: Vec<State<'a, 'p, R, D, Q>>,
 }
 
@@ -29,7 +44,7 @@ pub struct QuadState<'a, 'p, R, D>
 where
 	D: 'a + grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
 {
-	pattern: Quad<Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>>,
+	pattern: PatternRefQuad<'p, R>,
 	quad_matching: D::PatternMatching<'a, 'p>,
 }
 
@@ -37,13 +52,23 @@ impl<'a, 'p, R, D, Q> Matching<'a, 'p, R, D, Q>
 where
 	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
 {
-	pub fn new(dataset: &'a D, substitution: Substitution<R>, quads: Q) -> Self {
+	/// Starts a pattern matching on the given `dataset` using the input partial
+	/// `substitution` and `patterns` (an iterator of [`PatternRefQuad`]).
+	///
+	/// This will return an iterator over all the complete substitutions such
+	/// that the substituted patterns form an existing fragment of the dataset.
+	///
+	/// All the variables appearing in `patterns` *must* be declared in the
+	/// initial partial `substitution`. If a variable is already bound in the
+	/// initial substitution, only the substitutions preserving the same bound
+	/// will be iterated over.
+	pub fn new(dataset: &'a D, substitution: Substitution<R>, patterns: Q) -> Self {
 		Self {
 			dataset,
 			stack: vec![State {
 				substitution,
 				quad_state: None,
-				rest: quads,
+				rest: patterns,
 			}],
 		}
 	}
@@ -53,8 +78,7 @@ impl<'a, 'p, R, D, Q> Matching<'a, 'p, R, D, Q>
 where
 	R: Clone + PartialEq,
 	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
-	Q: Clone
-		+ Iterator<Item = Quad<Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>>>,
+	Q: Clone + Iterator<Item = PatternRefQuad<'p, R>>,
 {
 	pub fn into_unique(mut self) -> Result<Option<Substitution<R>>, Error> {
 		match self.next() {
@@ -78,8 +102,7 @@ impl<'a, 'p, R, D, Q> Iterator for Matching<'a, 'p, R, D, Q>
 where
 	R: Clone + PartialEq,
 	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
-	Q: Clone
-		+ Iterator<Item = Quad<Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>>>,
+	Q: Clone + Iterator<Item = PatternRefQuad<'p, R>>,
 {
 	type Item = Substitution<R>;
 
@@ -126,9 +149,9 @@ where
 	}
 }
 
-fn quad_matching_pattern<'p, R>(
-	pattern: Quad<Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>>,
-) -> Quad<Option<&'p R>, Option<&'p R>, Option<&'p R>, Option<&'p R>> {
+fn quad_matching_pattern<R>(
+	pattern: PatternRefQuad<R>,
+) -> Quad<Option<&R>, Option<&R>, Option<&R>, Option<&R>> {
 	Quad(
 		pattern.0.into_resource(),
 		pattern.1.into_resource(),
