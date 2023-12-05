@@ -42,6 +42,27 @@ pub enum Error {
 
 	#[error("missing required field `{0}`")]
 	MissingField(String),
+
+	#[error("missing required resource identifier")]
+	MissingId,
+
+	#[error("ambiguous resource identifier")]
+	AmbiguousId,
+
+	#[error("invalid resource identifier")]
+	InvalidId,
+
+	#[error("ambiguous literal value")]
+	AmbiguousLiteralValue,
+
+	#[error("invalid literal value")]
+	InvalidLiteralValue,
+
+	#[error("literal type mismatch")]
+	LiteralTypeMismatch,
+
+	#[error("expected literal value")]
+	ExpectedLiteral,
 }
 
 impl From<matching::Error> for Error {
@@ -74,3 +95,32 @@ where
 			GraphLabel = I::Resource,
 		>;
 }
+
+pub struct InvalidLiteral<T = String>(pub T);
+
+pub trait FromRdfLiteral: Sized {
+	fn from_rdf_literal(value: &str) -> Result<Self, InvalidLiteral>;
+}
+
+impl FromRdfLiteral for bool {
+	fn from_rdf_literal(value: &str) -> Result<Self, InvalidLiteral> {
+		use xsd_types::ParseRdf;
+		let value =
+			xsd_types::Boolean::parse_rdf(value).map_err(|_| InvalidLiteral(value.to_owned()))?;
+		Ok(value.0)
+	}
+}
+
+macro_rules! xsd_from_rdf {
+	($($ty:ident),*) => {
+		$(
+			impl FromRdfLiteral for $ty {
+				fn from_rdf_literal(value: &str) -> Result<Self, InvalidLiteral> {
+					xsd_types::ParseRdf::parse_rdf(value).map_err(|_| InvalidLiteral(value.to_owned()))
+				}
+			}
+		)*
+	};
+}
+
+xsd_from_rdf!(u8, u16, u32, u64, i8, i16, i32, i64, String);

@@ -15,5 +15,6 @@ educe.workspace = true
 iref.workspace = true
 langtag.workspace = true
 rdf-types.workspace = true
+xsd-types.workspace = true
 grdf.workspace = true
 treeldr-derive = { workspace = true, optional = true }

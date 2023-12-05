@@ -43,30 +43,114 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 	let layout = layouts.get(&layout_ref).unwrap();
 	let n = layout.input_count().unwrap() as usize;
 
+	let mut extra: Option<TokenStream> = None;
+
 	let body = match layout {
 		Layout::Always => {
 			unreachable!()
 		}
 		Layout::Literal(layout) => match layout {
 			LiteralLayout::Id(layout) => {
-				todo!()
+				let intro = layout.intro;
+				let dataset = dataset_to_array(&layout.dataset);
+				let resource = generate_pattern(&layout.resource);
+
+				quote! {
+					let mut substitution = ::treeldr::pattern::Substitution::from_inputs(inputs);
+					substitution.intro(#intro);
+
+					let substitution = ::treeldr::de::Matching::new(
+						dataset,
+						substitution.clone(),
+						::treeldr::utils::QuadsExt::with_default_graph(
+							#dataset
+								.ok_or(::treeldr::DeserializeError::MissingData)?
+								.iter()
+								.map(::treeldr::rdf_types::Quad::borrow_components),
+							current_graph
+						),
+					)
+					.into_required_unique()?;
+
+					let resource = #resource.ok_or(::treeldr::DeserializeError::MissingData)?.apply(&substitution).into_resource().unwrap();
+
+					let mut selected = None;
+
+					for i in rdf.interpretation.iris_of(&resource) {
+						let iri = rdf.vocabulary.iri(i).unwrap();
+
+						// TODO check automaton.
+
+						if selected.replace(::treeldr::rdf_types::Id::Iri(iri.to_owned())).is_some() {
+							return Err(::treeldr::DeserializeError::AmbiguousId)
+						}
+					}
+
+					match selected {
+						Some(id) => Ok(Self(::std::convert::TryFrom::try_from(id).map_err(|_| ::treeldr::DeserializeError::InvalidId)?)),
+						None => {
+							return Err(::treeldr::DeserializeError::MissingId)
+						}
+					}
+				}
 			}
 			LiteralLayout::Data(layout) => match layout {
 				DataLayout::Unit(layout) => {
-					todo!()
+					let intro = layout.intro;
+					let dataset = dataset_to_array(&layout.dataset);
+
+					quote! {
+						let mut substitution = ::treeldr::pattern::Substitution::from_inputs(inputs);
+						substitution.intro(#intro);
+
+						let substitution = ::treeldr::de::Matching::new(
+							dataset,
+							substitution.clone(),
+							::treeldr::utils::QuadsExt::with_default_graph(
+								#dataset
+									.ok_or(::treeldr::DeserializeError::MissingData)?
+									.iter()
+									.map(::treeldr::rdf_types::Quad::borrow_components),
+								current_graph
+							),
+						)
+						.into_required_unique()?;
+
+						Ok(Self)
+					}
 				}
-				DataLayout::Boolean(layout) => {
-					todo!()
-				}
-				DataLayout::Number(layout) => {
-					todo!()
-				}
-				DataLayout::ByteString(layout) => {
-					todo!()
-				}
-				DataLayout::TextString(layout) => {
-					todo!()
-				}
+				DataLayout::Boolean(layout) => generate_data(
+					&ident,
+					&mut extra,
+					layout.intro,
+					&layout.dataset,
+					&layout.resource,
+					&layout.datatype,
+				)?,
+				DataLayout::Number(layout) => generate_data(
+					&ident,
+					&mut extra,
+					layout.intro,
+					&layout.dataset,
+					&layout.resource,
+					&layout.datatype,
+				)?,
+				DataLayout::ByteString(layout) => generate_data(
+					&ident,
+					&mut extra,
+					layout.intro,
+					&layout.dataset,
+					&layout.resource,
+					&layout.datatype,
+				)?,
+				DataLayout::TextString(layout) => generate_data(
+					&ident,
+					&mut extra,
+					layout.intro,
+					&layout.dataset,
+					&layout.resource,
+					&layout.datatype,
+				)?,
 			},
 		},
 		Layout::Product(layout) => {
@@ -74,7 +158,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 			let dataset = dataset_to_array(&layout.dataset);
 
 			let opt_fields = layout.fields.iter().map(|(name, field)| {
-				let ident = syn::Ident::new(&name, Span::call_site());
+				let ident = syn::Ident::new(name, Span::call_site());
 				let ty = input
 					.type_map
 					.get(field.value.layout.id().as_iri().unwrap())
@@ -83,7 +167,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 			});
 
 			let deserialize_fields = layout.fields.iter().map(|(name, field)| {
-				let field_ident = syn::Ident::new(&name, Span::call_site());
+				let field_ident = syn::Ident::new(name, Span::call_site());
 				let field_ty = input
 					.type_map
 					.get(field.value.layout.id().as_iri().unwrap())
@@ -131,7 +215,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 			});
 
 			let unwrap_fields = layout.fields.keys().map(|name| {
-				let ident = syn::Ident::new(&name, Span::call_site());
+				let ident = syn::Ident::new(name, Span::call_site());
 				quote!(#ident: data.#ident.ok_or_else(|| ::treeldr::DeserializeError::MissingField(#name.to_owned()))?)
 			});
 
@@ -504,6 +588,8 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				#body
 			}
 		}
+
+		#extra
 	})
 }
 
@@ -538,7 +624,7 @@ fn dataset_to_array(dataset: &Dataset) -> TokenStream {
 }
 
 fn inputs_to_array(inputs: &[Pattern<Term>]) -> TokenStream {
-	let items = inputs.iter().map(|p| generate_pattern(p));
+	let items = inputs.iter().map(generate_pattern);
 	quote!((|| Some([#(#items?),*]))())
 }
 
@@ -572,4 +658,89 @@ fn generate_pattern(pattern: &Pattern<Term>) -> TokenStream {
 			}
 		},
 	}
+}
+
+fn term_to_datatype(term: &Term) -> Result<TokenStream, Error> {
+	match term {
+		Term::Id(Id::Iri(iri)) => {
+			let iri = iri.as_str();
+			Ok(quote!(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
+		}
+		other => Err(Error::InvalidDatatype(other.to_string())),
+	}
+}
+
+fn generate_data(
+	ident: &syn::Ident,
+	extra: &mut Option<TokenStream>,
+	intro: u32,
+	dataset: &Dataset,
+	resource: &Pattern<Term>,
+	datatype: &Term,
+) -> Result<TokenStream, Error> {
+	let dataset = dataset_to_array(dataset);
+	let resource = generate_pattern(resource);
+	let expected_ty_iri = term_to_datatype(datatype)?;
+
+	*extra = Some(quote! {
+		impl ::treeldr::de::FromRdfLiteral for #ident {
+			fn from_rdf_literal(s: &str) -> Result<Self, ::treeldr::de::InvalidLiteral> {
+				::treeldr::de::FromRdfLiteral::from_rdf_literal(s).map(Self)
+			}
+		}
+	});
+
+	Ok(quote! {
+		let mut substitution = ::treeldr::pattern::Substitution::from_inputs(inputs);
+		substitution.intro(#intro);
+
+		let substitution = ::treeldr::de::Matching::new(
+			dataset,
+			substitution.clone(),
+			::treeldr::utils::QuadsExt::with_default_graph(
+				#dataset
+					.ok_or(::treeldr::DeserializeError::MissingData)?
+					.iter()
+					.map(::treeldr::rdf_types::Quad::borrow_components),
+				current_graph
+			),
+		)
+		.into_required_unique()?;
+
+		let resource = #resource.ok_or(::treeldr::DeserializeError::MissingData)?.apply(&substitution).into_resource().unwrap();
+
+		let mut result = None;
+
+		let expected_ty_iri = #expected_ty_iri;
+		let mut has_literal = false;
+		for l in rdf.interpretation.literals_of(&resource) {
+			has_literal = true;
+			let literal = rdf.vocabulary.literal(l).unwrap();
+			let ty_iri = match literal.type_() {
+				::treeldr::rdf_types::literal::Type::Any(i) => {
+					rdf.vocabulary.iri(i).unwrap()
+				},
+				::treeldr::rdf_types::literal::Type::LangString(_) => {
+					::treeldr::rdf_types::RDF_LANG_STRING
+				}
+			};
+
+			if ty_iri == expected_ty_iri {
+				if let Ok(value) = ::treeldr::de::FromRdfLiteral::from_rdf_literal(literal.value().as_str()) {
+					if result.replace(value).is_some() {
+						return Err(::treeldr::DeserializeError::AmbiguousLiteralValue)
+					}
+				}
+			}
+		}
+
+		match result {
+			Some(r) => Ok(r),
+			None => if has_literal {
+				Err(::treeldr::DeserializeError::LiteralTypeMismatch)
+			} else {
+				Err(::treeldr::DeserializeError::ExpectedLiteral)
+			}
+		}
+	})
 }

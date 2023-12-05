@@ -55,23 +55,17 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				quote! {
 					let env = env.intro(rdf, #intro);
 					env.instantiate_dataset(&#dataset, output);
-					let value: &str = AsRef::<str>::as_ref(&self.0);
 
-					match ::treeldr::rdf_types::BlankId::new(value) {
-						Ok(value) => {
+					match ::treeldr::AsId::as_id(self) {
+						::treeldr::rdf_types::Id::Iri(value) => {
+							let id = rdf.vocabulary.insert(value);
+							rdf.interpretation.assign_iri(inputs[0].clone(), id);
+							Ok(())
+						}
+						::treeldr::rdf_types::Id::Blank(value) => {
 							let id = rdf.vocabulary.insert_blank_id(value);
 							rdf.interpretation.assign_blank_id(inputs[0].clone(), id);
 							Ok(())
-						}
-						Err(_) => match ::treeldr::iref::Iri::new(value) {
-							Ok(value) => {
-								let id = rdf.vocabulary.insert(value);
-								rdf.interpretation.assign_iri(inputs[0].clone(), id);
-								Ok(())
-							}
-							Err(_) => {
-								Err(::treeldr::SerializeError::InvalidId(value.to_owned()))
-							}
 						}
 					}
 				}
@@ -99,7 +93,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 
 						let literal = rdf.vocabulary_literal_owned(::treeldr::rdf_types::Literal::new(
 							self.0.to_string(),
-							#datatype
+							::treeldr::rdf_types::literal::Type::Any(#datatype)
 						));
 						rdf.interpretation.assign_literal(#target, literal);
 						Ok(())
@@ -117,7 +111,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 
 						let literal = rdf.vocabulary_literal_owned(::treeldr::rdf_types::Literal::new(
 							self.0.to_string(),
-							#datatype
+							::treeldr::rdf_types::literal::Type::Any(#datatype)
 						));
 						rdf.interpretation.assign_literal(#target, literal);
 						Ok(())
@@ -135,7 +129,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 
 						let literal = rdf.vocabulary_literal_owned(::treeldr::rdf_types::Literal::new(
 							self.0.to_string(),
-							#datatype
+							::treeldr::rdf_types::literal::Type::Any(#datatype)
 						));
 						rdf.interpretation.assign_literal(#target, literal);
 						Ok(())
@@ -153,7 +147,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 
 						let literal = rdf.vocabulary_literal(::treeldr::rdf_types::Literal::new(
 							::std::convert::AsRef::<str>::as_ref(&self.0),
-							#datatype
+							::treeldr::rdf_types::literal::Type::Any(#datatype)
 						));
 						rdf.interpretation.assign_literal(#target, literal);
 						Ok(())
@@ -474,9 +468,7 @@ fn term_to_datatype(term: &Term) -> Result<TokenStream, Error> {
 	match term {
 		Term::Id(Id::Iri(iri)) => {
 			let iri = iri.as_str();
-			Ok(
-				quote!(::treeldr::rdf_types::literal::Type::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) })),
-			)
+			Ok(quote!(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
 		}
 		other => Err(Error::InvalidDatatype(other.to_string())),
 	}
@@ -486,9 +478,7 @@ fn term_to_datatype_owned(term: &Term) -> Result<TokenStream, Error> {
 	match term {
 		Term::Id(Id::Iri(iri)) => {
 			let iri = iri.as_str();
-			Ok(
-				quote!(::treeldr::rdf_types::literal::Type::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }.to_owned())),
-			)
+			Ok(quote!(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }.to_owned()))
 		}
 		other => Err(Error::InvalidDatatype(other.to_string())),
 	}
@@ -514,7 +504,7 @@ fn dataset_to_array(dataset: &Dataset) -> TokenStream {
 }
 
 fn inputs_to_array(inputs: &[Pattern<Term>]) -> TokenStream {
-	let items = inputs.iter().map(|p| generate_pattern(p));
+	let items = inputs.iter().map(generate_pattern);
 	quote!([#(#items),*])
 }
 

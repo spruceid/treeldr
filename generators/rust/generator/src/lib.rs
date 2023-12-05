@@ -184,7 +184,7 @@ where
 					let dataset = generate_dataset_attribute(rdf, &layout.dataset)?;
 
 					Ok(quote! {
-						#[derive(treeldr::Serialize, treeldr::Deserialize)]
+						#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 						#[tldr(#input, #intro, #dataset)]
 						pub struct #ident;
 					})
@@ -195,7 +195,7 @@ where
 					let dataset = generate_dataset_attribute(rdf, &layout.dataset)?;
 
 					Ok(quote! {
-						#[derive(treeldr::Serialize, treeldr::Deserialize)]
+						#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 						#[tldr(#input, #intro, #dataset)]
 						pub struct #ident(bool);
 					})
@@ -206,7 +206,7 @@ where
 					let dataset = generate_dataset_attribute(rdf, &layout.dataset)?;
 
 					Ok(quote! {
-						#[derive(treeldr::Serialize, treeldr::Deserialize)]
+						#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 						#[tldr(#input, #intro, #dataset)]
 						pub struct #ident(Number);
 					})
@@ -217,7 +217,7 @@ where
 					let dataset = generate_dataset_attribute(rdf, &layout.dataset)?;
 
 					Ok(quote! {
-						#[derive(treeldr::Serialize, treeldr::Deserialize)]
+						#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 						#[tldr(#input, #intro, #dataset)]
 						pub struct #ident(String);
 					})
@@ -228,7 +228,7 @@ where
 					let dataset = generate_dataset_attribute(rdf, &layout.dataset)?;
 
 					Ok(quote! {
-						#[derive(treeldr::Serialize, treeldr::Deserialize)]
+						#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 						#[tldr(#input, #intro, #dataset)]
 						pub struct #ident(Vec<u8>);
 					})
@@ -240,7 +240,7 @@ where
 				let dataset = generate_dataset_attribute(rdf, &layout.dataset)?;
 
 				Ok(quote! {
-					#[derive(treeldr::Serialize, treeldr::Deserialize)]
+					#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 					#[tldr(id, #input, #intro, #dataset)]
 					pub struct #ident(Id);
 				})
@@ -271,7 +271,7 @@ where
 				.collect::<Result<Vec<_>, _>>()?;
 
 			Ok(quote! {
-				#[derive(treeldr::Serialize, treeldr::Deserialize)]
+				#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 				#[tldr(#input, #intro, #dataset)]
 				pub struct #ident {
 					#(#fields),*
@@ -303,7 +303,7 @@ where
 				.collect::<Result<Vec<_>, _>>()?;
 
 			Ok(quote! {
-				#[derive(treeldr::Serialize, treeldr::Deserialize)]
+				#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 				#[tldr(#input, #intro, #dataset)]
 				pub enum #ident {
 					#(#variants),*
@@ -324,7 +324,7 @@ where
 				let item_layout = options.layout_ident(rdf, &layout.item.value.layout)?;
 
 				Ok(quote! {
-					#[derive(treeldr::Serialize, treeldr::Deserialize)]
+					#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 					#[tldr(set, #intro, #dataset, #input)]
 					pub struct #ident(
 						#[tldr(#item_intro, #item_dataset, #item_input, #item_graph)]
@@ -349,7 +349,7 @@ where
 				let node_layout = options.layout_ident(rdf, &layout.node.value.layout)?;
 
 				Ok(quote! {
-					#[derive(treeldr::Serialize, treeldr::Deserialize)]
+					#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 					#[tldr(list, #intro, head(#head), tail(#tail), #dataset, #input)]
 					pub struct #ident(
 						#[tldr(head(#node_head), rest(#node_rest), #node_intro, #node_dataset, #node_input, #node_graph)]
@@ -381,7 +381,7 @@ where
 					.collect::<Result<Vec<_>, _>>()?;
 
 				Ok(quote! {
-					#[derive(treeldr::Serialize, treeldr::Deserialize)]
+					#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 					#[tldr(tuple, #intro, #dataset, #input)]
 					pub struct #ident(#(#items),*);
 				})

@@ -1,5 +1,8 @@
 use rdf_types::Quad;
 
+/// Quad of patterns.
+pub type PatternQuad<R> = Quad<Pattern<R>, Pattern<R>, Pattern<R>, Pattern<R>>;
+
 /// Pattern.
 ///
 /// Either a resource identifier or a variable.
