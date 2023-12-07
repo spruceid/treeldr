@@ -1,7 +1,7 @@
 # TreeLDR
 
-TreeLDR is Linked-Data framework providing three main features:
-  - RDF layouts to serialize and deserialize RDF datasets from/to structured data;
+TreeLDR is Linked-Data serialization framework providing three main features:
+  - RDF layouts to serialize and deserialize RDF datasets from/to tree data;
   - A concise schema definition language for RDF classes and layouts;
   - A set of boilerplate code generator.
 
