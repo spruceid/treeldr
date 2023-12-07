@@ -1,3 +1,12 @@
+//! Abstract syntax for layouts.
+//!
+//! This module defines the most human friendly version of the `Layout` type.
+//! It implements `serde::Serialize` and `serde::Deserialize` in a way that
+//! produces and consumes human readable data. It is the basis to the JSON
+//! syntax for layouts often used throughout the documentation.
+//!
+//! Abstract layouts must be compiled into `crate::Layout` before being used
+//! to serialize/deserialize RDF datasets.
 use grdf::BTreeDataset;
 use iref::{Iri, IriBuf, IriRefBuf};
 use rdf_types::{
@@ -149,21 +158,35 @@ impl CompactIri {
 impl<C: Context> Build<C> for CompactIri {
 	type Target = C::Resource;
 
+	/// Build this layout fragment using the given `context` in the given
+	/// `scope`.
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
 		let iri = self.resolve(scope)?;
 		Ok(context.iri_resource(&iri))
 	}
 }
 
+/// Scope providing the active base IRI, the currently defined IRI prefixes and
+/// variables.
 #[derive(Debug, Default, Clone)]
 pub struct Scope {
+	/// Active base IRI.
 	base_iri: Option<IriBuf>,
+
+	/// Current IRI prefixes.
 	iri_prefixes: HashMap<String, IriBuf>,
+
+	/// Defined variables.
 	variables: HashMap<String, u32>,
+
+	/// Defined variable count.
 	variable_count: u32,
 }
 
 impl Scope {
+	/// Creates a new scope by combining this scope with the given layout
+	/// `header` which may define a new base IRI, new IRI prefixes and new
+	/// variables.
 	pub fn with_header(&self, header: &LayoutHeader) -> Result<Self, Error> {
 		let mut result = self.clone();
 
@@ -189,6 +212,8 @@ impl Scope {
 		Ok(result)
 	}
 
+	/// Creates a new scope extending this scope with the given list of new
+	/// variables.
 	pub fn with_intro<'s>(
 		&self,
 		intro: impl IntoIterator<Item = &'s String>,
@@ -202,6 +227,8 @@ impl Scope {
 		Ok(result)
 	}
 
+	/// Creates a new scope based on this scope by clearing all defined
+	/// variables.
 	pub fn without_variables(&self) -> Self {
 		Self {
 			base_iri: self.base_iri.clone(),
@@ -211,11 +238,16 @@ impl Scope {
 		}
 	}
 
+	/// Defines a new variable.
+	///
+	/// The new variable will be assigned a new unique index.
+	/// If a variable with the same name already exists it will be shadowed.
 	pub fn bind(&mut self, name: &str) {
 		self.variables.insert(name.to_owned(), self.variable_count);
 		self.variable_count += 1;
 	}
 
+	/// Returns the unique index of the given variable.
 	pub fn variable(&self, name: &str) -> Result<u32, Error> {
 		self.variables
 			.get(name)
@@ -224,13 +256,51 @@ impl Scope {
 	}
 }
 
+/// Abstract syntax layout.
+///
+/// This is the most human friendly version of the `Layout` type.
+/// It implements `serde::Serialize` and `serde::Deserialize` in a way that
+/// produces and consumes human readable data. It is the basis to the JSON
+/// syntax for layouts often used throughout the documentation.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Layout {
 	/// Matches literal values.
+	///
+	/// # Example
+	///
+	/// The following JSON value is a serialized abstract literal (number)
+	/// layout:
+	/// ```json
+	/// { "type": "number" }
+	/// ```
+	/// It matches the following example value (a JSON number):
+	/// ```json
+	/// 12
+	/// ```
+	///
+	/// It matches any RDF dataset for any input resource that is a number
+	/// literal.
 	Literal(LiteralLayout),
 
 	/// Matches objects/records.
+	///
+	/// # Example
+	///
+	/// The following JSON value is a serialized abstract record layout:
+	/// ```json
+	/// {
+	///   "type": "record",
+	///   "fields": {
+	///     "f1": ...,
+	///     ...
+	///     "fn": ...
+	///   }
+	/// }
+	/// ```
+	///
+	/// It matches any record value (JSON object) containing the fields `f1`,
+	/// ..., `fn`.
 	Product(ProductLayout),
 
 	/// Matches exactly one of the given layouts.

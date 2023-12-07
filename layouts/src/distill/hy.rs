@@ -16,6 +16,7 @@ mod data;
 
 use data::*;
 
+/// Hydrate error.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
 	#[error("incompatible layout")]
@@ -46,8 +47,19 @@ impl From<matching::Error> for Error {
 	}
 }
 
-/// Serialize the given RDF `dataset` using the provided `layout`, returning
-/// a typed value.
+/// Serialize the given RDF `dataset` using the provided `layout`.
+///
+/// This is a simplified version of [`hydrate_with`] using the basic unit `()`
+/// interpretation where resources are interpreted as their lexical
+/// representation (a [`Term`]).
+///
+/// The data to be serialized is contained in the given RDF `dataset`.
+/// Serialization is performed following the layout identified by `layout_ref`
+/// in the layout collection `layouts`. This layout requires a number of inputs
+/// (the entry point to the dataset) provided by the `inputs` slice.
+///
+/// This function a tree value annotated (typed) with references to the
+/// different layouts used to serialize each part of the tree.
 pub fn hydrate<D>(
 	context: &Layouts,
 	dataset: &D,

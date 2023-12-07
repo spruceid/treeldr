@@ -134,7 +134,10 @@ impl TermAmbiguity {
 /// to the function. However in this simplified version (where resources are
 /// identified by their lexical representation) it is not possible to provide
 /// the input resource in advance, since we don't know their lexical
-/// representation. Instead, this function will create a intermediate
+/// representation. In the example above, that would mean providing the
+/// `dehydrate` function with the `https://example.org/JohnSmith` IRI in advance
+/// since it is the subject of the JSON document, but we don't know that yet.
+/// Instead, this function will create a intermediate
 /// interpretation of resources, allowing the term representation of the input
 /// resources to be collected during deserialization. The collected terms
 /// are then returned along with the RDF dataset.
