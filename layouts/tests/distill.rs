@@ -201,3 +201,8 @@ test! {
 	/// Sum layout.
 	t12 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
 }
+
+test! {
+	/// Unit layout with const value.
+	t13 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
+}

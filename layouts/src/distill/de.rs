@@ -420,14 +420,16 @@ where
 
 	match layout {
 		Layout::Never => Err(Error::IncompatibleLayout),
+		Layout::Literal(LiteralLayout::Data(DataLayout::Unit(layout)))
+			if *value == layout.const_ =>
+		{
+			let env = env.intro(rdf, layout.intro);
+			env.instantiate_dataset(&layout.dataset, output)?;
+			Ok(())
+		}
 		Layout::Literal(layout) => match value {
 			Value::Literal(value) => match layout {
 				LiteralLayout::Data(layout) => match (layout, value) {
-					(DataLayout::Unit(layout), Literal::Unit) => {
-						let env = env.intro(rdf, layout.intro);
-						env.instantiate_dataset(&layout.dataset, output)?;
-						Ok(())
-					}
 					(DataLayout::Boolean(layout), Literal::Boolean(value)) => {
 						let env = env.intro(rdf, layout.intro);
 						env.instantiate_dataset(&layout.dataset, output)?;

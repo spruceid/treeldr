@@ -1,7 +1,7 @@
 use educe::Educe;
 use std::hash::Hash;
 
-use crate::{utils::DetAutomaton, Dataset, Pattern};
+use crate::{utils::DetAutomaton, Dataset, Pattern, Value};
 
 pub struct DataLayoutType;
 
@@ -52,6 +52,9 @@ pub struct UnitLayout<R> {
 	pub intro: u32,
 
 	pub dataset: Dataset<R>,
+
+	#[serde(rename = "const", default, skip_serializing_if = "Value::is_unit")]
+	pub const_: Value,
 }
 
 impl<R: Ord> PartialOrd for UnitLayout<R> {

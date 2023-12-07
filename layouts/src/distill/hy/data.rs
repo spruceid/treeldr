@@ -51,7 +51,7 @@ where
 			)
 			.into_required_unique()?;
 
-			Ok(TypedLiteral::Unit(layout_ref.cast()))
+			Ok(TypedLiteral::Unit(layout.const_.clone(), layout_ref.cast()))
 		}
 		DataLayout::Boolean(layout) => {
 			let mut substitution = Substitution::from_inputs(inputs);

@@ -21,7 +21,7 @@ use std::{
 
 use crate::{
 	abs::{self, InsertResult, LayoutType, RegExp},
-	Ref,
+	Ref, Value,
 };
 
 use super::Builder;
@@ -1023,6 +1023,9 @@ pub struct UnitLayout {
 
 	#[serde(flatten)]
 	header: LayoutHeader,
+
+	#[serde(rename = "const", default, skip_serializing_if = "Value::is_unit")]
+	const_: Value,
 }
 
 impl<C: Context> Build<C> for UnitLayout {
@@ -1034,6 +1037,7 @@ impl<C: Context> Build<C> for UnitLayout {
 			input: header.input,
 			intro: header.intro,
 			dataset: header.dataset,
+			const_: self.const_.clone(),
 		})
 	}
 }

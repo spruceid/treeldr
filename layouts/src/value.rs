@@ -1,6 +1,7 @@
 use core::fmt;
 use std::collections::BTreeMap;
 
+use num_bigint::Sign;
 use num_rational::BigRational;
 
 use crate::{
@@ -30,6 +31,38 @@ impl Number {
 	pub fn into_big_rational(self) -> BigRational {
 		self.0
 	}
+
+	pub fn as_native(&self) -> NativeNumber {
+		use num_traits::ToPrimitive;
+		if self.0.is_integer() {
+			let n = self.0.numer();
+			match n.sign() {
+				Sign::Minus => {
+					if n.bits() < 64 {
+						let unsigned = n.iter_u64_digits().next().unwrap() as i64;
+						NativeNumber::I64(-unsigned)
+					} else {
+						NativeNumber::F64(self.0.to_f64().unwrap())
+					}
+				}
+				Sign::NoSign | Sign::Plus => {
+					if n.bits() <= 64 {
+						NativeNumber::U64(n.iter_u64_digits().next().unwrap())
+					} else {
+						NativeNumber::F64(self.0.to_f64().unwrap())
+					}
+				}
+			}
+		} else {
+			NativeNumber::F64(self.0.to_f64().unwrap())
+		}
+	}
+}
+
+pub enum NativeNumber {
+	U64(u64),
+	I64(i64),
+	F64(f64),
 }
 
 impl From<BigRational> for Number {
@@ -128,6 +161,16 @@ impl Value {
 	pub fn unit() -> Self {
 		Self::Literal(Literal::Unit)
 	}
+
+	pub fn is_unit(&self) -> bool {
+		matches!(self, Self::Literal(Literal::Unit))
+	}
+}
+
+impl Default for Value {
+	fn default() -> Self {
+		Self::unit()
+	}
 }
 
 impl From<serde_json::Value> for Value {
@@ -154,7 +197,7 @@ impl From<serde_json::Value> for Value {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedLiteral<R = rdf_types::Term> {
 	/// Unit.
-	Unit(Ref<UnitLayoutType, R>),
+	Unit(Value, Ref<UnitLayoutType, R>),
 
 	/// Boolean value.
 	Boolean(bool, Ref<BooleanLayoutType, R>),
@@ -173,14 +216,14 @@ pub enum TypedLiteral<R = rdf_types::Term> {
 }
 
 impl<R> TypedLiteral<R> {
-	pub fn into_untyped(self) -> Literal {
+	pub fn into_untyped(self) -> Value {
 		match self {
-			Self::Unit(_) => Literal::Unit,
-			Self::Boolean(b, _) => Literal::Boolean(b),
-			Self::Number(n, _) => Literal::Number(n),
-			Self::ByteString(s, _) => Literal::ByteString(s),
-			Self::TextString(s, _) => Literal::TextString(s),
-			Self::Id(i, _) => Literal::TextString(i),
+			Self::Unit(value, _) => value,
+			Self::Boolean(b, _) => Value::Literal(Literal::Boolean(b)),
+			Self::Number(n, _) => Value::Literal(Literal::Number(n)),
+			Self::ByteString(s, _) => Value::Literal(Literal::ByteString(s)),
+			Self::TextString(s, _) => Value::Literal(Literal::TextString(s)),
+			Self::Id(i, _) => Value::Literal(Literal::TextString(i)),
 		}
 	}
 }
@@ -216,7 +259,7 @@ impl<R> TypedValue<R> {
 	/// Strips the type information and returns a simple tree value.
 	pub fn into_untyped(self) -> Value {
 		match self {
-			Self::Literal(l) => Value::Literal(l.into_untyped()),
+			Self::Literal(l) => l.into_untyped(),
 			Self::Variant(value, _, _) => value.into_untyped(),
 			Self::Record(map, _) => Value::Record(
 				map.into_iter()
