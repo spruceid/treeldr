@@ -246,7 +246,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				#(#deserialize_fields)*
 
 				Ok(Self {
-					#(#unwrap_fields)*
+					#(#unwrap_fields),*
 				})
 			}
 		}

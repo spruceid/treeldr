@@ -1,7 +1,33 @@
 use iref::Iri;
 use rdf_types::BlankId;
-#[cfg(feature = "derive")]
-pub use treeldr_derive::{DeserializeLd, SerializeLd};
+
+#[cfg(feature = "macros")]
+/// Embed TreeLDR layouts as Rust types in the given module.
+///
+/// # Example
+///
+/// ```
+/// use treeldr::tldr;
+/// #[tldr("layouts/examples/simple_record.json")]
+/// mod module {
+///   // a `SimpleLayout` type will be generated here.
+/// }
+/// ```
+pub use treeldr_macros::tldr;
+
+#[cfg(feature = "macros")]
+/// Embed TreeLDR layouts as Rust types.
+///
+/// # Example
+///
+/// ```
+/// # use treeldr_macros::tldr_include;
+/// tldr_include!("layouts/examples/simple_record.json");
+/// ```
+pub use treeldr_macros::tldr_include;
+
+#[cfg(feature = "macros")]
+pub use treeldr_macros::{DeserializeLd, SerializeLd};
 
 #[doc(hidden)]
 pub use iref;

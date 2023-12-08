@@ -1,9 +1,13 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{
+	collections::{BTreeMap, HashMap},
+	hash::Hash,
+};
 
 use grdf::BTreeDataset;
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use rdf_types::{BlankIdBuf, Id, IriVocabulary, ReverseIriInterpretation};
+use rdf_types::{BlankIdBuf, Id, IriVocabulary, ReverseIriInterpretation, Term};
+use syn::spanned::Spanned;
 use treeldr_layouts::{
 	distill::RdfContext,
 	layout::{DataLayout, LayoutType, ListLayout, LiteralLayout},
@@ -14,7 +18,7 @@ use utils::ident_from_iri;
 pub mod utils;
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error<R> {
+pub enum Error<R = Term> {
 	#[error("missing type identifier for layout {0}")]
 	MissingTypeIdentifier(R),
 
@@ -28,15 +32,39 @@ pub enum Error<R> {
 	NoIriRepresentation,
 }
 
-pub struct Options<R> {
+#[derive(Debug, thiserror::Error)]
+#[error("invalid module path")]
+pub struct InvalidModulePath(Span);
+
+impl InvalidModulePath {
+	pub fn span(&self) -> Span {
+		self.0
+	}
+}
+
+pub struct Options<R = Term> {
 	idents: HashMap<Ref<LayoutType, R>, syn::Ident>,
+	extern_modules: BTreeMap<String, syn::Path>,
 }
 
 impl<R> Options<R> {
 	pub fn new() -> Self {
 		Self {
 			idents: HashMap::new(),
+			extern_modules: BTreeMap::new(),
 		}
+	}
+
+	pub fn use_module(&mut self, prefix: String, path: syn::Path) -> Result<(), InvalidModulePath> {
+		for segment in &path.segments {
+			if !matches!(&segment.arguments, syn::PathArguments::None) {
+				return Err(InvalidModulePath(path.span()));
+			}
+		}
+
+		self.extern_modules.insert(prefix, path);
+
+		Ok(())
 	}
 
 	pub fn layout_ident<V, I>(
@@ -67,6 +95,8 @@ impl<R> Options<R> {
 		R: Clone + Eq + Hash,
 	{
 		use treeldr_layouts::PresetLayout;
+		let mut module_path = None;
+
 		for i in rdf.interpretation.iris_of(layout_ref.id()) {
 			let iri = rdf.vocabulary.iri(i).unwrap();
 			if let Some(p) = PresetLayout::from_iri(iri) {
@@ -87,13 +117,27 @@ impl<R> Options<R> {
 
 				return Ok(syn::parse2(ty).unwrap());
 			}
+
+			for (prefix, path) in &self.extern_modules {
+				if iri.starts_with(prefix) {
+					module_path = Some(path.clone())
+				}
+			}
 		}
 
 		let ident = self.layout_ident(rdf, layout_ref)?;
-		Ok(syn::Type::Path(syn::TypePath {
-			qself: None,
-			path: syn::Path::from(ident),
-		}))
+
+		let mut path = module_path.unwrap_or_else(|| syn::Path {
+			leading_colon: None,
+			segments: syn::punctuated::Punctuated::new(),
+		});
+
+		path.segments.push(syn::PathSegment {
+			ident,
+			arguments: syn::PathArguments::None,
+		});
+
+		Ok(syn::Type::Path(syn::TypePath { qself: None, path }))
 	}
 }
 

@@ -6,8 +6,8 @@ authors.workspace = true
 edition.workspace = true
 
 [features]
-default = ["derive"]
-derive = ["treeldr-derive"]
+default = ["macros"]
+macros = ["treeldr-macros"]
 
 [dependencies]
 thiserror.workspace = true
@@ -17,4 +17,4 @@ langtag.workspace = true
 rdf-types.workspace = true
 xsd-types.workspace = true
 grdf.workspace = true
-treeldr-derive = { workspace = true, optional = true }
+treeldr-macros = { workspace = true, optional = true }

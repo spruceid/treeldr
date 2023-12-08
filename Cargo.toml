@@ -2,7 +2,7 @@
 members = [
 	"layouts",
 	"generators/rust/treeldr-rs",
-	"generators/rust/treeldr-rs-derive",
+	"generators/rust/treeldr-rs-macros",
 	"generators/rust/generator"
 ]
 resolver = "2"
@@ -14,7 +14,8 @@ authors = ["Spruce Systems Inc."]
 
 [workspace.dependencies]
 treeldr-layouts = { path = "layouts", version = "0.2.0" }
-treeldr-derive = { path = "generators/rust/treeldr-rs-derive", version = "0.2.0" }
+treeldr-macros = { path = "generators/rust/treeldr-rs-macros", version = "0.2.0" }
+treeldr-gen-rust = { path = "generators/rust/generator", version = "0.2.0" }
 
 log = "0.4"
 educe = "0.4.23"

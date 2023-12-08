@@ -7,7 +7,7 @@
 			"intro": [],
 			"value": {
 				"layout": "tldr:id",
-				"input": []
+				"input": ["_:self"]
 			}
 		},
 		"name": {
