@@ -94,6 +94,7 @@ pub mod graph;
 pub mod layout;
 pub mod matching;
 pub mod pattern;
+pub mod preset;
 pub mod r#ref;
 pub mod utils;
 pub mod value;
@@ -107,6 +108,7 @@ pub use layout::Layout;
 use layout::LayoutType;
 pub use matching::Matching;
 pub use pattern::Pattern;
+pub use preset::PresetLayout;
 pub use r#ref::{DerefResource, Ref};
 pub use value::{Literal, TypedLiteral, TypedValue, Value};
 
