@@ -123,50 +123,46 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 				resource: type_attrs.resource,
 			}))
 		}
-		Kind::Unit => {
-			Layout::Literal(LiteralLayout::Data(DataLayout::Unit(UnitLayout {
-				type_: Default::default(),
-				header: LayoutHeader {
-					base: type_attrs.base,
-					prefixes: type_attrs.prefixes,
-					id: type_attrs.id,
-					input: type_attrs.input.map(Into::into).unwrap_or_default(),
-					intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
-					dataset: type_attrs.dataset.unwrap_or_default()
-				},
-				const_: treeldr_layouts::Value::default()
-			})))
-		}
-		Kind::Boolean => {
-			Layout::Literal(LiteralLayout::Data(DataLayout::Boolean(BooleanLayout {
-				type_: Default::default(),
-				header: LayoutHeader {
-					base: type_attrs.base,
-					prefixes: type_attrs.prefixes,
-					id: type_attrs.id,
-					input: type_attrs.input.map(Into::into).unwrap_or_default(),
-					intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
-					dataset: type_attrs.dataset.unwrap_or_default()
-				},
-				datatype: type_attrs.datatype,
-				resource: type_attrs.resource
-			})))
-		},
-		Kind::Number => {
-			Layout::Literal(LiteralLayout::Data(DataLayout::Number(NumberLayout {
-				type_: Default::default(),
-				header: LayoutHeader {
-					base: type_attrs.base,
-					prefixes: type_attrs.prefixes,
-					id: type_attrs.id,
-					input: type_attrs.input.map(Into::into).unwrap_or_default(),
-					intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
-					dataset: type_attrs.dataset.unwrap_or_default()
-				},
-				datatype: type_attrs.datatype.ok_or_else(|| Error::MissingDatatype(input.ident.span()))?,
-				resource: type_attrs.resource
-			})))
-		},
+		Kind::Unit => Layout::Literal(LiteralLayout::Data(DataLayout::Unit(UnitLayout {
+			type_: Default::default(),
+			header: LayoutHeader {
+				base: type_attrs.base,
+				prefixes: type_attrs.prefixes,
+				id: type_attrs.id,
+				input: type_attrs.input.map(Into::into).unwrap_or_default(),
+				intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
+				dataset: type_attrs.dataset.unwrap_or_default(),
+			},
+			const_: treeldr_layouts::Value::default(),
+		}))),
+		Kind::Boolean => Layout::Literal(LiteralLayout::Data(DataLayout::Boolean(BooleanLayout {
+			type_: Default::default(),
+			header: LayoutHeader {
+				base: type_attrs.base,
+				prefixes: type_attrs.prefixes,
+				id: type_attrs.id,
+				input: type_attrs.input.map(Into::into).unwrap_or_default(),
+				intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
+				dataset: type_attrs.dataset.unwrap_or_default(),
+			},
+			datatype: type_attrs.datatype,
+			resource: type_attrs.resource,
+		}))),
+		Kind::Number => Layout::Literal(LiteralLayout::Data(DataLayout::Number(NumberLayout {
+			type_: Default::default(),
+			header: LayoutHeader {
+				base: type_attrs.base,
+				prefixes: type_attrs.prefixes,
+				id: type_attrs.id,
+				input: type_attrs.input.map(Into::into).unwrap_or_default(),
+				intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
+				dataset: type_attrs.dataset.unwrap_or_default(),
+			},
+			datatype: type_attrs
+				.datatype
+				.ok_or_else(|| Error::MissingDatatype(input.ident.span()))?,
+			resource: type_attrs.resource,
+		}))),
 		Kind::String => {
 			Layout::Literal(LiteralLayout::Data(DataLayout::TextString(
 				TextStringLayout {

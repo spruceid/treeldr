@@ -108,8 +108,8 @@ pub use layout::Layout;
 use layout::LayoutType;
 pub use matching::Matching;
 pub use pattern::Pattern;
-pub use r#ref::{DerefResource, Ref};
 pub use preset::PresetLayout;
+pub use r#ref::{DerefResource, Ref};
 pub use value::{Literal, TypedLiteral, TypedValue, Value};
 
 /// Layout collection.
