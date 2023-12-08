@@ -95,7 +95,8 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 		&layouts,
 		&input,
 		&layout_ref,
-		Some(expected_values.len() as u32),
+		treeldr_layouts::distill::de::Options::default()
+			.with_input_count(expected_values.len() as u32),
 	)
 	.unwrap();
 
@@ -107,7 +108,7 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 	// Test.
 	let bijection = output_dataset
 		.find_blank_id_bijection(&expected_dataset)
-		.unwrap(); // fail if the output is not isomorphic to the expected dataset.
+		.expect("not isomorphic"); // fail if the output is not isomorphic to the expected dataset.
 
 	assert_eq!(output_values.len(), expected_values.len());
 	for (output, expected) in output_values.iter().zip(&expected_values) {

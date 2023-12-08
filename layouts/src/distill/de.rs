@@ -10,9 +10,10 @@ use crate::{
 use grdf::BTreeDataset;
 use iref::IriBuf;
 use rdf_types::{
-	generator, Id, Interpretation, InterpretationMut, IriVocabulary, LanguageTagVocabulary,
-	LiteralVocabulary, Quad, ReverseIriInterpretation, ReverseIriInterpretationMut,
-	ReverseLiteralInterpretation, ReverseLiteralInterpretationMut, Term, VocabularyMut,
+	generator, BlankIdBuf, Generator, Id, Interpretation, InterpretationMut, IriVocabulary,
+	LanguageTagVocabulary, LiteralVocabulary, Quad, ReverseIriInterpretation,
+	ReverseIriInterpretationMut, ReverseLiteralInterpretation, ReverseLiteralInterpretationMut,
+	Term, VocabularyMut,
 };
 
 use super::RdfContextMut;
@@ -52,6 +53,91 @@ pub struct TermAmbiguity {
 impl TermAmbiguity {
 	pub fn new(a: Term, b: Term) -> Box<Self> {
 		Box::new(Self { a, b })
+	}
+}
+
+/// Options to the [`dehydrate`] function.
+///
+/// Most of the time `Options::default()` should work as expected. You can
+/// tweak the options to have more control on the expected number of inputs
+/// to the layout and how RDF terms are associated to anonymous resources (
+/// resources that don't have terms defined in the input tree value).
+pub struct Options<G = generator::Blank> {
+	/// The number of input resources passed to the deserialization function
+	/// (and hence the size of the output `Vec<Term>`).
+	///
+	/// If `None`, the input count is decided using the required input count of
+	/// the layout. However for the top and bottom layouts, that don't have a
+	/// required input count, only one input resource is passed by default
+	/// which may not fit all use cases. This option can be used to set the
+	/// input count manually.
+	input_count: Option<u32>,
+
+	/// Defines what term is given to input resources when none are defined by
+	/// the input tree value.
+	///
+	/// By default all input resources are associated to the blank node
+	/// identifier `_:input{i}` where `{i}` is replaced by the input index.
+	input_term_generator: fn(usize) -> Term,
+
+	/// Resource id generator for non-input resources.
+	///
+	/// By default the [`generator::Blank`] generator is used, creating a new
+	/// fresh blank node identifier of the form `_:{i}` for each resource,
+	/// where `{i}` is replaced by a unique number from `0` to `n` where `n` is
+	/// the number of anonymous non-input resources.
+	generator: G,
+}
+
+impl Default for Options {
+	fn default() -> Self {
+		Self {
+			input_count: None,
+			input_term_generator: |i| Term::blank(BlankIdBuf::new(format!("_:input{i}")).unwrap()),
+			generator: generator::Blank::new(),
+		}
+	}
+}
+
+impl<G> Options<G> {
+	/// Changes the number of inputs passed to the deserialization algorithm.
+	///
+	/// When defined, the layout's input count is used. However for the top
+	/// and bottom layouts that don't have an input count, `1` is used by
+	/// default, which may not fit all use cases. This option can be used to
+	/// set the input count manually.
+	pub fn with_input_count(self, count: u32) -> Self {
+		Self {
+			input_count: Some(count),
+			..self
+		}
+	}
+
+	/// Defines what term is given to input resources when none are defined by
+	/// the input tree value.
+	///
+	/// By default all input resources are associated to the blank node
+	/// identifier `_:input{i}` where `{i}` is replaced by the input index.
+	pub fn with_input_term_generator(self, f: fn(usize) -> Term) -> Self {
+		Self {
+			input_term_generator: f,
+			..self
+		}
+	}
+
+	/// Changes the generator used to generate non-input anonymous resources
+	/// terms.
+	///
+	/// By default the [`generator::Blank`] generator is used, creating a new
+	/// fresh blank node identifier of the form `_:{i}` for each resource,
+	/// where `{i}` is replaced by a unique number from `0` to `n` where `n` is
+	/// the number of anonymous non-input resources.
+	pub fn with_generator<H>(self, generator: H) -> Options<H> {
+		Options {
+			input_count: self.input_count,
+			input_term_generator: self.input_term_generator,
+			generator,
+		}
 	}
 }
 
@@ -114,7 +200,7 @@ impl TermAmbiguity {
 ///     &layouts,
 ///     &value,
 ///     &layout_ref,
-///     None // will be the layout's expected number of inputs by default (1)
+///     treeldr_layouts::distill::de::Options::default()
 /// ).unwrap();
 ///
 /// // The number of subjects is equal to the number of layout inputs.
@@ -141,18 +227,11 @@ impl TermAmbiguity {
 /// interpretation of resources, allowing the term representation of the input
 /// resources to be collected during deserialization. The collected terms
 /// are then returned along with the RDF dataset.
-///
-/// The number of input resources passed to the deserialization function
-/// (and hence the size of the output `Vec<Term>`) is given by the
-/// `expected_input_count` argument. If `None`, the input count is decided using
-/// the required input count of the layout. For the top and bottom layouts,
-/// that don't have a required input count, only one input resource is passed by
-/// default.
-pub fn dehydrate(
+pub fn dehydrate<G: Generator>(
 	layouts: &Layouts,
 	value: &Value,
 	layout_ref: &Ref<LayoutType>,
-	expected_input_count: Option<u32>,
+	mut options: Options<G>,
 ) -> Result<(BTreeDataset<Term>, Vec<Term>), Error> {
 	#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 	enum InputResource {
@@ -291,7 +370,7 @@ pub fn dehydrate(
 	let layout = layouts.get(layout_ref).unwrap();
 	let input_count = layout
 		.input_count()
-		.unwrap_or(expected_input_count.unwrap_or(1)) as usize;
+		.unwrap_or(options.input_count.unwrap_or(1)) as usize;
 	let mut inputs = Vec::with_capacity(input_count);
 	for i in 0..input_count {
 		inputs.push(InputResource::Input(i))
@@ -320,7 +399,6 @@ pub fn dehydrate(
 	)?;
 
 	let mut map = HashMap::new();
-	let mut generator = generator::Blank::new();
 
 	for (r, terms) in interpretation.map {
 		match r {
@@ -347,16 +425,20 @@ pub fn dehydrate(
 		}
 	}
 
-	fn map_resource(
-		generator: &mut generator::Blank,
+	fn map_resource<G: Generator>(
 		map: &mut HashMap<InputResource, Term>,
 		r: InputResource,
+		options: &mut Options<G>,
 	) -> Term {
 		match r {
 			InputResource::Term(t) => t,
-			r => map
-				.entry(r)
-				.or_insert_with(|| Term::blank(generator.next_blank_id()))
+			InputResource::Input(i) => map
+				.entry(InputResource::Input(i))
+				.or_insert_with(|| (options.input_term_generator)(i))
+				.clone(),
+			InputResource::Anonymous(i) => map
+				.entry(InputResource::Anonymous(i))
+				.or_insert_with(|| Term::Id(options.generator.next(&mut ())))
 				.clone(),
 		}
 	}
@@ -365,16 +447,16 @@ pub fn dehydrate(
 		.into_iter()
 		.map(|quad| {
 			Quad(
-				map_resource(&mut generator, &mut map, quad.0),
-				map_resource(&mut generator, &mut map, quad.1),
-				map_resource(&mut generator, &mut map, quad.2),
-				quad.3.map(|g| map_resource(&mut generator, &mut map, g)),
+				map_resource(&mut map, quad.0, &mut options),
+				map_resource(&mut map, quad.1, &mut options),
+				map_resource(&mut map, quad.2, &mut options),
+				quad.3.map(|g| map_resource(&mut map, g, &mut options)),
 			)
 		})
 		.collect();
 
 	let values = (0..input_count)
-		.map(|i| map_resource(&mut generator, &mut map, InputResource::Input(i)))
+		.map(|i| map_resource(&mut map, InputResource::Input(i), &mut options))
 		.collect();
 
 	Ok((dataset, values))
