@@ -16,6 +16,15 @@ pub struct RdfContext<'a, V, I> {
 	pub interpretation: &'a I,
 }
 
+impl Default for RdfContext<'static, (), ()> {
+	fn default() -> Self {
+		RdfContext {
+			vocabulary: &(),
+			interpretation: &(),
+		}
+	}
+}
+
 impl<'a, V, I> RdfContext<'a, V, I> {
 	/// Creates a new RDF context.
 	pub fn new(vocabulary: &'a V, interpretation: &'a I) -> Self {

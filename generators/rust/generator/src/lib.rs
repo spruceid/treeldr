@@ -13,10 +13,18 @@ use utils::ident_from_iri;
 
 pub mod utils;
 
-pub enum Error {
-	MissingTypeIdentifier,
+#[derive(Debug, thiserror::Error)]
+pub enum Error<R> {
+	#[error("missing type identifier for layout {0}")]
+	MissingTypeIdentifier(R),
+
+	#[error("invalid field identifier `{0}`")]
 	InvalidFieldIdent(String),
+
+	#[error("invalid variant identifier `{0}`")]
 	InvalidVariantIdent(String),
+
+	#[error("no IRI representation")]
 	NoIriRepresentation,
 }
 
@@ -25,19 +33,73 @@ pub struct Options<R> {
 }
 
 impl<R> Options<R> {
+	pub fn new() -> Self {
+		Self {
+			idents: HashMap::new(),
+		}
+	}
+
 	pub fn layout_ident<V, I>(
 		&self,
 		rdf: RdfContext<V, I>,
 		layout_ref: &Ref<LayoutType, I::Resource>,
-	) -> Result<syn::Ident, Error>
+	) -> Result<syn::Ident, Error<R>>
 	where
 		V: IriVocabulary,
 		I: ReverseIriInterpretation<Resource = R, Iri = V::Iri>,
-		R: Eq + Hash,
+		R: Clone + Eq + Hash,
 	{
-		default_layout_ident(rdf, layout_ref)
-			.or_else(|| self.idents.get(layout_ref).cloned())
-			.ok_or(Error::MissingTypeIdentifier)
+		self.idents
+			.get(layout_ref)
+			.cloned()
+			.or_else(|| default_layout_ident(rdf, layout_ref))
+			.ok_or(Error::MissingTypeIdentifier(layout_ref.id().clone()))
+	}
+
+	pub fn layout_ref<V, I>(
+		&self,
+		rdf: RdfContext<V, I>,
+		layout_ref: &Ref<LayoutType, I::Resource>,
+	) -> Result<syn::Type, Error<R>>
+	where
+		V: IriVocabulary,
+		I: ReverseIriInterpretation<Resource = R, Iri = V::Iri>,
+		R: Clone + Eq + Hash,
+	{
+		use treeldr_layouts::PresetLayout;
+		for i in rdf.interpretation.iris_of(layout_ref.id()) {
+			let iri = rdf.vocabulary.iri(i).unwrap();
+			if let Some(p) = PresetLayout::from_iri(iri) {
+				let ty = match p {
+					PresetLayout::Id => quote!(::treeldr::rdf_types::Id),
+					PresetLayout::Unit => quote!(()),
+					PresetLayout::Boolean => quote!(bool),
+					PresetLayout::U8 => quote!(u8),
+					PresetLayout::U16 => quote!(u16),
+					PresetLayout::U32 => quote!(u32),
+					PresetLayout::U64 => quote!(u64),
+					PresetLayout::I8 => quote!(i8),
+					PresetLayout::I16 => quote!(i16),
+					PresetLayout::I32 => quote!(i32),
+					PresetLayout::I64 => quote!(i64),
+					PresetLayout::String => quote!(String),
+				};
+
+				return Ok(syn::parse2(ty).unwrap());
+			}
+		}
+
+		let ident = self.layout_ident(rdf, layout_ref)?;
+		Ok(syn::Type::Path(syn::TypePath {
+			qself: None,
+			path: syn::Path::from(ident),
+		}))
+	}
+}
+
+impl<R> Default for Options<R> {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 
@@ -52,7 +114,8 @@ where
 	let mut selected = None;
 
 	for i in rdf.interpretation.iris_of(layout_ref.id()) {
-		if let Some(id) = ident_from_iri(rdf.vocabulary.iri(i).unwrap()) {
+		let iri = rdf.vocabulary.iri(i).unwrap();
+		if let Some(id) = ident_from_iri(iri) {
 			if !selected.as_ref().is_some_and(|s| *s < id) {
 				selected = Some(id)
 			}
@@ -65,7 +128,7 @@ where
 pub fn pattern_to_id<V, I>(
 	rdf: RdfContext<V, I>,
 	pattern: &Pattern<I::Resource>,
-) -> Result<Id, Error>
+) -> Result<Id, Error<I::Resource>>
 where
 	V: IriVocabulary,
 	I: ReverseIriInterpretation<Iri = V::Iri>,
@@ -96,7 +159,7 @@ pub fn generate_input_attribute(count: u32) -> TokenStream {
 pub fn generate_dataset_attribute<V, I>(
 	rdf: RdfContext<V, I>,
 	dataset: &BTreeDataset<Pattern<I::Resource>>,
-) -> Result<TokenStream, Error>
+) -> Result<TokenStream, Error<I::Resource>>
 where
 	V: IriVocabulary,
 	I: ReverseIriInterpretation<Iri = V::Iri>,
@@ -121,7 +184,7 @@ where
 pub fn generate_value_input_attribute<V, I>(
 	rdf: RdfContext<V, I>,
 	input: &[Pattern<I::Resource>],
-) -> Result<TokenStream, Error>
+) -> Result<TokenStream, Error<I::Resource>>
 where
 	V: IriVocabulary,
 	I: ReverseIriInterpretation<Iri = V::Iri>,
@@ -137,7 +200,7 @@ where
 pub fn generate_value_graph_attribute<V, I>(
 	rdf: RdfContext<V, I>,
 	graph: &Option<Option<Pattern<I::Resource>>>,
-) -> Result<TokenStream, Error>
+) -> Result<TokenStream, Error<I::Resource>>
 where
 	V: IriVocabulary,
 	I: ReverseIriInterpretation<Iri = V::Iri>,
@@ -163,11 +226,11 @@ pub fn generate<V, I>(
 	layouts: &Layouts<I::Resource>,
 	layout_ref: &Ref<LayoutType, I::Resource>,
 	options: &Options<I::Resource>,
-) -> Result<TokenStream, Error>
+) -> Result<TokenStream, Error<I::Resource>>
 where
 	V: IriVocabulary,
 	I: ReverseIriInterpretation<Iri = V::Iri>,
-	I::Resource: Ord + Hash,
+	I::Resource: Clone + Ord + Hash,
 {
 	let layout = layouts.get(layout_ref).unwrap();
 	let ident = options.layout_ident(rdf, layout_ref)?;
@@ -261,7 +324,7 @@ where
 					let dataset = generate_dataset_attribute(rdf, &f.dataset)?;
 					let input = generate_value_input_attribute(rdf, &f.value.input)?;
 					let graph = generate_value_graph_attribute(rdf, &f.value.graph)?;
-					let layout = options.layout_ident(rdf, &f.value.layout)?;
+					let layout = options.layout_ref(rdf, &f.value.layout)?;
 
 					Ok(quote! {
 						#[tldr(#intro, #dataset, #input, #graph)]
@@ -293,7 +356,7 @@ where
 					let dataset = generate_dataset_attribute(rdf, &v.dataset)?;
 					let input = generate_value_input_attribute(rdf, &v.value.input)?;
 					let graph = generate_value_graph_attribute(rdf, &v.value.graph)?;
-					let layout = options.layout_ident(rdf, &v.value.layout)?;
+					let layout = options.layout_ref(rdf, &v.value.layout)?;
 
 					Ok(quote! {
 						#[tldr(#intro, #dataset, #input, #graph)]
@@ -321,7 +384,7 @@ where
 				let item_dataset = generate_dataset_attribute(rdf, &layout.item.dataset)?;
 				let item_input = generate_value_input_attribute(rdf, &layout.item.value.input)?;
 				let item_graph = generate_value_graph_attribute(rdf, &layout.item.value.graph)?;
-				let item_layout = options.layout_ident(rdf, &layout.item.value.layout)?;
+				let item_layout = options.layout_ref(rdf, &layout.item.value.layout)?;
 
 				Ok(quote! {
 					#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
@@ -346,7 +409,7 @@ where
 				let node_dataset = generate_dataset_attribute(rdf, &layout.node.dataset)?;
 				let node_input = generate_value_input_attribute(rdf, &layout.node.value.input)?;
 				let node_graph = generate_value_graph_attribute(rdf, &layout.node.value.graph)?;
-				let node_layout = options.layout_ident(rdf, &layout.node.value.layout)?;
+				let node_layout = options.layout_ref(rdf, &layout.node.value.layout)?;
 
 				Ok(quote! {
 					#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
@@ -371,7 +434,7 @@ where
 						let item_dataset = generate_dataset_attribute(rdf, &item.dataset)?;
 						let item_input = generate_value_input_attribute(rdf, &item.value.input)?;
 						let item_graph = generate_value_graph_attribute(rdf, &item.value.graph)?;
-						let item_layout = options.layout_ident(rdf, &item.value.layout)?;
+						let item_layout = options.layout_ref(rdf, &item.value.layout)?;
 
 						Ok(quote! {
 							#[tldr(#item_intro, #item_dataset, #item_input, #item_graph)]
