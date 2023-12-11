@@ -1,9 +1,0 @@
-type A {
-	foo: &A
-	//   ^^ this anonymous node...
-}
-
-type B {
-	bar: &A
-	//   ^^ ...should be merged with this one.
-}

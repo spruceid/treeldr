@@ -1,0 +1,11 @@
+{
+	"type": "record",
+	"fields": {
+		"name": {
+			"value": {
+				"type": "string"
+			},
+			"property": "https://schema.org/name"
+		}
+	}
+}

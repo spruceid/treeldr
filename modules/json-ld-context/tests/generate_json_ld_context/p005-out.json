@@ -1,8 +1,0 @@
-{
-	"Foo": {
-		"@id": "http://www.example.com/Foo",
-		"@context": {
-			"prop": "http://www.example.com/Foo/prop"
-		}
-	}
-}

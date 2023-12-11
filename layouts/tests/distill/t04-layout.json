@@ -1,0 +1,94 @@
+{
+	"prefixes": {
+		"xsd": "http://www.w3.org/2001/XMLSchema#",
+		"schema": "https://schema.org/",
+		"ex": "https://example.org/#"
+	},
+	"type": "record",
+	"fields": {
+		"date": {
+			"value": {
+				"type": "string",
+				"datatype": "xsd:dateTime"
+			},
+			"property": "ex:date"
+		},
+		"bill": {
+			"value": {
+				"type": "record",
+				"fields": {
+					"milk1L": {
+						"value": {
+							"id": "ex:ItemByUnit",
+							"type": "record",
+							"fields": {
+								"unitPrice": {
+									"value": {
+										"type": "number",
+										"datatype": "xsd:decimal"
+									},
+									"property": "ex:unitPrice"
+								},
+								"units": {
+									"value": {
+										"type": "number",
+										"datatype": "xsd:nonNegativeInteger"
+									},
+									"property": "ex:units"
+								}
+							}
+						},
+						"property": "ex:milk1L"
+					},
+					"beef": {
+						"value": {
+							"id": "ex:ItemByVolume",
+							"type": "record",
+							"fields": {
+								"volumePrice": {
+									"value": {
+										"type": "number",
+										"datatype": "xsd:decimal"
+									},
+									"property": "ex:volumePrice"
+								},
+								"volume": {
+									"value": {
+										"type": "number",
+										"datatype": "xsd:decimal"
+									},
+									"property": "ex:volume"
+								}
+							}
+						},
+						"property": "ex:beef"
+					}
+				}
+			},
+			"property": "ex:bill"
+		},
+		"pointOfSale": {
+			"value": {
+				"id": "ex:PointOfSale",
+				"type": "record",
+				"fields": {
+					"address": {
+						"value": {
+							"type": "string",
+							"datatype": "https://schema.org/Text"
+						},
+						"property": "schema:address"
+					},
+					"till": {
+						"value": {
+							"type": "number",
+							"datatype": "xsd:nonNegativeInteger"
+						},
+						"property": "ex:till"
+					}
+				}
+			},
+			"property": "ex:pointOfSale"
+		}
+	}
+}

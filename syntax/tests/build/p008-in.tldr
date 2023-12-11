@@ -1,4 +1,0 @@
-type Foo;
-type Bar;
-
-type Union = Foo | Bar;

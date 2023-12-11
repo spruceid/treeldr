@@ -1,0 +1,51 @@
+{
+	"type": "tuple",
+	"input": "subject",
+	"items": [
+		{
+			"intro": "item",
+			"value": {
+				"layout": {
+					"type": "boolean",
+					"input": "value",
+					"resource": "_:value",
+					"datatype": "http://www.w3.org/2001/XMLSchema#boolean"
+				},
+				"input": ["_:item"]
+			},
+			"dataset": [
+				["_:subject", "http://example.org/prop1", "_:item"]
+			]
+		},
+		{
+			"intro": "item",
+			"value": {
+				"layout": {
+					"type": "number",
+					"input": "value",
+					"resource": "_:value",
+					"datatype": "http://www.w3.org/2001/XMLSchema#integer"
+				},
+				"input": ["_:item"]
+			},
+			"dataset": [
+				["_:subject", "http://example.org/prop2", "_:item"]
+			]
+		},
+		{
+			"intro": "item",
+			"value": {
+				"layout": {
+					"type": "string",
+					"input": "value",
+					"resource": "_:value",
+					"datatype": "http://www.w3.org/2001/XMLSchema#string"
+				},
+				"input": ["_:item"]
+			},
+			"dataset": [
+				["_:subject", "http://example.org/prop3", "_:item"]
+			]
+		}
+	]
+}

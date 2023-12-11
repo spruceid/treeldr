@@ -1,0 +1,20 @@
+[package]
+name = "treeldr"
+description = "TreeLDR interface with Rust"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[features]
+default = ["macros"]
+macros = ["treeldr-macros"]
+
+[dependencies]
+thiserror.workspace = true
+educe.workspace = true
+iref.workspace = true
+langtag.workspace = true
+rdf-types.workspace = true
+xsd-types.workspace = true
+grdf.workspace = true
+treeldr-macros = { workspace = true, optional = true }

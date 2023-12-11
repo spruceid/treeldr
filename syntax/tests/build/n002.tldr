@@ -1,2 +1,0 @@
-type A {}
-layout B for A = A // Layout aliases are forbidden

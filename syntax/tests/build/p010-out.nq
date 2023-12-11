@@ -1,5 +1,0 @@
-<http://www.example.com/type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2000/01/rdf-schema#Class> .
-<http://www.example.com/type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://treeldr.org/Layout> .
-<http://www.example.com/type> <https://treeldr.org/layoutFor> <http://www.example.com/type> .
-<http://www.example.com/type> <https://treeldr.org/fields> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
-<http://www.example.com/type> <https://treeldr.org/name> "type" .

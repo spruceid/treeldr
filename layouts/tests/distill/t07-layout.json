@@ -1,0 +1,18 @@
+{
+	"type": "set",
+	"input": "subject",
+	"item": {
+		"intro": "item",
+		"value": {
+			"layout": {
+				"type": "string",
+				"input": "value",
+				"resource": "_:value"
+			},
+			"input": ["_:item"]
+		},
+		"dataset": [
+			["_:subject", "http://example.org/prop", "_:item"]
+		]
+	}
+}

@@ -1,2 +1,0 @@
-type Foo;
-layout Reference for Foo = &Foo;

@@ -1,0 +1,23 @@
+{
+	"type": "list",
+	"input": "head",
+	"node": {
+		"intro": "item",
+		"value": {
+			"layout": {
+				"type": "string",
+				"input": "value",
+				"resource": "_:value"
+			},
+			"input": ["_:item"]
+		},
+		"head": "head",
+		"rest": "rest",
+		"dataset": [
+			["_:head", "http://www.w3.org/1999/02/22-rdf-syntax-ns#first", "_:item"],
+			["_:head", "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest", "_:rest"]
+		]
+	},
+	"head": "_:head",
+	"tail": "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+}

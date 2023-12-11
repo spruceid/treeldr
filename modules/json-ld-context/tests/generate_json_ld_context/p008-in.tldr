@@ -1,5 +1,0 @@
-use <http://www.w3.org/2001/XMLSchema#> as xsd;
-
-type Foo {
-	prop: multiple xsd:string
-}

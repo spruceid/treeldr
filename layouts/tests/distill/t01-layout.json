@@ -1,0 +1,20 @@
+{
+	"type": "record",
+	"input": ["self"],
+	"fields": {
+		"name": {
+			"intro": ["value"],
+			"value": {
+				"layout": {
+					"input": ["self"],
+					"type": "string",
+					"resource": "_:self"
+				},
+				"input": ["_:value"]
+			},
+			"dataset": [
+				["_:self", "https://schema.org/name", "_:value"]
+			]
+		}
+	}
+}

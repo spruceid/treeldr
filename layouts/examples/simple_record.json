@@ -1,0 +1,18 @@
+{
+	"id": "https://example.org/#SimpleRecord",
+	"type": "record",
+	"prefixes": { "tldr": "https://treeldr.org/layouts#" },
+	"fields": {
+		"id": {
+			"intro": [],
+			"value": {
+				"layout": "tldr:id",
+				"input": ["_:self"]
+			}
+		},
+		"name": {
+			"value": "tldr:string",
+			"property": "https://schema.org/name"
+		}
+	}
+}

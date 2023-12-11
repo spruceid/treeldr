@@ -1,9 +1,0 @@
-base <https://example.com>;
-
-type Foo {
-	bar: Bar
-}
-
-type Bar {
-	foo: Foo
-}

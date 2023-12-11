@@ -1,9 +1,0 @@
-{
-	"CustomCredential": {
-		"@id": "http://www.example.com/CustomCredential",
-		"@context": {
-			"id": "@id",
-			"sameAs": "http://www.example.com/sameAs"
-		}
-	}
-}

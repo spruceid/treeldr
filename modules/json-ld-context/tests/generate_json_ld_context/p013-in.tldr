@@ -1,8 +1,0 @@
-use <http://www.w3.org/1999/02/22-rdf-syntax-ns#> as rdf;
-use <http://www.w3.org/2000/01/rdf-schema#> as rdfs;
-use <http://www.w3.org/2001/XMLSchema#> as xsd;
-
-type Foo {
-	rdf:type as "@type": required &rdfs:Class,
-	prop: xsd:string
-}

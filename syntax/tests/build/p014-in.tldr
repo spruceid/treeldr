@@ -1,3 +1,0 @@
-type Type {
-	prop: (("singleton") with /[a-z]+/ as MoreGeneralLayout)
-}
