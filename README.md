@@ -1,6 +1,6 @@
 # TreeLDR
 
-TreeLDR is Linked-Data serialization framework providing three main features:
+TreeLDR is Linked-Data serialization framework providing:
   - RDF layouts to serialize and deserialize RDF datasets from/to tree data;
   - A concise schema definition language for RDF classes and layouts;
   - A set of boilerplate code generator.
@@ -11,9 +11,16 @@ target programming languages such as Python, Java and more. This way, developers
 can define data structures in a familiar way and focus purely on the application
 level.
 
+> [!IMPORTANT]
+> TreeLDR has experienced major changes with version 0.2. In particular, we
+> formalized the data model of Layouts, changing their definition in a way that
+> is incompatible with our current implementation of the DSL and (some)
+> generators. We will reintroduce the missing DSL and generators in future
+> updates.
+
 ## Installation
 
-You will need [Rust](https://rust-lang.org) 1.65 or later
+You will need [Rust](https://rust-lang.org) 1.73 or later
 to install TreeLDR, with [cargo](https://doc.rust-lang.org/cargo/).
 
 TreeLDR can be installed from the source by first cloning
@@ -22,164 +29,9 @@ the git repository:
 git clone https://github.com/spruceid/treeldr.git
 ```
 
-This repository contains the different libraries composing
-the TreeLDR language, the compiler library and its modules.
-You can then build and install the compiler using `cargo`
-from the repository root:
+This repository contains the different libraries and executables composing
+the TreeLDR framework.
+You can then build everything from the repository root:
 ```
-cargo install --path tldrc
-```
-
-## User Guide
-
-See the [user guide](https://www.spruceid.dev/treeldr) for a complete overview
-of TreeLDR's features.
-
-## Basic Usage
-
-A treeLDR schema is a collection of types and layouts.
-A type defines the semantics of a piece of data,
-while a layout defines its structure.
-One type can have many layouts,
-while each layout is associated to a single type.
-
-Here is a simple example
-with the definition of a `Person` type.
-```tldr
-// Sets the base IRI of the document.
-base <https://example.com/>;
-
-// Defines an `xs` prefix for the XML schema datatypes.
-use <http://www.w3.org/2001/XMLSchema#> as xs;
-
-/// A person.
-type Person {
-	/// Full name.
-	name: required xs:string,
-
-	/// Parents.
-	parent: multiple Person,
-
-	/// Age.
-	age: xs:nonNegativeInteger
-}
-```
-
-### Export
-
-TreeLDR schema definitions can be exported into various
-other schema description languages or programming language type
-definitions.
-
-```
-tldrc -i <input file 1> ... -i <input file N> <target> <layout>
-```
-where `<target>` is a sub command selecting the target language
-(e.g. `json-ld-context`, `json-schema`, etc.)
-and `<layout>` the IRI of the layout to export.
-SO target languages such as `json-ld-context` allow you to export
-multiple layouts at once.
-Use `--help` to see the description of each sub command and its options.
-
-#### Generating a JSON-LD context
-
-With the previous example
-we can use the following command:
-```
-tldrc -i example/xsd.tldr -i example/person.tldr json-ld-context https://example.com/Person
-```
-The `example/xsd.tldr` file should contains all the XSD type definitions.
-This will generate the given JSON-LD context:
-```json
-{
-	"name": "https://example.com/Person/name",
-	"parent": "https://schema.org/Person/parent",
-	"age": "https://schema.org/Person/age"
-}
-```
-
-#### Generating a JSON Schema
-
-We can also use the following command:
-```
-tldrc -i example/xsd.tldr -i example/person.tldr json-schema https://example.com/Person
-```
-This will generate the given JSON Schema for the same layout:
-```json
-{
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
-	"$id": "https://example.com/person.schema.json",
-	"description": "Person",
-	"type": "object",
-	"properties": {
-		"name": {
-			"description": "Full name",
-			"type": "string"
-		},
-		"parent": {
-			"description": "Parents",
-			"type": "array",
-			"item": {
-			"$ref": "https://example.com/person.schema.json"
-			}
-		},
-		"age": {
-			"description": "Age",
-			"type": "integer",
-			"minimum": 0
-		}
-	},
-	"required": [
-		"name"
-	]
-}
-```
-
-#### Generating a Rust module
-
-TreeLDR provides two Rust libraries
-`treeldr_rust_macros` and `treeldr_rust_prelude` that
-help integrate TreeLDR with Rust.
-The first define a `#[treeldr]` procedural macro attribute
-that generates code compatible with type definitions
-provided by `treeldr_rust_prelude`.
-
-```rust
-#[tldr(
-	"examples/xsd.tldr",
-	"examples/person.tldr"
-)]
-pub mod schema {
-	/// XSD datatypes.
-	#[prefix("http://www.w3.org/2001/XMLSchema#")]
-	pub mod xs {}
-
-	/// Person example type.
-	#[prefix("https://example.com/")]
-	pub mod example {}
-}
-```
-
-This will expand into the following code:
-```rust
-pub mod schema {
-	pub mod xs {
-		pub type String = ::std::alloc::String;
-	}
-
-	pub mod example {
-		/// A person.
-		#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-		pub struct Person {
-			/// Full name.
-			name: super::xs::String,
-
-			/// Parents.
-			parent: BTreeSet<Person>,
-
-			/// Age.
-			age: Option<u32>
-		}
-	}
-}
+cargo build
 ```
