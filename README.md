@@ -20,7 +20,7 @@ level.
 
 ## Installation
 
-You will need [Rust](https://rust-lang.org) 1.73 or later
+You will need [Rust](https://rust-lang.org) 1.70 or later
 to install TreeLDR, with [cargo](https://doc.rust-lang.org/cargo/).
 
 TreeLDR can be installed from the source by first cloning
