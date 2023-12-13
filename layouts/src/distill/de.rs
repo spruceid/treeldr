@@ -200,7 +200,7 @@ impl<G> Options<G> {
 ///     &layouts,
 ///     &value,
 ///     &layout_ref,
-///     treeldr_layouts::distill::de::Options::default()
+///     &mut treeldr_layouts::distill::de::Options::default()
 /// ).unwrap();
 ///
 /// // The number of subjects is equal to the number of layout inputs.
@@ -231,7 +231,7 @@ pub fn dehydrate<G: Generator>(
 	layouts: &Layouts,
 	value: &Value,
 	layout_ref: &Ref<LayoutType>,
-	mut options: Options<G>,
+	options: &mut Options<G>,
 ) -> Result<(BTreeDataset<Term>, Vec<Term>), Error> {
 	#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 	enum InputResource {
@@ -447,16 +447,16 @@ pub fn dehydrate<G: Generator>(
 		.into_iter()
 		.map(|quad| {
 			Quad(
-				map_resource(&mut map, quad.0, &mut options),
-				map_resource(&mut map, quad.1, &mut options),
-				map_resource(&mut map, quad.2, &mut options),
-				quad.3.map(|g| map_resource(&mut map, g, &mut options)),
+				map_resource(&mut map, quad.0, options),
+				map_resource(&mut map, quad.1, options),
+				map_resource(&mut map, quad.2, options),
+				quad.3.map(|g| map_resource(&mut map, g, options)),
 			)
 		})
 		.collect();
 
 	let values = (0..input_count)
-		.map(|i| map_resource(&mut map, InputResource::Input(i), &mut options))
+		.map(|i| map_resource(&mut map, InputResource::Input(i), options))
 		.collect();
 
 	Ok((dataset, values))

@@ -95,7 +95,7 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 		&layouts,
 		&input,
 		&layout_ref,
-		treeldr_layouts::distill::de::Options::default()
+		&mut treeldr_layouts::distill::de::Options::default()
 			.with_input_count(expected_values.len() as u32),
 	)
 	.unwrap();
