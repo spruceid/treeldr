@@ -1,0 +1,2 @@
+_:subject <https://example.org/#foo> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+_:subject <https://example.org/#bar> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> .

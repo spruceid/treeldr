@@ -1,0 +1,16 @@
+{
+	"type": "record",
+	"fields": {
+		"foo": {
+			"value": {
+				"id": "https://example.org/#FieldLayout",
+				"type": "boolean"
+			},
+			"property": "https://example.org/#foo"
+		},
+		"bar": {
+			"value": "https://example.org/#FieldLayout",
+			"property": "https://example.org/#bar"
+		}
+	}
+}

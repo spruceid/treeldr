@@ -207,3 +207,8 @@ test! {
 	/// Unit layout with const value.
 	t13 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
 }
+
+test! {
+	/// Layout reference.
+	t14 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
+}
