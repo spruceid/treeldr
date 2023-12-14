@@ -25,7 +25,7 @@ pub fn hydrate_data<V, I: Interpretation, D>(
 	layout_ref: Ref<DataLayoutType, I::Resource>,
 	layout: &DataLayout<I::Resource>,
 	inputs: &[I::Resource],
-) -> Result<TypedLiteral<I::Resource>, Error>
+) -> Result<TypedLiteral<I::Resource>, Error<I::Resource>>
 where
 	V: Vocabulary<Type = RdfLiteralType<V>>,
 	V::Iri: PartialEq,
@@ -234,7 +234,7 @@ where
 	}
 }
 
-fn hydrate_boolean_value(value: &str, type_: &Iri) -> Result<bool, Error> {
+fn hydrate_boolean_value<R>(value: &str, type_: &Iri) -> Result<bool, Error<R>> {
 	use xsd_types::{Boolean, ParseRdf};
 	if type_ == xsd_types::XSD_BOOLEAN {
 		Boolean::parse_rdf(value)
@@ -245,7 +245,7 @@ fn hydrate_boolean_value(value: &str, type_: &Iri) -> Result<bool, Error> {
 	}
 }
 
-fn hydrate_number_value(value: &str, type_: &Iri) -> Result<Number, Error> {
+fn hydrate_number_value<R>(value: &str, type_: &Iri) -> Result<Number, Error<R>> {
 	match xsd_types::Datatype::from_iri(type_) {
 		Some(xsd_types::Datatype::Decimal(_t)) => match xsd_types::lexical::Decimal::parse(value) {
 			Ok(value) => {
@@ -260,10 +260,10 @@ fn hydrate_number_value(value: &str, type_: &Iri) -> Result<Number, Error> {
 	}
 }
 
-fn hydrate_byte_string_value(_value: &str, _type_: &Iri) -> Result<Vec<u8>, Error> {
+fn hydrate_byte_string_value<R>(_value: &str, _type_: &Iri) -> Result<Vec<u8>, Error<R>> {
 	todo!()
 }
 
-fn hydrate_text_string_value(value: &str, _type_: &Iri) -> Result<String, Error> {
+fn hydrate_text_string_value<R>(value: &str, _type_: &Iri) -> Result<String, Error<R>> {
 	Ok(value.to_string())
 }

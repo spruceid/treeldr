@@ -18,7 +18,7 @@ use data::*;
 
 /// Hydrate error.
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum Error<R = Term> {
 	#[error("incompatible layout")]
 	IncompatibleLayout,
 
@@ -36,9 +36,12 @@ pub enum Error {
 
 	#[error("no matching literal representation found")]
 	NoMatchingLiteral,
+
+	#[error("layout `{0}` not found")]
+	LayoutNotFound(Ref<LayoutType, R>),
 }
 
-impl From<matching::Error> for Error {
+impl<R> From<matching::Error> for Error<R> {
 	fn from(value: matching::Error) -> Self {
 		match value {
 			matching::Error::Ambiguity => Self::DataAmbiguity,
@@ -82,7 +85,7 @@ pub fn hydrate_with<V, I: Interpretation, D>(
 	current_graph: Option<&I::Resource>,
 	layout_ref: &Ref<LayoutType, I::Resource>,
 	inputs: &[I::Resource],
-) -> Result<TypedValue<I::Resource>, Error>
+) -> Result<TypedValue<I::Resource>, Error<I::Resource>>
 where
 	V: Vocabulary<Type = RdfLiteralType<V>>,
 	V::Iri: PartialEq,
@@ -96,7 +99,9 @@ where
 		GraphLabel = I::Resource,
 	>,
 {
-	let layout = context.get(layout_ref).unwrap();
+	let layout = context
+		.get(layout_ref)
+		.ok_or_else(|| Error::LayoutNotFound(layout_ref.clone()))?;
 
 	if let Some(expected) = layout.input_count().filter(|&i| i != inputs.len() as u32) {
 		return Err(Error::InvalidInputCount {

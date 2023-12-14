@@ -107,6 +107,11 @@ impl<T, R> Ref<T, R> {
 	{
 		Ref(self.0.clone(), PhantomData)
 	}
+
+	/// Maps the resource identifier.
+	pub fn map<S>(self, f: impl FnOnce(R) -> S) -> Ref<T, S> {
+		Ref(f(self.0), PhantomData)
+	}
 }
 
 /// Context able to fetch (dereference) the definition of a resource for the
