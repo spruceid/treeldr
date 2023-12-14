@@ -1,8 +1,10 @@
 use core::fmt;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, str::FromStr};
 
-use num_bigint::Sign;
+use lazy_static::lazy_static;
+use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
+use num_traits::{Signed, Zero};
 
 use crate::{
 	layout::{
@@ -14,6 +16,10 @@ use crate::{
 
 pub mod de;
 pub mod ser;
+
+lazy_static! {
+	static ref TEN: BigInt = 10u32.into();
+}
 
 /// Rational number.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -55,6 +61,46 @@ impl Number {
 			}
 		} else {
 			NativeNumber::F64(self.0.to_f64().unwrap())
+		}
+	}
+
+	/// Returns the decimal representation of this number, if there is one.
+	pub fn decimal_representation(&self) -> Option<String> {
+		use std::fmt::Write;
+
+		let mut fraction = String::new();
+		let mut map = std::collections::HashMap::new();
+
+		let mut rem = if self.0.is_negative() {
+			-self.0.numer()
+		} else {
+			self.0.numer().clone()
+		};
+
+		rem %= self.0.denom();
+		while !rem.is_zero() && !map.contains_key(&rem) {
+			map.insert(rem.clone(), fraction.len());
+			rem *= TEN.clone();
+			fraction.push_str(&(rem.clone() / self.0.denom()).to_string());
+			rem %= self.0.denom();
+		}
+
+		let mut output = if self.0.is_negative() {
+			"-".to_owned()
+		} else {
+			String::new()
+		};
+
+		output.push_str(&(self.0.numer() / self.0.denom()).to_string());
+
+		if rem.is_zero() {
+			if !fraction.is_empty() {
+				write!(output, ".{}", &fraction).unwrap();
+			}
+
+			Some(output)
+		} else {
+			None
 		}
 	}
 }
@@ -130,6 +176,25 @@ impl From<serde_json::Number> for Number {
 	}
 }
 
+/// Error raised when trying to convert a non-decimal number to JSON.
+#[derive(Debug, thiserror::Error)]
+#[error("not a JSON number: {0}")]
+pub struct NonJsonNumber(pub Number);
+
+impl TryFrom<Number> for serde_json::Number {
+	type Error = NonJsonNumber;
+
+	fn try_from(value: Number) -> Result<Self, Self::Error> {
+		match value.decimal_representation() {
+			Some(decimal) => match serde_json::Number::from_str(&decimal) {
+				Ok(n) => Ok(n),
+				Err(_) => Err(NonJsonNumber(value)),
+			},
+			None => Err(NonJsonNumber(value)),
+		}
+	}
+}
+
 /// Literal value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Literal {
@@ -158,10 +223,12 @@ pub enum Value {
 }
 
 impl Value {
+	/// Returns the unit value.
 	pub fn unit() -> Self {
 		Self::Literal(Literal::Unit)
 	}
 
+	/// Checks if the value is unit.
 	pub fn is_unit(&self) -> bool {
 		matches!(self, Self::Literal(Literal::Unit))
 	}
@@ -189,6 +256,78 @@ impl From<serde_json::Value> for Value {
 					.map(|(key, value)| (key, value.into()))
 					.collect(),
 			),
+		}
+	}
+}
+
+/// Error raised when trying to convert a value to JSON that is not compatible
+/// with the JSON data model.
+#[derive(Debug, thiserror::Error)]
+pub enum NonJsonValue {
+	/// Number cannot be represented as JSON.
+	#[error("not a JSON number: {0}")]
+	Number(Number),
+
+	/// Byte string value, not supported by JSON.
+	#[error("byte string cannot be converted to JSON")]
+	ByteString(Vec<u8>),
+}
+
+impl From<NonJsonNumber> for NonJsonValue {
+	fn from(value: NonJsonNumber) -> Self {
+		NonJsonValue::Number(value.0)
+	}
+}
+
+impl TryFrom<Literal> for serde_json::Value {
+	type Error = NonJsonValue;
+
+	fn try_from(value: Literal) -> Result<Self, Self::Error> {
+		match value {
+			Literal::Unit => Ok(serde_json::Value::Null),
+			Literal::Boolean(b) => Ok(serde_json::Value::Bool(b)),
+			Literal::Number(n) => Ok(serde_json::Value::Number(n.try_into()?)),
+			Literal::TextString(s) => Ok(serde_json::Value::String(s)),
+			Literal::ByteString(s) => Err(NonJsonValue::ByteString(s)),
+		}
+	}
+}
+
+impl TryFrom<TypedLiteral> for serde_json::Value {
+	type Error = NonJsonValue;
+
+	fn try_from(value: TypedLiteral) -> Result<Self, Self::Error> {
+		match value {
+			TypedLiteral::Id(s, _) => Ok(serde_json::Value::String(s)),
+			TypedLiteral::Unit(value, _) => value.try_into(),
+			TypedLiteral::Boolean(b, _) => Ok(serde_json::Value::Bool(b)),
+			TypedLiteral::Number(n, _) => Ok(serde_json::Value::Number(n.try_into()?)),
+			TypedLiteral::TextString(s, _) => Ok(serde_json::Value::String(s)),
+			TypedLiteral::ByteString(s, _) => Err(NonJsonValue::ByteString(s)),
+		}
+	}
+}
+
+impl TryFrom<Value> for serde_json::Value {
+	type Error = NonJsonValue;
+
+	fn try_from(value: Value) -> Result<Self, Self::Error> {
+		match value {
+			Value::Literal(l) => l.try_into(),
+			Value::Record(r) => {
+				let mut map = serde_json::Map::new();
+
+				for (key, value) in r {
+					map.insert(key, value.try_into()?);
+				}
+
+				Ok(serde_json::Value::Object(map))
+			}
+			Value::List(list) => list
+				.into_iter()
+				.map(TryInto::try_into)
+				.collect::<Result<Vec<_>, _>>()
+				.map(serde_json::Value::Array),
 		}
 	}
 }
@@ -270,6 +409,32 @@ impl<R> TypedValue<R> {
 				Value::List(items.into_iter().map(TypedValue::into_untyped).collect())
 			}
 			Self::Always(value) => value,
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::Number;
+	use num_rational::Ratio;
+
+	#[test]
+	fn decimal_representation() {
+		let vectors = [
+			((1, 1), Some("1")),
+			((1, 2), Some("0.5")),
+			((1, 3), None),
+			((1, 4), Some("0.25")),
+			((1, 5), Some("0.2")),
+			((1, 6), None),
+			((1, 7), None),
+			((1, 8), Some("0.125")),
+			((1, 9), None),
+		];
+
+		for ((p, q), expected) in vectors {
+			let number = Number::new(Ratio::new(p.into(), q.into()));
+			assert_eq!(number.decimal_representation().as_deref(), expected)
 		}
 	}
 }
