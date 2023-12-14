@@ -7,11 +7,11 @@ use crate::{distill::RdfContextMut, value::Number};
 
 use super::{Error, RdfLiteral, RdfLiteralType};
 
-pub fn dehydrate_boolean<V, I>(
+pub fn dehydrate_boolean<V, I, Q>(
 	rdf: &RdfContextMut<V, I>,
 	value: bool,
 	type_: &I::Resource,
-) -> Result<RdfLiteral<V>, Error>
+) -> Result<RdfLiteral<V>, Error<Q>>
 where
 	V: IriVocabulary + LanguageTagVocabulary + LiteralVocabulary<Type = RdfLiteralType<V>>,
 	V::Iri: Clone,
@@ -33,11 +33,11 @@ where
 	todo!()
 }
 
-pub fn dehydrate_number<V, I>(
+pub fn dehydrate_number<V, I, Q>(
 	rdf: &RdfContextMut<V, I>,
 	value: &Number,
 	type_: &I::Resource,
-) -> Result<RdfLiteral<V>, Error>
+) -> Result<RdfLiteral<V>, Error<Q>>
 where
 	V: IriVocabulary + LanguageTagVocabulary + LiteralVocabulary<Type = RdfLiteralType<V>>,
 	V::Iri: Clone,
@@ -60,11 +60,11 @@ where
 	todo!()
 }
 
-pub fn dehydrate_byte_string<V, I>(
+pub fn dehydrate_byte_string<V, I, Q>(
 	_rdf: &RdfContextMut<V, I>,
 	_value: &[u8],
 	_type_: &I::Resource,
-) -> Result<RdfLiteral<V>, Error>
+) -> Result<RdfLiteral<V>, Error<Q>>
 where
 	V: IriVocabulary + LanguageTagVocabulary + LiteralVocabulary<Type = RdfLiteralType<V>>,
 	V::Iri: Clone,
@@ -74,11 +74,11 @@ where
 	todo!()
 }
 
-pub fn dehydrate_text_string<V, I>(
+pub fn dehydrate_text_string<V, I, Q>(
 	rdf: &RdfContextMut<V, I>,
 	value: &str,
 	type_: &I::Resource,
-) -> Result<RdfLiteral<V>, Error>
+) -> Result<RdfLiteral<V>, Error<Q>>
 where
 	V: IriVocabulary + LanguageTagVocabulary + LiteralVocabulary<Type = RdfLiteralType<V>>,
 	V::Iri: Clone,

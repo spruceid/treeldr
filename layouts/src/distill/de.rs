@@ -26,7 +26,7 @@ pub type RdfLiteral<V> = rdf_types::Literal<RdfLiteralType<V>, <V as LiteralVoca
 
 /// Dehydrate error.
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum Error<R = Term> {
 	#[error("incompatible layout")]
 	IncompatibleLayout,
 
@@ -41,6 +41,24 @@ pub enum Error {
 
 	#[error(transparent)]
 	TermAmbiguity(Box<TermAmbiguity>),
+
+	#[error("layout {0} not found")]
+	LayoutNotFound(Ref<LayoutType, R>),
+}
+
+impl<R> Error<R> {
+	pub fn map_ids<S>(self, f: impl Fn(R) -> S) -> Error<S> {
+		match self {
+			Self::IncompatibleLayout => Error::IncompatibleLayout,
+			Self::InvalidInputCount { expected, found } => {
+				Error::InvalidInputCount { expected, found }
+			}
+			Self::UndeclaredVariable(x) => Error::UndeclaredVariable(x),
+			Self::DataAmbiguity => Error::DataAmbiguity,
+			Self::TermAmbiguity(a) => Error::TermAmbiguity(a),
+			Self::LayoutNotFound(layout_ref) => Error::LayoutNotFound(layout_ref.map(f)),
+		}
+	}
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -472,7 +490,7 @@ pub fn dehydrate_with<V, I, Q, D>(
 	layout_ref: &Ref<LayoutType, Q>,
 	inputs: &[I::Resource],
 	output: &mut D,
-) -> Result<(), Error>
+) -> Result<(), Error<Q>>
 where
 	V: VocabularyMut<Type = RdfLiteralType<V>>,
 	V::Iri: Clone,
@@ -752,7 +770,7 @@ fn dehydrate_sub_value<V, I, Q, D>(
 	format: &ValueFormat<Q>,
 	env: &Environment<I::Resource>,
 	output: &mut D,
-) -> Result<(), Error>
+) -> Result<(), Error<Q>>
 where
 	V: VocabularyMut<Type = RdfLiteralType<V>>,
 	V::Iri: Clone,
@@ -829,7 +847,7 @@ impl<'a, R> Environment<'a, R> {
 }
 
 impl<'a, R: Clone> Environment<'a, R> {
-	pub fn instantiate_pattern<Q>(&self, pattern: &Pattern<Q>) -> Result<R, Error>
+	pub fn instantiate_pattern<Q>(&self, pattern: &Pattern<Q>) -> Result<R, Error<Q>>
 	where
 		Q: Clone + Into<R>,
 	{
@@ -842,7 +860,7 @@ impl<'a, R: Clone> Environment<'a, R> {
 		}
 	}
 
-	pub fn instantiate_patterns<Q>(&self, patterns: &[Pattern<Q>]) -> Result<Vec<R>, Error>
+	pub fn instantiate_patterns<Q>(&self, patterns: &[Pattern<Q>]) -> Result<Vec<R>, Error<Q>>
 	where
 		Q: Clone + Into<R>,
 	{
@@ -858,7 +876,7 @@ impl<'a, R: Clone> Environment<'a, R> {
 	pub fn instantiate_quad<Q>(
 		&self,
 		quad: Quad<&Pattern<Q>, &Pattern<Q>, &Pattern<Q>, &Pattern<Q>>,
-	) -> Result<Quad<R, R, R, R>, Error>
+	) -> Result<Quad<R, R, R, R>, Error<Q>>
 	where
 		Q: Clone + Into<R>,
 	{
@@ -874,7 +892,7 @@ impl<'a, R: Clone> Environment<'a, R> {
 		&self,
 		input: &BTreeDataset<Pattern<Q>>,
 		output: &mut D,
-	) -> Result<(), Error>
+	) -> Result<(), Error<Q>>
 	where
 		Q: Clone + Into<R>,
 		D: grdf::MutableDataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
