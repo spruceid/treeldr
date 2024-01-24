@@ -1,9 +1,6 @@
 use crate::{Dataset, Pattern};
 
-pub use crate::layout::{
-	BooleanLayout, BooleanLayoutType, ByteStringLayout, ByteStringLayoutType, NumberLayout,
-	NumberLayoutType, TextStringLayoutType, UnitLayout, UnitLayoutType,
-};
+pub use crate::layout::{BooleanLayout, ByteStringLayout, NumberLayout, UnitLayout};
 
 use crate::abs::RegExp;
 
