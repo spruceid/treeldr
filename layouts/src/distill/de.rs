@@ -385,7 +385,9 @@ pub fn dehydrate<G: Generator>(
 		}
 	}
 
-	let layout = layouts.get(layout_ref).unwrap();
+	let layout = layouts
+		.get(layout_ref)
+		.ok_or_else(|| Error::LayoutNotFound(layout_ref.clone()))?;
 	let input_count = layout
 		.input_count()
 		.unwrap_or(options.input_count.unwrap_or(1)) as usize;
@@ -507,7 +509,9 @@ where
 		GraphLabel = I::Resource,
 	>,
 {
-	let layout = layouts.get(layout_ref).unwrap();
+	let layout = layouts
+		.get(layout_ref)
+		.ok_or_else(|| Error::LayoutNotFound(layout_ref.clone()))?;
 
 	if let Some(expected) = layout.input_count().filter(|&i| i != inputs.len() as u32) {
 		return Err(Error::InvalidInputCount {

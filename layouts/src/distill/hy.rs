@@ -110,7 +110,7 @@ where
 		});
 	}
 
-	match context.get(layout_ref).unwrap() {
+	match layout {
 		Layout::Never => Err(Error::IncompatibleLayout),
 		Layout::Literal(layout) => {
 			match layout {
