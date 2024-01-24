@@ -8,8 +8,8 @@ use treeldr_layouts::abs::syntax::{
 	BooleanLayout, ByteStringLayout, CompactIri, DataLayout, Dataset, Field, IdLayout, Layout,
 	LayoutHeader, ListItem, ListLayout, ListNode, ListNodeOrLayout, LiteralLayout, NumberLayout,
 	OrderedListLayout, Pattern, ProductLayout, Quad, SizedListLayout, SumLayout, TextStringLayout,
-	UnitLayout, UnorderedListLayout, ValueFormat, ValueFormatOrLayout, Variant, VariantFormat,
-	VariantFormatOrLayout,
+	UnitLayout, UnorderedListLayout, ValueFormat, ValueFormatOrLayout, VariableNameBuf, Variant,
+	VariantFormat, VariantFormatOrLayout,
 };
 
 #[derive(Default)]
@@ -918,7 +918,9 @@ fn expect_quad_list_argument(
 
 fn parse_pattern(value: String, span: Span) -> Result<Pattern, Error> {
 	match BlankIdBuf::new(value) {
-		Ok(blank_id) => Ok(Pattern::Var(blank_id.suffix().to_owned())),
+		Ok(blank_id) => Ok(Pattern::Var(
+			VariableNameBuf::new(blank_id.suffix().to_owned()).unwrap(),
+		)),
 		Err(e) => match IriRefBuf::new(e.0) {
 			Ok(iri_ref) => Ok(Pattern::Iri(CompactIri(iri_ref))),
 			Err(e) => Err(Error::InvalidPattern(e.0, span)),
