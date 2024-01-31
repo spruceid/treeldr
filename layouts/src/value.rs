@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, str::FromStr};
 use lazy_static::lazy_static;
 use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
-use num_traits::{Signed, Zero};
+use num_traits::{Signed, ToPrimitive, Zero};
 
 use crate::{
 	layout::{
@@ -17,6 +17,9 @@ use crate::{
 pub mod de;
 pub mod ser;
 
+#[cfg(feature = "serde_cbor")]
+mod serde_cbor;
+
 lazy_static! {
 	static ref TEN: BigInt = 10u32.into();
 }
@@ -28,6 +31,18 @@ pub struct Number(BigRational);
 impl Number {
 	pub fn new(rational: BigRational) -> Self {
 		Self(rational)
+	}
+
+	pub fn is_integer(&self) -> bool {
+		self.0.is_integer()
+	}
+
+	pub fn as_integer(&self) -> Option<&BigInt> {
+		if self.0.is_integer() {
+			Some(self.0.numer())
+		} else {
+			None
+		}
 	}
 
 	pub fn as_big_rational(&self) -> &BigRational {
@@ -62,6 +77,10 @@ impl Number {
 		} else {
 			NativeNumber::F64(self.0.to_f64().unwrap())
 		}
+	}
+
+	pub fn to_f64(&self) -> f64 {
+		self.0.to_f64().unwrap()
 	}
 
 	/// Returns the decimal representation of this number, if there is one.
