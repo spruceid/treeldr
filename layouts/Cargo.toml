@@ -6,7 +6,7 @@ authors.workspace = true
 edition.workspace = true
 
 [features]
-default = ["serde_cbor"]
+default = []
 
 # CBOR extension.
 cbor = []
