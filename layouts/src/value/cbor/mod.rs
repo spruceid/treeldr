@@ -43,7 +43,7 @@ where
 	I::Resource: Ord,
 {
 	let layout = layouts.get(layout_ref).expect("missing layout definition");
-	match interpretation.lexical_iri_interpretation(&vocabulary, CBOR_TAG_IRI) {
+	match interpretation.lexical_iri_interpretation(vocabulary, CBOR_TAG_IRI) {
 		Some(prop) => match layout.extra_properties().get(&prop) {
 			Some(value) => {
 				for l in interpretation.literals_of(value) {
