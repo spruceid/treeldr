@@ -18,7 +18,7 @@ pub mod de;
 pub mod ser;
 
 #[cfg(feature = "cbor")]
-mod cbor;
+pub mod cbor;
 
 lazy_static! {
 	static ref TEN: BigInt = 10u32.into();
