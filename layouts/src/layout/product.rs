@@ -28,6 +28,9 @@ pub struct ProductLayout<R> {
 
 	/// Dataset.
 	pub dataset: Dataset<R>,
+
+	/// Additional properties.
+	pub extra_properties: BTreeMap<R, R>,
 }
 
 impl<R> ProductLayout<R> {

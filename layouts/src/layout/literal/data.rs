@@ -1,5 +1,5 @@
 use educe::Educe;
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 
 use crate::{utils::DetAutomaton, Dataset, Pattern, Value};
 
@@ -32,6 +32,18 @@ pub enum DataLayout<R> {
 	TextString(TextStringLayout<R>),
 }
 
+impl<R> DataLayout<R> {
+	pub fn extra_properties(&self) -> &BTreeMap<R, R> {
+		match self {
+			Self::Unit(l) => &l.extra_properties,
+			Self::Boolean(l) => &l.extra_properties,
+			Self::Number(l) => &l.extra_properties,
+			Self::ByteString(l) => &l.extra_properties,
+			Self::TextString(l) => &l.extra_properties,
+		}
+	}
+}
+
 impl<R: Ord> PartialOrd for DataLayout<R> {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
 		Some(self.cmp(other))
@@ -55,6 +67,9 @@ pub struct UnitLayout<R> {
 
 	#[serde(rename = "const", default, skip_serializing_if = "Value::is_unit")]
 	pub const_: Value,
+
+	/// Additional properties.
+	pub extra_properties: BTreeMap<R, R>,
 }
 
 impl<R: Ord> PartialOrd for UnitLayout<R> {
@@ -81,6 +96,9 @@ pub struct BooleanLayout<R> {
 	pub resource: Pattern<R>,
 
 	pub datatype: R,
+
+	/// Additional properties.
+	pub extra_properties: BTreeMap<R, R>,
 }
 
 impl<R: Ord> PartialOrd for BooleanLayout<R> {
@@ -107,6 +125,9 @@ pub struct NumberLayout<R> {
 	pub resource: Pattern<R>,
 
 	pub datatype: R,
+
+	/// Additional properties.
+	pub extra_properties: BTreeMap<R, R>,
 }
 
 impl<R: Ord> PartialOrd for NumberLayout<R> {
@@ -133,6 +154,9 @@ pub struct ByteStringLayout<R> {
 	pub resource: Pattern<R>,
 
 	pub datatype: R,
+
+	/// Additional properties.
+	pub extra_properties: BTreeMap<R, R>,
 }
 
 impl<R: Ord> PartialOrd for ByteStringLayout<R> {
@@ -161,6 +185,9 @@ pub struct TextStringLayout<R> {
 	pub resource: Pattern<R>,
 
 	pub datatype: R,
+
+	/// Additional properties.
+	pub extra_properties: BTreeMap<R, R>,
 }
 
 impl<R: Ord> PartialOrd for TextStringLayout<R> {

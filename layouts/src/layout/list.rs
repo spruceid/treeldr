@@ -5,7 +5,7 @@ pub mod unordered;
 use educe::Educe;
 pub use ordered::OrderedListLayout;
 pub use sized::SizedListLayout;
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 pub use unordered::UnorderedListLayout;
 
 use crate::{graph::Dataset, Ref, ValueFormat};
@@ -42,6 +42,14 @@ impl<R> ListLayout<R> {
 			Self::Unordered(l) => l.input,
 			Self::Ordered(l) => l.input,
 			Self::Sized(l) => l.input,
+		}
+	}
+
+	pub fn extra_properties(&self) -> &BTreeMap<R, R> {
+		match self {
+			Self::Unordered(l) => &l.extra_properties,
+			Self::Ordered(l) => &l.extra_properties,
+			Self::Sized(l) => &l.extra_properties,
 		}
 	}
 }

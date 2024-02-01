@@ -1,5 +1,5 @@
 use educe::Educe;
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 
 use crate::{utils::DetAutomaton, Dataset, Pattern};
 
@@ -23,6 +23,9 @@ pub struct IdLayout<R> {
 	pub pattern: Option<DetAutomaton<usize>>,
 
 	pub resource: Pattern<R>,
+
+	/// Additional properties.
+	pub extra_properties: BTreeMap<R, R>,
 }
 
 impl<R: Ord> PartialOrd for IdLayout<R> {

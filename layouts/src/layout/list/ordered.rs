@@ -1,5 +1,5 @@
 use educe::Educe;
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 
 use crate::{graph::Dataset, layout::LayoutType, Pattern, Ref, ValueFormat};
 
@@ -26,6 +26,9 @@ pub struct OrderedListLayout<R> {
 	pub tail: Pattern<R>,
 
 	pub dataset: Dataset<R>,
+
+	/// Additional properties.
+	pub extra_properties: BTreeMap<R, R>,
 }
 
 impl<R> OrderedListLayout<R> {

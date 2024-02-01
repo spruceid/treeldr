@@ -8,7 +8,7 @@ pub use data::{
 };
 use educe::Educe;
 pub use id::{IdLayout, IdLayoutType};
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 
 pub struct LiteralLayoutType;
 
@@ -23,6 +23,15 @@ pub struct LiteralLayoutType;
 pub enum LiteralLayout<R> {
 	Data(DataLayout<R>),
 	Id(IdLayout<R>),
+}
+
+impl<R> LiteralLayout<R> {
+	pub fn extra_properties(&self) -> &BTreeMap<R, R> {
+		match self {
+			Self::Data(d) => d.extra_properties(),
+			Self::Id(d) => &d.extra_properties,
+		}
+	}
 }
 
 impl<R: Ord> PartialOrd for LiteralLayout<R> {

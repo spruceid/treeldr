@@ -108,6 +108,20 @@ impl<T, R> Ref<T, R> {
 		Ref(self.0.clone(), PhantomData)
 	}
 
+	/// Returns this resource identifier as resource identifier with a
+	/// different type.
+	///
+	/// It is always possible to change the type of a typed resource identifier:
+	/// the actual type of the resource does not matter here, type checking is
+	/// done when the resource is dereferenced.
+	pub fn as_casted<U>(&self) -> &Ref<U, R> {
+		unsafe {
+			// SAFETY: this is safe because the `T` type parameter is not
+			// actually stored in `self`.
+			std::mem::transmute(self)
+		}
+	}
+
 	/// Maps the resource identifier.
 	pub fn map<S>(self, f: impl FnOnce(R) -> S) -> Ref<T, S> {
 		Ref(f(self.0), PhantomData)

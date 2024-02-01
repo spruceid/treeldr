@@ -5,11 +5,11 @@ use proc_macro2::{Span, TokenStream, TokenTree};
 use rdf_types::BlankIdBuf;
 use syn::spanned::Spanned;
 use treeldr_layouts::abs::syntax::{
-	BooleanLayout, ByteStringLayout, CompactIri, DataLayout, Dataset, Field, IdLayout, Layout,
-	LayoutHeader, ListItem, ListLayout, ListNode, ListNodeOrLayout, LiteralLayout, NumberLayout,
-	OrderedListLayout, Pattern, ProductLayout, Quad, SizedListLayout, SumLayout, TextStringLayout,
-	UnitLayout, UnorderedListLayout, ValueFormat, ValueFormatOrLayout, VariableNameBuf, Variant,
-	VariantFormat, VariantFormatOrLayout,
+	BooleanLayout, ByteStringLayout, CompactIri, DataLayout, Dataset, ExtraProperties, Field,
+	IdLayout, Layout, LayoutHeader, ListItem, ListLayout, ListNode, ListNodeOrLayout,
+	LiteralLayout, NumberLayout, OrderedListLayout, Pattern, ProductLayout, Quad, SizedListLayout,
+	SumLayout, TextStringLayout, UnitLayout, UnorderedListLayout, ValueFormat, ValueFormatOrLayout,
+	VariableNameBuf, Variant, VariantFormat, VariantFormatOrLayout,
 };
 
 #[derive(Default)]
@@ -118,6 +118,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 					input: type_attrs.input.map(Into::into).unwrap_or_default(),
 					intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 					dataset: type_attrs.dataset.unwrap_or_default(),
+					extra: type_attrs.extra.unwrap_or_default(),
 				},
 				pattern: None, // TODO
 				resource: type_attrs.resource,
@@ -132,6 +133,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 				input: type_attrs.input.map(Into::into).unwrap_or_default(),
 				intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 				dataset: type_attrs.dataset.unwrap_or_default(),
+				extra: type_attrs.extra.unwrap_or_default(),
 			},
 			const_: treeldr_layouts::Value::default(),
 		}))),
@@ -144,6 +146,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 				input: type_attrs.input.map(Into::into).unwrap_or_default(),
 				intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 				dataset: type_attrs.dataset.unwrap_or_default(),
+				extra: type_attrs.extra.unwrap_or_default(),
 			},
 			datatype: type_attrs.datatype,
 			resource: type_attrs.resource,
@@ -157,6 +160,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 				input: type_attrs.input.map(Into::into).unwrap_or_default(),
 				intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 				dataset: type_attrs.dataset.unwrap_or_default(),
+				extra: type_attrs.extra.unwrap_or_default(),
 			},
 			datatype: type_attrs
 				.datatype
@@ -174,6 +178,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 						input: type_attrs.input.map(Into::into).unwrap_or_default(),
 						intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 						dataset: type_attrs.dataset.unwrap_or_default(),
+						extra: type_attrs.extra.unwrap_or_default(),
 					},
 					pattern: None, // TODO
 					datatype: type_attrs.datatype,
@@ -191,6 +196,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 					input: type_attrs.input.map(Into::into).unwrap_or_default(),
 					intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 					dataset: type_attrs.dataset.unwrap_or_default(),
+					extra: type_attrs.extra.unwrap_or_default(),
 				},
 				datatype: type_attrs
 					.datatype
@@ -235,6 +241,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 					input: type_attrs.input.map(Into::into).unwrap_or_default(),
 					intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 					dataset: type_attrs.dataset.unwrap_or_default(),
+					extra: type_attrs.extra.unwrap_or_default(),
 				},
 				fields,
 			})
@@ -283,6 +290,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 					input: type_attrs.input.map(Into::into).unwrap_or_default(),
 					intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 					dataset: type_attrs.dataset.unwrap_or_default(),
+					extra: type_attrs.extra.unwrap_or_default(),
 				},
 				variants,
 			})
@@ -303,6 +311,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 								input: type_attrs.input.map(Into::into).unwrap_or_default(),
 								intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 								dataset: type_attrs.dataset.unwrap_or_default(),
+								extra: type_attrs.extra.unwrap_or_default(),
 							},
 							item: ListItem {
 								intro: item_attrs.intro.map(Into::into).unwrap_or_default(),
@@ -339,6 +348,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 								input: type_attrs.input.map(Into::into).unwrap_or_default(),
 								intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 								dataset: type_attrs.dataset.unwrap_or_default(),
+								extra: type_attrs.extra.unwrap_or_default(),
 							},
 							node: ListNodeOrLayout::ListNode(ListNode {
 								head: node_attrs.head.unwrap_or_else(ListNode::default_head),
@@ -392,6 +402,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 							input: type_attrs.input.map(Into::into).unwrap_or_default(),
 							intro: type_attrs.intro.map(Into::into).unwrap_or_default(),
 							dataset: type_attrs.dataset.unwrap_or_default(),
+							extra: type_attrs.extra.unwrap_or_default(),
 						},
 						items,
 					}))
@@ -422,6 +433,7 @@ pub struct TypeAttributes {
 	dataset: Option<Dataset>,
 	resource: Option<Pattern>,
 	datatype: Option<CompactIri>,
+	extra: Option<ExtraProperties>,
 }
 
 impl TypeAttributes {
