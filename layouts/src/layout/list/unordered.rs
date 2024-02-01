@@ -1,5 +1,5 @@
 use educe::Educe;
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 
 use crate::{layout::LayoutType, Dataset, Ref};
 
@@ -21,6 +21,9 @@ pub struct UnorderedListLayout<R> {
 	pub item: ItemLayout<R>,
 
 	pub dataset: Dataset<R>,
+
+	/// Additional properties.
+	pub extra_properties: BTreeMap<R, R>,
 }
 
 impl<R> UnorderedListLayout<R> {

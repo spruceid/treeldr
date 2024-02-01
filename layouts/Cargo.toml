@@ -8,8 +8,11 @@ edition.workspace = true
 [features]
 default = ["serde_cbor"]
 
+# CBOR extension.
+cbor = []
+
 # Implements conversion functions between `Value` and `serde_cbor::Value`.
-serde_cbor = ["dep:serde_cbor"]
+serde_cbor = ["cbor", "dep:serde_cbor"]
 
 [dependencies]
 educe.workspace = true

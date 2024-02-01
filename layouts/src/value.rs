@@ -8,8 +8,8 @@ use num_traits::{Signed, ToPrimitive, Zero};
 
 use crate::{
 	layout::{
-		BooleanLayoutType, ByteStringLayoutType, IdLayoutType, ListLayoutType, NumberLayoutType,
-		ProductLayoutType, SumLayoutType, TextStringLayoutType, UnitLayoutType,
+		BooleanLayoutType, ByteStringLayoutType, IdLayoutType, LayoutType, ListLayoutType,
+		NumberLayoutType, ProductLayoutType, SumLayoutType, TextStringLayoutType, UnitLayoutType,
 	},
 	Ref,
 };
@@ -17,8 +17,8 @@ use crate::{
 pub mod de;
 pub mod ser;
 
-#[cfg(feature = "serde_cbor")]
-mod serde_cbor;
+#[cfg(feature = "cbor")]
+mod cbor;
 
 lazy_static! {
 	static ref TEN: BigInt = 10u32.into();
@@ -54,7 +54,6 @@ impl Number {
 	}
 
 	pub fn as_native(&self) -> NativeNumber {
-		use num_traits::ToPrimitive;
 		if self.0.is_integer() {
 			let n = self.0.numer();
 			match n.sign() {
@@ -374,6 +373,17 @@ pub enum TypedLiteral<R = rdf_types::Term> {
 }
 
 impl<R> TypedLiteral<R> {
+	pub fn type_(&self) -> &Ref<LayoutType, R> {
+		match self {
+			Self::Unit(_, ty) => ty.as_casted(),
+			Self::Boolean(_, ty) => ty.as_casted(),
+			Self::Number(_, ty) => ty.as_casted(),
+			Self::ByteString(_, ty) => ty.as_casted(),
+			Self::TextString(_, ty) => ty.as_casted(),
+			Self::Id(_, ty) => ty.as_casted(),
+		}
+	}
+
 	pub fn into_untyped(self) -> Value {
 		match self {
 			Self::Unit(value, _) => value,
@@ -414,6 +424,21 @@ pub enum TypedValue<R = rdf_types::Term> {
 }
 
 impl<R> TypedValue<R> {
+	/// Returns a reference to the type of this value.
+	///
+	/// The type is the layout used to serialize/deserialize the value.
+	/// In the case of the "top" (also called "any" or "always") layout,
+	/// `None` is returned.
+	pub fn type_(&self) -> Option<&Ref<LayoutType, R>> {
+		match self {
+			Self::Literal(t) => Some(t.type_()),
+			Self::Variant(_, ty, _) => Some(ty.as_casted()),
+			Self::Record(_, ty) => Some(ty.as_casted()),
+			Self::List(_, ty) => Some(ty.as_casted()),
+			Self::Always(_) => None,
+		}
+	}
+
 	/// Strips the type information and returns a simple tree value.
 	pub fn into_untyped(self) -> Value {
 		match self {

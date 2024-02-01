@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{Dataset, Pattern};
 
 pub use crate::layout::{BooleanLayout, ByteStringLayout, NumberLayout, UnitLayout};
@@ -39,6 +41,8 @@ pub struct TextStringLayout<R> {
 	pub resource: Pattern<R>,
 
 	pub datatype: R,
+
+	pub properties: BTreeMap<R, R>,
 }
 
 impl<R: Clone> TextStringLayout<R> {
@@ -50,6 +54,7 @@ impl<R: Clone> TextStringLayout<R> {
 			dataset: self.dataset.clone(),
 			resource: self.resource.clone(),
 			datatype: self.datatype.clone(),
+			extra_properties: self.properties.clone(),
 		}
 	}
 }

@@ -10,8 +10,8 @@
 use grdf::BTreeDataset;
 use iref::{Iri, IriBuf, IriRefBuf};
 use rdf_types::{
-	generator, BlankIdBuf, Id, InterpretationMut, IriInterpretationMut, IriVocabularyMut, Term,
-	RDF_FIRST, RDF_NIL, RDF_REST,
+	generator, BlankIdBuf, Id, InterpretationMut, IriInterpretationMut, LiteralInterpretationMut,
+	Term, VocabularyMut, RDF_FIRST, RDF_NIL, RDF_REST,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -19,6 +19,7 @@ use std::{
 	collections::{BTreeMap, HashMap},
 	fmt,
 };
+use xsd_types::{XSD_BOOLEAN, XSD_STRING};
 
 use crate::{
 	abs::{self, InsertResult, LayoutType, RegExp},
@@ -37,6 +38,8 @@ pub trait Context {
 	) -> InsertResult<Self::Resource>;
 
 	fn iri_resource(&mut self, iri: &Iri) -> Self::Resource;
+
+	fn literal_resource(&mut self, value: &str, type_: &Iri) -> Self::Resource;
 
 	fn anonymous_resource(&mut self) -> Self::Resource;
 }
@@ -62,6 +65,11 @@ where
 		Term::Id(Id::Iri(iri.to_owned()))
 	}
 
+	fn literal_resource(&mut self, value: &str, type_: &Iri) -> Self::Resource {
+		use rdf_types::{literal::Type, Literal};
+		Term::Literal(Literal::new(value.to_owned(), Type::Any(type_.to_owned())))
+	}
+
 	fn anonymous_resource(&mut self) -> Self::Resource {
 		Term::Id(self.generator.next(&mut ()))
 	}
@@ -69,8 +77,10 @@ where
 
 impl<'a, V, I> Context for super::BuilderWithInterpretationMut<'a, V, I>
 where
-	V: IriVocabularyMut,
-	I: IriInterpretationMut<V::Iri> + InterpretationMut<V>,
+	V: VocabularyMut,
+	V::Type: From<rdf_types::literal::Type<V::Iri, V::LanguageTag>>,
+	V::Value: From<String>,
+	I: IriInterpretationMut<V::Iri> + LiteralInterpretationMut<V::Literal> + InterpretationMut<V>,
 	I::Resource: Clone + Eq + Ord + std::fmt::Debug,
 {
 	type Resource = I::Resource;
@@ -89,6 +99,16 @@ where
 	fn iri_resource(&mut self, iri: &Iri) -> Self::Resource {
 		let i = self.vocabulary.insert(iri);
 		self.interpretation.interpret_iri(i)
+	}
+
+	fn literal_resource(&mut self, value: &str, type_: &Iri) -> Self::Resource {
+		use rdf_types::{literal::Type, Literal};
+		let type_ = self.vocabulary.insert(type_);
+		let l = self.vocabulary.insert_owned_literal(Literal::new(
+			value.to_owned().into(),
+			Type::Any(type_).into(),
+		));
+		self.interpretation.interpret_literal(l)
 	}
 
 	fn anonymous_resource(&mut self) -> Self::Resource {
@@ -134,7 +154,7 @@ pub enum Error {
 	NoPropertyObject,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct CompactIri(pub IriRefBuf);
 
@@ -352,8 +372,12 @@ impl Layout {
 		builder: &mut Builder<I::Resource>,
 	) -> Result<Ref<LayoutType, I::Resource>, Error>
 	where
-		V: IriVocabularyMut,
-		I: IriInterpretationMut<V::Iri> + InterpretationMut<V>,
+		V: VocabularyMut,
+		V::Type: From<rdf_types::literal::Type<V::Iri, V::LanguageTag>>,
+		V::Value: From<String>,
+		I: IriInterpretationMut<V::Iri>
+			+ LiteralInterpretationMut<V::Literal>
+			+ InterpretationMut<V>,
 		I::Resource: Clone + Eq + Ord + std::fmt::Debug,
 	{
 		let mut context = builder.with_interpretation_mut(vocabulary, interpretation);
@@ -790,6 +814,95 @@ pub struct LayoutHeader {
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	pub dataset: Dataset,
+
+	#[serde(default, skip_serializing_if = "ExtraProperties::is_empty")]
+	pub extra: ExtraProperties,
+}
+
+/// RDF Resource properties.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ExtraProperties(HashMap<CompactIri, Resource>);
+
+impl ExtraProperties {
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+}
+
+impl<C: Context> Build<C> for ExtraProperties {
+	type Target = BTreeMap<C::Resource, C::Resource>;
+
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		let mut result = BTreeMap::new();
+
+		for (prop, value) in &self.0 {
+			let prop = prop.build(context, scope)?;
+			let value = value.build(context, scope)?;
+			result.insert(prop, value);
+		}
+
+		Ok(result)
+	}
+}
+
+/// RDF Resource description.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Resource {
+	/// Boolean value.
+	Boolean(bool),
+
+	/// Decimal number value.
+	Number(i64),
+
+	/// Simple string literal.
+	String(String),
+
+	/// Typed string.
+	TypedString(TypedString),
+}
+
+impl<C: Context> Build<C> for Resource {
+	type Target = C::Resource;
+
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		match self {
+			&Self::Boolean(b) => {
+				let value = if b { "true" } else { "false" };
+
+				Ok(context.literal_resource(value, XSD_BOOLEAN))
+			}
+			&Self::Number(n) => {
+				let value: xsd_types::Decimal = n.into();
+				let type_ = value.decimal_type();
+
+				Ok(context.literal_resource(value.lexical_representation(), type_.iri()))
+			}
+			Self::String(value) => Ok(context.literal_resource(value, XSD_STRING)),
+			Self::TypedString(t) => t.build(context, scope),
+		}
+	}
+}
+
+/// Typed string literal.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TypedString {
+	/// Literal value.
+	pub value: String,
+
+	/// Literal type.
+	#[serde(rename = "type")]
+	pub type_: CompactIri,
+}
+
+impl<C: Context> Build<C> for TypedString {
+	type Target = C::Resource;
+
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+		let type_ = self.type_.resolve(scope)?;
+		Ok(context.literal_resource(&self.value, &type_))
+	}
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -874,6 +987,7 @@ impl<C: Context> Build<C> for LayoutHeader {
 			input: self.input.len() as u32,
 			intro: self.intro.len() as u32,
 			dataset: self.dataset.build(context, &scope)?,
+			properties: self.extra.build(context, &scope)?,
 		};
 
 		Ok((header, scope))
@@ -886,6 +1000,8 @@ pub struct BuiltLayoutHeader<R> {
 	intro: u32,
 
 	dataset: crate::Dataset<R>,
+
+	properties: BTreeMap<R, R>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1259,6 +1375,7 @@ impl<C: Context> Build<C> for UnitLayout {
 			intro: header.intro,
 			dataset: header.dataset,
 			const_: self.const_.clone(),
+			extra_properties: header.properties,
 		})
 	}
 }
@@ -1318,6 +1435,7 @@ impl<C: Context> Build<C> for BooleanLayout {
 				.map(|i| i.build(context, &scope))
 				.transpose()?
 				.unwrap_or_else(|| context.iri_resource(xsd_types::XSD_BOOLEAN)),
+			extra_properties: header.properties,
 		})
 	}
 }
@@ -1353,6 +1471,7 @@ impl<C: Context> Build<C> for NumberLayout {
 				self.resource.as_ref(),
 			)?,
 			datatype: self.datatype.build(context, &scope)?,
+			extra_properties: header.properties,
 		})
 	}
 }
@@ -1388,6 +1507,7 @@ impl<C: Context> Build<C> for ByteStringLayout {
 				self.resource.as_ref(),
 			)?,
 			datatype: self.datatype.build(context, &scope)?,
+			extra_properties: header.properties,
 		})
 	}
 }
@@ -1433,6 +1553,7 @@ impl<C: Context> Build<C> for TextStringLayout {
 				.map(|i| i.build(context, &scope))
 				.transpose()?
 				.unwrap_or_else(|| context.iri_resource(xsd_types::XSD_STRING)),
+			properties: header.properties,
 		})
 	}
 }
@@ -1469,6 +1590,7 @@ impl<C: Context> Build<C> for IdLayout {
 				&self.header.input,
 				self.resource.as_ref(),
 			)?,
+			properties: header.properties,
 		})
 	}
 }
@@ -1531,6 +1653,7 @@ impl<C: Context> Build<C> for ProductLayout {
 			intro: header.intro,
 			fields,
 			dataset: header.dataset,
+			extra_properties: header.properties,
 		})
 	}
 }
@@ -1633,6 +1756,7 @@ impl<C: Context> Build<C> for SumLayout {
 			intro: header.intro,
 			variants,
 			dataset: header.dataset,
+			extra_properties: header.properties,
 		})
 	}
 }
@@ -1803,6 +1927,7 @@ impl<C: Context> Build<C> for OrderedListLayout {
 			head: self.head.build(context, &scope)?,
 			tail: self.tail.build(context, &scope)?,
 			dataset: header.dataset,
+			extra_properties: header.properties,
 		})
 	}
 }
@@ -1886,6 +2011,7 @@ impl<C: Context> Build<C> for UnorderedListLayout {
 			intro: header.intro,
 			item: self.item.build(context, &scope, subject)?,
 			dataset: header.dataset,
+			extra_properties: header.properties,
 		})
 	}
 }
@@ -1967,6 +2093,7 @@ impl<C: Context> Build<C> for SizedListLayout {
 			intro: header.intro,
 			items,
 			dataset: header.dataset,
+			extra_properties: header.properties,
 		})
 	}
 }

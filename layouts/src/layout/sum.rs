@@ -1,5 +1,5 @@
 use educe::Educe;
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 
 use crate::{Dataset, Ref, ValueFormat};
 
@@ -29,6 +29,9 @@ pub struct SumLayout<R> {
 
 	/// Graph.
 	pub dataset: Dataset<R>,
+
+	/// Additional properties.
+	pub extra_properties: BTreeMap<R, R>,
 }
 
 impl<R> SumLayout<R> {

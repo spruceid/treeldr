@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{Dataset, Pattern};
 
 use crate::abs::RegExp;
@@ -14,6 +16,9 @@ pub struct IdLayout<R> {
 	pub pattern: Option<RegExp>,
 
 	pub resource: Pattern<R>,
+
+	/// Additional properties.
+	pub properties: BTreeMap<R, R>,
 }
 
 impl<R: Clone> IdLayout<R> {
@@ -24,6 +29,7 @@ impl<R: Clone> IdLayout<R> {
 			dataset: self.dataset.clone(),
 			pattern: self.pattern.as_ref().map(RegExp::build),
 			resource: self.resource.clone(),
+			extra_properties: self.properties.clone(),
 		}
 	}
 }

@@ -13,7 +13,7 @@ pub use literal::{
 	NumberLayoutType, TextStringLayout, TextStringLayoutType, UnitLayout, UnitLayoutType,
 };
 pub use product::{ProductLayout, ProductLayoutType};
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 pub use sum::{SumLayout, SumLayoutType};
 
 use crate::{DerefResource, Layouts, Ref};
@@ -164,4 +164,21 @@ impl<R> Layout<R> {
 			Self::Always => None,
 		}
 	}
+
+	pub fn extra_properties<'a>(&'a self) -> &'a BTreeMap<R, R> {
+		match self {
+			Self::Never => <Self as NoExtraProperties<'a, R>>::NO_EXTRA_PROPERTIES,
+			Self::Literal(l) => l.extra_properties(),
+			Self::Product(p) => &p.extra_properties,
+			Self::List(l) => l.extra_properties(),
+			Self::Sum(s) => &s.extra_properties,
+			Self::Always => <Self as NoExtraProperties<'a, R>>::NO_EXTRA_PROPERTIES,
+		}
+	}
 }
+
+trait NoExtraProperties<'a, R: 'a> {
+	const NO_EXTRA_PROPERTIES: &'a BTreeMap<R, R> = &BTreeMap::new();
+}
+
+impl<'a, R: 'a> NoExtraProperties<'a, R> for Layout<R> {}
