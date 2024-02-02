@@ -423,7 +423,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 #[derive(Default)]
 pub struct TypeAttributes {
 	base: Option<CompactIri>,
-	prefixes: HashMap<String, CompactIri>,
+	prefixes: BTreeMap<String, CompactIri>,
 	id: Option<CompactIri>,
 	kind: Option<Kind>,
 	input: Option<Vec<String>>,

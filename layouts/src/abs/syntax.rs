@@ -154,7 +154,7 @@ pub enum Error {
 	NoPropertyObject,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct CompactIri(pub IriRefBuf);
 
@@ -289,7 +289,7 @@ impl Scope {
 /// It implements `serde::Serialize` and `serde::Deserialize` in a way that
 /// produces and consumes human readable data. It is the basis to the JSON
 /// syntax for layouts often used throughout the documentation.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Layout {
 	/// Matches literal values.
@@ -426,7 +426,7 @@ impl<C: Context> Build<C> for Layout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum LayoutRef {
 	Ref(CompactIri),
@@ -618,7 +618,7 @@ impl fmt::Display for VariableNameBuf {
 	}
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Pattern {
 	Var(VariableNameBuf),
 	Iri(CompactIri),
@@ -713,7 +713,7 @@ impl<'de> Deserialize<'de> for Pattern {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum OneOrMany<T> {
 	One(T),
@@ -759,7 +759,7 @@ impl<T> From<Vec<T>> for OneOrMany<T> {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct LayoutInput(OneOrMany<String>);
 
@@ -794,14 +794,14 @@ impl From<Vec<String>> for LayoutInput {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LayoutHeader {
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub base: Option<CompactIri>,
 
-	#[serde(default, skip_serializing_if = "HashMap::is_empty")]
-	pub prefixes: HashMap<String, CompactIri>,
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+	pub prefixes: BTreeMap<String, CompactIri>,
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub id: Option<CompactIri>,
@@ -820,9 +820,9 @@ pub struct LayoutHeader {
 }
 
 /// RDF Resource properties.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct ExtraProperties(HashMap<CompactIri, Resource>);
+pub struct ExtraProperties(BTreeMap<CompactIri, Resource>);
 
 impl ExtraProperties {
 	pub fn is_empty(&self) -> bool {
@@ -847,7 +847,7 @@ impl<C: Context> Build<C> for ExtraProperties {
 }
 
 /// RDF Resource description.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Resource {
 	/// Boolean value.
@@ -886,7 +886,7 @@ impl<C: Context> Build<C> for Resource {
 }
 
 /// Typed string literal.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TypedString {
 	/// Literal value.
 	pub value: String,
@@ -905,7 +905,7 @@ impl<C: Context> Build<C> for TypedString {
 	}
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Dataset(Vec<Quad>);
 
@@ -934,7 +934,7 @@ impl<C: Context> Build<C> for Dataset {
 	}
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Quad(
 	pub Pattern,
 	pub Pattern,
@@ -1004,7 +1004,7 @@ pub struct BuiltLayoutHeader<R> {
 	properties: BTreeMap<R, R>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ValueInput(OneOrMany<Pattern>);
 
@@ -1043,7 +1043,7 @@ impl From<Vec<Pattern>> for ValueInput {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct VariantInput(OneOrMany<Pattern>);
 
@@ -1078,7 +1078,7 @@ impl From<Vec<Pattern>> for VariantInput {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ValueFormatOrLayout {
 	Format(ValueFormat),
@@ -1100,7 +1100,7 @@ impl<C: Context> Build<C> for ValueFormatOrLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValueFormat {
 	pub layout: LayoutRef,
@@ -1133,7 +1133,7 @@ impl<C: Context> Build<C> for ValueFormat {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum VariantFormatOrLayout {
 	Format(VariantFormat),
@@ -1155,7 +1155,7 @@ impl<C: Context> Build<C> for VariantFormatOrLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VariantFormat {
 	pub layout: LayoutRef,
@@ -1191,7 +1191,7 @@ impl<C: Context> Build<C> for VariantFormat {
 macro_rules! type_markers {
 	($($id:ident: $value:literal),*) => {
 		$(
-			#[derive(Debug, Default, Clone, Copy)]
+			#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 			pub struct $id;
 
 			impl $id {
@@ -1283,7 +1283,7 @@ type_markers! {
 	IntersectionLayoutType: "intersection"
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum LiteralLayout {
 	Data(DataLayout),
@@ -1310,7 +1310,7 @@ impl<C: Context> Build<C> for LiteralLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DataLayout {
 	Unit(UnitLayout),
@@ -1352,7 +1352,7 @@ impl<C: Context> Build<C> for DataLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UnitLayout {
 	#[serde(rename = "type")]
@@ -1380,7 +1380,7 @@ impl<C: Context> Build<C> for UnitLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BooleanLayout {
 	#[serde(rename = "type")]
@@ -1440,7 +1440,7 @@ impl<C: Context> Build<C> for BooleanLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NumberLayout {
 	#[serde(rename = "type")]
@@ -1476,7 +1476,7 @@ impl<C: Context> Build<C> for NumberLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ByteStringLayout {
 	#[serde(rename = "type")]
@@ -1512,7 +1512,7 @@ impl<C: Context> Build<C> for ByteStringLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TextStringLayout {
 	#[serde(rename = "type")]
@@ -1558,7 +1558,7 @@ impl<C: Context> Build<C> for TextStringLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IdLayout {
 	#[serde(rename = "type")]
@@ -1595,7 +1595,7 @@ impl<C: Context> Build<C> for IdLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProductLayout {
 	#[serde(rename = "type")]
@@ -1658,7 +1658,7 @@ impl<C: Context> Build<C> for ProductLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ValueIntro(OneOrMany<String>);
 
@@ -1693,7 +1693,7 @@ impl From<Vec<String>> for ValueIntro {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Field {
 	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
@@ -1708,7 +1708,7 @@ pub struct Field {
 	pub property: Option<Pattern>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SumLayout {
 	#[serde(rename = "type")]
@@ -1721,7 +1721,7 @@ pub struct SumLayout {
 	pub variants: BTreeMap<String, Variant>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Variant {
 	#[serde(default, skip_serializing_if = "OneOrMany::is_empty")]
@@ -1761,7 +1761,7 @@ impl<C: Context> Build<C> for SumLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ListLayout {
 	Ordered(OrderedListLayout),
@@ -1795,7 +1795,7 @@ impl<C: Context> Build<C> for ListLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OrderedListLayout {
 	#[serde(rename = "type")]
@@ -1819,7 +1819,7 @@ pub struct OrderedListLayout {
 	pub tail: Pattern,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ListNodeOrLayout {
 	ListNode(ListNode),
@@ -1873,7 +1873,7 @@ impl<C: Context> Build<C> for ListNodeOrLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListNode {
 	#[serde(
@@ -1967,7 +1967,7 @@ impl<C: Context> Build<C> for ListNode {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UnorderedListLayout {
 	#[serde(rename = "type")]
@@ -1979,7 +1979,7 @@ pub struct UnorderedListLayout {
 	pub item: ListItem,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListItem {
 	#[serde(default, skip_serializing_if = "ValueIntro::is_default")]
@@ -2058,7 +2058,7 @@ impl ListItem {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SizedListLayout {
 	#[serde(rename = "type")]
@@ -2098,7 +2098,7 @@ impl<C: Context> Build<C> for SizedListLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IntersectionLayout {
 	#[serde(rename = "type")]
@@ -2116,7 +2116,7 @@ impl<C: Context> Build<C> for IntersectionLayout {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UnionLayout {
 	#[serde(rename = "type")]
