@@ -1,4 +1,4 @@
-#[cfg(feature = "derive")]
+#[cfg(feature = "macros")]
 #[test]
 fn sum() {
 	#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]

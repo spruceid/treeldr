@@ -1,11 +1,11 @@
-#[cfg(feature = "derive")]
+#[cfg(feature = "macros")]
 #[test]
 fn literal_unit() {
 	#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
 	pub struct Unit;
 }
 
-#[cfg(feature = "derive")]
+#[cfg(feature = "macros")]
 #[test]
 fn literal_boolean() {
 	#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
@@ -13,7 +13,7 @@ fn literal_boolean() {
 	pub struct Boolean(bool);
 }
 
-#[cfg(feature = "derive")]
+#[cfg(feature = "macros")]
 #[test]
 fn literal_i32() {
 	#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
@@ -22,7 +22,7 @@ fn literal_i32() {
 	pub struct I32(i32);
 }
 
-#[cfg(feature = "derive")]
+#[cfg(feature = "macros")]
 #[test]
 fn literal_string() {
 	#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]

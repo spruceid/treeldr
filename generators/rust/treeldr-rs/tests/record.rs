@@ -1,4 +1,4 @@
-#[cfg(feature = "derive")]
+#[cfg(feature = "macros")]
 #[test]
 fn record() {
 	#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
@@ -6,5 +6,8 @@ fn record() {
 	pub struct Record {
 		#[tldr("ex:foo")]
 		foo: String,
+
+		#[tldr("ex:bar")]
+		optional: Option<String>,
 	}
 }

@@ -137,6 +137,28 @@ macro_rules! test {
 	};
 }
 
+macro_rules! negative_test {
+	($(#[$meta:meta])* $name:ident ($($e:expr),*)) => {
+		paste! {
+			$(#[$meta])*
+			#[test]
+			#[should_panic]
+			fn [<hydrate_ $name>] () {
+				hydrate(stringify!($name), [$($e),*])
+			}
+		}
+
+		paste! {
+			$(#[$meta])*
+			#[test]
+			#[should_panic]
+			fn [<dehydrate_ $name>] () {
+				dehydrate(stringify!($name), [$($e),*])
+			}
+		}
+	};
+}
+
 test! {
 	/// Simple record layout.
 	t01 (Term::blank(BlankIdBuf::new("_:john_smith".to_string()).unwrap()))
@@ -205,4 +227,9 @@ test! {
 test! {
 	/// Layout reference.
 	t14 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
+}
+
+negative_test! {
+	/// Missing required field.
+	e01 (Term::blank(BlankIdBuf::new("_:john_smith".to_string()).unwrap()))
 }

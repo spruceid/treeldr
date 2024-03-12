@@ -1,10 +1,10 @@
 use std::{
-	collections::{HashMap, HashSet},
+	collections::{BTreeMap, HashMap, HashSet},
 	hash::Hash,
 };
 
 use crate::{
-	layout::{DataLayout, LayoutType, ListLayout, LiteralLayout},
+	layout::{DataLayout, LayoutType, ListLayout, LiteralLayout, ProductLayoutType},
 	Layout, Layouts, Literal, Pattern, Ref, Value, ValueFormat,
 };
 use iref::IriBuf;
@@ -45,6 +45,13 @@ pub enum Error<R = Term> {
 
 	#[error("layout {0} not found")]
 	LayoutNotFound(Ref<LayoutType, R>),
+
+	#[error("missing required field `{field_name}`")]
+	MissingRequiredField {
+		layout: Ref<ProductLayoutType, R>,
+		field_name: String,
+		value: BTreeMap<String, Value>,
+	},
 }
 
 impl<R> Error<R> {
@@ -58,6 +65,15 @@ impl<R> Error<R> {
 			Self::DataAmbiguity => Error::DataAmbiguity,
 			Self::TermAmbiguity(a) => Error::TermAmbiguity(a),
 			Self::LayoutNotFound(layout_ref) => Error::LayoutNotFound(layout_ref.map(f)),
+			Self::MissingRequiredField {
+				layout,
+				field_name,
+				value,
+			} => Error::MissingRequiredField {
+				layout: layout.map(f),
+				field_name,
+				value,
+			},
 		}
 	}
 }
@@ -675,6 +691,16 @@ where
 							)?;
 						}
 						None => return Err(Error::IncompatibleLayout),
+					}
+				}
+
+				for (name, field) in &layout.fields {
+					if field.required && !value.contains_key(name) {
+						return Err(Error::MissingRequiredField {
+							layout: layout_ref.clone().cast(),
+							field_name: name.clone(),
+							value: value.clone(),
+						});
 					}
 				}
 

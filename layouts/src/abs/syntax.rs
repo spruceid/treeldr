@@ -1697,6 +1697,7 @@ where
 					intro: field.intro.len() as u32,
 					value: field.value.build(context, &scope)?,
 					dataset,
+					required: field.required,
 				},
 			);
 		}
@@ -1759,6 +1760,9 @@ pub struct Field {
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub property: Option<Pattern>,
+
+	#[serde(default, skip_serializing_if = "super::is_false")]
+	pub required: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::{
-	layout::{LayoutType, ListLayout, LiteralLayout},
+	abs::syntax::{OrderedListLayoutType, SizedListLayoutType},
+	layout::{LayoutType, ListLayout, LiteralLayout, ProductLayoutType, SumLayoutType},
 	matching,
 	pattern::Substitution,
 	utils::QuadsExt,
@@ -27,11 +28,11 @@ pub enum Error<R = Term> {
 	#[error("invalid input count (expected {expected}, found {found})")]
 	InvalidInputCount { expected: u32, found: u32 },
 
-	#[error("data ambiguity")]
-	DataAmbiguity,
+	#[error("ambiguous {0}")]
+	DataAmbiguity(Box<DataFragment<R>>),
 
-	#[error("missing data")]
-	MissingData,
+	#[error("missing required {0}")]
+	MissingData(Box<DataFragment<R>>),
 
 	#[error("unknown number datatype")]
 	UnknownNumberDatatype(IriBuf),
@@ -43,12 +44,57 @@ pub enum Error<R = Term> {
 	LayoutNotFound(Ref<LayoutType, R>),
 }
 
-impl<R> From<matching::Error> for Error<R> {
-	fn from(value: matching::Error) -> Self {
+#[derive(Debug, thiserror::Error)]
+pub enum DataFragment<R> {
+	#[error("layout discriminant")]
+	Discriminant(Ref<LayoutType, R>),
+
+	#[error("variant `{variant_name}`")]
+	Variant {
+		layout: Ref<SumLayoutType, R>,
+		variant_name: String,
+	},
+
+	#[error("field `{field_name}`")]
+	Field {
+		layout: Ref<ProductLayoutType, R>,
+		field_name: String,
+	},
+
+	#[error("list node")]
+	OrderedListNode {
+		layout: Ref<OrderedListLayoutType, R>,
+		head: R,
+		tail: R,
+	},
+
+	#[error("list item")]
+	SizedListItem {
+		layout: Ref<SizedListLayoutType, R>,
+		index: usize,
+	},
+}
+
+impl<R> Error<R> {
+	fn from_matching_error(value: matching::Error, f: DataFragment<R>) -> Self {
 		match value {
-			matching::Error::Ambiguity => Self::DataAmbiguity,
-			matching::Error::Empty => Self::MissingData,
+			matching::Error::Ambiguity => Self::DataAmbiguity(Box::new(f)),
+			matching::Error::Empty => Self::MissingData(Box::new(f)),
 		}
+	}
+}
+
+trait MatchingForFragment<R> {
+	type Ok;
+
+	fn for_fragment(self, f: impl FnOnce() -> DataFragment<R>) -> Result<Self::Ok, Error<R>>;
+}
+
+impl<T, R> MatchingForFragment<R> for Result<T, matching::Error> {
+	type Ok = T;
+
+	fn for_fragment(self, f: impl FnOnce() -> DataFragment<R>) -> Result<T, Error<R>> {
+		self.map_err(|e| Error::from_matching_error(e, f()))
 	}
 }
 
@@ -131,7 +177,8 @@ where
 						substitution.clone(),
 						layout.dataset.quads().with_default_graph(current_graph),
 					)
-					.into_required_unique()?;
+					.into_required_unique()
+					.for_fragment(|| DataFragment::Discriminant(layout_ref.clone()))?;
 
 					let resource = layout
 						.resource
@@ -171,7 +218,8 @@ where
 				substitution.clone(),
 				layout.dataset.quads().with_default_graph(current_graph),
 			)
-			.into_required_unique()?;
+			.into_required_unique()
+			.for_fragment(|| DataFragment::Discriminant(layout_ref.clone()))?;
 
 			let mut failures = Vec::new();
 			let mut selected = None;
@@ -185,7 +233,11 @@ where
 					substitution.clone(),
 					variant.dataset.quads().with_default_graph(current_graph),
 				)
-				.into_unique()?;
+				.into_unique()
+				.for_fragment(|| DataFragment::Variant {
+					layout: layout_ref.clone().cast(),
+					variant_name: variant.name.clone(),
+				})?;
 
 				match variant_substitution {
 					Some(variant_substitution) => {
@@ -244,7 +296,8 @@ where
 				substitution.clone(),
 				layout.dataset.quads().with_default_graph(current_graph),
 			)
-			.into_required_unique()?;
+			.into_required_unique()
+			.for_fragment(|| DataFragment::Discriminant(layout_ref.clone()))?;
 
 			let mut record = BTreeMap::new();
 
@@ -257,7 +310,11 @@ where
 					field_substitution,
 					field.dataset.quads().with_default_graph(current_graph),
 				)
-				.into_unique()?;
+				.into_unique()
+				.for_fragment(|| DataFragment::Field {
+					layout: layout_ref.clone().cast(),
+					field_name: name.clone(),
+				})?;
 
 				match field_substitution {
 					Some(field_substitution) => {
@@ -279,7 +336,12 @@ where
 						record.insert(name.clone(), value);
 					}
 					None => {
-						// TODO check required fields
+						if field.required {
+							return Err(Error::MissingData(Box::new(DataFragment::Field {
+								layout: layout_ref.clone().cast(),
+								field_name: name.clone(),
+							})));
+						}
 					}
 				}
 			}
@@ -297,7 +359,8 @@ where
 						substitution,
 						layout.dataset.quads().with_default_graph(current_graph),
 					)
-					.into_required_unique()?;
+					.into_required_unique()
+					.for_fragment(|| DataFragment::Discriminant(layout_ref.clone()))?;
 
 					item_substitution.intro(layout.item.intro);
 					let matching = Matching::new(
@@ -348,7 +411,8 @@ where
 						substitution,
 						layout.dataset.quads().with_default_graph(current_graph),
 					)
-					.into_required_unique()?;
+					.into_required_unique()
+					.for_fragment(|| DataFragment::Discriminant(layout_ref.clone()))?;
 
 					let mut head = layout.head.apply(&substitution).into_resource().unwrap();
 					let tail = layout.tail.apply(&substitution).into_resource().unwrap();
@@ -357,7 +421,7 @@ where
 
 					while head != tail {
 						let mut item_substitution = substitution.clone();
-						item_substitution.push(Some(head)); // the head
+						item_substitution.push(Some(head.clone())); // the head
 						let rest = item_substitution.intro(1 + layout.node.intro); // the rest, and other intro variables.
 
 						let item_substitution = Matching::new(
@@ -369,7 +433,12 @@ where
 								.quads()
 								.with_default_graph(current_graph),
 						)
-						.into_required_unique()?;
+						.into_required_unique()
+						.for_fragment(|| DataFragment::OrderedListNode {
+							layout: layout_ref.clone().cast(),
+							head,
+							tail: tail.clone(),
+						})?;
 
 						let item_inputs =
 							select_inputs(&layout.node.value.input, &item_substitution);
@@ -406,11 +475,12 @@ where
 						substitution,
 						layout.dataset.quads().with_default_graph(current_graph),
 					)
-					.into_required_unique()?;
+					.into_required_unique()
+					.for_fragment(|| DataFragment::Discriminant(layout_ref.clone()))?;
 
 					let mut items = Vec::with_capacity(layout.items.len());
 
-					for item in &layout.items {
+					for (index, item) in layout.items.iter().enumerate() {
 						let mut item_substitution = substitution.clone();
 						item_substitution.intro(item.intro);
 
@@ -419,7 +489,11 @@ where
 							item_substitution,
 							item.dataset.quads().with_default_graph(current_graph),
 						)
-						.into_required_unique()?;
+						.into_required_unique()
+						.for_fragment(|| DataFragment::SizedListItem {
+							layout: layout_ref.clone().cast(),
+							index,
+						})?;
 
 						let item_inputs = select_inputs(&item.value.input, &item_substitution);
 						let item_graph =

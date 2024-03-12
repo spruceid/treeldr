@@ -59,12 +59,12 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 					match ::treeldr::AsId::as_id(self) {
 						::treeldr::rdf_types::Id::Iri(value) => {
 							let id = rdf.vocabulary.insert(value);
-							rdf.interpretation.assign_iri(inputs[0].clone(), id);
+							rdf.interpretation.assign_iri(&inputs[0], id);
 							Ok(())
 						}
 						::treeldr::rdf_types::Id::Blank(value) => {
 							let id = rdf.vocabulary.insert_blank_id(value);
-							rdf.interpretation.assign_blank_id(inputs[0].clone(), id);
+							rdf.interpretation.assign_blank_id(&inputs[0], id);
 							Ok(())
 						}
 					}
@@ -179,17 +179,33 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 
 				let m = field.value.input.len();
 
-				quote! {
-					{
-						let env = env.intro(rdf, #field_intro);
-						env.instantiate_dataset(&#field_dataset, output);
-						<#field_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
-							&self.#field_ident,
-							rdf,
-							&env.instantiate_patterns(&#field_inputs),
-							#field_graph.as_ref(),
-							output
-						)?;
+				if field.required {
+					quote! {
+						{
+							let env = env.intro(rdf, #field_intro);
+							env.instantiate_dataset(&#field_dataset, output);
+							<#field_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
+								&self.#field_ident,
+								rdf,
+								&env.instantiate_patterns(&#field_inputs),
+								#field_graph.as_ref(),
+								output
+							)?;
+						}
+					}
+				} else {
+					quote! {
+						if let Some(value) = &self.#field_ident {
+							let env = env.intro(rdf, #field_intro);
+							env.instantiate_dataset(&#field_dataset, output);
+							<#field_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
+								value,
+								rdf,
+								&env.instantiate_patterns(&#field_inputs),
+								#field_graph.as_ref(),
+								output
+							)?;
+						}
 					}
 				}
 			});
@@ -457,9 +473,12 @@ fn pattern_interpretation(pattern: &Pattern<Term>) -> TokenStream {
 	match pattern {
 		Pattern::Var(i) => {
 			let i = *i as usize;
-			quote!(inputs[#i].clone())
+			quote!(&inputs[#i])
 		}
-		Pattern::Resource(term) => term_interpretation(term),
+		Pattern::Resource(term) => {
+			let term = term_interpretation(term);
+			quote!(&#term)
+		}
 	}
 }
 

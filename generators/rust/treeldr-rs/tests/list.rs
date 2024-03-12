@@ -1,4 +1,4 @@
-#[cfg(feature = "derive")]
+#[cfg(feature = "macros")]
 #[test]
 fn list_unordered() {
 	#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
@@ -6,7 +6,7 @@ fn list_unordered() {
 	pub struct UnorderedList(Vec<String>);
 }
 
-#[cfg(feature = "derive")]
+#[cfg(feature = "macros")]
 #[test]
 fn list_ordered() {
 	#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
@@ -14,7 +14,7 @@ fn list_ordered() {
 	pub struct UnorderedList(Vec<String>);
 }
 
-#[cfg(feature = "derive")]
+#[cfg(feature = "macros")]
 #[test]
 fn list_sized() {
 	#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
