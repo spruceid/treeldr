@@ -4,9 +4,11 @@
 
 - [RDF Basics](rdf-basics.md)
 - [Data Model](data-model/README.md)
-	- [Values](data-model/values.md)
+	- [Literals](data-model/literals.md)
+	- [Records (Objects)](data-model/records.md)
+	- [Lists](data-model/lists.md)
 	- [Types](data-model/types.md)
-	- [Paths](data-model/paths.md)
+	<!-- - [Paths](data-model/paths.md) -->
 - [Layouts](layouts/README.md)
 	- [Product (Record)](layouts/record.md)
 	- [Sum](layouts/sum.md)

@@ -1,28 +1,33 @@
 # Types
 
-A type is a set of values.
+The data-model presented so far in this chapter is fundamentally *untyped*.
+However, it can (and will in the next chapter) be useful to formally describe
+a subset of values sharing a given *shape*.
+In this section we define types as sets of tree values.
+
+There are three primary sorts of types:
+  - Data-types, describing sets of literal values;
+  - Record types: describing sets of record values;
+  - List types: describing sets of list values.
+
+In addition, it is possible to compose new types by union or intersection.
 
 ## Syntax
 
-```abnf
-type = record-type | list-type | value
-```
-
-## Type reference
-
-A type reference is a name referring to a type definition.
+Just like for the data-model itself, we define a syntax for types.
 
 ```abnf
+type = datatype | record-type | list-type
 type-ref = ALPHA *(ALPHA | DIGIT)
-```
-
-## Type expression
-
-A type expression is either a type reference or definition.
-
-```abnf
 type-expr = type-ref | type
 ```
+
+### Type references and expressions
+
+A type reference, corresponding to the `type-ref` production in the above
+grammar, is a name referring to a type definition.
+A type expression (`type-expr` production) is either a type reference or
+definition.
 
 ## Datatype
 
@@ -45,7 +50,7 @@ binding-type  = key ws ":" ws type-expr
 
 For example:
 
-```
+```ts
 {
 	"id": string,
 	"name": string

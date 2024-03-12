@@ -3,3 +3,6 @@ title = "TreeLDR Layouts"
 
 [build]
 build-dir = "target"
+
+[preprocessor.graphviz]
+command = "mdbook-graphviz"
