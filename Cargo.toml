@@ -11,6 +11,7 @@ resolver = "2"
 version = "0.2.0"
 edition = "2021"
 authors = ["Spruce Systems Inc."]
+rust-version = "1.74"
 
 [workspace.dependencies]
 treeldr-layouts = { path = "layouts", version = "0.2.0" }

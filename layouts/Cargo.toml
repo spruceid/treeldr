@@ -4,6 +4,7 @@ description = "TreeLDR Layouts"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [features]
 default = []

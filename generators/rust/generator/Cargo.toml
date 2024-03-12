@@ -4,6 +4,7 @@ description = "TreeLDR Layouts to Rust"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 treeldr-layouts.workspace = true

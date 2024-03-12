@@ -4,6 +4,7 @@ description = "TreeLDR interface with Rust"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [features]
 default = ["macros"]
