@@ -7,15 +7,13 @@ use crate::{
 };
 use iref::Iri;
 use rdf_types::{
-	Interpretation, IriVocabulary, LanguageTagVocabulary, ReverseIriInterpretation,
-	ReverseLiteralInterpretation, Vocabulary,
+	dataset::{PatternMatchingDataset, TraversableDataset},
+	interpretation::{ReverseIriInterpretation, ReverseLiteralInterpretation},
+	Interpretation, LiteralType, Vocabulary,
 };
-use xsd_types::lexical::Lexical;
+use xsd_types::{lexical::Lexical, ParseXsd};
 
 use super::Error;
-
-pub type RdfLiteralType<V> =
-	rdf_types::literal::Type<<V as IriVocabulary>::Iri, <V as LanguageTagVocabulary>::LanguageTag>;
 
 pub fn hydrate_data<V, I: Interpretation, D>(
 	vocabulary: &V,
@@ -27,17 +25,11 @@ pub fn hydrate_data<V, I: Interpretation, D>(
 	inputs: &[I::Resource],
 ) -> Result<TypedLiteral<I::Resource>, Error<I::Resource>>
 where
-	V: Vocabulary<Type = RdfLiteralType<V>>,
+	V: Vocabulary,
 	V::Iri: PartialEq,
-	V::Value: AsRef<str>,
 	I: ReverseIriInterpretation<Iri = V::Iri> + ReverseLiteralInterpretation<Literal = V::Literal>,
 	I::Resource: Clone + PartialEq,
-	D: grdf::Dataset<
-		Subject = I::Resource,
-		Predicate = I::Resource,
-		Object = I::Resource,
-		GraphLabel = I::Resource,
-	>,
+	D: PatternMatchingDataset<Resource = I::Resource>,
 {
 	match layout {
 		DataLayout::Unit(layout) => {
@@ -74,18 +66,16 @@ where
 
 			for l in interpretation.literals_of(&resource) {
 				let literal = vocabulary.literal(l).unwrap();
-				let i = match literal.type_() {
-					rdf_types::literal::Type::Any(i) => i,
-					rdf_types::literal::Type::LangString(_) => {
+				let i = match &literal.type_ {
+					LiteralType::Any(i) => i,
+					LiteralType::LangString(_) => {
 						todo!() // Lang string
 					}
 				};
 
 				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
-					let v = hydrate_boolean_value(
-						literal.value().as_ref(),
-						vocabulary.iri(i).unwrap(),
-					)?;
+					let v =
+						hydrate_boolean_value(literal.value.as_ref(), vocabulary.iri(i).unwrap())?;
 
 					if value.replace(v).is_some() {
 						todo!() // Ambiguity
@@ -119,16 +109,16 @@ where
 
 			for l in interpretation.literals_of(&resource) {
 				let literal = vocabulary.literal(l).unwrap();
-				let i = match literal.type_() {
-					rdf_types::literal::Type::Any(i) => i,
-					rdf_types::literal::Type::LangString(_) => {
+				let i = match &literal.type_ {
+					LiteralType::Any(i) => i,
+					LiteralType::LangString(_) => {
 						todo!() // Lang string
 					}
 				};
 
 				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
 					let v =
-						hydrate_number_value(literal.value().as_ref(), vocabulary.iri(i).unwrap())?;
+						hydrate_number_value(literal.value.as_ref(), vocabulary.iri(i).unwrap())?;
 
 					if value.replace(v).is_some() {
 						todo!() // Ambiguity
@@ -162,16 +152,16 @@ where
 
 			for l in interpretation.literals_of(&resource) {
 				let literal = vocabulary.literal(l).unwrap();
-				let i = match literal.type_() {
-					rdf_types::literal::Type::Any(i) => i,
-					rdf_types::literal::Type::LangString(_) => {
+				let i = match &literal.type_ {
+					LiteralType::Any(i) => i,
+					LiteralType::LangString(_) => {
 						todo!() // Lang string
 					}
 				};
 
 				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
 					let v = hydrate_byte_string_value(
-						literal.value().as_ref(),
+						literal.value.as_ref(),
 						vocabulary.iri(i).unwrap(),
 					)?;
 
@@ -207,16 +197,16 @@ where
 
 			for l in interpretation.literals_of(&resource) {
 				let literal = vocabulary.literal(l).unwrap();
-				let i = match literal.type_() {
-					rdf_types::literal::Type::Any(i) => i,
-					rdf_types::literal::Type::LangString(_) => {
+				let i = match &literal.type_ {
+					LiteralType::Any(i) => i,
+					LiteralType::LangString(_) => {
 						todo!() // Lang string
 					}
 				};
 
 				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
 					let v = hydrate_text_string_value(
-						literal.value().as_ref(),
+						literal.value.as_ref(),
 						vocabulary.iri(i).unwrap(),
 					)?;
 
@@ -235,9 +225,9 @@ where
 }
 
 fn hydrate_boolean_value<R>(value: &str, type_: &Iri) -> Result<bool, Error<R>> {
-	use xsd_types::{Boolean, ParseRdf};
+	use xsd_types::Boolean;
 	if type_ == xsd_types::XSD_BOOLEAN {
-		Boolean::parse_rdf(value)
+		Boolean::parse_xsd(value)
 			.map(Boolean::into)
 			.map_err(|_| todo!())
 	} else {

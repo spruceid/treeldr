@@ -1,5 +1,4 @@
-use grdf::BTreeDataset;
-use rdf_types::{BlankIdBuf, Id, RdfDisplay, Term};
+use rdf_types::{dataset::BTreeDataset, BlankIdBuf, Id, RdfDisplay, Term};
 use serde_json::json;
 use treeldr_layouts::{
 	abs::{syntax::Layout, Builder},

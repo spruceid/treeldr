@@ -17,7 +17,7 @@ pub struct SumLayoutType;
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct SumLayout<R> {
 	pub input: u32,
 
@@ -55,7 +55,7 @@ impl<R: Ord> PartialOrd for SumLayout<R> {
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct Variant<R> {
 	/// Name.
 	pub name: String,

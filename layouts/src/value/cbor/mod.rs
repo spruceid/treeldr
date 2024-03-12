@@ -1,7 +1,8 @@
-use std::borrow::Borrow;
-
 use iref::{Iri, IriBuf};
-use rdf_types::{IriInterpretation, ReverseLiteralInterpretation, Vocabulary};
+use rdf_types::{
+	interpretation::{IriInterpretation, ReverseLiteralInterpretation},
+	Vocabulary,
+};
 use static_iref::iri;
 
 use crate::{layout::LayoutType, Layouts, Ref};
@@ -37,8 +38,6 @@ pub fn get_layout_tag<V, I>(
 ) -> Result<Option<u64>, InvalidTag>
 where
 	V: Vocabulary,
-	V::Value: AsRef<str>,
-	V::Type: Borrow<rdf_types::literal::Type<V::Iri, V::LanguageTag>>,
 	I: IriInterpretation<V::Iri> + ReverseLiteralInterpretation<Literal = V::Literal>,
 	I::Resource: Ord,
 {
@@ -48,16 +47,14 @@ where
 			Some(value) => {
 				for l in interpretation.literals_of(value) {
 					if let Some(literal) = vocabulary.literal(l) {
-						if let rdf_types::literal::Type::Any(ty) = literal.type_().borrow() {
+						if let rdf_types::LiteralType::Any(ty) = &literal.type_ {
 							if let Some(ty_iri) = vocabulary.iri(ty) {
 								return match xsd_types::UnsignedLongDatatype::from_iri(ty_iri) {
-									Some(_) => {
-										let value = literal.value().as_ref();
-										value
-											.parse()
-											.map(Some)
-											.map_err(|_| InvalidTag::Value(value.to_owned()))
-									}
+									Some(_) => literal
+										.value
+										.parse()
+										.map(Some)
+										.map_err(|_| InvalidTag::Value(literal.value.clone())),
 									None => Err(InvalidTag::Type(ty_iri.to_owned())),
 								};
 							}

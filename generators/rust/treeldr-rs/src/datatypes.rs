@@ -1,16 +1,19 @@
 use rdf_types::{
-	literal, InterpretationMut, Literal, ReverseTermInterpretation, ReverseTermInterpretationMut,
-	TermInterpretation, TermInterpretationMut, Vocabulary, VocabularyMut, XSD_STRING,
+	dataset::{BTreeDataset, PatternMatchingDataset},
+	interpretation::{
+		ReverseTermInterpretation, ReverseTermInterpretationMut, TermInterpretation,
+		TermInterpretationMut,
+	},
+	Dataset, InterpretationMut, Literal, LiteralType, Vocabulary, VocabularyMut, XSD_STRING,
 };
 
 use crate::{
-	DeserializeError, DeserializeLd, RdfContext, RdfContextMut, RdfType, SerializeError,
-	SerializeLd,
+	DeserializeError, DeserializeLd, RdfContext, RdfContextMut, SerializeError, SerializeLd,
 };
 
 impl<V, I> SerializeLd<1, V, I> for rdf_types::Id
 where
-	V: VocabularyMut<Value = String, Type = RdfType<V>>,
+	V: VocabularyMut,
 	I: InterpretationMut<V>
 		+ TermInterpretationMut<V::Iri, V::BlankId, V::Literal>
 		+ ReverseTermInterpretationMut<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
@@ -21,17 +24,25 @@ where
 		rdf: &mut RdfContextMut<V, I>,
 		inputs: &[<I as rdf_types::Interpretation>::Resource; 1],
 		_current_graph: Option<&<I as rdf_types::Interpretation>::Resource>,
-		_output: &mut grdf::BTreeDataset<<I as rdf_types::Interpretation>::Resource>,
+		_output: &mut BTreeDataset<<I as rdf_types::Interpretation>::Resource>,
 	) -> Result<(), SerializeError> {
-		let l = rdf.vocabulary_literal(Literal::new(self.as_str(), literal::Type::Any(XSD_STRING)));
-		rdf.interpretation.assign_literal(inputs[0].clone(), l);
+		match self {
+			Self::Iri(iri) => {
+				let i = rdf.vocabulary.insert(iri);
+				rdf.interpretation.assign_iri(&inputs[0], i);
+			}
+			Self::Blank(blank) => {
+				let b = rdf.vocabulary.insert_blank_id(blank);
+				rdf.interpretation.assign_blank_id(&inputs[0], b);
+			}
+		}
 		Ok(())
 	}
 }
 
 impl<V, I> DeserializeLd<1, V, I> for rdf_types::Id
 where
-	V: Vocabulary<Value = String, Type = RdfType<V>>,
+	V: Vocabulary,
 	I: TermInterpretation<V::Iri, V::BlankId, V::Literal>
 		+ ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
 	I::Resource: Clone + Ord,
@@ -43,12 +54,7 @@ where
 		inputs: &[I::Resource; 1],
 	) -> Result<Self, DeserializeError>
 	where
-		D: grdf::Dataset<
-			Subject = I::Resource,
-			Predicate = I::Resource,
-			Object = I::Resource,
-			GraphLabel = I::Resource,
-		>,
+		D: PatternMatchingDataset<Resource = I::Resource>,
 	{
 		let mut id = None;
 
@@ -77,7 +83,7 @@ where
 
 impl<V, I> SerializeLd<1, V, I> for String
 where
-	V: VocabularyMut<Value = String, Type = RdfType<V>>,
+	V: VocabularyMut,
 	I: InterpretationMut<V>
 		+ TermInterpretationMut<V::Iri, V::BlankId, V::Literal>
 		+ ReverseTermInterpretationMut<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
@@ -88,17 +94,17 @@ where
 		rdf: &mut RdfContextMut<V, I>,
 		inputs: &[<I as rdf_types::Interpretation>::Resource; 1],
 		_current_graph: Option<&<I as rdf_types::Interpretation>::Resource>,
-		_output: &mut grdf::BTreeDataset<<I as rdf_types::Interpretation>::Resource>,
+		_output: &mut BTreeDataset<<I as rdf_types::Interpretation>::Resource>,
 	) -> Result<(), SerializeError> {
-		let l = rdf.vocabulary_literal(Literal::new(self.as_str(), literal::Type::Any(XSD_STRING)));
-		rdf.interpretation.assign_literal(inputs[0].clone(), l);
+		let l = rdf.vocabulary_literal(Literal::new(self.clone(), LiteralType::Any(XSD_STRING)));
+		rdf.interpretation.assign_literal(&inputs[0], l);
 		Ok(())
 	}
 }
 
 impl<V, I> DeserializeLd<1, V, I> for String
 where
-	V: Vocabulary<Value = String, Type = RdfType<V>>,
+	V: Vocabulary,
 	I: TermInterpretation<V::Iri, V::BlankId, V::Literal>
 		+ ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
 	I::Resource: Clone + Ord,
@@ -110,19 +116,14 @@ where
 		inputs: &[I::Resource; 1],
 	) -> Result<Self, DeserializeError>
 	where
-		D: grdf::Dataset<
-			Subject = I::Resource,
-			Predicate = I::Resource,
-			Object = I::Resource,
-			GraphLabel = I::Resource,
-		>,
+		D: Dataset<Resource = I::Resource>,
 	{
 		for l in rdf.interpretation.literals_of(&inputs[0]) {
 			let literal = rdf.vocabulary.literal(l).unwrap();
-			if let literal::Type::Any(i) = literal.type_() {
+			if let LiteralType::Any(i) = &literal.type_ {
 				let iri = rdf.vocabulary.iri(i).unwrap();
 				if iri == XSD_STRING {
-					return Ok(literal.value().to_string());
+					return Ok(literal.value.clone());
 				}
 			}
 		}
@@ -136,7 +137,7 @@ macro_rules! xsd_datatypes {
 		$(
 			impl<V, I> SerializeLd<1, V, I> for $ty
 			where
-				V: VocabularyMut<Value = String, Type = RdfType<V>>,
+				V: VocabularyMut,
 				I: InterpretationMut<V>
 					+ TermInterpretationMut<V::Iri, V::BlankId, V::Literal>
 					+ ReverseTermInterpretationMut<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
@@ -147,17 +148,17 @@ macro_rules! xsd_datatypes {
 					rdf: &mut RdfContextMut<V, I>,
 					inputs: &[<I as rdf_types::Interpretation>::Resource; 1],
 					_current_graph: Option<&<I as rdf_types::Interpretation>::Resource>,
-					_output: &mut grdf::BTreeDataset<<I as rdf_types::Interpretation>::Resource>,
+					_output: &mut BTreeDataset<<I as rdf_types::Interpretation>::Resource>,
 				) -> Result<(), SerializeError> {
-					let l = rdf.vocabulary_literal_owned(Literal::new(self.to_string(), literal::Type::Any(xsd_types::$xsd_iri.to_owned())));
-					rdf.interpretation.assign_literal(inputs[0].clone(), l);
+					let l = rdf.vocabulary_literal_owned(Literal::new(self.to_string(), LiteralType::Any(xsd_types::$xsd_iri.to_owned())));
+					rdf.interpretation.assign_literal(&inputs[0], l);
 					Ok(())
 				}
 			}
 
 			impl<V, I> DeserializeLd<1, V, I> for $ty
 			where
-				V: Vocabulary<Value = String, Type = RdfType<V>>,
+				V: Vocabulary,
 				I: TermInterpretation<V::Iri, V::BlankId, V::Literal>
 					+ ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
 				I::Resource: Clone + Ord,
@@ -169,23 +170,18 @@ macro_rules! xsd_datatypes {
 					inputs: &[I::Resource; 1],
 				) -> Result<Self, DeserializeError>
 				where
-					D: grdf::Dataset<
-						Subject = I::Resource,
-						Predicate = I::Resource,
-						Object = I::Resource,
-						GraphLabel = I::Resource,
-					>,
+					D: PatternMatchingDataset<Resource = I::Resource>,
 				{
-					use xsd_types::ParseRdf;
+					use xsd_types::ParseXsd;
 					let mut result = None;
 					let mut has_literal = false;
 					for l in rdf.interpretation.literals_of(&inputs[0]) {
 						has_literal = true;
 						let literal = rdf.vocabulary.literal(l).unwrap();
-						if let literal::Type::Any(i) = literal.type_() {
+						if let LiteralType::Any(i) = &literal.type_ {
 							let iri = rdf.vocabulary.iri(i).unwrap();
 							if iri == xsd_types::$xsd_iri {
-								match Self::parse_rdf(literal.value()) {
+								match Self::parse_xsd(&literal.value) {
 									Ok(value) => {
 										if result.replace(value).is_some() {
 											return Err(DeserializeError::AmbiguousLiteralValue)

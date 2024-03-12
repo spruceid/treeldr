@@ -2,10 +2,12 @@ mod environment;
 
 pub use environment::Environment;
 use rdf_types::{
-	InterpretationMut, ReverseTermInterpretationMut, TermInterpretationMut, VocabularyMut,
+	dataset::BTreeDataset,
+	interpretation::{ReverseTermInterpretationMut, TermInterpretationMut},
+	InterpretationMut, VocabularyMut,
 };
 
-use crate::{RdfContextMut, RdfType};
+use crate::RdfContextMut;
 
 pub enum Error {
 	InvalidId(String),
@@ -13,7 +15,7 @@ pub enum Error {
 
 pub trait SerializeLd<const N: usize, V, I>: Sized
 where
-	V: VocabularyMut<Value = String, Type = RdfType<V>>,
+	V: VocabularyMut,
 	I: InterpretationMut<V>
 		+ TermInterpretationMut<V::Iri, V::BlankId, V::Literal>
 		+ ReverseTermInterpretationMut<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
@@ -24,6 +26,6 @@ where
 		rdf: &mut RdfContextMut<V, I>,
 		inputs: &[I::Resource; N],
 		current_graph: Option<&I::Resource>,
-		output: &mut grdf::BTreeDataset<I::Resource>,
+		output: &mut BTreeDataset<I::Resource>,
 	) -> Result<(), Error>;
 }

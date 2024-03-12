@@ -1,5 +1,5 @@
 use crate::{pattern::PatternQuad, Pattern, RdfContextMut};
-use rdf_types::{InterpretationMut, Quad};
+use rdf_types::{dataset::DatasetMut, InterpretationMut, Quad};
 
 pub enum Environment<'a, R> {
 	Root(&'a [R]),
@@ -84,10 +84,10 @@ where
 	pub fn instantiate_dataset<D>(&self, input: &[PatternQuad<R>], output: &mut D)
 	where
 		// Q: Clone + Into<R>,
-		D: grdf::MutableDataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+		D: DatasetMut<Resource = R>,
 	{
 		for quad in input {
-			output.insert(self.instantiate_quad(quad.borrow_components()));
+			output.insert(self.instantiate_quad(quad.as_ref()));
 		}
 	}
 }

@@ -9,7 +9,9 @@ use crate::{
 };
 use iref::IriBuf;
 use rdf_types::{
-	Interpretation, ReverseIriInterpretation, ReverseLiteralInterpretation, Term, Vocabulary,
+	dataset::{PatternMatchingDataset, TraversableDataset},
+	interpretation::{ReverseIriInterpretation, ReverseLiteralInterpretation},
+	Interpretation, Term, Vocabulary,
 };
 
 mod data;
@@ -70,7 +72,7 @@ pub fn hydrate<D>(
 	inputs: &[Term],
 ) -> Result<TypedValue, Error>
 where
-	D: grdf::Dataset<Subject = Term, Predicate = Term, Object = Term, GraphLabel = Term>,
+	D: PatternMatchingDataset<Resource = Term>,
 {
 	hydrate_with(&(), &(), context, dataset, None, layout_ref, inputs)
 }
@@ -87,17 +89,11 @@ pub fn hydrate_with<V, I: Interpretation, D>(
 	inputs: &[I::Resource],
 ) -> Result<TypedValue<I::Resource>, Error<I::Resource>>
 where
-	V: Vocabulary<Type = RdfLiteralType<V>>,
+	V: Vocabulary,
 	V::Iri: PartialEq,
-	V::Value: AsRef<str>,
 	I: ReverseIriInterpretation<Iri = V::Iri> + ReverseLiteralInterpretation<Literal = V::Literal>,
 	I::Resource: Clone + Ord,
-	D: grdf::Dataset<
-		Subject = I::Resource,
-		Predicate = I::Resource,
-		Object = I::Resource,
-		GraphLabel = I::Resource,
-	>,
+	D: PatternMatchingDataset<Resource = I::Resource>,
 {
 	let layout = context
 		.get(layout_ref)

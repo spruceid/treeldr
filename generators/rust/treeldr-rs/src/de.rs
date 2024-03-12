@@ -1,9 +1,13 @@
 mod matching;
 
 pub use matching::Matching;
-use rdf_types::{ReverseTermInterpretation, TermInterpretation, Vocabulary};
+use rdf_types::{
+	dataset::PatternMatchingDataset,
+	interpretation::{ReverseTermInterpretation, TermInterpretation},
+	Vocabulary,
+};
 
-use crate::{pattern::Substitution, Pattern, RdfContext, RdfType};
+use crate::{pattern::Substitution, Pattern, RdfContext};
 
 pub fn select_inputs<R: Clone, const N: usize>(
 	inputs: &[Pattern<R>; N],
@@ -76,7 +80,7 @@ impl From<matching::Error> for Error {
 
 pub trait DeserializeLd<const N: usize, V, I>: Sized
 where
-	V: Vocabulary<Value = String, Type = RdfType<V>>,
+	V: Vocabulary,
 	I: TermInterpretation<V::Iri, V::BlankId, V::Literal>
 		+ ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
 	I::Resource: Clone + Ord,
@@ -88,12 +92,7 @@ where
 		inputs: &[I::Resource; N],
 	) -> Result<Self, Error>
 	where
-		D: grdf::Dataset<
-			Subject = I::Resource,
-			Predicate = I::Resource,
-			Object = I::Resource,
-			GraphLabel = I::Resource,
-		>;
+		D: PatternMatchingDataset<Resource = I::Resource>;
 }
 
 pub struct InvalidLiteral<T = String>(pub T);
@@ -104,9 +103,9 @@ pub trait FromRdfLiteral: Sized {
 
 impl FromRdfLiteral for bool {
 	fn from_rdf_literal(value: &str) -> Result<Self, InvalidLiteral> {
-		use xsd_types::ParseRdf;
+		use xsd_types::ParseXsd;
 		let value =
-			xsd_types::Boolean::parse_rdf(value).map_err(|_| InvalidLiteral(value.to_owned()))?;
+			xsd_types::Boolean::parse_xsd(value).map_err(|_| InvalidLiteral(value.to_owned()))?;
 		Ok(value.0)
 	}
 }
@@ -116,7 +115,7 @@ macro_rules! xsd_from_rdf {
 		$(
 			impl FromRdfLiteral for $ty {
 				fn from_rdf_literal(value: &str) -> Result<Self, InvalidLiteral> {
-					xsd_types::ParseRdf::parse_rdf(value).map_err(|_| InvalidLiteral(value.to_owned()))
+					xsd_types::ParseXsd::parse_xsd(value).map_err(|_| InvalidLiteral(value.to_owned()))
 				}
 			}
 		)*

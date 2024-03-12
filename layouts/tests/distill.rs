@@ -1,6 +1,7 @@
 use nquads_syntax::Parse;
 use paste::paste;
-use rdf_types::{BlankIdBuf, Id, Term};
+use rdf_types::dataset::BTreeDataset;
+use rdf_types::{BlankIdBuf, Term};
 use static_iref::iri;
 use std::fs;
 use std::path::PathBuf;
@@ -17,15 +18,13 @@ fn hydrate<const N: usize>(id: &str, inputs: [Term; N]) {
 	let output_path = file_path(id, "-out.json");
 
 	// Parse the input dataset from N-Quads.
-	let dataset: grdf::BTreeDataset =
-		nquads_syntax::Document::parse_str(&std::fs::read_to_string(input_path).unwrap(), |span| {
-			span
-		})
-		.unwrap()
-		.into_value()
-		.into_iter()
-		.map(strip_rdf_quad)
-		.collect();
+	let dataset: BTreeDataset =
+		nquads_syntax::Document::parse_str(&std::fs::read_to_string(input_path).unwrap())
+			.unwrap()
+			.into_value()
+			.into_iter()
+			.map(strip_rdf_quad)
+			.collect();
 
 	// Initialize the layout builder.
 	let mut builder = treeldr_layouts::abs::Builder::new();
@@ -66,15 +65,13 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 	let input: treeldr_layouts::Value = input_json.into();
 
 	// Parse the expected output dataset from N-Quads.
-	let expected_dataset: grdf::BTreeDataset = nquads_syntax::Document::parse_str(
-		&std::fs::read_to_string(output_path).unwrap(),
-		|span| span,
-	)
-	.unwrap()
-	.into_value()
-	.into_iter()
-	.map(strip_rdf_quad)
-	.collect();
+	let expected_dataset: BTreeDataset =
+		nquads_syntax::Document::parse_str(&std::fs::read_to_string(output_path).unwrap())
+			.unwrap()
+			.into_value()
+			.into_iter()
+			.map(strip_rdf_quad)
+			.collect();
 
 	// Initialize the layout builder.
 	let mut builder = treeldr_layouts::abs::Builder::new();
@@ -106,19 +103,16 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 	}
 
 	// Test.
-	let bijection = output_dataset
-		.find_blank_id_bijection(&expected_dataset)
-		.expect("not isomorphic"); // fail if the output is not isomorphic to the expected dataset.
+	let bijection =
+		rdf_types::dataset::isomorphism::find_bijection(&output_dataset, &expected_dataset)
+			.expect("not isomorphic"); // fail if the output is not isomorphic to the expected dataset.
 
 	assert_eq!(output_values.len(), expected_values.len());
 	for (output, expected) in output_values.iter().zip(&expected_values) {
-		match (output, expected) {
-			(Term::Id(Id::Blank(output)), Term::Id(Id::Blank(expected))) => {
-				assert_eq!(*bijection.forward.get(output).unwrap(), expected)
-			}
-			(output, expected) => {
-				assert_eq!(output, expected)
-			}
+		if output.is_blank() {
+			assert_eq!(*bijection.forward.get(output).unwrap(), expected)
+		} else {
+			assert_eq!(output, expected)
 		}
 	}
 }

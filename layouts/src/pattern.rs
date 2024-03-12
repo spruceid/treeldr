@@ -1,8 +1,7 @@
-use grdf::Quad;
+use rdf_types::{pattern::ResourceOrVar, Quad};
 
 /// A quad of patterns referencing their resources.
-pub type PatternRefQuad<'p, R> =
-	Quad<Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>>;
+pub type PatternRefQuad<'p, R> = Quad<Pattern<&'p R>>;
 
 /// Pattern.
 ///
@@ -43,6 +42,15 @@ impl<R> Pattern<R> {
 		match self {
 			Self::Resource(r) => Some(r),
 			_ => None,
+		}
+	}
+}
+
+impl<R> From<Pattern<R>> for ResourceOrVar<R, u32> {
+	fn from(value: Pattern<R>) -> Self {
+		match value {
+			Pattern::Resource(r) => Self::Resource(r),
+			Pattern::Var(x) => Self::Var(x),
 		}
 	}
 }

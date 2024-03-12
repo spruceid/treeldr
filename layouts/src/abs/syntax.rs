@@ -7,11 +7,12 @@
 //!
 //! Abstract layouts must be compiled into `crate::Layout` before being used
 //! to serialize/deserialize RDF datasets.
-use grdf::BTreeDataset;
 use iref::{Iri, IriBuf, IriRefBuf};
 use rdf_types::{
-	generator, BlankIdBuf, Id, InterpretationMut, IriInterpretationMut, LiteralInterpretationMut,
-	Term, VocabularyMut, RDF_FIRST, RDF_NIL, RDF_REST,
+	dataset::BTreeDataset,
+	generator,
+	interpretation::{IriInterpretationMut, LiteralInterpretationMut},
+	BlankIdBuf, Id, InterpretationMut, Term, VocabularyMut, RDF_FIRST, RDF_NIL, RDF_REST,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -66,8 +67,11 @@ where
 	}
 
 	fn literal_resource(&mut self, value: &str, type_: &Iri) -> Self::Resource {
-		use rdf_types::{literal::Type, Literal};
-		Term::Literal(Literal::new(value.to_owned(), Type::Any(type_.to_owned())))
+		use rdf_types::{Literal, LiteralType};
+		Term::Literal(Literal::new(
+			value.to_owned(),
+			LiteralType::Any(type_.to_owned()),
+		))
 	}
 
 	fn anonymous_resource(&mut self) -> Self::Resource {
@@ -78,8 +82,6 @@ where
 impl<'a, V, I> Context for super::BuilderWithInterpretationMut<'a, V, I>
 where
 	V: VocabularyMut,
-	V::Type: From<rdf_types::literal::Type<V::Iri, V::LanguageTag>>,
-	V::Value: From<String>,
 	I: IriInterpretationMut<V::Iri> + LiteralInterpretationMut<V::Literal> + InterpretationMut<V>,
 	I::Resource: Clone + Eq + Ord + std::fmt::Debug,
 {
@@ -102,12 +104,11 @@ where
 	}
 
 	fn literal_resource(&mut self, value: &str, type_: &Iri) -> Self::Resource {
-		use rdf_types::{literal::Type, Literal};
+		use rdf_types::{Literal, LiteralType};
 		let type_ = self.vocabulary.insert(type_);
-		let l = self.vocabulary.insert_owned_literal(Literal::new(
-			value.to_owned().into(),
-			Type::Any(type_).into(),
-		));
+		let l = self
+			.vocabulary
+			.insert_owned_literal(Literal::new(value.to_owned(), LiteralType::Any(type_)));
 		self.interpretation.interpret_literal(l)
 	}
 
@@ -373,8 +374,6 @@ impl Layout {
 	) -> Result<Ref<LayoutType, I::Resource>, Error>
 	where
 		V: VocabularyMut,
-		V::Type: From<rdf_types::literal::Type<V::Iri, V::LanguageTag>>,
-		V::Value: From<String>,
 		I: IriInterpretationMut<V::Iri>
 			+ LiteralInterpretationMut<V::Literal>
 			+ InterpretationMut<V>,
@@ -387,13 +386,19 @@ impl Layout {
 	pub fn build_with_context<C: Context>(
 		&self,
 		context: &mut C,
-	) -> Result<Ref<LayoutType, C::Resource>, Error> {
+	) -> Result<Ref<LayoutType, C::Resource>, Error>
+	where
+		C::Resource: Clone,
+	{
 		let scope = Scope::default();
 		Build::build(self, context, &scope)
 	}
 }
 
-impl<C: Context> Build<C> for Layout {
+impl<C: Context> Build<C> for Layout
+where
+	C::Resource: Clone,
+{
 	type Target = Ref<LayoutType, C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -433,7 +438,10 @@ pub enum LayoutRef {
 	Layout(Box<Layout>),
 }
 
-impl<C: Context> Build<C> for LayoutRef {
+impl<C: Context> Build<C> for LayoutRef
+where
+	C::Resource: Clone,
+{
 	type Target = Ref<LayoutType, C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -921,7 +929,10 @@ impl From<Vec<Quad>> for Dataset {
 	}
 }
 
-impl<C: Context> Build<C> for Dataset {
+impl<C: Context> Build<C> for Dataset
+where
+	C::Resource: Clone,
+{
 	type Target = crate::Dataset<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -977,7 +988,10 @@ impl<C: Context> Build<C> for Quad {
 	}
 }
 
-impl<C: Context> Build<C> for LayoutHeader {
+impl<C: Context> Build<C> for LayoutHeader
+where
+	C::Resource: Clone,
+{
 	type Target = (BuiltLayoutHeader<C::Resource>, Scope);
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1085,7 +1099,10 @@ pub enum ValueFormatOrLayout {
 	Layout(LayoutRef),
 }
 
-impl<C: Context> Build<C> for ValueFormatOrLayout {
+impl<C: Context> Build<C> for ValueFormatOrLayout
+where
+	C::Resource: Clone,
+{
 	type Target = crate::ValueFormat<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1112,7 +1129,10 @@ pub struct ValueFormat {
 	pub graph: Option<Option<Pattern>>,
 }
 
-impl<C: Context> Build<C> for ValueFormat {
+impl<C: Context> Build<C> for ValueFormat
+where
+	C::Resource: Clone,
+{
 	type Target = crate::ValueFormat<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1140,7 +1160,10 @@ pub enum VariantFormatOrLayout {
 	Layout(LayoutRef),
 }
 
-impl<C: Context> Build<C> for VariantFormatOrLayout {
+impl<C: Context> Build<C> for VariantFormatOrLayout
+where
+	C::Resource: Clone,
+{
 	type Target = crate::ValueFormat<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1167,7 +1190,10 @@ pub struct VariantFormat {
 	pub graph: Option<Option<Pattern>>,
 }
 
-impl<C: Context> Build<C> for VariantFormat {
+impl<C: Context> Build<C> for VariantFormat
+where
+	C::Resource: Clone,
+{
 	type Target = crate::ValueFormat<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1299,7 +1325,10 @@ impl LiteralLayout {
 	}
 }
 
-impl<C: Context> Build<C> for LiteralLayout {
+impl<C: Context> Build<C> for LiteralLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::LiteralLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1332,7 +1361,10 @@ impl DataLayout {
 	}
 }
 
-impl<C: Context> Build<C> for DataLayout {
+impl<C: Context> Build<C> for DataLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::DataLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1365,7 +1397,10 @@ pub struct UnitLayout {
 	pub const_: Value,
 }
 
-impl<C: Context> Build<C> for UnitLayout {
+impl<C: Context> Build<C> for UnitLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::UnitLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1413,7 +1448,10 @@ fn literal_resource<C: Context>(
 	}
 }
 
-impl<C: Context> Build<C> for BooleanLayout {
+impl<C: Context> Build<C> for BooleanLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::BooleanLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1454,7 +1492,10 @@ pub struct NumberLayout {
 	pub datatype: CompactIri,
 }
 
-impl<C: Context> Build<C> for NumberLayout {
+impl<C: Context> Build<C> for NumberLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::NumberLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1490,7 +1531,10 @@ pub struct ByteStringLayout {
 	pub datatype: CompactIri,
 }
 
-impl<C: Context> Build<C> for ByteStringLayout {
+impl<C: Context> Build<C> for ByteStringLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::ByteStringLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1530,7 +1574,10 @@ pub struct TextStringLayout {
 	pub datatype: Option<CompactIri>,
 }
 
-impl<C: Context> Build<C> for TextStringLayout {
+impl<C: Context> Build<C> for TextStringLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::TextStringLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1573,7 +1620,10 @@ pub struct IdLayout {
 	pub resource: Option<Pattern>,
 }
 
-impl<C: Context> Build<C> for IdLayout {
+impl<C: Context> Build<C> for IdLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::IdLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1608,7 +1658,10 @@ pub struct ProductLayout {
 	pub fields: BTreeMap<String, Field>,
 }
 
-impl<C: Context> Build<C> for ProductLayout {
+impl<C: Context> Build<C> for ProductLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::ProductLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1733,7 +1786,10 @@ pub struct Variant {
 	pub dataset: Dataset,
 }
 
-impl<C: Context> Build<C> for SumLayout {
+impl<C: Context> Build<C> for SumLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::SumLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1779,7 +1835,10 @@ impl ListLayout {
 	}
 }
 
-impl<C: Context> Build<C> for ListLayout {
+impl<C: Context> Build<C> for ListLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::ListLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1831,7 +1890,10 @@ fn default_list_dataset<C: Context>(
 	head: u32,
 	rest: u32,
 	first: crate::Pattern<C::Resource>,
-) -> BTreeDataset<crate::Pattern<C::Resource>> {
+) -> BTreeDataset<crate::Pattern<C::Resource>>
+where
+	C::Resource: Clone,
+{
 	let mut dataset = BTreeDataset::new();
 
 	dataset.insert(rdf_types::Quad(
@@ -1851,7 +1913,10 @@ fn default_list_dataset<C: Context>(
 	dataset
 }
 
-impl<C: Context> Build<C> for ListNodeOrLayout {
+impl<C: Context> Build<C> for ListNodeOrLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::list::ordered::NodeLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1915,7 +1980,10 @@ impl ListNode {
 	}
 }
 
-impl<C: Context> Build<C> for OrderedListLayout {
+impl<C: Context> Build<C> for OrderedListLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::OrderedListLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1932,7 +2000,10 @@ impl<C: Context> Build<C> for OrderedListLayout {
 	}
 }
 
-impl<C: Context> Build<C> for ListNode {
+impl<C: Context> Build<C> for ListNode
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::list::ordered::NodeLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -1994,7 +2065,10 @@ pub struct ListItem {
 	pub property: Option<Pattern>,
 }
 
-impl<C: Context> Build<C> for UnorderedListLayout {
+impl<C: Context> Build<C> for UnorderedListLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::UnorderedListLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
@@ -2022,7 +2096,10 @@ impl ListItem {
 		context: &mut C,
 		scope: &Scope,
 		subject: Option<u32>,
-	) -> Result<abs::layout::list::ItemLayout<C::Resource>, Error> {
+	) -> Result<abs::layout::list::ItemLayout<C::Resource>, Error>
+	where
+		C::Resource: Clone,
+	{
 		let object = if self.intro.is_empty() {
 			None
 		} else {
@@ -2071,7 +2148,10 @@ pub struct SizedListLayout {
 	pub items: Vec<ListItem>,
 }
 
-impl<C: Context> Build<C> for SizedListLayout {
+impl<C: Context> Build<C> for SizedListLayout
+where
+	C::Resource: Clone,
+{
 	type Target = abs::layout::SizedListLayout<C::Resource>;
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {

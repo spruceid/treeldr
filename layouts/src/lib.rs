@@ -11,7 +11,7 @@
 //!
 //! ```
 //! use static_iref::iri;
-//! use rdf_types::{Quad, Term, Literal, literal::Type};
+//! use rdf_types::{Quad, Term, Literal, LiteralType, dataset::BTreeDataset};
 //! use xsd_types::XSD_STRING;
 //! use serde_json::json;
 //!
@@ -44,11 +44,11 @@
 //! let layouts = builder.build();
 //!
 //! // Create an RDF dataset with a single triple.
-//! let dataset: grdf::BTreeDataset = [
+//! let dataset: BTreeDataset = [
 //!   Quad(
 //!     Term::iri(iri!("https://example.org/#john.smith").to_owned()),
 //!     Term::iri(iri!("https://schema.org/name").to_owned()),
-//!     Term::Literal(Literal::new("John Smith".to_owned(), Type::Any(XSD_STRING.to_owned()))),
+//!     Term::Literal(Literal::new("John Smith".to_owned(), LiteralType::Any(XSD_STRING.to_owned()))),
 //!     None
 //!   )
 //! ].into_iter().collect();

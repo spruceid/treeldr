@@ -16,5 +16,4 @@ iref.workspace = true
 langtag.workspace = true
 rdf-types.workspace = true
 xsd-types.workspace = true
-grdf.workspace = true
 treeldr-macros = { workspace = true, optional = true }

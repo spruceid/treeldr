@@ -5,7 +5,8 @@ pub use automaton::{Automaton, DetAutomaton};
 use btree_range_map::RangeSet;
 use educe::Educe;
 use iref::IriBuf;
-use rdf_types::{meta::MetaQuad, Id, Quad};
+use locspan::{Meta, Span};
+use rdf_types::{GraphLabel, Id, Object, Quad, Term};
 
 use crate::Pattern;
 
@@ -60,10 +61,25 @@ where
 	}
 }
 
+pub type MetaQuad = Meta<
+	rdf_types::Quad<Meta<Id, Span>, Meta<IriBuf, Span>, Meta<Object, Span>, Meta<GraphLabel, Span>>,
+	Span,
+>;
+
 /// Strips the input RDF `quad` of its metadata information and returns it as a
 /// gRDF quad (a quad where all components are [`Term`](rdf_types::Term)s).
-pub fn strip_rdf_quad<M>(
-	quad: MetaQuad<Id, IriBuf, rdf_types::meta::Term<M>, Id, M>,
-) -> rdf_types::GrdfQuad {
-	quad.into_value().strip_all_but_predicate().into_grdf()
+pub fn strip_rdf_quad(
+	locspan::Meta(Quad(
+		locspan::Meta(s, _),
+		locspan::Meta(p, _),
+		locspan::Meta(o, _),
+		g
+	), _): MetaQuad,
+) -> Quad {
+	Quad(
+		Term::Id(s),
+		Term::iri(p),
+		o,
+		g.map(|locspan::Meta(g, _)| Term::Id(g)),
+	)
 }

@@ -10,7 +10,7 @@ use crate::{graph::Dataset, layout::LayoutType, Pattern, Ref, ValueFormat};
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct OrderedListLayout<R> {
 	pub input: u32,
 
@@ -50,7 +50,7 @@ impl<R: Ord> PartialOrd for OrderedListLayout<R> {
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct NodeLayout<R> {
 	pub intro: u32,
 

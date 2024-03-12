@@ -15,7 +15,7 @@ pub struct ProductLayoutType;
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct ProductLayout<R> {
 	/// Number of inputs.
 	pub input: u32,
@@ -54,7 +54,7 @@ impl<R: Ord> PartialOrd for ProductLayout<R> {
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct Field<R> {
 	/// Intros.
 	pub intro: u32,

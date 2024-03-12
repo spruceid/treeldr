@@ -9,7 +9,6 @@ edition.workspace = true
 treeldr-layouts.workspace = true
 rdf-types.workspace = true
 iref.workspace = true
-grdf.workspace = true
 syn.workspace = true
 proc-macro2.workspace = true
 quote.workspace = true

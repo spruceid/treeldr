@@ -1,9 +1,6 @@
-use grdf::Quad;
+use rdf_types::{dataset::PatternMatchingDataset, pattern::CanonicalQuadPattern, Quad};
 
-use crate::{
-	pattern::{PatternRefQuad, Substitution},
-	Pattern,
-};
+use crate::pattern::{PatternRefQuad, Substitution};
 
 /// Pattern matching error.
 pub enum Error {
@@ -22,7 +19,7 @@ pub enum Error {
 /// of the given RDF dataset.
 pub struct Matching<'a, 'p, R, D, Q>
 where
-	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+	D: PatternMatchingDataset<Resource = R>,
 {
 	/// Dataset on which the pattern matching is performed.
 	dataset: &'a D,
@@ -33,7 +30,7 @@ where
 
 pub struct State<'a, 'p, R, D, Q>
 where
-	D: 'a + grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+	D: 'a + PatternMatchingDataset<Resource = R>,
 {
 	substitution: Substitution<R>,
 	quad_state: Option<QuadState<'a, 'p, R, D>>,
@@ -42,15 +39,15 @@ where
 
 pub struct QuadState<'a, 'p, R, D>
 where
-	D: 'a + grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+	D: 'a + PatternMatchingDataset<Resource = R>,
 {
 	pattern: PatternRefQuad<'p, R>,
-	quad_matching: D::PatternMatching<'a, 'p>,
+	quad_matching: D::QuadPatternMatching<'a, 'p>,
 }
 
 impl<'a, 'p, R, D, Q> Matching<'a, 'p, R, D, Q>
 where
-	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+	D: PatternMatchingDataset<Resource = R>,
 {
 	/// Starts a pattern matching on the given `dataset` using the input partial
 	/// `substitution` and `patterns` (an iterator of [`PatternRefQuad`]).
@@ -77,7 +74,7 @@ where
 impl<'a, 'p, R, D, Q> Matching<'a, 'p, R, D, Q>
 where
 	R: Clone + PartialEq,
-	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+	D: PatternMatchingDataset<Resource = R>,
 	Q: Clone + Iterator<Item = PatternRefQuad<'p, R>>,
 {
 	pub fn into_unique(mut self) -> Result<Option<Substitution<R>>, Error> {
@@ -101,7 +98,7 @@ where
 impl<'a, 'p, R, D, Q> Iterator for Matching<'a, 'p, R, D, Q>
 where
 	R: Clone + PartialEq,
-	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+	D: PatternMatchingDataset<Resource = R>,
 	Q: Clone + Iterator<Item = PatternRefQuad<'p, R>>,
 {
 	type Item = Substitution<R>;
@@ -134,7 +131,7 @@ where
 								pattern,
 								quad_matching: self
 									.dataset
-									.pattern_matching(quad_matching_pattern(pattern)),
+									.quad_pattern_matching(quad_matching_pattern(pattern)),
 							})
 						}
 						None => {
@@ -149,13 +146,11 @@ where
 	}
 }
 
-fn quad_matching_pattern<R>(
-	pattern: PatternRefQuad<R>,
-) -> Quad<Option<&R>, Option<&R>, Option<&R>, Option<&R>> {
-	Quad(
-		pattern.0.into_resource(),
-		pattern.1.into_resource(),
-		pattern.2.into_resource(),
-		pattern.3.map(Pattern::into_resource),
-	)
+fn quad_matching_pattern<R>(pattern: PatternRefQuad<R>) -> CanonicalQuadPattern<&R> {
+	CanonicalQuadPattern::from_pattern(Quad(
+		pattern.0.into(),
+		pattern.1.into(),
+		pattern.2.into(),
+		pattern.3.map(Into::into),
+	))
 }

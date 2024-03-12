@@ -21,7 +21,7 @@ pub struct ListLayoutType;
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub enum ListLayout<R> {
 	Unordered(UnorderedListLayout<R>),
 	Ordered(OrderedListLayout<R>),
@@ -67,7 +67,7 @@ impl<R: Ord> PartialOrd for ListLayout<R> {
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct ItemLayout<R> {
 	/// Intros.
 	pub intro: u32,

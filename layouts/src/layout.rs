@@ -64,7 +64,7 @@ impl<R: Ord> DerefResource<LayoutType, R> for Layouts<R> {
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub enum Layout<R> {
 	/// Bottom layout.
 	///

@@ -3,10 +3,14 @@ use std::{
 	hash::Hash,
 };
 
-use grdf::BTreeDataset;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use rdf_types::{BlankIdBuf, Id, IriVocabulary, ReverseIriInterpretation, Term};
+use rdf_types::{
+	dataset::{BTreeDataset, TraversableDataset},
+	interpretation::ReverseIriInterpretation,
+	vocabulary::IriVocabulary,
+	BlankIdBuf, Id, Term,
+};
 use syn::spanned::Spanned;
 use treeldr_layouts::{
 	distill::RdfContext,
