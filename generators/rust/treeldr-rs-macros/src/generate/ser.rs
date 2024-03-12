@@ -1,6 +1,6 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use rdf_types::{Id, Term};
+use rdf_types::{dataset::TraversableDataset, Id, LiteralType, Term};
 use syn::DeriveInput;
 use treeldr_layouts::{
 	layout::{DataLayout, ListLayout, LiteralLayout},
@@ -93,7 +93,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 
 						let literal = rdf.vocabulary_literal_owned(::treeldr::rdf_types::Literal::new(
 							self.0.to_string(),
-							::treeldr::rdf_types::literal::Type::Any(#datatype)
+							::treeldr::rdf_types::LiteralType::Any(#datatype)
 						));
 						rdf.interpretation.assign_literal(#target, literal);
 						Ok(())
@@ -111,7 +111,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 
 						let literal = rdf.vocabulary_literal_owned(::treeldr::rdf_types::Literal::new(
 							self.0.to_string(),
-							::treeldr::rdf_types::literal::Type::Any(#datatype)
+							::treeldr::rdf_types::LiteralType::Any(#datatype)
 						));
 						rdf.interpretation.assign_literal(#target, literal);
 						Ok(())
@@ -129,7 +129,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 
 						let literal = rdf.vocabulary_literal_owned(::treeldr::rdf_types::Literal::new(
 							self.0.to_string(),
-							::treeldr::rdf_types::literal::Type::Any(#datatype)
+							::treeldr::rdf_types::LiteralType::Any(#datatype)
 						));
 						rdf.interpretation.assign_literal(#target, literal);
 						Ok(())
@@ -147,7 +147,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 
 						let literal = rdf.vocabulary_literal(::treeldr::rdf_types::Literal::new(
 							::std::convert::AsRef::<str>::as_ref(&self.0),
-							::treeldr::rdf_types::literal::Type::Any(#datatype)
+							::treeldr::rdf_types::LiteralType::Any(#datatype)
 						));
 						rdf.interpretation.assign_literal(#target, literal);
 						Ok(())
@@ -408,8 +408,8 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 	Ok(quote! {
 		impl<V, I> ::treeldr::SerializeLd<#n, V, I> for #ident
 		where
-			V: ::treeldr::rdf_types::VocabularyMut<Value = String, Type = ::treeldr::RdfType<V>>,
-			I: ::treeldr::rdf_types::InterpretationMut<V> + ::treeldr::rdf_types::TermInterpretationMut<V::Iri, V::BlankId, V::Literal> + ::treeldr::rdf_types::ReverseTermInterpretationMut<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
+			V: ::treeldr::rdf_types::VocabularyMut,
+			I: ::treeldr::rdf_types::InterpretationMut<V> + ::treeldr::rdf_types::interpretation::TermInterpretationMut<V::Iri, V::BlankId, V::Literal> + ::treeldr::rdf_types::interpretation::ReverseTermInterpretationMut<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
 			I::Resource: Clone + Ord
 		{
 			fn serialize_ld_with(
@@ -417,7 +417,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				rdf: &mut ::treeldr::RdfContextMut<V, I>,
 				inputs: &[I::Resource; #n],
 				current_graph: Option<&I::Resource>,
-				output: &mut ::treeldr::grdf::BTreeDataset<I::Resource>
+				output: &mut ::treeldr::rdf_types::dataset::BTreeDataset<I::Resource>
 			) -> Result<(), ::treeldr::SerializeError> {
 				let env = ::treeldr::ser::Environment::Root(inputs);
 				#body
@@ -437,14 +437,13 @@ fn term_interpretation(term: &Term) -> TokenStream {
 			quote!(rdf.interpret_blank_id(unsafe { ::treeldr::rdf_types::BlankId::new_unchecked(#blank_id) }))
 		}
 		Term::Literal(literal) => {
-			use rdf_types::literal;
-			let value = literal.value();
-			let ty = match literal.type_() {
-				literal::Type::Any(iri) => {
+			let value = &literal.value;
+			let ty = match &literal.type_ {
+				LiteralType::Any(iri) => {
 					let iri = iri.as_str();
-					quote!(::treeldr::rdf_types::literal::Type::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
+					quote!(::treeldr::rdf_types::LiteralType::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
 				}
-				literal::Type::LangString(_tag) => {
+				LiteralType::LangString(_tag) => {
 					todo!("lang string support")
 				}
 			};
@@ -520,14 +519,13 @@ fn generate_pattern(pattern: &Pattern<Term>) -> TokenStream {
 				))
 			}
 			Term::Literal(l) => {
-				use rdf_types::literal;
-				let value = l.value().as_str();
-				let ty = match l.type_() {
-					literal::Type::Any(iri) => {
+				let value = &l.value;
+				let ty = match &l.type_ {
+					LiteralType::Any(iri) => {
 						let iri = iri.as_str();
-						quote!(::treeldr::rdf_types::literal::Type::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
+						quote!(::treeldr::rdf_types::LiteralType::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
 					}
-					literal::Type::LangString(_tag) => {
+					LiteralType::LangString(_tag) => {
 						todo!("lang string support")
 					}
 				};

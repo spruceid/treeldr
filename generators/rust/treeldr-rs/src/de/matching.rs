@@ -1,4 +1,4 @@
-use grdf::Quad;
+use rdf_types::{dataset::PatternMatchingDataset, pattern::CanonicalQuadPattern, Quad};
 
 use crate::{pattern::Substitution, Pattern};
 
@@ -7,36 +7,36 @@ pub enum Error {
 	Empty,
 }
 
-pub struct Matching<'a, 'p, R, D, Q>
+pub struct Matching<'a, 'p, D, Q>
 where
-	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+	D: PatternMatchingDataset,
 {
 	dataset: &'a D,
-	stack: Vec<State<'a, 'p, R, D, Q>>,
+	stack: Vec<State<'a, 'p, D, Q>>,
 }
 
-pub struct State<'a, 'p, R, D, Q>
+pub struct State<'a, 'p, D, Q>
 where
-	D: 'a + grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+	D: 'a + PatternMatchingDataset,
 {
-	substitution: Substitution<R>,
-	quad_state: Option<QuadState<'a, 'p, R, D>>,
+	substitution: Substitution<D::Resource>,
+	quad_state: Option<QuadState<'a, 'p, D>>,
 	rest: Q,
 }
 
-pub struct QuadState<'a, 'p, R, D>
+pub struct QuadState<'a, 'p, D>
 where
-	D: 'a + grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+	D: 'a + PatternMatchingDataset,
 {
-	pattern: Quad<Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>>,
-	quad_matching: D::PatternMatching<'a, 'p>,
+	pattern: Quad<Pattern<&'p D::Resource>>,
+	quad_matching: D::QuadPatternMatching<'a, 'p>,
 }
 
-impl<'a, 'p, R, D, Q> Matching<'a, 'p, R, D, Q>
+impl<'a, 'p, D, Q> Matching<'a, 'p, D, Q>
 where
-	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+	D: PatternMatchingDataset,
 {
-	pub fn new(dataset: &'a D, substitution: Substitution<R>, quads: Q) -> Self {
+	pub fn new(dataset: &'a D, substitution: Substitution<D::Resource>, quads: Q) -> Self {
 		Self {
 			dataset,
 			stack: vec![State {
@@ -48,14 +48,13 @@ where
 	}
 }
 
-impl<'a, 'p, R, D, Q> Matching<'a, 'p, R, D, Q>
+impl<'a, 'p, D, Q> Matching<'a, 'p, D, Q>
 where
-	R: Clone + PartialEq,
-	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
-	Q: Clone
-		+ Iterator<Item = Quad<Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>>>,
+	D: PatternMatchingDataset,
+	D::Resource: Clone + PartialEq,
+	Q: Clone + Iterator<Item = Quad<Pattern<&'p D::Resource>>>,
 {
-	pub fn into_unique(mut self) -> Result<Option<Substitution<R>>, Error> {
+	pub fn into_unique(mut self) -> Result<Option<Substitution<D::Resource>>, Error> {
 		match self.next() {
 			Some(substitution) => {
 				if self.next().is_some() {
@@ -68,19 +67,18 @@ where
 		}
 	}
 
-	pub fn into_required_unique(self) -> Result<Substitution<R>, Error> {
+	pub fn into_required_unique(self) -> Result<Substitution<D::Resource>, Error> {
 		self.into_unique()?.ok_or(Error::Empty)
 	}
 }
 
-impl<'a, 'p, R, D, Q> Iterator for Matching<'a, 'p, R, D, Q>
+impl<'a, 'p, D, Q> Iterator for Matching<'a, 'p, D, Q>
 where
-	R: Clone + PartialEq,
-	D: grdf::Dataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
-	Q: Clone
-		+ Iterator<Item = Quad<Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>>>,
+	D: PatternMatchingDataset,
+	D::Resource: Clone + PartialEq,
+	Q: Clone + Iterator<Item = Quad<Pattern<&'p D::Resource>>>,
 {
-	type Item = Substitution<R>;
+	type Item = Substitution<D::Resource>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		loop {
@@ -110,7 +108,7 @@ where
 								pattern,
 								quad_matching: self
 									.dataset
-									.pattern_matching(quad_matching_pattern(pattern)),
+									.quad_pattern_matching(quad_matching_pattern(pattern)),
 							})
 						}
 						None => {
@@ -125,13 +123,11 @@ where
 	}
 }
 
-fn quad_matching_pattern<'p, R>(
-	pattern: Quad<Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>, Pattern<&'p R>>,
-) -> Quad<Option<&'p R>, Option<&'p R>, Option<&'p R>, Option<&'p R>> {
-	Quad(
-		pattern.0.into_resource(),
-		pattern.1.into_resource(),
-		pattern.2.into_resource(),
-		pattern.3.map(Pattern::into_resource),
-	)
+fn quad_matching_pattern<R>(pattern: Quad<Pattern<&R>>) -> CanonicalQuadPattern<&R> {
+	CanonicalQuadPattern::from_pattern(Quad(
+		pattern.0.into(),
+		pattern.1.into(),
+		pattern.2.into(),
+		pattern.3.map(Into::into),
+	))
 }

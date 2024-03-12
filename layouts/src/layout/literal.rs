@@ -19,7 +19,7 @@ pub struct LiteralLayoutType;
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub enum LiteralLayout<R> {
 	Data(DataLayout<R>),
 	Id(IdLayout<R>),

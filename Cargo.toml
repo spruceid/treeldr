@@ -11,6 +11,7 @@ resolver = "2"
 version = "0.2.0"
 edition = "2021"
 authors = ["Spruce Systems Inc."]
+rust-version = "1.74"
 
 [workspace.dependencies]
 treeldr-layouts = { path = "layouts", version = "0.2.0" }
@@ -22,19 +23,18 @@ educe = "0.4.23"
 num-traits = "0.2"
 num-bigint = "0.4"
 num-rational = "0.4"
-iref = "3.1.3"
+iref = "3.1.4"
 static-iref = "3.0"
-rdf-types = "0.18.2"
-xsd-types = { git = "https://github.com/timothee-haudebourg/xsd-types.git" }
-grdf = { version = "0.22.1", features = ["serde"] }
+rdf-types = "0.19.8"
+xsd-types = "0.9.1"
 btree-range-map = { version = "0.7.2", features = ["serde"] }
-langtag = "0.3.4"
+langtag = "0.4.0"
 thiserror = "1.0.50"
 serde = "1.0.192"
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 
 locspan = "0.8.2"
-nquads-syntax = "0.17.0"
+nquads-syntax = "0.18.0"
 
 clap = "4.0"
 stderrlog = "0.5"

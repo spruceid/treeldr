@@ -1,7 +1,8 @@
-use std::borrow::Borrow;
-
 use num_traits::{Signed, ToBytes};
-use rdf_types::{Interpretation, IriInterpretation, ReverseLiteralInterpretation, Vocabulary};
+use rdf_types::{
+	interpretation::{IriInterpretation, ReverseLiteralInterpretation},
+	Interpretation, Vocabulary,
+};
 
 use crate::{value::Number, Layouts, Literal, TypedLiteral, TypedValue, Value};
 
@@ -31,8 +32,6 @@ impl<R> TypedValue<R> {
 	) -> Result<serde_cbor::Value, InvalidTag>
 	where
 		V: Vocabulary,
-		V::Value: AsRef<str>,
-		V::Type: Borrow<rdf_types::literal::Type<V::Iri, V::LanguageTag>>,
 		I: Interpretation<Resource = R>
 			+ IriInterpretation<V::Iri>
 			+ ReverseLiteralInterpretation<Literal = V::Literal>,
@@ -164,8 +163,7 @@ mod tests {
 		abs::{self, syntax},
 		hydrate,
 	};
-	use grdf::BTreeDataset;
-	use rdf_types::{literal::Type, BlankIdBuf, Literal, Quad, Term};
+	use rdf_types::{dataset::BTreeDataset, BlankIdBuf, Literal, LiteralType, Quad, Term};
 	use serde_json::json;
 	use static_iref::iri;
 	use xsd_types::XSD_STRING;
@@ -204,7 +202,7 @@ mod tests {
 			Term::iri(iri!("https://schema.org/name").to_owned()),
 			Term::Literal(Literal::new(
 				"Bob L'éponge".to_owned(),
-				Type::Any(XSD_STRING.to_owned()),
+				LiteralType::Any(XSD_STRING.to_owned()),
 			)),
 			None,
 		));

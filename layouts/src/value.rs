@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
+use xsd_types::ParseXsd;
 
 use crate::{
 	layout::{
@@ -186,7 +187,7 @@ impl fmt::Display for Number {
 impl From<serde_json::Number> for Number {
 	fn from(value: serde_json::Number) -> Self {
 		Self(
-			<xsd_types::Decimal as xsd_types::ParseRdf>::parse_rdf(&value.to_string())
+			xsd_types::Decimal::parse_xsd(&value.to_string())
 				.ok()
 				.unwrap()
 				.into(),

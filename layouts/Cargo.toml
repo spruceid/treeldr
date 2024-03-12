@@ -4,6 +4,7 @@ description = "TreeLDR Layouts"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [features]
 default = []
@@ -21,20 +22,18 @@ num-bigint.workspace = true
 num-rational.workspace = true
 iref = { workspace = true, features = ["serde"] }
 static-iref.workspace = true
-rdf-types.workspace = true
+rdf-types = { workspace = true, features = ["serde"] }
 xsd-types.workspace = true
-grdf = { workspace = true, features = ["meta"] }
 btree-range-map.workspace = true
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
+locspan.workspace = true
 serde_json = "1.0"
 lazy_static = "1.4.0"
 
 serde_cbor = { version = "0.11.2", optional = true }
 
 [dev-dependencies]
-rdf-types = { workspace = true, features = ["locspan"] }
-locspan.workspace = true
 nquads-syntax.workspace = true
 serde_json.workspace = true
 paste = "1.0"

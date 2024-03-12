@@ -23,7 +23,7 @@ pub struct TextStringLayoutType;
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub enum DataLayout<R> {
 	Unit(UnitLayout<R>),
 	Boolean(BooleanLayout<R>),
@@ -57,7 +57,7 @@ impl<R: Ord> PartialOrd for DataLayout<R> {
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct UnitLayout<R> {
 	pub input: u32,
 
@@ -85,7 +85,7 @@ impl<R: Ord> PartialOrd for UnitLayout<R> {
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct BooleanLayout<R> {
 	pub input: u32,
 
@@ -114,7 +114,7 @@ impl<R: Ord> PartialOrd for BooleanLayout<R> {
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct NumberLayout<R> {
 	pub input: u32,
 
@@ -143,7 +143,7 @@ impl<R: Ord> PartialOrd for NumberLayout<R> {
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct ByteStringLayout<R> {
 	pub input: u32,
 
@@ -172,7 +172,7 @@ impl<R: Ord> PartialOrd for ByteStringLayout<R> {
 	Ord(bound = "R: Ord"),
 	Hash(bound = "R: Ord + Hash")
 )]
-#[serde(bound(deserialize = "R: Ord + serde::Deserialize<'de>"))]
+#[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
 pub struct TextStringLayout<R> {
 	pub input: u32,
 

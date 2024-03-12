@@ -7,22 +7,23 @@ use crate::{
 	layout::{DataLayout, LayoutType, ListLayout, LiteralLayout},
 	Layout, Layouts, Literal, Pattern, Ref, Value, ValueFormat,
 };
-use grdf::BTreeDataset;
 use iref::IriBuf;
 use rdf_types::{
-	generator, BlankIdBuf, Generator, Id, Interpretation, InterpretationMut, IriVocabulary,
-	LanguageTagVocabulary, LiteralVocabulary, Quad, ReverseIriInterpretation,
-	ReverseIriInterpretationMut, ReverseLiteralInterpretation, ReverseLiteralInterpretationMut,
-	Term, VocabularyMut,
+	dataset::{BTreeDataset, DatasetMut, TraversableDataset},
+	generator,
+	interpretation::{
+		ReverseIriInterpretation, ReverseIriInterpretationMut, ReverseLiteralInterpretation,
+		ReverseLiteralInterpretationMut,
+	},
+	vocabulary::IriVocabulary,
+	BlankIdBuf, Generator, Id, Interpretation, InterpretationMut, Quad, Term, VocabularyMut,
 };
 
 use super::RdfContextMut;
 
 mod data;
 
-pub type RdfLiteralType<V> =
-	rdf_types::literal::Type<<V as IriVocabulary>::Iri, <V as LanguageTagVocabulary>::LanguageTag>;
-pub type RdfLiteral<V> = rdf_types::Literal<RdfLiteralType<V>, <V as LiteralVocabulary>::Value>;
+pub type RdfLiteral<V> = rdf_types::Literal<<V as IriVocabulary>::Iri>;
 
 /// Dehydrate error.
 #[derive(Debug, thiserror::Error)]
@@ -173,7 +174,7 @@ impl<G> Options<G> {
 ///
 /// ```
 /// use serde_json::json;
-/// use rdf_types::{Term, Id};
+/// use rdf_types::{Term, Id, dataset::PatternMatchingDataset};
 /// use static_iref::iri;
 ///
 /// // Create a layout builder.
@@ -228,10 +229,11 @@ impl<G> Options<G> {
 /// assert_eq!(subjects[0].as_iri().unwrap(), "https://example.org/JohnSmith");
 ///
 /// // Fetch the name of our subject.
-/// let mut names = dataset.objects(None, &subjects[0], &Term::Id(Id::Iri(iri!("https://schema.org/name").to_owned()))).unwrap();
+/// let name_pred = Term::Id(Id::Iri(iri!("https://schema.org/name").to_owned()));
+/// let mut names = dataset.quad_objects(None, &subjects[0], &name_pred);
 ///
 /// // Should match what is defined in the serialized value.
-/// assert_eq!(names.next().unwrap().as_literal().unwrap().value(), "John Smith")
+/// assert_eq!(names.next().unwrap().as_literal().unwrap().value, "John Smith")
 /// ```
 ///
 /// In the more generic [`dehydrate_with`], the input terms are given as input
@@ -250,7 +252,7 @@ pub fn dehydrate<G: Generator>(
 	value: &Value,
 	layout_ref: &Ref<LayoutType>,
 	mut options: Options<G>,
-) -> Result<(BTreeDataset<Term>, Vec<Term>), Error> {
+) -> Result<(BTreeDataset, Vec<Term>), Error> {
 	#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 	enum InputResource {
 		Input(usize),
@@ -303,8 +305,11 @@ pub fn dehydrate<G: Generator>(
 	}
 
 	impl ReverseIriInterpretationMut for InputInterpretation {
-		fn assign_iri(&mut self, id: Self::Resource, iri: Self::Iri) -> bool {
-			self.map.entry(id).or_default().insert(Term::iri(iri))
+		fn assign_iri(&mut self, id: &Self::Resource, iri: Self::Iri) -> bool {
+			self.map
+				.entry(id.clone())
+				.or_default()
+				.insert(Term::iri(iri))
 		}
 	}
 
@@ -321,9 +326,9 @@ pub fn dehydrate<G: Generator>(
 	}
 
 	impl ReverseLiteralInterpretationMut for InputInterpretation {
-		fn assign_literal(&mut self, id: Self::Resource, literal: Self::Literal) -> bool {
+		fn assign_literal(&mut self, id: &Self::Resource, literal: Self::Literal) -> bool {
 			self.map
-				.entry(id)
+				.entry(id.clone())
 				.or_default()
 				.insert(Term::Literal(literal))
 		}
@@ -494,20 +499,14 @@ pub fn dehydrate_with<V, I, Q, D>(
 	output: &mut D,
 ) -> Result<(), Error<Q>>
 where
-	V: VocabularyMut<Type = RdfLiteralType<V>>,
+	V: VocabularyMut,
 	V::Iri: Clone,
-	V::Value: From<String>,
 	I: InterpretationMut<V>
 		+ ReverseIriInterpretationMut<Iri = V::Iri>
 		+ ReverseLiteralInterpretationMut<Literal = V::Literal>,
 	I::Resource: Clone + Ord,
 	Q: Clone + Ord + Into<I::Resource>,
-	D: grdf::MutableDataset<
-		Subject = I::Resource,
-		Predicate = I::Resource,
-		Object = I::Resource,
-		GraphLabel = I::Resource,
-	>,
+	D: TraversableDataset<Resource = I::Resource> + DatasetMut,
 {
 	let layout = layouts
 		.get(layout_ref)
@@ -541,8 +540,10 @@ where
 
 						let literal =
 							data::dehydrate_boolean(rdf, *value, &layout.datatype.clone().into())?;
-						rdf.interpretation
-							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
+						rdf.interpretation.assign_literal(
+							&resource,
+							rdf.vocabulary.insert_owned_literal(literal),
+						);
 
 						Ok(())
 					}
@@ -553,8 +554,10 @@ where
 
 						let literal =
 							data::dehydrate_number(rdf, value, &layout.datatype.clone().into())?;
-						rdf.interpretation
-							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
+						rdf.interpretation.assign_literal(
+							&resource,
+							rdf.vocabulary.insert_owned_literal(literal),
+						);
 
 						Ok(())
 					}
@@ -568,8 +571,10 @@ where
 							value,
 							&layout.datatype.clone().into(),
 						)?;
-						rdf.interpretation
-							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
+						rdf.interpretation.assign_literal(
+							&resource,
+							rdf.vocabulary.insert_owned_literal(literal),
+						);
 
 						Ok(())
 					}
@@ -583,8 +588,10 @@ where
 							value,
 							&layout.datatype.clone().into(),
 						)?;
-						rdf.interpretation
-							.assign_literal(resource, rdf.vocabulary.insert_owned_literal(literal));
+						rdf.interpretation.assign_literal(
+							&resource,
+							rdf.vocabulary.insert_owned_literal(literal),
+						);
 
 						Ok(())
 					}
@@ -599,7 +606,7 @@ where
 						match IriBuf::new(value.to_owned()) {
 							Ok(iri) => {
 								let i = rdf.vocabulary.insert_owned(iri);
-								rdf.interpretation.assign_iri(resource, i);
+								rdf.interpretation.assign_iri(&resource, i);
 								Ok(())
 							}
 							Err(_) => Err(Error::IncompatibleLayout), // not an IRI
@@ -776,20 +783,14 @@ fn dehydrate_sub_value<V, I, Q, D>(
 	output: &mut D,
 ) -> Result<(), Error<Q>>
 where
-	V: VocabularyMut<Type = RdfLiteralType<V>>,
+	V: VocabularyMut,
 	V::Iri: Clone,
-	V::Value: From<String>,
 	I: InterpretationMut<V>
 		+ ReverseIriInterpretationMut<Iri = V::Iri>
 		+ ReverseLiteralInterpretationMut<Literal = V::Literal>,
 	I::Resource: Clone + Ord,
 	Q: Clone + Ord + Into<I::Resource>,
-	D: grdf::MutableDataset<
-		Subject = I::Resource,
-		Predicate = I::Resource,
-		Object = I::Resource,
-		GraphLabel = I::Resource,
-	>,
+	D: TraversableDataset<Resource = I::Resource> + DatasetMut,
 {
 	let inputs = env.instantiate_patterns(&format.input)?;
 	let graph = match &format.graph {
@@ -899,7 +900,7 @@ impl<'a, R: Clone> Environment<'a, R> {
 	) -> Result<(), Error<Q>>
 	where
 		Q: Clone + Into<R>,
-		D: grdf::MutableDataset<Subject = R, Predicate = R, Object = R, GraphLabel = R>,
+		D: TraversableDataset<Resource = R> + DatasetMut,
 	{
 		for quad in input.quads() {
 			output.insert(self.instantiate_quad(quad)?);

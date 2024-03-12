@@ -1,6 +1,6 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use rdf_types::{Id, Term};
+use rdf_types::{dataset::TraversableDataset, Id, LiteralType, Term};
 use syn::DeriveInput;
 use treeldr_layouts::{
 	layout::{DataLayout, ListLayout, LiteralLayout},
@@ -66,7 +66,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 							#dataset
 								.ok_or(::treeldr::DeserializeError::MissingData)?
 								.iter()
-								.map(::treeldr::rdf_types::Quad::borrow_components),
+								.map(::treeldr::rdf_types::Quad::as_ref),
 							current_graph
 						),
 					)
@@ -110,7 +110,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 								#dataset
 									.ok_or(::treeldr::DeserializeError::MissingData)?
 									.iter()
-									.map(::treeldr::rdf_types::Quad::borrow_components),
+									.map(::treeldr::rdf_types::Quad::as_ref),
 								current_graph
 							),
 						)
@@ -190,7 +190,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 							#field_dataset
 								.ok_or(::treeldr::DeserializeError::MissingData)?
 								.iter()
-								.map(::treeldr::rdf_types::Quad::borrow_components),
+								.map(::treeldr::rdf_types::Quad::as_ref),
 							current_graph
 						),
 					)
@@ -230,7 +230,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 						#dataset
 							.ok_or(::treeldr::DeserializeError::MissingData)?
 							.iter()
-							.map(::treeldr::rdf_types::Quad::borrow_components),
+							.map(::treeldr::rdf_types::Quad::as_ref),
 						current_graph
 					),
 				)
@@ -277,7 +277,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 							#variant_dataset
 								.ok_or(::treeldr::DeserializeError::MissingData)?
 								.iter()
-								.map(::treeldr::rdf_types::Quad::borrow_components),
+								.map(::treeldr::rdf_types::Quad::as_ref),
 							current_graph
 						),
 					)
@@ -314,7 +314,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 						#dataset
 							.ok_or(::treeldr::DeserializeError::MissingData)?
 							.iter()
-							.map(::treeldr::rdf_types::Quad::borrow_components),
+							.map(::treeldr::rdf_types::Quad::as_ref),
 						current_graph
 					),
 				)
@@ -354,7 +354,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 							#dataset
 								.ok_or(::treeldr::DeserializeError::MissingData)?
 								.iter()
-								.map(::treeldr::rdf_types::Quad::borrow_components),
+								.map(::treeldr::rdf_types::Quad::as_ref),
 							current_graph
 						),
 					)
@@ -371,7 +371,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 						::treeldr::utils::QuadsExt::with_default_graph(
 							matching_dataset
 								.iter()
-								.map(::treeldr::rdf_types::Quad::borrow_components),
+								.map(::treeldr::rdf_types::Quad::as_ref),
 							current_graph
 						)
 					);
@@ -429,7 +429,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 							#dataset
 								.ok_or(::treeldr::DeserializeError::MissingData)?
 								.iter()
-								.map(::treeldr::rdf_types::Quad::borrow_components),
+								.map(::treeldr::rdf_types::Quad::as_ref),
 							current_graph
 						),
 					)
@@ -451,7 +451,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 								#node_dataset
 									.ok_or(::treeldr::DeserializeError::MissingData)?
 									.iter()
-									.map(::treeldr::rdf_types::Quad::borrow_components),
+									.map(::treeldr::rdf_types::Quad::as_ref),
 								current_graph
 							)
 						)
@@ -509,7 +509,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 								#node_dataset
 									.ok_or(::treeldr::DeserializeError::MissingData)?
 									.iter()
-									.map(::treeldr::rdf_types::Quad::borrow_components),
+									.map(::treeldr::rdf_types::Quad::as_ref),
 								current_graph
 							)
 						).into_required_unique()?;
@@ -550,7 +550,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 							#dataset
 								.ok_or(::treeldr::DeserializeError::MissingData)?
 								.iter()
-								.map(::treeldr::rdf_types::Quad::borrow_components),
+								.map(::treeldr::rdf_types::Quad::as_ref),
 							current_graph
 						),
 					)
@@ -572,8 +572,8 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 	Ok(quote! {
 		impl<V, I> ::treeldr::DeserializeLd<#n, V, I> for #ident
 		where
-			V: ::treeldr::rdf_types::Vocabulary<Value = String, Type = ::treeldr::RdfType<V>>,
-			I: ::treeldr::rdf_types::TermInterpretation<V::Iri, V::BlankId, V::Literal> + ::treeldr::rdf_types::ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
+			V: ::treeldr::rdf_types::Vocabulary,
+			I: ::treeldr::rdf_types::interpretation::TermInterpretation<V::Iri, V::BlankId, V::Literal> + ::treeldr::rdf_types::interpretation::ReverseTermInterpretation<Iri = V::Iri, BlankId = V::BlankId, Literal = V::Literal>,
 			I::Resource: Clone + Ord
 		{
 			fn deserialize_ld_with<D>(
@@ -583,7 +583,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				inputs: &[I::Resource; #n],
 			) -> Result<Self, ::treeldr::DeserializeError>
 			where
-				D: ::treeldr::grdf::Dataset<Subject = I::Resource, Predicate = I::Resource, Object = I::Resource, GraphLabel = I::Resource>
+				D: ::treeldr::rdf_types::dataset::PatternMatchingDataset<Resource = I::Resource>
 			{
 				#body
 			}
@@ -640,14 +640,13 @@ fn generate_pattern(pattern: &Pattern<Term>) -> TokenStream {
 				)
 			}
 			Term::Literal(l) => {
-				use rdf_types::literal;
-				let value = l.value().as_str();
-				let ty = match l.type_() {
-					literal::Type::Any(iri) => {
+				let value = &l.value;
+				let ty = match &l.type_ {
+					LiteralType::Any(iri) => {
 						let iri = iri.as_str();
-						quote!(::treeldr::rdf_types::literal::Type::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
+						quote!(::treeldr::rdf_types::LiteralType::Any(unsafe { ::treeldr::iref::Iri::new_unchecked(#iri) }))
 					}
-					literal::Type::LangString(_tag) => {
+					LiteralType::LangString(_tag) => {
 						todo!("lang string support")
 					}
 				};
@@ -701,7 +700,7 @@ fn generate_data(
 				#dataset
 					.ok_or(::treeldr::DeserializeError::MissingData)?
 					.iter()
-					.map(::treeldr::rdf_types::Quad::borrow_components),
+					.map(::treeldr::rdf_types::Quad::as_ref),
 				current_graph
 			),
 		)
@@ -717,10 +716,10 @@ fn generate_data(
 			has_literal = true;
 			let literal = rdf.vocabulary.literal(l).unwrap();
 			let ty_iri = match literal.type_() {
-				::treeldr::rdf_types::literal::Type::Any(i) => {
+				::treeldr::rdf_types::LiteralType::Any(i) => {
 					rdf.vocabulary.iri(i).unwrap()
 				},
-				::treeldr::rdf_types::literal::Type::LangString(_) => {
+				::treeldr::rdf_types::LiteralType::LangString(_) => {
 					::treeldr::rdf_types::RDF_LANG_STRING
 				}
 			};

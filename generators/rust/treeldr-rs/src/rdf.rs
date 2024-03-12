@@ -1,15 +1,16 @@
 use educe::Educe;
-use iref::{Iri, IriBuf};
-use langtag::{LanguageTag, LanguageTagBuf};
+use iref::Iri;
 use rdf_types::{
-	literal, BlankId, BlankIdInterpretationMut, BlankIdVocabularyMut, IriInterpretation,
-	IriInterpretationMut, IriVocabulary, IriVocabularyMut, LanguageTagVocabulary,
-	LanguageTagVocabularyMut, Literal, LiteralInterpretation, LiteralInterpretationMut,
-	LiteralVocabulary, LiteralVocabularyMut,
+	interpretation::{
+		BlankIdInterpretationMut, IriInterpretation, IriInterpretationMut, LiteralInterpretation,
+		LiteralInterpretationMut,
+	},
+	vocabulary::{
+		BlankIdVocabularyMut, IriVocabulary, IriVocabularyMut, LiteralVocabulary,
+		LiteralVocabularyMut,
+	},
+	BlankId, Literal, LiteralType,
 };
-
-pub type RdfType<V> =
-	literal::Type<<V as IriVocabulary>::Iri, <V as LanguageTagVocabulary>::LanguageTag>;
 
 #[derive(Educe)]
 #[educe(Clone, Copy)]
@@ -35,25 +36,18 @@ impl<'a, V, I> RdfContext<'a, V, I> {
 			.lexical_iri_interpretation(self.vocabulary, iri)
 	}
 
-	pub fn literal_interpretation(
-		&self,
-		literal: Literal<literal::Type<&Iri, LanguageTag>, &str>,
-	) -> Option<I::Resource>
+	pub fn literal_interpretation(&self, literal: Literal<&Iri>) -> Option<I::Resource>
 	where
-		V: IriVocabulary
-			+ LanguageTagVocabulary
-			+ LiteralVocabulary<Value = String, Type = RdfType<V>>,
+		V: IriVocabulary + LiteralVocabulary,
 		I: IriInterpretation<V::Iri> + LiteralInterpretation<V::Literal>,
 	{
-		let ty = match literal.type_() {
-			literal::Type::Any(iri) => literal::Type::Any(self.vocabulary.get(iri)?),
-			literal::Type::LangString(tag) => {
-				literal::Type::LangString(self.vocabulary.get_language_tag(*tag)?)
-			}
+		let (value, type_) = literal.into_parts();
+		let type_ = match type_ {
+			LiteralType::Any(iri) => LiteralType::Any(self.vocabulary.get(iri)?),
+			LiteralType::LangString(tag) => LiteralType::LangString(tag),
 		};
 
-		let value = literal.value().to_string();
-		let lit = self.vocabulary.get_literal(&Literal::new(value, ty))?;
+		let lit = self.vocabulary.get_literal(&Literal::new(value, type_))?;
 		self.interpretation.literal_interpretation(&lit)
 	}
 }
@@ -89,58 +83,27 @@ impl<'a, V, I> RdfContextMut<'a, V, I> {
 			.interpret_blank_id(self.vocabulary.insert_blank_id(blank_id))
 	}
 
-	pub fn vocabulary_literal(
-		&mut self,
-		literal: Literal<literal::Type<&Iri, LanguageTag>, &str>,
-	) -> V::Literal
+	pub fn vocabulary_literal(&mut self, literal: Literal<&Iri>) -> V::Literal
 	where
-		V: IriVocabularyMut
-			+ LanguageTagVocabularyMut
-			+ LiteralVocabularyMut<Value = String, Type = RdfType<V>>,
+		V: IriVocabularyMut + LiteralVocabularyMut,
 		I: IriInterpretationMut<V::Iri> + LiteralInterpretationMut<V::Literal>,
 	{
-		let value = (*literal.value()).to_owned();
-		let type_ = match literal.type_() {
-			literal::Type::Any(iri) => literal::Type::Any(self.vocabulary.insert(iri)),
-			literal::Type::LangString(tag) => {
-				literal::Type::LangString(self.vocabulary.insert_language_tag(*tag))
-			}
-		};
-
-		self.vocabulary
-			.insert_owned_literal(Literal::new(value, type_))
+		let literal = literal.insert_type_into_vocabulary(self.vocabulary);
+		self.vocabulary.insert_owned_literal(literal)
 	}
 
-	pub fn vocabulary_literal_owned(
-		&mut self,
-		literal: Literal<literal::Type<IriBuf, LanguageTagBuf>, String>,
-	) -> V::Literal
+	pub fn vocabulary_literal_owned(&mut self, literal: Literal) -> V::Literal
 	where
-		V: IriVocabularyMut
-			+ LanguageTagVocabularyMut
-			+ LiteralVocabularyMut<Value = String, Type = RdfType<V>>,
+		V: IriVocabularyMut + LiteralVocabularyMut,
 		I: IriInterpretationMut<V::Iri> + LiteralInterpretationMut<V::Literal>,
 	{
-		let (value, type_) = literal.into_parts();
-		let type_ = match type_ {
-			literal::Type::Any(iri) => literal::Type::Any(self.vocabulary.insert_owned(iri)),
-			literal::Type::LangString(tag) => {
-				literal::Type::LangString(self.vocabulary.insert_owned_language_tag(tag))
-			}
-		};
-
-		self.vocabulary
-			.insert_owned_literal(Literal::new(value, type_))
+		let literal = literal.insert_type_into_vocabulary(self.vocabulary);
+		self.vocabulary.insert_owned_literal(literal)
 	}
 
-	pub fn interpret_literal(
-		&mut self,
-		literal: Literal<literal::Type<&Iri, LanguageTag>, &str>,
-	) -> I::Resource
+	pub fn interpret_literal(&mut self, literal: Literal<&Iri>) -> I::Resource
 	where
-		V: IriVocabularyMut
-			+ LanguageTagVocabularyMut
-			+ LiteralVocabularyMut<Value = String, Type = RdfType<V>>,
+		V: IriVocabularyMut + LiteralVocabularyMut,
 		I: IriInterpretationMut<V::Iri> + LiteralInterpretationMut<V::Literal>,
 	{
 		let l = self.vocabulary_literal(literal);

@@ -35,9 +35,6 @@ pub use iref;
 #[doc(hidden)]
 pub use rdf_types;
 
-#[doc(hidden)]
-pub use grdf;
-
 mod datatypes;
 pub mod de;
 pub mod pattern;
@@ -47,7 +44,7 @@ pub mod utils;
 
 pub use de::{DeserializeLd, Error as DeserializeError};
 pub use pattern::Pattern;
-pub use rdf::{RdfContext, RdfContextMut, RdfType};
+pub use rdf::{RdfContext, RdfContextMut};
 pub use ser::{Error as SerializeError, SerializeLd};
 
 pub trait AsId {
@@ -56,6 +53,6 @@ pub trait AsId {
 
 impl AsId for rdf_types::Id {
 	fn as_id(&self) -> rdf_types::Id<&Iri, &BlankId> {
-		self.as_id_ref()
+		self.as_lexical_id_ref()
 	}
 }
