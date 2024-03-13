@@ -22,5 +22,5 @@ TODO
 ## Type Definition
 
 ```ts
-type Layout = Never | LiteralLayout | ProductLayout | SumLayout | ListLayout | Always ;
+type Layout = LiteralLayout | ProductLayout | SumLayout | ListLayout | Always | Never ;
 ```

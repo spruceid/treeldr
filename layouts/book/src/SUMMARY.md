@@ -10,15 +10,15 @@
 	- [Types](data-model/types.md)
 	<!-- - [Paths](data-model/paths.md) -->
 - [Layouts](layouts/README.md)
+    - [Literals](layouts/literals.md)
 	- [Product (Record)](layouts/record.md)
 	- [Sum](layouts/sum.md)
-	- [Literals](layouts/literals.md)
 	- [Lists](layouts/lists.md)
-	- [Functional Layouts](layouts/functional-layouts.md)
-- [Abstract Layouts](abstract-layouts/README.md)
+	<!-- - [Functional Layouts](layouts/functional-layouts.md) -->
+<!-- - [Abstract Layouts](abstract-layouts/README.md)
 	- [Intersection](abstract-layouts/intersection.md)
-	- [Union](abstract-layouts/union.md)
-- [Abstract Syntax](abstract-syntax/README.md)
+	- [Union](abstract-layouts/union.md) -->
+<!-- - [Abstract Syntax](abstract-syntax/README.md) -->
 - [Algorithms](algorithms/README.md)
 	- [Serialization](algorithms/serialization.md)
 	- [Deserialization](algorithms/deserialization.md)
