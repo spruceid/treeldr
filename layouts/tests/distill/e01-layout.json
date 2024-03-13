@@ -1,0 +1,16 @@
+{
+	"type": "record",
+	"input": ["self"],
+	"fields": {
+		"name": {
+			"value": { "type": "string" },
+			"property": "https://schema.org/name",
+			"required": true
+		},
+		"email": {
+			"value": { "type": "string" },
+			"property": "https://schema.org/email",
+			"required": true
+		}
+	}
+}

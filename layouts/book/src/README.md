@@ -2,13 +2,13 @@
 
 TreeLDR Layouts are a data serialization and deserialization tool for the
 Resource Description Framework (RDF).
-It can be used to convert RDF datasets into tree-like values (such as JSON),
+It can be used to convert RDF graphs into tree-like values (such as JSON),
 and back.
 The idea behind layouts is simple: each layout describes the expected shape of a
 tree value.
 This shape can be either a record (sometimes called object, in JSON for
 instance), a list, a number, etc. Each part of this shape is then associated to
-a fraction of the represented RDF dataset.
+a subset of the represented RDF dataset.
 
 ## Basic layout
 

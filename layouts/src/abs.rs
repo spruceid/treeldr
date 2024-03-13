@@ -110,3 +110,7 @@ pub struct BuilderWithInterpretationMut<'a, V, I: Interpretation> {
 	interpretation: &'a mut I,
 	builder: &'a mut Builder<I::Resource>,
 }
+
+fn is_false(b: &bool) -> bool {
+	!*b
+}

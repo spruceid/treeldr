@@ -213,15 +213,18 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 						.map(|f| {
 							let name = f.ident.unwrap().to_string();
 							let attrs = ComponentAttributes::parse(f.attrs)?;
+							let ty = FieldType::new(f.ty);
+							let required = ty.is_required();
 							let field = Field {
 								intro: attrs.intro.map(Into::into).unwrap_or_default(),
 								dataset: attrs.dataset.unwrap_or_default(),
 								property: attrs.property,
 								value: ValueFormatOrLayout::Format(ValueFormat {
-									layout: type_map.insert(f.ty).into(),
+									layout: type_map.insert(ty.into_type()).into(),
 									input: attrs.input.map(Into::into).unwrap_or_default(),
 									graph: attrs.graph.unwrap_or_default().into(),
 								}),
+								required,
 							};
 
 							Ok((name, field))
@@ -637,55 +640,61 @@ impl ComponentAttributes {
 	}
 }
 
-// pub enum FieldType {
-// 	Optional(syn::Type),
-// 	Required(syn::Type)
-// }
+pub enum FieldType {
+	Optional(syn::Type),
+	Required(syn::Type),
+}
 
-// impl FieldType {
-// 	pub fn new(ty: syn::Type) -> Self {
-// 		if is_option_type(&ty) {
-// 			let syn::Type::Path(path) = ty else { unreachable!() };
-// 			let syn::PathArguments::AngleBracketed(args) = path.path.segments.into_iter().next().unwrap().arguments else { unreachable!() };
-// 			let syn::GenericArgument::Type(item) = args.args.into_iter().next().unwrap() else { unreachable!() };
-// 			Self::Optional(item)
-// 		} else {
-// 			Self::Required(ty)
-// 		}
-// 	}
+impl FieldType {
+	pub fn new(ty: syn::Type) -> Self {
+		if is_option_type(&ty) {
+			let syn::Type::Path(path) = ty else {
+				unreachable!()
+			};
+			let syn::PathArguments::AngleBracketed(args) =
+				path.path.segments.into_iter().next().unwrap().arguments
+			else {
+				unreachable!()
+			};
+			let syn::GenericArgument::Type(item) = args.args.into_iter().next().unwrap() else {
+				unreachable!()
+			};
+			Self::Optional(item)
+		} else {
+			Self::Required(ty)
+		}
+	}
 
-// 	pub fn is_required(&self) -> bool {
-// 		matches!(self, Self::Required(_))
-// 	}
+	pub fn is_required(&self) -> bool {
+		matches!(self, Self::Required(_))
+	}
 
-// 	pub fn into_type(self) -> syn::Type {
-// 		match self {
-// 			Self::Required(ty) => ty,
-// 			Self::Optional(ty) => ty
-// 		}
-// 	}
-// }
+	pub fn into_type(self) -> syn::Type {
+		match self {
+			Self::Required(ty) => ty,
+			Self::Optional(ty) => ty,
+		}
+	}
+}
 
-// fn is_option_type(ty: &syn::Type) -> bool {
-// 	if let syn::Type::Path(path) = ty {
-// 		if path.qself.is_none() {
-// 			if path.path.segments.len() == 1 {
-// 				let segment = path.path.segments.iter().next().unwrap();
-// 				if segment.ident == "Option" {
-// 					if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-// 						if args.args.len() == 1 {
-// 							if let syn::GenericArgument::Type(_) = args.args.iter().next().unwrap() {
-// 								return true
-// 							}
-// 						}
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
+fn is_option_type(ty: &syn::Type) -> bool {
+	if let syn::Type::Path(path) = ty {
+		if path.qself.is_none() && path.path.segments.len() == 1 {
+			let segment = path.path.segments.iter().next().unwrap();
+			if segment.ident == "Option" {
+				if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+					if args.args.len() == 1 {
+						if let syn::GenericArgument::Type(_) = args.args.iter().next().unwrap() {
+							return true;
+						}
+					}
+				}
+			}
+		}
+	}
 
-// 	false
-// }
+	false
+}
 
 fn extract_vec_item(ty: syn::Type) -> Result<syn::Type, Error> {
 	let span = ty.span();

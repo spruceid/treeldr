@@ -64,6 +64,9 @@ pub struct Field<R> {
 
 	/// Dataset.
 	pub dataset: Dataset<R>,
+
+	/// Whether or not the field is required.
+	pub required: bool,
 }
 
 impl<R: Ord> PartialOrd for Field<R> {

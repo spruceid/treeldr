@@ -214,9 +214,13 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				}
 			});
 
-			let unwrap_fields = layout.fields.keys().map(|name| {
+			let unwrap_fields = layout.fields.iter().map(|(name, f)| {
 				let ident = syn::Ident::new(name, Span::call_site());
-				quote!(#ident: data.#ident.ok_or_else(|| ::treeldr::DeserializeError::MissingField(#name.to_owned()))?)
+				if f.required {
+					quote!(#ident: data.#ident.ok_or_else(|| ::treeldr::DeserializeError::MissingField(#name.to_owned()))?)
+				} else {
+					quote!(#ident: data.#ident)
+				}
 			});
 
 			quote! {
@@ -715,7 +719,7 @@ fn generate_data(
 		for l in rdf.interpretation.literals_of(&resource) {
 			has_literal = true;
 			let literal = rdf.vocabulary.literal(l).unwrap();
-			let ty_iri = match literal.type_() {
+			let ty_iri = match &literal.type_ {
 				::treeldr::rdf_types::LiteralType::Any(i) => {
 					rdf.vocabulary.iri(i).unwrap()
 				},
@@ -725,7 +729,7 @@ fn generate_data(
 			};
 
 			if ty_iri == expected_ty_iri {
-				if let Ok(value) = ::treeldr::de::FromRdfLiteral::from_rdf_literal(literal.value().as_str()) {
+				if let Ok(value) = ::treeldr::de::FromRdfLiteral::from_rdf_literal(&literal.value) {
 					if result.replace(value).is_some() {
 						return Err(::treeldr::DeserializeError::AmbiguousLiteralValue)
 					}

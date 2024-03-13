@@ -13,7 +13,7 @@ use rdf_types::{
 };
 use xsd_types::{lexical::Lexical, ParseXsd};
 
-use super::Error;
+use super::{DataFragment, Error, MatchingForFragment};
 
 pub fn hydrate_data<V, I: Interpretation, D>(
 	vocabulary: &V,
@@ -41,7 +41,8 @@ where
 				substitution.clone(),
 				layout.dataset.quads().with_default_graph(current_graph),
 			)
-			.into_required_unique()?;
+			.into_required_unique()
+			.for_fragment(|| DataFragment::Discriminant(layout_ref.clone().cast()))?;
 
 			Ok(TypedLiteral::Unit(layout.const_.clone(), layout_ref.cast()))
 		}
@@ -54,7 +55,8 @@ where
 				substitution.clone(),
 				layout.dataset.quads().with_default_graph(current_graph),
 			)
-			.into_required_unique()?;
+			.into_required_unique()
+			.for_fragment(|| DataFragment::Discriminant(layout_ref.clone().cast()))?;
 
 			let resource = layout
 				.resource
@@ -97,7 +99,8 @@ where
 				substitution.clone(),
 				layout.dataset.quads().with_default_graph(current_graph),
 			)
-			.into_required_unique()?;
+			.into_required_unique()
+			.for_fragment(|| DataFragment::Discriminant(layout_ref.clone().cast()))?;
 
 			let resource = layout
 				.resource
@@ -140,7 +143,8 @@ where
 				substitution.clone(),
 				layout.dataset.quads().with_default_graph(current_graph),
 			)
-			.into_required_unique()?;
+			.into_required_unique()
+			.for_fragment(|| DataFragment::Discriminant(layout_ref.clone().cast()))?;
 
 			let resource = layout
 				.resource
@@ -185,7 +189,8 @@ where
 				substitution.clone(),
 				layout.dataset.quads().with_default_graph(current_graph),
 			)
-			.into_required_unique()?;
+			.into_required_unique()
+			.for_fragment(|| DataFragment::Discriminant(layout_ref.clone().cast()))?;
 
 			let resource = layout
 				.resource

@@ -1,4 +1,4 @@
-#[cfg(feature = "derive")]
+#[cfg(feature = "macros")]
 #[test]
 fn id() {
 	#[derive(treeldr::SerializeLd, treeldr::DeserializeLd)]
@@ -7,7 +7,7 @@ fn id() {
 
 	impl treeldr::AsId for Id {
 		fn as_id(&self) -> rdf_types::Id<&iref::Iri, &rdf_types::BlankId> {
-			self.0.as_id_ref()
+			self.0.as_lexical_id_ref()
 		}
 	}
 
