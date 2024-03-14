@@ -8,11 +8,13 @@
 //! Abstract layouts must be compiled into `crate::Layout` before being used
 //! to serialize/deserialize RDF datasets.
 use iref::{Iri, IriBuf, IriRefBuf};
+use langtag::LangTagBuf;
 use rdf_types::{
 	dataset::BTreeDataset,
 	generator,
 	interpretation::{IriInterpretationMut, LiteralInterpretationMut},
-	BlankIdBuf, Id, InterpretationMut, Term, VocabularyMut, RDF_FIRST, RDF_NIL, RDF_REST,
+	BlankIdBuf, Id, InterpretationMut, LexicalLiteralTypeRef, Term, VocabularyMut, RDF_FIRST,
+	RDF_NIL, RDF_REST,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -40,7 +42,7 @@ pub trait Context {
 
 	fn iri_resource(&mut self, iri: &Iri) -> Self::Resource;
 
-	fn literal_resource(&mut self, value: &str, type_: &Iri) -> Self::Resource;
+	fn literal_resource(&mut self, value: &str, type_: LexicalLiteralTypeRef) -> Self::Resource;
 
 	fn anonymous_resource(&mut self) -> Self::Resource;
 }
@@ -66,11 +68,14 @@ where
 		Term::Id(Id::Iri(iri.to_owned()))
 	}
 
-	fn literal_resource(&mut self, value: &str, type_: &Iri) -> Self::Resource {
+	fn literal_resource(&mut self, value: &str, type_: LexicalLiteralTypeRef) -> Self::Resource {
 		use rdf_types::{Literal, LiteralType};
 		Term::Literal(Literal::new(
 			value.to_owned(),
-			LiteralType::Any(type_.to_owned()),
+			match type_ {
+				LexicalLiteralTypeRef::Any(iri) => LiteralType::Any(iri.to_owned()),
+				LexicalLiteralTypeRef::LangString(tag) => LiteralType::LangString(tag.to_owned()),
+			},
 		))
 	}
 
@@ -103,12 +108,15 @@ where
 		self.interpretation.interpret_iri(i)
 	}
 
-	fn literal_resource(&mut self, value: &str, type_: &Iri) -> Self::Resource {
+	fn literal_resource(&mut self, value: &str, type_: LexicalLiteralTypeRef) -> Self::Resource {
 		use rdf_types::{Literal, LiteralType};
-		let type_ = self.vocabulary.insert(type_);
+		let type_ = match type_ {
+			LexicalLiteralTypeRef::Any(iri) => LiteralType::Any(self.vocabulary.insert(iri)),
+			LexicalLiteralTypeRef::LangString(tag) => LiteralType::LangString(tag.to_owned()),
+		};
 		let l = self
 			.vocabulary
-			.insert_owned_literal(Literal::new(value.to_owned(), LiteralType::Any(type_)));
+			.insert_owned_literal(Literal::new(value.to_owned(), type_));
 		self.interpretation.interpret_literal(l)
 	}
 
@@ -174,6 +182,14 @@ impl CompactIri {
 				None => Err(Error::NoBaseIri(self.0.clone())),
 			},
 		}
+	}
+
+	fn is_xsd_string(&self) -> bool {
+		self.0 == XSD_STRING
+	}
+
+	fn xsd_string() -> Self {
+		Self(XSD_STRING.to_owned().into())
 	}
 }
 
@@ -626,17 +642,99 @@ impl fmt::Display for VariableNameBuf {
 	}
 }
 
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct LiteralValue {
+	value: String,
+
+	#[serde(flatten)]
+	type_: LiteralType,
+}
+
+impl From<rdf_types::Literal> for LiteralValue {
+	fn from(value: rdf_types::Literal) -> Self {
+		Self {
+			value: value.value,
+			type_: value.type_.into(),
+		}
+	}
+}
+
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(untagged)]
+pub enum LiteralType {
+	Iri(LiteralTypeIri),
+	Language(LiteralTypeLanguage),
+}
+
+impl Default for LiteralType {
+	fn default() -> Self {
+		Self::Iri(LiteralTypeIri {
+			type_: XSD_STRING.to_owned().into(),
+		})
+	}
+}
+
+impl LiteralType {
+	pub fn resolve(&self, scope: &Scope) -> Result<rdf_types::LiteralType, Error> {
+		match self {
+			Self::Iri(iri) => Ok(rdf_types::LiteralType::Any(iri.resolve(scope)?)),
+			Self::Language(lang) => Ok(rdf_types::LiteralType::LangString(lang.language.clone())),
+		}
+	}
+}
+
+impl From<rdf_types::LiteralType> for LiteralType {
+	fn from(value: rdf_types::LiteralType) -> Self {
+		match value {
+			rdf_types::LiteralType::Any(iri) => Self::Iri(LiteralTypeIri { type_: iri.into() }),
+			rdf_types::LiteralType::LangString(tag) => {
+				Self::Language(LiteralTypeLanguage { language: tag })
+			}
+		}
+	}
+}
+
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct LiteralTypeIri {
+	#[serde(
+		rename = "type",
+		skip_serializing_if = "CompactIri::is_xsd_string",
+		default = "CompactIri::xsd_string"
+	)]
+	pub type_: CompactIri,
+}
+
+impl LiteralTypeIri {
+	pub fn resolve(&self, scope: &Scope) -> Result<IriBuf, Error> {
+		self.type_.resolve(scope)
+	}
+}
+
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct LiteralTypeLanguage {
+	pub language: LangTagBuf,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Pattern {
 	Var(VariableNameBuf),
 	Iri(CompactIri),
+	Literal(LiteralValue),
 }
 
 impl Pattern {
 	pub fn is_variable(&self, name: &str) -> bool {
 		match self {
 			Self::Var(x) => x == name,
-			Self::Iri(_) => false,
+			_ => false,
 		}
 	}
 
@@ -662,10 +760,22 @@ impl Pattern {
 		}
 	}
 
+	pub fn from_term(term: Term) -> Self {
+		match term {
+			Term::Id(Id::Iri(iri)) => Self::Iri(iri.into()),
+			Term::Id(Id::Blank(b)) => Self::Var(VariableNameBuf(b.suffix().to_owned())),
+			Term::Literal(l) => Self::Literal(l.into()),
+		}
+	}
+
 	pub fn to_term(&self, scope: &Scope) -> Result<Term, Error> {
 		match self {
 			Self::Var(name) => Ok(Term::blank(BlankIdBuf::from_suffix(name).unwrap())),
 			Self::Iri(compact_iri) => compact_iri.resolve(scope).map(Term::iri),
+			Self::Literal(l) => Ok(Term::Literal(rdf_types::Literal::new(
+				l.value.clone(),
+				l.type_.resolve(scope)?,
+			))),
 		}
 	}
 }
@@ -678,6 +788,7 @@ impl Serialize for Pattern {
 		match self {
 			Self::Var(name) => format!("_:{name}").serialize(serializer),
 			Self::Iri(compact_iri) => compact_iri.serialize(serializer),
+			Self::Literal(l) => l.serialize(serializer),
 		}
 	}
 }
@@ -687,37 +798,36 @@ impl<'de> Deserialize<'de> for Pattern {
 	where
 		D: serde::Deserializer<'de>,
 	{
-		struct Visitor;
+		use serde::de::Error;
 
-		impl<'de> serde::de::Visitor<'de> for Visitor {
-			type Value = Pattern;
+		#[derive(Serialize, Deserialize)]
+		#[serde(untagged)]
+		pub enum StringOrLiteral {
+			String(String),
+			Literal(LiteralValue),
+		}
 
-			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-				write!(formatter, "a compact IRI or blank node identifier")
-			}
+		struct Expected;
 
-			fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-			where
-				E: serde::de::Error,
-			{
-				self.visit_string(v.to_owned())
-			}
-
-			fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-			where
-				E: serde::de::Error,
-			{
-				match BlankIdBuf::new(v) {
-					Ok(blank_id) => Ok(Pattern::Var(VariableNameBuf(blank_id.suffix().to_owned()))),
-					Err(e) => match IriRefBuf::new(e.0) {
-						Ok(iri_ref) => Ok(Pattern::Iri(CompactIri(iri_ref))),
-						Err(e) => Err(E::invalid_value(serde::de::Unexpected::Str(&e.0), &self)),
-					},
-				}
+		impl serde::de::Expected for Expected {
+			fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+				write!(formatter, "an IRI, blank node identifier or literal value")
 			}
 		}
 
-		deserializer.deserialize_string(Visitor)
+		match StringOrLiteral::deserialize(deserializer)? {
+			StringOrLiteral::String(v) => match BlankIdBuf::new(v) {
+				Ok(blank_id) => Ok(Pattern::Var(VariableNameBuf(blank_id.suffix().to_owned()))),
+				Err(e) => match IriRefBuf::new(e.0) {
+					Ok(iri_ref) => Ok(Pattern::Iri(CompactIri(iri_ref))),
+					Err(e) => Err(D::Error::invalid_value(
+						serde::de::Unexpected::Str(&e.0),
+						&Expected,
+					)),
+				},
+			},
+			StringOrLiteral::Literal(l) => Ok(Self::Literal(l)),
+		}
 	}
 }
 
@@ -879,15 +989,20 @@ impl<C: Context> Build<C> for Resource {
 			&Self::Boolean(b) => {
 				let value = if b { "true" } else { "false" };
 
-				Ok(context.literal_resource(value, XSD_BOOLEAN))
+				Ok(context.literal_resource(value, LexicalLiteralTypeRef::Any(XSD_BOOLEAN)))
 			}
 			&Self::Number(n) => {
 				let value: xsd_types::Decimal = n.into();
 				let type_ = value.decimal_type();
 
-				Ok(context.literal_resource(value.lexical_representation(), type_.iri()))
+				Ok(context.literal_resource(
+					value.lexical_representation(),
+					LexicalLiteralTypeRef::Any(type_.iri()),
+				))
 			}
-			Self::String(value) => Ok(context.literal_resource(value, XSD_STRING)),
+			Self::String(value) => {
+				Ok(context.literal_resource(value, LexicalLiteralTypeRef::Any(XSD_STRING)))
+			}
 			Self::TypedString(t) => t.build(context, scope),
 		}
 	}
@@ -909,7 +1024,7 @@ impl<C: Context> Build<C> for TypedString {
 
 	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
 		let type_ = self.type_.resolve(scope)?;
-		Ok(context.literal_resource(&self.value, &type_))
+		Ok(context.literal_resource(&self.value, LexicalLiteralTypeRef::Any(&type_)))
 	}
 }
 
@@ -963,6 +1078,9 @@ impl<C: Context> Build<C> for Pattern {
 				let iri = compact_iri.resolve(scope)?;
 				Ok(crate::Pattern::Resource(context.iri_resource(&iri)))
 			}
+			Self::Literal(l) => Ok(crate::Pattern::Resource(
+				context.literal_resource(&l.value, l.type_.resolve(scope)?.as_lexical_type_ref()),
+			)),
 		}
 	}
 }

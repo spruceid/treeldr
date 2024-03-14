@@ -229,6 +229,11 @@ test! {
 	t14 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
 }
 
+test! {
+	/// Literal value.
+	t15 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
+}
+
 negative_test! {
 	/// Missing required field.
 	e01 (Term::blank(BlankIdBuf::new("_:john_smith".to_string()).unwrap()))
