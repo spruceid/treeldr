@@ -1,0 +1,6 @@
+{
+	"type": "unit",
+	"dataset": [
+		["_:self", "https://example.org/#foo", { "value": "Foo", "type": "https://example.org/#Type" }]
+	]
+}

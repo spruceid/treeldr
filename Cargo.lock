@@ -955,6 +955,7 @@ dependencies = [
  "btree-range-map",
  "educe 0.4.23",
  "iref",
+ "langtag",
  "lazy_static",
  "locspan",
  "nquads-syntax",
