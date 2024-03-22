@@ -1,4 +1,4 @@
-name: CI
+name: Continuous Integration
 
 on:
   push:
@@ -15,74 +15,36 @@ env:
   CARGO_TERM_COLORS: always
 
 jobs:
-  minimum:
-    name: Minimum-supported Rust version
+  test:
+    name: Test
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+      - name: Retrieve MSRV
+        id: msrv
+        run: echo "MSRV=$(cat Cargo.toml | grep -Po '(?<=rust-version = ")([\d\.]+)')" >> $GITHUB_OUTPUT
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.74.0"
-          profile: minimal
-          override: true
+          toolchain: ${{ steps.msrv.outputs.MSRV }}
       - name: Build
         run: cargo build --all-features --verbose
       - name: Run tests
         run: cargo test --all-features --verbose --all-targets
-  tests:
-    name: Tests
-    runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: "1.74.0"
-          profile: minimal
-          override: true
-      - name: Build
-        run: cargo build --all-features --verbose
-      - name: Run tests
-        run: cargo test --all-features --verbose
-  rustfmt:
-    name: Formatting
+
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.74.0"
-          profile: minimal
-          override: true
-          components: rustfmt
+          components: rustfmt, clippy
       - name: Check formatting
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-  clippy:
-    name: Warnings
-    runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: "1.74.0"
-          profile: minimal
-          override: true
-          components: clippy
-      - name: Clippy Check
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-features -- -D warnings
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-features -- -D warnings
