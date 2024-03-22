@@ -238,6 +238,9 @@ impl<G> Options<G> {
 ///     treeldr_layouts::distill::de::Options::default()
 /// ).unwrap();
 ///
+/// // Index the dataset so we can run queries on it.
+/// let dataset = dataset.into_indexed();
+///
 /// // The number of subjects is equal to the number of layout inputs.
 /// assert_eq!(subjects.len(), 1);
 ///

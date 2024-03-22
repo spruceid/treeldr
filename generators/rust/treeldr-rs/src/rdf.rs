@@ -47,7 +47,9 @@ impl<'a, V, I> RdfContext<'a, V, I> {
 			LiteralType::LangString(tag) => LiteralType::LangString(tag),
 		};
 
-		let lit = self.vocabulary.get_literal(&Literal::new(value, type_))?;
+		let lit = self
+			.vocabulary
+			.get_literal(Literal::new(value, type_).as_ref())?;
 		self.interpretation.literal_interpretation(&lit)
 	}
 }

@@ -719,17 +719,17 @@ fn generate_data(
 		for l in rdf.interpretation.literals_of(&resource) {
 			has_literal = true;
 			let literal = rdf.vocabulary.literal(l).unwrap();
-			let ty_iri = match &literal.type_ {
-				::treeldr::rdf_types::LiteralType::Any(i) => {
+			let ty_iri = match literal.type_ {
+				::treeldr::rdf_types::LiteralTypeRef::Any(i) => {
 					rdf.vocabulary.iri(i).unwrap()
 				},
-				::treeldr::rdf_types::LiteralType::LangString(_) => {
+				::treeldr::rdf_types::LiteralTypeRef::LangString(_) => {
 					::treeldr::rdf_types::RDF_LANG_STRING
 				}
 			};
 
 			if ty_iri == expected_ty_iri {
-				if let Ok(value) = ::treeldr::de::FromRdfLiteral::from_rdf_literal(&literal.value) {
+				if let Ok(value) = ::treeldr::de::FromRdfLiteral::from_rdf_literal(literal.value) {
 					if result.replace(value).is_some() {
 						return Err(::treeldr::DeserializeError::AmbiguousLiteralValue)
 					}

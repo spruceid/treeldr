@@ -1,4 +1,4 @@
-use rdf_types::{dataset::BTreeDataset, BlankIdBuf, Id, RdfDisplay, Term};
+use rdf_types::{dataset::IndexedBTreeDataset, BlankIdBuf, Id, RdfDisplay, Term};
 use serde_json::json;
 use treeldr_layouts::{
 	abs::{syntax::Layout, Builder},
@@ -108,7 +108,7 @@ fn main() {
 
 	let mut generator = rdf_types::generator::Blank::new();
 
-	let mut dataset = BTreeDataset::default();
+	let mut dataset = IndexedBTreeDataset::default();
 	let (nested_dataset, _) = treeldr_layouts::distill::de::dehydrate(
 		&layouts,
 		&nested_json.into(),

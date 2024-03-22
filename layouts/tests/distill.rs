@@ -1,6 +1,6 @@
 use nquads_syntax::Parse;
 use paste::paste;
-use rdf_types::dataset::BTreeDataset;
+use rdf_types::dataset::IndexedBTreeDataset;
 use rdf_types::{BlankIdBuf, Term};
 use static_iref::iri;
 use std::fs;
@@ -18,7 +18,7 @@ fn hydrate<const N: usize>(id: &str, inputs: [Term; N]) {
 	let output_path = file_path(id, "-out.json");
 
 	// Parse the input dataset from N-Quads.
-	let dataset: BTreeDataset =
+	let dataset: IndexedBTreeDataset =
 		nquads_syntax::Document::parse_str(&std::fs::read_to_string(input_path).unwrap())
 			.unwrap()
 			.into_value()
@@ -65,7 +65,7 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 	let input: treeldr_layouts::Value = input_json.into();
 
 	// Parse the expected output dataset from N-Quads.
-	let expected_dataset: BTreeDataset =
+	let expected_dataset: IndexedBTreeDataset =
 		nquads_syntax::Document::parse_str(&std::fs::read_to_string(output_path).unwrap())
 			.unwrap()
 			.into_value()

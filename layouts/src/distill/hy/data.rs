@@ -9,7 +9,7 @@ use iref::Iri;
 use rdf_types::{
 	dataset::{PatternMatchingDataset, TraversableDataset},
 	interpretation::{ReverseIriInterpretation, ReverseLiteralInterpretation},
-	Interpretation, LiteralType, Vocabulary,
+	Interpretation, LiteralTypeRef, Vocabulary,
 };
 use xsd_types::{lexical::Lexical, ParseXsd};
 
@@ -68,16 +68,15 @@ where
 
 			for l in interpretation.literals_of(&resource) {
 				let literal = vocabulary.literal(l).unwrap();
-				let i = match &literal.type_ {
-					LiteralType::Any(i) => i,
-					LiteralType::LangString(_) => {
+				let i = match literal.type_ {
+					LiteralTypeRef::Any(i) => i,
+					LiteralTypeRef::LangString(_) => {
 						todo!() // Lang string
 					}
 				};
 
 				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
-					let v =
-						hydrate_boolean_value(literal.value.as_ref(), vocabulary.iri(i).unwrap())?;
+					let v = hydrate_boolean_value(literal.value, vocabulary.iri(i).unwrap())?;
 
 					if value.replace(v).is_some() {
 						todo!() // Ambiguity
@@ -112,16 +111,15 @@ where
 
 			for l in interpretation.literals_of(&resource) {
 				let literal = vocabulary.literal(l).unwrap();
-				let i = match &literal.type_ {
-					LiteralType::Any(i) => i,
-					LiteralType::LangString(_) => {
+				let i = match literal.type_ {
+					LiteralTypeRef::Any(i) => i,
+					LiteralTypeRef::LangString(_) => {
 						todo!() // Lang string
 					}
 				};
 
 				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
-					let v =
-						hydrate_number_value(literal.value.as_ref(), vocabulary.iri(i).unwrap())?;
+					let v = hydrate_number_value(literal.value, vocabulary.iri(i).unwrap())?;
 
 					if value.replace(v).is_some() {
 						todo!() // Ambiguity
@@ -156,18 +154,15 @@ where
 
 			for l in interpretation.literals_of(&resource) {
 				let literal = vocabulary.literal(l).unwrap();
-				let i = match &literal.type_ {
-					LiteralType::Any(i) => i,
-					LiteralType::LangString(_) => {
+				let i = match literal.type_ {
+					LiteralTypeRef::Any(i) => i,
+					LiteralTypeRef::LangString(_) => {
 						todo!() // Lang string
 					}
 				};
 
 				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
-					let v = hydrate_byte_string_value(
-						literal.value.as_ref(),
-						vocabulary.iri(i).unwrap(),
-					)?;
+					let v = hydrate_byte_string_value(literal.value, vocabulary.iri(i).unwrap())?;
 
 					if value.replace(v).is_some() {
 						todo!() // Ambiguity
@@ -202,18 +197,15 @@ where
 
 			for l in interpretation.literals_of(&resource) {
 				let literal = vocabulary.literal(l).unwrap();
-				let i = match &literal.type_ {
-					LiteralType::Any(i) => i,
-					LiteralType::LangString(_) => {
+				let i = match literal.type_ {
+					LiteralTypeRef::Any(i) => i,
+					LiteralTypeRef::LangString(_) => {
 						todo!() // Lang string
 					}
 				};
 
 				if interpretation.iris_of(&layout.datatype).any(|j| i == j) {
-					let v = hydrate_text_string_value(
-						literal.value.as_ref(),
-						vocabulary.iri(i).unwrap(),
-					)?;
+					let v = hydrate_text_string_value(literal.value, vocabulary.iri(i).unwrap())?;
 
 					if value.replace(v).is_some() {
 						todo!() // Ambiguity

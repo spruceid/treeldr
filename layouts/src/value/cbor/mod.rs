@@ -43,29 +43,29 @@ where
 {
 	let layout = layouts.get(layout_ref).expect("missing layout definition");
 	match interpretation.lexical_iri_interpretation(vocabulary, CBOR_TAG_IRI) {
-		Some(prop) => match layout.extra_properties().get(&prop) {
-			Some(value) => {
-				for l in interpretation.literals_of(value) {
-					if let Some(literal) = vocabulary.literal(l) {
-						if let rdf_types::LiteralType::Any(ty) = &literal.type_ {
-							if let Some(ty_iri) = vocabulary.iri(ty) {
-								return match xsd_types::UnsignedLongDatatype::from_iri(ty_iri) {
-									Some(_) => literal
-										.value
-										.parse()
-										.map(Some)
-										.map_err(|_| InvalidTag::Value(literal.value.clone())),
-									None => Err(InvalidTag::Type(ty_iri.to_owned())),
-								};
+		Some(prop) => {
+			match layout.extra_properties().get(&prop) {
+				Some(value) => {
+					for l in interpretation.literals_of(value) {
+						if let Some(literal) = vocabulary.literal(l) {
+							if let rdf_types::LiteralTypeRef::Any(ty) = literal.type_ {
+								if let Some(ty_iri) = vocabulary.iri(ty) {
+									return match xsd_types::UnsignedLongDatatype::from_iri(ty_iri) {
+										Some(_) => literal.value.parse().map(Some).map_err(|_| {
+											InvalidTag::Value(literal.value.to_owned())
+										}),
+										None => Err(InvalidTag::Type(ty_iri.to_owned())),
+									};
+								}
 							}
 						}
 					}
-				}
 
-				Err(InvalidTag::NonLiteral)
+					Err(InvalidTag::NonLiteral)
+				}
+				None => Ok(None),
 			}
-			None => Ok(None),
-		},
+		}
 		None => Ok(None),
 	}
 }

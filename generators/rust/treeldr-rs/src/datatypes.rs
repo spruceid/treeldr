@@ -4,7 +4,8 @@ use rdf_types::{
 		ReverseTermInterpretation, ReverseTermInterpretationMut, TermInterpretation,
 		TermInterpretationMut,
 	},
-	Dataset, InterpretationMut, Literal, LiteralType, Vocabulary, VocabularyMut, XSD_STRING,
+	Dataset, InterpretationMut, Literal, LiteralType, LiteralTypeRef, Vocabulary, VocabularyMut,
+	XSD_STRING,
 };
 
 use crate::{
@@ -120,10 +121,10 @@ where
 	{
 		for l in rdf.interpretation.literals_of(&inputs[0]) {
 			let literal = rdf.vocabulary.literal(l).unwrap();
-			if let LiteralType::Any(i) = &literal.type_ {
+			if let LiteralTypeRef::Any(i) = literal.type_ {
 				let iri = rdf.vocabulary.iri(i).unwrap();
 				if iri == XSD_STRING {
-					return Ok(literal.value.clone());
+					return Ok(literal.value.to_owned());
 				}
 			}
 		}
@@ -178,7 +179,7 @@ macro_rules! xsd_datatypes {
 					for l in rdf.interpretation.literals_of(&inputs[0]) {
 						has_literal = true;
 						let literal = rdf.vocabulary.literal(l).unwrap();
-						if let LiteralType::Any(i) = &literal.type_ {
+						if let LiteralTypeRef::Any(i) = literal.type_ {
 							let iri = rdf.vocabulary.iri(i).unwrap();
 							if iri == xsd_types::$xsd_iri {
 								match Self::parse_xsd(&literal.value) {

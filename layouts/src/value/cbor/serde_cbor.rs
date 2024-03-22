@@ -163,7 +163,7 @@ mod tests {
 		abs::{self, syntax},
 		hydrate,
 	};
-	use rdf_types::{dataset::BTreeDataset, BlankIdBuf, Literal, LiteralType, Quad, Term};
+	use rdf_types::{dataset::IndexedBTreeDataset, BlankIdBuf, Literal, LiteralType, Quad, Term};
 	use serde_json::json;
 	use static_iref::iri;
 	use xsd_types::XSD_STRING;
@@ -195,7 +195,7 @@ mod tests {
 		let layout_ref = layout.build(&mut builder).unwrap();
 		let layouts = builder.build();
 
-		let mut dataset = BTreeDataset::new();
+		let mut dataset = IndexedBTreeDataset::new();
 		let subject = Term::blank(BlankIdBuf::from_suffix("subject").unwrap());
 		dataset.insert(Quad(
 			subject.clone(),
