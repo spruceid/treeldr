@@ -5,9 +5,6 @@ use crate::{Dataset, Ref, ValueFormat};
 
 use super::LayoutType;
 
-pub mod deserialization;
-pub mod serialization;
-
 pub struct SumLayoutType;
 
 #[derive(Debug, Clone, Educe, serde::Serialize, serde::Deserialize)]
