@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Build, Context, Error, Pattern, Scope};
+use super::{Build, Context, BuildError, Pattern, Scope};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -24,7 +24,7 @@ where
 {
 	type Target = crate::Dataset<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let mut dataset = crate::Dataset::new();
 		for quad in &self.0 {
 			dataset.insert(quad.build(context, scope)?);
@@ -45,7 +45,7 @@ pub struct Quad(
 impl<C: Context> Build<C> for Pattern {
 	type Target = crate::Pattern<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		match self {
 			Self::Var(name) => Ok(crate::Pattern::Var(scope.variable(name)?)),
 			Self::Iri(compact_iri) => {
@@ -67,7 +67,7 @@ impl<C: Context> Build<C> for Quad {
 		crate::Pattern<C::Resource>,
 	>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		Ok(rdf_types::Quad(
 			self.0.build(context, scope)?,
 			self.1.build(context, scope)?,

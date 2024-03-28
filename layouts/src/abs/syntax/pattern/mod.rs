@@ -11,7 +11,7 @@ use rdf_types::{BlankIdBuf, Id, Term, RDF_NIL};
 use serde::{Deserialize, Serialize};
 pub use variable::*;
 
-use super::{Error, Scope};
+use super::{BuildError, Scope};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Pattern {
@@ -58,7 +58,7 @@ impl Pattern {
 		}
 	}
 
-	pub fn to_term(&self, scope: &Scope) -> Result<Term, Error> {
+	pub fn to_term(&self, scope: &Scope) -> Result<Term, BuildError> {
 		match self {
 			Self::Var(name) => Ok(Term::blank(BlankIdBuf::from_suffix(name).unwrap())),
 			Self::Iri(compact_iri) => compact_iri.resolve(scope).map(Term::iri),

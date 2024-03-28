@@ -12,6 +12,92 @@ pub use layout::*;
 pub use pattern::*;
 pub use resource::*;
 
+pub enum Error {
+	Unexpected {
+		offset: usize,
+		expected: json_syntax::Kind,
+		found: json_syntax::Kind
+	},
+	DuplicateEntry {
+		offset: usize,
+		key: String,
+		other_offset: usize
+	},
+	MissingType(usize),
+	InvalidType {
+		offset: usize,
+		expected: &'static str,
+		found: String
+	}
+}
+
+impl Error {
+	pub fn duplicate<'a>(key: &str) -> impl '_ + FnOnce(json_syntax::object::Duplicate<json_syntax::code_map::Mapped<&'a json_syntax::Value>>) -> Self {
+		move |e| {
+			Self::DuplicateEntry { offset: e.0.offset, key: key.to_owned(), other_offset: e.1.offset }
+		}
+	}
+}
+
+pub(crate) fn expect_object(
+	json: &json_syntax::Value,
+	offset: usize,
+) -> Result<&json_syntax::Object, Error> {
+	match json {
+		json_syntax::Value::Object(object) => {
+			Ok(object)
+		}
+		json => Err(Error::Unexpected {
+			offset,
+			expected: json_syntax::Kind::Object,
+			found: json.kind()
+		})
+	}
+}
+
+pub(crate) fn get_entry<'a, T: json_syntax::TryFromJsonSyntax<Error = Error>>(
+	object: &'a json_syntax::Object,
+	key: &str,
+	code_map: &json_syntax::CodeMap,
+	offset: usize
+) -> Result<Option<T>, Error> {
+	let value = object.get_unique_mapped(code_map, offset, key)
+		.map_err(Error::duplicate(key))?;
+
+	match value {
+		Some(value) => {
+			let t = T::try_from_json_syntax_at(value.value, code_map, value.offset)?;
+			Ok(Some(t))
+		}
+		None => Ok(None)
+	}
+}
+
+pub(crate) fn check_type(object: &json_syntax::Object, expected: &'static str, code_map: &json_syntax::CodeMap, offset: usize) -> Result<(), Error> {
+	let ty = object.get_unique_mapped(code_map, offset, "type")
+		.map_err(Error::duplicate("type"))?
+		.ok_or(Error::MissingType(offset))?;
+
+	match ty.value {
+		json_syntax::Value::String(found) => {
+			if found == expected {
+				Ok(())
+			} else {
+				Err(Error::InvalidType {
+					offset: ty.offset,
+					expected,
+					found: found.to_string()
+				})
+			}
+		}
+		other => Err(Error::Unexpected {
+			offset: ty.offset,
+			expected: json_syntax::Kind::String,
+			found: other.kind()
+		})
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum OneOrMany<T> {
@@ -71,7 +157,7 @@ where
 {
 	type Target = crate::ValueFormat<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		match self {
 			Self::Format(f) => f.build(context, scope),
 			Self::Layout(layout) => Ok(crate::ValueFormat {

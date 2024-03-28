@@ -15,7 +15,7 @@ use crate::{
 use super::LayoutHeader;
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum BuildError {
 	#[error("no base IRI to resolve `{0}`")]
 	NoBaseIri(IriRefBuf),
 
@@ -135,13 +135,13 @@ where
 pub trait Build<C> {
 	type Target;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error>;
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError>;
 }
 
 impl<C, T: Build<C>> Build<C> for Box<T> {
 	type Target = T::Target;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		T::build(&**self, context, scope)
 	}
 }
@@ -167,7 +167,7 @@ impl Scope {
 	/// Creates a new scope by combining this scope with the given layout
 	/// `header` which may define a new base IRI, new IRI prefixes and new
 	/// variables.
-	pub fn with_header(&self, header: &LayoutHeader) -> Result<Self, Error> {
+	pub fn with_header(&self, header: &LayoutHeader) -> Result<Self, BuildError> {
 		let mut result = self.clone();
 
 		if let Some(base_iri) = &header.base {
@@ -197,7 +197,7 @@ impl Scope {
 	pub fn with_intro<'s>(
 		&self,
 		intro: impl IntoIterator<Item = &'s String>,
-	) -> Result<Self, Error> {
+	) -> Result<Self, BuildError> {
 		let mut result = self.clone();
 
 		for name in intro {
@@ -240,10 +240,10 @@ impl Scope {
 	}
 
 	/// Returns the unique index of the given variable.
-	pub fn variable(&self, name: &str) -> Result<u32, Error> {
+	pub fn variable(&self, name: &str) -> Result<u32, BuildError> {
 		self.variables
 			.get(name)
 			.copied()
-			.ok_or_else(|| Error::UndeclaredVariable(name.to_owned()))
+			.ok_or_else(|| BuildError::UndeclaredVariable(name.to_owned()))
 	}
 }

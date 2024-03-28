@@ -2,25 +2,25 @@ use iref::{IriBuf, IriRefBuf};
 use serde::{Deserialize, Serialize};
 use xsd_types::XSD_STRING;
 
-use crate::abs::syntax::{Build, Context, Error, Scope};
+use crate::abs::syntax::{Build, Context, BuildError, Scope};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct CompactIri(pub IriRefBuf);
 
 impl CompactIri {
-	pub fn resolve(&self, scope: &Scope) -> Result<IriBuf, Error> {
+	pub fn resolve(&self, scope: &Scope) -> Result<IriBuf, BuildError> {
 		match self.0.as_iri() {
 			Some(iri) => match scope.iri_prefix(iri.scheme().as_str()) {
 				Some(prefix) => {
 					let suffix = iri.split_once(':').unwrap().1;
-					IriBuf::new(format!("{prefix}{suffix}")).map_err(|e| Error::InvalidIri(e.0))
+					IriBuf::new(format!("{prefix}{suffix}")).map_err(|e| BuildError::InvalidIri(e.0))
 				}
 				None => Ok(iri.to_owned()),
 			},
 			None => match &scope.base_iri() {
 				Some(base_iri) => Ok(self.0.resolved(base_iri)),
-				None => Err(Error::NoBaseIri(self.0.clone())),
+				None => Err(BuildError::NoBaseIri(self.0.clone())),
 			},
 		}
 	}
@@ -45,7 +45,7 @@ impl<C: Context> Build<C> for CompactIri {
 
 	/// Build this layout fragment using the given `context` in the given
 	/// `scope`.
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let iri = self.resolve(scope)?;
 		Ok(context.iri_resource(&iri))
 	}

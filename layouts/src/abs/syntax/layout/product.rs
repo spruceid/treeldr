@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::abs::{
 	self,
-	syntax::{Build, Context, Dataset, Error, Pattern, Scope, ValueFormatOrLayout, ValueIntro},
+	syntax::{Build, Context, Dataset, BuildError, Pattern, Scope, ValueFormatOrLayout, ValueIntro},
 };
 
 use super::{LayoutHeader, ProductLayoutType};
@@ -28,7 +28,7 @@ where
 {
 	type Target = abs::layout::ProductLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let (header, scope) = self.header.build(context, scope)?;
 
 		let mut fields = BTreeMap::new();
@@ -40,11 +40,11 @@ where
 
 			if let Some(property) = &field.property {
 				if self.header.input.is_empty() {
-					return Err(Error::NoPropertySubject);
+					return Err(BuildError::NoPropertySubject);
 				} else {
 					let subject = crate::Pattern::Var(0);
 					if field.intro.is_empty() {
-						return Err(Error::NoPropertyObject);
+						return Err(BuildError::NoPropertyObject);
 					} else {
 						let object = crate::Pattern::Var(
 							(self.header.input.len() + self.header.intro.len()) as u32,

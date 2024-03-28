@@ -2,7 +2,7 @@ use iref::IriBuf;
 use langtag::LangTagBuf;
 use rdf_types::XSD_STRING;
 
-use crate::abs::syntax::{Error, Scope};
+use crate::abs::syntax::{BuildError, Scope};
 
 use super::CompactIri;
 
@@ -43,7 +43,7 @@ impl Default for LiteralType {
 }
 
 impl LiteralType {
-	pub fn resolve(&self, scope: &Scope) -> Result<rdf_types::LiteralType, Error> {
+	pub fn resolve(&self, scope: &Scope) -> Result<rdf_types::LiteralType, BuildError> {
 		match self {
 			Self::Iri(iri) => Ok(rdf_types::LiteralType::Any(iri.resolve(scope)?)),
 			Self::Language(lang) => Ok(rdf_types::LiteralType::LangString(lang.language.clone())),
@@ -75,7 +75,7 @@ pub struct LiteralTypeIri {
 }
 
 impl LiteralTypeIri {
-	pub fn resolve(&self, scope: &Scope) -> Result<IriBuf, Error> {
+	pub fn resolve(&self, scope: &Scope) -> Result<IriBuf, BuildError> {
 		self.type_.resolve(scope)
 	}
 }

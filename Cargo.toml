@@ -32,6 +32,8 @@ langtag = "0.4.0"
 thiserror = "1.0.50"
 serde = "1.0.192"
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
+# json-syntax = "0.12.2"
+json-syntax = { path = "/home/timothee/Projets/utils/json/json-syntax" }
 
 locspan = "0.8.2"
 nquads-syntax = "0.19.0"

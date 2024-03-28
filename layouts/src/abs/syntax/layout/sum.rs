@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::abs::{
 	self,
-	syntax::{Build, Context, Dataset, Error, OneOrMany, Pattern, Scope, VariableName},
+	syntax::{Build, Context, Dataset, BuildError, OneOrMany, Pattern, Scope, VariableName},
 };
 
 use super::{LayoutHeader, LayoutRef, SumLayoutType};
@@ -40,7 +40,7 @@ where
 {
 	type Target = abs::layout::SumLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let (header, scope) = self.header.build(context, scope)?;
 
 		let mut variants = Vec::with_capacity(self.variants.len());
@@ -78,7 +78,7 @@ where
 {
 	type Target = crate::ValueFormat<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		match self {
 			Self::Format(f) => f.build(context, scope),
 			Self::Layout(layout) => Ok(crate::ValueFormat {
@@ -108,7 +108,7 @@ where
 {
 	type Target = crate::ValueFormat<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let mut inputs = Vec::with_capacity(self.input.len());
 		for i in self.input.as_slice() {
 			inputs.push(i.build(context, scope)?);

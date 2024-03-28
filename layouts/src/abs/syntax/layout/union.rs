@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-	abs::syntax::{Build, Context, Error, Scope},
+	abs::syntax::{Build, Context, BuildError, Scope},
 	layout::LayoutType,
 	Ref,
 };
@@ -21,7 +21,7 @@ pub struct UnionLayout {
 impl<C: Context> Build<C> for UnionLayout {
 	type Target = Vec<Ref<LayoutType, C::Resource>>;
 
-	fn build(&self, _context: &mut C, _scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, _context: &mut C, _scope: &Scope) -> Result<Self::Target, BuildError> {
 		unimplemented!()
 	}
 }

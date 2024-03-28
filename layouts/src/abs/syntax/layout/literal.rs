@@ -1,9 +1,10 @@
+use json_syntax::TryFromJsonSyntax;
 use serde::{Deserialize, Serialize};
 
 use crate::{
 	abs::{
 		self,
-		syntax::{Build, CompactIri, Context, Error, Pattern, Scope},
+		syntax::{check_type, expect_object, get_entry, Build, BuildError, CompactIri, Context, Error, Pattern, Scope},
 		RegExp,
 	},
 	Value,
@@ -36,7 +37,7 @@ where
 {
 	type Target = abs::layout::LiteralLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		match self {
 			Self::Data(l) => Ok(abs::layout::LiteralLayout::Data(l.build(context, scope)?)),
 			Self::Id(l) => Ok(abs::layout::LiteralLayout::Id(l.build(context, scope)?)),
@@ -72,7 +73,7 @@ where
 {
 	type Target = abs::layout::DataLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		match self {
 			Self::Unit(l) => l.build(context, scope).map(abs::layout::DataLayout::Unit),
 			Self::Boolean(l) => l
@@ -108,7 +109,7 @@ where
 {
 	type Target = abs::layout::UnitLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let (header, _) = self.header.build(context, scope)?;
 		Ok(abs::layout::UnitLayout {
 			input: header.input,
@@ -140,12 +141,12 @@ fn literal_resource<C: Context>(
 	scope: &Scope,
 	input: &LayoutInput,
 	resource: Option<&Pattern>,
-) -> Result<crate::Pattern<C::Resource>, Error> {
+) -> Result<crate::Pattern<C::Resource>, BuildError> {
 	match resource {
 		Some(r) => r.build(context, scope),
 		None => {
 			if input.is_empty() {
-				Err(Error::MissingLiteralTargetResource)
+				Err(BuildError::MissingLiteralTargetResource)
 			} else {
 				Ok(crate::Pattern::Var(0))
 			}
@@ -159,7 +160,7 @@ where
 {
 	type Target = abs::layout::BooleanLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(abs::layout::BooleanLayout {
@@ -203,7 +204,7 @@ where
 {
 	type Target = abs::layout::NumberLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(abs::layout::NumberLayout {
@@ -242,7 +243,7 @@ where
 {
 	type Target = abs::layout::ByteStringLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(abs::layout::ByteStringLayout {
@@ -285,7 +286,7 @@ where
 {
 	type Target = abs::layout::TextStringLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(abs::layout::TextStringLayout {
@@ -325,13 +326,32 @@ pub struct IdLayout {
 	pub resource: Option<Pattern>,
 }
 
+impl TryFromJsonSyntax for IdLayout {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(json: &json_syntax::Value, code_map: &json_syntax::CodeMap, offset: usize) -> Result<Self, Error> {
+		let object = expect_object(json, offset)?;
+		check_type(object, IdLayoutType::NAME, code_map, offset)?;
+		let header = LayoutHeader::try_from_json_syntax_at(object, code_map, offset)?;
+		let pattern = get_entry(object, "pattern", code_map, offset)?;
+		let resource = get_entry(object, "resource", code_map, offset)?;
+
+		Ok(Self {
+			type_: IdLayoutType,
+			header,
+			pattern,
+			resource
+		})
+	}
+}
+
 impl<C: Context> Build<C> for IdLayout
 where
 	C::Resource: Clone,
 {
 	type Target = abs::layout::IdLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let (header, scope) = self.header.build(context, scope)?;
 
 		Ok(abs::layout::IdLayout {

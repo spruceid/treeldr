@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::abs::{
 	self,
 	syntax::{
-		Build, CompactIri, Context, Dataset, Error, Pattern, Scope, ValueFormatOrLayout, ValueIntro,
+		Build, CompactIri, Context, Dataset, BuildError, Pattern, Scope, ValueFormatOrLayout, ValueIntro,
 	},
 };
 
@@ -36,7 +36,7 @@ where
 {
 	type Target = abs::layout::ListLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		match self {
 			Self::Ordered(l) => l
 				.build(context, scope)
@@ -114,7 +114,7 @@ where
 {
 	type Target = abs::layout::list::ordered::NodeLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let head = scope.variable_count();
 		let rest = head + 1;
 		let first = rest + 1;
@@ -181,7 +181,7 @@ where
 {
 	type Target = abs::layout::OrderedListLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let (header, scope) = self.header.build(context, scope)?;
 		Ok(abs::layout::OrderedListLayout {
 			input: header.input,
@@ -201,7 +201,7 @@ where
 {
 	type Target = abs::layout::list::ordered::NodeLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let head = scope.variable_count();
 		let rest = head + 1;
 		let scope = scope.with_intro(
@@ -266,7 +266,7 @@ where
 {
 	type Target = abs::layout::UnorderedListLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let subject = if self.header.input.is_empty() {
 			None
 		} else {
@@ -291,7 +291,7 @@ impl ListItem {
 		context: &mut C,
 		scope: &Scope,
 		subject: Option<u32>,
-	) -> Result<abs::layout::list::ItemLayout<C::Resource>, Error>
+	) -> Result<abs::layout::list::ItemLayout<C::Resource>, BuildError>
 	where
 		C::Resource: Clone,
 	{
@@ -316,9 +316,9 @@ impl ListItem {
 							None,
 						));
 					}
-					None => return Err(Error::NoPropertyObject),
+					None => return Err(BuildError::NoPropertyObject),
 				},
-				None => return Err(Error::NoPropertySubject),
+				None => return Err(BuildError::NoPropertySubject),
 			}
 		}
 
@@ -349,7 +349,7 @@ where
 {
 	type Target = abs::layout::SizedListLayout<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let subject = if self.header.input.is_empty() {
 			None
 		} else {

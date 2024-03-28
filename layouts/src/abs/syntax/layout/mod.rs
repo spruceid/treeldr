@@ -29,8 +29,7 @@ use crate::{
 };
 
 use super::{
-	Build, CompactIri, Context, Dataset, Error, OneOrMany, Pattern, Resource, Scope, ValueFormat,
-	VariableName,
+	Build, BuildError, CompactIri, Context, Dataset, Error, OneOrMany, Pattern, Resource, Scope, ValueFormat, VariableName
 };
 
 /// Abstract syntax layout.
@@ -110,7 +109,7 @@ impl Layout {
 		}
 	}
 
-	pub fn build(&self, builder: &mut Builder) -> Result<Ref<LayoutType>, Error> {
+	pub fn build(&self, builder: &mut Builder) -> Result<Ref<LayoutType>, BuildError> {
 		let mut context = builder.with_generator_mut(generator::Blank::new());
 		self.build_with_context(&mut context)
 	}
@@ -120,7 +119,7 @@ impl Layout {
 		vocabulary: &mut V,
 		interpretation: &mut I,
 		builder: &mut Builder<I::Resource>,
-	) -> Result<Ref<LayoutType, I::Resource>, Error>
+	) -> Result<Ref<LayoutType, I::Resource>, BuildError>
 	where
 		V: VocabularyMut,
 		I: IriInterpretationMut<V::Iri>
@@ -135,7 +134,7 @@ impl Layout {
 	pub fn build_with_context<C: Context>(
 		&self,
 		context: &mut C,
-	) -> Result<Ref<LayoutType, C::Resource>, Error>
+	) -> Result<Ref<LayoutType, C::Resource>, BuildError>
 	where
 		C::Resource: Clone,
 	{
@@ -150,7 +149,7 @@ where
 {
 	type Target = Ref<LayoutType, C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let id = match self.id() {
 			Some(id) => {
 				let iri = id.resolve(scope)?;
@@ -173,7 +172,7 @@ where
 		let (layout_ref, old_layout) = context.insert_layout(id, layout);
 
 		if old_layout.is_some() {
-			Err(Error::LayoutRedefinition)
+			Err(BuildError::LayoutRedefinition)
 		} else {
 			Ok(layout_ref)
 		}
@@ -193,7 +192,7 @@ where
 {
 	type Target = Ref<LayoutType, C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let scope = scope.without_variables();
 		match self {
 			Self::Ref(r) => r.build(context, &scope).map(Ref::new),
@@ -268,13 +267,19 @@ pub struct LayoutHeader {
 	pub extra: ExtraProperties,
 }
 
+impl LayoutHeader {
+	fn try_from_json_syntax_at(object: &json_syntax::Object, code_map: &json_syntax::CodeMap, offset: usize) -> Result<Self, Error> {
+		todo!()
+	}
+}
+
 impl<C: Context> Build<C> for LayoutHeader
 where
 	C::Resource: Clone,
 {
 	type Target = (BuiltLayoutHeader<C::Resource>, Scope);
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let scope = scope.with_header(self)?;
 
 		let header = BuiltLayoutHeader {
@@ -312,7 +317,7 @@ impl ExtraProperties {
 impl<C: Context> Build<C> for ExtraProperties {
 	type Target = BTreeMap<C::Resource, C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let mut result = BTreeMap::new();
 
 		for (prop, value) in &self.0 {
@@ -370,7 +375,7 @@ where
 {
 	type Target = crate::ValueFormat<C::Resource>;
 
-	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, Error> {
+	fn build(&self, context: &mut C, scope: &Scope) -> Result<Self::Target, BuildError> {
 		let mut inputs = Vec::with_capacity(self.input.len());
 		for i in self.input.as_slice() {
 			inputs.push(i.build(context, scope)?);
@@ -395,6 +400,8 @@ macro_rules! type_markers {
 			pub struct $id;
 
 			impl $id {
+				pub const NAME: &'static str = $value;
+
 				pub fn as_str(&self) -> &'static str {
 					$value
 				}
