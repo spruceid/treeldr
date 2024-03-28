@@ -1,10 +1,13 @@
-use json_syntax::TryFromJsonSyntax;
+use json_syntax::{TryFromJsonObject, TryFromJsonSyntax};
 use serde::{Deserialize, Serialize};
 
 use crate::{
 	abs::{
 		self,
-		syntax::{check_type, expect_object, get_entry, Build, BuildError, CompactIri, Context, Error, Pattern, Scope},
+		syntax::{
+			check_type, expect_object, get_entry, require_entry, require_type, Build, BuildError,
+			CompactIri, Context, Error, ExpectedType, Pattern, Scope,
+		},
 		RegExp,
 	},
 	Value,
@@ -27,6 +30,42 @@ impl LiteralLayout {
 		match self {
 			Self::Data(l) => l.id(),
 			Self::Id(l) => l.header.id.as_ref(),
+		}
+	}
+}
+
+impl TryFromJsonObject for LiteralLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		let ty = require_type(object, code_map, offset)?;
+		match ty.value {
+			IdLayoutType::NAME => {
+				IdLayout::try_from_json_object_at(object, code_map, offset).map(Self::Id)
+			}
+			UnitLayoutType::NAME
+			| BooleanLayoutType::NAME
+			| NumberLayoutType::NAME
+			| ByteStringLayoutType::NAME
+			| TextStringLayoutType::NAME => {
+				DataLayout::try_from_json_object_at(object, code_map, offset).map(Self::Data)
+			}
+			unexpected => Err(Error::InvalidType {
+				offset: ty.offset,
+				expected: ExpectedType::Many(&[
+					IdLayoutType::NAME,
+					UnitLayoutType::NAME,
+					BooleanLayoutType::NAME,
+					NumberLayoutType::NAME,
+					ByteStringLayoutType::NAME,
+					TextStringLayoutType::NAME,
+				]),
+				found: unexpected.to_owned(),
+			}),
 		}
 	}
 }
@@ -67,6 +106,61 @@ impl DataLayout {
 	}
 }
 
+impl TryFromJsonSyntax for DataLayout {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Error> {
+		let object = expect_object(json, offset)?;
+		Self::try_from_json_object_at(object, code_map, offset)
+	}
+}
+
+impl TryFromJsonObject for DataLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Error> {
+		let ty = require_type(object, code_map, offset)?;
+		match ty.value {
+			UnitLayoutType::NAME => {
+				UnitLayout::try_from_json_object_at(object, code_map, offset).map(Self::Unit)
+			}
+			BooleanLayoutType::NAME => {
+				BooleanLayout::try_from_json_object_at(object, code_map, offset).map(Self::Boolean)
+			}
+			NumberLayoutType::NAME => {
+				NumberLayout::try_from_json_object_at(object, code_map, offset).map(Self::Number)
+			}
+			ByteStringLayoutType::NAME => {
+				ByteStringLayout::try_from_json_object_at(object, code_map, offset)
+					.map(Self::ByteString)
+			}
+			TextStringLayoutType::NAME => {
+				TextStringLayout::try_from_json_object_at(object, code_map, offset)
+					.map(Self::TextString)
+			}
+			unexpected => Err(Error::InvalidType {
+				offset: ty.offset,
+				expected: ExpectedType::Many(&[
+					UnitLayoutType::NAME,
+					BooleanLayoutType::NAME,
+					NumberLayoutType::NAME,
+					ByteStringLayoutType::NAME,
+					TextStringLayoutType::NAME,
+				]),
+				found: unexpected.to_owned(),
+			}),
+		}
+	}
+}
+
 impl<C: Context> Build<C> for DataLayout
 where
 	C::Resource: Clone,
@@ -101,6 +195,26 @@ pub struct UnitLayout {
 
 	#[serde(rename = "const", default, skip_serializing_if = "Value::is_unit")]
 	pub const_: Value,
+}
+
+impl TryFromJsonObject for UnitLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Error> {
+		check_type(object, UnitLayoutType::NAME, code_map, offset)?;
+		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
+		let const_ = get_entry(object, "const", code_map, offset)?.unwrap_or_default();
+
+		Ok(Self {
+			type_: UnitLayoutType,
+			header,
+			const_,
+		})
+	}
 }
 
 impl<C: Context> Build<C> for UnitLayout
@@ -184,6 +298,28 @@ where
 	}
 }
 
+impl TryFromJsonObject for BooleanLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Error> {
+		check_type(object, BooleanLayoutType::NAME, code_map, offset)?;
+		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
+		let resource = get_entry(object, "resource", code_map, offset)?;
+		let datatype = get_entry(object, "datatype", code_map, offset)?;
+
+		Ok(Self {
+			type_: BooleanLayoutType,
+			header,
+			resource,
+			datatype,
+		})
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NumberLayout {
@@ -219,6 +355,28 @@ where
 			)?,
 			datatype: self.datatype.build(context, &scope)?,
 			extra_properties: header.properties,
+		})
+	}
+}
+
+impl TryFromJsonObject for NumberLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Error> {
+		check_type(object, NumberLayoutType::NAME, code_map, offset)?;
+		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
+		let resource = get_entry(object, "resource", code_map, offset)?;
+		let datatype = require_entry(object, "datatype", code_map, offset)?;
+
+		Ok(Self {
+			type_: NumberLayoutType,
+			header,
+			resource,
+			datatype,
 		})
 	}
 }
@@ -262,6 +420,28 @@ where
 	}
 }
 
+impl TryFromJsonObject for ByteStringLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Error> {
+		check_type(object, ByteStringLayoutType::NAME, code_map, offset)?;
+		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
+		let resource = get_entry(object, "resource", code_map, offset)?;
+		let datatype = require_entry(object, "datatype", code_map, offset)?;
+
+		Ok(Self {
+			type_: ByteStringLayoutType,
+			header,
+			resource,
+			datatype,
+		})
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TextStringLayout {
@@ -278,6 +458,30 @@ pub struct TextStringLayout {
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub datatype: Option<CompactIri>,
+}
+
+impl TryFromJsonObject for TextStringLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Error> {
+		check_type(object, TextStringLayoutType::NAME, code_map, offset)?;
+		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
+		let pattern = get_entry(object, "pattern", code_map, offset)?;
+		let resource = get_entry(object, "resource", code_map, offset)?;
+		let datatype = get_entry(object, "datatype", code_map, offset)?;
+
+		Ok(Self {
+			type_: TextStringLayoutType,
+			header,
+			pattern,
+			resource,
+			datatype,
+		})
+	}
 }
 
 impl<C: Context> Build<C> for TextStringLayout
@@ -326,13 +530,16 @@ pub struct IdLayout {
 	pub resource: Option<Pattern>,
 }
 
-impl TryFromJsonSyntax for IdLayout {
+impl TryFromJsonObject for IdLayout {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(json: &json_syntax::Value, code_map: &json_syntax::CodeMap, offset: usize) -> Result<Self, Error> {
-		let object = expect_object(json, offset)?;
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Error> {
 		check_type(object, IdLayoutType::NAME, code_map, offset)?;
-		let header = LayoutHeader::try_from_json_syntax_at(object, code_map, offset)?;
+		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
 		let pattern = get_entry(object, "pattern", code_map, offset)?;
 		let resource = get_entry(object, "resource", code_map, offset)?;
 
@@ -340,7 +547,7 @@ impl TryFromJsonSyntax for IdLayout {
 			type_: IdLayoutType,
 			header,
 			pattern,
-			resource
+			resource,
 		})
 	}
 }

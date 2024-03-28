@@ -1,8 +1,11 @@
-use iref::{IriBuf, IriRefBuf};
+use std::str::FromStr;
+
+use iref::{IriBuf, IriRef, IriRefBuf};
+use json_syntax::TryFromJsonSyntax;
 use serde::{Deserialize, Serialize};
 use xsd_types::XSD_STRING;
 
-use crate::abs::syntax::{Build, Context, BuildError, Scope};
+use crate::abs::syntax::{expect_string, Build, BuildError, Context, Error, Scope};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -14,7 +17,8 @@ impl CompactIri {
 			Some(iri) => match scope.iri_prefix(iri.scheme().as_str()) {
 				Some(prefix) => {
 					let suffix = iri.split_once(':').unwrap().1;
-					IriBuf::new(format!("{prefix}{suffix}")).map_err(|e| BuildError::InvalidIri(e.0))
+					IriBuf::new(format!("{prefix}{suffix}"))
+						.map_err(|e| BuildError::InvalidIri(e.0))
 				}
 				None => Ok(iri.to_owned()),
 			},
@@ -34,9 +38,39 @@ impl CompactIri {
 	}
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("invalid compact IRI `{0}`")]
+pub struct InvalidCompactIri(pub String);
+
+impl FromStr for CompactIri {
+	type Err = InvalidCompactIri;
+
+	fn from_str(value: &str) -> Result<Self, Self::Err> {
+		match IriRef::new(value) {
+			Ok(iri_ref) => Ok(Self(iri_ref.to_owned())),
+			Err(_) => Err(InvalidCompactIri(value.to_owned())),
+		}
+	}
+}
+
 impl From<IriBuf> for CompactIri {
 	fn from(value: IriBuf) -> Self {
 		Self(value.into())
+	}
+}
+
+impl TryFromJsonSyntax for CompactIri {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		_code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		match IriRef::new(expect_string(json, offset)?) {
+			Ok(iri_ref) => Ok(Self(iri_ref.to_owned())),
+			Err(e) => Err(Error::InvalidCompactIri(offset, e.0.to_owned())),
+		}
 	}
 }
 

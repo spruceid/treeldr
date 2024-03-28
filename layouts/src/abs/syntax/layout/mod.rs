@@ -1,12 +1,13 @@
 use core::fmt;
 use iref::IriBuf;
+use json_syntax::{Kind, TryFromJsonObject, TryFromJsonSyntax};
 use rdf_types::{
 	generator,
 	interpretation::{IriInterpretationMut, LiteralInterpretationMut},
 	InterpretationMut, VocabularyMut,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, str::FromStr};
 
 mod intersection;
 mod list;
@@ -29,7 +30,8 @@ use crate::{
 };
 
 use super::{
-	Build, BuildError, CompactIri, Context, Dataset, Error, OneOrMany, Pattern, Resource, Scope, ValueFormat, VariableName
+	get_entry, require_type, Build, BuildError, CompactIri, Context, Dataset, Error, ExpectedType,
+	InvalidCompactIri, OneOrMany, Pattern, Resource, Scope, ValueFormat, VariableName,
 };
 
 /// Abstract syntax layout.
@@ -143,6 +145,87 @@ impl Layout {
 	}
 }
 
+impl TryFromJsonSyntax for Layout {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		match json {
+			json_syntax::Value::Boolean(value) => Ok(Self::Boolean(*value)),
+			json_syntax::Value::Object(object) => {
+				Self::try_from_json_object_at(object, code_map, offset)
+			}
+			other => Err(Error::Unexpected {
+				offset,
+				expected: Kind::Boolean | Kind::Object,
+				found: other.kind(),
+			}),
+		}
+	}
+}
+
+impl TryFromJsonObject for Layout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		let ty = require_type(object, code_map, offset)?;
+		match ty.value {
+			IdLayoutType::NAME
+			| UnitLayoutType::NAME
+			| BooleanLayoutType::NAME
+			| NumberLayoutType::NAME
+			| ByteStringLayoutType::NAME
+			| TextStringLayoutType::NAME => {
+				LiteralLayout::try_from_json_object_at(object, code_map, offset).map(Self::Literal)
+			}
+			ProductLayoutType::NAME => {
+				ProductLayout::try_from_json_object_at(object, code_map, offset).map(Self::Product)
+			}
+			SumLayoutType::NAME => {
+				SumLayout::try_from_json_object_at(object, code_map, offset).map(Self::Sum)
+			}
+			OrderedListLayoutType::NAME
+			| UnorderedListLayoutType::NAME
+			| SizedListLayoutType::NAME => {
+				ListLayout::try_from_json_object_at(object, code_map, offset).map(Self::List)
+			}
+			UnionLayoutType::NAME => {
+				UnionLayout::try_from_json_object_at(object, code_map, offset).map(Self::Union)
+			}
+			IntersectionLayoutType::NAME => {
+				IntersectionLayout::try_from_json_object_at(object, code_map, offset)
+					.map(Self::Intersection)
+			}
+			other => Err(Error::InvalidType {
+				offset: ty.offset,
+				expected: ExpectedType::Many(&[
+					IdLayoutType::NAME,
+					UnitLayoutType::NAME,
+					BooleanLayoutType::NAME,
+					NumberLayoutType::NAME,
+					ByteStringLayoutType::NAME,
+					TextStringLayoutType::NAME,
+					ProductLayoutType::NAME,
+					SumLayoutType::NAME,
+					OrderedListLayoutType::NAME,
+					UnorderedListLayoutType::NAME,
+					SizedListLayoutType::NAME,
+					UnionLayoutType::NAME,
+					IntersectionLayoutType::NAME,
+				]),
+				found: other.to_owned(),
+			}),
+		}
+	}
+}
+
 impl<C: Context> Build<C> for Layout
 where
 	C::Resource: Clone,
@@ -184,6 +267,54 @@ where
 pub enum LayoutRef {
 	Ref(CompactIri),
 	Layout(Box<Layout>),
+}
+
+impl LayoutRef {
+	pub fn try_from_json_string_at(value: &str, offset: usize) -> Result<Self, Error> {
+		Self::from_str(value).map_err(|e| Error::InvalidCompactIri(offset, e.0))
+	}
+}
+
+impl FromStr for LayoutRef {
+	type Err = InvalidCompactIri;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		CompactIri::from_str(s).map(Self::Ref)
+	}
+}
+
+impl TryFromJsonObject for LayoutRef {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		Box::try_from_json_object_at(object, code_map, offset).map(Self::Layout)
+	}
+}
+
+impl TryFromJsonSyntax for LayoutRef {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		match json {
+			json_syntax::Value::String(value) => Self::try_from_json_string_at(value, offset),
+			json_syntax::Value::Object(value) => {
+				Self::try_from_json_object_at(value, code_map, offset)
+			}
+			other => Err(Error::Unexpected {
+				offset,
+				expected: Kind::String | Kind::Object,
+				found: other.kind(),
+			}),
+		}
+	}
 }
 
 impl<C: Context> Build<C> for LayoutRef
@@ -242,6 +373,20 @@ impl From<Vec<String>> for LayoutInput {
 	}
 }
 
+impl TryFromJsonSyntax for LayoutInput {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		Ok(Self(OneOrMany::try_from_json_syntax_at(
+			json, code_map, offset,
+		)?))
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LayoutHeader {
@@ -268,8 +413,20 @@ pub struct LayoutHeader {
 }
 
 impl LayoutHeader {
-	fn try_from_json_syntax_at(object: &json_syntax::Object, code_map: &json_syntax::CodeMap, offset: usize) -> Result<Self, Error> {
-		todo!()
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Error> {
+		Ok(Self {
+			base: get_entry(object, "base", code_map, offset)?,
+			prefixes: get_entry(object, "prefixes", code_map, offset)?.unwrap_or_default(),
+			id: get_entry(object, "id", code_map, offset)?,
+			input: get_entry(object, "input", code_map, offset)?.unwrap_or_default(),
+			intro: get_entry(object, "intro", code_map, offset)?.unwrap_or_default(),
+			dataset: get_entry(object, "dataset", code_map, offset)?.unwrap_or_default(),
+			extra: get_entry(object, "extra", code_map, offset)?.unwrap_or_default(),
+		})
 	}
 }
 
@@ -311,6 +468,20 @@ pub struct ExtraProperties(BTreeMap<CompactIri, Resource>);
 impl ExtraProperties {
 	pub fn is_empty(&self) -> bool {
 		self.0.is_empty()
+	}
+}
+
+impl TryFromJsonSyntax for ExtraProperties {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		Ok(Self(BTreeMap::try_from_json_syntax_at(
+			json, code_map, offset,
+		)?))
 	}
 }
 
@@ -366,6 +537,18 @@ impl Default for ValueInput {
 impl From<Vec<Pattern>> for ValueInput {
 	fn from(value: Vec<Pattern>) -> Self {
 		Self(value.into())
+	}
+}
+
+impl TryFromJsonSyntax for ValueInput {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		OneOrMany::try_from_json_syntax_at(json, code_map, offset).map(Self)
 	}
 }
 

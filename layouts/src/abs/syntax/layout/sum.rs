@@ -1,10 +1,14 @@
 use std::collections::BTreeMap;
 
+use json_syntax::{Kind, TryFromJsonObject, TryFromJsonSyntax};
 use serde::{Deserialize, Serialize};
 
 use crate::abs::{
 	self,
-	syntax::{Build, Context, Dataset, BuildError, OneOrMany, Pattern, Scope, VariableName},
+	syntax::{
+		check_type, expect_object, get_entry, require_entry, Build, BuildError, Context, Dataset,
+		Error, OneOrMany, Pattern, Scope, VariableName,
+	},
 };
 
 use super::{LayoutHeader, LayoutRef, SumLayoutType};
@@ -22,6 +26,36 @@ pub struct SumLayout {
 	pub variants: BTreeMap<String, Variant>,
 }
 
+impl TryFromJsonSyntax for SumLayout {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		let object = expect_object(json, offset)?;
+		Self::try_from_json_object_at(object, code_map, offset)
+	}
+}
+
+impl TryFromJsonObject for SumLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		check_type(object, SumLayoutType::NAME, code_map, offset)?;
+		Ok(Self {
+			type_: SumLayoutType,
+			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
+			variants: get_entry(object, "variants", code_map, offset)?.unwrap_or_default(),
+		})
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Variant {
@@ -32,6 +66,35 @@ pub struct Variant {
 
 	#[serde(default, skip_serializing_if = "Dataset::is_empty")]
 	pub dataset: Dataset,
+}
+
+impl TryFromJsonSyntax for Variant {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		let object = expect_object(json, offset)?;
+		Self::try_from_json_object_at(object, code_map, offset)
+	}
+}
+
+impl TryFromJsonObject for Variant {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		Ok(Self {
+			intro: get_entry(object, "intro", code_map, offset)?.unwrap_or_default(),
+			value: require_entry(object, "value", code_map, offset)?,
+			dataset: get_entry(object, "dataset", code_map, offset)?.unwrap_or_default(),
+		})
+	}
 }
 
 impl<C: Context> Build<C> for SumLayout
@@ -72,6 +135,34 @@ pub enum VariantFormatOrLayout {
 	Layout(LayoutRef),
 }
 
+impl TryFromJsonSyntax for VariantFormatOrLayout {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		match json {
+			json_syntax::Value::String(value) => {
+				LayoutRef::try_from_json_string_at(value, offset).map(Self::Layout)
+			}
+			json_syntax::Value::Object(value) => {
+				if value.contains_key("type") {
+					LayoutRef::try_from_json_object_at(value, code_map, offset).map(Self::Layout)
+				} else {
+					VariantFormat::try_from_json_syntax_at(json, code_map, offset).map(Self::Format)
+				}
+			}
+			other => Err(Error::Unexpected {
+				offset,
+				expected: Kind::String | Kind::Object,
+				found: other.kind(),
+			}),
+		}
+	}
+}
+
 impl<C: Context> Build<C> for VariantFormatOrLayout
 where
 	C::Resource: Clone,
@@ -100,6 +191,35 @@ pub struct VariantFormat {
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub graph: Option<Option<Pattern>>,
+}
+
+impl TryFromJsonSyntax for VariantFormat {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		let object = expect_object(json, offset)?;
+		Self::try_from_json_object_at(object, code_map, offset)
+	}
+}
+
+impl TryFromJsonObject for VariantFormat {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		Ok(Self {
+			layout: require_entry(object, "layout", code_map, offset)?,
+			input: get_entry(object, "input", code_map, offset)?.unwrap_or_default(),
+			graph: get_entry(object, "graph", code_map, offset)?.unwrap_or_default(),
+		})
+	}
 }
 
 impl<C: Context> Build<C> for VariantFormat
@@ -158,5 +278,17 @@ impl Default for VariantInput {
 impl From<Vec<Pattern>> for VariantInput {
 	fn from(value: Vec<Pattern>) -> Self {
 		Self(value.into())
+	}
+}
+
+impl TryFromJsonSyntax for VariantInput {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		OneOrMany::try_from_json_syntax_at(json, code_map, offset).map(Self)
 	}
 }

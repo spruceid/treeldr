@@ -1,10 +1,13 @@
+use json_syntax::{Kind, TryFromJsonObject, TryFromJsonSyntax};
 use rdf_types::{dataset::BTreeDataset, RDF_FIRST, RDF_REST};
 use serde::{Deserialize, Serialize};
 
 use crate::abs::{
 	self,
 	syntax::{
-		Build, CompactIri, Context, Dataset, BuildError, Pattern, Scope, ValueFormatOrLayout, ValueIntro,
+		check_type, expect_object, get_entry, require_entry, require_type, Build, BuildError,
+		CompactIri, Context, Dataset, Error, ExpectedType, Pattern, Scope, ValueFormatOrLayout,
+		ValueIntro,
 	},
 };
 
@@ -26,6 +29,40 @@ impl ListLayout {
 			Self::Ordered(l) => l.header.id.as_ref(),
 			Self::Unordered(l) => l.header.id.as_ref(),
 			Self::Sized(l) => l.header.id.as_ref(),
+		}
+	}
+}
+
+impl TryFromJsonObject for ListLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		let ty = require_type(object, code_map, offset)?;
+		match ty.value {
+			OrderedListLayoutType::NAME => {
+				OrderedListLayout::try_from_json_object_at(object, code_map, offset)
+					.map(Self::Ordered)
+			}
+			UnorderedListLayoutType::NAME => {
+				UnorderedListLayout::try_from_json_object_at(object, code_map, offset)
+					.map(Self::Unordered)
+			}
+			SizedListLayoutType::NAME => {
+				SizedListLayout::try_from_json_object_at(object, code_map, offset).map(Self::Sized)
+			}
+			other => Err(Error::InvalidType {
+				offset: ty.offset,
+				expected: ExpectedType::Many(&[
+					OrderedListLayoutType::NAME,
+					UnorderedListLayoutType::NAME,
+					SizedListLayoutType::NAME,
+				]),
+				found: other.to_owned(),
+			}),
 		}
 	}
 }
@@ -73,11 +110,62 @@ pub struct OrderedListLayout {
 	pub tail: Pattern,
 }
 
+impl TryFromJsonObject for OrderedListLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		check_type(object, OrderedListLayoutType::NAME, code_map, offset)?;
+		Ok(Self {
+			type_: OrderedListLayoutType,
+			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
+			node: require_entry(object, "node", code_map, offset)?,
+			head: get_entry(object, "head", code_map, offset)?
+				.unwrap_or_else(Pattern::default_head),
+			tail: get_entry(object, "tail", code_map, offset)?
+				.unwrap_or_else(Pattern::default_tail),
+		})
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ListNodeOrLayout {
 	ListNode(ListNode),
 	Layout(LayoutRef),
+}
+
+impl TryFromJsonSyntax for ListNodeOrLayout {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		match json {
+			json_syntax::Value::String(value) => {
+				LayoutRef::try_from_json_string_at(value, offset).map(Self::Layout)
+			}
+			json_syntax::Value::Object(value) => {
+				if value.contains_key("type") {
+					// Layout
+					LayoutRef::try_from_json_object_at(value, code_map, offset).map(Self::Layout)
+				} else {
+					// List node.
+					ListNode::try_from_json_object_at(value, code_map, offset).map(Self::ListNode)
+				}
+			}
+			other => Err(Error::Unexpected {
+				offset,
+				expected: Kind::String | Kind::Object,
+				found: other.kind(),
+			}),
+		}
+	}
 }
 
 fn default_list_dataset<C: Context>(
@@ -175,6 +263,24 @@ impl ListNode {
 	}
 }
 
+impl TryFromJsonObject for ListNode {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		Ok(Self {
+			head: get_entry(object, "head", code_map, offset)?.unwrap_or_else(Self::default_head),
+			rest: get_entry(object, "rest", code_map, offset)?.unwrap_or_else(Self::default_rest),
+			intro: get_entry(object, "intro", code_map, offset)?.unwrap_or_default(),
+			value: require_entry(object, "value", code_map, offset)?,
+			dataset: get_entry(object, "dataset", code_map, offset)?,
+		})
+	}
+}
+
 impl<C: Context> Build<C> for OrderedListLayout
 where
 	C::Resource: Clone,
@@ -245,6 +351,23 @@ pub struct UnorderedListLayout {
 	pub item: ListItem,
 }
 
+impl TryFromJsonObject for UnorderedListLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		check_type(object, UnorderedListLayoutType::NAME, code_map, offset)?;
+		Ok(Self {
+			type_: UnorderedListLayoutType,
+			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
+			item: require_entry(object, "item", code_map, offset)?,
+		})
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListItem {
@@ -258,6 +381,36 @@ pub struct ListItem {
 
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub property: Option<Pattern>,
+}
+
+impl TryFromJsonSyntax for ListItem {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		let object = expect_object(json, offset)?;
+		Self::try_from_json_object_at(object, code_map, offset)
+	}
+}
+
+impl TryFromJsonObject for ListItem {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		Ok(Self {
+			intro: get_entry(object, "intro", code_map, offset)?.unwrap_or_default(),
+			value: require_entry(object, "value", code_map, offset)?,
+			dataset: get_entry(object, "dataset", code_map, offset)?.unwrap_or_default(),
+			property: get_entry(object, "property", code_map, offset)?,
+		})
+	}
 }
 
 impl<C: Context> Build<C> for UnorderedListLayout
@@ -341,6 +494,23 @@ pub struct SizedListLayout {
 
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub items: Vec<ListItem>,
+}
+
+impl TryFromJsonObject for SizedListLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		check_type(object, SizedListLayoutType::NAME, code_map, offset)?;
+		Ok(Self {
+			type_: SizedListLayoutType,
+			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
+			items: get_entry(object, "items", code_map, offset)?.unwrap_or_default(),
+		})
+	}
 }
 
 impl<C: Context> Build<C> for SizedListLayout

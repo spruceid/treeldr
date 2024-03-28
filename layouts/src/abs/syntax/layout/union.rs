@@ -1,7 +1,8 @@
+use json_syntax::TryFromJsonObject;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-	abs::syntax::{Build, Context, BuildError, Scope},
+	abs::syntax::{check_type, Build, BuildError, Context, Error, Scope},
 	layout::LayoutType,
 	Ref,
 };
@@ -16,6 +17,22 @@ pub struct UnionLayout {
 
 	#[serde(flatten)]
 	pub header: LayoutHeader,
+}
+
+impl TryFromJsonObject for UnionLayout {
+	type Error = Error;
+
+	fn try_from_json_object_at(
+		object: &json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		check_type(object, UnionLayoutType::NAME, code_map, offset)?;
+		Ok(Self {
+			type_: UnionLayoutType,
+			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
+		})
+	}
 }
 
 impl<C: Context> Build<C> for UnionLayout {

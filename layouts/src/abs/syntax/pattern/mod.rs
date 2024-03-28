@@ -5,13 +5,14 @@ mod variable;
 use core::fmt;
 
 pub use compact_iri::*;
-use iref::IriRefBuf;
+use iref::{IriRef, IriRefBuf};
+use json_syntax::{Kind, TryFromJsonSyntax};
 pub use literal::*;
-use rdf_types::{BlankIdBuf, Id, Term, RDF_NIL};
+use rdf_types::{BlankId, BlankIdBuf, Id, Term, RDF_NIL};
 use serde::{Deserialize, Serialize};
 pub use variable::*;
 
-use super::{BuildError, Scope};
+use super::{BuildError, Error, Scope};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Pattern {
@@ -66,6 +67,34 @@ impl Pattern {
 				l.value.clone(),
 				l.type_.resolve(scope)?,
 			))),
+		}
+	}
+}
+
+impl TryFromJsonSyntax for Pattern {
+	type Error = Error;
+
+	fn try_from_json_syntax_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		match json {
+			json_syntax::Value::String(value) => match BlankId::new(value) {
+				Ok(blank_id) => Ok(Pattern::Var(VariableNameBuf(blank_id.suffix().to_owned()))),
+				Err(_) => match IriRef::new(value) {
+					Ok(iri_ref) => Ok(Pattern::Iri(CompactIri(iri_ref.to_owned()))),
+					Err(_) => Err(Error::InvalidPattern(offset, value.to_string())),
+				},
+			},
+			json_syntax::Value::Object(value) => Ok(Self::Literal(
+				LiteralValue::try_from_json_object_at(value, code_map, offset)?,
+			)),
+			other => Err(Error::Unexpected {
+				offset,
+				expected: Kind::String | Kind::Object,
+				found: other.kind(),
+			}),
 		}
 	}
 }
