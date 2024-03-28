@@ -28,7 +28,7 @@ enum Error {
 	Json(serde_json::Error),
 
 	#[error("build error: {0}")]
-	Layout(abs::syntax::Error),
+	Layout(abs::syntax::BuildError),
 }
 
 struct Attribute(syn::punctuated::Punctuated<syn::LitStr, syn::Token![,]>);
