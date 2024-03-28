@@ -74,14 +74,12 @@ pub enum Error {
 impl Error {
 	pub fn duplicate<'a>(
 		key: &str,
-	) -> impl '_
-	       + FnOnce(
-		json_syntax::object::Duplicate<json_syntax::code_map::Mapped<&'a json_syntax::Value>>,
-	) -> Self {
+	) -> impl '_ + FnOnce(json_syntax::object::Duplicate<json_syntax::object::MappedEntry<'a>>) -> Self
+	{
 		move |e| Self::DuplicateEntry {
-			offset: e.0.offset,
+			offset: e.0.value.key.offset,
 			key: key.to_owned(),
-			other_offset: e.1.offset,
+			other_offset: e.1.value.key.offset,
 		}
 	}
 
@@ -105,6 +103,9 @@ impl Error {
 
 	pub fn hints(&self) -> Vec<ErrorHint> {
 		match self {
+			Self::DuplicateEntry { other_offset, .. } => {
+				vec![ErrorHint::DuplicateEntry(*other_offset)]
+			}
 			Self::InvalidType {
 				expected, found, ..
 			} => vec![
@@ -147,6 +148,16 @@ impl From<json_syntax::code_map::Mapped<std::convert::Infallible>> for Error {
 pub enum ErrorHint<'a> {
 	ExpectedType(ExpectedType),
 	FoundType(&'a str),
+	DuplicateEntry(usize),
+}
+
+impl<'a> ErrorHint<'a> {
+	pub fn position(&self) -> Option<usize> {
+		match self {
+			Self::DuplicateEntry(offset) => Some(*offset),
+			_ => None,
+		}
+	}
 }
 
 impl<'a> fmt::Display for ErrorHint<'a> {
@@ -174,6 +185,7 @@ impl<'a> fmt::Display for ErrorHint<'a> {
 				}
 			},
 			Self::FoundType(ty) => write!(f, "found type `{ty}`"),
+			Self::DuplicateEntry(_) => write!(f, "also defined here"),
 		}
 	}
 }
@@ -232,14 +244,18 @@ pub(crate) fn get_entry<T: json_syntax::TryFromJsonSyntax>(
 where
 	T::Error: Into<Error>,
 {
-	let value = object
-		.get_unique_mapped(code_map, offset, key)
+	let entry = object
+		.get_unique_mapped_entry(code_map, offset, key)
 		.map_err(Error::duplicate(key))?;
 
-	match value {
-		Some(value) => {
-			let t = T::try_from_json_syntax_at(value.value, code_map, value.offset)
-				.map_err(Into::into)?;
+	match entry {
+		Some(entry) => {
+			let t = T::try_from_json_syntax_at(
+				entry.value.value.value,
+				code_map,
+				entry.value.value.offset,
+			)
+			.map_err(Into::into)?;
 			Ok(Some(t))
 		}
 		None => Ok(None),
@@ -255,13 +271,14 @@ pub(crate) fn require_entry<T: json_syntax::TryFromJsonSyntax>(
 where
 	T::Error: Into<Error>,
 {
-	let value = object
-		.get_unique_mapped(code_map, offset, key)
+	let entry = object
+		.get_unique_mapped_entry(code_map, offset, key)
 		.map_err(Error::duplicate(key))?;
 
-	match value {
-		Some(value) => {
-			T::try_from_json_syntax_at(value.value, code_map, value.offset).map_err(Into::into)
+	match entry {
+		Some(entry) => {
+			T::try_from_json_syntax_at(entry.value.value.value, code_map, entry.value.value.offset)
+				.map_err(Into::into)
 		}
 		None => Err(Error::MissingRequiredEntry {
 			offset,
@@ -275,17 +292,18 @@ pub(crate) fn require_type<'a>(
 	code_map: &json_syntax::CodeMap,
 	offset: usize,
 ) -> Result<json_syntax::code_map::Mapped<&'a str>, Error> {
-	let ty = object
-		.get_unique_mapped(code_map, offset, "type")
+	let entry = object
+		.get_unique_mapped_entry(code_map, offset, "type")
 		.map_err(Error::duplicate("type"))?
 		.ok_or(Error::MissingType(offset))?;
 
-	match ty.value {
-		json_syntax::Value::String(found) => {
-			Ok(json_syntax::code_map::Mapped::new(ty.offset, found))
-		}
+	match entry.value.value.value {
+		json_syntax::Value::String(found) => Ok(json_syntax::code_map::Mapped::new(
+			entry.value.value.offset,
+			found,
+		)),
 		other => Err(Error::Unexpected {
-			offset: ty.offset,
+			offset: entry.value.value.offset,
 			expected: json_syntax::KindSet::STRING,
 			found: other.kind(),
 		}),

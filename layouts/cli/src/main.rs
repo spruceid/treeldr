@@ -58,12 +58,27 @@ fn load_file(files: &SimpleFiles<String, String>, file_id: usize) -> bool {
 				Ok(_layout) => true,
 				Err(e) => {
 					let span = code_map.get(e.position()).unwrap().span;
+
+					let mut labels =
+						vec![Label::primary(file_id, span).with_message(e.to_string())];
+
+					let mut notes = Vec::new();
+					for hint in e.hints() {
+						match hint.position() {
+							Some(i) => {
+								let span = code_map.get(i).unwrap().span;
+								labels.push(
+									Label::secondary(file_id, span).with_message(hint.to_string()),
+								)
+							}
+							None => notes.push(hint.to_string()),
+						}
+					}
+
 					let diagnostic = Diagnostic::error()
 						.with_message("Layout syntax error")
-						.with_labels(vec![
-							Label::primary(file_id, span).with_message(e.to_string())
-						])
-						.with_notes(e.hints().into_iter().map(|h| h.to_string()).collect());
+						.with_labels(labels)
+						.with_notes(notes);
 
 					let writer = StandardStream::stderr(ColorChoice::Always);
 					let config = codespan_reporting::term::Config::default();
