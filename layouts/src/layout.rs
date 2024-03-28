@@ -13,6 +13,8 @@ pub use literal::{
 	NumberLayoutType, TextStringLayout, TextStringLayoutType, UnitLayout, UnitLayoutType,
 };
 pub use product::{ProductLayout, ProductLayoutType};
+use rdf_types::Term;
+use static_assertions::assert_impl_all;
 use std::{collections::BTreeMap, hash::Hash};
 pub use sum::{SumLayout, SumLayoutType};
 
@@ -108,6 +110,8 @@ pub enum Layout<R> {
 	/// This layout accepts any number of inputs.
 	Always,
 }
+
+assert_impl_all!(Layout<Term>: Send, Sync);
 
 impl<R: Ord> PartialOrd for Layout<R> {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
