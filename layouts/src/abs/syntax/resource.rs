@@ -1,4 +1,4 @@
-use json_syntax::{Kind, TryFromJsonSyntax};
+use json_syntax::{Kind, TryFromJson};
 use rdf_types::LexicalLiteralTypeRef;
 use serde::{Deserialize, Serialize};
 use xsd_types::{XSD_BOOLEAN, XSD_STRING};
@@ -22,10 +22,10 @@ pub enum Resource {
 	TypedString(TypedString),
 }
 
-impl TryFromJsonSyntax for Resource {
+impl TryFromJson for Resource {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,

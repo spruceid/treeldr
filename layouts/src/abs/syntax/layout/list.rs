@@ -1,4 +1,4 @@
-use json_syntax::{Kind, TryFromJsonObject, TryFromJsonSyntax};
+use json_syntax::{Kind, TryFromJson, TryFromJsonObject};
 use rdf_types::{dataset::BTreeDataset, RDF_FIRST, RDF_REST};
 use serde::{Deserialize, Serialize};
 
@@ -138,10 +138,10 @@ pub enum ListNodeOrLayout {
 	Layout(LayoutRef),
 }
 
-impl TryFromJsonSyntax for ListNodeOrLayout {
+impl TryFromJson for ListNodeOrLayout {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -383,10 +383,10 @@ pub struct ListItem {
 	pub property: Option<Pattern>,
 }
 
-impl TryFromJsonSyntax for ListItem {
+impl TryFromJson for ListItem {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,

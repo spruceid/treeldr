@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{collections::BTreeMap, str::FromStr};
 
-use json_syntax::{array::JsonArray, TryFromJsonSyntax};
+use json_syntax::{array::JsonArray, TryFromJson};
 use lazy_static::lazy_static;
 use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
@@ -282,10 +282,10 @@ impl Default for Value {
 	}
 }
 
-impl TryFromJsonSyntax for Value {
+impl TryFromJson for Value {
 	type Error = std::convert::Infallible;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -299,9 +299,7 @@ impl TryFromJsonSyntax for Value {
 			json_syntax::Value::String(s) => Ok(Self::Literal(Literal::TextString(s.to_string()))),
 			json_syntax::Value::Array(a) => Ok(Self::List(
 				a.iter_mapped(code_map, offset)
-					.map(|item| {
-						Self::try_from_json_syntax_at(item.value, code_map, item.offset).unwrap()
-					})
+					.map(|item| Self::try_from_json_at(item.value, code_map, item.offset).unwrap())
 					.collect(),
 			)),
 			json_syntax::Value::Object(o) => Ok(Self::Record(
@@ -309,7 +307,7 @@ impl TryFromJsonSyntax for Value {
 					.map(|entry| {
 						(
 							entry.value.key.value.to_string(),
-							Self::try_from_json_syntax_at(
+							Self::try_from_json_at(
 								entry.value.value.value,
 								code_map,
 								entry.value.value.offset,

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use json_syntax::{Kind, TryFromJsonObject, TryFromJsonSyntax};
+use json_syntax::{Kind, TryFromJson, TryFromJsonObject};
 use serde::{Deserialize, Serialize};
 
 use crate::abs::{
@@ -26,10 +26,10 @@ pub struct SumLayout {
 	pub variants: BTreeMap<String, Variant>,
 }
 
-impl TryFromJsonSyntax for SumLayout {
+impl TryFromJson for SumLayout {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -68,10 +68,10 @@ pub struct Variant {
 	pub dataset: Dataset,
 }
 
-impl TryFromJsonSyntax for Variant {
+impl TryFromJson for Variant {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -135,10 +135,10 @@ pub enum VariantFormatOrLayout {
 	Layout(LayoutRef),
 }
 
-impl TryFromJsonSyntax for VariantFormatOrLayout {
+impl TryFromJson for VariantFormatOrLayout {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -151,7 +151,7 @@ impl TryFromJsonSyntax for VariantFormatOrLayout {
 				if value.contains_key("type") {
 					LayoutRef::try_from_json_object_at(value, code_map, offset).map(Self::Layout)
 				} else {
-					VariantFormat::try_from_json_syntax_at(json, code_map, offset).map(Self::Format)
+					VariantFormat::try_from_json_at(json, code_map, offset).map(Self::Format)
 				}
 			}
 			other => Err(Error::Unexpected {
@@ -193,10 +193,10 @@ pub struct VariantFormat {
 	pub graph: Option<Option<Pattern>>,
 }
 
-impl TryFromJsonSyntax for VariantFormat {
+impl TryFromJson for VariantFormat {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -281,14 +281,14 @@ impl From<Vec<Pattern>> for VariantInput {
 	}
 }
 
-impl TryFromJsonSyntax for VariantInput {
+impl TryFromJson for VariantInput {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		OneOrMany::try_from_json_syntax_at(json, code_map, offset).map(Self)
+		OneOrMany::try_from_json_at(json, code_map, offset).map(Self)
 	}
 }

@@ -50,11 +50,11 @@ fn main() -> ExitCode {
 }
 
 fn load_file(files: &SimpleFiles<String, String>, file_id: usize) -> bool {
-	use json_syntax::{Parse, TryFromJsonSyntax};
+	use json_syntax::{Parse, TryFromJson};
 
 	match json_syntax::Value::parse_str(files.get(file_id).unwrap().source().as_str()) {
 		Ok((json, code_map)) => {
-			match treeldr_layouts::abs::syntax::Layout::try_from_json_syntax(&json, &code_map) {
+			match treeldr_layouts::abs::syntax::Layout::try_from_json(&json, &code_map) {
 				Ok(_layout) => true,
 				Err(e) => {
 					let span = code_map.get(e.position()).unwrap().span;

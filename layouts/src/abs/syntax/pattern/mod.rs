@@ -6,7 +6,7 @@ use core::fmt;
 
 pub use compact_iri::*;
 use iref::{IriRef, IriRefBuf};
-use json_syntax::{Kind, TryFromJsonSyntax};
+use json_syntax::{Kind, TryFromJson};
 pub use literal::*;
 use rdf_types::{BlankId, BlankIdBuf, Id, Term, RDF_NIL};
 use serde::{Deserialize, Serialize};
@@ -71,10 +71,10 @@ impl Pattern {
 	}
 }
 
-impl TryFromJsonSyntax for Pattern {
+impl TryFromJson for Pattern {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,

@@ -1,4 +1,4 @@
-use json_syntax::{TryFromJsonObject, TryFromJsonSyntax};
+use json_syntax::{TryFromJson, TryFromJsonObject};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -106,10 +106,10 @@ impl DataLayout {
 	}
 }
 
-impl TryFromJsonSyntax for DataLayout {
+impl TryFromJson for DataLayout {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,

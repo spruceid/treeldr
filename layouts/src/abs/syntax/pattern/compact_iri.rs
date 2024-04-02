@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use iref::{IriBuf, IriRef, IriRefBuf};
-use json_syntax::TryFromJsonSyntax;
+use json_syntax::TryFromJson;
 use serde::{Deserialize, Serialize};
 use xsd_types::XSD_STRING;
 
@@ -59,10 +59,10 @@ impl From<IriBuf> for CompactIri {
 	}
 }
 
-impl TryFromJsonSyntax for CompactIri {
+impl TryFromJson for CompactIri {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		_code_map: &json_syntax::CodeMap,
 		offset: usize,

@@ -1,6 +1,6 @@
 use core::fmt;
 use iref::IriBuf;
-use json_syntax::{Kind, TryFromJsonObject, TryFromJsonSyntax};
+use json_syntax::{Kind, TryFromJson, TryFromJsonObject};
 use rdf_types::{
 	generator,
 	interpretation::{IriInterpretationMut, LiteralInterpretationMut},
@@ -145,10 +145,10 @@ impl Layout {
 	}
 }
 
-impl TryFromJsonSyntax for Layout {
+impl TryFromJson for Layout {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -295,10 +295,10 @@ impl TryFromJsonObject for LayoutRef {
 	}
 }
 
-impl TryFromJsonSyntax for LayoutRef {
+impl TryFromJson for LayoutRef {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -373,17 +373,15 @@ impl From<Vec<String>> for LayoutInput {
 	}
 }
 
-impl TryFromJsonSyntax for LayoutInput {
+impl TryFromJson for LayoutInput {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		Ok(Self(OneOrMany::try_from_json_syntax_at(
-			json, code_map, offset,
-		)?))
+		Ok(Self(OneOrMany::try_from_json_at(json, code_map, offset)?))
 	}
 }
 
@@ -471,17 +469,15 @@ impl ExtraProperties {
 	}
 }
 
-impl TryFromJsonSyntax for ExtraProperties {
+impl TryFromJson for ExtraProperties {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		Ok(Self(BTreeMap::try_from_json_syntax_at(
-			json, code_map, offset,
-		)?))
+		Ok(Self(BTreeMap::try_from_json_at(json, code_map, offset)?))
 	}
 }
 
@@ -540,15 +536,15 @@ impl From<Vec<Pattern>> for ValueInput {
 	}
 }
 
-impl TryFromJsonSyntax for ValueInput {
+impl TryFromJson for ValueInput {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		OneOrMany::try_from_json_syntax_at(json, code_map, offset).map(Self)
+		OneOrMany::try_from_json_at(json, code_map, offset).map(Self)
 	}
 }
 

@@ -1,4 +1,4 @@
-use json_syntax::TryFromJsonSyntax;
+use json_syntax::TryFromJson;
 use serde::{Deserialize, Serialize};
 
 use super::{expect_array, Build, BuildError, Context, Error, Pattern, Scope};
@@ -19,15 +19,15 @@ impl From<Vec<Quad>> for Dataset {
 	}
 }
 
-impl TryFromJsonSyntax for Dataset {
+impl TryFromJson for Dataset {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		Vec::try_from_json_syntax_at(json, code_map, offset).map(Self)
+		Vec::try_from_json_at(json, code_map, offset).map(Self)
 	}
 }
 
@@ -55,10 +55,10 @@ pub struct Quad(
 	#[serde(default, skip_serializing_if = "Option::is_none")] pub Option<Pattern>,
 );
 
-impl TryFromJsonSyntax for Quad {
+impl TryFromJson for Quad {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -74,15 +74,15 @@ impl TryFromJsonSyntax for Quad {
 		}
 
 		let mut component_offset = offset + 1;
-		let s = Pattern::try_from_json_syntax_at(&array[0], code_map, component_offset)?;
+		let s = Pattern::try_from_json_at(&array[0], code_map, component_offset)?;
 		component_offset += code_map.get(component_offset).unwrap().volume;
-		let p = Pattern::try_from_json_syntax_at(&array[1], code_map, component_offset)?;
+		let p = Pattern::try_from_json_at(&array[1], code_map, component_offset)?;
 		component_offset += code_map.get(component_offset).unwrap().volume;
-		let o = Pattern::try_from_json_syntax_at(&array[2], code_map, component_offset)?;
+		let o = Pattern::try_from_json_at(&array[2], code_map, component_offset)?;
 		component_offset += code_map.get(component_offset).unwrap().volume;
 		let g = array
 			.get(3)
-			.map(|g| Pattern::try_from_json_syntax_at(g, code_map, component_offset))
+			.map(|g| Pattern::try_from_json_at(g, code_map, component_offset))
 			.transpose()?;
 
 		Ok(Self(s, p, o, g))

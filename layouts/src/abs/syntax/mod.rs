@@ -1,6 +1,6 @@
 use core::fmt;
 
-use json_syntax::{array::JsonArray, Kind, TryFromJsonObject, TryFromJsonSyntax};
+use json_syntax::{array::JsonArray, Kind, TryFromJson, TryFromJsonObject};
 use serde::{Deserialize, Serialize};
 
 mod build;
@@ -127,7 +127,7 @@ impl From<json_syntax::code_map::Mapped<json_syntax::Unexpected>> for Error {
 	fn from(value: json_syntax::code_map::Mapped<json_syntax::Unexpected>) -> Self {
 		Self::Unexpected {
 			offset: value.offset,
-			expected: value.value.expected.into(),
+			expected: value.value.expected,
 			found: value.value.found,
 		}
 	}
@@ -235,7 +235,7 @@ pub(crate) fn expect_string(json: &json_syntax::Value, offset: usize) -> Result<
 	}
 }
 
-pub(crate) fn get_entry<T: json_syntax::TryFromJsonSyntax>(
+pub(crate) fn get_entry<T: json_syntax::TryFromJson>(
 	object: &json_syntax::Object,
 	key: &str,
 	code_map: &json_syntax::CodeMap,
@@ -250,19 +250,16 @@ where
 
 	match entry {
 		Some(entry) => {
-			let t = T::try_from_json_syntax_at(
-				entry.value.value.value,
-				code_map,
-				entry.value.value.offset,
-			)
-			.map_err(Into::into)?;
+			let t =
+				T::try_from_json_at(entry.value.value.value, code_map, entry.value.value.offset)
+					.map_err(Into::into)?;
 			Ok(Some(t))
 		}
 		None => Ok(None),
 	}
 }
 
-pub(crate) fn require_entry<T: json_syntax::TryFromJsonSyntax>(
+pub(crate) fn require_entry<T: json_syntax::TryFromJson>(
 	object: &json_syntax::Object,
 	key: &str,
 	code_map: &json_syntax::CodeMap,
@@ -277,7 +274,7 @@ where
 
 	match entry {
 		Some(entry) => {
-			T::try_from_json_syntax_at(entry.value.value.value, code_map, entry.value.value.offset)
+			T::try_from_json_at(entry.value.value.value, code_map, entry.value.value.offset)
 				.map_err(Into::into)
 		}
 		None => Err(Error::MissingRequiredEntry {
@@ -374,10 +371,10 @@ impl<T> From<Vec<T>> for OneOrMany<T> {
 	}
 }
 
-impl<T: TryFromJsonSyntax> TryFromJsonSyntax for OneOrMany<T> {
+impl<T: TryFromJson> TryFromJson for OneOrMany<T> {
 	type Error = T::Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -386,10 +383,10 @@ impl<T: TryFromJsonSyntax> TryFromJsonSyntax for OneOrMany<T> {
 			json_syntax::Value::Array(array) => Ok(Self::Many(
 				array
 					.iter_mapped(code_map, offset)
-					.map(|item| T::try_from_json_syntax_at(item.value, code_map, item.offset))
+					.map(|item| T::try_from_json_at(item.value, code_map, item.offset))
 					.collect::<Result<_, _>>()?,
 			)),
-			other => T::try_from_json_syntax_at(other, code_map, offset).map(Self::One),
+			other => T::try_from_json_at(other, code_map, offset).map(Self::One),
 		}
 	}
 }
@@ -401,10 +398,10 @@ pub enum ValueFormatOrLayout {
 	Layout(LayoutRef),
 }
 
-impl TryFromJsonSyntax for ValueFormatOrLayout {
+impl TryFromJson for ValueFormatOrLayout {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -510,16 +507,14 @@ impl From<Vec<String>> for ValueIntro {
 	}
 }
 
-impl TryFromJsonSyntax for ValueIntro {
+impl TryFromJson for ValueIntro {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		Ok(Self(OneOrMany::try_from_json_syntax_at(
-			json, code_map, offset,
-		)?))
+		Ok(Self(OneOrMany::try_from_json_at(json, code_map, offset)?))
 	}
 }

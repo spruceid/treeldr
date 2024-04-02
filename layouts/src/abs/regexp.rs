@@ -1,15 +1,15 @@
 use btree_range_map::RangeSet;
-use json_syntax::TryFromJsonSyntax;
+use json_syntax::TryFromJson;
 use std::{fmt, str::FromStr};
 
 use crate::utils::{Automaton, DetAutomaton};
 
 use super::syntax::{expect_string, Error};
 
-impl TryFromJsonSyntax for RegExp {
+impl TryFromJson for RegExp {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		_code_map: &json_syntax::CodeMap,
 		offset: usize,

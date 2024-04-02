@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use json_syntax::{TryFromJsonObject, TryFromJsonSyntax};
+use json_syntax::{TryFromJson, TryFromJsonObject};
 use serde::{Deserialize, Serialize};
 
 use crate::abs::{
@@ -26,10 +26,10 @@ pub struct ProductLayout {
 	pub fields: BTreeMap<String, Field>,
 }
 
-impl TryFromJsonSyntax for ProductLayout {
+impl TryFromJson for ProductLayout {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
@@ -128,10 +128,10 @@ pub struct Field {
 	pub required: bool,
 }
 
-impl TryFromJsonSyntax for Field {
+impl TryFromJson for Field {
 	type Error = Error;
 
-	fn try_from_json_syntax_at(
+	fn try_from_json_at(
 		json: &json_syntax::Value,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
