@@ -4,7 +4,7 @@ use std::{fs, path::PathBuf, process::ExitCode};
 use treeldr_layouts::{abs, distill::RdfContext, layout::LayoutType, Ref};
 
 #[derive(clap::Parser)]
-#[clap(name="treeldr", author, version, about, long_about = None)]
+#[clap(name="tldr-rs", author, version, about, long_about = None)]
 struct Args {
 	/// Input files.
 	filenames: Vec<PathBuf>,

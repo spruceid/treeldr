@@ -1,6 +1,7 @@
 use core::fmt;
 use std::{collections::BTreeMap, str::FromStr};
 
+use json_syntax::{array::JsonArray, TryFromJson};
 use lazy_static::lazy_static;
 use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
@@ -195,6 +196,28 @@ impl From<serde_json::Number> for Number {
 	}
 }
 
+impl From<json_syntax::NumberBuf> for Number {
+	fn from(value: json_syntax::NumberBuf) -> Self {
+		Self(
+			xsd_types::Decimal::parse_xsd(value.as_str())
+				.ok()
+				.unwrap()
+				.into(),
+		)
+	}
+}
+
+impl<'a> From<&'a json_syntax::Number> for Number {
+	fn from(value: &'a json_syntax::Number) -> Self {
+		Self(
+			xsd_types::Decimal::parse_xsd(value.as_str())
+				.ok()
+				.unwrap()
+				.into(),
+		)
+	}
+}
+
 /// Error raised when trying to convert a non-decimal number to JSON.
 #[derive(Debug, thiserror::Error)]
 #[error("not a JSON number: {0}")]
@@ -256,6 +279,45 @@ impl Value {
 impl Default for Value {
 	fn default() -> Self {
 		Self::unit()
+	}
+}
+
+impl TryFromJson for Value {
+	type Error = std::convert::Infallible;
+
+	fn try_from_json_at(
+		json: &json_syntax::Value,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		match json {
+			json_syntax::Value::Null => Ok(Self::Literal(Literal::Unit)),
+			json_syntax::Value::Boolean(b) => Ok(Self::Literal(Literal::Boolean(*b))),
+			json_syntax::Value::Number(n) => {
+				Ok(Self::Literal(Literal::Number(n.as_number().into())))
+			}
+			json_syntax::Value::String(s) => Ok(Self::Literal(Literal::TextString(s.to_string()))),
+			json_syntax::Value::Array(a) => Ok(Self::List(
+				a.iter_mapped(code_map, offset)
+					.map(|item| Self::try_from_json_at(item.value, code_map, item.offset).unwrap())
+					.collect(),
+			)),
+			json_syntax::Value::Object(o) => Ok(Self::Record(
+				o.iter_mapped(code_map, offset)
+					.map(|entry| {
+						(
+							entry.value.key.value.to_string(),
+							Self::try_from_json_at(
+								entry.value.value.value,
+								code_map,
+								entry.value.value.offset,
+							)
+							.unwrap(),
+						)
+					})
+					.collect(),
+			)),
+		}
 	}
 }
 

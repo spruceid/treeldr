@@ -1,6 +1,7 @@
 [workspace]
 members = [
 	"layouts",
+	"layouts/cli",
 	"generators/rust/treeldr-rs",
 	"generators/rust/treeldr-rs-macros",
 	"generators/rust/generator"
@@ -32,12 +33,14 @@ langtag = "0.4.0"
 thiserror = "1.0.50"
 serde = "1.0.192"
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
+json-syntax = "0.12.3"
+codespan-reporting = "0.11.1"
 
 locspan = "0.8.2"
 nquads-syntax = "0.19.0"
 
 clap = "4.0"
-stderrlog = "0.5"
+stderrlog = "0.6"
 
 syn = "2.0.29"
 proc-macro2 = "1.0.66"

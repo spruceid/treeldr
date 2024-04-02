@@ -15,7 +15,7 @@ pub enum Error {
 	Parse(#[from] crate::parse::Error),
 
 	#[error(transparent)]
-	Build(#[from] treeldr_layouts::abs::syntax::Error),
+	Build(#[from] treeldr_layouts::abs::syntax::BuildError),
 
 	#[error("invalid datatype `{0}`")]
 	InvalidDatatype(String),

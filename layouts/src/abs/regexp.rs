@@ -1,7 +1,23 @@
 use btree_range_map::RangeSet;
+use json_syntax::TryFromJson;
 use std::{fmt, str::FromStr};
 
 use crate::utils::{Automaton, DetAutomaton};
+
+use super::syntax::{expect_string, Error};
+
+impl TryFromJson for RegExp {
+	type Error = Error;
+
+	fn try_from_json_at(
+		json: &json_syntax::Value,
+		_code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Result<Self, Self::Error> {
+		let value = expect_string(json, offset)?;
+		Self::parse(value).map_err(|e| Error::InvalidRegex(offset, e))
+	}
+}
 
 /// Regular expression.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

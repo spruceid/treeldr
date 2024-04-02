@@ -1,0 +1,14 @@
+[package]
+name = "tldr"
+description = "TreeLDR Distiller"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+treeldr-layouts.workspace = true
+clap = { workspace = true, features = ["derive"] }
+stderrlog.workspace = true
+json-syntax.workspace = true
+codespan-reporting.workspace = true
