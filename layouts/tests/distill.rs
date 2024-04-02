@@ -1,14 +1,45 @@
-use nquads_syntax::Parse;
+use json_syntax::{Parse as ParseJson, TryFromJson};
+use nquads_syntax::Parse as ParseNQuads;
 use paste::paste;
 use rdf_types::dataset::IndexedBTreeDataset;
 use rdf_types::{BlankIdBuf, Term};
 use static_iref::iri;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use treeldr_layouts::layout::LayoutType;
 use treeldr_layouts::utils::strip_rdf_quad;
+use treeldr_layouts::{Layouts, Ref};
 
 fn file_path(id: &str, suffix: &str) -> PathBuf {
 	format!("{}/tests/distill/{id}{suffix}", env!("CARGO_MANIFEST_DIR")).into()
+}
+
+fn load_layout(layout_path: &Path) -> (Layouts, Ref<LayoutType>) {
+	// Initialize the layout builder.
+	let mut builder = treeldr_layouts::abs::Builder::new();
+
+	// Parse the layout definition.
+	let raw_json = fs::read_to_string(layout_path).unwrap();
+	let (layout_json, layout_code_map) = json_syntax::Value::parse_str(&raw_json).unwrap();
+	match treeldr_layouts::abs::syntax::Layout::try_from_json(&layout_json, &layout_code_map) {
+		Ok(layout_abs) => {
+			// We also test parsing through `serde`.
+			if let Err(e) = serde_json::from_str::<treeldr_layouts::abs::syntax::Layout>(&raw_json)
+			{
+				panic!("layout `serde` parse error: {e}")
+			}
+
+			let layout_ref = layout_abs.build(&mut builder).unwrap();
+
+			// Compile the layouts.
+			let layouts = builder.build();
+
+			(layouts, layout_ref)
+		}
+		Err(e) => {
+			panic!("layout parse error: {e}")
+		}
+	}
 }
 
 fn hydrate<const N: usize>(id: &str, inputs: [Term; N]) {
@@ -26,24 +57,12 @@ fn hydrate<const N: usize>(id: &str, inputs: [Term; N]) {
 			.map(strip_rdf_quad)
 			.collect();
 
-	// Initialize the layout builder.
-	let mut builder = treeldr_layouts::abs::Builder::new();
-
-	// Parse the layout definition.
-	let layout_ref = serde_json::from_str::<treeldr_layouts::abs::syntax::Layout>(
-		&fs::read_to_string(layout_path).unwrap(),
-	)
-	.unwrap()
-	.build(&mut builder)
-	.unwrap();
+	let (layouts, layout_ref) = load_layout(&layout_path);
 
 	// Parse the expected output.
 	let expected_json: serde_json::Value =
 		fs::read_to_string(output_path).unwrap().parse().unwrap();
 	let expected: treeldr_layouts::Value = expected_json.into();
-
-	// Compile the layouts.
-	let layouts = builder.build();
 
 	// Hydrate.
 	let output = treeldr_layouts::distill::hydrate(&layouts, &dataset, &layout_ref, &inputs)
@@ -73,19 +92,7 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 			.map(strip_rdf_quad)
 			.collect();
 
-	// Initialize the layout builder.
-	let mut builder = treeldr_layouts::abs::Builder::new();
-
-	// Parse the layout definition.
-	let layout_ref = serde_json::from_str::<treeldr_layouts::abs::syntax::Layout>(
-		&fs::read_to_string(layout_path).unwrap(),
-	)
-	.unwrap()
-	.build(&mut builder)
-	.unwrap();
-
-	// Compile the layouts.
-	let layouts = builder.build();
+	let (layouts, layout_ref) = load_layout(&layout_path);
 
 	// Hydrate.
 	let (output_dataset, output_values) = treeldr_layouts::distill::dehydrate(
