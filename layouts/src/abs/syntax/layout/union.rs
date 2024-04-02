@@ -2,7 +2,7 @@ use json_syntax::TryFromJsonObject;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-	abs::syntax::{check_type, Build, BuildError, Context, Error, Scope},
+	abs::syntax::{check_type, Build, BuildError, Context, Error, ObjectUnusedEntries, Scope},
 	layout::LayoutType,
 	Ref,
 };
@@ -27,11 +27,25 @@ impl TryFromJsonObject for UnionLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		check_type(object, UnionLayoutType::NAME, code_map, offset)?;
-		Ok(Self {
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			UnionLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let result = Self {
 			type_: UnionLayoutType,
-			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
-		})
+			header: LayoutHeader::try_from_json_object_at(
+				object,
+				&mut unused_entries,
+				code_map,
+				offset,
+			)?,
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 

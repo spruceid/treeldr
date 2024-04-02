@@ -7,7 +7,7 @@ use crate::abs::{
 	self,
 	syntax::{
 		check_type, expect_object, get_entry, require_entry, Build, BuildError, Context, Dataset,
-		Error, OneOrMany, Pattern, Scope, VariableName,
+		Error, ObjectUnusedEntries, OneOrMany, Pattern, Scope, VariableName,
 	},
 };
 
@@ -47,12 +47,27 @@ impl TryFromJsonObject for SumLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		check_type(object, SumLayoutType::NAME, code_map, offset)?;
-		Ok(Self {
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			SumLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let result = Self {
 			type_: SumLayoutType,
-			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
-			variants: get_entry(object, "variants", code_map, offset)?.unwrap_or_default(),
-		})
+			header: LayoutHeader::try_from_json_object_at(
+				object,
+				&mut unused_entries,
+				code_map,
+				offset,
+			)?,
+			variants: get_entry(object, "variants", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 
@@ -89,11 +104,16 @@ impl TryFromJsonObject for Variant {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		Ok(Self {
-			intro: get_entry(object, "intro", code_map, offset)?.unwrap_or_default(),
-			value: require_entry(object, "value", code_map, offset)?,
-			dataset: get_entry(object, "dataset", code_map, offset)?.unwrap_or_default(),
-		})
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		let result = Self {
+			intro: get_entry(object, "intro", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			value: require_entry(object, "value", &mut unused_entries, code_map, offset)?,
+			dataset: get_entry(object, "dataset", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 
@@ -214,11 +234,16 @@ impl TryFromJsonObject for VariantFormat {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		Ok(Self {
-			layout: require_entry(object, "layout", code_map, offset)?,
-			input: get_entry(object, "input", code_map, offset)?.unwrap_or_default(),
-			graph: get_entry(object, "graph", code_map, offset)?.unwrap_or_default(),
-		})
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		let result = Self {
+			layout: require_entry(object, "layout", &mut unused_entries, code_map, offset)?,
+			input: get_entry(object, "input", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			graph: get_entry(object, "graph", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 

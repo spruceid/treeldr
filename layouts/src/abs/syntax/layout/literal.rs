@@ -6,7 +6,7 @@ use crate::{
 		self,
 		syntax::{
 			check_type, expect_object, get_entry, require_entry, require_type, Build, BuildError,
-			CompactIri, Context, Error, ExpectedType, Pattern, Scope,
+			CompactIri, Context, Error, ExpectedType, ObjectUnusedEntries, Pattern, Scope,
 		},
 		RegExp,
 	},
@@ -42,7 +42,7 @@ impl TryFromJsonObject for LiteralLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		let ty = require_type(object, code_map, offset)?;
+		let ty = require_type(object, None, code_map, offset)?;
 		match ty.value {
 			IdLayoutType::NAME => {
 				IdLayout::try_from_json_object_at(object, code_map, offset).map(Self::Id)
@@ -127,7 +127,7 @@ impl TryFromJsonObject for DataLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Error> {
-		let ty = require_type(object, code_map, offset)?;
+		let ty = require_type(object, None, code_map, offset)?;
 		match ty.value {
 			UnitLayoutType::NAME => {
 				UnitLayout::try_from_json_object_at(object, code_map, offset).map(Self::Unit)
@@ -205,10 +205,19 @@ impl TryFromJsonObject for UnitLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Error> {
-		check_type(object, UnitLayoutType::NAME, code_map, offset)?;
-		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
-		let const_ = get_entry(object, "const", code_map, offset)?.unwrap_or_default();
-
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			UnitLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let header =
+			LayoutHeader::try_from_json_object_at(object, &mut unused_entries, code_map, offset)?;
+		let const_ =
+			get_entry(object, "const", &mut unused_entries, code_map, offset)?.unwrap_or_default();
+		unused_entries.check()?;
 		Ok(Self {
 			type_: UnitLayoutType,
 			header,
@@ -306,11 +315,19 @@ impl TryFromJsonObject for BooleanLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Error> {
-		check_type(object, BooleanLayoutType::NAME, code_map, offset)?;
-		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
-		let resource = get_entry(object, "resource", code_map, offset)?;
-		let datatype = get_entry(object, "datatype", code_map, offset)?;
-
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			BooleanLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let header =
+			LayoutHeader::try_from_json_object_at(object, &mut unused_entries, code_map, offset)?;
+		let resource = get_entry(object, "resource", &mut unused_entries, code_map, offset)?;
+		let datatype = get_entry(object, "datatype", &mut unused_entries, code_map, offset)?;
+		unused_entries.check()?;
 		Ok(Self {
 			type_: BooleanLayoutType,
 			header,
@@ -367,11 +384,19 @@ impl TryFromJsonObject for NumberLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Error> {
-		check_type(object, NumberLayoutType::NAME, code_map, offset)?;
-		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
-		let resource = get_entry(object, "resource", code_map, offset)?;
-		let datatype = require_entry(object, "datatype", code_map, offset)?;
-
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			NumberLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let header =
+			LayoutHeader::try_from_json_object_at(object, &mut unused_entries, code_map, offset)?;
+		let resource = get_entry(object, "resource", &mut unused_entries, code_map, offset)?;
+		let datatype = require_entry(object, "datatype", &mut unused_entries, code_map, offset)?;
+		unused_entries.check()?;
 		Ok(Self {
 			type_: NumberLayoutType,
 			header,
@@ -428,11 +453,19 @@ impl TryFromJsonObject for ByteStringLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Error> {
-		check_type(object, ByteStringLayoutType::NAME, code_map, offset)?;
-		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
-		let resource = get_entry(object, "resource", code_map, offset)?;
-		let datatype = require_entry(object, "datatype", code_map, offset)?;
-
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			ByteStringLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let header =
+			LayoutHeader::try_from_json_object_at(object, &mut unused_entries, code_map, offset)?;
+		let resource = get_entry(object, "resource", &mut unused_entries, code_map, offset)?;
+		let datatype = require_entry(object, "datatype", &mut unused_entries, code_map, offset)?;
+		unused_entries.check()?;
 		Ok(Self {
 			type_: ByteStringLayoutType,
 			header,
@@ -468,12 +501,20 @@ impl TryFromJsonObject for TextStringLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Error> {
-		check_type(object, TextStringLayoutType::NAME, code_map, offset)?;
-		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
-		let pattern = get_entry(object, "pattern", code_map, offset)?;
-		let resource = get_entry(object, "resource", code_map, offset)?;
-		let datatype = get_entry(object, "datatype", code_map, offset)?;
-
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			TextStringLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let header =
+			LayoutHeader::try_from_json_object_at(object, &mut unused_entries, code_map, offset)?;
+		let pattern = get_entry(object, "pattern", &mut unused_entries, code_map, offset)?;
+		let resource = get_entry(object, "resource", &mut unused_entries, code_map, offset)?;
+		let datatype = get_entry(object, "datatype", &mut unused_entries, code_map, offset)?;
+		unused_entries.check()?;
 		Ok(Self {
 			type_: TextStringLayoutType,
 			header,
@@ -538,11 +579,19 @@ impl TryFromJsonObject for IdLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Error> {
-		check_type(object, IdLayoutType::NAME, code_map, offset)?;
-		let header = LayoutHeader::try_from_json_object_at(object, code_map, offset)?;
-		let pattern = get_entry(object, "pattern", code_map, offset)?;
-		let resource = get_entry(object, "resource", code_map, offset)?;
-
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			IdLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let header =
+			LayoutHeader::try_from_json_object_at(object, &mut unused_entries, code_map, offset)?;
+		let pattern = get_entry(object, "pattern", &mut unused_entries, code_map, offset)?;
+		let resource = get_entry(object, "resource", &mut unused_entries, code_map, offset)?;
+		unused_entries.check()?;
 		Ok(Self {
 			type_: IdLayoutType,
 			header,

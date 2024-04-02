@@ -31,7 +31,8 @@ use crate::{
 
 use super::{
 	get_entry, require_type, Build, BuildError, CompactIri, Context, Dataset, Error, ExpectedType,
-	InvalidCompactIri, OneOrMany, Pattern, Resource, Scope, ValueFormat, VariableName,
+	InvalidCompactIri, ObjectUnusedEntries, OneOrMany, Pattern, Resource, Scope, ValueFormat,
+	VariableName,
 };
 
 /// Abstract syntax layout.
@@ -175,7 +176,7 @@ impl TryFromJsonObject for Layout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		let ty = require_type(object, code_map, offset)?;
+		let ty = require_type(object, None, code_map, offset)?;
 		match ty.value {
 			IdLayoutType::NAME
 			| UnitLayoutType::NAME
@@ -413,17 +414,23 @@ pub struct LayoutHeader {
 impl LayoutHeader {
 	fn try_from_json_object_at(
 		object: &json_syntax::Object,
+		unused_entries: &mut ObjectUnusedEntries,
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Error> {
 		Ok(Self {
-			base: get_entry(object, "base", code_map, offset)?,
-			prefixes: get_entry(object, "prefixes", code_map, offset)?.unwrap_or_default(),
-			id: get_entry(object, "id", code_map, offset)?,
-			input: get_entry(object, "input", code_map, offset)?.unwrap_or_default(),
-			intro: get_entry(object, "intro", code_map, offset)?.unwrap_or_default(),
-			dataset: get_entry(object, "dataset", code_map, offset)?.unwrap_or_default(),
-			extra: get_entry(object, "extra", code_map, offset)?.unwrap_or_default(),
+			base: get_entry(object, "base", unused_entries, code_map, offset)?,
+			prefixes: get_entry(object, "prefixes", unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			id: get_entry(object, "id", unused_entries, code_map, offset)?,
+			input: get_entry(object, "input", unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			intro: get_entry(object, "intro", unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			dataset: get_entry(object, "dataset", unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			extra: get_entry(object, "extra", unused_entries, code_map, offset)?
+				.unwrap_or_default(),
 		})
 	}
 }

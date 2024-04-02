@@ -2,7 +2,7 @@ use iref::IriBuf;
 use langtag::LangTagBuf;
 use rdf_types::XSD_STRING;
 
-use crate::abs::syntax::{get_entry, require_entry, BuildError, Error, Scope};
+use crate::abs::syntax::{get_entry, require_entry, BuildError, Error, ObjectUnusedEntries, Scope};
 
 use super::CompactIri;
 
@@ -22,13 +22,15 @@ impl LiteralValue {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Error> {
-		let type_ = match get_entry(object, "type", code_map, offset)? {
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		let type_ = match get_entry(object, "type", &mut unused_entries, code_map, offset)? {
 			Some(ty) => {
 				// TODO check if language is present.
 				LiteralType::Iri(LiteralTypeIri { type_: ty })
 			}
 			None => {
-				let language: String = require_entry(object, "language", code_map, offset)?;
+				let language: String =
+					require_entry(object, "language", &mut unused_entries, code_map, offset)?;
 				match LangTagBuf::new(language) {
 					Ok(language) => LiteralType::Language(LiteralTypeLanguage { language }),
 					Err(e) => return Err(Error::InvalidLangTag(offset, e.0)),
@@ -36,10 +38,10 @@ impl LiteralValue {
 			}
 		};
 
-		Ok(Self {
-			value: require_entry(object, "value", code_map, offset)?,
-			type_,
-		})
+		let value = require_entry(object, "value", &mut unused_entries, code_map, offset)?;
+		unused_entries.check()?;
+
+		Ok(Self { value, type_ })
 	}
 }
 

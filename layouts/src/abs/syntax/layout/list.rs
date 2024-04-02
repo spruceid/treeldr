@@ -6,8 +6,8 @@ use crate::abs::{
 	self,
 	syntax::{
 		check_type, expect_object, get_entry, require_entry, require_type, Build, BuildError,
-		CompactIri, Context, Dataset, Error, ExpectedType, Pattern, Scope, ValueFormatOrLayout,
-		ValueIntro,
+		CompactIri, Context, Dataset, Error, ExpectedType, ObjectUnusedEntries, Pattern, Scope,
+		ValueFormatOrLayout, ValueIntro,
 	},
 };
 
@@ -41,7 +41,7 @@ impl TryFromJsonObject for ListLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		let ty = require_type(object, code_map, offset)?;
+		let ty = require_type(object, None, code_map, offset)?;
 		match ty.value {
 			OrderedListLayoutType::NAME => {
 				OrderedListLayout::try_from_json_object_at(object, code_map, offset)
@@ -118,16 +118,30 @@ impl TryFromJsonObject for OrderedListLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		check_type(object, OrderedListLayoutType::NAME, code_map, offset)?;
-		Ok(Self {
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			OrderedListLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let result = Self {
 			type_: OrderedListLayoutType,
-			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
-			node: require_entry(object, "node", code_map, offset)?,
-			head: get_entry(object, "head", code_map, offset)?
+			header: LayoutHeader::try_from_json_object_at(
+				object,
+				&mut unused_entries,
+				code_map,
+				offset,
+			)?,
+			node: require_entry(object, "node", &mut unused_entries, code_map, offset)?,
+			head: get_entry(object, "head", &mut unused_entries, code_map, offset)?
 				.unwrap_or_else(Pattern::default_head),
-			tail: get_entry(object, "tail", code_map, offset)?
+			tail: get_entry(object, "tail", &mut unused_entries, code_map, offset)?
 				.unwrap_or_else(Pattern::default_tail),
-		})
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 
@@ -271,13 +285,19 @@ impl TryFromJsonObject for ListNode {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		Ok(Self {
-			head: get_entry(object, "head", code_map, offset)?.unwrap_or_else(Self::default_head),
-			rest: get_entry(object, "rest", code_map, offset)?.unwrap_or_else(Self::default_rest),
-			intro: get_entry(object, "intro", code_map, offset)?.unwrap_or_default(),
-			value: require_entry(object, "value", code_map, offset)?,
-			dataset: get_entry(object, "dataset", code_map, offset)?,
-		})
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		let result = Self {
+			head: get_entry(object, "head", &mut unused_entries, code_map, offset)?
+				.unwrap_or_else(Self::default_head),
+			rest: get_entry(object, "rest", &mut unused_entries, code_map, offset)?
+				.unwrap_or_else(Self::default_rest),
+			intro: get_entry(object, "intro", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			value: require_entry(object, "value", &mut unused_entries, code_map, offset)?,
+			dataset: get_entry(object, "dataset", &mut unused_entries, code_map, offset)?,
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 
@@ -359,12 +379,26 @@ impl TryFromJsonObject for UnorderedListLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		check_type(object, UnorderedListLayoutType::NAME, code_map, offset)?;
-		Ok(Self {
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			UnorderedListLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let result = Self {
 			type_: UnorderedListLayoutType,
-			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
-			item: require_entry(object, "item", code_map, offset)?,
-		})
+			header: LayoutHeader::try_from_json_object_at(
+				object,
+				&mut unused_entries,
+				code_map,
+				offset,
+			)?,
+			item: require_entry(object, "item", &mut unused_entries, code_map, offset)?,
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 
@@ -404,12 +438,17 @@ impl TryFromJsonObject for ListItem {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		Ok(Self {
-			intro: get_entry(object, "intro", code_map, offset)?.unwrap_or_default(),
-			value: require_entry(object, "value", code_map, offset)?,
-			dataset: get_entry(object, "dataset", code_map, offset)?.unwrap_or_default(),
-			property: get_entry(object, "property", code_map, offset)?,
-		})
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		let result = Self {
+			intro: get_entry(object, "intro", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			value: require_entry(object, "value", &mut unused_entries, code_map, offset)?,
+			dataset: get_entry(object, "dataset", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			property: get_entry(object, "property", &mut unused_entries, code_map, offset)?,
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 
@@ -504,12 +543,27 @@ impl TryFromJsonObject for SizedListLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		check_type(object, SizedListLayoutType::NAME, code_map, offset)?;
-		Ok(Self {
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			SizedListLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let result = Self {
 			type_: SizedListLayoutType,
-			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
-			items: get_entry(object, "items", code_map, offset)?.unwrap_or_default(),
-		})
+			header: LayoutHeader::try_from_json_object_at(
+				object,
+				&mut unused_entries,
+				code_map,
+				offset,
+			)?,
+			items: get_entry(object, "items", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 

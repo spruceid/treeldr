@@ -3,7 +3,9 @@ use rdf_types::LexicalLiteralTypeRef;
 use serde::{Deserialize, Serialize};
 use xsd_types::{XSD_BOOLEAN, XSD_STRING};
 
-use super::{require_entry, Build, BuildError, CompactIri, Context, Error, Scope};
+use super::{
+	require_entry, Build, BuildError, CompactIri, Context, Error, ObjectUnusedEntries, Scope,
+};
 
 /// RDF Resource description.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -102,10 +104,13 @@ impl TypedString {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Error> {
-		Ok(Self {
-			value: require_entry(object, "value", code_map, offset)?,
-			type_: require_entry(object, "type", code_map, offset)?,
-		})
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		let result = Self {
+			value: require_entry(object, "value", &mut unused_entries, code_map, offset)?,
+			type_: require_entry(object, "type", &mut unused_entries, code_map, offset)?,
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 

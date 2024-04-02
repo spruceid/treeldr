@@ -36,6 +36,9 @@ pub enum Error {
 		other_offset: usize,
 	},
 
+	#[error("unexpected entry `{key}`")]
+	UnexpectedEntry { offset: usize, key: String },
+
 	#[error("missing `type` entry")]
 	MissingType(usize),
 
@@ -74,12 +77,14 @@ pub enum Error {
 impl Error {
 	pub fn duplicate<'a>(
 		key: &str,
-	) -> impl '_ + FnOnce(json_syntax::object::Duplicate<json_syntax::object::MappedEntry<'a>>) -> Self
-	{
+	) -> impl '_
+	       + FnOnce(
+		json_syntax::object::Duplicate<json_syntax::object::IndexedMappedEntry<'a>>,
+	) -> Self {
 		move |e| Self::DuplicateEntry {
-			offset: e.0.value.key.offset,
+			offset: e.0 .1.value.key.offset,
 			key: key.to_owned(),
-			other_offset: e.1.value.key.offset,
+			other_offset: e.1 .1.value.key.offset,
 		}
 	}
 
@@ -88,6 +93,7 @@ impl Error {
 			Self::Unexpected { offset, .. } => *offset,
 			Self::MissingRequiredEntry { offset, .. } => *offset,
 			Self::DuplicateEntry { offset, .. } => *offset,
+			Self::UnexpectedEntry { offset, .. } => *offset,
 			Self::MissingType(offset) => *offset,
 			Self::InvalidType { offset, .. } => *offset,
 			Self::InvalidRegex(offset, _) => *offset,
@@ -235,9 +241,46 @@ pub(crate) fn expect_string(json: &json_syntax::Value, offset: usize) -> Result<
 	}
 }
 
+pub(crate) struct ObjectUnusedEntries<'a> {
+	object: &'a json_syntax::Object,
+	entries: Vec<(usize, bool)>,
+}
+
+impl<'a> ObjectUnusedEntries<'a> {
+	pub fn new(
+		object: &'a json_syntax::Object,
+		code_map: &json_syntax::CodeMap,
+		offset: usize,
+	) -> Self {
+		let mut entries = Vec::with_capacity(object.len());
+		for e in object.iter_mapped(code_map, offset) {
+			entries.push((e.value.key.offset, true))
+		}
+		Self { object, entries }
+	}
+
+	pub fn remove(&mut self, index: usize) {
+		self.entries[index].1 = false;
+	}
+
+	pub fn check(self) -> Result<(), Error> {
+		for (i, (offset, unused)) in self.entries.into_iter().enumerate() {
+			if unused {
+				return Err(Error::UnexpectedEntry {
+					offset,
+					key: self.object.entries()[i].key.to_string(),
+				});
+			}
+		}
+
+		Ok(())
+	}
+}
+
 pub(crate) fn get_entry<T: json_syntax::TryFromJson>(
 	object: &json_syntax::Object,
 	key: &str,
+	unused_entries: &mut ObjectUnusedEntries,
 	code_map: &json_syntax::CodeMap,
 	offset: usize,
 ) -> Result<Option<T>, Error>
@@ -245,11 +288,12 @@ where
 	T::Error: Into<Error>,
 {
 	let entry = object
-		.get_unique_mapped_entry(code_map, offset, key)
+		.get_unique_mapped_entry_with_index(code_map, offset, key)
 		.map_err(Error::duplicate(key))?;
 
 	match entry {
-		Some(entry) => {
+		Some((i, entry)) => {
+			unused_entries.remove(i);
 			let t =
 				T::try_from_json_at(entry.value.value.value, code_map, entry.value.value.offset)
 					.map_err(Into::into)?;
@@ -262,6 +306,7 @@ where
 pub(crate) fn require_entry<T: json_syntax::TryFromJson>(
 	object: &json_syntax::Object,
 	key: &str,
+	unused_entries: &mut ObjectUnusedEntries,
 	code_map: &json_syntax::CodeMap,
 	offset: usize,
 ) -> Result<T, Error>
@@ -269,11 +314,12 @@ where
 	T::Error: Into<Error>,
 {
 	let entry = object
-		.get_unique_mapped_entry(code_map, offset, key)
+		.get_unique_mapped_entry_with_index(code_map, offset, key)
 		.map_err(Error::duplicate(key))?;
 
 	match entry {
-		Some(entry) => {
+		Some((i, entry)) => {
+			unused_entries.remove(i);
 			T::try_from_json_at(entry.value.value.value, code_map, entry.value.value.offset)
 				.map_err(Into::into)
 		}
@@ -286,13 +332,17 @@ where
 
 pub(crate) fn require_type<'a>(
 	object: &'a json_syntax::Object,
+	unused_entries: Option<&mut ObjectUnusedEntries>,
 	code_map: &json_syntax::CodeMap,
 	offset: usize,
 ) -> Result<json_syntax::code_map::Mapped<&'a str>, Error> {
-	let entry = object
-		.get_unique_mapped_entry(code_map, offset, "type")
+	let (i, entry) = object
+		.get_unique_mapped_entry_with_index(code_map, offset, "type")
 		.map_err(Error::duplicate("type"))?
 		.ok_or(Error::MissingType(offset))?;
+	if let Some(unused_entries) = unused_entries {
+		unused_entries.remove(i);
+	}
 
 	match entry.value.value.value {
 		json_syntax::Value::String(found) => Ok(json_syntax::code_map::Mapped::new(
@@ -310,10 +360,11 @@ pub(crate) fn require_type<'a>(
 pub(crate) fn check_type(
 	object: &json_syntax::Object,
 	expected: &'static str,
+	unused_entries: &mut ObjectUnusedEntries,
 	code_map: &json_syntax::CodeMap,
 	offset: usize,
 ) -> Result<(), Error> {
-	let found = require_type(object, code_map, offset)?;
+	let found = require_type(object, Some(unused_entries), code_map, offset)?;
 	if found.value == expected {
 		Ok(())
 	} else {
@@ -464,11 +515,17 @@ impl TryFromJsonObject for ValueFormat {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		Ok(Self {
-			layout: require_entry(object, "layout", code_map, offset)?,
-			input: get_entry(object, "input", code_map, offset)?.unwrap_or_default(),
-			graph: get_entry(object, "graph", code_map, offset)?.unwrap_or_default(),
-		})
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		let result = Self {
+			layout: require_entry(object, "layout", &mut unused_entries, code_map, offset)?,
+			input: get_entry(object, "input", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			graph: get_entry(object, "graph", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+		};
+
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 

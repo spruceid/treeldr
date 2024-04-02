@@ -7,7 +7,7 @@ use crate::abs::{
 	self,
 	syntax::{
 		check_type, expect_object, get_entry, require_entry, Build, BuildError, Context, Dataset,
-		Error, Pattern, Scope, ValueFormatOrLayout, ValueIntro,
+		Error, ObjectUnusedEntries, Pattern, Scope, ValueFormatOrLayout, ValueIntro,
 	},
 };
 
@@ -47,12 +47,27 @@ impl TryFromJsonObject for ProductLayout {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		check_type(object, ProductLayoutType::NAME, code_map, offset)?;
-		Ok(Self {
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		check_type(
+			object,
+			ProductLayoutType::NAME,
+			&mut unused_entries,
+			code_map,
+			offset,
+		)?;
+		let result = Self {
 			type_: ProductLayoutType,
-			header: LayoutHeader::try_from_json_object_at(object, code_map, offset)?,
-			fields: get_entry(object, "fields", code_map, offset)?.unwrap_or_default(),
-		})
+			header: LayoutHeader::try_from_json_object_at(
+				object,
+				&mut unused_entries,
+				code_map,
+				offset,
+			)?,
+			fields: get_entry(object, "fields", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
 
@@ -149,12 +164,18 @@ impl TryFromJsonObject for Field {
 		code_map: &json_syntax::CodeMap,
 		offset: usize,
 	) -> Result<Self, Self::Error> {
-		Ok(Self {
-			intro: get_entry(object, "intro", code_map, offset)?.unwrap_or_default(),
-			value: require_entry(object, "value", code_map, offset)?,
-			dataset: get_entry(object, "dataset", code_map, offset)?.unwrap_or_default(),
-			property: get_entry(object, "property", code_map, offset)?,
-			required: get_entry(object, "required", code_map, offset)?.unwrap_or_default(),
-		})
+		let mut unused_entries = ObjectUnusedEntries::new(object, code_map, offset);
+		let result = Self {
+			intro: get_entry(object, "intro", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			value: require_entry(object, "value", &mut unused_entries, code_map, offset)?,
+			dataset: get_entry(object, "dataset", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+			property: get_entry(object, "property", &mut unused_entries, code_map, offset)?,
+			required: get_entry(object, "required", &mut unused_entries, code_map, offset)?
+				.unwrap_or_default(),
+		};
+		unused_entries.check()?;
+		Ok(result)
 	}
 }
