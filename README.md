@@ -63,6 +63,10 @@ $ tldr path/to/layout.json dehydrate
 ```
 
 Example layouts are found in the `layouts/examples` folder.
+```console
+$ echo '{"id": "http://example.org/#bob", "name": "Bob"}' | tldr layouts/examples/record.json dehydrate
+<http://example.org/#bob> <https://schema.org/name> "Bob" .
+```
 
 You can specify the input (tree) format using the `-i` option after `dehydrate`.
 Similarly, you can specify the output (RDF) format using the `-o` option.
@@ -80,6 +84,10 @@ $ tldr path/to/layout.json hydrate
 ```
 
 Example layouts are found in the `layouts/examples` folder.
+```console
+$ echo '<http://example.org/#bob> <https://schema.org/name> "Bob" .' | tldr layouts/examples/record.json hydrate 'http://example.org/#bob'
+{"id":"http://example.org/#bob","name":"Bob"}
+```
 
 You can specify the input (RDF) format using the `-i` option after `hydrate`.
 Similarly, you can specify the output (tree) format using the `-o` option.
