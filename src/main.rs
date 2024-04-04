@@ -58,11 +58,11 @@ enum Command {
 	/// Serializes an RDF dataset into a tree value.
 	Hydrate {
 		/// Format of the input RDF dataset.
-		#[arg(short, long, default_value = "n-quads")]
+		#[arg(short, long, value_parser = RDFFormat::parser(), default_value = "n-quads")]
 		input: RDFFormat,
 
 		/// Format of the output tree value.
-		#[arg(short, long, default_value = "json")]
+		#[arg(short, long, value_parser = TreeFormat::parser(), default_value = "json")]
 		output: TreeFormat,
 
 		/// Serializing layout.
@@ -85,11 +85,11 @@ enum Command {
 	/// Deserializes a tree value into an RDF dataset.
 	Dehydrate {
 		/// Format of the input tree value.
-		#[clap(short, long, default_value = "json")]
+		#[arg(short, long, value_parser = TreeFormat::parser(), default_value = "json")]
 		input: TreeFormat,
 
 		/// Format of the output RDF dataset.
-		#[clap(short, long, default_value = "n-quads")]
+		#[arg(short, long, value_parser = RDFFormat::parser(), default_value = "n-quads")]
 		output: RDFFormat,
 
 		/// Deserializing layout.

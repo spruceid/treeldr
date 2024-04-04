@@ -1,16 +1,10 @@
 use core::fmt;
-use std::{
-	io::{self, BufRead, Write},
-	str::FromStr,
-};
+use std::io::{self, BufRead, Write};
 
+use clap::builder::TypedValueParser;
 use locspan::Span;
 use nquads_syntax::Parse;
 use rdf_types::dataset::BTreeDataset;
-
-#[derive(Debug, thiserror::Error)]
-#[error("unknown RDF format `{0}`")]
-pub struct UnknownRDFFormat(String);
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
@@ -26,6 +20,22 @@ pub enum RDFFormat {
 }
 
 impl RDFFormat {
+	pub const POSSIBLE_VALUES: &'static [&'static str] =
+		&["application/n-quads", "n-quads", "nquads", "nq"];
+
+	pub fn parser(
+	) -> clap::builder::MapValueParser<clap::builder::PossibleValuesParser, fn(String) -> Self> {
+		clap::builder::PossibleValuesParser::new(Self::POSSIBLE_VALUES)
+			.map(|s| Self::new(&s).unwrap())
+	}
+
+	pub fn new(name: &str) -> Option<Self> {
+		match name {
+			"nq" | "nquads" | "n-quads" | "application/n-quads" => Some(Self::NQuads),
+			_ => None,
+		}
+	}
+
 	pub fn as_str(&self) -> &'static str {
 		match self {
 			Self::NQuads => "application/n-quads",
@@ -63,16 +73,5 @@ impl RDFFormat {
 impl fmt::Display for RDFFormat {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		self.as_str().fmt(f)
-	}
-}
-
-impl FromStr for RDFFormat {
-	type Err = UnknownRDFFormat;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		match s {
-			"nq" | "nquads" | "n-quads" | "application/n-quads" => Ok(Self::NQuads),
-			_ => Err(UnknownRDFFormat(s.to_owned())),
-		}
 	}
 }

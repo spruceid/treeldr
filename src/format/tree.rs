@@ -1,15 +1,9 @@
 use core::fmt;
-use std::{
-	io::{self, BufRead, Write},
-	str::FromStr,
-};
+use std::io::{self, BufRead, Write};
 
+use clap::builder::TypedValueParser;
 use json_syntax::Print;
 use treeldr_layouts::value::NonJsonValue;
-
-#[derive(Debug, thiserror::Error)]
-#[error("unknown tree format `{0}`")]
-pub struct UnknownTreeFormat(String);
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
@@ -32,6 +26,21 @@ pub enum TreeFormat {
 }
 
 impl TreeFormat {
+	pub const POSSIBLE_VALUES: &'static [&'static str] = &["application/json", "json"];
+
+	pub fn parser(
+	) -> clap::builder::MapValueParser<clap::builder::PossibleValuesParser, fn(String) -> Self> {
+		clap::builder::PossibleValuesParser::new(Self::POSSIBLE_VALUES)
+			.map(|s| Self::new(&s).unwrap())
+	}
+
+	pub fn new(name: &str) -> Option<Self> {
+		match name {
+			"json" | "application/json" => Some(Self::Json),
+			_ => None,
+		}
+	}
+
 	pub fn as_str(&self) -> &'static str {
 		match self {
 			Self::Json => "application/json",
@@ -75,16 +84,5 @@ impl TreeFormat {
 impl fmt::Display for TreeFormat {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		self.as_str().fmt(f)
-	}
-}
-
-impl FromStr for TreeFormat {
-	type Err = UnknownTreeFormat;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		match s {
-			"json" | "application/json" => Ok(Self::Json),
-			_ => Err(UnknownTreeFormat(s.to_owned())),
-		}
 	}
 }
