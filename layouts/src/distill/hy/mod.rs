@@ -44,6 +44,8 @@ pub enum Error<R = Term> {
 	LayoutNotFound(Ref<LayoutType, R>),
 }
 
+static_assertions::assert_impl_all!(Error: ToString);
+
 #[derive(Debug, thiserror::Error)]
 pub enum DataFragment<R> {
 	#[error("layout discriminant")]

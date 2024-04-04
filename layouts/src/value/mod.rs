@@ -223,6 +223,20 @@ impl<'a> From<&'a json_syntax::Number> for Number {
 #[error("not a JSON number: {0}")]
 pub struct NonJsonNumber(pub Number);
 
+impl TryFrom<Number> for json_syntax::NumberBuf {
+	type Error = NonJsonNumber;
+
+	fn try_from(value: Number) -> Result<Self, Self::Error> {
+		match value.decimal_representation() {
+			Some(decimal) => match json_syntax::NumberBuf::from_str(&decimal) {
+				Ok(n) => Ok(n),
+				Err(_) => Err(NonJsonNumber(value)),
+			},
+			None => Err(NonJsonNumber(value)),
+		}
+	}
+}
+
 impl TryFrom<Number> for serde_json::Number {
 	type Error = NonJsonNumber;
 
@@ -321,6 +335,23 @@ impl TryFromJson for Value {
 	}
 }
 
+impl From<json_syntax::Value> for Value {
+	fn from(value: json_syntax::Value) -> Self {
+		match value {
+			json_syntax::Value::Null => Self::Literal(Literal::Unit),
+			json_syntax::Value::Boolean(b) => Self::Literal(Literal::Boolean(b)),
+			json_syntax::Value::Number(n) => Self::Literal(Literal::Number(n.into())),
+			json_syntax::Value::String(s) => Self::Literal(Literal::TextString(s.to_string())),
+			json_syntax::Value::Array(a) => Self::List(a.into_iter().map(Into::into).collect()),
+			json_syntax::Value::Object(o) => Self::Record(
+				o.into_iter()
+					.map(|entry| (entry.key.into_string(), entry.value.into()))
+					.collect(),
+			),
+		}
+	}
+}
+
 impl From<serde_json::Value> for Value {
 	fn from(value: serde_json::Value) -> Self {
 		match value {
@@ -360,6 +391,20 @@ impl From<NonJsonNumber> for NonJsonValue {
 	}
 }
 
+impl TryFrom<Literal> for json_syntax::Value {
+	type Error = NonJsonValue;
+
+	fn try_from(value: Literal) -> Result<Self, Self::Error> {
+		match value {
+			Literal::Unit => Ok(json_syntax::Value::Null),
+			Literal::Boolean(b) => Ok(json_syntax::Value::Boolean(b)),
+			Literal::Number(n) => Ok(json_syntax::Value::Number(n.try_into()?)),
+			Literal::TextString(s) => Ok(json_syntax::Value::String(s.into())),
+			Literal::ByteString(s) => Err(NonJsonValue::ByteString(s)),
+		}
+	}
+}
+
 impl TryFrom<Literal> for serde_json::Value {
 	type Error = NonJsonValue;
 
@@ -385,6 +430,30 @@ impl TryFrom<TypedLiteral> for serde_json::Value {
 			TypedLiteral::Number(n, _) => Ok(serde_json::Value::Number(n.try_into()?)),
 			TypedLiteral::TextString(s, _) => Ok(serde_json::Value::String(s)),
 			TypedLiteral::ByteString(s, _) => Err(NonJsonValue::ByteString(s)),
+		}
+	}
+}
+
+impl TryFrom<Value> for json_syntax::Value {
+	type Error = NonJsonValue;
+
+	fn try_from(value: Value) -> Result<Self, Self::Error> {
+		match value {
+			Value::Literal(l) => l.try_into(),
+			Value::Record(r) => {
+				let mut object = json_syntax::Object::new();
+
+				for (key, value) in r {
+					object.insert(key.into(), value.try_into()?);
+				}
+
+				Ok(json_syntax::Value::Object(object))
+			}
+			Value::List(list) => list
+				.into_iter()
+				.map(TryInto::try_into)
+				.collect::<Result<Vec<_>, _>>()
+				.map(json_syntax::Value::Array),
 		}
 	}
 }

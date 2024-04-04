@@ -1,3 +1,4 @@
+use core::fmt;
 use std::marker::PhantomData;
 
 use educe::Educe;
@@ -125,6 +126,12 @@ impl<T, R> Ref<T, R> {
 	/// Maps the resource identifier.
 	pub fn map<S>(self, f: impl FnOnce(R) -> S) -> Ref<T, S> {
 		Ref(f(self.0), PhantomData)
+	}
+}
+
+impl<T, R: fmt::Display> fmt::Display for Ref<T, R> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		self.0.fmt(f)
 	}
 }
 
