@@ -46,7 +46,7 @@ $ cargo install --path .
 The top-level package provides a command-line interface which can use TreeLDR
 layouts to serialize or deserialize tree value (like JSON), or generate code.
 If you want to use TreeLDR layouts directly in your code, use the
-[`treeldr-layouts` library](treeldr-layouts).
+[`treeldr-layouts` library](layouts).
 
 In this section, the `tldr` command can be replaced with `cargo run -- ` if
 you chose not to install the binary.
