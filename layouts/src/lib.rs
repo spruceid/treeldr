@@ -94,6 +94,7 @@ pub mod graph;
 pub mod layout;
 pub mod matching;
 pub mod pattern;
+mod prelude;
 pub mod preset;
 pub mod r#ref;
 pub mod utils;
@@ -108,9 +109,98 @@ pub use layout::Layout;
 use layout::LayoutType;
 pub use matching::Matching;
 pub use pattern::Pattern;
+pub use prelude::Prelude;
 pub use preset::PresetLayout;
 pub use r#ref::{DerefResource, Ref};
+use rdf_types::Term;
 pub use value::{Literal, TypedLiteral, TypedValue, Value};
+
+/// Layout registry.
+///
+/// Any collection of layout, used by the serialization and deserialization
+/// functions.
+///
+/// This trait is notably implemented by [`Layouts`], returned after compiling
+/// layouts from the abstract syntax, and by [`Prelude`] which provides all the
+/// layouts defined by TreeLDR's prelude (`tldr:bool`, `tldr:string`, `tldr:u8`,
+/// etc.).
+///
+/// Registries can be combined together using the [`with`] method.
+///
+/// [`with`]: LayoutRegistry::with
+///
+/// # Example
+///
+/// ```
+/// use serde_json::json;
+/// use treeldr_layouts::{abs, LayoutRegistry, distill::dehydrate, Prelude};
+/// let mut builder = abs::Builder::new();
+/// let layout: abs::syntax::Layout = serde_json::from_value(json!({
+///   "type": "record",
+///   "prefixes": { "tldr": "https://treeldr.org/layouts#" },
+///   "fields": {
+///     "name": {
+///       "value": "tldr:string", // This layout is defined in the prelude.
+///       "property": "https://example.org/#name"
+///     }
+///   }
+/// })).unwrap();
+/// let layout_ref = layout.build(&mut builder).unwrap();
+/// let layouts = builder.build();
+/// let input: treeldr_layouts::Value = serde_json::from_value(json!({
+///   "name": "John Smith"
+/// })).unwrap();
+/// dehydrate(
+///   layouts.with(Prelude), // Add the prelude layouts.
+///   &input,
+///   &layout_ref,
+///   Default::default()
+/// );
+/// ```
+pub trait LayoutRegistry<R = Term> {
+	/// Returns the layout definition associated to the given layout identifier.
+	fn get(&self, id: &Ref<LayoutType, R>) -> Option<&Layout<R>>;
+
+	/// Checks if this registry contains the definition for the given layout.
+	fn contains(&self, id: &Ref<LayoutType, R>) -> bool {
+		self.get(id).is_some()
+	}
+
+	/// Returns the union of this registry with `other`.
+	fn with<T: LayoutRegistry<R>>(&self, other: T) -> LayoutRegistryUnion<T, &Self> {
+		LayoutRegistryUnion(other, self)
+	}
+
+	/// Returns the union of this registry with `other`.
+	///
+	/// Same as `with`, but consumes `self`.
+	fn into_with<T: LayoutRegistry<R>>(self, other: T) -> LayoutRegistryUnion<T, Self>
+	where
+		Self: Sized,
+	{
+		LayoutRegistryUnion(other, self)
+	}
+}
+
+impl<'a, R, T: LayoutRegistry<R>> LayoutRegistry<R> for &'a T {
+	fn get(&self, id: &Ref<LayoutType, R>) -> Option<&Layout<R>> {
+		T::get(*self, id)
+	}
+
+	fn contains(&self, id: &Ref<LayoutType, R>) -> bool {
+		T::contains(*self, id)
+	}
+}
+
+impl<R, T: LayoutRegistry<R>> LayoutRegistry<R> for Option<T> {
+	fn get(&self, id: &Ref<LayoutType, R>) -> Option<&Layout<R>> {
+		self.as_ref()?.get(id)
+	}
+
+	fn contains(&self, id: &Ref<LayoutType, R>) -> bool {
+		self.as_ref().is_some_and(|r| r.contains(id))
+	}
+}
 
 /// Layout collection.
 ///
@@ -207,6 +297,12 @@ impl<R: Clone + Ord> Layouts<R> {
 	}
 }
 
+impl<R: Ord> LayoutRegistry<R> for Layouts<R> {
+	fn get(&self, id: &Ref<LayoutType, R>) -> Option<&Layout<R>> {
+		self.get(id)
+	}
+}
+
 /// Layout definitions iterator.
 ///
 /// Returned by the [`Layouts::iter`] method.
@@ -248,5 +344,19 @@ impl<R> IntoIterator for Layouts<R> {
 
 	fn into_iter(self) -> Self::IntoIter {
 		LayoutsIntoIter(self.layouts.into_iter())
+	}
+}
+
+/// Union of two layout registries.
+///
+/// Registry `B` gets precedence over registry `A`. If a given layout is defined
+/// in both registries, the definition provided by `B` will be returned.
+pub struct LayoutRegistryUnion<A, B>(pub A, pub B);
+
+impl<R, A: LayoutRegistry<R>, B: LayoutRegistry<R>> LayoutRegistry<R>
+	for LayoutRegistryUnion<A, B>
+{
+	fn get(&self, id: &Ref<LayoutType, R>) -> Option<&Layout<R>> {
+		self.1.get(id).or_else(|| self.0.get(id))
 	}
 }

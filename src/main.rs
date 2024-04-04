@@ -13,7 +13,7 @@ use std::{
 	path::PathBuf,
 	process::ExitCode,
 };
-use treeldr_layouts::{layout::LayoutType, Layouts, Ref};
+use treeldr_layouts::{layout::LayoutType, LayoutRegistry, Layouts, Prelude, Ref};
 
 mod format;
 use format::{RDFFormat, TreeFormat};
@@ -35,8 +35,22 @@ struct Args {
 	#[arg(short, long = "verbose", action = clap::ArgAction::Count, global = true)]
 	verbosity: u8,
 
+	/// Do not load TreeLDR's prelude.
+	#[arg(short, long, global = true)]
+	no_prelude: bool,
+
 	#[command(subcommand)]
 	command: Option<Command>,
+}
+
+impl Args {
+	pub fn prelude(&self) -> Option<Prelude> {
+		if self.no_prelude {
+			None
+		} else {
+			Some(Prelude)
+		}
+	}
 }
 
 #[derive(clap::Subcommand)]
@@ -141,6 +155,7 @@ impl DefaultLayoutRef {
 
 fn run(files: &mut SimpleFiles<String, String>, args: Args) -> Result<(), Error> {
 	let mut layouts = Layouts::new();
+	let prelude = args.prelude();
 	let mut default_layout = DefaultLayoutRef::None;
 	for filename in args.layouts {
 		let content = fs::read_to_string(&filename).map_err(Error::IO)?;
@@ -155,6 +170,8 @@ fn run(files: &mut SimpleFiles<String, String>, args: Args) -> Result<(), Error>
 		load_layout(files, file_id, &mut layouts)?;
 	}
 
+	let layouts = layouts.with(prelude);
+
 	match args.command {
 		None => Ok(()),
 		Some(command) => command.run(layouts, default_layout),
@@ -162,7 +179,11 @@ fn run(files: &mut SimpleFiles<String, String>, args: Args) -> Result<(), Error>
 }
 
 impl Command {
-	fn run(self, layouts: Layouts, default_layout: DefaultLayoutRef) -> Result<(), Error> {
+	fn run(
+		self,
+		layouts: impl LayoutRegistry,
+		default_layout: DefaultLayoutRef,
+	) -> Result<(), Error> {
 		match self {
 			Self::Hydrate {
 				input,

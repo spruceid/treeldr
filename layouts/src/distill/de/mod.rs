@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
 	layout::{DataLayout, LayoutType, ListLayout, LiteralLayout, ProductLayoutType},
-	Layout, Layouts, Literal, Pattern, Ref, Value, ValueFormat,
+	Layout, LayoutRegistry, Literal, Pattern, Ref, Value, ValueFormat,
 };
 use iref::IriBuf;
 use rdf_types::{
@@ -43,7 +43,7 @@ pub enum Error<R = Term> {
 	#[error(transparent)]
 	TermAmbiguity(Box<TermAmbiguity>),
 
-	#[error("layout {0} not found")]
+	#[error("layout `{0}` is undefined")]
 	LayoutNotFound(Ref<LayoutType, R>),
 
 	#[error("missing required field `{field_name}`")]
@@ -267,7 +267,7 @@ impl<G> Options<G> {
 /// resources to be collected during deserialization. The collected terms
 /// are then returned along with the RDF dataset.
 pub fn dehydrate<G: Generator>(
-	layouts: &Layouts,
+	layouts: impl LayoutRegistry,
 	value: &Value,
 	layout_ref: &Ref<LayoutType>,
 	mut options: Options<G>,
@@ -510,7 +510,37 @@ pub fn dehydrate<G: Generator>(
 /// the deserialized RDF dataset.
 pub fn dehydrate_with<V, I, Q, D>(
 	rdf: &mut RdfContextMut<V, I>,
-	layouts: &Layouts<Q>,
+	layouts: impl LayoutRegistry<Q>,
+	value: &Value,
+	current_graph: Option<&I::Resource>,
+	layout_ref: &Ref<LayoutType, Q>,
+	inputs: &[I::Resource],
+	output: &mut D,
+) -> Result<(), Error<Q>>
+where
+	V: VocabularyMut,
+	V::Iri: Clone,
+	I: InterpretationMut<V>
+		+ ReverseIriInterpretationMut<Iri = V::Iri>
+		+ ReverseLiteralInterpretationMut<Literal = V::Literal>,
+	I::Resource: Clone + Ord,
+	Q: Clone + Ord + Into<I::Resource>,
+	D: TraversableDataset<Resource = I::Resource> + DatasetMut,
+{
+	dehydrate_with_ref(
+		rdf,
+		&layouts,
+		value,
+		current_graph,
+		layout_ref,
+		inputs,
+		output,
+	)
+}
+
+fn dehydrate_with_ref<V, I, Q, D>(
+	rdf: &mut RdfContextMut<V, I>,
+	layouts: &impl LayoutRegistry<Q>,
 	value: &Value,
 	current_graph: Option<&I::Resource>,
 	layout_ref: &Ref<LayoutType, Q>,
@@ -804,7 +834,7 @@ where
 
 fn dehydrate_sub_value<V, I, Q, D>(
 	rdf: &mut RdfContextMut<V, I>,
-	layouts: &Layouts<Q>,
+	layouts: &impl LayoutRegistry<Q>,
 	value: &Value,
 	current_graph: Option<&I::Resource>,
 	format: &ValueFormat<Q>,
@@ -828,7 +858,7 @@ where
 		None => current_graph.cloned(),
 	};
 
-	dehydrate_with(
+	dehydrate_with_ref(
 		rdf,
 		layouts,
 		value,

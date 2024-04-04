@@ -67,7 +67,7 @@ impl<R: Ord> DerefResource<LayoutType, R> for Layouts<R> {
 	Hash(bound = "R: Ord + Hash")
 )]
 #[serde(bound(deserialize = "R: Clone + Ord + serde::Deserialize<'de>"))]
-pub enum Layout<R> {
+pub enum Layout<R = Term> {
 	/// Bottom layout.
 	///
 	/// This layout does not match any tree value or RDF dataset.
