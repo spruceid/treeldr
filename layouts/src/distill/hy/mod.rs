@@ -6,7 +6,7 @@ use crate::{
 	matching,
 	pattern::Substitution,
 	utils::QuadsExt,
-	Layout, Layouts, Matching, Pattern, Ref, TypedLiteral, TypedValue, Value,
+	Layout, LayoutRegistry, Matching, Pattern, Ref, TypedLiteral, TypedValue, Value,
 };
 use iref::IriBuf;
 use rdf_types::{
@@ -40,7 +40,7 @@ pub enum Error<R = Term> {
 	#[error("no matching literal representation found")]
 	NoMatchingLiteral,
 
-	#[error("layout `{0}` not found")]
+	#[error("layout `{0}` is undefined")]
 	LayoutNotFound(Ref<LayoutType, R>),
 }
 
@@ -114,7 +114,7 @@ impl<T, R> MatchingForFragment<R> for Result<T, matching::Error> {
 /// This function a tree value annotated (typed) with references to the
 /// different layouts used to serialize each part of the tree.
 pub fn hydrate<D>(
-	context: &Layouts,
+	context: impl LayoutRegistry,
 	dataset: &D,
 	layout_ref: &Ref<LayoutType>,
 	inputs: &[Term],
@@ -130,7 +130,34 @@ where
 pub fn hydrate_with<V, I: Interpretation, D>(
 	vocabulary: &V,
 	interpretation: &I,
-	context: &Layouts<I::Resource>,
+	context: impl LayoutRegistry<I::Resource>,
+	dataset: &D,
+	current_graph: Option<&I::Resource>,
+	layout_ref: &Ref<LayoutType, I::Resource>,
+	inputs: &[I::Resource],
+) -> Result<TypedValue<I::Resource>, Error<I::Resource>>
+where
+	V: Vocabulary,
+	V::Iri: PartialEq,
+	I: ReverseIriInterpretation<Iri = V::Iri> + ReverseLiteralInterpretation<Literal = V::Literal>,
+	I::Resource: Clone + Ord,
+	D: PatternMatchingDataset<Resource = I::Resource>,
+{
+	hydrate_with_ref(
+		vocabulary,
+		interpretation,
+		&context,
+		dataset,
+		current_graph,
+		layout_ref,
+		inputs,
+	)
+}
+
+fn hydrate_with_ref<V, I: Interpretation, D>(
+	vocabulary: &V,
+	interpretation: &I,
+	context: &impl LayoutRegistry<I::Resource>,
 	dataset: &D,
 	current_graph: Option<&I::Resource>,
 	layout_ref: &Ref<LayoutType, I::Resource>,
@@ -252,7 +279,7 @@ where
 							&variant_substitution,
 						);
 
-						let value = hydrate_with(
+						let value = hydrate_with_ref(
 							vocabulary,
 							interpretation,
 							context,
@@ -325,7 +352,7 @@ where
 						let item_graph =
 							select_graph(current_graph, &field.value.graph, &field_substitution);
 
-						let value = hydrate_with(
+						let value = hydrate_with_ref(
 							vocabulary,
 							interpretation,
 							context,
@@ -387,7 +414,7 @@ where
 							&item_substitution,
 						);
 
-						let item = hydrate_with(
+						let item = hydrate_with_ref(
 							vocabulary,
 							interpretation,
 							context,
@@ -451,7 +478,7 @@ where
 							&item_substitution,
 						);
 
-						let item = hydrate_with(
+						let item = hydrate_with_ref(
 							vocabulary,
 							interpretation,
 							context,
@@ -501,7 +528,7 @@ where
 						let item_graph =
 							select_graph(current_graph, &item.value.graph, &item_substitution);
 
-						let item = hydrate_with(
+						let item = hydrate_with_ref(
 							vocabulary,
 							interpretation,
 							context,

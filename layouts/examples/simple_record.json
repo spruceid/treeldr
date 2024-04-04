@@ -1,7 +1,7 @@
 {
 	"id": "https://example.org/#SimpleRecord",
 	"type": "record",
-	"prefixes": { "tldr": "https://treeldr.org/layouts#" },
+	"prefixes": { "tldr": "https://treeldr.org/prelude#" },
 	"fields": {
 		"id": {
 			"intro": [],
