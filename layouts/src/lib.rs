@@ -137,7 +137,7 @@ pub use value::{Literal, TypedLiteral, TypedValue, Value};
 /// let mut builder = abs::Builder::new();
 /// let layout: abs::syntax::Layout = serde_json::from_value(json!({
 ///   "type": "record",
-///   "prefixes": { "tldr": "https://treeldr.org/layouts#" },
+///   "prefixes": { "tldr": "https://treeldr.org/prelude#" },
 ///   "fields": {
 ///     "name": {
 ///       "value": "tldr:string", // This layout is defined in the prelude.

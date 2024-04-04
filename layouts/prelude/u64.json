@@ -1,5 +1,5 @@
 {
-	"id": "https://treeldr.org/layouts#u64",
+	"id": "https://treeldr.org/prelude#u64",
 	"type": "number",
 	"datatype": "http://www.w3.org/2001/XMLSchema#unsignedLong"
 }

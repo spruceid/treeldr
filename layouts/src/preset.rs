@@ -1,18 +1,18 @@
 use iref::Iri;
 use static_iref::iri;
 
-const ID_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#id");
-const UNIT_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#unit");
-const BOOLEAN_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#boolean");
-const U8_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#u8");
-const U16_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#u16");
-const U32_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#u32");
-const U64_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#u64");
-const I8_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#i8");
-const I16_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#i16");
-const I32_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#i32");
-const I64_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#i64");
-const STRING_LAYOUT: &Iri = iri!("https://treeldr.org/layouts#string");
+const ID_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#id");
+const UNIT_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#unit");
+const BOOLEAN_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#boolean");
+const U8_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#u8");
+const U16_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#u16");
+const U32_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#u32");
+const U64_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#u64");
+const I8_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#i8");
+const I16_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#i16");
+const I32_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#i32");
+const I64_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#i64");
+const STRING_LAYOUT: &Iri = iri!("https://treeldr.org/prelude#string");
 
 pub enum PresetLayout {
 	Id,
