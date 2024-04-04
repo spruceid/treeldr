@@ -70,7 +70,9 @@ $ echo '{"id": "http://example.org/#bob", "name": "Bob"}' | tldr layouts/example
 
 You can specify the input (tree) format using the `-i` option after `dehydrate`.
 Similarly, you can specify the output (RDF) format using the `-o` option.
-Supported formats are given in the [#supported-formats] section below.
+By default the input is expected to be JSON and output is N-Quads.
+Supported formats are given in the [Supported Formats](#supported-formats)
+section below.
 
 ### Serialization
 
@@ -91,7 +93,9 @@ $ echo '<http://example.org/#bob> <https://schema.org/name> "Bob" .' | tldr layo
 
 You can specify the input (RDF) format using the `-i` option after `hydrate`.
 Similarly, you can specify the output (tree) format using the `-o` option.
-Supported formats are given in the [#supported-formats] section below.
+By default the input is expected to be N-Quads and output is JSON.
+Supported formats are given in the [Supported Formats](#supported-formats)
+section below.
 
 ### Supported formats
 
