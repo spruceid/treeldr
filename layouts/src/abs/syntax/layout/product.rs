@@ -3,12 +3,15 @@ use std::collections::BTreeMap;
 use json_syntax::{TryFromJson, TryFromJsonObject};
 use serde::{Deserialize, Serialize};
 
-use crate::abs::{
-	self,
-	syntax::{
-		check_type, expect_object, get_entry, require_entry, Build, BuildError, Context, Dataset,
-		Error, ObjectUnusedEntries, Pattern, Scope, ValueFormatOrLayout, ValueIntro,
+use crate::{
+	abs::{
+		self,
+		syntax::{
+			check_type, expect_object, get_entry, require_entry, Build, BuildError, Context,
+			Dataset, Error, ObjectUnusedEntries, Pattern, Scope, ValueFormatOrLayout, ValueIntro,
+		},
 	},
+	Value,
 };
 
 use super::{LayoutHeader, ProductLayoutType};
@@ -23,7 +26,7 @@ pub struct ProductLayout {
 	pub header: LayoutHeader,
 
 	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-	pub fields: BTreeMap<String, Field>,
+	pub fields: BTreeMap<Value, Field>,
 }
 
 impl TryFromJson for ProductLayout {
@@ -55,6 +58,8 @@ impl TryFromJsonObject for ProductLayout {
 			code_map,
 			offset,
 		)?;
+		let fields: BTreeMap<String, Field> =
+			get_entry(object, "fields", &mut unused_entries, code_map, offset)?.unwrap_or_default();
 		let result = Self {
 			type_: ProductLayoutType,
 			header: LayoutHeader::try_from_json_object_at(
@@ -63,8 +68,10 @@ impl TryFromJsonObject for ProductLayout {
 				code_map,
 				offset,
 			)?,
-			fields: get_entry(object, "fields", &mut unused_entries, code_map, offset)?
-				.unwrap_or_default(),
+			fields: fields
+				.into_iter()
+				.map(|(k, v)| (Value::string(k), v))
+				.collect(),
 		};
 		unused_entries.check()?;
 		Ok(result)

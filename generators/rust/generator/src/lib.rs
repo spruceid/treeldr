@@ -15,7 +15,7 @@ use syn::spanned::Spanned;
 use treeldr_layouts::{
 	distill::RdfContext,
 	layout::{DataLayout, LayoutType, ListLayout, LiteralLayout},
-	Layout, Layouts, Pattern, Ref,
+	Layout, Layouts, Literal, Pattern, Ref, Value,
 };
 use utils::ident_from_iri;
 
@@ -27,7 +27,7 @@ pub enum Error<R = Term> {
 	MissingTypeIdentifier(R),
 
 	#[error("invalid field identifier `{0}`")]
-	InvalidFieldIdent(String),
+	InvalidFieldIdent(Value),
 
 	#[error("invalid variant identifier `{0}`")]
 	InvalidVariantIdent(String),
@@ -364,20 +364,23 @@ where
 			let fields = layout
 				.fields
 				.iter()
-				.map(|(name, f)| {
-					let f_ident = syn::parse_str::<syn::Ident>(name.as_str())
-						.map_err(|_| Error::InvalidFieldIdent(name.clone()))?;
+				.map(|(key, f)| match key {
+					Value::Literal(Literal::TextString(name)) => {
+						let f_ident = syn::parse_str::<syn::Ident>(name.as_str())
+							.map_err(|_| Error::InvalidFieldIdent(key.clone()))?;
 
-					let intro = generate_intro_attribute(f.intro, layout.input + layout.intro);
-					let dataset = generate_dataset_attribute(rdf, &f.dataset)?;
-					let input = generate_value_input_attribute(rdf, &f.value.input)?;
-					let graph = generate_value_graph_attribute(rdf, &f.value.graph)?;
-					let layout = options.layout_ref(rdf, &f.value.layout)?;
+						let intro = generate_intro_attribute(f.intro, layout.input + layout.intro);
+						let dataset = generate_dataset_attribute(rdf, &f.dataset)?;
+						let input = generate_value_input_attribute(rdf, &f.value.input)?;
+						let graph = generate_value_graph_attribute(rdf, &f.value.graph)?;
+						let layout = options.layout_ref(rdf, &f.value.layout)?;
 
-					Ok(quote! {
-						#[tldr(#intro, #dataset, #input, #graph)]
-						#f_ident : #layout
-					})
+						Ok(quote! {
+							#[tldr(#intro, #dataset, #input, #graph)]
+							#f_ident : #layout
+						})
+					}
+					other => Err(Error::InvalidFieldIdent(other.clone())),
 				})
 				.collect::<Result<Vec<_>, _>>()?;
 

@@ -46,11 +46,11 @@ pub enum Error<R = Term> {
 	#[error("layout `{0}` is undefined")]
 	LayoutNotFound(Ref<LayoutType, R>),
 
-	#[error("missing required field `{field_name}`")]
-	MissingRequiredField {
+	#[error("missing required key `{key}`")]
+	MissingRequiredKey {
 		layout: Ref<ProductLayoutType, R>,
-		field_name: String,
-		value: BTreeMap<String, Value>,
+		key: Value,
+		value: BTreeMap<Value, Value>,
 	},
 }
 
@@ -65,13 +65,13 @@ impl<R> Error<R> {
 			Self::DataAmbiguity => Error::DataAmbiguity,
 			Self::TermAmbiguity(a) => Error::TermAmbiguity(a),
 			Self::LayoutNotFound(layout_ref) => Error::LayoutNotFound(layout_ref.map(f)),
-			Self::MissingRequiredField {
+			Self::MissingRequiredKey {
 				layout,
-				field_name,
+				key: field_name,
 				value,
-			} => Error::MissingRequiredField {
+			} => Error::MissingRequiredKey {
 				layout: layout.map(f),
-				field_name,
+				key: field_name,
 				value,
 			},
 		}
@@ -704,7 +704,7 @@ where
 			}
 		}
 		Layout::Product(layout) => match value {
-			Value::Record(value) => {
+			Value::Map(value) => {
 				let env = env.intro(rdf, layout.intro);
 				env.instantiate_dataset(&layout.dataset, output)?;
 
@@ -727,11 +727,11 @@ where
 					}
 				}
 
-				for (name, field) in &layout.fields {
-					if field.required && !value.contains_key(name) {
-						return Err(Error::MissingRequiredField {
+				for (key, field) in &layout.fields {
+					if field.required && !value.contains_key(key) {
+						return Err(Error::MissingRequiredKey {
 							layout: layout_ref.clone().cast(),
-							field_name: name.clone(),
+							key: key.clone(),
 							value: value.clone(),
 						});
 					}

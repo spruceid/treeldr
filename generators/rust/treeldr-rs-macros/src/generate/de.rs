@@ -4,7 +4,7 @@ use rdf_types::{dataset::TraversableDataset, Id, LiteralType, Term};
 use syn::DeriveInput;
 use treeldr_layouts::{
 	layout::{DataLayout, ListLayout, LiteralLayout},
-	Dataset, Layout, Pattern,
+	Dataset, Layout, Literal, Pattern, Value,
 };
 
 use crate::parse::parse;
@@ -17,6 +17,9 @@ pub enum Error {
 	#[error(transparent)]
 	Build(#[from] treeldr_layouts::abs::syntax::BuildError),
 
+	#[error("invalid field ident `{0}`")]
+	InvalidFieldIdent(Value),
+
 	#[error("invalid datatype `{0}`")]
 	InvalidDatatype(String),
 }
@@ -26,6 +29,7 @@ impl Error {
 		match self {
 			Self::Parse(e) => e.span(),
 			Self::Build(_) => Span::call_site(),
+			Self::InvalidFieldIdent(_) => Span::call_site(),
 			Self::InvalidDatatype(_) => Span::call_site(),
 		}
 	}
@@ -157,7 +161,16 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 			let intro = layout.intro;
 			let dataset = dataset_to_array(&layout.dataset);
 
-			let opt_fields = layout.fields.iter().map(|(name, field)| {
+			let layout_fields: Vec<_> = layout
+				.fields
+				.iter()
+				.map(|(key, field)| match key {
+					Value::Literal(Literal::TextString(name)) => Ok((name, field)),
+					_ => Err(Error::InvalidFieldIdent(key.clone())),
+				})
+				.collect::<Result<_, _>>()?;
+
+			let opt_fields = layout_fields.iter().copied().map(|(name, field)| {
 				let ident = syn::Ident::new(name, Span::call_site());
 				let ty = input
 					.type_map
@@ -166,7 +179,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				quote!(#ident : Option<#ty>)
 			});
 
-			let deserialize_fields = layout.fields.iter().map(|(name, field)| {
+			let deserialize_fields = layout_fields.iter().copied().map(|(name, field)| {
 				let field_ident = syn::Ident::new(name, Span::call_site());
 				let field_ty = input
 					.type_map
@@ -214,7 +227,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 				}
 			});
 
-			let unwrap_fields = layout.fields.iter().map(|(name, f)| {
+			let unwrap_fields = layout_fields.iter().copied().map(|(name, f)| {
 				let ident = syn::Ident::new(name, Span::call_site());
 				if f.required {
 					quote!(#ident: data.#ident.ok_or_else(|| ::treeldr::DeserializeError::MissingField(#name.to_owned()))?)

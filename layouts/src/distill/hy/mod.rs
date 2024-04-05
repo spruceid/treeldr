@@ -57,10 +57,10 @@ pub enum DataFragment<R> {
 		variant_name: String,
 	},
 
-	#[error("field `{field_name}`")]
-	Field {
+	#[error("key `{key}`")]
+	Key {
 		layout: Ref<ProductLayoutType, R>,
-		field_name: String,
+		key: Value,
 	},
 
 	#[error("list node")]
@@ -330,7 +330,7 @@ where
 
 			let mut record = BTreeMap::new();
 
-			for (name, field) in &layout.fields {
+			for (key, field) in &layout.fields {
 				let mut field_substitution = substitution.clone();
 				field_substitution.intro(field.intro);
 
@@ -340,9 +340,9 @@ where
 					field.dataset.quads().with_default_graph(current_graph),
 				)
 				.into_unique()
-				.for_fragment(|| DataFragment::Field {
+				.for_fragment(|| DataFragment::Key {
 					layout: layout_ref.clone().cast(),
-					field_name: name.clone(),
+					key: key.clone(),
 				})?;
 
 				match field_substitution {
@@ -362,20 +362,20 @@ where
 							&field_inputs,
 						)?;
 
-						record.insert(name.clone(), value);
+						record.insert(key.clone(), value);
 					}
 					None => {
 						if field.required {
-							return Err(Error::MissingData(Box::new(DataFragment::Field {
+							return Err(Error::MissingData(Box::new(DataFragment::Key {
 								layout: layout_ref.clone().cast(),
-								field_name: name.clone(),
+								key: key.clone(),
 							})));
 						}
 					}
 				}
 			}
 
-			Ok(TypedValue::Record(record, layout_ref.casted()))
+			Ok(TypedValue::Map(record, layout_ref.casted()))
 		}
 		Layout::List(layout) => {
 			match layout {

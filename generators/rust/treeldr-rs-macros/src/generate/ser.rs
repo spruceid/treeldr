@@ -4,7 +4,7 @@ use rdf_types::{dataset::TraversableDataset, Id, LiteralType, Term};
 use syn::DeriveInput;
 use treeldr_layouts::{
 	layout::{DataLayout, ListLayout, LiteralLayout},
-	Dataset, Layout, Pattern,
+	Dataset, Layout, Pattern, Value,
 };
 
 use crate::parse::parse;
@@ -17,6 +17,9 @@ pub enum Error {
 	#[error(transparent)]
 	Build(#[from] treeldr_layouts::abs::syntax::BuildError),
 
+	#[error("invalid field ident `{0}`")]
+	InvalidFieldIdent(Value),
+
 	#[error("invalid datatype `{0}`")]
 	InvalidDatatype(String),
 }
@@ -26,6 +29,7 @@ impl Error {
 		match self {
 			Self::Parse(e) => e.span(),
 			Self::Build(_) => Span::call_site(),
+			Self::InvalidFieldIdent(_) => Span::call_site(),
 			Self::InvalidDatatype(_) => Span::call_site(),
 		}
 	}
@@ -159,56 +163,63 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 			let intro = layout.intro;
 			let dataset = dataset_to_array(&layout.dataset);
 
-			let fields = layout.fields.iter().map(|(name, field)| {
-				let field_ident = syn::Ident::new(name, Span::call_site());
-				let field_intro = field.intro;
-				let field_dataset = dataset_to_array(&field.dataset);
-				let field_layout = input
-					.type_map
-					.get(field.value.layout.id().as_iri().unwrap())
-					.unwrap();
-				let field_inputs = inputs_to_array(&field.value.input);
-				let field_graph = match &field.value.graph {
-					Some(None) => quote!(None),
-					Some(Some(g)) => {
-						let g = generate_pattern(g);
-						quote!(Some(env.instantiate_pattern(#g)))
-					}
-					None => quote!(current_graph.cloned()),
-				};
-
-				let m = field.value.input.len();
-
-				if field.required {
-					quote! {
-						{
-							let env = env.intro(rdf, #field_intro);
-							env.instantiate_dataset(&#field_dataset, output);
-							<#field_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
-								&self.#field_ident,
-								rdf,
-								&env.instantiate_patterns(&#field_inputs),
-								#field_graph.as_ref(),
-								output
-							)?;
+			let fields: Vec<_> = layout
+				.fields
+				.iter()
+				.map(|(key, field)| {
+					let name = key
+						.as_str()
+						.ok_or_else(|| Error::InvalidFieldIdent(key.clone()))?;
+					let field_ident = syn::Ident::new(name, Span::call_site());
+					let field_intro = field.intro;
+					let field_dataset = dataset_to_array(&field.dataset);
+					let field_layout = input
+						.type_map
+						.get(field.value.layout.id().as_iri().unwrap())
+						.unwrap();
+					let field_inputs = inputs_to_array(&field.value.input);
+					let field_graph = match &field.value.graph {
+						Some(None) => quote!(None),
+						Some(Some(g)) => {
+							let g = generate_pattern(g);
+							quote!(Some(env.instantiate_pattern(#g)))
 						}
+						None => quote!(current_graph.cloned()),
+					};
+
+					let m = field.value.input.len();
+
+					if field.required {
+						Ok(quote! {
+							{
+								let env = env.intro(rdf, #field_intro);
+								env.instantiate_dataset(&#field_dataset, output);
+								<#field_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
+									&self.#field_ident,
+									rdf,
+									&env.instantiate_patterns(&#field_inputs),
+									#field_graph.as_ref(),
+									output
+								)?;
+							}
+						})
+					} else {
+						Ok(quote! {
+							if let Some(value) = &self.#field_ident {
+								let env = env.intro(rdf, #field_intro);
+								env.instantiate_dataset(&#field_dataset, output);
+								<#field_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
+									value,
+									rdf,
+									&env.instantiate_patterns(&#field_inputs),
+									#field_graph.as_ref(),
+									output
+								)?;
+							}
+						})
 					}
-				} else {
-					quote! {
-						if let Some(value) = &self.#field_ident {
-							let env = env.intro(rdf, #field_intro);
-							env.instantiate_dataset(&#field_dataset, output);
-							<#field_layout as ::treeldr::SerializeLd<#m, V, I>>::serialize_ld_with(
-								value,
-								rdf,
-								&env.instantiate_patterns(&#field_inputs),
-								#field_graph.as_ref(),
-								output
-							)?;
-						}
-					}
-				}
-			});
+				})
+				.collect::<Result<_, Error>>()?;
 
 			quote! {
 				let env = env.intro(rdf, #intro);

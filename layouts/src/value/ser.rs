@@ -7,7 +7,7 @@ impl serde::Serialize for Value {
 	{
 		match self {
 			Self::Literal(literal) => literal.serialize(serializer),
-			Self::Record(record) => {
+			Self::Map(record) => {
 				use serde::ser::SerializeMap;
 				let mut map = serializer.serialize_map(Some(record.len()))?;
 
