@@ -100,6 +100,41 @@ enum Command {
 		#[arg(short, long, value_parser = rdf::parse_term)]
 		layout: Option<Term>,
 	},
+
+	/// Convert a tree value or RDF dataset without changing its shape.
+	Convert {
+		#[command(subcommand)]
+		command: Convert,
+	},
+}
+
+#[derive(clap::Subcommand)]
+pub enum Convert {
+	/// Convert a tree value into another format.
+	Tree {
+		/// Format of the input tree value.
+		#[arg(short, long, value_parser = TreeFormat::parser(), default_value = "json")]
+		input: TreeFormat,
+
+		/// Format of the output tree value.
+		#[arg(short, long, value_parser = TreeFormat::parser(), default_value = "json")]
+		output: TreeFormat,
+
+		/// Pretty print the output.
+		#[arg(short, long)]
+		pretty: bool,
+	},
+
+	/// Convert an RDF dataset into another format.
+	Rdf {
+		/// Format of the input RDF dataset.
+		#[arg(short, long, value_parser = RDFFormat::parser(), default_value = "n-quads")]
+		input: RDFFormat,
+
+		/// Format of the output RDF dataset.
+		#[arg(short, long, value_parser = RDFFormat::parser(), default_value = "n-quads")]
+		output: RDFFormat,
+	},
 }
 
 fn main() -> ExitCode {
@@ -199,7 +234,7 @@ impl Command {
 					treeldr_layouts::distill::hydrate(&layouts, &input, &layout_ref, &subjects)
 						.map_err(Error::Hydrate)?;
 				output
-					.write(output_data, pretty, io::stdout())
+					.write_typed(&layouts, output_data, pretty, io::stdout())
 					.map_err(Error::CreateTree)
 			}
 			Self::Dehydrate {
@@ -218,6 +253,30 @@ impl Command {
 				)
 				.map_err(Error::Dehydrate)?;
 				output.write(output_data, io::stdout()).map_err(Error::IO)
+			}
+			Self::Convert { command } => command.run(),
+		}
+	}
+}
+
+impl Convert {
+	fn run(self) -> Result<(), Error> {
+		match self {
+			Self::Tree {
+				input,
+				output,
+				pretty,
+			} => {
+				let stdin = BufReader::new(io::stdin());
+				let value = input.load(stdin).map_err(Error::LoadTree)?;
+				output
+					.write_untyped(value, pretty, io::stdout())
+					.map_err(Error::CreateTree)
+			}
+			Self::Rdf { input, output } => {
+				let stdin = BufReader::new(io::stdin());
+				let dataset = input.load(stdin).map_err(Error::LoadRdf)?.into_indexed();
+				output.write(dataset, io::stdout()).map_err(Error::IO)
 			}
 		}
 	}

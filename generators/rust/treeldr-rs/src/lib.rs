@@ -8,7 +8,7 @@ use rdf_types::BlankId;
 ///
 /// ```
 /// use treeldr::tldr;
-/// #[tldr("layouts/examples/simple_record.json")]
+/// #[tldr("layouts/examples/record.json")]
 /// mod module {
 ///   // a `SimpleLayout` type will be generated here.
 /// }
@@ -22,7 +22,7 @@ pub use treeldr_macros::tldr;
 ///
 /// ```
 /// # use treeldr_macros::tldr_include;
-/// tldr_include!("layouts/examples/simple_record.json");
+/// tldr_include!("layouts/examples/record.json");
 /// ```
 pub use treeldr_macros::tldr_include;
 

@@ -5,7 +5,7 @@ use rdf_types::{
 };
 use static_iref::iri;
 
-use crate::{layout::LayoutType, Layouts, Ref};
+use crate::{layout::LayoutType, LayoutRegistry, Ref};
 
 #[cfg(feature = "serde_cbor")]
 mod serde_cbor;
@@ -33,7 +33,7 @@ pub enum InvalidTag {
 pub fn get_layout_tag<V, I>(
 	vocabulary: &V,
 	interpretation: &I,
-	layouts: &Layouts<I::Resource>,
+	layouts: &impl LayoutRegistry<I::Resource>,
 	layout_ref: &Ref<LayoutType, I::Resource>,
 ) -> Result<Option<u64>, InvalidTag>
 where

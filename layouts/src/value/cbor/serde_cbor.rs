@@ -4,7 +4,7 @@ use rdf_types::{
 	Interpretation, Vocabulary,
 };
 
-use crate::{value::Number, Layouts, Literal, TypedLiteral, TypedValue, Value};
+use crate::{value::Number, LayoutRegistry, Literal, TypedLiteral, TypedValue, Value};
 
 use super::{get_layout_tag, InvalidTag};
 
@@ -14,7 +14,7 @@ impl TypedValue {
 	/// <https://schema.treeldr.org/cbor#tag>.
 	pub fn try_into_tagged_serde_cbor(
 		self,
-		layouts: &Layouts,
+		layouts: impl LayoutRegistry,
 	) -> Result<serde_cbor::Value, InvalidTag> {
 		self.try_into_tagged_serde_cbor_with(&(), &(), layouts)
 	}
@@ -28,7 +28,23 @@ impl<R> TypedValue<R> {
 		self,
 		vocabulary: &V,
 		interpretation: &I,
-		layouts: &Layouts<R>,
+		layouts: impl LayoutRegistry<R>,
+	) -> Result<serde_cbor::Value, InvalidTag>
+	where
+		V: Vocabulary,
+		I: Interpretation<Resource = R>
+			+ IriInterpretation<V::Iri>
+			+ ReverseLiteralInterpretation<Literal = V::Literal>,
+		R: Ord,
+	{
+		self.try_into_tagged_serde_cbor_with_ref(vocabulary, interpretation, &layouts)
+	}
+
+	fn try_into_tagged_serde_cbor_with_ref<V, I>(
+		self,
+		vocabulary: &V,
+		interpretation: &I,
+		layouts: &impl LayoutRegistry<R>,
 	) -> Result<serde_cbor::Value, InvalidTag>
 	where
 		V: Vocabulary,
@@ -52,7 +68,7 @@ impl<R> TypedValue<R> {
 			}
 			Self::Literal(TypedLiteral::Id(s, ty)) => (serde_cbor::Value::Text(s), Some(ty.cast())),
 			Self::Variant(inner, ty, _) => (
-				inner.try_into_tagged_serde_cbor_with(vocabulary, interpretation, layouts)?,
+				inner.try_into_tagged_serde_cbor_with_ref(vocabulary, interpretation, layouts)?,
 				Some(ty.cast()),
 			),
 			Self::Record(map, ty) => (
@@ -61,7 +77,7 @@ impl<R> TypedValue<R> {
 						.map(|(key, value)| {
 							Ok((
 								serde_cbor::Value::Text(key),
-								value.try_into_tagged_serde_cbor_with(
+								value.try_into_tagged_serde_cbor_with_ref(
 									vocabulary,
 									interpretation,
 									layouts,
@@ -77,7 +93,11 @@ impl<R> TypedValue<R> {
 					items
 						.into_iter()
 						.map(|t| {
-							t.try_into_tagged_serde_cbor_with(vocabulary, interpretation, layouts)
+							t.try_into_tagged_serde_cbor_with_ref(
+								vocabulary,
+								interpretation,
+								layouts,
+							)
 						})
 						.collect::<Result<_, _>>()?,
 				),

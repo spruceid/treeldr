@@ -106,6 +106,7 @@ subcommand, or the `-o` option of the `hydrate` subcommand.
 | Tree format | Option value(s)                                  |
 | ----------- | ------------------------------------------------ |
 | JSON        | `application/json`, `json`                       |
+| CBOR        | `application/cbor`, `cbor`                       |
 
 The following table lists all the RDF formats supported by TreeLDR.
 The "Option value" can be given to the `-i` option of the `hydrate` subcommand,

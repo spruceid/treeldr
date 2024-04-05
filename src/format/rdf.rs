@@ -5,6 +5,7 @@ use clap::builder::TypedValueParser;
 use locspan::Span;
 use nquads_syntax::Parse;
 use rdf_types::dataset::BTreeDataset;
+use rdf_types::Quad;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
@@ -57,7 +58,11 @@ impl RDFFormat {
 		}
 	}
 
-	pub fn write(&self, dataset: BTreeDataset, mut output: impl Write) -> Result<(), io::Error> {
+	pub fn write(
+		&self,
+		dataset: impl IntoIterator<Item = Quad>,
+		mut output: impl Write,
+	) -> Result<(), io::Error> {
 		match self {
 			Self::NQuads => {
 				for quad in dataset {

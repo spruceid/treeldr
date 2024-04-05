@@ -41,6 +41,7 @@ thiserror = "1.0.50"
 serde = "1.0.192"
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 json-syntax = "0.12.3"
+serde_cbor = "0.11.2"
 codespan-reporting = "0.11.1"
 
 locspan = "0.8.2"
@@ -54,11 +55,12 @@ proc-macro2 = "1.0.66"
 quote = "1.0.33"
 
 [dependencies]
-treeldr-layouts.workspace = true
+treeldr-layouts = { workspace = true, features = ["serde_cbor"] }
 clap = { workspace = true, features = ["derive"] }
 stderrlog.workspace = true
 nquads-syntax.workspace = true
 json-syntax.workspace = true
+serde_cbor.workspace = true
 codespan-reporting.workspace = true
 thiserror.workspace = true
 iref.workspace = true
