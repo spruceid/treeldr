@@ -4,12 +4,15 @@ use iref::{Iri, IriBuf, IriRefBuf};
 use proc_macro2::{Span, TokenStream, TokenTree};
 use rdf_types::BlankIdBuf;
 use syn::spanned::Spanned;
-use treeldr_layouts::abs::syntax::{
-	BooleanLayout, ByteStringLayout, CompactIri, DataLayout, Dataset, ExtraProperties, Field,
-	IdLayout, Layout, LayoutHeader, ListItem, ListLayout, ListNode, ListNodeOrLayout,
-	LiteralLayout, NumberLayout, OrderedListLayout, Pattern, ProductLayout, Quad, SizedListLayout,
-	SumLayout, TextStringLayout, UnitLayout, UnorderedListLayout, ValueFormat, ValueFormatOrLayout,
-	VariableNameBuf, Variant, VariantFormat, VariantFormatOrLayout,
+use treeldr_layouts::{
+	abs::syntax::{
+		BooleanLayout, ByteStringLayout, CompactIri, DataLayout, Dataset, ExtraProperties, Field,
+		IdLayout, Layout, LayoutHeader, ListItem, ListLayout, ListNode, ListNodeOrLayout,
+		LiteralLayout, NumberLayout, OrderedListLayout, Pattern, ProductLayout, Quad,
+		SizedListLayout, SumLayout, TextStringLayout, UnitLayout, UnorderedListLayout, ValueFormat,
+		ValueFormatOrLayout, VariableNameBuf, Variant, VariantFormat, VariantFormatOrLayout,
+	},
+	Value,
 };
 
 #[derive(Default)]
@@ -205,7 +208,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 			},
 		))),
 		Kind::Record => {
-			let fields = match input.data {
+			let entries = match input.data {
 				syn::Data::Struct(s) => match s.fields {
 					syn::Fields::Named(fields) => fields
 						.named
@@ -227,7 +230,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 								required,
 							};
 
-							Ok((name, field))
+							Ok((Value::string(name), field))
 						})
 						.collect::<Result<BTreeMap<_, _>, _>>()?,
 					f => return Err(Error::ExpectedNamedFields(f.span())),
@@ -246,7 +249,7 @@ pub fn parse(input: syn::DeriveInput) -> Result<ParsedInput, Error> {
 					dataset: type_attrs.dataset.unwrap_or_default(),
 					extra: type_attrs.extra.unwrap_or_default(),
 				},
-				fields,
+				fields: entries,
 			})
 		}
 		Kind::Sum => {

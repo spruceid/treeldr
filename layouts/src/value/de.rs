@@ -113,7 +113,7 @@ impl<'de> serde::Deserialize<'de> for Value {
 					map.insert(key, value);
 				}
 
-				Ok(Value::Record(map))
+				Ok(Value::Map(map))
 			}
 		}
 

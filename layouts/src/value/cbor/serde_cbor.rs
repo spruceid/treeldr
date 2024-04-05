@@ -71,12 +71,12 @@ impl<R> TypedValue<R> {
 				inner.try_into_tagged_serde_cbor_with_ref(vocabulary, interpretation, layouts)?,
 				Some(ty.cast()),
 			),
-			Self::Record(map, ty) => (
+			Self::Map(map, ty) => (
 				serde_cbor::Value::Map(
 					map.into_iter()
 						.map(|(key, value)| {
 							Ok((
-								serde_cbor::Value::Text(key),
+								key.into(),
 								value.try_into_tagged_serde_cbor_with_ref(
 									vocabulary,
 									interpretation,
@@ -126,9 +126,9 @@ impl<R> From<TypedValue<R>> for serde_cbor::Value {
 			TypedValue::Literal(TypedLiteral::TextString(s, _)) => Self::Text(s),
 			TypedValue::Literal(TypedLiteral::Id(s, _)) => Self::Text(s),
 			TypedValue::Variant(inner, _, _) => (*inner).into(),
-			TypedValue::Record(map, _) => Self::Map(
+			TypedValue::Map(map, _) => Self::Map(
 				map.into_iter()
-					.map(|(key, value)| (serde_cbor::Value::Text(key), value.into()))
+					.map(|(key, value)| (key.into(), value.into()))
 					.collect(),
 			),
 			TypedValue::List(items, _) => Self::Array(items.into_iter().map(Into::into).collect()),
@@ -165,9 +165,9 @@ impl From<Value> for serde_cbor::Value {
 			Value::Literal(Literal::Number(n)) => n.into(),
 			Value::Literal(Literal::ByteString(bytes)) => serde_cbor::Value::Bytes(bytes),
 			Value::Literal(Literal::TextString(string)) => serde_cbor::Value::Text(string),
-			Value::Record(map) => serde_cbor::Value::Map(
+			Value::Map(map) => serde_cbor::Value::Map(
 				map.into_iter()
-					.map(|(key, value)| (serde_cbor::Value::Text(key), value.into()))
+					.map(|(key, value)| (key.into(), value.into()))
 					.collect(),
 			),
 			Value::List(items) => {

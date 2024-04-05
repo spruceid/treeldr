@@ -270,11 +270,39 @@ pub enum Literal {
 	TextString(String),
 }
 
+impl Literal {
+	pub fn as_str(&self) -> Option<&str> {
+		match self {
+			Self::TextString(s) => Some(s),
+			_ => None,
+		}
+	}
+}
+
+impl fmt::Display for Literal {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Unit => f.write_str("null"),
+			Self::Boolean(true) => f.write_str("true"),
+			Self::Boolean(false) => f.write_str("false"),
+			Self::Number(n) => n.fmt(f),
+			Self::ByteString(bytes) => {
+				f.write_str("x")?;
+				for b in bytes {
+					write!(f, "{b:02x}")?;
+				}
+				Ok(())
+			}
+			Self::TextString(s) => json_syntax::print::string_literal(s, f),
+		}
+	}
+}
+
 /// Untyped tree value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Value {
 	Literal(Literal),
-	Record(BTreeMap<String, Self>),
+	Map(BTreeMap<Self, Self>),
 	List(Vec<Self>),
 }
 
@@ -287,6 +315,18 @@ impl Value {
 	/// Checks if the value is unit.
 	pub fn is_unit(&self) -> bool {
 		matches!(self, Self::Literal(Literal::Unit))
+	}
+
+	/// Creates a text string value.
+	pub fn string(value: String) -> Self {
+		Self::Literal(Literal::TextString(value))
+	}
+
+	pub fn as_str(&self) -> Option<&str> {
+		match self {
+			Self::Literal(l) => l.as_str(),
+			_ => None,
+		}
 	}
 }
 
@@ -316,11 +356,11 @@ impl TryFromJson for Value {
 					.map(|item| Self::try_from_json_at(item.value, code_map, item.offset).unwrap())
 					.collect(),
 			)),
-			json_syntax::Value::Object(o) => Ok(Self::Record(
+			json_syntax::Value::Object(o) => Ok(Self::Map(
 				o.iter_mapped(code_map, offset)
 					.map(|entry| {
 						(
-							entry.value.key.value.to_string(),
+							Value::string(entry.value.key.value.to_string()),
 							Self::try_from_json_at(
 								entry.value.value.value,
 								code_map,
@@ -343,9 +383,9 @@ impl From<json_syntax::Value> for Value {
 			json_syntax::Value::Number(n) => Self::Literal(Literal::Number(n.into())),
 			json_syntax::Value::String(s) => Self::Literal(Literal::TextString(s.to_string())),
 			json_syntax::Value::Array(a) => Self::List(a.into_iter().map(Into::into).collect()),
-			json_syntax::Value::Object(o) => Self::Record(
+			json_syntax::Value::Object(o) => Self::Map(
 				o.into_iter()
-					.map(|entry| (entry.key.into_string(), entry.value.into()))
+					.map(|entry| (Value::string(entry.key.into_string()), entry.value.into()))
 					.collect(),
 			),
 		}
@@ -362,12 +402,44 @@ impl From<serde_json::Value> for Value {
 			serde_json::Value::Array(items) => {
 				Self::List(items.into_iter().map(Into::into).collect())
 			}
-			serde_json::Value::Object(entries) => Self::Record(
+			serde_json::Value::Object(entries) => Self::Map(
 				entries
 					.into_iter()
-					.map(|(key, value)| (key, value.into()))
+					.map(|(key, value)| (Value::string(key), value.into()))
 					.collect(),
 			),
+		}
+	}
+}
+
+impl fmt::Display for Value {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Literal(l) => l.fmt(f),
+			Self::List(l) => {
+				f.write_str("[")?;
+				for (i, v) in l.iter().enumerate() {
+					if i > 0 {
+						f.write_str(",")?;
+					}
+
+					v.fmt(f)?;
+				}
+				f.write_str("]")
+			}
+			Self::Map(m) => {
+				f.write_str("{")?;
+				for (i, (k, v)) in m.iter().enumerate() {
+					if i > 0 {
+						f.write_str(",")?;
+					}
+
+					k.fmt(f)?;
+					f.write_str(":")?;
+					v.fmt(f)?;
+				}
+				f.write_str("}")
+			}
 		}
 	}
 }
@@ -383,6 +455,10 @@ pub enum NonJsonValue {
 	/// Byte string value, not supported by JSON.
 	#[error("byte string cannot be converted to JSON")]
 	ByteString(Vec<u8>),
+
+	/// Non-string key, not supported by JSON.
+	#[error("non-string key")]
+	NonStringKey(Value),
 }
 
 impl From<NonJsonNumber> for NonJsonValue {
@@ -440,11 +516,16 @@ impl TryFrom<Value> for json_syntax::Value {
 	fn try_from(value: Value) -> Result<Self, Self::Error> {
 		match value {
 			Value::Literal(l) => l.try_into(),
-			Value::Record(r) => {
+			Value::Map(r) => {
 				let mut object = json_syntax::Object::new();
 
 				for (key, value) in r {
-					object.insert(key.into(), value.try_into()?);
+					match key {
+						Value::Literal(Literal::TextString(key)) => {
+							object.insert(key.into(), value.try_into()?);
+						}
+						other => return Err(NonJsonValue::NonStringKey(other)),
+					}
 				}
 
 				Ok(json_syntax::Value::Object(object))
@@ -464,14 +545,19 @@ impl TryFrom<Value> for serde_json::Value {
 	fn try_from(value: Value) -> Result<Self, Self::Error> {
 		match value {
 			Value::Literal(l) => l.try_into(),
-			Value::Record(r) => {
-				let mut map = serde_json::Map::new();
+			Value::Map(r) => {
+				let mut object = serde_json::Map::new();
 
 				for (key, value) in r {
-					map.insert(key, value.try_into()?);
+					match key {
+						Value::Literal(Literal::TextString(key)) => {
+							object.insert(key, value.try_into()?);
+						}
+						other => return Err(NonJsonValue::NonStringKey(other)),
+					}
 				}
 
-				Ok(serde_json::Value::Object(map))
+				Ok(serde_json::Value::Object(object))
 			}
 			Value::List(list) => list
 				.into_iter()
@@ -542,8 +628,8 @@ pub enum TypedValue<R = rdf_types::Term> {
 	/// The third parameter is the index of the variant in the sum layout.
 	Variant(Box<Self>, Ref<SumLayoutType, R>, u32),
 
-	/// Record.
-	Record(BTreeMap<String, Self>, Ref<ProductLayoutType, R>),
+	/// Map.
+	Map(BTreeMap<Value, Self>, Ref<ProductLayoutType, R>),
 
 	/// List.
 	List(Vec<Self>, Ref<ListLayoutType, R>),
@@ -565,7 +651,7 @@ impl<R> TypedValue<R> {
 		match self {
 			Self::Literal(t) => Some(t.type_()),
 			Self::Variant(_, ty, _) => Some(ty.as_casted()),
-			Self::Record(_, ty) => Some(ty.as_casted()),
+			Self::Map(_, ty) => Some(ty.as_casted()),
 			Self::List(_, ty) => Some(ty.as_casted()),
 			Self::Always(_) => None,
 		}
@@ -576,7 +662,7 @@ impl<R> TypedValue<R> {
 		match self {
 			Self::Literal(l) => l.into_untyped(),
 			Self::Variant(value, _, _) => value.into_untyped(),
-			Self::Record(map, _) => Value::Record(
+			Self::Map(map, _) => Value::Map(
 				map.into_iter()
 					.map(|(k, v)| (k, v.into_untyped()))
 					.collect(),

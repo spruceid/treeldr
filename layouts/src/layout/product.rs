@@ -2,7 +2,7 @@ use educe::Educe;
 use std::collections::BTreeMap;
 use std::hash::Hash;
 
-use crate::{Dataset, Ref, ValueFormat};
+use crate::{Dataset, Ref, Value, ValueFormat};
 
 use super::LayoutType;
 
@@ -24,7 +24,7 @@ pub struct ProductLayout<R> {
 	pub intro: u32,
 
 	/// Fields.
-	pub fields: BTreeMap<String, Field<R>>,
+	pub fields: BTreeMap<Value, Field<R>>,
 
 	/// Dataset.
 	pub dataset: Dataset<R>,
