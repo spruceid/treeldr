@@ -60,7 +60,7 @@ clap = { workspace = true, features = ["derive"] }
 stderrlog.workspace = true
 nquads-syntax.workspace = true
 json-syntax.workspace = true
-serde_cbor.workspace = true
+serde_cbor = { workspace = true, features = ["tags"] }
 codespan-reporting.workspace = true
 thiserror.workspace = true
 iref.workspace = true
