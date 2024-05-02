@@ -15,7 +15,7 @@ use xsd_types::{lexical::Lexical, ParseXsd};
 
 use super::{DataFragment, Error, MatchingForFragment};
 
-pub fn hydrate_data<V, I: Interpretation, D>(
+pub fn hydrate_data<V, I, D>(
 	vocabulary: &V,
 	interpretation: &I,
 	dataset: &D,
@@ -27,7 +27,9 @@ pub fn hydrate_data<V, I: Interpretation, D>(
 where
 	V: Vocabulary,
 	V::Iri: PartialEq,
-	I: ReverseIriInterpretation<Iri = V::Iri> + ReverseLiteralInterpretation<Literal = V::Literal>,
+	I: Interpretation
+		+ ReverseIriInterpretation<Iri = V::Iri>
+		+ ReverseLiteralInterpretation<Literal = V::Literal>,
 	I::Resource: Clone + PartialEq,
 	D: PatternMatchingDataset<Resource = I::Resource>,
 {

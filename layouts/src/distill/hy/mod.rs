@@ -127,7 +127,7 @@ where
 
 /// Serialize the given RDF `dataset` using the provided `layout`, returning
 /// a typed value.
-pub fn hydrate_with<V, I: Interpretation, D>(
+pub fn hydrate_with<V, I, D>(
 	vocabulary: &V,
 	interpretation: &I,
 	context: impl LayoutRegistry<I::Resource>,
@@ -139,7 +139,9 @@ pub fn hydrate_with<V, I: Interpretation, D>(
 where
 	V: Vocabulary,
 	V::Iri: PartialEq,
-	I: ReverseIriInterpretation<Iri = V::Iri> + ReverseLiteralInterpretation<Literal = V::Literal>,
+	I: Interpretation
+		+ ReverseIriInterpretation<Iri = V::Iri>
+		+ ReverseLiteralInterpretation<Literal = V::Literal>,
 	I::Resource: Clone + Ord,
 	D: PatternMatchingDataset<Resource = I::Resource>,
 {
@@ -154,7 +156,7 @@ where
 	)
 }
 
-fn hydrate_with_ref<V, I: Interpretation, D>(
+fn hydrate_with_ref<V, I, D>(
 	vocabulary: &V,
 	interpretation: &I,
 	context: &impl LayoutRegistry<I::Resource>,
@@ -166,7 +168,9 @@ fn hydrate_with_ref<V, I: Interpretation, D>(
 where
 	V: Vocabulary,
 	V::Iri: PartialEq,
-	I: ReverseIriInterpretation<Iri = V::Iri> + ReverseLiteralInterpretation<Literal = V::Literal>,
+	I: Interpretation
+		+ ReverseIriInterpretation<Iri = V::Iri>
+		+ ReverseLiteralInterpretation<Literal = V::Literal>,
 	I::Resource: Clone + Ord,
 	D: PatternMatchingDataset<Resource = I::Resource>,
 {

@@ -73,7 +73,7 @@ where
 
 impl<'a, 'p, R, D, Q> Matching<'a, 'p, R, D, Q>
 where
-	R: Clone + PartialEq,
+	R: Clone + PartialEq + 'a,
 	D: PatternMatchingDataset<Resource = R>,
 	Q: Clone + Iterator<Item = PatternRefQuad<'p, R>>,
 {
@@ -97,7 +97,7 @@ where
 
 impl<'a, 'p, R, D, Q> Iterator for Matching<'a, 'p, R, D, Q>
 where
-	R: Clone + PartialEq,
+	R: Clone + PartialEq + 'a,
 	D: PatternMatchingDataset<Resource = R>,
 	Q: Clone + Iterator<Item = PatternRefQuad<'p, R>>,
 {
