@@ -5,6 +5,7 @@ authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
+license.workspace = true
 
 [workspace]
 members = [
@@ -20,6 +21,7 @@ authors = ["Spruce Systems Inc."]
 edition = "2021"
 rust-version = "1.74.0"
 version = "0.2.0"
+license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
 treeldr-layouts = { path = "layouts", version = "0.2.0" }
