@@ -15,7 +15,7 @@ use syn::spanned::Spanned;
 use treeldr_layouts::{
 	distill::RdfContext,
 	layout::{DataLayout, LayoutType, ListLayout, LiteralLayout},
-	Layout, Layouts, Literal, Pattern, Ref, Value,
+	Layout, Resources, Literal, Pattern, Ref, Value,
 };
 use utils::ident_from_iri;
 
@@ -271,7 +271,7 @@ where
 
 pub fn generate<V, I>(
 	rdf: RdfContext<V, I>,
-	layouts: &Layouts<I::Resource>,
+	layouts: &Resources<I::Resource>,
 	layout_ref: &Ref<LayoutType, I::Resource>,
 	options: &Options<I::Resource>,
 ) -> Result<TokenStream, Error<I::Resource>>
@@ -284,7 +284,7 @@ where
 	let ident = options.layout_ident(rdf, layout_ref)?;
 
 	match layout {
-		Layout::Always => Ok(quote! {
+		Layout::Any => Ok(quote! {
 			pub type #ident = treeldr::Always;
 		}),
 		Layout::Literal(layout) => match layout {

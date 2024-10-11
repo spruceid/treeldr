@@ -1,18 +1,33 @@
 [package]
-name = "tldr"
-description = "TreeLDR Command Line Interface"
+name = "treeldr-layouts"
+description = "TreeLDR Layouts"
+version.workspace = true
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-version.workspace = true
 license.workspace = true
+
+[features]
+default = ["serde_json", "serde_cbor"]
+
+# JSON extension.
+json = []
+
+# Implements conversion functions between `Value` and `serde_json::Value`.
+serde_json = ["json", "dep:serde_json"]
+
+# CBOR extension.
+cbor = []
+
+# Implements conversion functions between `Value` and `serde_cbor::Value`.
+serde_cbor = ["cbor", "dep:serde_cbor"]
 
 [workspace]
 members = [
-	"layouts",
-	"generators/rust/treeldr-rs",
-	"generators/rust/treeldr-rs-macros",
-	"generators/rust/generator"
+	# "layouts",
+	# "generators/rust/treeldr-rs",
+	# "generators/rust/treeldr-rs-macros",
+	# "generators/rust/generator"
 ]
 resolver = "2"
 
@@ -24,48 +39,55 @@ version = "0.2.0"
 license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
-treeldr-layouts = { path = "layouts", version = "0.2.0" }
-treeldr-macros = { path = "generators/rust/treeldr-rs-macros", version = "0.2.0" }
-treeldr-gen-rust = { path = "generators/rust/generator", version = "0.2.0" }
+# treeldr-layouts = { path = "layouts", version = "0.2.0" }
+# treeldr-macros = { path = "generators/rust/treeldr-rs-macros", version = "0.2.0" }
+# treeldr-gen-rust = { path = "generators/rust/generator", version = "0.2.0" }
 
 log = "0.4"
 educe = "0.4.23"
-num-traits = "0.2"
-num-bigint = "0.4"
-num-rational = "0.4"
-iref = "3.1.4"
-static-iref = "3.0"
-rdf-types = "0.22.4"
-xsd-types = "0.9.2"
-btree-range-map = { version = "0.7.2", features = ["serde"] }
-langtag = "0.4.0"
-thiserror = "1.0.50"
-serde = "1.0.192"
-serde_json = { version = "1.0", features = ["arbitrary_precision"] }
-json-syntax = "0.12.3"
+thiserror = "1.0.64"
+serde_json = "1.0.128"
 serde_cbor = "0.11.2"
-codespan-reporting = "0.11.1"
-
 locspan = "0.8.2"
-nquads-syntax = "0.19.0"
-
-clap = "4.0"
-stderrlog = "0.6"
-
-syn = "2.0.29"
-proc-macro2 = "1.0.66"
-quote = "1.0.33"
 
 [dependencies]
-treeldr-layouts = { workspace = true, features = ["serde_cbor"] }
-clap = { workspace = true, features = ["derive"] }
-stderrlog.workspace = true
-nquads-syntax.workspace = true
-json-syntax.workspace = true
-serde_cbor = { workspace = true, features = ["tags"] }
-codespan-reporting.workspace = true
+educe.workspace = true
+iref = { version = "3.2.2", features = ["macros", "serde"] }
+num-bigint = "0.4.6"
+num-rational = "0.4.2"
+num-traits = "0.2.19"
+rdf-types = "0.22.4"
+serde = { version = "1.0.210", features = ["derive"] }
+xsd-types = "0.9.6"
+# num-traits.workspace = true
+# num-bigint.workspace = true
+# num-rational.workspace = true
+# iref = { workspace = true, features = ["macros", "serde"] }
+# static-iref.workspace = true
+# langtag = "0.4.0"
+# rdf-types = { workspace = true, features = ["serde"] }
+# xsd-types.workspace = true
+# btree-range-map.workspace = true
+# serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
-iref.workspace = true
-rdf-types.workspace = true
 locspan.workspace = true
-utf8-decode = "1.0.1"
+# lazy_static = "1.4.0"
+# static_assertions = "1.1.0"
+# slab = "0.4.9"
+raw-btree = "0.3.0"
+dashmap = "6.1.0"
+
+json-syntax = "0.12.5"
+serde_json = { workspace = true, optional = true }
+serde_cbor = { workspace = true, optional = true }
+# parking_lot = "0.12.3"
+
+ll1 = { path = "/home/timothee/Projets/utils/parsing/ll1" }
+iregex = { path = "/home/timothee/Projets/utils/parsing/iregex" }
+iregex-syntax = { path = "/home/timothee/Projets/utils/parsing/iregex/crates/syntax" }
+langtag = "0.4.0"
+
+[dev-dependencies]
+# nquads-syntax.workspace = true
+# serde_json.workspace = true
+paste = "1.0"

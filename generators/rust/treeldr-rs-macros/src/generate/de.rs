@@ -50,7 +50,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 	let mut extra: Option<TokenStream> = None;
 
 	let body = match layout {
-		Layout::Always => {
+		Layout::Any => {
 			unreachable!()
 		}
 		Layout::Literal(layout) => match layout {

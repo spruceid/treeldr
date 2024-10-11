@@ -1,4 +1,6 @@
 #!/bin/sh
-EXTENSIONS_PATH=`codium --verbose --list-extensions | grep -Po "(?<='extensions-dir': ')([a-zA-Z0-9\\-:./]+)(?=')"`
-HERE=`pwd`
-sudo ln -s $HERE $EXTENSIONS_PATH/spruceid-treeldr
+EXTENSIONS_PATH=$HOME/.vscode-oss/extensions
+SRC=$(dirname $0)
+DST=$EXTENSIONS_PATH/spruceid-treeldr-0.1.0
+echo "Installing \`$SRC\` to \`$DST\`"
+ln -s $SRC $DST

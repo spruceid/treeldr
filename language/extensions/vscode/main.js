@@ -22,15 +22,15 @@ function configureLanguage() {
 		onEnterRules: [
 			{
 				// Doc single-line comment
-				// e.g. ///|
-				beforeText: /^\s*\/{3}.*$/,
-				action: { indentAction: vscode.IndentAction.None, appendText: '/// ' },
+				// e.g. ##|
+				beforeText: /^\s*#{2}.*$/,
+				action: { indentAction: vscode.IndentAction.None, appendText: '## ' },
 			},
 			{
 				// Parent doc single-line comment
-				// e.g. //!|
-				beforeText: /^\s*\/{2}\!.*$/,
-				action: { indentAction: vscode.IndentAction.None, appendText: '//! ' },
+				// e.g. #!|
+				beforeText: /^\s*#\!.*$/,
+				action: { indentAction: vscode.IndentAction.None, appendText: '#! ' },
 			}
 		],
 	});

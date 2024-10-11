@@ -1,22 +1,12 @@
 {
-	"Type": {
+	"Struct": {
 		"scope": "treeldr",
-		"prefix": "type",
+		"prefix": "struct",
 		"body": [
-			"type ${1:Name} {",
+			"struct ${1:Name} {",
 			"\t$0",
 			"}"
 		],
-		"description": "Type definition."
-	},
-	"Layout": {
-		"scope": "treeldr",
-		"prefix": "layout",
-		"body": [
-			"layout ${1:Name} {",
-			"\t$0",
-			"}"
-		],
-		"description": "Layout definition."
+		"description": "Struct definition."
 	}
 }

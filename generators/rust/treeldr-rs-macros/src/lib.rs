@@ -7,7 +7,7 @@ use proc_macro::TokenStream;
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::quote;
 use syn::{spanned::Spanned, DeriveInput};
-use treeldr_layouts::{abs, Layouts};
+use treeldr_layouts::{abs, Resources};
 
 mod generate;
 mod parse;
@@ -34,7 +34,7 @@ enum Error {
 struct Attribute(syn::punctuated::Punctuated<syn::LitStr, syn::Token![,]>);
 
 impl Attribute {
-	pub fn build(self) -> Result<Layouts, Error> {
+	pub fn build(self) -> Result<Resources, Error> {
 		let mut builder = abs::Builder::new();
 
 		for lit in self.0.into_iter() {
@@ -64,7 +64,7 @@ impl syn::parse::Parse for Attribute {
 }
 
 fn generate_layouts(
-	layouts: &Layouts,
+	layouts: &Resources,
 	gen_options: treeldr_gen_rust::Options,
 ) -> Result<proc_macro2::TokenStream, treeldr_gen_rust::Error> {
 	let mut result = proc_macro2::TokenStream::new();

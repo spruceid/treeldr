@@ -3,33 +3,37 @@
 	"patterns": [
 		{
 			"name": "comment.line.documentation.treeldr",
-			"begin": "///",
+			"begin": "##",
 			"end": "\n"
 		},
 		{
 			"name": "comment.line.double-slash.treeldr",
-			"begin": "//",
+			"begin": "#",
 			"end": "\n"
 		},
 		{
+			"name": "variable.language.treeldr",
+			"match": "\\?(self|Self)\\b"
+		},
+		{
+			"name": "variable.other.treeldr",
+			"match": "\\?\\w+\\b"
+		},
+		{
 			"name": "keyword.treeldr",
-			"match": "(?<!as\\s*)\\b(base|use|as|type|property|layout|with|for|any|all)\\b(?!\\s*(:|as))"
-		},
-		{
-			"name": "entity.name.tag.treeldr",
-			"match": "(?<!as\\s*)\\b(required|multiple|single)\\b(?!\\s*(:|as))"
-		},
-		{
-			"name": "variable.prefix.treeldr",
-			"match": "\\b\\w+(?=:\\w)"
+			"match": "\\b(prefix|struct|union|where|as|let|all|min|max|fn|forall|set)\\b"
 		},
 		{
 			"name": "entity.name.type.treeldr",
-			"match": "\\b\\p{Lu}\\w*\\b"
+			"match": "\\b(bool|u8|u16|u32|u64|i8|i16|i32|i64|string|\\p{Lu}\\w*)\\b"
 		},
 		{
-			"name": "entity.name.type.xsd.treeldr",
-			"match": "(?<=xs:)\\w+\\b"
+			"name": "entity.name.section.treeldr",
+			"match": "\\b\\w*:(?=\\w)"
+		},
+		{
+			"name": "entity.name.type.treeldr",
+			"match": "(?<=:)\\w+\\b"
 		},
 		{
 			"name": "string.quoted.other.uri.treeldr",

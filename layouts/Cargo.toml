@@ -8,7 +8,13 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
-default = []
+default = ["serde_json", "serde_cbor"]
+
+# JSON extension.
+json = []
+
+# Implements conversion functions between `Value` and `serde_json::Value`.
+serde_json = ["json", "dep:serde_json"]
 
 # CBOR extension.
 cbor = []
@@ -21,7 +27,7 @@ educe.workspace = true
 num-traits.workspace = true
 num-bigint.workspace = true
 num-rational.workspace = true
-iref = { workspace = true, features = ["serde"] }
+iref = { workspace = true, features = ["macros", "serde"] }
 static-iref.workspace = true
 langtag = "0.4.0"
 rdf-types = { workspace = true, features = ["serde"] }
@@ -30,12 +36,16 @@ btree-range-map.workspace = true
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 locspan.workspace = true
-serde_json = "1.0"
 json-syntax.workspace = true
 lazy_static = "1.4.0"
 static_assertions = "1.1.0"
+slab = "0.4.9"
+raw-btree = "0.3.0"
+dashmap = "6.1.0"
 
+serde_json = { version = "1.0", optional = true }
 serde_cbor = { workspace = true, optional = true }
+parking_lot = "0.12.3"
 
 [dev-dependencies]
 nquads-syntax.workspace = true

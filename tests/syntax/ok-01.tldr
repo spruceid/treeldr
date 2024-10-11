@@ -1,0 +1,4 @@
+fn (_ (subject : u32) credential) : u32 = {
+	"name": let name where { subject <https://schema.org/name> name }; (string_of name),
+	"email": let email where { subject <https://schema.org/email> name }; (string_of email)
+}

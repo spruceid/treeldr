@@ -48,7 +48,7 @@ pub fn generate(input: DeriveInput) -> Result<TokenStream, Error> {
 	let n = layout.input_count().unwrap() as usize;
 
 	let body = match layout {
-		Layout::Always => {
+		Layout::Any => {
 			unreachable!()
 		}
 		Layout::Literal(layout) => match layout {
