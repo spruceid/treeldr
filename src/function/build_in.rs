@@ -1,6 +1,9 @@
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 
-use crate::{eval::{EvalError, Scope}, Value};
+use crate::{
+	eval::{EvalError, Scope},
+	Value,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BuiltInFunction {

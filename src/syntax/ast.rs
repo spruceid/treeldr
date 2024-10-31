@@ -103,18 +103,18 @@ pub enum TokenKind {
 	DoubleCarret,
 
 	#[token("@")]
-	At
+	At,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct Module {
-	pub items: Vec<Item>
+	pub items: Vec<Item>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub enum Item {
 	Prefix(PrefixDefinition),
-	Function(Function)
+	Function(Function),
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -122,7 +122,7 @@ pub struct PrefixDefinition {
 	pub prefix: Prefix,
 	pub ident: Ident,
 	pub eq: Equal,
-	pub value: Iri
+	pub value: Iri,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -134,19 +134,19 @@ pub struct Function {
 	pub paren_r: ParenthesisR,
 	pub eq: Equal,
 	pub type_: Option<TypeAnnotation>,
-	pub body: Expr
+	pub body: Expr,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub enum ArgDef {
 	Typed(ParenthesisL, Ident, TypeAnnotation, ParenthesisR),
-	Untyped(Ident)
+	Untyped(Ident),
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct TypeAnnotation {
 	pub colon: Colon,
-	pub expr: TypeExpr
+	pub expr: TypeExpr,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -160,14 +160,14 @@ pub enum ConstValue {
 pub struct ConstList {
 	pub bracket_l: BracketL,
 	pub items: List<ConstValue>,
-	pub bracket_r: BracketR
+	pub bracket_r: BracketR,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct ConstMap {
 	pub brace_l: BraceL,
 	pub entries: List<ConstEntry>,
-	pub brace_r: BraceR
+	pub brace_r: BraceR,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -209,7 +209,7 @@ pub enum LiteralExpr {
 pub struct ListExpr {
 	pub bracket_l: BracketL,
 	pub desc: ListDescription,
-	pub bracket_r: BracketR
+	pub bracket_r: BracketR,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -230,7 +230,7 @@ pub enum ListDescription {
 pub struct MapExpr {
 	pub brace_l: BraceL,
 	pub entries: List<Entry>,
-	pub brace_r: BraceR
+	pub brace_r: BraceR,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -269,44 +269,44 @@ pub struct WhereBound {
 
 #[derive(Debug, ll1::Parse)]
 pub struct RdfDataset {
-	pub statements: List<RdfStatement, Period>
+	pub statements: List<RdfStatement, Period>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct RdfStatement {
 	pub subject: RdfTerm,
-	pub predicates_objects: List<RdfPredicateObjects, Semicolon>
+	pub predicates_objects: List<RdfPredicateObjects, Semicolon>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct RdfPredicateObjects {
 	pub predicate: RdfTerm,
-	pub objects: List<RdfTerm, Comma>
+	pub objects: List<RdfTerm, Comma>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub enum RdfTerm {
 	Var(Ident),
 	Iri(Iri),
-	Literal(RdfLiteral)
+	Literal(RdfLiteral),
 }
 
 #[derive(Debug, ll1::Parse)]
 pub enum Iri {
 	Compact(CompactIri),
-	Full(FullIri)
+	Full(FullIri),
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct RdfLiteral {
 	pub value: TextString,
-	pub annotation: Option<RdfLiteralAnnotation>
+	pub annotation: Option<RdfLiteralAnnotation>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub enum RdfLiteralAnnotation {
 	Type(DoubleCarret, Iri),
-	Language(At, TextString)
+	Language(At, TextString),
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -332,7 +332,7 @@ pub enum TypeExpr {
 }
 
 /// List type expression.
-/// 
+///
 /// ```
 /// [A, B, C]
 /// [A, B, C, ... T],
@@ -341,13 +341,13 @@ pub enum TypeExpr {
 #[derive(Debug, ll1::Parse)]
 pub struct ListTypeExpr {
 	pub prefix: List<TypeExpr>,
-	pub rest: Option<ListTypeExprRest>
+	pub rest: Option<ListTypeExprRest>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct ListTypeExprRest {
 	pub ellipsis: Ellipsis,
-	pub type_: Box<TypeExpr>
+	pub type_: Box<TypeExpr>,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -393,14 +393,14 @@ impl<T, S> List<T, S> {
 	pub fn len(&self) -> usize {
 		match self {
 			Self::Empty => 0,
-			Self::NonEmpty(_, rest) => 1 + rest.len()
+			Self::NonEmpty(_, rest) => 1 + rest.len(),
 		}
 	}
 
 	pub fn first(&self) -> Option<&T> {
 		match self {
 			Self::Empty => None,
-			Self::NonEmpty(item, _) => Some(item)
+			Self::NonEmpty(item, _) => Some(item),
 		}
 	}
 
@@ -408,8 +408,8 @@ impl<T, S> List<T, S> {
 		ListIter {
 			current: match self {
 				Self::Empty => None,
-				Self::NonEmpty(item, rest) => Some((item, rest))
-			}
+				Self::NonEmpty(item, rest) => Some((item, rest)),
+			},
 		}
 	}
 }
@@ -424,20 +424,20 @@ impl<T, S> ListRest<T, S> {
 	pub fn is_empty(&self) -> bool {
 		match self {
 			Self::Empty => true,
-			Self::NonEmpty(_, list) => list.is_empty()
+			Self::NonEmpty(_, list) => list.is_empty(),
 		}
 	}
 
 	pub fn len(&self) -> usize {
 		match self {
 			Self::Empty => 0,
-			Self::NonEmpty(_, list) => list.len()
+			Self::NonEmpty(_, list) => list.len(),
 		}
 	}
 }
 
 pub struct ListIter<'a, T, S = Comma> {
-	current: Option<(&'a T, &'a ListRest<T, S>)>
+	current: Option<(&'a T, &'a ListRest<T, S>)>,
 }
 
 impl<'a, T, S> Iterator for ListIter<'a, T, S> {
@@ -445,7 +445,7 @@ impl<'a, T, S> Iterator for ListIter<'a, T, S> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		let (item, rest) = self.current.take()?;
-		
+
 		if let ListRest::NonEmpty(_, list) = rest {
 			if let List::NonEmpty(next_item, next_rest) = &**list {
 				self.current = Some((next_item, next_rest));

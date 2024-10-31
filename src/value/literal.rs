@@ -119,57 +119,49 @@ impl Number {
 			Some('-') => {
 				negate = true;
 			}
-			Some(c) => {
-				match c.to_digit(10) {
-					Some(d) => {
-						numer *= 10;
-						numer += d;
-						empty = false;
-					}
-					None => {
-						return Err(NumberParseError::InvalidDigit)
-					}
+			Some(c) => match c.to_digit(10) {
+				Some(d) => {
+					numer *= 10;
+					numer += d;
+					empty = false;
 				}
-			}
-			None => ()
+				None => return Err(NumberParseError::InvalidDigit),
+			},
+			None => (),
 		}
 
 		while let Some(c) = chars.next() {
 			match c {
 				'.' if !fractional_part => {
 					if empty {
-						return Err(NumberParseError::MissingNumer)
+						return Err(NumberParseError::MissingNumer);
 					}
 
 					fractional_part = true;
 					empty = true;
 					denom *= 10;
-				},
-				_ => {
-					match c.to_digit(10) {
-						Some(d) => {
-							numer *= 10;
-							numer += d;
-
-							if fractional_part {
-								denom *= 10;
-							}
-
-							empty = false;
-						}
-						None => {
-							return Err(NumberParseError::InvalidDigit)
-						}
-					}
 				}
+				_ => match c.to_digit(10) {
+					Some(d) => {
+						numer *= 10;
+						numer += d;
+
+						if fractional_part {
+							denom *= 10;
+						}
+
+						empty = false;
+					}
+					None => return Err(NumberParseError::InvalidDigit),
+				},
 			}
 		}
 
 		if empty {
 			if fractional_part {
-				return Err(NumberParseError::MissingDenom)
+				return Err(NumberParseError::MissingDenom);
 			} else {
-				return Err(NumberParseError::MissingNumer)
+				return Err(NumberParseError::MissingNumer);
 			}
 		}
 
@@ -193,12 +185,12 @@ pub enum NumberParseError {
 	ZeroDenominator,
 
 	#[error("invalid digit")]
-	InvalidDigit
+	InvalidDigit,
 }
 
 impl FromStr for Number {
 	type Err = NumberParseError;
-	
+
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		match s.split_once('/') {
 			Some((numer, denom)) => {
@@ -211,9 +203,7 @@ impl FromStr for Number {
 					Ok(Number(numer / denom))
 				}
 			}
-			None => {
-				Number::from_decimal(s)
-			}
+			None => Number::from_decimal(s),
 		}
 	}
 }

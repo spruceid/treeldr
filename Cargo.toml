@@ -85,6 +85,8 @@ serde_cbor = { workspace = true, optional = true }
 ll1 = { path = "/home/timothee/Projets/utils/parsing/ll1" }
 iregex = { path = "/home/timothee/Projets/utils/parsing/iregex" }
 iregex-syntax = { path = "/home/timothee/Projets/utils/parsing/iregex/crates/syntax" }
+disjoint-collections = { path = "/home/timothee/Projets/utils/data-structures/disjoint-collections" }
+scc-trait = "0.1.0"
 langtag = "0.4.0"
 
 [dev-dependencies]

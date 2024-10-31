@@ -20,7 +20,7 @@ use crate::{Domain, Literal, TypeRef};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub struct Expr<R, T = TypeRef<R>> {
+pub struct Expr<R, T = TypeRef> {
 	pub type_: T,
 
 	pub bound: Bound<R, T>,
@@ -32,7 +32,7 @@ pub struct Expr<R, T = TypeRef<R>> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub enum InnerExpr<R, T = TypeRef<R>> {
+pub enum InnerExpr<R, T = TypeRef> {
 	/// Resource variable.
 	///
 	/// ```tldr

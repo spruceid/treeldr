@@ -1,12 +1,15 @@
 use educe::Educe;
 
-use crate::{expr::{Bound, Expr}, TypeRef};
+use crate::{
+	expr::{Bound, Expr},
+	TypeRef,
+};
 
 /// Select a list of resources and map them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub struct OrderedList<R, T = TypeRef<R>> {
+pub struct OrderedList<R, T = TypeRef> {
 	/// List components.
 	pub components: ListComponents<R>,
 

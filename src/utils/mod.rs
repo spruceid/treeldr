@@ -1,4 +1,3 @@
-
 use educe::Educe;
 use iref::IriBuf;
 use locspan::{Meta, Span};

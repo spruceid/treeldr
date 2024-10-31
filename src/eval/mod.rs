@@ -5,7 +5,7 @@ pub use scope::*;
 
 use crate::{
 	expr::{Expr, InnerExpr},
-	TypeRef, Value,
+	Registry, TypeRef, Value,
 };
 
 mod rdf;
@@ -42,6 +42,7 @@ pub enum EvalError<R> {
 pub trait Eval<R: Clone> {
 	fn eval(
 		&self,
+		registry: &Registry<R>,
 		rdf: &impl RdfContext<R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		scope: &Scope<R>,
@@ -49,6 +50,7 @@ pub trait Eval<R: Clone> {
 
 	fn eval_inverse(
 		&self,
+		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
 		scope: &mut ReverseScope<R>,
@@ -59,18 +61,20 @@ pub trait Eval<R: Clone> {
 pub trait EvalTyped<R: Clone> {
 	fn eval_typed(
 		&self,
+		registry: &Registry<R>,
 		rdf: &impl RdfContext<R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		scope: &Scope<R>,
-		type_: &TypeRef<R>,
+		type_: TypeRef,
 	) -> Result<Value<R>, EvalError<R>>;
 
 	fn eval_inverse_typed(
 		&self,
+		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
 		scope: &mut ReverseScope<R>,
-		type_: &TypeRef<R>,
+		type_: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>>;
 }
@@ -78,6 +82,7 @@ pub trait EvalTyped<R: Clone> {
 impl<R: Ord + Clone> Eval<R> for Expr<R> {
 	fn eval(
 		&self,
+		registry: &Registry<R>,
 		rdf: &impl RdfContext<R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		scope: &Scope<R>,
@@ -87,11 +92,13 @@ impl<R: Ord + Clone> Eval<R> for Expr<R> {
 			.find_one(dataset, scope)?
 			.ok_or(EvalError::Empty)?;
 
-		self.inner.eval_typed(rdf, dataset, &scope, &self.type_)
+		self.inner
+			.eval_typed(registry, rdf, dataset, &scope, self.type_)
 	}
 
 	fn eval_inverse(
 		&self,
+		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
 		scope: &mut ReverseScope<R>,
@@ -99,7 +106,7 @@ impl<R: Ord + Clone> Eval<R> for Expr<R> {
 	) -> Result<(), EvalError<R>> {
 		self.bound.inverse_once(rdf, scope, |rdf, scope| {
 			self.inner
-				.eval_inverse_typed(rdf, dataset, scope, &self.type_, output)
+				.eval_inverse_typed(registry, rdf, dataset, scope, self.type_, output)
 		})?;
 		Ok(())
 	}
@@ -108,36 +115,40 @@ impl<R: Ord + Clone> Eval<R> for Expr<R> {
 impl<R: Ord + Clone> EvalTyped<R> for InnerExpr<R> {
 	fn eval_typed(
 		&self,
+		registry: &Registry<R>,
 		rdf: &impl RdfContext<R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		scope: &Scope<R>,
-		type_: &TypeRef<R>,
+		type_: TypeRef,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
 			Self::Var(i) => Ok(scope.get(*i).unwrap().clone()),
-			Self::Literal(l) => l.eval_typed(rdf, dataset, scope, type_),
-			Self::List(list) => list.eval_typed(rdf, dataset, scope, type_),
-			Self::Map(map) => map.eval_typed(rdf, dataset, scope, type_),
-			Self::Match(m) => m.eval_typed(rdf, dataset, scope, type_),
-			Self::Call(call) => call.eval(rdf, dataset, scope),
+			Self::Literal(l) => l.eval_typed(registry, rdf, dataset, scope, type_),
+			Self::List(list) => list.eval_typed(registry, rdf, dataset, scope, type_),
+			Self::Map(map) => map.eval_typed(registry, rdf, dataset, scope, type_),
+			Self::Match(m) => m.eval_typed(registry, rdf, dataset, scope, type_),
+			Self::Call(call) => call.eval(registry, rdf, dataset, scope),
 		}
 	}
 
 	fn eval_inverse_typed(
 		&self,
+		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
 		scope: &mut ReverseScope<R>,
-		type_: &TypeRef<R>,
+		type_: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {
 			Self::Var(i) => scope.set(*i, output.clone()),
-			Self::Literal(l) => l.eval_inverse_typed(rdf, dataset, scope, type_, output),
-			Self::List(list) => list.eval_inverse_typed(rdf, dataset, scope, type_, output),
-			Self::Map(map) => map.eval_inverse_typed(rdf, dataset, scope, type_, output),
-			Self::Match(m) => m.eval_inverse_typed(rdf, dataset, scope, type_, output),
-			Self::Call(call) => call.eval_inverse(rdf, dataset, scope, output),
+			Self::Literal(l) => l.eval_inverse_typed(registry, rdf, dataset, scope, type_, output),
+			Self::List(list) => {
+				list.eval_inverse_typed(registry, rdf, dataset, scope, type_, output)
+			}
+			Self::Map(map) => map.eval_inverse_typed(registry, rdf, dataset, scope, type_, output),
+			Self::Match(m) => m.eval_inverse_typed(registry, rdf, dataset, scope, type_, output),
+			Self::Call(call) => call.eval_inverse(registry, rdf, dataset, scope, output),
 		}
 	}
 }

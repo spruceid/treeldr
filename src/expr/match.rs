@@ -20,7 +20,7 @@ use super::Expr;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub struct Match<R, T = TypeRef<R>> {
+pub struct Match<R, T = TypeRef> {
 	pub cases: BTreeMap<String, Expr<R, T>>,
 
 	pub order: Vec<String>,

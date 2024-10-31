@@ -7,7 +7,7 @@ use crate::{value::ValueLike, TypeRef};
 use super::TypedValue;
 
 #[derive(Clone)]
-pub struct TypedMap<R, V, T = TypeRef<R>>(RawBTree<Entry<R, V, T>>);
+pub struct TypedMap<R, V, T = TypeRef>(RawBTree<Entry<R, V, T>>);
 
 impl<R, V, T> TypedMap<R, V, T> {
 	pub fn new() -> Self {

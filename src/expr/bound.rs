@@ -6,7 +6,7 @@ use crate::{DatasetPattern, TypeRef};
 #[educe(Default)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub struct Bound<R, T = TypeRef<R>> {
+pub struct Bound<R, T = TypeRef> {
 	/// Introduced variables.
 	pub intro: Vec<T>,
 

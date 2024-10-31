@@ -3,18 +3,18 @@ use crate::{pattern::Substitution, TypeRef, Value};
 use std::borrow::Cow;
 
 #[derive(Clone, Copy)]
-pub enum ScopeTypes<'a, R> {
-	Slice(&'a [TypeRef<R>]),
-	Repeat(&'a TypeRef<R>, u32),
+pub enum ScopeTypes<'a> {
+	Slice(&'a [TypeRef]),
+	Repeat(TypeRef, u32),
 }
 
-impl<'a, R> ScopeTypes<'a, R> {
-	pub fn get(&self, i: u32) -> Option<&'a TypeRef<R>> {
+impl<'a> ScopeTypes<'a> {
+	pub fn get(&self, i: u32) -> Option<TypeRef> {
 		match self {
-			Self::Slice(slice) => slice.get(i as usize),
+			Self::Slice(slice) => slice.get(i as usize).copied(),
 			Self::Repeat(ty, count) => {
 				if i < *count {
-					Some(ty)
+					Some(*ty)
 				} else {
 					None
 				}
@@ -27,7 +27,7 @@ impl<'a, R> ScopeTypes<'a, R> {
 pub struct Scope<'parent, R: Clone> {
 	parent: Option<(&'parent Self, u32)>,
 	graph: Option<R>,
-	types: ScopeTypes<'parent, R>,
+	types: ScopeTypes<'parent>,
 	values: Cow<'parent, [Value<R>]>,
 }
 
@@ -39,7 +39,7 @@ impl<'parent, R: Clone> Scope<'parent, R> {
 	pub fn new(
 		parent: Option<&'parent Self>,
 		graph: Option<Option<R>>,
-		types: ScopeTypes<'parent, R>,
+		types: ScopeTypes<'parent>,
 		values: Cow<'parent, [Value<R>]>,
 	) -> Self {
 		Self {
@@ -65,7 +65,7 @@ impl<'parent, R: Clone> Scope<'parent, R> {
 		self.graph.as_ref()
 	}
 
-	pub fn type_of(&self, i: u32) -> Option<&TypeRef<R>> {
+	pub fn type_of(&self, i: u32) -> Option<TypeRef> {
 		match self.parent {
 			Some((parent, parent_len)) => {
 				if i < parent_len {
@@ -110,7 +110,7 @@ pub struct ReverseScope<'parent, R> {
 }
 
 impl<'a, R> ReverseScope<'a, R> {
-	pub fn new(graph: Option<R>, types: &'a [TypeRef<R>]) -> Self
+	pub fn new(graph: Option<R>, types: &'a [TypeRef]) -> Self
 	where
 		R: Clone,
 	{
@@ -132,7 +132,7 @@ impl<'a, R> ReverseScope<'a, R> {
 		&'b mut self,
 		rdf: &mut C,
 		graph: Option<Option<R>>,
-		types: &'b [TypeRef<R>],
+		types: &'b [TypeRef],
 		f: impl FnOnce(&mut C, &mut ReverseScope<'b, R>) -> Result<(), EvalError<R>>,
 	) -> Result<Vec<Value<R>>, EvalError<R>>
 	where

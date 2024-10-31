@@ -3,7 +3,8 @@ use std::ops::Deref;
 use rdf_types::dataset::PatternMatchingDataset;
 
 use crate::{
-	eval::{EvalError, RdfContext}, Domain, Function, Value
+	eval::{EvalError, RdfContext},
+	Domain, Function, Registry, Value,
 };
 
 /// Layout.
@@ -14,12 +15,13 @@ pub struct Layout<R>(Function<R>);
 impl<R: Clone + Ord> Layout<R> {
 	pub fn hydrate(
 		&self,
+		registry: &Registry<R>,
 		rdf: &impl RdfContext<R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		args: &[R],
 	) -> Result<Value<R>, EvalError<R>> {
 		let args: Vec<_> = args.iter().map(|r| Value::Resource(r.clone())).collect();
-		self.0.call(rdf, dataset, &args)
+		self.0.call(registry, rdf, dataset, &args)
 	}
 }
 

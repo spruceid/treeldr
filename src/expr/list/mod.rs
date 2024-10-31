@@ -13,7 +13,7 @@ use super::Expr;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub enum List<R, T = TypeRef<R>> {
+pub enum List<R, T = TypeRef> {
 	Explicit(ExplicitList<R, T>),
 	Implicit(ImplicitList<R, T>),
 }
@@ -22,15 +22,13 @@ pub enum List<R, T = TypeRef<R>> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub struct ExplicitList<R, T = TypeRef<R>> {
+pub struct ExplicitList<R, T = TypeRef> {
 	pub items: Vec<Expr<R, T>>,
 }
 
 impl<R, T> ExplicitList<R, T> {
 	pub fn new(items: Vec<Expr<R, T>>) -> Self {
-		Self {
-			items
-		}
+		Self { items }
 	}
 }
 
@@ -38,7 +36,7 @@ impl<R, T> ExplicitList<R, T> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub enum ImplicitList<R, T = TypeRef<R>> {
+pub enum ImplicitList<R, T = TypeRef> {
 	Ordered(OrderedList<R, T>),
 	Unordered(UnorderedList<R, T>),
 }

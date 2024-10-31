@@ -10,7 +10,7 @@ pub use literal::*;
 mod typed;
 pub use typed::*;
 
-use crate::{utils::try_map_list, Type, TypeRef};
+use crate::{utils::try_map_list, Registry, Type, TypeRef};
 
 /// Untyped tree value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -72,26 +72,31 @@ impl<R> Value<R> {
 		}
 	}
 
-	pub fn into_typed(self, ty_ref: &TypeRef<R>) -> Result<TypedValue<R>, Value<R>>
+	pub fn into_typed(
+		self,
+		registry: &Registry<R>,
+		ty_ref: TypeRef,
+	) -> Result<TypedValue<R>, Value<R>>
 	where
 		R: Clone + Ord + Hash,
 	{
-		match (ty_ref.as_ref(), self) {
+		let ty: &Type<R> = registry.get_type(ty_ref).unwrap();
+		match (ty, self) {
 			(Type::Any, value) => Ok(TypedValue {
-				type_: ty_ref.clone(),
+				type_: ty_ref,
 				desc: match value {
 					Value::Resource(r) => TypedValueInnerDesc::Resource(r),
 					Value::Literal(l) => TypedValueInnerDesc::Literal(l),
 					Value::List(l) => try_map_list(l, TypedValue::into_untyped, |_, item| {
-						item.into_typed(ty_ref)
+						item.into_typed(registry, ty_ref)
 					})
 					.map(TypedValueInnerDesc::List)
 					.map_err(Self::List)?,
-					Value::Map(m) => {
-						map_into_typed(m, TypedValue::into_untyped, |item| item.into_typed(ty_ref))
-							.map(TypedValueInnerDesc::Map)
-							.map_err(Self::Map)?
-					}
+					Value::Map(m) => map_into_typed(m, TypedValue::into_untyped, |item| {
+						item.into_typed(registry, ty_ref)
+					})
+					.map(TypedValueInnerDesc::Map)
+					.map_err(Self::Map)?,
 				}
 				.into(),
 			}),
@@ -105,30 +110,35 @@ impl<R> Value<R> {
 			}),
 			(Type::List(ty), Self::List(items)) => {
 				if items.len() < ty.min_len() {
-					return Err(Self::List(items))
+					return Err(Self::List(items));
 				}
 
 				if ty.max_len().is_some_and(|m| items.len() > m) {
-					return Err(Self::List(items))
+					return Err(Self::List(items));
 				}
 
 				Ok(TypedValue {
 					type_: ty_ref.clone(),
 					desc: TypedValueInnerDesc::List(
-						items.into_iter().enumerate().map(|(i, item)| item.into_typed(ty.item_type(i).unwrap())).collect::<Result<_, _>>()?
-					).into(),
+						items
+							.into_iter()
+							.enumerate()
+							.map(|(i, item)| item.into_typed(registry, ty.item_type(i).unwrap()))
+							.collect::<Result<_, _>>()?,
+					)
+					.into(),
 				})
 			}
 			(Type::Struct(ty), Self::Map(mut map)) => {
 				let mut result = TypedMap::new();
 
-				for (key_pattern, field) in &ty.fields {
+				for (&key_pattern, field) in &ty.fields {
 					let mut found = false;
 					let mut entries = std::mem::take(&mut map).into_iter();
 
 					while let Some((key, value)) = entries.next() {
-						match key.into_typed(key_pattern) {
-							Ok(typed_key) => match value.into_typed(&field.type_) {
+						match key.into_typed(registry, key_pattern) {
+							Ok(typed_key) => match value.into_typed(registry, field.type_) {
 								Ok(typed_value) => {
 									found = true;
 									result.insert(typed_key, typed_value);
@@ -169,8 +179,8 @@ impl<R> Value<R> {
 				})
 			}
 			(Type::Enum(e), mut value) => {
-				for (name, variant) in &e.variants {
-					match std::mem::take(&mut value).into_typed(variant) {
+				for (name, &variant) in &e.variants {
+					match std::mem::take(&mut value).into_typed(registry, variant) {
 						Ok(typed_value) => {
 							return Ok(TypedValue {
 								type_: ty_ref.clone(),

@@ -1,11 +1,11 @@
-use std::{borrow::Cow, cell::OnceCell, hash::Hash, ops::Deref, sync::Arc};
 use educe::Educe;
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
+use std::{borrow::Cow, cell::OnceCell, hash::Hash, ops::Deref, sync::Arc};
 
 use crate::{
 	eval::{EvalError, RdfContext, RdfContextMut, Scope, ScopeTypes},
 	ty::TypeRef,
-	Domain, Layout, Value,
+	Domain, Layout, Registry, Value,
 };
 
 mod body;
@@ -17,7 +17,7 @@ pub use build_in::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Signature<T> {
 	pub args: Vec<T>,
-	pub return_type: T
+	pub return_type: T,
 }
 
 impl<R> Signature<R> {
@@ -32,17 +32,17 @@ impl<R> Domain for Signature<R> {
 
 /// Function.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord"))]
-pub struct Function<R> {
-	pub signature: Signature<TypeRef<R>>,
-	pub body: Body<R>,
+#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
+#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
+pub struct Function<R, T = TypeRef> {
+	pub signature: Signature<T>,
+	pub body: Body<R, T>,
 }
 
 impl<R> Function<R> {
-	pub fn as_layout(&self) -> Option<&Layout<R>> {
-		for a in &self.signature.args {
-			if a.is_resource() {
+	pub fn as_layout(&self, registry: &Registry<R>) -> Option<&Layout<R>> {
+		for &a in &self.signature.args {
+			if registry.get_type(a)?.is_resource() {
 				return None;
 			}
 		}
@@ -58,6 +58,7 @@ impl<R> Function<R> {
 impl<R: Clone + Ord> Function<R> {
 	pub fn call(
 		&self,
+		registry: &Registry<R>,
 		rdf: &impl RdfContext<R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		args: &[Value<R>],
@@ -68,23 +69,19 @@ impl<R: Clone + Ord> Function<R> {
 			ScopeTypes::Slice(&self.signature.args),
 			Cow::Borrowed(args),
 		);
-		self.body
-			.eval(rdf, dataset, &scope)
+		self.body.eval(registry, rdf, dataset, &scope)
 	}
 
 	pub fn call_inverse(
 		&self,
+		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
 		output: &Value<R>,
 	) -> Result<Vec<Value<R>>, EvalError<R>> {
 		let input_types: Vec<_> = self.signature.args.iter().map(|a| a.clone()).collect();
-		self.body.eval_inverse(
-			rdf,
-			dataset,
-			&input_types,
-			output,
-		)
+		self.body
+			.eval_inverse(registry, rdf, dataset, &input_types, output)
 	}
 }
 
@@ -99,54 +96,17 @@ pub struct Arg<T> {
 	pub is_const: bool,
 }
 
-#[derive(Debug, Educe)]
-#[educe(Clone)]
-pub struct FunctionRef<R>(Arc<OnceCell<Function<R>>>);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FunctionRef(usize);
 
-impl<R> FunctionRef<R> {
-	pub fn new(value: Function<R>) -> Self {
-		todo!()
-	}
-
-	pub fn new_undefined() -> Self {
-		todo!()
-	}
-
-	pub fn define(&self, value: Function<R>) {
-		todo!()
+impl From<FunctionRef> for usize {
+	fn from(value: FunctionRef) -> Self {
+		value.0
 	}
 }
 
-impl<R> Deref for FunctionRef<R> {
-	type Target = Function<R>;
-	
-	fn deref(&self) -> &Self::Target {
-		self.0.get().expect("undefined function")
-	}
-}
-
-impl<R: PartialEq> PartialEq for FunctionRef<R> {
-	fn eq(&self, other: &Self) -> bool {
-		Function::<R>::eq(self, other)
-	}
-}
-
-impl<R: Eq> Eq for FunctionRef<R> {}
-
-impl<R: 'static + PartialOrd> PartialOrd for FunctionRef<R> {
-	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		<Function<R>>::partial_cmp(self, other)
-	}
-}
-
-impl<R: 'static + Ord> Ord for FunctionRef<R> {
-	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-		<Function<R>>::cmp(self, other)
-	}
-}
-
-impl<R: Hash> Hash for FunctionRef<R> {
-	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		<Function<R>>::hash(self, state);
+impl From<usize> for FunctionRef {
+	fn from(value: usize) -> Self {
+		Self(value)
 	}
 }

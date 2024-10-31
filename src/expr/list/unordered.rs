@@ -1,6 +1,9 @@
 use educe::Educe;
 
-use crate::{expr::{Bound, Expr}, TypeRef};
+use crate::{
+	expr::{Bound, Expr},
+	TypeRef,
+};
 
 /// Select a set of resources and map them.
 ///
@@ -15,7 +18,7 @@ use crate::{expr::{Bound, Expr}, TypeRef};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub struct UnorderedList<R, T = TypeRef<R>> {
+pub struct UnorderedList<R, T = TypeRef> {
 	pub bound: Bound<R, T>,
 
 	/// Expression mapping the selected resources.

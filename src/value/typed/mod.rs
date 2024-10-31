@@ -9,7 +9,7 @@ pub use map::TypedMap;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub struct TypedValue<R = rdf_types::Term, T = TypeRef<R>> {
+pub struct TypedValue<R = rdf_types::Term, T = TypeRef> {
 	pub type_: T,
 	pub desc: TypedValueDesc<R, T>,
 }
@@ -108,7 +108,7 @@ impl<R, T> MapLike for TypedMap<R, TypedValue<R, T>, T> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub enum TypedValueDesc<R = rdf_types::Term, T = TypeRef<R>> {
+pub enum TypedValueDesc<R = rdf_types::Term, T = TypeRef> {
 	Variant(String, Box<TypedValue<R, T>>),
 	Constant(TypedValueInnerDesc<R, T>),
 }
@@ -166,7 +166,7 @@ impl<R, T> From<TypedValueInnerDesc<R, T>> for TypedValueDesc<R, T> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
 #[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
 #[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
-pub enum TypedValueInnerDesc<R = rdf_types::Term, T = TypeRef<R>> {
+pub enum TypedValueInnerDesc<R = rdf_types::Term, T = TypeRef> {
 	/// RDF resource.
 	Resource(R),
 

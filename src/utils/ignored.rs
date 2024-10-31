@@ -1,4 +1,8 @@
-use std::{cmp::Ordering, hash::Hash, ops::{Deref, DerefMut}};
+use std::{
+	cmp::Ordering,
+	hash::Hash,
+	ops::{Deref, DerefMut},
+};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Ignored<T>(pub T);
