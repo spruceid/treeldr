@@ -94,42 +94,120 @@ impl<R, T> Type<R, T> {
 			_ => None,
 		}
 	}
+
+	pub fn visit_type_components(&self, f: impl FnMut(&T, bool)) {
+		todo!()
+	}
+}
+
+pub trait TypeUnifier<T, U> {
+	type Target;
+
+	fn left_key_type(&mut self, t: &T) -> TypeRef;
+
+	fn right_key_type(&mut self, u: &U) -> TypeRef;
+
+	fn unify(&mut self, t: &T, u: &U) -> Self::Target;
 }
 
 impl<R: Clone + Ord, T> Type<R, T> {
 	pub fn unify_with<U, V>(
 		&self,
+		registry: &Registry<R>,
+		unifier: &mut impl TypeUnifier<T, U, Target = V>,
 		other: &Type<R, U>,
-		merge_type: impl FnMut(&T, &U) -> V,
-	) -> Result<Type<R, V>, TypeUnificationError> {
+	) -> Result<Type<R, V>, TypeUnificationError>
+	where 
+		V: Ord
+	{
 		match (self, other) {
 			(Self::Any, Type::Any) => Ok(Type::Any),
 			(Self::Resource(a), Type::Resource(b)) => {
-				todo!()
+				if a == b {
+					Ok(Type::Resource(a.clone()))
+				} else {
+					Err(TypeUnificationError)
+				}
 			}
 			(Self::Literal(a), Type::Literal(b)) => match a.subtype_cmp(b) {
 				Some(Ordering::Equal) => Ok(Type::Literal(a.clone())),
-				_ => Err(TypeUnificationError::Neq),
+				_ => Err(TypeUnificationError),
 			},
 			(Self::List(a), Type::List(b)) => {
-				todo!()
+				Ok(Type::List(List {
+					prefix: if a.prefix.len() == b.prefix.len() {
+						a.prefix.iter().zip(&b.prefix).map(|(a, b)| unifier.unify(a, b)).collect()
+					} else {
+						return Err(TypeUnificationError)
+					},
+					rest: match (&a.rest, &b.rest) {
+						(Some(a), Some(b)) => Some(unifier.unify(a, b)),
+						(None, None) => None,
+						_ => return Err(TypeUnificationError)
+					}
+				}))
 			}
 			(Self::Struct(a), Type::Struct(b)) => {
-				todo!()
+				if a.fields.len() == b.fields.len() {
+					let mut fields = BTreeMap::new();
+
+					for (a_key, a_field) in &a.fields {
+						let a_key_type = unifier.left_key_type(a_key);
+						let b_entry = b.fields.iter().find(|(k, _)| {
+							a_key_type.subtype_cmp(registry, unifier.right_key_type(k)).is_some_and(Ordering::is_eq)
+						});
+
+						match b_entry {
+							Some((b_key, b_field)) => {
+								if a_field.required == b_field.required {
+									let key = unifier.unify(a_key, b_key);
+									fields.insert(key, Field {
+										type_: unifier.unify(&a_field.type_, &b_field.type_),
+										required: a_field.required
+									});
+								} else {
+									return Err(TypeUnificationError)
+								}
+							}
+							None => return Err(TypeUnificationError)
+						}
+					}
+
+					Ok(Type::Struct(Struct {
+						fields
+					}))
+				} else {
+					Err(TypeUnificationError)
+				}
 			}
 			(Self::Enum(a), Type::Enum(b)) => {
-				todo!()
+				if a.variants.len() == b.variants.len() {
+					let mut variants = BTreeMap::new();
+
+					for (key, a_type) in &a.variants {
+						match b.variants.get(key) {
+							Some(b_type) => {
+								variants.insert(key.clone(), unifier.unify(a_type, b_type));
+							}
+							None => return Err(TypeUnificationError)
+						}
+					}
+
+					Ok(Type::Enum(Enum {
+						variants
+					}))
+				} else {
+					Err(TypeUnificationError)
+				}
 			}
-			_ => Err(TypeUnificationError::Neq),
+			_ => Err(TypeUnificationError),
 		}
 	}
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum TypeUnificationError {
-	#[error("incompatible types")]
-	Neq,
-}
+#[error("type unification failed")]
+pub struct TypeUnificationError;
 
 impl<R: Ord> Type<R> {
 	pub fn subtype_cmp(&self, registry: &Registry<R>, other: &Self) -> Option<Ordering> {
@@ -161,10 +239,8 @@ impl<R: Ord> Type<R> {
 }
 
 /// Resource type.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Educe)]
 #[educe(Default)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord"))]
 pub struct Resource<R> {
 	set: Option<BTreeSet<R>>,
 }

@@ -46,6 +46,10 @@ impl<R> Registry<R> {
 		let i: usize = function_ref.into();
 		self.functions.get(i)
 	}
+
+	pub fn insert_type(&mut self, type_: Type<R>) -> TypeRef {
+		todo!()
+	}
 }
 
 struct RegistryReservation<'a, R> {

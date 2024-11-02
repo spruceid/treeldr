@@ -1,27 +1,22 @@
 use std::{
 	borrow::Cow,
-	cmp::Ordering,
-	collections::{BTreeMap, HashMap, HashSet},
+	collections::{BTreeMap, HashMap},
 	hash::Hash,
 };
 
-use disjoint_collections::DisjointVec;
 use iref::{InvalidIri, IriBuf};
 use langtag::{InvalidLangTag, LangTagBuf};
 use ll1::{Span, Spanned};
 use rdf_types::{Quad, RDF_FIRST, RDF_NIL, RDF_REST, XSD_STRING};
-use scc_trait::Scc;
 
 use crate::{
-	eval::RdfContextMut,
-	expr::{self, Bound, Expr, InnerExpr, ListComponents},
-	function::{self, FunctionRef, Signature},
-	ty::{self, TypeUnificationError},
-	value::{Number, NumberParseError, TypedMap, TypedValue, TypedValueDesc, TypedValueInnerDesc},
-	DatasetPattern, Function, Item, Literal, Module, Registry, TermPattern, Type, TypeRef,
+	eval::RdfContextMut, expr::{self, Bound, Expr, InnerExpr, ListComponents}, function::{self, FunctionRef, Signature}, ty::{self, TypeUnificationError, TypeUnifier}, value::{Number, NumberParseError, TypedMap, TypedValue, TypedValueDesc, TypedValueInnerDesc}, DatasetPattern, Function, Item, Literal, Module, Registry, RegistryReservation, TermPattern, Type, TypeRef
 };
 
 use super::ast::{self, Ident, ListDescription};
+
+mod typing;
+pub use typing::*;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -205,253 +200,6 @@ impl<'a> SubScope<'a> {
 		self.bindings.insert(ident.as_str().to_owned(), i);
 		i
 	}
-}
-
-pub type TypeVariableRef = usize;
-
-#[derive(Debug, Clone)]
-pub enum TypeValue<R> {
-	Undefined,
-	Pattern(Type<R, TypeVariableRef>),
-	Type(TypeRef),
-}
-
-impl<R> Default for TypeValue<R> {
-	fn default() -> Self {
-		Self::Undefined
-	}
-}
-
-impl<R> TypeValue<R> {
-	/// Unifies two type values.
-	pub fn unify(
-		self,
-		registry: &Registry<R>,
-		other: Self,
-		mut type_ref_variable: impl FnMut(&TypeRef) -> TypeVariableRef,
-		mut assert_eq: impl FnMut(TypeVariableRef, TypeVariableRef),
-	) -> Result<Self, TypeUnificationError>
-	where
-		R: Clone + Ord,
-	{
-		match (self, other) {
-			(Self::Undefined, b) => Ok(b),
-			(a, Self::Undefined) => Ok(a),
-			(Self::Pattern(a), Self::Pattern(b)) => a
-				.unify_with(&b, |&a, &b| {
-					assert_eq(a, b);
-					a
-				})
-				.map(Self::Pattern),
-			(Self::Pattern(a), Self::Type(b_ref)) => {
-				let b = registry.get_type(b_ref).unwrap();
-				a.unify_with(&b, |&a, b| {
-					assert_eq(a, type_ref_variable(b));
-					a
-				})
-				.map(Self::Pattern)
-			}
-			(Self::Type(a_ref), Self::Pattern(b)) => {
-				let a = registry.get_type(a_ref).unwrap();
-				a.unify_with(&b, |a, &b| {
-					assert_eq(type_ref_variable(a), b);
-					b
-				})
-				.map(Self::Pattern)
-			}
-			(Self::Type(a), Self::Type(b)) => {
-				if a == b {
-					Ok(Self::Type(a.clone()))
-				} else {
-					Err(TypeUnificationError::Neq)
-				}
-			}
-		}
-	}
-
-	fn resolve(&self) -> Result<TypeRef, TypeUnificationError> {
-		todo!()
-	}
-}
-
-impl<R> From<Type<R, TypeVariableRef>> for TypeValue<R> {
-	fn from(value: Type<R, TypeVariableRef>) -> Self {
-		Self::Pattern(value)
-	}
-}
-
-struct TypeVariables<R> {
-	list: Vec<TypeValue<R>>,
-	subtype_relation: SubtypeRelation,
-	imported_types: HashMap<TypeRef, TypeVariableRef>,
-}
-
-impl<R> TypeVariables<R> {
-	pub fn new() -> Self {
-		Self {
-			list: Vec::new(),
-			subtype_relation: SubtypeRelation::default(),
-			imported_types: HashMap::new(),
-		}
-	}
-
-	pub fn fresh(&mut self, value: impl Into<TypeValue<R>>) -> TypeVariableRef {
-		todo!()
-	}
-
-	/// Import a type reference as a type variable.
-	pub fn import_type_ref(&mut self, ty: &TypeRef) -> TypeVariableRef {
-		let next_index = self.imported_types.len();
-		*self.imported_types.entry(ty.clone()).or_insert(next_index)
-	}
-
-	/// Asserts that type `a` is a subtype of type `b`.
-	pub fn assert_subtype_of(&mut self, a: TypeVariableRef, b: TypeVariableRef) {
-		self.subtype_relation.insert(a, b);
-	}
-
-	/// Asserts that two type variables are equal.
-	pub fn assert_eq(&mut self, a: TypeVariableRef, b: TypeVariableRef) {
-		self.assert_subtype_of(a, b);
-		self.assert_subtype_of(b, a);
-	}
-
-	pub fn resolve(
-		&self,
-		registry: &mut Registry<R>,
-	) -> Result<HashMap<TypeVariableRef, TypeRef>, TypeResolutionError>
-	where
-		R: Clone + Ord,
-	{
-		// Step 1: Compute the strongly connection components of the sub-typing
-		//         relations.
-		let components = self.subtype_relation.strongly_connected_components();
-
-		// Step 2: Prepare type unification. Types that are in the same SCC must
-		//         be unified.
-		let mut to_unify = Vec::new();
-		for c in components.order_by_depth().into_iter().rev() {
-			let component = components.get_by_index(c).unwrap();
-
-			let (&first, rest) = component.split_first().unwrap();
-			for &other in rest {
-				to_unify.push((first, other));
-			}
-		}
-
-		// Step 3: Unify types.
-		let mut variables: DisjointVec<TypeValue<R>> = self.list.iter().cloned().collect();
-		let mut imported_types: Vec<TypeValue<R>> = Vec::new();
-		let mut imported_types_map = HashMap::new();
-		while let Some((a, b)) = to_unify.pop() {
-			let import_type_ref = |type_ref: &TypeRef| {
-				self.imported_types
-					.get(type_ref)
-					.copied()
-					.unwrap_or_else(|| {
-						*imported_types_map
-							.entry(type_ref.clone())
-							.or_insert_with(|| {
-								imported_types.push(TypeValue::Type(type_ref.clone()));
-								self.list.len() + imported_types.len()
-							})
-					})
-			};
-
-			let assert_eq = |a, b| to_unify.push((a, b));
-
-			variables.try_merge(a, b, |a, b| {
-				a.unify(registry, b, import_type_ref, assert_eq)
-			})?;
-		}
-
-		// Step 4: Resolve the sub-typing relation.
-		let super_types = self
-			.subtype_relation
-			.resolve(|x| variables.class_of(x).unwrap());
-
-		// Step 5: Actually resolve types.
-		let resolved_variables: Vec<_> = variables
-			.classes()
-			.map(|(_, value)| value.resolve())
-			.collect::<Result<_, _>>()?;
-
-		let mut result = HashMap::new();
-		for x in 0..variables.len() {
-			result.insert(
-				x,
-				resolved_variables[variables.class_of(x).unwrap()].clone(),
-			);
-		}
-
-		// Step 6: Check sub-typing constraints.
-		for (x, _) in variables.classes() {
-			let x_type = resolved_variables[x];
-
-			if let Some(x_supertypes) = super_types.get(&x) {
-				for &y in x_supertypes {
-					let y_type = resolved_variables[y];
-
-					if !x_type
-						.subtype_cmp(registry, y_type)
-						.is_some_and(Ordering::is_le)
-					{
-						return Err(TypeResolutionError::Subtyping);
-					}
-				}
-			}
-		}
-
-		Ok(result)
-	}
-}
-
-/// Subtype relation.
-#[derive(Default)]
-struct SubtypeRelation(HashMap<TypeVariableRef, HashSet<TypeVariableRef>>);
-
-impl SubtypeRelation {
-	/// Declares that `a` is a subtype of `b`.
-	fn insert(&mut self, a: TypeVariableRef, b: TypeVariableRef) -> bool {
-		self.0.entry(b).or_default().insert(a)
-	}
-
-	fn resolve(
-		&self,
-		f: impl Copy + Fn(TypeVariableRef) -> TypeVariableRef,
-	) -> HashMap<TypeVariableRef, HashSet<TypeVariableRef>> {
-		let mut result: HashMap<TypeVariableRef, HashSet<TypeVariableRef>> = HashMap::new();
-
-		for (&key, value) in &self.0 {
-			result
-				.entry(f(key))
-				.or_default()
-				.extend(value.iter().copied().map(f));
-		}
-
-		result
-	}
-}
-
-impl Scc for SubtypeRelation {
-	type Vertex = TypeVariableRef;
-
-	fn vertices(&self) -> impl '_ + IntoIterator<Item = Self::Vertex> {
-		self.0.keys().copied()
-	}
-
-	fn successors(&self, v: Self::Vertex) -> impl '_ + IntoIterator<Item = Self::Vertex> {
-		self.0[&v].iter().copied()
-	}
-}
-
-#[derive(Debug, thiserror::Error)]
-enum TypeResolutionError {
-	#[error("subtyping failed")]
-	Subtyping,
-
-	#[error(transparent)]
-	Unification(#[from] TypeUnificationError),
 }
 
 pub struct BuildContext<'registry, 'context, 'ast, R, C> {
