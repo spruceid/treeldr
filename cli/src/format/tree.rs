@@ -3,15 +3,15 @@ use std::io::{self, BufRead, Write};
 
 use clap::builder::TypedValueParser;
 use json_syntax::Print;
-use treeldr_layouts::{value::NonJsonValue, Registry};
+use treeldr::{value::{serde::json::NonJsonValue, TypedValue}, Registry};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
 	#[error("JSON parse error: {0}")]
 	Json(json_syntax::parse::Error<io::Error>),
 
-	#[error("CBOR parse error: {0}")]
-	Cbor(serde_cbor::Error),
+	// #[error("CBOR parse error: {0}")]
+	// Cbor(serde_cbor::Error),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -22,17 +22,17 @@ pub enum WriteError {
 	#[error(transparent)]
 	IO(#[from] io::Error),
 
-	#[error("invalid CBOR tag: {0}")]
-	CborTag(treeldr_layouts::value::cbor::InvalidTag),
+	// #[error("invalid CBOR tag: {0}")]
+	// CborTag(treeldr_layouts::value::cbor::InvalidTag),
 
-	#[error(transparent)]
-	Cbor(serde_cbor::Error),
+	// #[error(transparent)]
+	// Cbor(serde_cbor::Error),
 }
 
 #[derive(Debug, Clone)]
 pub enum TreeFormat {
 	Json,
-	Cbor,
+	// Cbor,
 }
 
 impl TreeFormat {
@@ -48,7 +48,7 @@ impl TreeFormat {
 	pub fn new(name: &str) -> Option<Self> {
 		match name {
 			"application/json" | "json" => Some(Self::Json),
-			"application/cbor" | "cbor" => Some(Self::Cbor),
+			// "application/cbor" | "cbor" => Some(Self::Cbor),
 			_ => None,
 		}
 	}
@@ -56,11 +56,11 @@ impl TreeFormat {
 	pub fn as_str(&self) -> &'static str {
 		match self {
 			Self::Json => "application/json",
-			Self::Cbor => "application/cbor",
+			// Self::Cbor => "application/cbor",
 		}
 	}
 
-	pub fn load(&self, input: impl BufRead) -> Result<treeldr_layouts::Value, LoadError> {
+	pub fn load(&self, input: impl BufRead) -> Result<treeldr::Value, LoadError> {
 		match self {
 			Self::Json => {
 				use json_syntax::Parse;
@@ -69,20 +69,21 @@ impl TreeFormat {
 					json_syntax::Value::parse_utf8(utf8_input).map_err(LoadError::Json)?;
 				Ok(json.into())
 			}
-			Self::Cbor => serde_cbor::from_reader(input).map_err(LoadError::Cbor),
+			// Self::Cbor => serde_cbor::from_reader(input).map_err(LoadError::Cbor),
 		}
 	}
 
-	pub fn write_typed(
+	pub fn write(
 		&self,
-		layouts: &impl Registry,
-		value: treeldr_layouts::TypedValue,
+		_registry: &Registry,
+		value: &TypedValue,
 		pretty: bool,
 		mut output: impl Write,
 	) -> Result<(), WriteError> {
 		match self {
 			Self::Json => {
 				let json: json_syntax::Value = value
+					.clone()
 					.into_untyped()
 					.try_into()
 					.map_err(WriteError::NonJsonValue)?;
@@ -92,34 +93,34 @@ impl TreeFormat {
 					write!(output, "{}", json.compact_print()).map_err(WriteError::IO)
 				}
 			}
-			Self::Cbor => {
-				let cbor = value
-					.try_into_tagged_serde_cbor(layouts)
-					.map_err(WriteError::CborTag)?;
-				serde_cbor::to_writer(output, &cbor).map_err(WriteError::Cbor)
-			}
+			// Self::Cbor => {
+			// 	let cbor = value
+			// 		.try_into_tagged_serde_cbor(registry)
+			// 		.map_err(WriteError::CborTag)?;
+			// 	serde_cbor::to_writer(output, &cbor).map_err(WriteError::Cbor)
+			// }
 		}
 	}
 
-	pub fn write_untyped(
-		&self,
-		value: treeldr_layouts::Value,
-		pretty: bool,
-		mut output: impl Write,
-	) -> Result<(), WriteError> {
-		match self {
-			Self::Json => {
-				let json: json_syntax::Value =
-					value.try_into().map_err(WriteError::NonJsonValue)?;
-				if pretty {
-					write!(output, "{}", json.pretty_print()).map_err(WriteError::IO)
-				} else {
-					write!(output, "{}", json.compact_print()).map_err(WriteError::IO)
-				}
-			}
-			Self::Cbor => serde_cbor::to_writer(output, &value).map_err(WriteError::Cbor),
-		}
-	}
+	// pub fn write_untyped(
+	// 	&self,
+	// 	value: &treeldr::Value,
+	// 	pretty: bool,
+	// 	mut output: impl Write,
+	// ) -> Result<(), WriteError> {
+	// 	match self {
+	// 		Self::Json => {
+	// 			let json: json_syntax::Value =
+	// 				value.clone().try_into().map_err(WriteError::NonJsonValue)?;
+	// 			if pretty {
+	// 				write!(output, "{}", json.pretty_print()).map_err(WriteError::IO)
+	// 			} else {
+	// 				write!(output, "{}", json.compact_print()).map_err(WriteError::IO)
+	// 			}
+	// 		}
+	// 		// Self::Cbor => serde_cbor::to_writer(output, &value).map_err(WriteError::Cbor),
+	// 	}
+	// }
 }
 
 impl fmt::Display for TreeFormat {

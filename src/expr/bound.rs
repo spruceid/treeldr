@@ -2,14 +2,21 @@ use educe::Educe;
 
 use crate::{DatasetPattern, TypeRef};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Educe)]
 #[educe(Default)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
 pub struct Bound<R, T = TypeRef> {
 	/// Introduced variables.
 	pub intro: Vec<T>,
 
 	/// Dataset constraints.
 	pub dataset: DatasetPattern<R>,
+}
+
+impl<R, T> Bound<R, T> {
+	pub fn map_types<U>(self, mut f: impl FnMut(T) -> U) -> Bound<R, U> {
+		Bound {
+			intro: self.intro.into_iter().map(|x| f(x)).collect(),
+			dataset: self.dataset
+		}
+	}
 }

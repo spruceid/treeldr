@@ -81,13 +81,13 @@ impl<R: PartialEq, V: PartialEq, T: PartialEq> PartialEq for TypedMap<R, V, T> {
 
 impl<R: Eq, V: Eq, T: Eq> Eq for TypedMap<R, V, T> {}
 
-impl<R: 'static + PartialOrd, V: PartialOrd, T: PartialOrd> PartialOrd for TypedMap<R, V, T> {
+impl<R: PartialOrd, V: PartialOrd, T: PartialOrd> PartialOrd for TypedMap<R, V, T> {
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
 		self.iter().partial_cmp(other.iter())
 	}
 }
 
-impl<R: 'static + Ord, V: Ord, T: Ord> Ord for TypedMap<R, V, T> {
+impl<R: Ord, V: Ord, T: Ord> Ord for TypedMap<R, V, T> {
 	fn cmp(&self, other: &Self) -> Ordering {
 		self.iter().cmp(other.iter())
 	}

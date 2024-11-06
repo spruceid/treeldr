@@ -1,39 +1,39 @@
-use std::{collections::BTreeMap, fmt};
+use std::{collections::BTreeMap, fmt, marker::PhantomData};
 
-use super::{Literal, Number, Value};
+use crate::{value::Number, Literal, Value};
 
-impl<'de> serde::Deserialize<'de> for Value {
+impl<'de, R: Ord + serde::Deserialize<'de>> serde::Deserialize<'de> for Value<R> {
 	#[inline]
-	fn deserialize<D>(deserializer: D) -> Result<Value, D::Error>
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 	where
 		D: serde::Deserializer<'de>,
 	{
-		struct ValueVisitor;
+		struct ValueVisitor<R>(PhantomData<R>);
 
-		impl<'de> serde::de::Visitor<'de> for ValueVisitor {
-			type Value = Value;
+		impl<'de, R: Ord + serde::Deserialize<'de>> serde::de::Visitor<'de> for ValueVisitor<R> {
+			type Value = Value<R>;
 
 			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
 				formatter.write_str("any valid TreeLDR value")
 			}
 
 			#[inline]
-			fn visit_bool<E>(self, value: bool) -> Result<Value, E> {
+			fn visit_bool<E>(self, value: bool) -> Result<Value<R>, E> {
 				Ok(Value::Literal(Literal::Boolean(value)))
 			}
 
 			#[inline]
-			fn visit_i64<E>(self, value: i64) -> Result<Value, E> {
+			fn visit_i64<E>(self, value: i64) -> Result<Value<R>, E> {
 				Ok(Value::Literal(Literal::Number(value.into())))
 			}
 
 			#[inline]
-			fn visit_u64<E>(self, value: u64) -> Result<Value, E> {
+			fn visit_u64<E>(self, value: u64) -> Result<Value<R>, E> {
 				Ok(Value::Literal(Literal::Number(value.into())))
 			}
 
 			#[inline]
-			fn visit_f64<E>(self, value: f64) -> Result<Value, E>
+			fn visit_f64<E>(self, value: f64) -> Result<Value<R>, E>
 			where
 				E: serde::de::Error,
 			{
@@ -58,7 +58,7 @@ impl<'de> serde::Deserialize<'de> for Value {
 			}
 
 			#[inline]
-			fn visit_str<E>(self, value: &str) -> Result<Value, E>
+			fn visit_str<E>(self, value: &str) -> Result<Value<R>, E>
 			where
 				E: serde::de::Error,
 			{
@@ -66,17 +66,17 @@ impl<'de> serde::Deserialize<'de> for Value {
 			}
 
 			#[inline]
-			fn visit_string<E>(self, value: String) -> Result<Value, E> {
+			fn visit_string<E>(self, value: String) -> Result<Value<R>, E> {
 				Ok(Value::Literal(Literal::TextString(value)))
 			}
 
 			#[inline]
-			fn visit_none<E>(self) -> Result<Value, E> {
+			fn visit_none<E>(self) -> Result<Value<R>, E> {
 				Ok(Value::Literal(Literal::Unit))
 			}
 
 			#[inline]
-			fn visit_some<D>(self, deserializer: D) -> Result<Value, D::Error>
+			fn visit_some<D>(self, deserializer: D) -> Result<Value<R>, D::Error>
 			where
 				D: serde::Deserializer<'de>,
 			{
@@ -84,12 +84,12 @@ impl<'de> serde::Deserialize<'de> for Value {
 			}
 
 			#[inline]
-			fn visit_unit<E>(self) -> Result<Value, E> {
+			fn visit_unit<E>(self) -> Result<Value<R>, E> {
 				Ok(Value::Literal(Literal::Unit))
 			}
 
 			#[inline]
-			fn visit_seq<V>(self, mut visitor: V) -> Result<Value, V::Error>
+			fn visit_seq<V>(self, mut visitor: V) -> Result<Value<R>, V::Error>
 			where
 				V: serde::de::SeqAccess<'de>,
 			{
@@ -103,7 +103,7 @@ impl<'de> serde::Deserialize<'de> for Value {
 			}
 
 			#[inline]
-			fn visit_map<V>(self, mut visitor: V) -> Result<Value, V::Error>
+			fn visit_map<V>(self, mut visitor: V) -> Result<Value<R>, V::Error>
 			where
 				V: serde::de::MapAccess<'de>,
 			{
@@ -117,6 +117,6 @@ impl<'de> serde::Deserialize<'de> for Value {
 			}
 		}
 
-		deserializer.deserialize_any(ValueVisitor)
+		deserializer.deserialize_any(ValueVisitor(PhantomData))
 	}
 }

@@ -1,5 +1,4 @@
-use iref::Iri;
-use rdf_types::{BlankId, Term};
+use treeldr::rdf::{Iri, BlankId, Term};
 
 #[derive(Debug, thiserror::Error)]
 #[error("invalid RDF term `{0}`")]

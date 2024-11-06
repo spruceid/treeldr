@@ -1,14 +1,10 @@
 use super::{Destruct, ListLike, Literal, MapLike, Value, ValueLike};
 use crate::TypeRef;
 
-use educe::Educe;
-
 pub mod map;
 pub use map::TypedMap;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypedValue<R = rdf_types::Term, T = TypeRef> {
 	pub type_: T,
 	pub desc: TypedValueDesc<R, T>,
@@ -45,21 +41,31 @@ impl<R, T> TypedValue<R, T> {
 	pub fn as_literal(&self) -> Option<&Literal> {
 		self.desc.as_literal()
 	}
+}
 
+impl<R: Ord, T> TypedValue<R, T> {
 	/// Strips the type information and returns a simple tree value.
 	pub fn to_untyped(&self) -> Value<R>
 	where
-		R: Clone + Ord,
+		R: Clone
 	{
 		self.desc.to_untyped()
 	}
 
 	/// Strips the type information and returns a simple tree value.
-	pub fn into_untyped(self) -> Value<R>
-	where
-		R: Ord,
-	{
+	pub fn into_untyped(self) -> Value<R> {
 		self.desc.into_untyped()
+	}
+
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> TypedValue<R, U> {
+		self.map_types_ref_mut(&mut f)
+	}
+
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> TypedValue<R, U> {
+		TypedValue {
+			type_: f(self.type_),
+			desc: self.desc.map_types_ref_mut(f)
+		}
 	}
 }
 
@@ -105,9 +111,7 @@ impl<R, T> MapLike for TypedMap<R, TypedValue<R, T>, T> {
 }
 
 /// Typed tree value description.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedValueDesc<R = rdf_types::Term, T = TypeRef> {
 	Variant(String, Box<TypedValue<R, T>>),
 	Constant(TypedValueInnerDesc<R, T>),
@@ -139,21 +143,31 @@ impl<R, T> TypedValueDesc<R, T> {
 	pub fn as_literal(&self) -> Option<&Literal> {
 		self.inner_description().as_literal()
 	}
+}
 
+impl<R: Ord, T> TypedValueDesc<R, T> {
 	/// Strips the type information and returns a simple tree value.
 	pub fn to_untyped(&self) -> Value<R>
 	where
-		R: Clone + Ord,
+		R: Clone,
 	{
 		self.inner_description().to_untyped()
 	}
 
 	/// Strips the type information and returns a simple tree value.
-	pub fn into_untyped(self) -> Value<R>
-	where
-		R: Ord,
-	{
+	pub fn into_untyped(self) -> Value<R> {
 		self.into_inner_description().into_untyped()
+	}
+
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> TypedValueDesc<R, U> {
+		self.map_types_ref_mut(&mut f)
+	}
+
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> TypedValueDesc<R, U> {
+		match self {
+			Self::Variant(name, v) => TypedValueDesc::Variant(name, Box::new(v.map_types_ref_mut(f))),
+			Self::Constant(v) => TypedValueDesc::Constant(v.map_types_ref_mut(f))
+		}
 	}
 }
 
@@ -163,9 +177,7 @@ impl<R, T> From<TypedValueInnerDesc<R, T>> for TypedValueDesc<R, T> {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedValueInnerDesc<R = rdf_types::Term, T = TypeRef> {
 	/// RDF resource.
 	Resource(R),
@@ -201,11 +213,13 @@ impl<R, T> TypedValueInnerDesc<R, T> {
 			_ => None,
 		}
 	}
+}
 
+impl<R: Ord, T> TypedValueInnerDesc<R, T> {
 	/// Strips the type information and returns a simple tree value.
 	pub fn to_untyped(&self) -> Value<R>
 	where
-		R: Clone + Ord,
+		R: Clone,
 	{
 		match self {
 			Self::Resource(r) => Value::Resource(r.clone()),
@@ -220,10 +234,7 @@ impl<R, T> TypedValueInnerDesc<R, T> {
 	}
 
 	/// Strips the type information and returns a simple tree value.
-	pub fn into_untyped(self) -> Value<R>
-	where
-		R: Ord,
-	{
+	pub fn into_untyped(self) -> Value<R> {
 		match self {
 			Self::Resource(r) => Value::Resource(r),
 			Self::Literal(l) => Value::Literal(l),
@@ -235,6 +246,24 @@ impl<R, T> TypedValueInnerDesc<R, T> {
 			Self::List(items) => {
 				Value::List(items.into_iter().map(TypedValue::into_untyped).collect())
 			}
+		}
+	}
+
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> TypedValueInnerDesc<R, U> {
+		self.map_types_ref_mut(&mut f)
+	}
+
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> TypedValueInnerDesc<R, U> {
+		match self {
+			Self::Resource(r) => TypedValueInnerDesc::Resource(r),
+			Self::Literal(l) => TypedValueInnerDesc::Literal(l),
+			Self::List(l) => TypedValueInnerDesc::List(l.into_iter().map(|v| v.map_types_ref_mut(f)).collect()),
+			Self::Map(m) => TypedValueInnerDesc::Map(m.into_iter().map(|(k, v)| {
+				(
+					k.map_types_ref_mut(f),
+					v.map_types_ref_mut(f)
+				)
+			}).collect())
 		}
 	}
 }

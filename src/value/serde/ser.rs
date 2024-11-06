@@ -1,11 +1,14 @@
-use super::{Literal, NativeNumber, Value};
+// use super::{Literal, NativeNumber, Value};
 
-impl serde::Serialize for Value {
+use crate::{value::NativeNumber, Literal, Value};
+
+impl<R: serde::Serialize> serde::Serialize for Value<R> {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where
 		S: serde::Serializer,
 	{
 		match self {
+			Self::Resource(r) => r.serialize(serializer),
 			Self::Literal(literal) => literal.serialize(serializer),
 			Self::Map(record) => {
 				use serde::ser::SerializeMap;

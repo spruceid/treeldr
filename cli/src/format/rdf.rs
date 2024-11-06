@@ -2,10 +2,8 @@ use core::fmt;
 use std::io::{self, BufRead, Write};
 
 use clap::builder::TypedValueParser;
-use locspan::Span;
 use nquads_syntax::Parse;
-use rdf_types::dataset::BTreeDataset;
-use rdf_types::Quad;
+use treeldr::{rdf::{dataset::BTreeDataset, Quad}, syntax::Span};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {

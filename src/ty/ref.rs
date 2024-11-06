@@ -8,9 +8,19 @@ use super::Type;
 
 /// Type reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TypeRef(usize);
+pub struct TypeRef {
+	pub namespace: u32,
+	pub index: u32
+}
 
 impl TypeRef {
+	pub fn new(namespace: u32, index: u32) -> Self {
+		Self {
+			namespace,
+			index
+		}
+	}
+
 	pub fn contains<R: Ord>(&self, registry: &Registry<R>, value: &Value<R>) -> bool {
 		registry
 			.get_type(*self)
@@ -30,17 +40,26 @@ impl TypeRef {
 			.get_type(*self)
 			.is_some_and(|ty| ty.is_subtype_of(registry, other_ref))
 	}
-}
 
-impl From<TypeRef> for usize {
-	fn from(value: TypeRef) -> Self {
-		value.0
+	pub fn display<'a, R>(&self, registry: &'a Registry<R>) -> DisplayedType<'a, R> {
+		DisplayedType {
+			registry,
+			self_: *self
+		}
 	}
 }
 
-impl From<usize> for TypeRef {
-	fn from(value: usize) -> Self {
-		Self(value)
+impl<R: fmt::Display> DisplayType<R> for TypeRef {
+	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		if depth > 0 && d.self_ == *self {
+			write!(f, "self")
+		} else {
+			d
+				.registry
+				.get_type(*self)
+				.unwrap()
+				.fmt_type(d, depth, f)
+		}
 	}
 }
 
@@ -90,5 +109,26 @@ impl<R> Deref for TypeDefinition<R> {
 impl<R: fmt::Debug> fmt::Debug for TypeDefinition<R> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		self.value.fmt(f)
+	}
+}
+
+impl<R: fmt::Display> DisplayType<R> for TypeDefinition<R> {
+	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		self.value.fmt_type(d, depth, f)
+	}
+}
+
+pub trait DisplayType<R> {
+	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result;
+}
+
+pub struct DisplayedType<'a, R> {
+	pub registry: &'a Registry<R>,
+	pub self_: TypeRef
+}
+
+impl<'a, R: fmt::Display> fmt::Display for DisplayedType<'a, R> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		self.self_.fmt_type(self, 0, f)
 	}
 }

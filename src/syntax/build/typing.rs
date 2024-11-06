@@ -3,7 +3,7 @@ use std::{cmp::Ordering, collections::{HashMap, HashSet}};
 use disjoint_collections::DisjointVec;
 use scc_trait::{Components, Scc};
 
-use crate::{ty::{self, TypeUnificationError}, Registry, RegistryReservation, Type, TypeRef};
+use crate::{registry::TypeAllocator, ty::{self, TypeUnificationError}, Registry, Type, TypeRef};
 
 pub type TypeVariableRef = usize;
 
@@ -13,7 +13,7 @@ pub type TypePattern<R> = Type<R, TypeVariableRef>;
 pub enum TypeValue<R> {
 	Undefined,
 	Pattern(Type<R, TypeVariableRef>),
-	Type(TypeRef),
+	Type(ImportedTypeRef),
 }
 
 impl<R> Default for TypeValue<R> {
@@ -42,13 +42,13 @@ impl<R> TypeValue<R> {
 				.unify_with(registry, unifier, &b)
 				.map(Self::Pattern),
 			(Self::Pattern(a), Self::Type(b_ref)) => {
-				let b = registry.get_type(b_ref).unwrap();
-				a.unify_with(registry, unifier, &b)
+				let b = registry.get_type(b_ref.ty_ref).unwrap();
+				a.unify_with(registry, &mut unifier.import(b_ref.import), &b)
 				.map(Self::Pattern)
 			}
 			(Self::Type(a_ref), Self::Pattern(b)) => {
-				let a = registry.get_type(a_ref).unwrap();
-				a.unify_with(registry, unifier, &b)
+				let a = registry.get_type(a_ref.ty_ref).unwrap();
+				a.unify_with(registry, &mut unifier.import(a_ref.import), &b)
 				.map(Self::Pattern)
 			}
 			(Self::Type(a), Self::Type(b)) => {
@@ -62,21 +62,33 @@ impl<R> TypeValue<R> {
 	}
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("undefined type")]
-pub struct UndefinedType;
-
 impl<R> From<Type<R, TypeVariableRef>> for TypeValue<R> {
 	fn from(value: Type<R, TypeVariableRef>) -> Self {
 		Self::Pattern(value)
 	}
 }
 
+impl<R> From<ImportedTypeRef> for TypeValue<R> {
+	fn from(value: ImportedTypeRef) -> Self {
+		Self::Type(value)
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ImportedTypeRef {
+	pub ty_ref: TypeRef,
+	pub import: u32
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("undefined type")]
+pub struct UndefinedType;
+
 pub struct TypeVariables<R> {
 	list: Vec<TypeValue<R>>,
 	subtype_relation: SubtypeRelation,
-	dependencies: ResolutionGroups,
-	imported_types: HashMap<TypeRef, TypeVariableRef>,
+	import_count: u32,
+	imported_types: HashMap<ImportedTypeRef, TypeVariableRef>
 }
 
 impl<R> TypeVariables<R> {
@@ -84,19 +96,49 @@ impl<R> TypeVariables<R> {
 		Self {
 			list: Vec::new(),
 			subtype_relation: SubtypeRelation::default(),
-			dependencies: ResolutionGroups::default(),
-			imported_types: HashMap::new(),
+			import_count: 0,
+			imported_types: HashMap::new()
 		}
 	}
 
 	pub fn fresh(&mut self, value: impl Into<TypeValue<R>>) -> TypeVariableRef {
-		todo!()
+		let x = self.list.len();
+		self.list.push(value.into());
+		self.subtype_relation.declare(x);
+		x
 	}
 
 	/// Import a type reference as a type variable.
-	pub fn import_type_ref(&mut self, ty: &TypeRef) -> TypeVariableRef {
-		let next_index = self.imported_types.len();
-		*self.imported_types.entry(ty.clone()).or_insert(next_index)
+	pub fn import_type_ref(
+		&mut self,
+		registry: &Registry<R>,
+		ty_ref: TypeRef
+	) -> TypeVariableRef {
+		let import = self.import_count;
+		self.import_count += 1;
+
+		let mut stack = vec![ty_ref];
+		let mut visited = HashSet::new();
+
+		while let Some(ty_ref) = stack.pop() {
+			if visited.insert(ty_ref) {
+				let imported = ImportedTypeRef {
+					ty_ref,
+					import
+				};
+
+				let x = self.fresh(imported);
+				self.imported_types.insert(imported, x);
+
+				let ty = registry.get_type(ty_ref).unwrap();
+				ty.visit_type_components(|&c_ref, _| stack.push(c_ref));
+			}
+		}
+
+		self.imported_types[&ImportedTypeRef {
+			ty_ref,
+			import
+		}]
 	}
 
 	/// Asserts that type `a` is a subtype of type `b`.
@@ -110,7 +152,7 @@ impl<R> TypeVariables<R> {
 		self.assert_subtype_of(b, a);
 	}
 
-	/// Compute groups.
+	/// Compute resolution groups.
 	/// 
 	/// Most types can be resolved at the same time, with the exception of
 	/// struct key types that must be resolved *before* the outer struct and
@@ -120,7 +162,7 @@ impl<R> TypeVariables<R> {
 	/// resolved *before* `struct { T: U }` and `U`.
 	/// 
 	/// This dependency is necessary to allow the unification of struct types,
-	/// which requires knowing the keys to known what values to unify
+	/// which requires knowing the keys in order to known what values to unify
 	/// recursively.
 	/// 
 	/// # Relations
@@ -151,10 +193,10 @@ impl<R> TypeVariables<R> {
 	/// ```text
 	/// X ∋ T and Y ∋ U and T > U ⇒ X > Y
 	/// ```
-	fn compute_type_groups(
+	fn compute_resolution_groups(
 		&self,
 		base_classes: &Components<usize>
-	) -> Result<(ResolutionGroups, Vec<usize>), TypeResolutionError> {
+	) -> Result<(DisjointVec<ResolutionGroup>, Vec<usize>), TypeResolutionError> {
 		// Compute groups.
 		let mut groups: DisjointVec<HashSet<TypeVariableRef>> = (0..self.list.len()).map(|x| {
 			let mut set = HashSet::new();
@@ -201,11 +243,11 @@ impl<R> TypeVariables<R> {
 		// Check that the dependencies are not symmetric nor reflexive and order
 		// them by depth.
 		let components = ordering.strongly_connected_components();
-		let mut ordered_classes = Vec::with_capacity(components.len());
+		let mut ordered_groups = Vec::with_capacity(components.len());
 		for c in components.order_by_depth().into_iter() {
 			match components.get_by_index(c).unwrap() {
-				[class] if !components.is_cyclic(c) => {
-					ordered_classes.push(*class);
+				[g] if !components.is_cyclic(c) => {
+					ordered_groups.push(*g);
 				}
 				_ => {
 					return Err(TypeResolutionError::DependencyCycle)
@@ -214,11 +256,8 @@ impl<R> TypeVariables<R> {
 		}
 
 		Ok((
-			ResolutionGroups {
-				list: groups.map(|set| ResolutionGroup::new(base_classes, set)),
-				ordering
-			},
-			ordered_classes
+			groups.map(|set| ResolutionGroup::new(base_classes, set)),
+			ordered_groups
 		))
 	}
 
@@ -226,6 +265,7 @@ impl<R> TypeVariables<R> {
 	pub fn resolve(
 		&self,
 		registry: &mut Registry<R>,
+		namespace: u32,
 	) -> Result<HashMap<TypeVariableRef, TypeRef>, TypeResolutionError>
 	where
 		R: Clone + Ord,
@@ -235,7 +275,7 @@ impl<R> TypeVariables<R> {
 		// Resolve each group one by one, ordered by depth.
 		let mut result: HashMap<TypeVariableRef, TypeRef> = HashMap::new();
 		for g in ordered_groups {
-			let group_result = resolver.resolve_group(registry, &result, g)?;
+			let group_result = resolver.resolve_group(registry, namespace, &result, g)?;
 			result.extend(group_result);
 		}
 
@@ -245,13 +285,16 @@ impl<R> TypeVariables<R> {
 			.resolve(|x| result[&x]);
 
 		// Check sub-type constraints.
-		for (a, a_super_types) in &super_types {
+		for (&a, a_super_types) in &super_types {
 			for &b in a_super_types {
 				if !a
 						.subtype_cmp(registry, b)
 						.is_some_and(Ordering::is_le)
 				{
-					return Err(TypeResolutionError::Subtyping);
+					return Err(TypeResolutionError::Subtyping {
+						sub_type: a,
+						super_type: b
+					});
 				}
 			}
 		}
@@ -265,7 +308,7 @@ struct Resolver<'a, R> {
 	variables: &'a TypeVariables<R>,
 
 	/// Resolution groups.
-	groups: ResolutionGroups,
+	groups: DisjointVec<ResolutionGroup>,
 
 	/// Base equivalence classes.
 	/// 
@@ -277,10 +320,7 @@ struct Resolver<'a, R> {
 	/// 
 	/// When the resolution is done, this classification includes *at least* the
 	/// base classification (`base_classes`).
-	classes: DisjointVec<TypeValue<R>>,
-
-	imported_types: Vec<TypeValue<R>>,
-	imported_types_map: HashMap<TypeRef, TypeVariableRef>
+	classes: DisjointVec<TypeValue<R>>
 }
 
 impl<'a, R: Clone> Resolver<'a, R> {
@@ -292,7 +332,7 @@ impl<'a, R: Clone> Resolver<'a, R> {
 			.strongly_connected_components();
 
 		let (groups, ordered_groups) = variables
-			.compute_type_groups(&base_classes)?;
+			.compute_resolution_groups(&base_classes)?;
 
 		let classes: DisjointVec<TypeValue<R>> = variables
 			.list
@@ -305,9 +345,7 @@ impl<'a, R: Clone> Resolver<'a, R> {
 				variables,
 				groups,
 				base_classes,
-				classes,
-				imported_types: Vec::new(),
-				imported_types_map: HashMap::new()
+				classes
 			},
 			ordered_groups
 		))
@@ -316,13 +354,14 @@ impl<'a, R: Clone> Resolver<'a, R> {
 	fn resolve_group(
 		&mut self,
 		registry: &mut Registry<R>,
+		namespace: u32,
 		resolved: &HashMap<TypeVariableRef, TypeRef>,
 		g: usize
 	) -> Result<HashMap<TypeVariableRef, TypeRef>, TypeResolutionError>
 	where
 		R: Ord
 	{
-		let group = &self.groups.list.get(g).unwrap();
+		let group = &self.groups.get(g).unwrap();
 
 		// Prepare type unification. Types that are in the same base class must
 		// be unified.
@@ -338,24 +377,7 @@ impl<'a, R: Clone> Resolver<'a, R> {
 
 		// Unify types.
 		while let Some((a, b)) = to_unify.pop() {
-			// let import_type_ref = |type_ref: &TypeRef| {
-			// 	self.variables
-			// 		.imported_types
-			// 		.get(type_ref)
-			// 		.copied()
-			// 		.unwrap_or_else(|| {
-			// 			*self.imported_types_map
-			// 				.entry(type_ref.clone())
-			// 				.or_insert_with(|| {
-			// 					self.imported_types.push(TypeValue::Type(type_ref.clone()));
-			// 					self.variables.list.len() + self.imported_types.len()
-			// 				})
-			// 		})
-			// };
-
-			// let assert_eq = |a, b| to_unify.push((a, b));
-
-			let mut unifier = Unifier::new(resolved, &mut to_unify);
+			let mut unifier = Unifier::new(&self.variables.imported_types, resolved, &mut to_unify);
 			self.classes.try_merge(a, b, |a, b| {
 				// Unify `a` and `b`. This might trigger the unification of some
 				// constituents of `a` and `b`. We know the constituents are
@@ -365,14 +387,14 @@ impl<'a, R: Clone> Resolver<'a, R> {
 		}
 
 		// Resolve classes.
-		let mut reservation = RegistryReservation::new(registry);
+		let mut reservation = TypeAllocator::new(registry, namespace);
 		let mut resolved_classes = HashMap::new();
 		for &x in &group.variables {
 			let (y, value) = self.classes.get_with_class(x).unwrap();
 			if x == y {
 				let target = match value {
 					TypeValue::Undefined => return Err(TypeResolutionError::Definition(UndefinedType)),
-					TypeValue::Type(r) => *r,
+					TypeValue::Type(r) => r.ty_ref,
 					TypeValue::Pattern(_) => reservation.reserve_type()
 				};
 
@@ -390,7 +412,9 @@ impl<'a, R: Clone> Resolver<'a, R> {
 		// Realization.
 		for (x, type_ref) in resolved_classes {
 			if let TypeValue::Pattern(pattern) = self.classes.get(x).unwrap() {
-				let type_ = pattern.realize(|x| result[x]);
+				let type_ = pattern.realize(|x| {
+					resolved.get(x).copied().unwrap_or_else(|| result[x])
+				});
 				reservation.define_type(type_ref, type_);
 			}
 		}
@@ -411,57 +435,57 @@ impl<R: Clone> TypePattern<R> {
 					rest: l.rest.as_ref().map(realize_var)
 				})
 			}
-			_ => todo!()
+			Type::Struct(ty) => {
+				Type::Struct(ty::Struct {
+					fields: ty.fields.iter().map(|(key, field)| {
+						(
+							realize_var(key),
+							ty::Field {
+								type_: realize_var(&field.type_),
+								required: field.required
+							}
+						)
+					}).collect()
+				})
+			}
+			Type::Enum(ty) => {
+				Type::Enum(ty::Enum {
+					variants: ty.variants.iter().map(|(name, t)| {
+						(
+							name.clone(),
+							realize_var(t)
+						)
+					}).collect()
+				})
+			}
 		}
 	}
 }
 
-struct Unifier<'a> {
+pub struct Unifier<'a> {
+	imported_types: &'a HashMap<ImportedTypeRef, TypeVariableRef>,
 	resolved: &'a HashMap<TypeVariableRef, TypeRef>,
 	queue: &'a mut Vec<(TypeVariableRef, TypeVariableRef)>
 }
 
 impl<'a> Unifier<'a> {
 	fn new(
+		imported_types: &'a HashMap<ImportedTypeRef, TypeVariableRef>,
 		resolved: &'a HashMap<TypeVariableRef, TypeRef>,
 		queue: &'a mut Vec<(TypeVariableRef, TypeVariableRef)>
 	) -> Self {
 		Self {
+			imported_types,
 			resolved,
 			queue
 		}
 	}
-}
 
-impl<'a> ty::TypeUnifier<TypeRef, TypeVariableRef> for Unifier<'a> {
-	type Target = TypeVariableRef;
-
-	fn left_key_type(&mut self, t: &TypeRef) -> TypeRef {
-		*t
-	}
-
-	fn right_key_type(&mut self, u: &TypeVariableRef) -> TypeRef {
-		self.resolved[u]
-	}
-
-	fn unify(&mut self, t: &TypeRef, u: &TypeVariableRef) -> Self::Target {
-		todo!()
-	}
-}
-
-impl<'a> ty::TypeUnifier<TypeVariableRef, TypeRef> for Unifier<'a> {
-	type Target = TypeVariableRef;
-
-	fn left_key_type(&mut self, t: &TypeVariableRef) -> TypeRef {
-		self.resolved[t]
-	}
-
-	fn right_key_type(&mut self, u: &TypeRef) -> TypeRef {
-		*u
-	}
-
-	fn unify(&mut self, t: &TypeVariableRef, u: &TypeRef) -> Self::Target {
-		todo!()
+	fn import(&mut self, import: u32) -> ImportUnifier<'a, '_> {
+		ImportUnifier {
+			unifier: self,
+			import
+		}
 	}
 }
 
@@ -477,7 +501,55 @@ impl<'a> ty::TypeUnifier<TypeVariableRef, TypeVariableRef> for Unifier<'a> {
 	}
 
 	fn unify(&mut self, t: &TypeVariableRef, u: &TypeVariableRef) -> Self::Target {
-		todo!()
+		self.queue.push((*t, *u));
+		*t
+	}
+}
+
+struct ImportUnifier<'a, 'u> {
+	unifier: &'u mut Unifier<'a>,
+	import: u32
+}
+
+impl<'a, 'u> ty::TypeUnifier<TypeRef, TypeVariableRef> for ImportUnifier<'a, 'u> {
+	type Target = TypeVariableRef;
+
+	fn left_key_type(&mut self, t: &TypeRef) -> TypeRef {
+		*t
+	}
+
+	fn right_key_type(&mut self, u: &TypeVariableRef) -> TypeRef {
+		self.unifier.resolved[u]
+	}
+
+	fn unify(&mut self, t: &TypeRef, u: &TypeVariableRef) -> Self::Target {
+		let t = self.unifier.imported_types[&ImportedTypeRef {
+			ty_ref: *t,
+			import: self.import
+		}];
+		self.unifier.queue.push((t, *u));
+		t
+	}
+}
+
+impl<'a, 'u> ty::TypeUnifier<TypeVariableRef, TypeRef> for ImportUnifier<'a, 'u> {
+	type Target = TypeVariableRef;
+
+	fn left_key_type(&mut self, t: &TypeVariableRef) -> TypeRef {
+		self.unifier.resolved[t]
+	}
+
+	fn right_key_type(&mut self, u: &TypeRef) -> TypeRef {
+		*u
+	}
+
+	fn unify(&mut self, t: &TypeVariableRef, u: &TypeRef) -> Self::Target {
+		let u = self.unifier.imported_types[&ImportedTypeRef {
+			ty_ref: *u,
+			import: self.import
+		}];
+		self.unifier.queue.push((*t, u));
+		*t
 	}
 }
 
@@ -486,9 +558,13 @@ impl<'a> ty::TypeUnifier<TypeVariableRef, TypeVariableRef> for Unifier<'a> {
 struct SubtypeRelation(HashMap<TypeVariableRef, HashSet<TypeVariableRef>>);
 
 impl SubtypeRelation {
+	fn declare(&mut self, x: TypeVariableRef) {
+		self.0.entry(x).or_default();
+	}
+
 	/// Declares that `a` is a subtype of `b`.
 	fn insert(&mut self, a: TypeVariableRef, b: TypeVariableRef) -> bool {
-		self.0.entry(b).or_default().insert(a)
+		self.0.get_mut(&b).unwrap().insert(a)
 	}
 
 	fn supertypes_of(&self, b: TypeVariableRef) -> impl '_ + Iterator<Item = TypeVariableRef> {
@@ -524,15 +600,6 @@ impl Scc for SubtypeRelation {
 	}
 }
 
-#[derive(Default)]
-struct ResolutionGroups {
-	/// List of groups.
-	list: DisjointVec<ResolutionGroup>,
-
-	/// Group ordering.
-	ordering: HashMap<usize, HashSet<usize>>
-}
-
 /// Resolution group.
 struct ResolutionGroup {
 	/// Type variables that are in the resolution group.
@@ -560,12 +627,15 @@ impl ResolutionGroup {
 }
 
 #[derive(Debug, thiserror::Error)]
-enum TypeResolutionError {
+pub enum TypeResolutionError {
 	#[error("dependency cycle")]
 	DependencyCycle,
 
 	#[error("subtyping failed")]
-	Subtyping,
+	Subtyping {
+		sub_type: TypeRef,
+		super_type: TypeRef
+	},
 
 	#[error(transparent)]
 	Unification(#[from] TypeUnificationError),

@@ -1,0 +1,20 @@
+[package]
+name = "tldr"
+description = "Command-line interface for TreeLDR"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+stderrlog = "0.6.0"
+clap = { version = "4.5.20", features = ["derive"] }
+codespan-reporting = "0.11.1"
+nquads-syntax = "0.19.0"
+utf8-decode = "1.0.1"
+log.workspace = true
+thiserror.workspace = true
+treeldr = { workspace = true, features = ["json-syntax"] }
+json-syntax.workspace = true
+serde_cbor.workspace = true

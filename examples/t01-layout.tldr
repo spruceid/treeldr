@@ -1,0 +1,3 @@
+let (_ subject) = {
+	"name": let name where { subject <https://schema.org/name> name }; (string_of name)
+}

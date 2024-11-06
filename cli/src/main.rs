@@ -1,3 +1,4 @@
+use std::{borrow::Cow, fs, io::{self, BufReader}, path::PathBuf, process::ExitCode};
 use codespan_reporting::{
 	diagnostic::{Diagnostic, Label},
 	files::SimpleFiles,
@@ -6,51 +7,23 @@ use codespan_reporting::{
 		termcolor::{ColorChoice, StandardStream},
 	},
 };
-use rdf_types::Term;
-use std::{
-	fs,
-	io::{self, BufReader},
-	path::PathBuf,
-	process::ExitCode,
-};
-use treeldr_layouts::{Registry, Resources, Prelude, Ref};
+use treeldr::{rdf::{dataset::BTreeDataset, Rdf}, syntax::{build::TypeResolutionError, Spanned}, value::ValueParseError, CompileError, Environment, ItemRef, Module, Registry, Value};
 
 mod format;
 use format::{RDFFormat, TreeFormat};
-mod rdf;
 
 #[derive(clap::Parser)]
 #[clap(name="tldr", author, version, about, long_about = None, subcommand_precedence_over_arg = true)]
 struct Args {
-	/// Input layout files.
-	layouts: Vec<PathBuf>,
-
-	/// More layout files.
-	///
-	/// Those layouts will not contribute to the search for a default layout.
-	#[arg(short, long)]
-	include: Vec<PathBuf>,
+	/// Input file.
+	input: PathBuf,
 
 	/// Sets the level of verbosity.
 	#[arg(short, long = "verbose", action = clap::ArgAction::Count, global = true)]
 	verbosity: u8,
 
-	/// Do not load TreeLDR's prelude.
-	#[arg(short, long, global = true)]
-	no_prelude: bool,
-
 	#[command(subcommand)]
 	command: Option<Command>,
-}
-
-impl Args {
-	pub fn prelude(&self) -> Option<Prelude> {
-		if self.no_prelude {
-			None
-		} else {
-			Some(Prelude)
-		}
-	}
 }
 
 #[derive(clap::Subcommand)]
@@ -58,24 +31,16 @@ enum Command {
 	/// Serializes an RDF dataset into a tree value.
 	Hydrate {
 		/// Format of the input RDF dataset.
-		#[arg(short, long, value_parser = RDFFormat::parser(), default_value = "n-quads")]
-		input: RDFFormat,
+		#[arg(short, long = "input", value_parser = RDFFormat::parser(), default_value = "n-quads")]
+		input_format: RDFFormat,
 
 		/// Format of the output tree value.
-		#[arg(short, long, value_parser = TreeFormat::parser(), default_value = "json")]
-		output: TreeFormat,
+		#[arg(short, long = "output", value_parser = TreeFormat::parser(), default_value = "json")]
+		output_format: TreeFormat,
 
-		/// Serializing layout.
-		///
-		/// If only one layout file is given with a single top-level layout,
-		/// this layout will be selected by TreeLDR by default.
-		/// Otherwise, this argument is required.
-		#[arg(short, long, value_parser = rdf::parse_term)]
-		layout: Option<Term>,
-
-		/// Entry points to the dataset, provided as layout input.
-		#[arg(value_parser = rdf::parse_term)]
-		subjects: Vec<Term>,
+		/// Function arguments.
+		#[arg(value_parser = value_parser)]
+		args: Vec<Value>,
 
 		/// Pretty print the output.
 		#[arg(short, long)]
@@ -85,56 +50,13 @@ enum Command {
 	/// Deserializes a tree value into an RDF dataset.
 	Dehydrate {
 		/// Format of the input tree value.
-		#[arg(short, long, value_parser = TreeFormat::parser(), default_value = "json")]
-		input: TreeFormat,
+		#[arg(short, long = "input", value_parser = TreeFormat::parser(), default_value = "json")]
+		input_format: TreeFormat,
 
 		/// Format of the output RDF dataset.
-		#[arg(short, long, value_parser = RDFFormat::parser(), default_value = "n-quads")]
-		output: RDFFormat,
-
-		/// Deserializing layout.
-		///
-		/// If only one layout file is given with a single top-level layout,
-		/// this layout will be selected by TreeLDR by default.
-		/// Otherwise, this argument is required.
-		#[arg(short, long, value_parser = rdf::parse_term)]
-		layout: Option<Term>,
-	},
-
-	/// Convert a tree value or RDF dataset without changing its shape.
-	Convert {
-		#[command(subcommand)]
-		command: Convert,
-	},
-}
-
-#[derive(clap::Subcommand)]
-pub enum Convert {
-	/// Convert a tree value into another format.
-	Tree {
-		/// Format of the input tree value.
-		#[arg(short, long, value_parser = TreeFormat::parser(), default_value = "json")]
-		input: TreeFormat,
-
-		/// Format of the output tree value.
-		#[arg(short, long, value_parser = TreeFormat::parser(), default_value = "json")]
-		output: TreeFormat,
-
-		/// Pretty print the output.
-		#[arg(short, long)]
-		pretty: bool,
-	},
-
-	/// Convert an RDF dataset into another format.
-	Rdf {
-		/// Format of the input RDF dataset.
-		#[arg(short, long, value_parser = RDFFormat::parser(), default_value = "n-quads")]
-		input: RDFFormat,
-
-		/// Format of the output RDF dataset.
-		#[arg(short, long, value_parser = RDFFormat::parser(), default_value = "n-quads")]
-		output: RDFFormat,
-	},
+		#[arg(short, long = "output", value_parser = RDFFormat::parser(), default_value = "n-quads")]
+		output_format: RDFFormat
+	}
 }
 
 fn main() -> ExitCode {
@@ -149,10 +71,14 @@ fn main() -> ExitCode {
 
 	let mut files = SimpleFiles::new();
 
-	match run(&mut files, args) {
+	let mut rdf = Rdf::default();
+	let mut registry = Registry::new();
+	let env = Environment::new(Some(Cow::Owned(Module::prelude(&mut registry))));
+
+	match args.run(&mut rdf, &mut registry, &env, &mut files) {
 		Ok(()) => ExitCode::SUCCESS,
 		Err(e) => {
-			let diagnostic = e.into_diagnostic();
+			let diagnostic = e.into_diagnostic(&registry);
 			let writer = StandardStream::stderr(ColorChoice::Always);
 			let config = codespan_reporting::term::Config::default();
 			term::emit(&mut writer.lock(), &config, &files, &diagnostic).unwrap();
@@ -161,230 +87,134 @@ fn main() -> ExitCode {
 	}
 }
 
-enum DefaultLayoutRef {
-	None,
-	Some(Ref<LayoutType>),
-	Ambiguous,
-}
-
-impl DefaultLayoutRef {
-	fn set(&mut self, layout_ref: Ref<LayoutType>) {
-		match self {
-			Self::None => *self = Self::Some(layout_ref),
-			Self::Some(_) => *self = Self::Ambiguous,
-			_ => (),
+impl Args {
+	fn run(self, rdf: &mut Rdf, registry: &mut Registry, env: &Environment, files: &mut SimpleFiles<String, String>) -> Result<(), Error> {
+		let content = fs::read_to_string(&self.input).map_err(Error::IO)?;
+		let file_id = files.add(self.input.to_string_lossy().into_owned(), content);
+		
+		let module = treeldr::Module::compile(
+			rdf,
+			registry,
+			env,
+			files.get(file_id).unwrap().source().as_str()
+		).map_err(|e| Error::Compile(file_id, e))?;
+	
+		match self.command {
+			Some(command) => command.run(rdf, registry, &module),
+			None => Ok(())
 		}
-	}
-
-	fn get(self, preferred_layout: Option<Term>) -> Result<Ref<LayoutType>, Error> {
-		match preferred_layout {
-			Some(term) => Ok(Ref::new(term)),
-			None => match self {
-				Self::None => Err(Error::NoDefaultLayout),
-				Self::Some(layout_ref) => Ok(layout_ref),
-				Self::Ambiguous => Err(Error::AmbiguousDefaultLayout),
-			},
-		}
-	}
-}
-
-fn run(files: &mut SimpleFiles<String, String>, args: Args) -> Result<(), Error> {
-	let mut layouts = Resources::new();
-	let prelude = args.prelude();
-	let mut default_layout = DefaultLayoutRef::None;
-	for filename in args.layouts {
-		let content = fs::read_to_string(&filename).map_err(Error::IO)?;
-		let file_id = files.add(filename.to_string_lossy().into_owned(), content);
-		let layout_ref = load_layout(files, file_id, &mut layouts)?;
-		default_layout.set(layout_ref);
-	}
-
-	for filename in args.include {
-		let content = fs::read_to_string(&filename).map_err(Error::IO)?;
-		let file_id = files.add(filename.to_string_lossy().into_owned(), content);
-		load_layout(files, file_id, &mut layouts)?;
-	}
-
-	let layouts = layouts.with(prelude);
-
-	match args.command {
-		None => Ok(()),
-		Some(command) => command.run(layouts, default_layout),
 	}
 }
 
 impl Command {
-	fn run(
-		self,
-		layouts: impl Registry,
-		default_layout: DefaultLayoutRef,
-	) -> Result<(), Error> {
+	fn run(self, rdf: &mut Rdf, registry: &Registry, module: &Module) -> Result<(), Error> {
 		match self {
-			Self::Hydrate {
-				input,
-				output,
-				layout,
-				subjects,
-				pretty,
-			} => {
-				let layout_ref = default_layout.get(layout)?;
-				let stdin = BufReader::new(io::stdin());
-				let input = input.load(stdin).map_err(Error::LoadRdf)?.into_indexed();
-				let output_data =
-					treeldr_layouts::distill::hydrate(&layouts, &input, &layout_ref, &subjects)
-						.map_err(Error::Hydrate)?;
-				output
-					.write_typed(&layouts, output_data, pretty, io::stdout())
-					.map_err(Error::CreateTree)
-			}
-			Self::Dehydrate {
-				input,
-				output,
-				layout,
-			} => {
-				let layout_ref = default_layout.get(layout)?;
-				let stdin = BufReader::new(io::stdin());
-				let input = input.load(stdin).map_err(Error::LoadTree)?;
-				let (output_data, _) = treeldr_layouts::distill::dehydrate(
-					&layouts,
-					&input,
-					&layout_ref,
-					Default::default(),
-				)
-				.map_err(Error::Dehydrate)?;
-				output.write(output_data, io::stdout()).map_err(Error::IO)
-			}
-			Self::Convert { command } => command.run(),
-		}
-	}
-}
+			Self::Hydrate { input_format, output_format, args, pretty } => {
+				let name = "_";
+				
+				let f_ref = match module.get_by_name(name) {
+					Some(ItemRef::Function(f_ref)) => f_ref,
+					Some(_) => return Err(Error::NotAFunction(name.to_owned())),
+					None => return Err(Error::UndefinedFunction(name.to_owned()))
+				};
+			
+				let function = registry
+					.get_function(f_ref)
+					.unwrap();
 
-impl Convert {
-	fn run(self) -> Result<(), Error> {
-		match self {
-			Self::Tree {
-				input,
-				output,
-				pretty,
-			} => {
 				let stdin = BufReader::new(io::stdin());
-				let value = input.load(stdin).map_err(Error::LoadTree)?;
-				output
-					.write_untyped(value, pretty, io::stdout())
-					.map_err(Error::CreateTree)
+				let dataset = input_format.load(stdin).map_err(Error::LoadRdf)?.into_indexed();
+
+				let output = function.call(registry, rdf, &dataset, &args)?;
+
+				let typed_output = output
+					.into_typed(registry, function.signature.return_type)
+					.unwrap();
+
+				output_format.write(registry, &typed_output, pretty, io::stdout()).map_err(Into::into)
 			}
-			Self::Rdf { input, output } => {
+			Self::Dehydrate { input_format, output_format } => {
+				let name = "_";
+				
+				let f_ref = match module.get_by_name(name) {
+					Some(ItemRef::Function(f_ref)) => f_ref,
+					Some(_) => return Err(Error::NotAFunction(name.to_owned())),
+					None => return Err(Error::UndefinedFunction(name.to_owned()))
+				};
+			
+				let function = registry
+					.get_function(f_ref)
+					.unwrap();
+
 				let stdin = BufReader::new(io::stdin());
-				let dataset = input.load(stdin).map_err(Error::LoadRdf)?.into_indexed();
-				output.write(dataset, io::stdout()).map_err(Error::IO)
+				let tree = input_format.load(stdin).map_err(Error::LoadTree)?;
+
+				let mut dataset = BTreeDataset::new();
+				let _ = function.call_inverse(registry, rdf, &mut dataset, &tree)?;
+
+				output_format.write(dataset, io::stdout()).map_err(Into::into)
 			}
 		}
 	}
 }
 
-enum Error {
-	IO(io::Error),
-	JsonSyntax(usize, json_syntax::parse::Error),
-	LayoutSyntax(
-		usize,
-		json_syntax::CodeMap,
-		treeldr_layouts::abs::syntax::Error,
-	),
-	LayoutBuild(usize, treeldr_layouts::abs::syntax::BuildError),
-	NoDefaultLayout,
-	AmbiguousDefaultLayout,
-	LoadRdf(format::rdf::LoadError),
-	LoadTree(format::tree::LoadError),
-	Hydrate(treeldr_layouts::distill::hy::Error),
-	Dehydrate(treeldr_layouts::distill::de::Error),
-	CreateTree(format::tree::WriteError),
+fn value_parser(s: &str) -> Result<Value, ValueParseError> {
+	s.parse()
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+	#[error(transparent)]
+	IO(#[from] io::Error),
+
+	#[error("{1}")]
+	Compile(usize, treeldr::CompileError),
+
+	#[error("undefined function `{0}`")]
+	UndefinedFunction(String),
+
+	#[error("`{0}` is not a function")]
+	NotAFunction(String),
+
+	#[error(transparent)]
+	LoadRdf(#[from] format::rdf::LoadError),
+
+	#[error(transparent)]
+	LoadTree(#[from] format::tree::LoadError),
+
+	#[error(transparent)]
+	Eval(#[from] treeldr::eval::EvalError),
+	
+	#[error(transparent)]
+	WriteTree(#[from] format::tree::WriteError)
 }
 
 impl Error {
-	fn into_diagnostic(self) -> Diagnostic<usize> {
+	fn into_diagnostic(self, registry: &Registry) -> Diagnostic<usize> {
 		match self {
-			Self::IO(e) => Diagnostic::error().with_message(e.to_string()),
-			Self::JsonSyntax(file_id, e) => Diagnostic::error()
-				.with_message("JSON error")
-				.with_labels(vec![
-					Label::primary(file_id, e.span()).with_message(e.to_string())
-				]),
-			Self::LayoutSyntax(file_id, code_map, e) => {
-				let span = code_map.get(e.position()).unwrap().span;
-
-				let mut labels = vec![Label::primary(file_id, span).with_message(e.to_string())];
-
-				let mut notes = Vec::new();
-				for hint in e.hints() {
-					match hint.position() {
-						Some(i) => {
-							let span = code_map.get(i).unwrap().span;
-							labels.push(
-								Label::secondary(file_id, span).with_message(hint.to_string()),
-							)
-						}
-						None => notes.push(hint.to_string()),
+			Self::Compile(file_id, e) => {
+				match e {
+					CompileError::Typing(TypeResolutionError::Subtyping { sub_type, super_type }) => {
+						Diagnostic::error()
+							.with_notes(vec![
+								format!("type                {}", sub_type.display(registry)),
+								format!("is not a subtype of {}", super_type.display(registry))
+							])
+							.with_message(e.to_string())
+					},
+					CompileError::Parse(e) => {
+						Diagnostic::error()
+							.with_labels(vec![
+								Label::primary(file_id, e.span())
+									.with_message(e.to_string())
+							])
+							.with_message("invalid syntax")
 					}
+					e => Diagnostic::error()
+						.with_message(e.to_string())
 				}
-
-				Diagnostic::error()
-					.with_message("Layout syntax error")
-					.with_labels(labels)
-					.with_notes(notes)
 			}
-			Self::LayoutBuild(_file_id, e) => Diagnostic::error().with_message(e.to_string()),
-			Self::NoDefaultLayout => Diagnostic::error()
-				.with_message("no default layout")
-				.with_notes(vec![
-					"use the `--layout` option to specify what layout to use".to_owned(),
-				]),
-			Self::AmbiguousDefaultLayout => Diagnostic::error()
-				.with_message("ambiguous layout")
-				.with_notes(vec![
-					"use the `--layout` option to specify what layout to use".to_owned(),
-				]),
-			Self::LoadRdf(e) => Diagnostic::error().with_message(e.to_string()),
-			Self::LoadTree(e) => Diagnostic::error().with_message(e.to_string()),
-			Self::Hydrate(e) => Diagnostic::error().with_message(e.to_string()),
-			Self::Dehydrate(e) => Diagnostic::error().with_message(e.to_string()),
-			Self::CreateTree(e) => Diagnostic::error().with_message(e.to_string()),
+			e => Diagnostic::error().with_message(e.to_string())
 		}
-	}
-}
-
-/// Loads a layout file.
-fn load_layout(
-	files: &SimpleFiles<String, String>,
-	file_id: usize,
-	layouts: &mut Resources,
-) -> Result<Ref<LayoutType>, Error> {
-	use json_syntax::{Parse, TryFromJson};
-
-	let mut builder = treeldr_layouts::abs::Builder::new();
-	match json_syntax::Value::parse_str(files.get(file_id).unwrap().source().as_str()) {
-		Ok((json, code_map)) => {
-			match treeldr_layouts::abs::syntax::Layout::try_from_json(&json, &code_map) {
-				Ok(layout) => match layout.build(&mut builder) {
-					Ok(layout_ref) => {
-						let new_layouts = builder.build();
-
-						for (id, layout) in new_layouts {
-							let (_, old_layout) = layouts.insert(id.into_id(), layout);
-							if old_layout.is_some() {
-								return Err(Error::LayoutBuild(
-									file_id,
-									treeldr_layouts::abs::syntax::BuildError::LayoutRedefinition,
-								));
-							}
-						}
-
-						Ok(layout_ref)
-					}
-					Err(e) => Err(Error::LayoutBuild(file_id, e)),
-				},
-				Err(e) => Err(Error::LayoutSyntax(file_id, code_map, e)),
-			}
-		}
-		Err(e) => Err(Error::JsonSyntax(file_id, e)),
 	}
 }

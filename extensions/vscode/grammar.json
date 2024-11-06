@@ -21,7 +21,7 @@
 		},
 		{
 			"name": "keyword.treeldr",
-			"match": "\\b(prefix|struct|union|where|as|let|all|min|max|fn|forall|set)\\b"
+			"match": "\\b(prefix|type|where|as|let|all|min|max|fn|forall|set)\\b"
 		},
 		{
 			"name": "entity.name.type.treeldr",
@@ -34,6 +34,10 @@
 		{
 			"name": "entity.name.type.treeldr",
 			"match": "(?<=:)\\w+\\b"
+		},
+		{
+			"name": "constant.numeric.decimal.treeldr",
+			"match": "\\b[0-9]+\\b"
 		},
 		{
 			"name": "string.quoted.other.uri.treeldr",

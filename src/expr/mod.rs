@@ -2,7 +2,6 @@ mod bound;
 pub use bound::*;
 
 mod list;
-use educe::Educe;
 pub use list::*;
 
 mod map;
@@ -14,12 +13,10 @@ pub use r#match::*;
 mod call;
 pub use call::*;
 
-use crate::{Domain, Literal, TypeRef};
+use crate::{Literal, TypeRef};
 
 /// Expression.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Expr<R, T = TypeRef> {
 	pub type_: T,
 
@@ -28,10 +25,22 @@ pub struct Expr<R, T = TypeRef> {
 	pub inner: InnerExpr<R, T>,
 }
 
+impl<R: Ord, T> Expr<R, T> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Expr<R, U> {
+		self.map_types_ref_mut(&mut f)
+	}
+
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Expr<R, U> {
+		Expr {
+			type_: f(self.type_),
+			bound: self.bound.map_types(&mut *f),
+			inner: self.inner.map_types_ref_mut(f)
+		}
+	}
+}
+
 /// Inner expression.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum InnerExpr<R, T = TypeRef> {
 	/// Resource variable.
 	///
@@ -79,6 +88,19 @@ impl<R, T> InnerExpr<R, T> {
 	}
 }
 
-impl<R, T> Domain for InnerExpr<R, T> {
-	type Resource = R;
+impl<R: Ord, T> InnerExpr<R, T> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> InnerExpr<R, U> {
+		self.map_types_ref_mut(&mut f)
+	}
+
+	fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> InnerExpr<R, U> {
+		match self {
+			Self::Var(x) => InnerExpr::Var(x),
+			Self::Literal(l) => InnerExpr::Literal(l),
+			Self::List(l) => InnerExpr::List(l.map_types_ref_mut(f)),
+			Self::Map(m) => InnerExpr::Map(m.map_types_ref_mut(f)),
+			Self::Match(m) => InnerExpr::Match(m.map_types_ref_mut(f)),
+			Self::Call(m) => InnerExpr::Call(m.map_types_ref_mut(f)),
+		}
+	}
 }

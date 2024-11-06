@@ -18,8 +18,8 @@ pub enum TokenKind {
 	#[token("prefix")]
 	Prefix,
 
-	#[token("fn")]
-	Fn,
+	#[token("type")]
+	Type,
 
 	#[token("enum")]
 	Enum,
@@ -114,7 +114,20 @@ pub struct Module {
 #[derive(Debug, ll1::Parse)]
 pub enum Item {
 	Prefix(PrefixDefinition),
-	Function(Function),
+	Type(TypeDefinition),
+	Function(FunctionDefinition),
+}
+
+#[derive(Debug, ll1::Parse)]
+pub struct ItemPath {
+	pub first: Ident,
+	pub rest: Option<ItemPathRest>
+}
+
+#[derive(Debug, ll1::Parse)]
+pub struct ItemPathRest {
+	pub period: Period,
+	pub rest: Box<ItemPath>
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -126,14 +139,22 @@ pub struct PrefixDefinition {
 }
 
 #[derive(Debug, ll1::Parse)]
-pub struct Function {
-	pub fn_: Fn,
+pub struct TypeDefinition {
+	pub type_: Type,
+	pub ident: Ident,
+	pub eq: Equal,
+	pub value: TypeExpr
+}
+
+#[derive(Debug, ll1::Parse)]
+pub struct FunctionDefinition {
+	pub let_: Let,
 	pub paren_l: ParenthesisL,
 	pub ident: Ident,
 	pub args: Vec<ArgDef>,
 	pub paren_r: ParenthesisR,
-	pub eq: Equal,
 	pub type_: Option<TypeAnnotation>,
+	pub eq: Equal,
 	pub body: Expr,
 }
 
@@ -151,6 +172,7 @@ pub struct TypeAnnotation {
 
 #[derive(Debug, ll1::Parse)]
 pub enum ConstValue {
+	Resource(RdfTerm),
 	Literal(LiteralExpr),
 	List(ConstList),
 	Map(ConstMap),
@@ -248,7 +270,7 @@ pub struct MatchCase {
 #[derive(Debug, ll1::Parse)]
 pub struct CallExpr {
 	pub paren_l: ParenthesisL,
-	pub function: Ident,
+	pub function: ItemPath,
 	pub args: Vec<Expr>,
 	pub paren_r: ParenthesisR,
 }
@@ -274,18 +296,24 @@ pub struct RdfDataset {
 
 #[derive(Debug, ll1::Parse)]
 pub struct RdfStatement {
-	pub subject: RdfTerm,
+	pub subject: RdfPattern,
 	pub predicates_objects: List<RdfPredicateObjects, Semicolon>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct RdfPredicateObjects {
-	pub predicate: RdfTerm,
-	pub objects: List<RdfTerm, Comma>,
+	pub predicate: RdfPattern,
+	pub objects: List<RdfPattern, Comma>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub enum RdfTerm {
+	Iri(Iri),
+	Literal(RdfLiteral),
+}
+
+#[derive(Debug, ll1::Parse)]
+pub enum RdfPattern {
 	Var(Ident),
 	Iri(Iri),
 	Literal(RdfLiteral),
@@ -324,7 +352,7 @@ pub struct Entry {
 
 #[derive(Debug, ll1::Parse)]
 pub enum TypeExpr {
-	Var(Ident),
+	Path(ItemPath),
 	Literal(LiteralExpr),
 	List(ListTypeExpr),
 	Map(MapTypeExpr),
@@ -340,8 +368,10 @@ pub enum TypeExpr {
 /// ```
 #[derive(Debug, ll1::Parse)]
 pub struct ListTypeExpr {
+	pub bracket_l: BracketL,
 	pub prefix: List<TypeExpr>,
 	pub rest: Option<ListTypeExprRest>,
+	pub bracket_r: BracketR
 }
 
 #[derive(Debug, ll1::Parse)]

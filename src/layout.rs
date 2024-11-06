@@ -3,8 +3,7 @@ use std::ops::Deref;
 use rdf_types::dataset::PatternMatchingDataset;
 
 use crate::{
-	eval::{EvalError, RdfContext},
-	Domain, Function, Registry, Value,
+	eval::EvalError, rdf::RdfContext, Function, Registry, Value
 };
 
 /// Layout.
@@ -31,8 +30,4 @@ impl<R> Deref for Layout<R> {
 	fn deref(&self) -> &Self::Target {
 		&self.0
 	}
-}
-
-impl<R> Domain for Layout<R> {
-	type Resource = R;
 }

@@ -1,4 +1,12 @@
-impl From<serde_json::Value> for Value {
+use std::str::FromStr;
+
+use xsd_types::ParseXsd;
+
+use crate::{value::Number, Literal, Value};
+
+use super::{NonJsonLiteral, NonJsonNumber, NonJsonValue};
+
+impl<R: Ord> From<serde_json::Value> for Value<R> {
 	fn from(value: serde_json::Value) -> Self {
 		match value {
 			serde_json::Value::Null => Self::Literal(Literal::Unit),
@@ -32,8 +40,17 @@ impl TryFrom<Number> for serde_json::Number {
 	}
 }
 
+impl From<serde_json::Number> for Number {
+	fn from(value: serde_json::Number) -> Self {
+		xsd_types::Decimal::parse_xsd(&value.to_string())
+			.ok()
+			.unwrap()
+			.into()
+	}
+}
+
 impl TryFrom<Literal> for serde_json::Value {
-	type Error = NonJsonValue;
+	type Error = NonJsonLiteral;
 
 	fn try_from(value: Literal) -> Result<Self, Self::Error> {
 		match value {
@@ -41,32 +58,33 @@ impl TryFrom<Literal> for serde_json::Value {
 			Literal::Boolean(b) => Ok(serde_json::Value::Bool(b)),
 			Literal::Number(n) => Ok(serde_json::Value::Number(n.try_into()?)),
 			Literal::TextString(s) => Ok(serde_json::Value::String(s)),
-			Literal::ByteString(s) => Err(NonJsonValue::ByteString(s)),
+			Literal::ByteString(s) => Err(NonJsonLiteral::ByteString(s)),
 		}
 	}
 }
 
-impl TryFrom<TypedLiteral> for serde_json::Value {
-	type Error = NonJsonValue;
+// impl TryFrom<TypedLiteral> for serde_json::Value {
+// 	type Error = NonJsonValue;
 
-	fn try_from(value: TypedLiteral) -> Result<Self, Self::Error> {
+// 	fn try_from(value: TypedLiteral) -> Result<Self, Self::Error> {
+// 		match value {
+// 			TypedLiteral::Id(s, _) => Ok(serde_json::Value::String(s)),
+// 			TypedLiteral::Unit(value, _) => value.try_into(),
+// 			TypedLiteral::Boolean(b, _) => Ok(serde_json::Value::Bool(b)),
+// 			TypedLiteral::Number(n, _) => Ok(serde_json::Value::Number(n.try_into()?)),
+// 			TypedLiteral::TextString(s, _) => Ok(serde_json::Value::String(s)),
+// 			TypedLiteral::ByteString(s, _) => Err(NonJsonValue::ByteString(s)),
+// 		}
+// 	}
+// }
+
+impl<R> TryFrom<Value<R>> for serde_json::Value {
+	type Error = NonJsonValue<R>;
+
+	fn try_from(value: Value<R>) -> Result<Self, Self::Error> {
 		match value {
-			TypedLiteral::Id(s, _) => Ok(serde_json::Value::String(s)),
-			TypedLiteral::Unit(value, _) => value.try_into(),
-			TypedLiteral::Boolean(b, _) => Ok(serde_json::Value::Bool(b)),
-			TypedLiteral::Number(n, _) => Ok(serde_json::Value::Number(n.try_into()?)),
-			TypedLiteral::TextString(s, _) => Ok(serde_json::Value::String(s)),
-			TypedLiteral::ByteString(s, _) => Err(NonJsonValue::ByteString(s)),
-		}
-	}
-}
-
-impl TryFrom<Value> for serde_json::Value {
-	type Error = NonJsonValue;
-
-	fn try_from(value: Value) -> Result<Self, Self::Error> {
-		match value {
-			Value::Literal(l) => l.try_into(),
+			Value::Resource(_) => Err(NonJsonValue::Resource),
+			Value::Literal(l) => l.try_into().map_err(Into::into),
 			Value::Map(r) => {
 				let mut object = serde_json::Map::new();
 

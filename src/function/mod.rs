@@ -1,11 +1,8 @@
-use educe::Educe;
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
-use std::{borrow::Cow, cell::OnceCell, hash::Hash, ops::Deref, sync::Arc};
+use std::{borrow::Cow, hash::Hash};
 
 use crate::{
-	eval::{EvalError, RdfContext, RdfContextMut, Scope, ScopeTypes},
-	ty::TypeRef,
-	Domain, Layout, Registry, Value,
+	eval::{EvalError, Scope, ScopeTypes}, rdf::{RdfContext, RdfContextMut}, ty::{BuiltInType, TypeRef}, Layout, Registry, Value
 };
 
 mod body;
@@ -15,31 +12,46 @@ pub use body::*;
 pub use build_in::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Signature<T> {
+pub struct Signature<T = TypeRef> {
 	pub args: Vec<T>,
 	pub return_type: T,
 }
 
-impl<R> Signature<R> {
+impl<T> Signature<T> {
 	pub fn arity(&self) -> u32 {
 		self.args.len() as u32
 	}
-}
 
-impl<R> Domain for Signature<R> {
-	type Resource = R;
+	pub fn mapped_types<U>(&self, mut f: impl FnMut(&T) -> U) -> Signature<U> {
+		Signature {
+			args: self.args.iter().map(&mut f).collect(),
+			return_type: f(&self.return_type)
+		}
+	}
+
+	pub fn map_types<U>(self, mut f: impl FnMut(T) -> U) -> Signature<U> {
+		Signature {
+			args: self.args.into_iter().map(&mut f).collect(),
+			return_type: f(self.return_type)
+		}
+	}
 }
 
 /// Function.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Function<R, T = TypeRef> {
 	pub signature: Signature<T>,
 	pub body: Body<R, T>,
 }
 
 impl<R> Function<R> {
+	pub fn built_in(b: BuiltInFunction, ty: impl Fn(BuiltInType) -> TypeRef) -> Self {
+		Self {
+			signature: b.signature(ty),
+			body: Body::BuiltIn(b)
+		}
+	}
+
 	pub fn as_layout(&self, registry: &Registry<R>) -> Option<&Layout<R>> {
 		for &a in &self.signature.args {
 			if registry.get_type(a)?.is_resource() {
@@ -63,6 +75,13 @@ impl<R: Clone + Ord> Function<R> {
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		args: &[Value<R>],
 	) -> Result<Value<R>, EvalError<R>> {
+		if args.len() != self.signature.args.len() {
+			return Err(EvalError::ArgumentCount {
+				expected: self.signature.args.len(),
+				found: args.len()
+			})
+		}
+
 		let scope = Scope::new(
 			None,
 			None,
@@ -85,10 +104,6 @@ impl<R: Clone + Ord> Function<R> {
 	}
 }
 
-impl<R> Domain for Function<R> {
-	type Resource = R;
-}
-
 /// Function argument.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Arg<T> {
@@ -97,16 +112,16 @@ pub struct Arg<T> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct FunctionRef(usize);
-
-impl From<FunctionRef> for usize {
-	fn from(value: FunctionRef) -> Self {
-		value.0
-	}
+pub struct FunctionRef {
+	pub namespace: u32,
+	pub index: u32
 }
 
-impl From<usize> for FunctionRef {
-	fn from(value: usize) -> Self {
-		Self(value)
+impl FunctionRef {
+	pub fn new(namespace: u32, index: u32) -> Self {
+		Self {
+			namespace,
+			index
+		}
 	}
 }

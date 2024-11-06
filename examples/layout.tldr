@@ -1,0 +1,5 @@
+type myType = {
+	"key": string
+}
+
+let (_ foo) = 0

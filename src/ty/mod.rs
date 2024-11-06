@@ -1,27 +1,27 @@
 use crate::{
 	utils::{self, take_first, Ignored},
-	value, Domain, Literal, Registry, Value,
+	value, Literal, Registry, Value,
 };
 use educe::Educe;
-use iref::{iri, Iri};
 use iregex::automata::{AnyRange, Automaton, RangeSet};
+use core::fmt;
 use std::{
-	cmp::Ordering,
-	collections::{BTreeMap, BTreeSet},
-	hash::Hash,
-	ops::Bound,
-	sync::OnceLock,
+	cmp::Ordering, collections::{BTreeMap, BTreeSet}, fmt::Debug, hash::Hash, ops::Bound, sync::OnceLock
 };
 
 mod r#ref;
 pub use r#ref::*;
 
-pub const TYPE_ANY: &Iri = iri!("http://schema.treeldr.org/type#any");
-pub const TYPE_UNIT: &Iri = iri!("http://schema.treeldr.org/type#unit");
-pub const TYPE_BOOLEAN: &Iri = iri!("http://schema.treeldr.org/type#bool");
-pub const TYPE_NUMBER: &Iri = iri!("http://schema.treeldr.org/type#number");
-pub const TYPE_BYTE_STRING: &Iri = iri!("http://schema.treeldr.org/type#bytes");
-pub const TYPE_TEXT_STRING: &Iri = iri!("http://schema.treeldr.org/type#string");
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BuiltInType {
+	Any,
+	Resource,
+	Unit,
+	Boolean,
+	Number,
+	ByteString,
+	TextString
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LiteralType {
@@ -33,6 +33,22 @@ pub enum LiteralType {
 }
 
 impl LiteralType {
+	pub fn boolean() -> Self {
+		Self::Boolean(Boolean::default())
+	}
+
+	pub fn number() -> Self {
+		Self::Number(Number::default())
+	}
+
+	pub fn byte_string() -> Self {
+		Self::ByteString(ByteString::default())
+	}
+
+	pub fn text_string() -> Self {
+		Self::TextString(TextString::default())
+	}
+
 	pub fn contains(&self, value: &Literal) -> bool {
 		match (self, value) {
 			(Self::Unit, Literal::Unit) => true,
@@ -56,9 +72,19 @@ impl LiteralType {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
+impl<R> DisplayType<R> for LiteralType {
+	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::Unit => write!(f, "null"),
+			Self::Boolean(ty) => ty.fmt_type(d, depth, f),
+			Self::Number(ty) => ty.fmt_type(d, depth, f),
+			Self::ByteString(ty) => ty.fmt_type(d, depth, f),
+			Self::TextString(ty) => ty.fmt_type(d, depth, f)
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Type<R, T = TypeRef> {
 	/// RDF resource.
 	Resource(Resource<R>),
@@ -95,8 +121,30 @@ impl<R, T> Type<R, T> {
 		}
 	}
 
-	pub fn visit_type_components(&self, f: impl FnMut(&T, bool)) {
-		todo!()
+	pub fn visit_type_components(&self, mut f: impl FnMut(&T, bool)) {
+		match self {
+			Self::Any | Self::Resource(_) | Self::Literal(_) => (),
+			Self::List(ty) => {
+				for c_ref in &ty.prefix {
+					f(c_ref, false);
+				}
+
+				if let Some(c_ref) = &ty.rest {
+					f(c_ref, false);
+				}
+			}
+			Self::Struct(ty) => {
+				for (key, field) in &ty.fields {
+					f(key, true);
+					f(&field.type_, false);
+				}
+			}
+			Self::Enum(ty) => {
+				for c_ref in ty.variants.values() {
+					f(c_ref, false);
+				}
+			}
+		}
 	}
 }
 
@@ -238,6 +286,19 @@ impl<R: Ord> Type<R> {
 	}
 }
 
+impl<R: fmt::Display> DisplayType<R> for Type<R> {
+	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			Self::Any => write!(f, "any"),
+			Self::Resource(ty) => ty.fmt_type(d, depth, f),
+			Self::Literal(ty) => ty.fmt_type(d, depth, f),
+			Self::List(ty) => ty.fmt_type(d, depth, f),
+			Self::Struct(ty) => ty.fmt_type(d, depth, f),
+			Self::Enum(ty) => ty.fmt_type(d, depth, f)
+		}
+	}
+}
+
 /// Resource type.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Educe)]
 #[educe(Default)]
@@ -246,6 +307,15 @@ pub struct Resource<R> {
 }
 
 impl<R: Ord> Resource<R> {
+	pub fn singleton(r: R) -> Self {
+		let mut set = BTreeSet::new();
+		set.insert(r);
+
+		Self {
+			set: Some(set)
+		}
+	}
+
 	pub fn subtype_cmp(&self, other: &Self) -> Option<Ordering> {
 		match (&self.set, &other.set) {
 			(Some(a), Some(b)) => {
@@ -273,13 +343,28 @@ impl<R: Ord> Resource<R> {
 	}
 }
 
-impl<R> Domain for Resource<R> {
-	type Resource = R;
+impl<R: fmt::Display> DisplayType<R> for Resource<R> {
+	fn fmt_type(&self, _d: &DisplayedType<R>, _depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		match &self.set {
+			Some(set) => {
+				write!(f, "(any_of")?;
+
+				for r in set {
+					write!(f, " {r}")?;
+				}
+
+				write!(f, ")")
+			}
+			None => {
+				write!(f, "resource")
+			}
+		}
+	}
 }
 
 /// Struct type.
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Struct<T> {
+pub struct Struct<T = TypeRef> {
 	/// Fields definitions.
 	///
 	/// # Soundness
@@ -355,6 +440,30 @@ impl Struct<TypeRef> {
 	}
 }
 
+impl<R: fmt::Display> DisplayType<R> for Struct {
+	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{{")?;
+
+		for (i, (key, field)) in self.fields.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+
+			key.fmt_type(d, depth + 1, f)?;
+
+			if !field.required {
+				write!(f, "?")?;
+			}
+
+			write!(f, ": ")?;
+			
+			field.type_.fmt_type(d, depth + 1, f)?;
+		}
+
+		write!(f, "}}")
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Field<T> {
 	pub type_: T,
@@ -368,7 +477,7 @@ impl Field<TypeRef> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Enum<T> {
+pub struct Enum<T = TypeRef> {
 	pub variants: BTreeMap<String, T>,
 }
 
@@ -424,12 +533,21 @@ impl Enum<TypeRef> {
 	}
 }
 
-impl<R> Domain for Enum<R> {
-	type Resource = R;
+impl<R: fmt::Display> DisplayType<R> for Enum {
+	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "enum {{")?;
+
+		for (name, variant) in &self.variants {
+			write!(f, "{name}: ")?;
+			variant.fmt_type(d, depth + 1, f)?;
+		}
+
+		write!(f, "}}")
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct List<T> {
+pub struct List<T = TypeRef> {
 	pub prefix: Vec<T>,
 	pub rest: Option<T>,
 }
@@ -513,6 +631,31 @@ impl List<TypeRef> {
 	}
 }
 
+impl<R: fmt::Display> DisplayType<R> for List {
+	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "[")?;
+
+		for (i, &p) in self.prefix.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+
+			p.fmt_type(d, depth + 1, f)?;
+		}
+
+		if let Some(t) = self.rest {
+			if !self.prefix.is_empty() {
+				write!(f, ", ")?;
+			}
+
+			write!(f, "... ")?;
+			t.fmt_type(d, depth, f)?;
+		}
+
+		write!(f, "]")
+	}
+}
+
 fn refine_cmp(cmp: Ordering, refine_with: Option<Ordering>) -> Option<Ordering> {
 	match (cmp, refine_with?) {
 		(Ordering::Equal, cmp) => Some(cmp),
@@ -520,10 +663,6 @@ fn refine_cmp(cmp: Ordering, refine_with: Option<Ordering>) -> Option<Ordering> 
 		(Ordering::Less, Ordering::Less | Ordering::Equal) => Some(Ordering::Less),
 		_ => None,
 	}
-}
-
-impl<R> Domain for List<R> {
-	type Resource = R;
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -555,6 +694,16 @@ impl Boolean {
 		match self.const_ {
 			Some(b) => b == value,
 			None => true,
+		}
+	}
+}
+
+impl<R> DisplayType<R> for Boolean {
+	fn fmt_type(&self, _d: &DisplayedType<R>, _depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		match self.const_ {
+			Some(true) => write!(f, "true"),
+			Some(false) => write!(f, "false"),
+			None => write!(f, "bool")
 		}
 	}
 }
@@ -726,6 +875,24 @@ impl Number {
 	}
 }
 
+impl<R> DisplayType<R> for Number {
+	fn fmt_type(&self, _d: &DisplayedType<R>, _depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		match self.as_singleton() {
+			Some(s) => {
+				s.fmt(f)
+			}
+			None => match self.domain {
+				NumberDomain::Integer => {
+					todo!()
+				}
+				NumberDomain::Rational => {
+					todo!()
+				}
+			}
+		}
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TextString {
 	automaton: iregex::automata::NFA<u32>,
@@ -837,6 +1004,19 @@ impl TextString {
 	}
 }
 
+impl<R> DisplayType<R> for TextString {
+	fn fmt_type(&self, _d: &DisplayedType<R>, _depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		match self.as_singleton() {
+			Some(s) => {
+				todo!()
+			}
+			None => {
+				todo!()
+			}
+		}
+	}
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ByteString;
 
@@ -847,5 +1027,11 @@ impl ByteString {
 
 	pub fn contains(&self, _value: &[u8]) -> bool {
 		true
+	}
+}
+
+impl<R> DisplayType<R> for ByteString {
+	fn fmt_type(&self, _d: &DisplayedType<R>, _depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "bytes")
 	}
 }

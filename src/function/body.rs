@@ -1,20 +1,24 @@
-use educe::Educe;
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 
 use crate::{
-	eval::{Eval, EvalError, RdfContext, RdfContextMut, ReverseScope, Scope},
-	expr::Expr,
-	Registry, TypeRef, Value,
+	eval::{Eval, EvalError, ReverseScope, Scope}, expr::Expr, rdf::{RdfContext, RdfContextMut}, Registry, TypeRef, Value
 };
 
 use super::BuiltInFunction;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Body<R, T = TypeRef> {
 	BuiltIn(BuiltInFunction),
 	Expr(Box<Expr<R, T>>),
+}
+
+impl<R: Ord, T> Body<R, T> {
+	pub fn map_types<U: Ord>(self, f: impl FnMut(T) -> U) -> Body<R, U> {
+		match self {
+			Self::BuiltIn(b) => Body::BuiltIn(b),
+			Self::Expr(e) => Body::Expr(Box::new(e.map_types(f)))
+		}
+	}
 }
 
 impl<R: Ord + Clone> Body<R> {

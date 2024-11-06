@@ -3,7 +3,6 @@ use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use std::{str::FromStr, sync::LazyLock};
-use xsd_types::ParseXsd;
 
 static TEN: LazyLock<BigInt> = LazyLock::new(|| 10u32.into());
 
@@ -208,6 +207,12 @@ impl FromStr for Number {
 	}
 }
 
+impl From<xsd_types::Decimal> for Number {
+	fn from(value: xsd_types::Decimal) -> Self {
+		Self(value.into())
+	}
+}
+
 pub enum NativeNumber {
 	U64(u64),
 	I64(i64),
@@ -284,60 +289,6 @@ impl fmt::Display for Number {
 	}
 }
 
-impl From<serde_json::Number> for Number {
-	fn from(value: serde_json::Number) -> Self {
-		Self(
-			xsd_types::Decimal::parse_xsd(&value.to_string())
-				.ok()
-				.unwrap()
-				.into(),
-		)
-	}
-}
-
-impl From<json_syntax::NumberBuf> for Number {
-	fn from(value: json_syntax::NumberBuf) -> Self {
-		Self(
-			xsd_types::Decimal::parse_xsd(value.as_str())
-				.ok()
-				.unwrap()
-				.into(),
-		)
-	}
-}
-
-impl<'a> From<&'a json_syntax::Number> for Number {
-	fn from(value: &'a json_syntax::Number) -> Self {
-		Self(
-			xsd_types::Decimal::parse_xsd(value.as_str())
-				.ok()
-				.unwrap()
-				.into(),
-		)
-	}
-}
-
-/// Error raised when trying to convert a non-decimal number to JSON.
-#[derive(Debug, thiserror::Error)]
-#[error("not a JSON number: {0}")]
-pub struct NonJsonNumber(pub Number);
-
-impl TryFrom<Number> for json_syntax::NumberBuf {
-	type Error = NonJsonNumber;
-
-	fn try_from(value: Number) -> Result<Self, Self::Error> {
-		match value.decimal_representation() {
-			Some(decimal) => match json_syntax::NumberBuf::new(
-				json_syntax::number::Buffer::from_vec(decimal.into_bytes()),
-			) {
-				Ok(n) => Ok(n),
-				Err(_) => Err(NonJsonNumber(value)),
-			},
-			None => Err(NonJsonNumber(value)),
-		}
-	}
-}
-
 /// Literal value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Literal {
@@ -380,7 +331,64 @@ impl fmt::Display for Literal {
 				}
 				Ok(())
 			}
-			Self::TextString(s) => json_syntax::print::string_literal(s, f),
+			Self::TextString(s) => string_literal(s, f),
 		}
+	}
+}
+
+/// Formats a string literal according to [RFC8785](https://www.rfc-editor.org/rfc/rfc8785#name-serialization-of-strings).
+pub fn string_literal(s: &str, f: &mut fmt::Formatter) -> fmt::Result {
+	use fmt::Display;
+	f.write_str("\"")?;
+
+	for c in s.chars() {
+		match c {
+			'\\' => f.write_str("\\\\")?,
+			'\"' => f.write_str("\\\"")?,
+			'\u{0008}' => f.write_str("\\b")?,
+			'\u{0009}' => f.write_str("\\t")?,
+			'\u{000a}' => f.write_str("\\n")?,
+			'\u{000c}' => f.write_str("\\f")?,
+			'\u{000d}' => f.write_str("\\r")?,
+			'\u{0000}'..='\u{001f}' => {
+				f.write_str("\\u")?;
+
+				let codepoint = c as u32;
+				let d = codepoint & 0x000f;
+				let c = (codepoint & 0x00f0) >> 4;
+				let b = (codepoint & 0x0f00) >> 8;
+				let a = (codepoint & 0xf000) >> 12;
+
+				digit(a).fmt(f)?;
+				digit(b).fmt(f)?;
+				digit(c).fmt(f)?;
+				digit(d).fmt(f)?
+			}
+			_ => c.fmt(f)?,
+		}
+	}
+
+	f.write_str("\"")
+}
+
+fn digit(c: u32) -> char {
+	match c {
+		0x0 => '0',
+		0x1 => '1',
+		0x2 => '2',
+		0x3 => '3',
+		0x4 => '4',
+		0x5 => '5',
+		0x6 => '6',
+		0x7 => '7',
+		0x8 => '8',
+		0x9 => '9',
+		0xa => 'a',
+		0xb => 'b',
+		0xc => 'c',
+		0xd => 'd',
+		0xe => 'e',
+		0xf => 'f',
+		_ => panic!("invalid input: {}", c),
 	}
 }

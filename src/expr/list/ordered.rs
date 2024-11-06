@@ -1,14 +1,10 @@
-use educe::Educe;
-
 use crate::{
 	expr::{Bound, Expr},
 	TypeRef,
 };
 
 /// Select a list of resources and map them.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd, T: PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord, T: Ord"))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OrderedList<R, T = TypeRef> {
 	/// List components.
 	pub components: ListComponents<R>,
@@ -23,9 +19,22 @@ pub struct OrderedList<R, T = TypeRef> {
 	pub body: Box<Expr<R, T>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Educe)]
-#[educe(PartialOrd(bound = "R: 'static + PartialOrd"))]
-#[educe(Ord(bound = "R: 'static + Ord"))]
+impl<R: Ord, T> OrderedList<R, T> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> OrderedList<R, U> {
+		self.map_types_ref_mut(&mut f)
+	}
+
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> OrderedList<R, U> {
+		OrderedList {
+			components: self.components,
+			head: Box::new(self.head.map_types_ref_mut(f)),
+			bound: self.bound.map_types(&mut *f),
+			body: Box::new(self.body.map_types_ref_mut(f))
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ListComponents<R> {
 	pub first: R,
 	pub rest: R,

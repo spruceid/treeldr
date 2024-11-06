@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{collections::BTreeMap, hash::Hash};
+use std::{collections::BTreeMap, hash::Hash, str::FromStr};
 
 mod like;
 pub use like::*;
@@ -8,13 +8,16 @@ mod literal;
 pub use literal::*;
 
 mod typed;
+use ll1::Parse;
 pub use typed::*;
+
+pub mod serde;
 
 use crate::{utils::try_map_list, Registry, Type, TypeRef};
 
 /// Untyped tree value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Value<R> {
+pub enum Value<R = rdf_types::Term> {
 	Resource(R),
 	Literal(Literal),
 	Map(BTreeMap<Self, Self>),
@@ -197,6 +200,23 @@ impl<R> Value<R> {
 		}
 	}
 }
+
+impl FromStr for Value {
+	type Err = ValueParseError;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		let ast = crate::syntax::ast::ConstValue::parse_str(s)
+			.map_err(|_| ValueParseError(s.to_owned()))?;
+
+		ast
+			.build_unscoped()
+			.map_err(|_| ValueParseError(s.to_owned()))
+	}
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("invalid value")]
+pub struct ValueParseError(pub String);
 
 impl<R> ValueLike for Value<R> {
 	type Resource = R;

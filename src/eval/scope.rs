@@ -1,5 +1,5 @@
-use super::{EvalError, RdfContextMut};
-use crate::{pattern::Substitution, TypeRef, Value};
+use super::EvalError;
+use crate::{pattern::Substitution, rdf::RdfContextMut, TypeRef, Value};
 use std::borrow::Cow;
 
 #[derive(Clone, Copy)]

@@ -4,12 +4,8 @@ use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 pub use scope::*;
 
 use crate::{
-	expr::{Expr, InnerExpr},
-	Registry, TypeRef, Value,
+	expr::{Expr, InnerExpr}, rdf::{RdfContext, RdfContextMut}, Registry, TypeRef, Value
 };
-
-mod rdf;
-pub use rdf::*;
 
 mod bound;
 mod call;
@@ -19,7 +15,7 @@ mod map;
 mod r#match;
 
 #[derive(Debug, thiserror::Error)]
-pub enum EvalError<R> {
+pub enum EvalError<R = rdf_types::Term> {
 	#[error("ambiguity")]
 	Ambiguity,
 
@@ -37,6 +33,12 @@ pub enum EvalError<R> {
 
 	#[error("unknown variant `{0}`")]
 	UnknownVariant(String),
+
+	#[error("invalid number of arguments (expected {expected}, found {found})")]
+	ArgumentCount {
+		expected: usize,
+		found: usize
+	}
 }
 
 pub trait Eval<R: Clone> {

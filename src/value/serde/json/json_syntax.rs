@@ -1,4 +1,11 @@
-impl TryFromJson for Value {
+use json_syntax::{array::JsonArray, TryFromJson};
+use xsd_types::ParseXsd;
+
+use crate::{value::Number, Literal, Value};
+
+use super::{NonJsonLiteral, NonJsonNumber, NonJsonValue};
+
+impl<R: Ord> TryFromJson for Value<R> {
 	type Error = std::convert::Infallible;
 
 	fn try_from_json_at(
@@ -37,7 +44,7 @@ impl TryFromJson for Value {
 	}
 }
 
-impl From<json_syntax::Value> for Value {
+impl<R: Ord> From<json_syntax::Value> for Value<R> {
 	fn from(value: json_syntax::Value) -> Self {
 		match value {
 			json_syntax::Value::Null => Self::Literal(Literal::Unit),
@@ -55,7 +62,7 @@ impl From<json_syntax::Value> for Value {
 }
 
 impl TryFrom<Literal> for json_syntax::Value {
-	type Error = NonJsonValue;
+	type Error = NonJsonLiteral;
 
 	fn try_from(value: Literal) -> Result<Self, Self::Error> {
 		match value {
@@ -63,17 +70,18 @@ impl TryFrom<Literal> for json_syntax::Value {
 			Literal::Boolean(b) => Ok(json_syntax::Value::Boolean(b)),
 			Literal::Number(n) => Ok(json_syntax::Value::Number(n.try_into()?)),
 			Literal::TextString(s) => Ok(json_syntax::Value::String(s.into())),
-			Literal::ByteString(s) => Err(NonJsonValue::ByteString(s)),
+			Literal::ByteString(s) => Err(NonJsonLiteral::ByteString(s)),
 		}
 	}
 }
 
-impl TryFrom<Value> for json_syntax::Value {
-	type Error = NonJsonValue;
+impl<R> TryFrom<Value<R>> for json_syntax::Value {
+	type Error = NonJsonValue<R>;
 
-	fn try_from(value: Value) -> Result<Self, Self::Error> {
+	fn try_from(value: Value<R>) -> Result<Self, Self::Error> {
 		match value {
-			Value::Literal(l) => l.try_into(),
+			Value::Resource(_) => Err(NonJsonValue::Resource),
+			Value::Literal(l) => l.try_into().map_err(Into::into),
 			Value::Map(r) => {
 				let mut object = json_syntax::Object::new();
 
@@ -93,6 +101,40 @@ impl TryFrom<Value> for json_syntax::Value {
 				.map(TryInto::try_into)
 				.collect::<Result<Vec<_>, _>>()
 				.map(json_syntax::Value::Array),
+		}
+	}
+}
+
+impl From<json_syntax::NumberBuf> for Number {
+	fn from(value: json_syntax::NumberBuf) -> Self {
+		xsd_types::Decimal::parse_xsd(value.as_str())
+			.ok()
+			.unwrap()
+			.into()
+	}
+}
+
+impl<'a> From<&'a json_syntax::Number> for Number {
+	fn from(value: &'a json_syntax::Number) -> Self {
+		xsd_types::Decimal::parse_xsd(value.as_str())
+			.ok()
+			.unwrap()
+			.into()
+	}
+}
+
+impl TryFrom<Number> for json_syntax::NumberBuf {
+	type Error = NonJsonNumber;
+
+	fn try_from(value: Number) -> Result<Self, Self::Error> {
+		match value.decimal_representation() {
+			Some(decimal) => match json_syntax::NumberBuf::new(
+				json_syntax::number::Buffer::from_vec(decimal.into_bytes()),
+			) {
+				Ok(n) => Ok(n),
+				Err(_) => Err(NonJsonNumber(value)),
+			},
+			None => Err(NonJsonNumber(value)),
 		}
 	}
 }
