@@ -3,13 +3,15 @@ use std::io::{self, BufRead, Write};
 
 use clap::builder::TypedValueParser;
 use json_syntax::Print;
-use treeldr::{value::{serde::json::NonJsonValue, TypedValue}, Registry};
+use treeldr::{
+	value::{serde::json::NonJsonValue, TypedValue},
+	Registry,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
 	#[error("JSON parse error: {0}")]
 	Json(json_syntax::parse::Error<io::Error>),
-
 	// #[error("CBOR parse error: {0}")]
 	// Cbor(serde_cbor::Error),
 }
@@ -21,7 +23,6 @@ pub enum WriteError {
 
 	#[error(transparent)]
 	IO(#[from] io::Error),
-
 	// #[error("invalid CBOR tag: {0}")]
 	// CborTag(treeldr_layouts::value::cbor::InvalidTag),
 
@@ -68,8 +69,7 @@ impl TreeFormat {
 				let (json, _) =
 					json_syntax::Value::parse_utf8(utf8_input).map_err(LoadError::Json)?;
 				Ok(json.into())
-			}
-			// Self::Cbor => serde_cbor::from_reader(input).map_err(LoadError::Cbor),
+			} // Self::Cbor => serde_cbor::from_reader(input).map_err(LoadError::Cbor),
 		}
 	}
 
@@ -92,13 +92,12 @@ impl TreeFormat {
 				} else {
 					write!(output, "{}", json.compact_print()).map_err(WriteError::IO)
 				}
-			}
-			// Self::Cbor => {
-			// 	let cbor = value
-			// 		.try_into_tagged_serde_cbor(registry)
-			// 		.map_err(WriteError::CborTag)?;
-			// 	serde_cbor::to_writer(output, &cbor).map_err(WriteError::Cbor)
-			// }
+			} // Self::Cbor => {
+			  // 	let cbor = value
+			  // 		.try_into_tagged_serde_cbor(registry)
+			  // 		.map_err(WriteError::CborTag)?;
+			  // 	serde_cbor::to_writer(output, &cbor).map_err(WriteError::Cbor)
+			  // }
 		}
 	}
 

@@ -6,6 +6,23 @@ use std::{str::FromStr, sync::LazyLock};
 
 static TEN: LazyLock<BigInt> = LazyLock::new(|| 10u32.into());
 
+pub static NUMBER_ZERO: LazyLock<Number> = LazyLock::new(|| 0u32.into());
+pub static NUMBER_U8_MAX: LazyLock<Number> = LazyLock::new(|| u8::MAX.into());
+pub static NUMBER_U16_MAX: LazyLock<Number> = LazyLock::new(|| u16::MAX.into());
+pub static NUMBER_U32_MAX: LazyLock<Number> = LazyLock::new(|| u32::MAX.into());
+pub static NUMBER_U64_MAX: LazyLock<Number> = LazyLock::new(|| u64::MAX.into());
+pub static NUMBER_U128_MAX: LazyLock<Number> = LazyLock::new(|| u64::MAX.into());
+pub static NUMBER_I8_MIN: LazyLock<Number> = LazyLock::new(|| i8::MIN.into());
+pub static NUMBER_I16_MIN: LazyLock<Number> = LazyLock::new(|| i16::MIN.into());
+pub static NUMBER_I32_MIN: LazyLock<Number> = LazyLock::new(|| i32::MIN.into());
+pub static NUMBER_I64_MIN: LazyLock<Number> = LazyLock::new(|| i64::MIN.into());
+pub static NUMBER_I128_MIN: LazyLock<Number> = LazyLock::new(|| i64::MIN.into());
+pub static NUMBER_I8_MAX: LazyLock<Number> = LazyLock::new(|| i8::MAX.into());
+pub static NUMBER_I16_MAX: LazyLock<Number> = LazyLock::new(|| i16::MAX.into());
+pub static NUMBER_I32_MAX: LazyLock<Number> = LazyLock::new(|| i32::MAX.into());
+pub static NUMBER_I64_MAX: LazyLock<Number> = LazyLock::new(|| i64::MAX.into());
+pub static NUMBER_I128_MAX: LazyLock<Number> = LazyLock::new(|| i64::MAX.into());
+
 /// Rational number.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Number(BigRational);

@@ -1,19 +1,26 @@
-use std::borrow::Cow;
-use interpretation::{IriInterpretationMut, LiteralInterpretationMut};
+use interpretation::{
+	IriInterpretationMut, LiteralInterpretation, LiteralInterpretationMut,
+	ReverseIriInterpretation, ReverseLiteralInterpretation,
+};
 use langtag::LangTagBuf;
 use rdf_types::{
-	interpretation::{IriInterpretation, WithGenerator}, vocabulary::IriVocabulary
+	interpretation::{IriInterpretation, WithGenerator},
+	vocabulary::IriVocabulary,
 };
+use std::borrow::Cow;
 
 pub use iref;
 pub use rdf_types::*;
 
 pub use iref::{Iri, IriBuf};
+use vocabulary::LiteralVocabulary;
 
 pub trait RdfContext<R> {
 	type Vocabulary: Vocabulary;
 	type Interpretation: Interpretation<Resource = R>
-		+ IriInterpretation<<Self::Vocabulary as IriVocabulary>::Iri>;
+		+ IriInterpretation<<Self::Vocabulary as IriVocabulary>::Iri>
+		+ ReverseIriInterpretation<Iri = <Self::Vocabulary as IriVocabulary>::Iri>
+		+ ReverseLiteralInterpretation<Literal = <Self::Vocabulary as LiteralVocabulary>::Literal>;
 
 	fn vocabulary(&self) -> &Self::Vocabulary;
 
@@ -50,7 +57,7 @@ impl Default for Rdf {
 	fn default() -> Self {
 		Self {
 			vocabulary: (),
-			interpretation: WithGenerator::new((), generator::Blank::new())
+			interpretation: WithGenerator::new((), generator::Blank::new()),
 		}
 	}
 }
@@ -58,7 +65,11 @@ impl Default for Rdf {
 impl<V, I, R> RdfContext<R> for Rdf<V, I>
 where
 	V: Vocabulary,
-	I: Interpretation<Resource = R> + IriInterpretation<V::Iri>
+	I: Interpretation<Resource = R>
+		+ IriInterpretation<V::Iri>
+		+ LiteralInterpretation<V::Literal>
+		+ ReverseIriInterpretation<Iri = V::Iri>
+		+ ReverseLiteralInterpretation<Literal = V::Literal>,
 {
 	type Interpretation = I;
 	type Vocabulary = V;
@@ -75,7 +86,13 @@ where
 impl<V, I, R> RdfContextMut<R> for Rdf<V, I>
 where
 	V: VocabularyMut,
-	I: InterpretationMut<V, Resource = R> + IriInterpretation<V::Iri> + IriInterpretationMut<V::Iri> + LiteralInterpretationMut<V::Literal>
+	I: InterpretationMut<V, Resource = R>
+		+ IriInterpretation<V::Iri>
+		+ IriInterpretationMut<V::Iri>
+		+ ReverseIriInterpretation<Iri = V::Iri>
+		+ LiteralInterpretation<V::Literal>
+		+ LiteralInterpretationMut<V::Literal>
+		+ ReverseLiteralInterpretation<Literal = V::Literal>,
 {
 	fn new_resource(&mut self) -> R {
 		self.interpretation.new_resource(&mut self.vocabulary)
@@ -84,7 +101,7 @@ where
 	fn insert_iri(&mut self, iri: Cow<Iri>) -> R {
 		let iri = match iri {
 			Cow::Owned(iri) => self.vocabulary.insert_owned(iri),
-			Cow::Borrowed(iri) => self.vocabulary.insert(iri)
+			Cow::Borrowed(iri) => self.vocabulary.insert(iri),
 		};
 
 		self.interpretation.interpret_iri(iri)
@@ -93,7 +110,7 @@ where
 	fn insert_literal(&mut self, value: String, type_: Cow<Iri>) -> R {
 		let type_ = match type_ {
 			Cow::Owned(iri) => self.vocabulary.insert_owned(iri),
-			Cow::Borrowed(iri) => self.vocabulary.insert(iri)
+			Cow::Borrowed(iri) => self.vocabulary.insert(iri),
 		};
 
 		let literal = self

@@ -19,7 +19,7 @@ pub enum NonJsonValue<R = rdf_types::Term> {
 	Literal(#[from] NonJsonLiteral),
 
 	/// Non-string key, not supported by JSON.
-	#[error("non-string key")]
+	#[error("non-string key {0:?}")]
 	NonStringKey(Value<R>),
 }
 
@@ -39,7 +39,7 @@ pub enum NonJsonLiteral {
 
 	/// Byte string value, not supported by JSON.
 	#[error("byte string cannot be converted to JSON")]
-	ByteString(Vec<u8>)
+	ByteString(Vec<u8>),
 }
 
 impl From<NonJsonNumber> for NonJsonLiteral {

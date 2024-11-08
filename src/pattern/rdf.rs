@@ -46,10 +46,34 @@ impl<R> TermPattern<R> {
 		}
 	}
 
-	pub fn into_resource(self) -> Option<R> {
+	pub fn into_resource(self) -> Result<R, Self> {
 		match self {
-			Self::Resource(r) => Some(r),
-			_ => None,
+			Self::Resource(r) => Ok(r),
+			other => Err(other),
+		}
+	}
+
+	pub fn quad_into_resources(q: Quad<Self>) -> Result<Quad<R>, Quad<Self>> {
+		match q.0.into_resource() {
+			Ok(s) => match q.1.into_resource() {
+				Ok(p) => match q.2.into_resource() {
+					Ok(o) => match q.3 {
+						Some(g) => match g.into_resource() {
+							Ok(g) => Ok(Quad(s, p, o, Some(g))),
+							Err(g) => Err(Quad(
+								Self::Resource(s),
+								Self::Resource(p),
+								Self::Resource(o),
+								Some(g),
+							)),
+						},
+						None => Ok(Quad(s, p, o, None)),
+					},
+					Err(o) => Err(Quad(Self::Resource(s), Self::Resource(p), o, q.3)),
+				},
+				Err(p) => Err(Quad(Self::Resource(s), p, q.2, q.3)),
+			},
+			Err(s) => Err(Quad(s, q.1, q.2, q.3)),
 		}
 	}
 }

@@ -2,9 +2,7 @@ use std::ops::Deref;
 
 use rdf_types::dataset::PatternMatchingDataset;
 
-use crate::{
-	eval::EvalError, rdf::RdfContext, Function, Registry, Value
-};
+use crate::{eval::EvalError, rdf::RdfContext, Function, Registry, Value};
 
 /// Layout.
 ///

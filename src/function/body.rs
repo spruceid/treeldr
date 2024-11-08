@@ -1,10 +1,11 @@
-use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
-
-use crate::{
-	eval::{Eval, EvalError, ReverseScope, Scope}, expr::Expr, rdf::{RdfContext, RdfContextMut}, Registry, TypeRef, Value
-};
-
 use super::BuiltInFunction;
+use crate::{
+	eval::{Eval, EvalError, ReverseScope, Scope},
+	expr::Expr,
+	rdf::{RdfContext, RdfContextMut},
+	Registry, TypeRef, Value,
+};
+use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Body<R, T = TypeRef> {
@@ -16,7 +17,7 @@ impl<R: Ord, T> Body<R, T> {
 	pub fn map_types<U: Ord>(self, f: impl FnMut(T) -> U) -> Body<R, U> {
 		match self {
 			Self::BuiltIn(b) => Body::BuiltIn(b),
-			Self::Expr(e) => Body::Expr(Box::new(e.map_types(f)))
+			Self::Expr(e) => Body::Expr(Box::new(e.map_types(f))),
 		}
 	}
 }
@@ -31,7 +32,7 @@ impl<R: Ord + Clone> Body<R> {
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
 			Self::Expr(e) => e.eval(registry, rdf, dataset, scope),
-			Self::BuiltIn(b) => b.eval(dataset, scope),
+			Self::BuiltIn(b) => b.eval(rdf, dataset, scope.top_values()),
 		}
 	}
 
@@ -40,16 +41,20 @@ impl<R: Ord + Clone> Body<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		input_types: &[TypeRef],
+		scope: &mut ReverseScope<R>,
 		output: &Value<R>,
-	) -> Result<Vec<Value<R>>, EvalError<R>> {
+	) -> Result<(), EvalError<R>> {
 		match self {
-			Self::Expr(e) => {
-				let mut scope = ReverseScope::new(None, input_types);
-				e.eval_inverse(registry, rdf, dataset, &mut scope, output)?;
-				scope.end(rdf)
+			Self::Expr(e) => e.eval_inverse(registry, rdf, dataset, scope, output),
+			Self::BuiltIn(b) => {
+				let values = b.eval_inverse(rdf, scope, output)?;
+
+				for (i, value) in values.into_iter().enumerate() {
+					scope.set(i as u32, value)?;
+				}
+
+				Ok(())
 			}
-			Self::BuiltIn(b) => b.eval_inverse(dataset, output),
 		}
 	}
 }

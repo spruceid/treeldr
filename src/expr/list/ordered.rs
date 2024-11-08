@@ -29,7 +29,7 @@ impl<R: Ord, T> OrderedList<R, T> {
 			components: self.components,
 			head: Box::new(self.head.map_types_ref_mut(f)),
 			bound: self.bound.map_types(&mut *f),
-			body: Box::new(self.body.map_types_ref_mut(f))
+			body: Box::new(self.body.map_types_ref_mut(f)),
 		}
 	}
 }

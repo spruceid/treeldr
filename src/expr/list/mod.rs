@@ -23,7 +23,7 @@ impl<R: Ord, T> List<R, T> {
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> List<R, U> {
 		match self {
 			Self::Explicit(e) => List::Explicit(e.map_types_ref_mut(f)),
-			Self::Implicit(i) => List::Implicit(i.map_types_ref_mut(f))
+			Self::Implicit(i) => List::Implicit(i.map_types_ref_mut(f)),
 		}
 	}
 }
@@ -47,7 +47,11 @@ impl<R: Ord, T> ExplicitList<R, T> {
 
 	fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> ExplicitList<R, U> {
 		ExplicitList {
-			items: self.items.into_iter().map(|e| e.map_types_ref_mut(f)).collect()
+			items: self
+				.items
+				.into_iter()
+				.map(|e| e.map_types_ref_mut(f))
+				.collect(),
 		}
 	}
 }
@@ -67,7 +71,7 @@ impl<R: Ord, T> ImplicitList<R, T> {
 	fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> ImplicitList<R, U> {
 		match self {
 			Self::Ordered(o) => ImplicitList::Ordered(o.map_types_ref_mut(f)),
-			Self::Unordered(u) => ImplicitList::Unordered(u.map_types_ref_mut(f))
+			Self::Unordered(u) => ImplicitList::Unordered(u.map_types_ref_mut(f)),
 		}
 	}
 }

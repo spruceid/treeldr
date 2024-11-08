@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 
-use rdf_types::dataset::{BTreeDataset, PatternMatchingDataset, TraversableDataset};
+use rdf_types::{
+	dataset::{BTreeDataset, DatasetMut, PatternMatchingDataset, TraversableDataset},
+	Quad,
+};
 
 use crate::{
 	expr::Bound,
@@ -54,16 +57,27 @@ impl<R: Clone + PartialEq> Bound<R> {
 		}
 	}
 
-	pub fn inverse_once<'a, C>(
-		&'a self,
+	pub fn inverse_once<C, D>(
+		&self,
 		rdf: &mut C,
-		scope: &'a mut ReverseScope<R>,
-		f: impl FnOnce(&mut C, &mut ReverseScope<'a, R>) -> Result<(), EvalError<R>>,
+		dataset: &mut D,
+		scope: &mut ReverseScope<R>,
+		f: impl FnOnce(&mut C, &mut D, &mut ReverseScope<R>) -> Result<(), EvalError<R>>,
 	) -> Result<Vec<Value<R>>, EvalError<R>>
 	where
 		C: RdfContextMut<R>,
+		D: DatasetMut<Resource = R>,
 	{
-		scope.begin(rdf, None, &self.intro, f)
+		scope.begin(
+			rdf,
+			dataset,
+			None,
+			&self.intro,
+			move |rdf, dataset, scope| {
+				scope.extend_dataset(self.dataset.iter().map(Quad::into_cloned));
+				f(rdf, dataset, scope)
+			},
+		)
 	}
 
 	pub fn find_all<'a, D>(

@@ -1,5 +1,5 @@
-pub mod ser;
 pub mod de;
+pub mod ser;
 
 #[cfg(feature = "json")]
 pub mod json;

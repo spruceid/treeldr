@@ -1,4 +1,3 @@
-use std::{borrow::Cow, fs, io::{self, BufReader}, path::PathBuf, process::ExitCode};
 use codespan_reporting::{
 	diagnostic::{Diagnostic, Label},
 	files::SimpleFiles,
@@ -7,7 +6,20 @@ use codespan_reporting::{
 		termcolor::{ColorChoice, StandardStream},
 	},
 };
-use treeldr::{rdf::{dataset::BTreeDataset, Rdf}, syntax::{build::TypeResolutionError, Spanned}, value::ValueParseError, CompileError, Environment, ItemRef, Module, Registry, Value};
+use std::{
+	borrow::Cow,
+	fs,
+	io::{self, BufReader},
+	path::PathBuf,
+	process::ExitCode,
+};
+use treeldr::{
+	display::DisplaySignature,
+	rdf::{dataset::BTreeDataset, Rdf},
+	syntax::{build::TypeResolutionError, Spanned},
+	value::ValueParseError,
+	CompileError, Environment, ItemRef, Module, Registry, Value,
+};
 
 mod format;
 use format::{RDFFormat, TreeFormat};
@@ -55,8 +67,8 @@ enum Command {
 
 		/// Format of the output RDF dataset.
 		#[arg(short, long = "output", value_parser = RDFFormat::parser(), default_value = "n-quads")]
-		output_format: RDFFormat
-	}
+		output_format: RDFFormat,
+	},
 }
 
 fn main() -> ExitCode {
@@ -88,20 +100,30 @@ fn main() -> ExitCode {
 }
 
 impl Args {
-	fn run(self, rdf: &mut Rdf, registry: &mut Registry, env: &Environment, files: &mut SimpleFiles<String, String>) -> Result<(), Error> {
+	fn run(
+		self,
+		rdf: &mut Rdf,
+		registry: &mut Registry,
+		env: &Environment,
+		files: &mut SimpleFiles<String, String>,
+	) -> Result<(), Error> {
 		let content = fs::read_to_string(&self.input).map_err(Error::IO)?;
 		let file_id = files.add(self.input.to_string_lossy().into_owned(), content);
-		
+
 		let module = treeldr::Module::compile(
 			rdf,
 			registry,
 			env,
-			files.get(file_id).unwrap().source().as_str()
-		).map_err(|e| Error::Compile(file_id, e))?;
-	
+			files.get(file_id).unwrap().source().as_str(),
+		)
+		.map_err(|e| Error::Compile(file_id, e))?;
+
 		match self.command {
 			Some(command) => command.run(rdf, registry, &module),
-			None => Ok(())
+			None => {
+				println!("{}", module.display_signature(registry));
+				Ok(())
+			}
 		}
 	}
 }
@@ -109,21 +131,27 @@ impl Args {
 impl Command {
 	fn run(self, rdf: &mut Rdf, registry: &Registry, module: &Module) -> Result<(), Error> {
 		match self {
-			Self::Hydrate { input_format, output_format, args, pretty } => {
+			Self::Hydrate {
+				input_format,
+				output_format,
+				args,
+				pretty,
+			} => {
 				let name = "_";
-				
+
 				let f_ref = match module.get_by_name(name) {
 					Some(ItemRef::Function(f_ref)) => f_ref,
 					Some(_) => return Err(Error::NotAFunction(name.to_owned())),
-					None => return Err(Error::UndefinedFunction(name.to_owned()))
+					None => return Err(Error::UndefinedFunction(name.to_owned())),
 				};
-			
-				let function = registry
-					.get_function(f_ref)
-					.unwrap();
+
+				let function = registry.get_function(f_ref).unwrap();
 
 				let stdin = BufReader::new(io::stdin());
-				let dataset = input_format.load(stdin).map_err(Error::LoadRdf)?.into_indexed();
+				let dataset = input_format
+					.load(stdin)
+					.map_err(Error::LoadRdf)?
+					.into_indexed();
 
 				let output = function.call(registry, rdf, &dataset, &args)?;
 
@@ -131,20 +159,23 @@ impl Command {
 					.into_typed(registry, function.signature.return_type)
 					.unwrap();
 
-				output_format.write(registry, &typed_output, pretty, io::stdout()).map_err(Into::into)
+				output_format
+					.write(registry, &typed_output, pretty, io::stdout())
+					.map_err(Into::into)
 			}
-			Self::Dehydrate { input_format, output_format } => {
+			Self::Dehydrate {
+				input_format,
+				output_format,
+			} => {
 				let name = "_";
-				
+
 				let f_ref = match module.get_by_name(name) {
 					Some(ItemRef::Function(f_ref)) => f_ref,
 					Some(_) => return Err(Error::NotAFunction(name.to_owned())),
-					None => return Err(Error::UndefinedFunction(name.to_owned()))
+					None => return Err(Error::UndefinedFunction(name.to_owned())),
 				};
-			
-				let function = registry
-					.get_function(f_ref)
-					.unwrap();
+
+				let function = registry.get_function(f_ref).unwrap();
 
 				let stdin = BufReader::new(io::stdin());
 				let tree = input_format.load(stdin).map_err(Error::LoadTree)?;
@@ -152,7 +183,9 @@ impl Command {
 				let mut dataset = BTreeDataset::new();
 				let _ = function.call_inverse(registry, rdf, &mut dataset, &tree)?;
 
-				output_format.write(dataset, io::stdout()).map_err(Into::into)
+				output_format
+					.write(dataset, io::stdout())
+					.map_err(Into::into)
 			}
 		}
 	}
@@ -184,37 +217,38 @@ pub enum Error {
 
 	#[error(transparent)]
 	Eval(#[from] treeldr::eval::EvalError),
-	
+
 	#[error(transparent)]
-	WriteTree(#[from] format::tree::WriteError)
+	WriteTree(#[from] format::tree::WriteError),
 }
 
 impl Error {
 	fn into_diagnostic(self, registry: &Registry) -> Diagnostic<usize> {
 		match self {
-			Self::Compile(file_id, e) => {
-				match e {
-					CompileError::Typing(TypeResolutionError::Subtyping { sub_type, super_type }) => {
-						Diagnostic::error()
-							.with_notes(vec![
-								format!("type                {}", sub_type.display(registry)),
-								format!("is not a subtype of {}", super_type.display(registry))
-							])
-							.with_message(e.to_string())
-					},
-					CompileError::Parse(e) => {
-						Diagnostic::error()
-							.with_labels(vec![
-								Label::primary(file_id, e.span())
-									.with_message(e.to_string())
-							])
-							.with_message("invalid syntax")
-					}
-					e => Diagnostic::error()
-						.with_message(e.to_string())
-				}
-			}
-			e => Diagnostic::error().with_message(e.to_string())
+			Self::Compile(file_id, e) => match e {
+				CompileError::Typing(TypeResolutionError::Subtyping {
+					sub_type,
+					super_type,
+				}) => Diagnostic::error()
+					.with_notes(vec![
+						format!(
+							"type                {}",
+							sub_type.display_signature(registry)
+						),
+						format!(
+							"is not a subtype of {}",
+							super_type.display_signature(registry)
+						),
+					])
+					.with_message(e.to_string()),
+				CompileError::Parse(e) => Diagnostic::error()
+					.with_labels(vec![
+						Label::primary(file_id, e.span()).with_message(e.to_string())
+					])
+					.with_message("invalid syntax"),
+				e => Diagnostic::error().with_message(e.to_string()),
+			},
+			e => Diagnostic::error().with_message(e.to_string()),
 		}
 	}
 }

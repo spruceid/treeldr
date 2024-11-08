@@ -47,7 +47,7 @@ impl<R: Ord, T> TypedValue<R, T> {
 	/// Strips the type information and returns a simple tree value.
 	pub fn to_untyped(&self) -> Value<R>
 	where
-		R: Clone
+		R: Clone,
 	{
 		self.desc.to_untyped()
 	}
@@ -64,7 +64,7 @@ impl<R: Ord, T> TypedValue<R, T> {
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> TypedValue<R, U> {
 		TypedValue {
 			type_: f(self.type_),
-			desc: self.desc.map_types_ref_mut(f)
+			desc: self.desc.map_types_ref_mut(f),
 		}
 	}
 }
@@ -165,8 +165,10 @@ impl<R: Ord, T> TypedValueDesc<R, T> {
 
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> TypedValueDesc<R, U> {
 		match self {
-			Self::Variant(name, v) => TypedValueDesc::Variant(name, Box::new(v.map_types_ref_mut(f))),
-			Self::Constant(v) => TypedValueDesc::Constant(v.map_types_ref_mut(f))
+			Self::Variant(name, v) => {
+				TypedValueDesc::Variant(name, Box::new(v.map_types_ref_mut(f)))
+			}
+			Self::Constant(v) => TypedValueDesc::Constant(v.map_types_ref_mut(f)),
 		}
 	}
 }
@@ -253,17 +255,21 @@ impl<R: Ord, T> TypedValueInnerDesc<R, T> {
 		self.map_types_ref_mut(&mut f)
 	}
 
-	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> TypedValueInnerDesc<R, U> {
+	pub fn map_types_ref_mut<U: Ord>(
+		self,
+		f: &mut impl FnMut(T) -> U,
+	) -> TypedValueInnerDesc<R, U> {
 		match self {
 			Self::Resource(r) => TypedValueInnerDesc::Resource(r),
 			Self::Literal(l) => TypedValueInnerDesc::Literal(l),
-			Self::List(l) => TypedValueInnerDesc::List(l.into_iter().map(|v| v.map_types_ref_mut(f)).collect()),
-			Self::Map(m) => TypedValueInnerDesc::Map(m.into_iter().map(|(k, v)| {
-				(
-					k.map_types_ref_mut(f),
-					v.map_types_ref_mut(f)
-				)
-			}).collect())
+			Self::List(l) => {
+				TypedValueInnerDesc::List(l.into_iter().map(|v| v.map_types_ref_mut(f)).collect())
+			}
+			Self::Map(m) => TypedValueInnerDesc::Map(
+				m.into_iter()
+					.map(|(k, v)| (k.map_types_ref_mut(f), v.map_types_ref_mut(f)))
+					.collect(),
+			),
 		}
 	}
 }

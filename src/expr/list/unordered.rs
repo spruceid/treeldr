@@ -29,7 +29,7 @@ impl<R: Ord, T> UnorderedList<R, T> {
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> UnorderedList<R, U> {
 		UnorderedList {
 			bound: self.bound.map_types(&mut *f),
-			body: Box::new(self.body.map_types_ref_mut(f))
+			body: Box::new(self.body.map_types_ref_mut(f)),
 		}
 	}
 }

@@ -4,13 +4,20 @@ use std::{
 	hash::Hash,
 };
 
-use iref::{InvalidIri, IriBuf};
+use educe::Educe;
+use iref::{InvalidIri, Iri, IriBuf};
 use langtag::{InvalidLangTag, LangTagBuf};
 use ll1::{Span, Spanned};
 use rdf_types::{LiteralType, Quad, Term, RDF_FIRST, RDF_NIL, RDF_REST, XSD_STRING};
 
 use crate::{
-	expr::{self, Bound, Expr, InnerExpr, ListComponents}, function::{self, FunctionRef, Signature}, rdf::RdfContextMut, ty, value::{Number, NumberParseError, TypedMap, TypedValue, TypedValueDesc, TypedValueInnerDesc}, DatasetPattern, Environment, Function, Item, ItemPath, ItemPathBuf, ItemRef, Literal, Module, Registry, TermPattern, Type, TypeRef, Value
+	expr::{self, Bound, Expr, InnerExpr, ListComponents},
+	function::{self, FunctionRef, Signature},
+	rdf::RdfContextMut,
+	ty::{self, TypeDesc},
+	value::{Number, NumberParseError, TypedMap, TypedValue, TypedValueDesc, TypedValueInnerDesc},
+	Attribute, Attributes, DatasetPattern, Environment, Function, Item, ItemPath, ItemPathBuf,
+	ItemRef, Literal, Module, Registry, TermPattern, Type, TypeRef, Value,
 };
 
 use super::ast::{self, Ident, ListDescription};
@@ -34,6 +41,9 @@ pub enum Error {
 
 	#[error("unknown IRI prefix `{1}`")]
 	UnknownPrefix(Span, String),
+
+	#[error("`{1}` is not an IRI prefix")]
+	NotAPrefix(Span, String),
 
 	#[error("unknown variable `{0}`")]
 	UnknownVariable(Ident),
@@ -72,17 +82,19 @@ pub enum Error {
 	ExpectedExactlyOneBinding(Span),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum BuildItemRef<'a, 'ast> {
+#[derive(Debug, Educe)]
+#[educe(Clone, Copy)]
+pub enum BuildItemRef<'a, 'ast, R> {
+	Prefix(&'a Iri),
 	Variable(u32),
 	Type(TypeRef),
 	TypeVariable(TypeVariableRef),
 	Function(FunctionRef),
 	BuildModule(&'a BuildModule<'ast>),
-	Module(&'a Module)
+	Module(&'a Module<R>),
 }
 
-impl<'a, 'ast> BuildItemRef<'a, 'ast> {
+impl<'a, 'ast, R> BuildItemRef<'a, 'ast, R> {
 	pub fn get(&self, path: &ItemPath) -> Option<Self> {
 		if path.is_empty() {
 			Some(*self)
@@ -90,8 +102,15 @@ impl<'a, 'ast> BuildItemRef<'a, 'ast> {
 			match self {
 				Self::BuildModule(m) => m.get(path),
 				Self::Module(m) => m.get(path).map(Into::into),
-				_ => None
+				_ => None,
 			}
+		}
+	}
+
+	pub fn as_prefix(&self) -> Option<&'a str> {
+		match self {
+			Self::Prefix(p) => Some(p),
+			_ => None,
 		}
 	}
 
@@ -102,7 +121,11 @@ impl<'a, 'ast> BuildItemRef<'a, 'ast> {
 		}
 	}
 
-	pub fn import_type<R>(&self, registry: &mut Registry<R>, type_variables: &mut TypeVariables<R>) -> Option<TypeVariableRef> {
+	pub fn import_type(
+		&self,
+		registry: &mut Registry<R>,
+		type_variables: &mut TypeVariables<R>,
+	) -> Option<TypeVariableRef> {
 		match self {
 			Self::Type(t) => Some(type_variables.import_type_ref(registry, *t)),
 			Self::TypeVariable(t) => Some(*t),
@@ -118,23 +141,31 @@ impl<'a, 'ast> BuildItemRef<'a, 'ast> {
 	}
 }
 
-impl<'a, 'ast> From<ItemRef<'a>> for BuildItemRef<'a, 'ast> {
-	fn from(value: ItemRef<'a>) -> Self {
+impl<'a, 'ast, R> From<ItemRef<'a, R>> for BuildItemRef<'a, 'ast, R> {
+	fn from(value: ItemRef<'a, R>) -> Self {
 		match value {
 			ItemRef::Type(t) => BuildItemRef::Type(t),
 			ItemRef::Function(f) => BuildItemRef::Function(f),
-			ItemRef::Module(m) => BuildItemRef::Module(m)
+			ItemRef::Module(m) => BuildItemRef::Module(m),
 		}
 	}
 }
 
-pub enum Scope<'a> {
-	Root(&'a Environment<'a>),
-	Module(&'a Scope<'a>, &'a BuildModule<'a>),
-	SubScope(SubScope<'a>),
+pub enum Scope<'a, R: Clone> {
+	Root(&'a Environment<'a, R>),
+	Module(&'a Self, &'a BuildModule<'a>),
+	SubScope(SubScope<'a, R>),
 }
 
-impl<'a> Scope<'a> {
+impl<'a, R: Clone> Scope<'a, R> {
+	pub fn environment(&self) -> &'a Environment<'a, R> {
+		match self {
+			Self::Root(e) => e,
+			Self::Module(scope, _) => scope.environment(),
+			Self::SubScope(scope) => scope.parent.environment(),
+		}
+	}
+
 	pub fn offset(&self) -> u32 {
 		match self {
 			Self::Root(_) => 0,
@@ -159,37 +190,29 @@ impl<'a> Scope<'a> {
 		}
 	}
 
-	pub fn get_prefix(&self, name: &str) -> Option<&str> {
-		todo!()
-	}
-
-	pub fn get_self(&self) -> Option<BuildItemRef> {
+	pub fn get_self(&self) -> Option<BuildItemRef<R>> {
 		match self {
 			Self::Root(_) => None,
 			Self::Module(_, m) => Some(BuildItemRef::BuildModule(m)),
-			Self::SubScope(s) => s.get_self()
+			Self::SubScope(s) => s.get_self(),
 		}
 	}
 
-	pub fn get(&self, path: &ItemPath) -> Option<BuildItemRef> {
+	pub fn get(&self, path: &ItemPath) -> Option<BuildItemRef<R>> {
 		match path.split_first() {
-			Some((first, rest)) => {
-				self.get_by_name(first).and_then(|item| item.get(ItemPath::from_slice(rest)))
-			}
-			None => self.get_self()
+			Some((first, rest)) => self
+				.get_by_name(first)
+				.and_then(|item| item.get(ItemPath::from_slice(rest))),
+			None => self.get_self(),
 		}
 	}
 
-	pub fn get_by_name(&self, name: &str) -> Option<BuildItemRef> {
+	pub fn get_by_name(&self, name: &str) -> Option<BuildItemRef<R>> {
 		match self {
-			Self::Root(env) => {
-				env.get_by_name(name).map(Into::into)
-			},
-			Self::Module(parent, module) => {
-				module.get_by_name(name).or_else(|| {
-					parent.get_by_name(name)
-				})
-			},
+			Self::Root(env) => env.get_by_name(name).map(Into::into),
+			Self::Module(parent, module) => module
+				.get_by_name(name)
+				.or_else(|| parent.get_by_name(name)),
 			Self::SubScope(s) => s.get_by_name(name),
 		}
 	}
@@ -198,7 +221,7 @@ impl<'a> Scope<'a> {
 		self.variable(i).map(|(_, ty)| ty)
 	}
 
-	pub fn begin<R, D>(&self, context: &mut BuildContext<R, D>, bindings: &ast::Bindings) -> Scope {
+	pub fn begin<D>(&self, context: &mut BuildContext<R, D>, bindings: &ast::Bindings) -> Scope<R> {
 		let mut sub_scope = SubScope::new(self);
 
 		for ident in &bindings.variables {
@@ -210,15 +233,15 @@ impl<'a> Scope<'a> {
 	}
 }
 
-pub struct SubScope<'a> {
-	parent: &'a Scope<'a>,
+pub struct SubScope<'a, R: Clone> {
+	parent: &'a Scope<'a, R>,
 	variables: Vec<(String, TypeVariableRef)>,
 	bindings: HashMap<String, u32>,
 	len: u32,
 }
 
-impl<'a> SubScope<'a> {
-	pub fn new(parent: &'a Scope<'a>) -> Self {
+impl<'a, R: Clone> SubScope<'a, R> {
+	pub fn new(parent: &'a Scope<'a, R>) -> Self {
 		Self {
 			parent,
 			variables: Vec::new(),
@@ -247,20 +270,20 @@ impl<'a> SubScope<'a> {
 		}
 	}
 
-	pub fn get_self(&self) -> Option<BuildItemRef> {
+	pub fn get_self(&self) -> Option<BuildItemRef<R>> {
 		self.parent.get_self()
 	}
 
-	pub fn get(&self, path: &ItemPath) -> Option<BuildItemRef> {
+	pub fn get(&self, path: &ItemPath) -> Option<BuildItemRef<R>> {
 		match path.split_first() {
-			Some((first, rest)) => {
-				self.get_by_name(first).and_then(|item| item.get(ItemPath::from_slice(rest)))
-			}
-			None => self.get_self()
+			Some((first, rest)) => self
+				.get_by_name(first)
+				.and_then(|item| item.get(ItemPath::from_slice(rest))),
+			None => self.get_self(),
 		}
 	}
 
-	pub fn get_by_name(&self, name: &str) -> Option<BuildItemRef> {
+	pub fn get_by_name(&self, name: &str) -> Option<BuildItemRef<R>> {
 		match self.bindings.get(name) {
 			Some(i) => Some(BuildItemRef::Variable(*i)),
 			None => self.parent.get_by_name(name),
@@ -294,10 +317,7 @@ pub struct BuildContext<'a, R, D> {
 }
 
 impl<'a, R, D> BuildContext<'a, R, D> {
-	pub fn new(
-		rdf: &'a mut D,
-		registry: &'a mut Registry<R>
-	) -> Self {
+	pub fn new(rdf: &'a mut D, registry: &'a mut Registry<R>) -> Self {
 		let namespace = registry.create_namespace();
 
 		Self {
@@ -305,33 +325,44 @@ impl<'a, R, D> BuildContext<'a, R, D> {
 			registry,
 			namespace,
 			type_variables: TypeVariables::new(),
-			functions: Vec::new()
+			functions: Vec::new(),
 		}
 	}
 
-	fn declare_function(
-		&mut self,
-		signature: Signature<TypeVariableRef>,
-	) -> FunctionRef {
+	fn declare_function(&mut self, signature: Signature<R, TypeVariableRef>) -> FunctionRef
+	where
+		R: Clone,
+	{
 		let f_ref = FunctionRef::new(self.namespace, self.functions.len() as u32);
-		
+
 		self.functions.push(FunctionDefinition {
 			signature,
-			value: None
+			value: None,
 		});
-		
+
 		f_ref
 	}
 
-	fn define_function(&mut self, r: FunctionRef, body: function::Body<R, TypeVariableRef>) {
+	fn define_function(
+		&mut self,
+		r: FunctionRef,
+		attributes: Attributes<R>,
+		body: function::Body<R, TypeVariableRef>,
+	) where
+		R: Clone,
+	{
 		let f = &mut self.functions[r.index as usize];
 		f.value = Some(Function {
+			attributes,
 			signature: f.signature.clone(),
-			body
+			body,
 		});
 	}
 
-	fn import_function_signature(&mut self, r: FunctionRef) -> Option<Signature<TypeVariableRef>> {
+	fn import_function_signature(&mut self, r: FunctionRef) -> Option<Signature<R, TypeVariableRef>>
+	where
+		R: Clone,
+	{
 		if r.namespace == self.namespace {
 			Some(self.functions[r.index as usize].signature.clone())
 		} else {
@@ -343,17 +374,22 @@ impl<'a, R, D> BuildContext<'a, R, D> {
 		}
 	}
 
-	pub fn resolve(self) -> Result<HashMap<TypeVariableRef, TypeRef>, TypeResolutionError> where R: Clone + Ord {
-		let map = self
-			.type_variables
-			.resolve(self.registry, self.namespace)?;
+	pub fn resolve(self) -> Result<HashMap<TypeVariableRef, TypeRef>, TypeResolutionError>
+	where
+		R: Clone + Ord,
+	{
+		let map = self.type_variables.resolve(self.registry, self.namespace)?;
 
 		for f in self.functions {
 			let value = f.value.unwrap();
-			self.registry.insert_function(self.namespace, Function {
-				signature: value.signature.map_types(|x| map[&x]),
-				body: value.body.map_types(|x| map[&x])
-			});
+			self.registry.insert_function(
+				self.namespace,
+				Function {
+					attributes: value.attributes,
+					signature: value.signature.map_types(|x| map[&x]),
+					body: value.body.map_types(|x| map[&x]),
+				},
+			);
 		}
 
 		Ok(map)
@@ -361,62 +397,65 @@ impl<'a, R, D> BuildContext<'a, R, D> {
 }
 
 struct FunctionDefinition<R> {
-	signature: Signature<TypeVariableRef>,
+	signature: Signature<R, TypeVariableRef>,
 	value: Option<Function<R, TypeVariableRef>>,
 }
 
 #[derive(Debug)]
 enum BuildItem<'ast> {
-	Type(TypeVariableRef, &'ast ast::TypeDefinition),
-	Function(FunctionRef, &'ast ast::FunctionDefinition),
-	Module(BuildModule<'ast>),
+	Prefix(IriBuf),
+	Type(
+		TypeVariableRef,
+		&'ast ast::TypeDefinition,
+		&'ast ast::Metadata,
+	),
+	Function(
+		FunctionRef,
+		&'ast ast::FunctionDefinition,
+		&'ast ast::Metadata,
+	),
+	Module(BuildModule<'ast>, &'ast ast::Metadata),
 }
 
 impl<'ast> BuildItem<'ast> {
-	fn as_ref(&self) -> BuildItemRef<'_, 'ast> {
+	fn as_ref<R>(&self) -> BuildItemRef<'_, 'ast, R> {
 		match self {
-			Self::Type(r, _) => BuildItemRef::TypeVariable(*r),
-			Self::Function(r, _) => BuildItemRef::Function(*r),
-			Self::Module(m) => BuildItemRef::BuildModule(m)
+			Self::Prefix(p) => BuildItemRef::Prefix(p),
+			Self::Type(r, _, _) => BuildItemRef::TypeVariable(*r),
+			Self::Function(r, _, _) => BuildItemRef::Function(*r),
+			Self::Module(m, _) => BuildItemRef::BuildModule(m),
 		}
 	}
 }
 
 #[derive(Debug, Default)]
 pub struct BuildModule<'ast> {
-	/// IRI prefixes.
-	prefixes: HashMap<String, IriBuf>,
-
 	/// Items.
 	items: HashMap<String, BuildItem<'ast>>,
 }
 
 impl<'ast> BuildModule<'ast> {
-	fn get_prefix(&self, name: &str) -> Option<&str> {
-		todo!()
-	}
-
-	pub fn get(&self, path: &ItemPath) -> Option<BuildItemRef<'_, 'ast>> {
+	pub fn get<R>(&self, path: &ItemPath) -> Option<BuildItemRef<'_, 'ast, R>> {
 		match path.split_first() {
-			Some((first, rest)) => {
-				self.get_by_name(first).and_then(|item| item.get(ItemPath::from_slice(rest)))
-			}
-			None => Some(BuildItemRef::BuildModule(self))
+			Some((first, rest)) => self
+				.get_by_name(first)
+				.and_then(|item| item.get(ItemPath::from_slice(rest))),
+			None => Some(BuildItemRef::BuildModule(self)),
 		}
 	}
 
-	fn get_by_name(&self, name: &str) -> Option<BuildItemRef<'_, 'ast>> {
+	fn get_by_name<R>(&self, name: &str) -> Option<BuildItemRef<'_, 'ast, R>> {
 		self.items.get(name).map(BuildItem::as_ref)
 	}
 }
 
-pub trait Build<'ast, R> {
+pub trait Build<'ast, R: Clone> {
 	type Target;
 
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
 		D: RdfContextMut<R>;
@@ -428,67 +467,119 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Module {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		_scope: &Scope,
-	) -> Result<Self::Target, Error> {
-		let mut result = BuildModule::default();
+		scope: &Scope<R>,
+	) -> Result<Self::Target, Error>
+	where
+		D: RdfContextMut<R>,
+	{
+		// Declare prefixes.
+		let mut prefixed_module = BuildModule::default();
+		for item in &self.items {
+			if let ast::Item::Prefix(ast) = &item.value {
+				let iri = ast.value.build(scope)?;
+				prefixed_module
+					.items
+					.insert(ast.ident.as_str().to_owned(), BuildItem::Prefix(iri));
+			}
+		}
 
 		// Declare.
+		let scope = Scope::Module(scope, &prefixed_module);
+		let mut result = BuildModule::default();
 		for item in &self.items {
-			match item {
-				ast::Item::Prefix(_) => {
-					// nothing to do.
+			match &item.value {
+				ast::Item::Prefix(p_ast) => {
+					let iri = p_ast.value.build(&scope)?;
+					result
+						.items
+						.insert(p_ast.ident.as_str().to_owned(), BuildItem::Prefix(iri));
 				}
 				ast::Item::Type(t_ast) => {
 					let x = context.type_variables.fresh(TypeValue::Undefined);
-					if let Some(_) = result.items.insert(t_ast.ident.as_str().to_owned(), BuildItem::Type(x, t_ast)) {
+					if let Some(_) = result.items.insert(
+						t_ast.ident.as_str().to_owned(),
+						BuildItem::Type(x, t_ast, &item.metadata),
+					) {
 						todo!() // type redefinition.
 					}
 				}
 				ast::Item::Function(f_ast) => {
+					let mut sub_scope = SubScope::new(&scope);
+
+					let args = f_ast
+						.args
+						.iter()
+						.map(|a| {
+							let type_ref = context.type_variables.fresh(TypeValue::Undefined);
+							sub_scope.insert(a.ident(), type_ref);
+							type_ref
+						})
+						.collect();
+
+					let sub_scope = Scope::SubScope(sub_scope);
+
 					let signature = Signature {
-						args: f_ast
-							.args
-							.iter()
-							.map(|_| context.type_variables.fresh(TypeValue::Undefined))
-							.collect(),
+						args,
 						return_type: context.type_variables.fresh(TypeValue::Undefined),
+						dataset: f_ast
+							.where_bound
+							.as_ref()
+							.map(|b| b.dataset.build(context, &sub_scope))
+							.transpose()?
+							.unwrap_or_default(),
 					};
 
 					let f_ref = context.declare_function(signature);
-					if let Some(_) = result
-						.items
-						.insert(f_ast.ident.as_str().to_owned(), BuildItem::Function(f_ref, f_ast))
-					{
+					if let Some(_) = result.items.insert(
+						f_ast.ident.as_str().to_owned(),
+						BuildItem::Function(f_ref, f_ast, &item.metadata),
+					) {
 						todo!() // function redefinition
+					}
+				}
+				ast::Item::Module(m) => {
+					let m_scope = Scope::Root(scope.environment());
+					if let Some(_) = result.items.insert(
+						m.ident.as_str().to_owned(),
+						BuildItem::Module(m.value.build(context, &m_scope)?, &item.metadata),
+					) {
+						todo!() // module redefinition
 					}
 				}
 			}
 		}
+
+		result.items.extend(prefixed_module.items);
 
 		Ok(result)
 	}
 }
 
 impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for BuildModule<'ast> {
-	type Target = Module<TypeVariableRef>;
+	type Target = Module<R, TypeVariableRef>;
 
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let mut result = Module::default();
 
 		for (name, item) in &self.items {
 			match item {
-				BuildItem::Type(x, ast) => {
-					let y = ast.value.build(context, scope)?;
+				BuildItem::Prefix(_) => (),
+				BuildItem::Type(x, ast, metadata) => {
+					let attributes = metadata.build(context, scope)?;
+					let y = ast
+						.value
+						.build_with_attributes(context, scope, attributes)?;
 					context.type_variables.assert_eq(*x, y);
 				}
-				BuildItem::Function(f_ref, ast) => {
+				BuildItem::Function(f_ref, ast, metadata) => {
+					let attributes = metadata.build(context, scope)?;
 					let mut sub_scope = SubScope::new(scope);
 
 					let args: Vec<_> = ast
@@ -510,9 +601,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for BuildModule<'ast> {
 						})
 						.collect::<Result<_, _>>()?;
 
-					let body = ast
-						.body
-						.build(context, &Scope::SubScope(sub_scope))?;
+					let body = ast.body.build(context, &Scope::SubScope(sub_scope))?;
 
 					let return_type = match &ast.type_ {
 						Some(ty) => ty.expr.build(context, scope)?,
@@ -528,11 +617,20 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for BuildModule<'ast> {
 						.type_variables
 						.assert_eq(return_type, signature.return_type);
 
-					context.define_function(*f_ref, function::Body::Expr(Box::new(body)));
+					context.define_function(
+						*f_ref,
+						attributes,
+						function::Body::Expr(Box::new(body)),
+					);
 					result.insert(name, Item::Function(*f_ref));
 				}
-				BuildItem::Module(_) => {
-					todo!()
+				BuildItem::Module(m, metadata) => {
+					let mut attributes = metadata.build(context, scope)?;
+					let m_scope = Scope::Root(scope.environment());
+					let mut compiled_m = m.build(context, &m_scope)?;
+					std::mem::swap(&mut attributes, &mut compiled_m.attributes);
+					compiled_m.attributes.extend(attributes);
+					result.insert(name, Item::Module(compiled_m));
 				}
 			}
 		}
@@ -547,10 +645,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ItemPath {
 	fn build<D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, R, D>,
-		_scope: &Scope,
+		_scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let mut result = Vec::new();
 		self.build_into(&mut result);
@@ -559,10 +657,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ItemPath {
 }
 
 impl ast::ItemPath {
-	fn build_into(
-		&self,
-		result: &mut Vec<String>
-	) {
+	fn build_into(&self, result: &mut Vec<String>) {
 		result.push(self.first.as_str().to_owned());
 		if let Some(rest) = &self.rest {
 			rest.rest.build_into(result);
@@ -576,10 +671,67 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::TypeExpr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
+	{
+		self.build_with_attributes(context, scope, Attributes::new())
+	}
+}
+
+impl ast::DocComment {
+	pub fn decode(&self) -> &str {
+		&self.as_str()[2..]
+	}
+}
+
+impl<'ast, R: Clone + Ord> Build<'ast, R> for ast::DocComment {
+	type Target = Value<R>;
+
+	fn build<D>(
+		&'ast self,
+		_context: &mut BuildContext<'_, R, D>,
+		_scope: &Scope<R>,
+	) -> Result<Self::Target, Error>
+	where
+		D: RdfContextMut<R>,
+	{
+		Ok(Value::string(self.decode().to_owned()))
+	}
+}
+
+impl<'ast, R: Clone + Ord> Build<'ast, R> for ast::Metadata {
+	type Target = Attributes<R>;
+
+	fn build<D>(
+		&'ast self,
+		context: &mut BuildContext<'_, R, D>,
+		scope: &Scope<R>,
+	) -> Result<Self::Target, Error>
+	where
+		D: RdfContextMut<R>,
+	{
+		let mut result = Attributes::new();
+
+		for d in &self.doc {
+			result.insert(Attribute::Documentation, d.build(context, scope)?);
+		}
+
+		Ok(result)
+	}
+}
+
+impl ast::TypeExpr {
+	fn build_with_attributes<R, D>(
+		&self,
+		context: &mut BuildContext<'_, R, D>,
+		scope: &Scope<R>,
+		attributes: Attributes<R>,
+	) -> Result<TypeVariableRef, Error>
+	where
+		R: Clone + Ord + Hash,
+		D: RdfContextMut<R>,
 	{
 		match self {
 			Self::Path(path) => {
@@ -590,22 +742,30 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::TypeExpr {
 					.ok_or_else(|| Error::UnknownType(path.clone()))?
 					.import_type(context.registry, &mut context.type_variables)
 					.ok_or_else(|| Error::NotAType(path.clone()))
-			},
+			}
 			Self::Literal(expr) => {
 				let (_, ty) = expr.build(context, scope)?;
-				Ok(context.type_variables.fresh(Type::Literal(ty)))
+				Ok(context
+					.type_variables
+					.fresh(Type::new(attributes, TypeDesc::Literal(ty))))
 			}
 			Self::List(expr) => {
 				let ty = expr.build(context, scope)?;
-				Ok(context.type_variables.fresh(Type::List(ty)))
+				Ok(context
+					.type_variables
+					.fresh(Type::new(attributes, TypeDesc::List(ty))))
 			}
 			Self::Map(expr) => {
 				let ty = expr.build(context, scope)?;
-				Ok(context.type_variables.fresh(Type::Struct(ty)))
+				Ok(context
+					.type_variables
+					.fresh(Type::new(attributes, TypeDesc::Struct(ty))))
 			}
 			Self::Enum(expr) => {
 				let ty = expr.build(context, scope)?;
-				Ok(context.type_variables.fresh(Type::Enum(ty)))
+				Ok(context
+					.type_variables
+					.fresh(Type::new(attributes, TypeDesc::Enum(ty))))
 			}
 		}
 	}
@@ -617,10 +777,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListTypeExpr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		Ok(ty::List {
 			prefix: self
@@ -643,10 +803,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapTypeExpr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		Ok(ty::Struct {
 			fields: self
@@ -672,21 +832,16 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::EnumTypeExpr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		Ok(ty::Enum {
 			variants: self
 				.variants
 				.iter()
-				.map(|v| {
-					Ok((
-						v.ident.as_str().to_owned(),
-						v.type_.build(context, scope)?,
-					))
-				})
+				.map(|v| Ok((v.ident.as_str().to_owned(), v.type_.build(context, scope)?)))
 				.collect::<Result<_, _>>()?,
 		})
 	}
@@ -698,10 +853,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let (bound, inner, type_) = match self {
 			Self::Let(_, bindings, _, inner) => {
@@ -727,14 +882,13 @@ impl ast::Bindings {
 	fn build<'ast, 'a, R, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &'a Scope,
-	) -> Result<(expr::Bound<R, TypeVariableRef>, Scope<'a>), Error>
+		scope: &'a Scope<R>,
+	) -> Result<(expr::Bound<R, TypeVariableRef>, Scope<'a, R>), Error>
 	where
 		R: Clone + Ord + Hash,
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let mut intro = Vec::with_capacity(self.variables.len());
-		let dataset = DatasetPattern::new();
 		let mut sub_scope = SubScope::new(scope);
 
 		for ident in &self.variables {
@@ -745,9 +899,10 @@ impl ast::Bindings {
 
 		let sub_scope = Scope::SubScope(sub_scope);
 
-		if let Some(b) = &self.bound {
-			b.dataset.build(context, &sub_scope)?;
-		}
+		let dataset = match &self.bound {
+			Some(b) => b.dataset.build(context, &sub_scope)?,
+			None => DatasetPattern::new(),
+		};
 
 		Ok((expr::Bound { intro, dataset }, sub_scope))
 	}
@@ -759,10 +914,10 @@ impl<'ast, R: Clone + Ord> Build<'ast, R> for ast::RdfDataset {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let mut result = DatasetPattern::new();
 
@@ -778,12 +933,12 @@ impl ast::RdfStatement {
 	fn build<R, D>(
 		&self,
 		context: &mut BuildContext<R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 		result: &mut DatasetPattern<R>,
 	) -> Result<(), Error>
 	where
 		R: Clone + Ord,
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let subject = self.subject.build(context, scope)?;
 
@@ -799,13 +954,13 @@ impl ast::RdfPredicateObjects {
 	fn build<R, D>(
 		&self,
 		context: &mut BuildContext<R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 		result: &mut DatasetPattern<R>,
 		subject: &TermPattern<R>,
 	) -> Result<(), Error>
 	where
 		R: Clone + Ord,
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let predicate = self.predicate.build(context, scope)?;
 
@@ -819,22 +974,17 @@ impl ast::RdfPredicateObjects {
 }
 
 impl ast::RdfTerm {
-	fn build_unscoped(
-		&self
-	) -> Result<Term, Error> {
+	fn build_unscoped(&self) -> Result<Term, Error> {
 		match self {
 			Self::Iri(i) => i.build_unscoped().map(Term::iri),
 			Self::Literal(l) => l.build_unscoped().map(Term::Literal),
 		}
 	}
 
-	fn build<R, D>(
-		&self,
-		context: &mut BuildContext<R, D>,
-		scope: &Scope,
-	) -> Result<R, Error>
+	fn build<R, D>(&self, context: &mut BuildContext<R, D>, scope: &Scope<R>) -> Result<R, Error>
 	where
-		D: RdfContextMut<R>
+		R: Clone,
+		D: RdfContextMut<R>,
 	{
 		match self {
 			Self::Iri(i) => {
@@ -850,10 +1000,11 @@ impl ast::RdfPattern {
 	fn build<R, D>(
 		&self,
 		context: &mut BuildContext<R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<TermPattern<R>, Error>
 	where
-		D: RdfContextMut<R>
+		R: Clone,
+		D: RdfContextMut<R>,
 	{
 		match self {
 			Self::Var(ident) => scope
@@ -864,7 +1015,9 @@ impl ast::RdfPattern {
 				.map(TermPattern::Var),
 			Self::Iri(i) => {
 				let iri = i.build(scope)?;
-				Ok(TermPattern::Resource(context.rdf.insert_iri(Cow::Owned(iri))))
+				Ok(TermPattern::Resource(
+					context.rdf.insert_iri(Cow::Owned(iri)),
+				))
 			}
 			Self::Literal(l) => l.build(context.rdf, scope).map(TermPattern::Resource),
 		}
@@ -875,21 +1028,26 @@ impl ast::RdfLiteral {
 	fn build_unscoped(&self) -> Result<rdf_types::Literal, Error> {
 		let value = self.value.decode()?;
 		match &self.annotation {
-			None => Ok(rdf_types::Literal::new(value, LiteralType::Any(XSD_STRING.to_owned()))),
+			None => Ok(rdf_types::Literal::new(
+				value,
+				LiteralType::Any(XSD_STRING.to_owned()),
+			)),
 			Some(ast::RdfLiteralAnnotation::Type(_, iri)) => {
 				let iri = iri.build_unscoped()?;
 				Ok(rdf_types::Literal::new(value, LiteralType::Any(iri)))
 			}
-			Some(ast::RdfLiteralAnnotation::Language(_, lang_literal)) => {
-				let lang = lang_literal.decode()?;
-				let tag = LangTagBuf::new(lang)
-					.map_err(|InvalidLangTag(t)| Error::Language(lang_literal.span(), t))?;
+			Some(ast::RdfLiteralAnnotation::Language(lang)) => {
+				let tag = lang.decode()?;
 				Ok(rdf_types::Literal::new(value, LiteralType::LangString(tag)))
 			}
 		}
 	}
 
-	fn build<R>(&self, rdf: &mut impl RdfContextMut<R>, scope: &Scope) -> Result<R, Error> {
+	fn build<R: Clone>(
+		&self,
+		rdf: &mut impl RdfContextMut<R>,
+		scope: &Scope<R>,
+	) -> Result<R, Error> {
 		let value = self.value.decode()?;
 		match &self.annotation {
 			None => Ok(rdf.insert_literal(value, Cow::Borrowed(XSD_STRING))),
@@ -897,13 +1055,18 @@ impl ast::RdfLiteral {
 				let iri = iri.build(scope)?;
 				Ok(rdf.insert_literal(value, Cow::Owned(iri)))
 			}
-			Some(ast::RdfLiteralAnnotation::Language(_, lang_literal)) => {
-				let lang = lang_literal.decode()?;
-				let tag = LangTagBuf::new(lang)
-					.map_err(|InvalidLangTag(t)| Error::Language(lang_literal.span(), t))?;
+			Some(ast::RdfLiteralAnnotation::Language(lang)) => {
+				let tag = lang.decode()?;
 				Ok(rdf.insert_lang_string(value, tag))
 			}
 		}
+	}
+}
+
+impl ast::LangTag {
+	fn decode(&self) -> Result<LangTagBuf, Error> {
+		LangTagBuf::new(self.as_str()[1..].to_owned())
+			.map_err(|InvalidLangTag(t)| Error::Language(self.span(), t))
 	}
 }
 
@@ -917,8 +1080,8 @@ impl ast::Iri {
 			}
 		}
 	}
-	
-	fn build(&self, scope: &Scope) -> Result<IriBuf, Error> {
+
+	fn build<R: Clone>(&self, scope: &Scope<R>) -> Result<IriBuf, Error> {
 		match self {
 			Self::Full(iri) => iri.decode(),
 			Self::Compact(compact_iri) => compact_iri.build(scope),
@@ -935,11 +1098,13 @@ impl ast::FullIri {
 }
 
 impl ast::CompactIri {
-	fn build(&self, scope: &Scope) -> Result<IriBuf, Error> {
+	fn build<R: Clone>(&self, scope: &Scope<R>) -> Result<IriBuf, Error> {
 		let (prefix_name, suffix) = self.as_str().split_once(':').unwrap();
 		let prefix = scope
-			.get_prefix(prefix_name)
-			.ok_or_else(|| Error::UnknownPrefix(self.span(), prefix_name.to_owned()))?;
+			.get_by_name(prefix_name)
+			.ok_or_else(|| Error::UnknownPrefix(self.span(), prefix_name.to_owned()))?
+			.as_prefix()
+			.ok_or_else(|| Error::NotAPrefix(self.span(), prefix_name.to_owned()))?;
 		IriBuf::new(format!("{prefix}{suffix}")).map_err(|InvalidIri(i)| Error::Iri(self.span(), i))
 	}
 }
@@ -950,10 +1115,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::InnerExpr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		match self {
 			Self::Var(ident) => {
@@ -967,22 +1132,30 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::InnerExpr {
 			}
 			Self::Literal(expr) => {
 				let (e, ty) = expr.build(context, scope)?;
-				let ty = context.type_variables.fresh(Type::Literal(ty));
+				let ty = context
+					.type_variables
+					.fresh(Type::new(Attributes::new(), TypeDesc::Literal(ty)));
 				Ok((InnerExpr::Literal(e), ty))
 			}
 			Self::List(expr) => {
 				let (e, ty) = expr.build(context, scope)?;
-				let ty = context.type_variables.fresh(Type::List(ty));
+				let ty = context
+					.type_variables
+					.fresh(Type::new(Attributes::new(), TypeDesc::List(ty)));
 				Ok((InnerExpr::List(e), ty))
 			}
 			Self::Map(expr) => {
 				let (e, ty) = expr.build(context, scope)?;
-				let ty = context.type_variables.fresh(Type::Struct(ty));
+				let ty = context
+					.type_variables
+					.fresh(Type::new(Attributes::new(), TypeDesc::Struct(ty)));
 				Ok((InnerExpr::Map(e), ty))
 			}
 			Self::Match(expr) => {
 				let (e, ty) = expr.build(context, scope)?;
-				let ty = context.type_variables.fresh(Type::Enum(ty));
+				let ty = context
+					.type_variables
+					.fresh(Type::new(Attributes::new(), TypeDesc::Enum(ty)));
 				Ok((InnerExpr::Match(e), ty))
 			}
 			Self::Call(expr) => {
@@ -999,10 +1172,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListExpr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		match &self.desc {
 			ListDescription::Given(list) => {
@@ -1088,10 +1261,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let mut fields = BTreeMap::new();
 		let mut entries = TypedMap::new();
@@ -1120,22 +1293,12 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
 }
 
 impl ast::ConstValue {
-	pub fn build_unscoped(
-		&self
-	) -> Result<Value, Error> {
+	pub fn build_unscoped(&self) -> Result<Value, Error> {
 		match self {
-			Self::Resource(term) => {
-				term.build_unscoped().map(Value::Resource)
-			}
-			Self::Literal(expr) => {
-				expr.build_unscoped().map(Value::Literal)
-			}
-			Self::List(expr) => {
-				expr.build_unscoped().map(Value::List)
-			}
-			Self::Map(expr) => {
-				expr.build_unscoped().map(Value::Map)
-			}
+			Self::Resource(term) => term.build_unscoped().map(Value::Resource),
+			Self::Literal(expr) => expr.build_unscoped().map(Value::Literal),
+			Self::List(expr) => expr.build_unscoped().map(Value::List),
+			Self::Map(expr) => expr.build_unscoped().map(Value::Map),
 		}
 	}
 }
@@ -1146,30 +1309,39 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstValue {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let (inner, type_) = match self {
 			Self::Resource(term) => {
 				let term = term.build(context, scope)?;
-				let ty = context.type_variables.fresh(Type::Resource(ty::Resource::singleton(term.clone())));
+				let ty = context.type_variables.fresh(Type::new(
+					Attributes::new(),
+					TypeDesc::Resource(ty::Resource::singleton(term.clone())),
+				));
 				(TypedValueInnerDesc::Resource(term), ty)
 			}
 			Self::Literal(expr) => {
 				let (e, ty) = expr.build(context, scope)?;
-				let ty = context.type_variables.fresh(Type::Literal(ty));
+				let ty = context
+					.type_variables
+					.fresh(Type::new(Attributes::new(), TypeDesc::Literal(ty)));
 				(TypedValueInnerDesc::Literal(e), ty)
 			}
 			Self::List(expr) => {
 				let (e, ty) = expr.build(context, scope)?;
-				let ty = context.type_variables.fresh(Type::List(ty));
+				let ty = context
+					.type_variables
+					.fresh(Type::new(Attributes::new(), TypeDesc::List(ty)));
 				(TypedValueInnerDesc::List(e), ty)
 			}
 			Self::Map(expr) => {
 				let (e, ty) = expr.build(context, scope)?;
-				let ty = context.type_variables.fresh(Type::Struct(ty));
+				let ty = context
+					.type_variables
+					.fresh(Type::new(Attributes::new(), TypeDesc::Struct(ty)));
 				(TypedValueInnerDesc::Map(e), ty)
 			}
 		};
@@ -1183,7 +1355,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstValue {
 
 impl ast::ConstList {
 	pub fn build_unscoped(&self) -> Result<Vec<Value>, Error> {
-		self.items.iter().map(|v| v.build_unscoped()).collect::<Result<_, _>>()
+		self.items
+			.iter()
+			.map(|v| v.build_unscoped())
+			.collect::<Result<_, _>>()
 	}
 }
 
@@ -1196,10 +1371,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstList {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let mut items = Vec::with_capacity(self.items.len());
 		let mut types = Vec::with_capacity(self.items.len());
@@ -1216,10 +1391,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstList {
 
 impl ast::ConstMap {
 	pub fn build_unscoped(&self) -> Result<BTreeMap<Value, Value>, Error> {
-		self.entries.iter().map(|entry| Ok((
-			entry.key.build_unscoped()?,
-			entry.value.build_unscoped()?
-		))).collect::<Result<_, _>>()
+		self.entries
+			.iter()
+			.map(|entry| Ok((entry.key.build_unscoped()?, entry.value.build_unscoped()?)))
+			.collect::<Result<_, _>>()
 	}
 }
 
@@ -1232,10 +1407,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let mut fields = BTreeMap::new();
 		let mut entries = TypedMap::new();
@@ -1267,10 +1442,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MatchExpr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let mut t = ty::Enum {
 			variants: BTreeMap::new(),
@@ -1299,10 +1474,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::CallExpr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		let path = self.function.build(context, scope)?;
 
@@ -1338,9 +1513,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::CallExpr {
 		};
 
 		let t = context.type_variables.fresh(TypeValue::Undefined);
-		context
-			.type_variables
-			.assert_eq(signature.return_type, t);
+		context.type_variables.assert_eq(signature.return_type, t);
 
 		Ok((e, t))
 	}
@@ -1353,7 +1526,7 @@ impl ast::LiteralExpr {
 			Self::True(_) => Ok(Literal::Boolean(true)),
 			Self::False(_) => Ok(Literal::Boolean(false)),
 			Self::Number(a) => a.build_unscoped().map(Literal::Number),
-			Self::TextString(a) => a.decode().map(Literal::TextString)
+			Self::TextString(a) => a.decode().map(Literal::TextString),
 		}
 	}
 }
@@ -1364,10 +1537,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::LiteralExpr {
 	fn build<D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
-		scope: &Scope,
+		scope: &Scope<R>,
 	) -> Result<Self::Target, Error>
 	where
-		D: RdfContextMut<R>
+		D: RdfContextMut<R>,
 	{
 		match self {
 			Self::Unit(_) => Ok((Literal::Unit, ty::LiteralType::Unit)),
@@ -1397,7 +1570,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::True {
 	fn build<D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, R, D>,
-		_scope: &Scope,
+		_scope: &Scope<R>,
 	) -> Result<Self::Target, Error> {
 		Ok((true, ty::Boolean::singleton(true)))
 	}
@@ -1409,7 +1582,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::False {
 	fn build<D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, R, D>,
-		_scope: &Scope,
+		_scope: &Scope<R>,
 	) -> Result<Self::Target, Error> {
 		Ok((false, ty::Boolean::singleton(false)))
 	}
@@ -1417,8 +1590,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::False {
 
 impl ast::Number {
 	pub fn build_unscoped(&self) -> Result<Number, Error> {
-		self
-			.as_str()
+		self.as_str()
 			.parse()
 			.map_err(|e| Error::Number(self.span(), e))
 	}
@@ -1430,7 +1602,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Number {
 	fn build<D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, R, D>,
-		_scope: &Scope,
+		_scope: &Scope<R>,
 	) -> Result<Self::Target, Error> {
 		let value = self.build_unscoped()?;
 		Ok((value.clone(), ty::Number::singleton(value)))
@@ -1439,64 +1611,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Number {
 
 impl ast::TextString {
 	pub fn decode(&self) -> Result<String, Error> {
-		let s = self.as_str();
-		let content = &s[1..(s.len() - 1)];
-		let mut chars = content.chars();
-		let mut value = String::with_capacity(content.len());
-
-		while let Some(c) = chars.next() {
-			let decoded_c = match c {
-				'\\' => match chars.next() {
-					Some('x') => {
-						let a = chars
-							.next()
-							.and_then(|c| c.to_digit(16))
-							.ok_or_else(|| Error::String(self.span()))?;
-
-						let b = chars
-							.next()
-							.and_then(|c| c.to_digit(16))
-							.ok_or_else(|| Error::String(self.span()))?;
-
-						char::from_u32(a << 4 | b).ok_or_else(|| Error::String(self.span()))?
-					}
-					Some('u' | 'U') => match chars.next() {
-						Some('{') => {
-							let mut value = 0;
-							let mut i = 0;
-
-							loop {
-								match chars.next() {
-									Some('}') if i >= 2 => break,
-									Some(d) if i < 6 => {
-										value = value << 4
-											| d.to_digit(16)
-												.ok_or_else(|| Error::String(self.span()))?;
-										i += 1
-									}
-									_ => return Err(Error::String(self.span())),
-								}
-							}
-
-							char::from_u32(value).ok_or_else(|| Error::String(self.span()))?
-						}
-						_ => return Err(Error::String(self.span())),
-					},
-					Some('t') => '\t',
-					Some('r') => '\r',
-					Some('n') => '\n',
-					Some('\'') => '\'',
-					Some('"') => '"',
-					Some('\\') => '\\',
-					_ => return Err(Error::String(self.span())),
-				},
-				c => c,
-			};
-
-			value.push(decoded_c);
-		}
-
-		Ok(value)
+		decode_string_literal(self.as_str(), self.span())
 	}
 }
 
@@ -1506,9 +1621,87 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::TextString {
 	fn build<D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, R, D>,
-		_scope: &Scope,
+		_scope: &Scope<R>,
 	) -> Result<Self::Target, Error> {
 		let value = self.decode()?;
 		Ok((value.clone(), ty::TextString::singleton(value)))
 	}
+}
+
+impl ast::RdfString {
+	pub fn decode(&self) -> Result<String, Error> {
+		decode_string_literal(self.as_str(), self.span())
+	}
+}
+
+impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::RdfString {
+	type Target = (String, ty::TextString);
+
+	fn build<D>(
+		&'ast self,
+		_context: &mut BuildContext<'_, R, D>,
+		_scope: &Scope<R>,
+	) -> Result<Self::Target, Error> {
+		let value = self.decode()?;
+		Ok((value.clone(), ty::TextString::singleton(value)))
+	}
+}
+
+fn decode_string_literal(s: &str, span: Span) -> Result<String, Error> {
+	let content = &s[1..(s.len() - 1)];
+	let mut chars = content.chars();
+	let mut value = String::with_capacity(content.len());
+
+	while let Some(c) = chars.next() {
+		let decoded_c = match c {
+			'\\' => match chars.next() {
+				Some('x') => {
+					let a = chars
+						.next()
+						.and_then(|c| c.to_digit(16))
+						.ok_or_else(|| Error::String(span))?;
+
+					let b = chars
+						.next()
+						.and_then(|c| c.to_digit(16))
+						.ok_or_else(|| Error::String(span))?;
+
+					char::from_u32(a << 4 | b).ok_or_else(|| Error::String(span))?
+				}
+				Some('u' | 'U') => match chars.next() {
+					Some('{') => {
+						let mut value = 0;
+						let mut i = 0;
+
+						loop {
+							match chars.next() {
+								Some('}') if i >= 2 => break,
+								Some(d) if i < 6 => {
+									value = value << 4
+										| d.to_digit(16).ok_or_else(|| Error::String(span))?;
+									i += 1
+								}
+								_ => return Err(Error::String(span)),
+							}
+						}
+
+						char::from_u32(value).ok_or_else(|| Error::String(span))?
+					}
+					_ => return Err(Error::String(span)),
+				},
+				Some('t') => '\t',
+				Some('r') => '\r',
+				Some('n') => '\n',
+				Some('\'') => '\'',
+				Some('"') => '"',
+				Some('\\') => '\\',
+				_ => return Err(Error::String(span)),
+			},
+			c => c,
+		};
+
+		value.push(decoded_c);
+	}
+
+	Ok(value)
 }

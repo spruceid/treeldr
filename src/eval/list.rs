@@ -166,9 +166,10 @@ impl<R: Clone + Ord> EvalTyped<R> for UnorderedList<R> {
 		match output {
 			Value::List(list) => {
 				for item in list {
-					self.bound.inverse_once(rdf, scope, |rdf, scope| {
-						self.body.eval_inverse(registry, rdf, dataset, scope, item)
-					})?;
+					self.bound
+						.inverse_once(rdf, dataset, scope, |rdf, dataset, scope| {
+							self.body.eval_inverse(registry, rdf, dataset, scope, item)
+						})?;
 				}
 
 				Ok(())
@@ -269,7 +270,7 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 
 					let first = self
 						.bound
-						.inverse_once(rdf, scope, |rdf, scope| {
+						.inverse_once(rdf, dataset, scope, |rdf, dataset, scope| {
 							self.body.eval_inverse(registry, rdf, dataset, scope, item)
 						})?
 						.into_iter()

@@ -15,12 +15,11 @@ impl<R: Ord, T> Map<R, T> {
 
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Map<R, U> {
 		Map {
-			entries: self.entries.into_iter().map(|(ty, e)| {
-				(
-					ty.map_types_ref_mut(f),
-					e.map_types_ref_mut(f)
-				)
-			}).collect()
+			entries: self
+				.entries
+				.into_iter()
+				.map(|(ty, e)| (ty.map_types_ref_mut(f), e.map_types_ref_mut(f)))
+				.collect(),
 		}
 	}
 }

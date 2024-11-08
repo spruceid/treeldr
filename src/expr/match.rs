@@ -30,13 +30,12 @@ impl<R: Ord, T> Match<R, T> {
 
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Match<R, U> {
 		Match {
-			cases: self.cases.into_iter().map(|(k, e)| {
-				(
-					k,
-					e.map_types_ref_mut(f)
-				)
-			}).collect(),
-			order: self.order
+			cases: self
+				.cases
+				.into_iter()
+				.map(|(k, e)| (k, e.map_types_ref_mut(f)))
+				.collect(),
+			order: self.order,
 		}
 	}
 }

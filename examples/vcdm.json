@@ -1,0 +1,7 @@
+{
+	"issuer": "https://example.com#issuer",
+	"credentialSubject": {
+		"id": "https://example.com#subject",
+		"name": "John Smith"
+	}
+}

@@ -3,10 +3,13 @@ pub enum TokenKind {
 	#[token(skip, whitespace)]
 	Whitespace,
 
-	#[token(skip, regexp("#[^\n]*"))]
+	#[token(skip, regexp("#([^\n#][^\n]*)?"))]
 	Comment,
 
-	#[token(regexp("([a-zA-Z_][a-zA-Z0-9_]*)?:[a-zA-Z0-9_:/?#%+\\-]+"))]
+	#[token(regexp("##[^\n]*"))]
+	DocComment,
+
+	#[token(regexp("[a-zA-Z0-9_]*:[a-zA-Z0-9_:/?#%+\\-]+"))]
 	CompactIri,
 
 	#[token(regexp("<[^>]*>"))]
@@ -29,6 +32,9 @@ pub enum TokenKind {
 
 	#[token("let")]
 	Let,
+
+	#[token("mod")]
+	Mod,
 
 	#[token("in")]
 	In,
@@ -59,6 +65,9 @@ pub enum TokenKind {
 
 	#[token(regexp("\"[^\"]*\""))]
 	TextString,
+
+	#[token(regexp("'[^']*'"))]
+	RdfString,
 
 	#[token(".")]
 	Period,
@@ -102,13 +111,24 @@ pub enum TokenKind {
 	#[token("^^")]
 	DoubleCarret,
 
-	#[token("@")]
-	At,
+	#[token(regexp("@[a-zA-Z0-9_]+"))]
+	LangTag,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct Module {
-	pub items: Vec<Item>,
+	pub items: Vec<ItemDefinition>,
+}
+
+#[derive(Debug, ll1::Parse)]
+pub struct Metadata {
+	pub doc: Vec<DocComment>,
+}
+
+#[derive(Debug, ll1::Parse)]
+pub struct ItemDefinition {
+	pub metadata: Metadata,
+	pub value: Item,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -116,18 +136,28 @@ pub enum Item {
 	Prefix(PrefixDefinition),
 	Type(TypeDefinition),
 	Function(FunctionDefinition),
+	Module(ModuleDefinition),
+}
+
+#[derive(Debug, ll1::Parse)]
+pub struct ModuleDefinition {
+	pub mod_: Mod,
+	pub ident: Ident,
+	pub brace_l: BraceL,
+	pub value: Module,
+	pub brace_r: BraceR,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct ItemPath {
 	pub first: Ident,
-	pub rest: Option<ItemPathRest>
+	pub rest: Option<ItemPathRest>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct ItemPathRest {
 	pub period: Period,
-	pub rest: Box<ItemPath>
+	pub rest: Box<ItemPath>,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -143,7 +173,7 @@ pub struct TypeDefinition {
 	pub type_: Type,
 	pub ident: Ident,
 	pub eq: Equal,
-	pub value: TypeExpr
+	pub value: TypeExpr,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -154,6 +184,7 @@ pub struct FunctionDefinition {
 	pub args: Vec<ArgDef>,
 	pub paren_r: ParenthesisR,
 	pub type_: Option<TypeAnnotation>,
+	pub where_bound: Option<WhereBound>,
 	pub eq: Equal,
 	pub body: Expr,
 }
@@ -162,6 +193,15 @@ pub struct FunctionDefinition {
 pub enum ArgDef {
 	Typed(ParenthesisL, Ident, TypeAnnotation, ParenthesisR),
 	Untyped(Ident),
+}
+
+impl ArgDef {
+	pub fn ident(&self) -> &Ident {
+		match self {
+			Self::Typed(_, ident, _, _) => ident,
+			Self::Untyped(ident) => ident,
+		}
+	}
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -195,7 +235,7 @@ pub struct ConstMap {
 #[derive(Debug, ll1::Parse)]
 pub struct ConstEntry {
 	pub key: ConstValue,
-	pub colon: Colon,
+	pub eq: Equal,
 	pub value: ConstValue,
 }
 
@@ -327,14 +367,14 @@ pub enum Iri {
 
 #[derive(Debug, ll1::Parse)]
 pub struct RdfLiteral {
-	pub value: TextString,
+	pub value: RdfString,
 	pub annotation: Option<RdfLiteralAnnotation>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub enum RdfLiteralAnnotation {
 	Type(DoubleCarret, Iri),
-	Language(At, TextString),
+	Language(LangTag),
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -345,8 +385,9 @@ pub struct Mapping {
 
 #[derive(Debug, ll1::Parse)]
 pub struct Entry {
+	pub metadata: Metadata,
 	pub key: ConstValue,
-	pub colon: Colon,
+	pub eq: Equal,
 	pub value: Expr,
 }
 
@@ -371,7 +412,7 @@ pub struct ListTypeExpr {
 	pub bracket_l: BracketL,
 	pub prefix: List<TypeExpr>,
 	pub rest: Option<ListTypeExprRest>,
-	pub bracket_r: BracketR
+	pub bracket_r: BracketR,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -389,6 +430,7 @@ pub struct MapTypeExpr {
 
 #[derive(Debug, ll1::Parse)]
 pub struct EntryType {
+	pub metadata: Metadata,
 	pub key: TypeExpr,
 	pub colon: Colon,
 	pub value: TypeExpr,
@@ -404,6 +446,7 @@ pub struct EnumTypeExpr {
 
 #[derive(Debug, ll1::Parse)]
 pub struct Variant {
+	pub metadata: Metadata,
 	pub ident: Ident,
 	pub comma: Comma,
 	pub type_: TypeExpr,

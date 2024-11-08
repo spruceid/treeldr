@@ -3,7 +3,10 @@ use std::io::{self, BufRead, Write};
 
 use clap::builder::TypedValueParser;
 use nquads_syntax::Parse;
-use treeldr::{rdf::{dataset::BTreeDataset, Quad}, syntax::Span};
+use treeldr::{
+	rdf::{dataset::BTreeDataset, Quad},
+	syntax::Span,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {

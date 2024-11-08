@@ -13,7 +13,7 @@ pub use typed::*;
 
 pub mod serde;
 
-use crate::{utils::try_map_list, Registry, Type, TypeRef};
+use crate::{ty::TypeDesc, utils::try_map_list, Registry, Type, TypeRef};
 
 /// Untyped tree value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -31,10 +31,6 @@ impl<R> Default for Value<R> {
 }
 
 impl<R> Value<R> {
-	pub fn resource(resource: R) -> Self {
-		Self::Resource(resource)
-	}
-
 	/// Returns the unit value.
 	pub fn unit() -> Self {
 		Self::Literal(Literal::Unit)
@@ -84,8 +80,8 @@ impl<R> Value<R> {
 		R: Clone + Ord + Hash,
 	{
 		let ty: &Type<R> = registry.get_type(ty_ref).unwrap();
-		match (ty, self) {
-			(Type::Any, value) => Ok(TypedValue {
+		match (&ty.desc, self) {
+			(TypeDesc::Any, value) => Ok(TypedValue {
 				type_: ty_ref,
 				desc: match value {
 					Value::Resource(r) => TypedValueInnerDesc::Resource(r),
@@ -103,15 +99,21 @@ impl<R> Value<R> {
 				}
 				.into(),
 			}),
-			(Type::Resource(_), Self::Resource(r)) => Ok(TypedValue {
+			(TypeDesc::Resource(_), Self::Resource(r)) => Ok(TypedValue {
 				type_: ty_ref.clone(),
 				desc: TypedValueInnerDesc::Resource(r).into(),
 			}),
-			(Type::Literal(_), Self::Literal(l)) => Ok(TypedValue {
-				type_: ty_ref.clone(),
-				desc: TypedValueInnerDesc::Literal(l).into(),
-			}),
-			(Type::List(ty), Self::List(items)) => {
+			(TypeDesc::Literal(ty), Self::Literal(l)) => {
+				if ty.contains(&l) {
+					Ok(TypedValue {
+						type_: ty_ref.clone(),
+						desc: TypedValueInnerDesc::Literal(l).into(),
+					})
+				} else {
+					Err(Self::Literal(l))
+				}
+			}
+			(TypeDesc::List(ty), Self::List(items)) => {
 				if items.len() < ty.min_len() {
 					return Err(Self::List(items));
 				}
@@ -132,7 +134,7 @@ impl<R> Value<R> {
 					.into(),
 				})
 			}
-			(Type::Struct(ty), Self::Map(mut map)) => {
+			(TypeDesc::Struct(ty), Self::Map(mut map)) => {
 				let mut result = TypedMap::new();
 
 				for (&key_pattern, field) in &ty.fields {
@@ -181,7 +183,7 @@ impl<R> Value<R> {
 					desc: TypedValueInnerDesc::Map(result).into(),
 				})
 			}
-			(Type::Enum(e), mut value) => {
+			(TypeDesc::Enum(e), mut value) => {
 				for (name, &variant) in &e.variants {
 					match std::mem::take(&mut value).into_typed(registry, variant) {
 						Ok(typed_value) => {
@@ -208,8 +210,7 @@ impl FromStr for Value {
 		let ast = crate::syntax::ast::ConstValue::parse_str(s)
 			.map_err(|_| ValueParseError(s.to_owned()))?;
 
-		ast
-			.build_unscoped()
+		ast.build_unscoped()
 			.map_err(|_| ValueParseError(s.to_owned()))
 	}
 }

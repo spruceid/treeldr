@@ -16,7 +16,11 @@ impl<R: Ord, T> Call<R, T> {
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Call<R, U> {
 		Call {
 			function: self.function,
-			args: self.args.into_iter().map(|e| e.map_types_ref_mut(f)).collect()
+			args: self
+				.args
+				.into_iter()
+				.map(|e| e.map_types_ref_mut(f))
+				.collect(),
 		}
 	}
 }

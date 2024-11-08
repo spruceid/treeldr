@@ -34,7 +34,7 @@ impl<R: Ord, T> Expr<R, T> {
 		Expr {
 			type_: f(self.type_),
 			bound: self.bound.map_types(&mut *f),
-			inner: self.inner.map_types_ref_mut(f)
+			inner: self.inner.map_types_ref_mut(f),
 		}
 	}
 }

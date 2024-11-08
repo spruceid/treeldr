@@ -1,12 +1,24 @@
 use crate::{
+	display::DisplaySignature,
 	utils::{self, take_first, Ignored},
-	value, Literal, Registry, Value,
+	value::{
+		self, NUMBER_I128_MAX, NUMBER_I128_MIN, NUMBER_I16_MAX, NUMBER_I16_MIN, NUMBER_I32_MAX,
+		NUMBER_I32_MIN, NUMBER_I64_MAX, NUMBER_I64_MIN, NUMBER_I8_MAX, NUMBER_I8_MIN,
+		NUMBER_U128_MAX, NUMBER_U16_MAX, NUMBER_U32_MAX, NUMBER_U64_MAX, NUMBER_U8_MAX,
+		NUMBER_ZERO,
+	},
+	Attributes, Literal, Registry, Value,
 };
+use core::fmt;
 use educe::Educe;
 use iregex::automata::{AnyRange, Automaton, RangeSet};
-use core::fmt;
 use std::{
-	cmp::Ordering, collections::{BTreeMap, BTreeSet}, fmt::Debug, hash::Hash, ops::Bound, sync::OnceLock
+	cmp::Ordering,
+	collections::{BTreeMap, BTreeSet},
+	fmt::{Debug, Write},
+	hash::Hash,
+	ops::Bound,
+	sync::OnceLock,
 };
 
 mod r#ref;
@@ -20,7 +32,7 @@ pub enum BuiltInType {
 	Boolean,
 	Number,
 	ByteString,
-	TextString
+	TextString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -72,20 +84,64 @@ impl LiteralType {
 	}
 }
 
-impl<R> DisplayType<R> for LiteralType {
-	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+impl<R> DisplaySignature<R> for LiteralType {
+	fn fmt_signature(
+		&self,
+		context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		match self {
 			Self::Unit => write!(f, "null"),
-			Self::Boolean(ty) => ty.fmt_type(d, depth, f),
-			Self::Number(ty) => ty.fmt_type(d, depth, f),
-			Self::ByteString(ty) => ty.fmt_type(d, depth, f),
-			Self::TextString(ty) => ty.fmt_type(d, depth, f)
+			Self::Boolean(ty) => ty.fmt_signature(context, f),
+			Self::Number(ty) => ty.fmt_signature(context, f),
+			Self::ByteString(ty) => ty.fmt_signature(context, f),
+			Self::TextString(ty) => ty.fmt_signature(context, f),
 		}
 	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Type<R, T = TypeRef> {
+pub struct Type<R, T = TypeRef> {
+	pub attributes: Attributes<R>,
+	pub desc: TypeDesc<R, T>,
+}
+
+impl<R, T> Type<R, T> {
+	pub fn new(attributes: Attributes<R>, desc: TypeDesc<R, T>) -> Self {
+		Self { attributes, desc }
+	}
+
+	pub fn resource() -> Self {
+		Self {
+			attributes: Attributes::new(),
+			desc: TypeDesc::resource(),
+		}
+	}
+
+	pub fn is_resource(&self) -> bool {
+		self.desc.is_resource()
+	}
+
+	pub fn as_list(&self) -> Option<&List<T>> {
+		self.desc.as_list()
+	}
+
+	pub fn visit_type_components(&self, f: impl FnMut(&T, bool)) {
+		self.desc.visit_type_components(f);
+	}
+}
+
+impl<R, T> From<TypeDesc<R, T>> for Type<R, T> {
+	fn from(desc: TypeDesc<R, T>) -> Self {
+		Self {
+			attributes: Attributes::new(),
+			desc,
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TypeDesc<R, T = TypeRef> {
 	/// RDF resource.
 	Resource(Resource<R>),
 
@@ -105,7 +161,7 @@ pub enum Type<R, T = TypeRef> {
 	Any,
 }
 
-impl<R, T> Type<R, T> {
+impl<R, T> TypeDesc<R, T> {
 	pub fn resource() -> Self {
 		Self::Resource(Resource::default())
 	}
@@ -165,70 +221,99 @@ impl<R: Clone + Ord, T> Type<R, T> {
 		unifier: &mut impl TypeUnifier<T, U, Target = V>,
 		other: &Type<R, U>,
 	) -> Result<Type<R, V>, TypeUnificationError>
-	where 
-		V: Ord
+	where
+		V: Ord,
+	{
+		let attributes = if self.attributes.is_empty() {
+			other.attributes.clone()
+		} else if other.attributes.is_empty() || self.attributes == other.attributes {
+			self.attributes.clone()
+		} else {
+			return Err(TypeUnificationError);
+		};
+
+		let desc = self.desc.unify_with(registry, unifier, &other.desc)?;
+
+		Ok(Type::new(attributes, desc))
+	}
+}
+
+impl<R: Clone + Ord, T> TypeDesc<R, T> {
+	pub fn unify_with<U, V>(
+		&self,
+		registry: &Registry<R>,
+		unifier: &mut impl TypeUnifier<T, U, Target = V>,
+		other: &TypeDesc<R, U>,
+	) -> Result<TypeDesc<R, V>, TypeUnificationError>
+	where
+		V: Ord,
 	{
 		match (self, other) {
-			(Self::Any, Type::Any) => Ok(Type::Any),
-			(Self::Resource(a), Type::Resource(b)) => {
+			(Self::Any, TypeDesc::Any) => Ok(TypeDesc::Any),
+			(Self::Resource(a), TypeDesc::Resource(b)) => {
 				if a == b {
-					Ok(Type::Resource(a.clone()))
+					Ok(TypeDesc::Resource(a.clone()))
 				} else {
 					Err(TypeUnificationError)
 				}
 			}
-			(Self::Literal(a), Type::Literal(b)) => match a.subtype_cmp(b) {
-				Some(Ordering::Equal) => Ok(Type::Literal(a.clone())),
+			(Self::Literal(a), TypeDesc::Literal(b)) => match a.subtype_cmp(b) {
+				Some(Ordering::Equal) => Ok(TypeDesc::Literal(a.clone())),
 				_ => Err(TypeUnificationError),
 			},
-			(Self::List(a), Type::List(b)) => {
-				Ok(Type::List(List {
-					prefix: if a.prefix.len() == b.prefix.len() {
-						a.prefix.iter().zip(&b.prefix).map(|(a, b)| unifier.unify(a, b)).collect()
-					} else {
-						return Err(TypeUnificationError)
-					},
-					rest: match (&a.rest, &b.rest) {
-						(Some(a), Some(b)) => Some(unifier.unify(a, b)),
-						(None, None) => None,
-						_ => return Err(TypeUnificationError)
-					}
-				}))
-			}
-			(Self::Struct(a), Type::Struct(b)) => {
+			(Self::List(a), TypeDesc::List(b)) => Ok(TypeDesc::List(List {
+				prefix: if a.prefix.len() == b.prefix.len() {
+					a.prefix
+						.iter()
+						.zip(&b.prefix)
+						.map(|(a, b)| unifier.unify(a, b))
+						.collect()
+				} else {
+					return Err(TypeUnificationError);
+				},
+				rest: match (&a.rest, &b.rest) {
+					(Some(a), Some(b)) => Some(unifier.unify(a, b)),
+					(None, None) => None,
+					_ => return Err(TypeUnificationError),
+				},
+			})),
+			(Self::Struct(a), TypeDesc::Struct(b)) => {
 				if a.fields.len() == b.fields.len() {
 					let mut fields = BTreeMap::new();
 
 					for (a_key, a_field) in &a.fields {
 						let a_key_type = unifier.left_key_type(a_key);
 						let b_entry = b.fields.iter().find(|(k, _)| {
-							a_key_type.subtype_cmp(registry, unifier.right_key_type(k)).is_some_and(Ordering::is_eq)
+							a_key_type
+								.subtype_cmp(registry, unifier.right_key_type(k))
+								.is_some_and(Ordering::is_eq)
 						});
 
 						match b_entry {
 							Some((b_key, b_field)) => {
 								if a_field.required == b_field.required {
 									let key = unifier.unify(a_key, b_key);
-									fields.insert(key, Field {
-										type_: unifier.unify(&a_field.type_, &b_field.type_),
-										required: a_field.required
-									});
+									fields.insert(
+										key,
+										Field {
+											type_: unifier.unify(&a_field.type_, &b_field.type_),
+											required: a_field.required,
+										},
+									);
 								} else {
-									return Err(TypeUnificationError)
+									return Err(TypeUnificationError);
 								}
 							}
-							None => return Err(TypeUnificationError)
+							None => return Err(TypeUnificationError),
 						}
 					}
 
-					Ok(Type::Struct(Struct {
-						fields
-					}))
+					Ok(TypeDesc::Struct(Struct { fields }))
 				} else {
 					Err(TypeUnificationError)
 				}
 			}
-			(Self::Enum(a), Type::Enum(b)) => {
+			(Self::Enum(a), TypeDesc::Enum(b)) => {
 				if a.variants.len() == b.variants.len() {
 					let mut variants = BTreeMap::new();
 
@@ -237,13 +322,11 @@ impl<R: Clone + Ord, T> Type<R, T> {
 							Some(b_type) => {
 								variants.insert(key.clone(), unifier.unify(a_type, b_type));
 							}
-							None => return Err(TypeUnificationError)
+							None => return Err(TypeUnificationError),
 						}
 					}
 
-					Ok(Type::Enum(Enum {
-						variants
-					}))
+					Ok(TypeDesc::Enum(Enum { variants }))
 				} else {
 					Err(TypeUnificationError)
 				}
@@ -258,6 +341,16 @@ impl<R: Clone + Ord, T> Type<R, T> {
 pub struct TypeUnificationError;
 
 impl<R: Ord> Type<R> {
+	pub fn subtype_cmp(&self, registry: &Registry<R>, other: &Self) -> Option<Ordering> {
+		self.desc.subtype_cmp(registry, &other.desc)
+	}
+
+	pub fn contains(&self, registry: &Registry<R>, value: &Value<R>) -> bool {
+		self.desc.contains(registry, value)
+	}
+}
+
+impl<R: Ord> TypeDesc<R> {
 	pub fn subtype_cmp(&self, registry: &Registry<R>, other: &Self) -> Option<Ordering> {
 		match (self, other) {
 			(Self::Any, Self::Any) => Some(Ordering::Equal),
@@ -286,15 +379,29 @@ impl<R: Ord> Type<R> {
 	}
 }
 
-impl<R: fmt::Display> DisplayType<R> for Type<R> {
-	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+impl<R: fmt::Display> DisplaySignature<R> for Type<R> {
+	fn fmt_signature(
+		&self,
+		context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
+		self.desc.fmt_signature(context, f)
+	}
+}
+
+impl<R: fmt::Display> DisplaySignature<R> for TypeDesc<R> {
+	fn fmt_signature(
+		&self,
+		context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		match self {
 			Self::Any => write!(f, "any"),
-			Self::Resource(ty) => ty.fmt_type(d, depth, f),
-			Self::Literal(ty) => ty.fmt_type(d, depth, f),
-			Self::List(ty) => ty.fmt_type(d, depth, f),
-			Self::Struct(ty) => ty.fmt_type(d, depth, f),
-			Self::Enum(ty) => ty.fmt_type(d, depth, f)
+			Self::Resource(ty) => ty.fmt_signature(context, f),
+			Self::Literal(ty) => ty.fmt_signature(context, f),
+			Self::List(ty) => ty.fmt_signature(context, f),
+			Self::Struct(ty) => ty.fmt_signature(context, f),
+			Self::Enum(ty) => ty.fmt_signature(context, f),
 		}
 	}
 }
@@ -311,9 +418,7 @@ impl<R: Ord> Resource<R> {
 		let mut set = BTreeSet::new();
 		set.insert(r);
 
-		Self {
-			set: Some(set)
-		}
+		Self { set: Some(set) }
 	}
 
 	pub fn subtype_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -343,8 +448,12 @@ impl<R: Ord> Resource<R> {
 	}
 }
 
-impl<R: fmt::Display> DisplayType<R> for Resource<R> {
-	fn fmt_type(&self, _d: &DisplayedType<R>, _depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+impl<R: fmt::Display> DisplaySignature<R> for Resource<R> {
+	fn fmt_signature(
+		&self,
+		_context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		match &self.set {
 			Some(set) => {
 				write!(f, "(any_of")?;
@@ -440,8 +549,12 @@ impl Struct<TypeRef> {
 	}
 }
 
-impl<R: fmt::Display> DisplayType<R> for Struct {
-	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+impl<R: fmt::Display> DisplaySignature<R> for Struct {
+	fn fmt_signature(
+		&self,
+		context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		write!(f, "{{")?;
 
 		for (i, (key, field)) in self.fields.iter().enumerate() {
@@ -449,15 +562,17 @@ impl<R: fmt::Display> DisplayType<R> for Struct {
 				write!(f, ", ")?;
 			}
 
-			key.fmt_type(d, depth + 1, f)?;
+			key.fmt_signature(&context.inner(), f)?;
 
 			if !field.required {
 				write!(f, "?")?;
 			}
 
-			write!(f, ": ")?;
-			
-			field.type_.fmt_type(d, depth + 1, f)?;
+			write!(
+				f,
+				": {}",
+				field.type_.display_signature_with(context.inner())
+			)?;
 		}
 
 		write!(f, "}}")
@@ -482,9 +597,13 @@ pub struct Enum<T = TypeRef> {
 }
 
 impl Enum<TypeRef> {
-	pub fn subtype_cmp<R: Ord>(&self, registry: &Registry<R>, other: &Type<R>) -> Option<Ordering> {
+	pub fn subtype_cmp<R: Ord>(
+		&self,
+		registry: &Registry<R>,
+		other: &TypeDesc<R>,
+	) -> Option<Ordering> {
 		match other {
-			Type::Enum(other) => {
+			TypeDesc::Enum(other) => {
 				let mut cmp = Ordering::Equal;
 
 				for &a in self.variants.values() {
@@ -501,7 +620,7 @@ impl Enum<TypeRef> {
 
 				for (_, &ty_ref) in &self.variants {
 					let ty: &Type<R> = registry.get_type(ty_ref)?;
-					match (cmp, ty.subtype_cmp(registry, other)) {
+					match (cmp, ty.desc.subtype_cmp(registry, other)) {
 						(
 							None | Some(Ordering::Greater | Ordering::Equal),
 							Some(Ordering::Greater),
@@ -533,13 +652,20 @@ impl Enum<TypeRef> {
 	}
 }
 
-impl<R: fmt::Display> DisplayType<R> for Enum {
-	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+impl<R: fmt::Display> DisplaySignature<R> for Enum {
+	fn fmt_signature(
+		&self,
+		context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		write!(f, "enum {{")?;
 
 		for (name, variant) in &self.variants {
-			write!(f, "{name}: ")?;
-			variant.fmt_type(d, depth + 1, f)?;
+			write!(
+				f,
+				"{name}: {}",
+				variant.display_signature_with(context.inner())
+			)?;
 		}
 
 		write!(f, "}}")
@@ -631,8 +757,12 @@ impl List<TypeRef> {
 	}
 }
 
-impl<R: fmt::Display> DisplayType<R> for List {
-	fn fmt_type(&self, d: &DisplayedType<R>, depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+impl<R: fmt::Display> DisplaySignature<R> for List {
+	fn fmt_signature(
+		&self,
+		context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		write!(f, "[")?;
 
 		for (i, &p) in self.prefix.iter().enumerate() {
@@ -640,7 +770,7 @@ impl<R: fmt::Display> DisplayType<R> for List {
 				write!(f, ", ")?;
 			}
 
-			p.fmt_type(d, depth + 1, f)?;
+			p.fmt_signature(&context.inner(), f)?;
 		}
 
 		if let Some(t) = self.rest {
@@ -648,8 +778,7 @@ impl<R: fmt::Display> DisplayType<R> for List {
 				write!(f, ", ")?;
 			}
 
-			write!(f, "... ")?;
-			t.fmt_type(d, depth, f)?;
+			write!(f, "... {}", t.display_signature_with(context.inner()))?;
 		}
 
 		write!(f, "]")
@@ -698,12 +827,16 @@ impl Boolean {
 	}
 }
 
-impl<R> DisplayType<R> for Boolean {
-	fn fmt_type(&self, _d: &DisplayedType<R>, _depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+impl<R> DisplaySignature<R> for Boolean {
+	fn fmt_signature(
+		&self,
+		_context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		match self.const_ {
 			Some(true) => write!(f, "true"),
 			Some(false) => write!(f, "false"),
-			None => write!(f, "bool")
+			None => write!(f, "bool"),
 		}
 	}
 }
@@ -733,6 +866,10 @@ pub enum MinBound {
 }
 
 impl MinBound {
+	pub fn is_unbounded(&self) -> bool {
+		matches!(self, Self::Unbounded)
+	}
+
 	pub fn normalize(&mut self, domain: NumberDomain) {
 		if domain.is_integer() {
 			if let Self::Excluded(n) = &self {
@@ -751,6 +888,17 @@ pub enum MaxBound {
 }
 
 impl MaxBound {
+	pub fn is_unbounded(&self) -> bool {
+		matches!(self, Self::Unbounded)
+	}
+
+	pub fn as_included(&self) -> Option<&value::Number> {
+		match self {
+			Self::Included(m) => Some(m),
+			_ => None,
+		}
+	}
+
 	pub fn normalize(&mut self, domain: NumberDomain) {
 		if domain.is_integer() {
 			if let Self::Excluded(n) = &self {
@@ -873,30 +1021,159 @@ impl Number {
 		self.max = bound;
 		self.max.normalize(self.domain);
 	}
-}
 
-impl<R> DisplayType<R> for Number {
-	fn fmt_type(&self, _d: &DisplayedType<R>, _depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
-		match self.as_singleton() {
-			Some(s) => {
-				s.fmt(f)
-			}
-			None => match self.domain {
-				NumberDomain::Integer => {
-					todo!()
+	fn as_native_number(&self) -> Option<NativeNumber> {
+		match self.domain {
+			NumberDomain::Integer => {
+				// int
+				match &self.min {
+					MinBound::Unbounded => Some(NativeNumber::Int),
+					MinBound::Included(n) => {
+						if *n == *NUMBER_ZERO {
+							match &self.max {
+								MaxBound::Unbounded => return Some(NativeNumber::Uint),
+								MaxBound::Included(m) => {
+									if *m == *NUMBER_U8_MAX {
+										return Some(NativeNumber::U8);
+									}
+
+									if *m == *NUMBER_U16_MAX {
+										return Some(NativeNumber::U16);
+									}
+
+									if *m == *NUMBER_U32_MAX {
+										return Some(NativeNumber::U32);
+									}
+
+									if *m == *NUMBER_U64_MAX {
+										return Some(NativeNumber::U64);
+									}
+
+									if *m == *NUMBER_U128_MAX {
+										return Some(NativeNumber::U128);
+									}
+								}
+								MaxBound::Excluded(_) => panic!("non normalized bound"),
+							}
+						}
+
+						if *n == *NUMBER_I8_MIN
+							&& self.max.as_included().is_some_and(|m| *m == *NUMBER_I8_MAX)
+						{
+							return Some(NativeNumber::I8);
+						}
+
+						if *n == *NUMBER_I16_MIN
+							&& self
+								.max
+								.as_included()
+								.is_some_and(|m| *m == *NUMBER_I16_MAX)
+						{
+							return Some(NativeNumber::I16);
+						}
+
+						if *n == *NUMBER_I32_MIN
+							&& self
+								.max
+								.as_included()
+								.is_some_and(|m| *m == *NUMBER_I32_MAX)
+						{
+							return Some(NativeNumber::I32);
+						}
+
+						if *n == *NUMBER_I64_MIN
+							&& self
+								.max
+								.as_included()
+								.is_some_and(|m| *m == *NUMBER_I64_MAX)
+						{
+							return Some(NativeNumber::I64);
+						}
+
+						if *n == *NUMBER_I128_MIN
+							&& self
+								.max
+								.as_included()
+								.is_some_and(|m| *m == *NUMBER_I128_MAX)
+						{
+							return Some(NativeNumber::I128);
+						}
+
+						None
+					}
+					MinBound::Excluded(_) => panic!("non normalized bound"),
 				}
-				NumberDomain::Rational => {
-					todo!()
+			}
+			NumberDomain::Rational => {
+				if self.min.is_unbounded() && self.max.is_unbounded() {
+					Some(NativeNumber::Rational)
+				} else {
+					None
 				}
 			}
 		}
 	}
 }
 
+impl<R> DisplaySignature<R> for Number {
+	fn fmt_signature(
+		&self,
+		_context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
+		match self.as_singleton() {
+			Some(s) => s.fmt(f),
+			None => match self.as_native_number() {
+				Some(n) => match n {
+					NativeNumber::Uint => write!(f, "uint"),
+					NativeNumber::U8 => write!(f, "u8"),
+					NativeNumber::U16 => write!(f, "u16"),
+					NativeNumber::U32 => write!(f, "u32"),
+					NativeNumber::U64 => write!(f, "u64"),
+					NativeNumber::U128 => write!(f, "u128"),
+					NativeNumber::Int => write!(f, "int"),
+					NativeNumber::I8 => write!(f, "i8"),
+					NativeNumber::I16 => write!(f, "i16"),
+					NativeNumber::I32 => write!(f, "i32"),
+					NativeNumber::I64 => write!(f, "i64"),
+					NativeNumber::I128 => write!(f, "i128"),
+					NativeNumber::Rational => write!(f, "rational"),
+				},
+				None => {
+					todo!()
+				}
+			},
+		}
+	}
+}
+
+pub enum NativeNumber {
+	Uint,
+	U8,
+	U16,
+	U32,
+	U64,
+	U128,
+	Int,
+	I8,
+	I16,
+	I32,
+	I64,
+	I128,
+	Rational,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct TextStringPrecomputedData {
+	is_any: bool,
+	regex_string: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TextString {
 	automaton: iregex::automata::NFA<u32>,
 	singleton: Ignored<OnceLock<Option<String>>>,
+	precomputed_data: TextStringPrecomputedData,
 }
 
 impl Default for TextString {
@@ -919,6 +1196,10 @@ impl Default for TextString {
 		Self {
 			automaton,
 			singleton: Ignored(OnceLock::new()),
+			precomputed_data: TextStringPrecomputedData {
+				is_any: true,
+				regex_string: ".*".to_owned(),
+			},
 		}
 	}
 }
@@ -934,12 +1215,33 @@ impl TextString {
 			None => 0,
 		});
 
+		let mut regex_string = String::new();
+		for c in value.chars() {
+			match c {
+				'(' => regex_string.push_str("\\("),
+				')' => regex_string.push_str("\\)"),
+				'[' => regex_string.push_str("\\["),
+				']' => regex_string.push_str("\\]"),
+				'\\' => regex_string.push_str("\\\\"),
+				'.' => regex_string.push_str("\\."),
+				'*' => regex_string.push_str("\\*"),
+				'+' => regex_string.push_str("\\+"),
+				'?' => regex_string.push_str("\\?"),
+				'^' => regex_string.push_str("\\^"),
+				c => regex_string.push(c),
+			}
+		}
+
 		let singleton = OnceLock::new();
 		let _ = singleton.set(Some(value));
 
 		Self {
 			automaton,
 			singleton: Ignored(singleton),
+			precomputed_data: TextStringPrecomputedData {
+				is_any: false,
+				regex_string,
+			},
 		}
 	}
 
@@ -999,19 +1301,44 @@ impl TextString {
 		}
 	}
 
-	pub fn contains(&self, _value: &str) -> bool {
-		true
+	pub fn contains(&self, value: &str) -> bool {
+		match self.as_singleton() {
+			Some(singleton) => singleton == value,
+			None => self.automaton.contains(value.chars()),
+		}
 	}
 }
 
-impl<R> DisplayType<R> for TextString {
-	fn fmt_type(&self, _d: &DisplayedType<R>, _depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+impl<R> DisplaySignature<R> for TextString {
+	fn fmt_signature(
+		&self,
+		_context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		match self.as_singleton() {
 			Some(s) => {
-				todo!()
+				f.write_char('"')?;
+
+				for c in s.chars() {
+					match c {
+						'\t' => f.write_str("\\t")?,
+						'\r' => f.write_str("\\r")?,
+						'\n' => f.write_str("\\n")?,
+						'\'' => f.write_str("\\'")?,
+						'\"' => f.write_str("\\\"")?,
+						'\\' => f.write_str("\\\\")?,
+						c => f.write_char(c)?,
+					}
+				}
+
+				f.write_char('"')
 			}
 			None => {
-				todo!()
+				if self.precomputed_data.is_any {
+					write!(f, "string")
+				} else {
+					write!(f, "/{}/", self.precomputed_data.regex_string)
+				}
 			}
 		}
 	}
@@ -1030,8 +1357,12 @@ impl ByteString {
 	}
 }
 
-impl<R> DisplayType<R> for ByteString {
-	fn fmt_type(&self, _d: &DisplayedType<R>, _depth: usize, f: &mut fmt::Formatter) -> fmt::Result {
+impl<R> DisplaySignature<R> for ByteString {
+	fn fmt_signature(
+		&self,
+		_context: &crate::display::DisplayContext<R>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		write!(f, "bytes")
 	}
 }

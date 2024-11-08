@@ -1,5 +1,7 @@
+use rdf_types::{dataset::DatasetMut, Quad};
+
 use super::EvalError;
-use crate::{pattern::Substitution, rdf::RdfContextMut, TypeRef, Value};
+use crate::{pattern::Substitution, rdf::RdfContextMut, TermPattern, TypeRef, Value};
 use std::borrow::Cow;
 
 #[derive(Clone, Copy)]
@@ -48,6 +50,10 @@ impl<'parent, R: Clone> Scope<'parent, R> {
 			types,
 			values,
 		}
+	}
+
+	pub fn top_values(&self) -> &[Value<R>] {
+		&self.values
 	}
 
 	pub fn is_empty(&self) -> bool {
@@ -107,48 +113,10 @@ pub struct ReverseScope<'parent, R> {
 	parent: Option<(&'parent Self, u32)>,
 	graph: Option<R>,
 	values: Substitution<R>,
+	dataset: Vec<Quad<TermPattern<R>>>,
 }
 
 impl<'a, R> ReverseScope<'a, R> {
-	pub fn new(graph: Option<R>, types: &'a [TypeRef]) -> Self
-	where
-		R: Clone,
-	{
-		Self {
-			parent: None,
-			graph,
-			values: Substitution::new(types.len() as u32, |_| None),
-		}
-	}
-
-	/// Creates a sub scope that extends this scope.
-	///
-	/// This scope will be the parent scope of the created sub scope.
-	/// The sub scope is then passed to the function `f`.
-	///
-	/// This guarantees that the sub scopes does not outlive the parent scope
-	/// and that is has exclusive access over the parent scope.
-	pub fn begin<'b, C>(
-		&'b mut self,
-		rdf: &mut C,
-		graph: Option<Option<R>>,
-		types: &'b [TypeRef],
-		f: impl FnOnce(&mut C, &mut ReverseScope<'b, R>) -> Result<(), EvalError<R>>,
-	) -> Result<Vec<Value<R>>, EvalError<R>>
-	where
-		C: RdfContextMut<R>,
-		R: Clone,
-	{
-		let mut sub_scope = ReverseScope::<'b, R> {
-			parent: Some((self, self.len())),
-			graph: graph.unwrap_or_else(|| self.graph.clone()),
-			values: Substitution::new(types.len() as u32, |_| None),
-		};
-
-		f(rdf, &mut sub_scope)?;
-		sub_scope.end(rdf)
-	}
-
 	pub fn is_empty(&self) -> bool {
 		self.len() == 0
 	}
@@ -177,6 +145,19 @@ impl<'a, R> ReverseScope<'a, R> {
 		}
 	}
 
+	pub fn get_or_insert(&self, i: u32, f: impl FnOnce() -> Value<R>) -> Option<&Value<R>> {
+		match self.parent {
+			Some((parent, parent_len)) => {
+				if i < parent_len {
+					parent.get(i)
+				} else {
+					Some(self.values.get_or_insert(i - parent_len, f))
+				}
+			}
+			None => Some(self.values.get_or_insert(i, f)),
+		}
+	}
+
 	pub fn set(&self, i: u32, value: Value<R>) -> Result<(), EvalError<R>>
 	where
 		R: Eq,
@@ -194,8 +175,113 @@ impl<'a, R> ReverseScope<'a, R> {
 		}
 	}
 
-	pub fn end(self, rdf: &mut impl RdfContextMut<R>) -> Result<Vec<Value<R>>, EvalError<R>> {
-		self.values
-			.try_into_total_with(|_| Ok(Value::Resource(rdf.new_resource())))
+	pub fn extend_dataset(&mut self, quads: impl Iterator<Item = Quad<TermPattern<R>>>) {
+		self.dataset.extend(quads);
+	}
+}
+
+impl<'a, R: Clone> ReverseScope<'a, R> {
+	pub fn root(graph: Option<R>) -> Self {
+		Self::new(graph, &[])
+	}
+
+	pub fn new(graph: Option<R>, types: &[TypeRef]) -> Self {
+		Self {
+			parent: None,
+			graph,
+			values: Substitution::new(types.len() as u32, |_| None),
+			dataset: Vec::new(),
+		}
+	}
+
+	/// Creates a sub scope that extends this scope.
+	///
+	/// This scope will be the parent scope of the created sub scope.
+	/// The sub scope is then passed to the function `f`.
+	///
+	/// This guarantees that the sub scopes does not outlive the parent scope
+	/// and that is has exclusive access over the parent scope.
+	pub fn begin<C, D>(
+		&mut self,
+		rdf: &mut C,
+		dataset: &mut D,
+		graph: Option<Option<R>>,
+		types: &[TypeRef],
+		f: impl FnOnce(&mut C, &mut D, &mut ReverseScope<R>) -> Result<(), EvalError<R>>,
+	) -> Result<Vec<Value<R>>, EvalError<R>>
+	where
+		C: RdfContextMut<R>,
+		D: DatasetMut<Resource = R>,
+	{
+		let (substitution, more_patterns) = {
+			let mut sub_scope = ReverseScope::<R> {
+				parent: Some((self, self.len())),
+				graph: graph.unwrap_or_else(|| self.graph.clone()),
+				values: Substitution::new(types.len() as u32, |_| None),
+				dataset: Vec::new(),
+			};
+
+			f(rdf, dataset, &mut sub_scope)?;
+
+			sub_scope.end(rdf, dataset)?
+		};
+
+		self.dataset.extend(more_patterns);
+		Ok(substitution)
+	}
+
+	fn end(
+		self,
+		rdf: &mut impl RdfContextMut<R>,
+		dataset: &mut impl DatasetMut<Resource = R>,
+	) -> Result<(Vec<Value<R>>, Vec<Quad<TermPattern<R>>>), EvalError<R>> {
+		let mut patterns = Vec::new();
+		for quad_pattern in &self.dataset {
+			match TermPattern::quad_into_resources(self.realize_quad(rdf, quad_pattern)?) {
+				Ok(quad) => {
+					dataset.insert(quad);
+				}
+				Err(quad_pattern) => patterns.push(quad_pattern),
+			}
+		}
+
+		let substitution = self
+			.values
+			.try_into_total_with(|_| Ok(Value::Resource(rdf.new_resource())))?;
+
+		Ok((substitution, patterns))
+	}
+
+	fn realize_quad(
+		&self,
+		rdf: &mut impl RdfContextMut<R>,
+		quad: &Quad<TermPattern<R>>,
+	) -> Result<Quad<TermPattern<R>>, EvalError<R>> {
+		Ok(Quad(
+			self.realize_term(rdf, &quad.0)?,
+			self.realize_term(rdf, &quad.1)?,
+			self.realize_term(rdf, &quad.2)?,
+			quad.3
+				.as_ref()
+				.map(|g| self.realize_term(rdf, g))
+				.transpose()?,
+		))
+	}
+
+	fn realize_term(
+		&self,
+		rdf: &mut impl RdfContextMut<R>,
+		t: &TermPattern<R>,
+	) -> Result<TermPattern<R>, EvalError<R>> {
+		match t {
+			TermPattern::Var(x) => {
+				match self.get_or_insert(*x, || Value::Resource(rdf.new_resource())) {
+					Some(Value::Resource(r)) => Ok(TermPattern::Resource(r.clone())),
+					Some(_) => Err(EvalError::InvalidType),
+					None => Ok(TermPattern::Var(*x)),
+				}
+			}
+			TermPattern::Resource(r) => Ok(TermPattern::Resource(r.clone())),
+		}
 	}
 }

@@ -40,6 +40,10 @@ impl<R> Substitution<R> {
 		self.0.get(i as usize).and_then(OnceCell::get)
 	}
 
+	pub fn get_or_insert(&self, x: u32, f: impl FnOnce() -> Value<R>) -> &Value<R> {
+		self.0.get(x as usize).unwrap().get_or_init(f)
+	}
+
 	/// Sets the binding of the variable `x` to `value`.
 	///
 	/// The variable `x` *must* be declared in the substitution.

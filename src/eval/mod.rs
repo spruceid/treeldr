@@ -1,10 +1,13 @@
 mod scope;
 
+use iref::IriBuf;
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 pub use scope::*;
 
 use crate::{
-	expr::{Expr, InnerExpr}, rdf::{RdfContext, RdfContextMut}, Registry, TypeRef, Value
+	expr::{Expr, InnerExpr},
+	rdf::{RdfContext, RdfContextMut},
+	Registry, TypeRef, Value,
 };
 
 mod bound;
@@ -35,10 +38,19 @@ pub enum EvalError<R = rdf_types::Term> {
 	UnknownVariant(String),
 
 	#[error("invalid number of arguments (expected {expected}, found {found})")]
-	ArgumentCount {
-		expected: usize,
-		found: usize
-	}
+	ArgumentCount { expected: usize, found: usize },
+
+	#[error("ambiguous IRI representation")]
+	AmbiguousIriRepresentation(IriBuf, IriBuf),
+
+	#[error("no matching IRI representation")]
+	NoMatchingIriRepresentation,
+
+	#[error("ambiguous literal representation")]
+	AmbiguousLiteralRepresentation(String, String),
+
+	#[error("no matching literal representation")]
+	NoMatchingLiteralRepresentation,
 }
 
 pub trait Eval<R: Clone> {
@@ -106,10 +118,11 @@ impl<R: Ord + Clone> Eval<R> for Expr<R> {
 		scope: &mut ReverseScope<R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
-		self.bound.inverse_once(rdf, scope, |rdf, scope| {
-			self.inner
-				.eval_inverse_typed(registry, rdf, dataset, scope, self.type_, output)
-		})?;
+		self.bound
+			.inverse_once(rdf, dataset, scope, |rdf, dataset, scope| {
+				self.inner
+					.eval_inverse_typed(registry, rdf, dataset, scope, self.type_, output)
+			})?;
 		Ok(())
 	}
 }

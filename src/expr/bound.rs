@@ -16,7 +16,7 @@ impl<R, T> Bound<R, T> {
 	pub fn map_types<U>(self, mut f: impl FnMut(T) -> U) -> Bound<R, U> {
 		Bound {
 			intro: self.intro.into_iter().map(|x| f(x)).collect(),
-			dataset: self.dataset
+			dataset: self.dataset,
 		}
 	}
 }

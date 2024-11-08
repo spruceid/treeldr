@@ -1,0 +1,3 @@
+<https://example.com#cred> <https://www.w3.org/2018/credentials#issuer> <https://example.com#issuer> .
+<https://example.com#cred> <https://www.w3.org/2018/credentials#credentialSubject> <https://example.com#subject> .
+<https://example.com#subject> <https://schema.org/name> "John Smith" .
