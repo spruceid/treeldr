@@ -126,6 +126,10 @@ impl<R, T> Type<R, T> {
 		self.desc.as_list()
 	}
 
+	pub fn as_struct(&self) -> Option<&Struct<T>> {
+		self.desc.as_struct()
+	}
+
 	pub fn visit_type_components(&self, f: impl FnMut(&T, bool)) {
 		self.desc.visit_type_components(f);
 	}
@@ -173,6 +177,13 @@ impl<R, T> TypeDesc<R, T> {
 	pub fn as_list(&self) -> Option<&List<T>> {
 		match self {
 			Self::List(l) => Some(l),
+			_ => None,
+		}
+	}
+
+	pub fn as_struct(&self) -> Option<&Struct<T>> {
+		match self {
+			Self::Struct(m) => Some(m),
 			_ => None,
 		}
 	}
@@ -1122,7 +1133,7 @@ impl<R> DisplaySignature<R> for Number {
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		match self.as_singleton() {
-			Some(s) => s.fmt(f),
+			Some(s) => fmt::Display::fmt(s, f),
 			None => match self.as_native_number() {
 				Some(n) => match n {
 					NativeNumber::Uint => write!(f, "uint"),

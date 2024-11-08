@@ -577,6 +577,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for BuildModule<'ast> {
 						.value
 						.build_with_attributes(context, scope, attributes)?;
 					context.type_variables.assert_eq(*x, y);
+					result.insert(name, Item::Type(*x));
 				}
 				BuildItem::Function(f_ref, ast, metadata) => {
 					let attributes = metadata.build(context, scope)?;
@@ -817,7 +818,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapTypeExpr {
 						f.key.build(context, scope)?,
 						ty::Field {
 							type_: f.value.build(context, scope)?,
-							required: false,
+							required: self.optional.is_none(),
 						},
 					))
 				})
@@ -1277,7 +1278,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
 				key.type_,
 				ty::Field {
 					type_: value.type_,
-					required: true,
+					required: entry.optional.is_none(),
 				},
 			);
 

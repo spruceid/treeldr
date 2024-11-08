@@ -1,5 +1,6 @@
 use super::{
-	Eval, EvalError, EvalTyped, RdfContext, RdfContextMut, ReverseScope, Scope, ScopeTypes,
+	Eval, EvalError, EvalTyped, MissingData, RdfContext, RdfContextMut, ReverseScope, Scope,
+	ScopeTypes,
 };
 use crate::{
 	expr::{ExplicitList, ImplicitList, List, OrderedList, UnorderedList},
@@ -209,7 +210,7 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 				);
 
 				let Some(Quad(_, _, first, _)) = first_candidates.next() else {
-					return Err(EvalError::Empty);
+					return Err(EvalError::MissingData(MissingData::Empty));
 				};
 
 				if first_candidates.next().is_some() {
@@ -227,7 +228,7 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 				);
 
 				let Some(Quad(_, _, rest, _)) = rest_candidates.next() else {
-					return Err(EvalError::Empty);
+					return Err(EvalError::MissingData(MissingData::Empty));
 				};
 
 				if rest_candidates.next().is_some() {
@@ -240,7 +241,7 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 			let scope = self
 				.bound
 				.find_one_with(dataset, &scope, |_| Some(first.clone()))?
-				.ok_or(EvalError::Empty)?;
+				.ok_or(EvalError::MissingData(MissingData::Empty))?;
 
 			result.push(self.body.eval(registry, rdf, dataset, &scope)?);
 

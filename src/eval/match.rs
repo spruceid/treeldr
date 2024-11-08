@@ -1,4 +1,6 @@
-use super::{Eval, EvalError, EvalTyped, RdfContext, RdfContextMut, ReverseScope, Scope};
+use super::{
+	Eval, EvalError, EvalTyped, MissingData, RdfContext, RdfContextMut, ReverseScope, Scope,
+};
 use crate::{expr::Match, Registry, TypeRef, Value};
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 
@@ -23,7 +25,7 @@ impl<R: Clone + Ord> EvalTyped<R> for Match<R> {
 			}
 		}
 
-		Err(EvalError::Empty)
+		Err(EvalError::MissingData(MissingData::Empty))
 	}
 
 	fn eval_inverse_typed(

@@ -2,9 +2,13 @@ prefix cred = <https://www.w3.org/2018/credentials#>
 prefix schema = <https://schema.org/>
 
 ## VCDM 2.0 layout.
-let (_ credential subject) where { credential cred:credentialSubject subject } = {
+let (_ credential subject) where {
+		credential cred:credentialSubject subject
+} = {
 	## Issuer.
-	"issuer" = let issuer where { credential cred:issuer issuer }; (iri_of issuer),
+	"issuer" = let issuer where {
+		credential cred:issuer issuer
+	}; (iri_of issuer),
 
 	## Credential subject.
 	"credentialSubject" = {
@@ -12,6 +16,8 @@ let (_ credential subject) where { credential cred:credentialSubject subject } =
 		"id" = (iri_of subject),
 
 		## Name.
-		"name" = let name where { subject schema:name name }; (string_of name)
+		"name" = let name where {
+			subject schema:name name
+		}; (string_of name)
 	}
 }

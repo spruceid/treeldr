@@ -10,7 +10,7 @@ use rdf_types::{
 use xsd_types::XSD_STRING;
 
 use crate::{
-	eval::{EvalError, ReverseScope},
+	eval::{EvalError, MissingData, ReverseScope},
 	rdf::{RdfContext, RdfContextMut},
 	ty::BuiltInType,
 	DatasetPattern, TypeRef, Value,
@@ -63,7 +63,9 @@ impl BuiltInFunction {
 
 				match value {
 					Some(value) => Ok(Value::string(value.as_str().to_owned())),
-					None => Err(EvalError::NoMatchingIriRepresentation),
+					None => Err(EvalError::MissingData(
+						MissingData::NoMatchingIriRepresentation,
+					)),
 				}
 			}
 			Self::StringOf => {
@@ -86,7 +88,9 @@ impl BuiltInFunction {
 
 				match value {
 					Some(value) => Ok(Value::string(value.to_owned())),
-					None => Err(EvalError::NoMatchingLiteralRepresentation),
+					None => Err(EvalError::MissingData(
+						MissingData::NoMatchingLiteralRepresentation,
+					)),
 				}
 			}
 		}

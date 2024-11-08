@@ -11,12 +11,22 @@ impl<R: Clone + Ord> EvalTyped<R> for Map<R> {
 		rdf: &impl RdfContext<R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		scope: &Scope<R>,
-		_type_ref: TypeRef,
+		type_ref: TypeRef,
 	) -> Result<Value<R>, EvalError<R>> {
+		let type_ = registry.get_type(type_ref).unwrap().as_struct().unwrap();
+
 		let mut result = BTreeMap::new();
 
 		for (key, value) in &self.entries {
-			result.insert(key.to_untyped(), value.eval(registry, rdf, dataset, scope)?);
+			let field = type_.fields.get(&key.type_).unwrap();
+
+			match value.eval(registry, rdf, dataset, scope) {
+				Ok(value) => {
+					result.insert(key.to_untyped(), value);
+				}
+				Err(EvalError::MissingData(_)) if !field.required => (),
+				Err(e) => return Err(e),
+			}
 		}
 
 		Ok(Value::Map(result))

@@ -81,6 +81,9 @@ pub enum TokenKind {
 	#[token(";")]
 	Semicolon,
 
+	#[token("?")]
+	QuestionMark,
+
 	#[token("=>")]
 	Arrow,
 
@@ -387,6 +390,7 @@ pub struct Mapping {
 pub struct Entry {
 	pub metadata: Metadata,
 	pub key: ConstValue,
+	pub optional: Option<QuestionMark>,
 	pub eq: Equal,
 	pub value: Expr,
 }
@@ -425,6 +429,7 @@ pub struct ListTypeExprRest {
 pub struct MapTypeExpr {
 	pub brace_l: BraceL,
 	pub entries: List<EntryType>,
+	pub optional: Option<QuestionMark>,
 	pub brace_r: BraceR,
 }
 

@@ -18,12 +18,24 @@ mod map;
 mod r#match;
 
 #[derive(Debug, thiserror::Error)]
-pub enum EvalError<R = rdf_types::Term> {
-	#[error("ambiguity")]
-	Ambiguity,
-
+pub enum MissingData {
 	#[error("empty selection")]
 	Empty,
+
+	#[error("no matching IRI representation")]
+	NoMatchingIriRepresentation,
+
+	#[error("no matching literal representation")]
+	NoMatchingLiteralRepresentation,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum EvalError<R = rdf_types::Term> {
+	#[error("empty selection")]
+	MissingData(MissingData),
+
+	#[error("ambiguity")]
+	Ambiguity,
 
 	#[error("invalid type")]
 	InvalidType,
@@ -43,14 +55,8 @@ pub enum EvalError<R = rdf_types::Term> {
 	#[error("ambiguous IRI representation")]
 	AmbiguousIriRepresentation(IriBuf, IriBuf),
 
-	#[error("no matching IRI representation")]
-	NoMatchingIriRepresentation,
-
 	#[error("ambiguous literal representation")]
 	AmbiguousLiteralRepresentation(String, String),
-
-	#[error("no matching literal representation")]
-	NoMatchingLiteralRepresentation,
 }
 
 pub trait Eval<R: Clone> {
@@ -104,7 +110,7 @@ impl<R: Ord + Clone> Eval<R> for Expr<R> {
 		let scope = self
 			.bound
 			.find_one(dataset, scope)?
-			.ok_or(EvalError::Empty)?;
+			.ok_or(EvalError::MissingData(MissingData::Empty))?;
 
 		self.inner
 			.eval_typed(registry, rdf, dataset, &scope, self.type_)
