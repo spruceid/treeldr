@@ -184,8 +184,8 @@ impl<R> Value<R> {
 				})
 			}
 			(TypeDesc::Enum(e), mut value) => {
-				for (name, &variant) in &e.variants {
-					match std::mem::take(&mut value).into_typed(registry, variant) {
+				for (name, variant) in &e.variants {
+					match std::mem::take(&mut value).into_typed(registry, variant.type_) {
 						Ok(typed_value) => {
 							return Ok(TypedValue {
 								type_: ty_ref.clone(),

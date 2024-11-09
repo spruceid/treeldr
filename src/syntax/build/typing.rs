@@ -429,6 +429,7 @@ impl<R: Clone> TypePattern<R> {
 						(
 							realize_var(key),
 							ty::Field {
+								attributes: field.attributes.clone(),
 								type_: realize_var(&field.type_),
 								required: field.required,
 							},
@@ -440,7 +441,13 @@ impl<R: Clone> TypePattern<R> {
 				variants: ty
 					.variants
 					.iter()
-					.map(|(name, t)| (name.clone(), realize_var(t)))
+					.map(|(name, v)| {
+						let variant = ty::Variant {
+							attributes: v.attributes.clone(),
+							type_: realize_var(&v.type_),
+						};
+						(name.clone(), variant)
+					})
 					.collect(),
 			}),
 		};

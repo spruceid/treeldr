@@ -14,7 +14,7 @@ use crate::{
 	expr::{self, Bound, Expr, InnerExpr, ListComponents},
 	function::{self, FunctionRef, Signature},
 	rdf::RdfContextMut,
-	ty::{self, TypeDesc},
+	ty::{self, TypeDesc, Variant},
 	value::{Number, NumberParseError, TypedMap, TypedValue, TypedValueDesc, TypedValueInnerDesc},
 	Attribute, Attributes, DatasetPattern, Environment, Function, Item, ItemPath, ItemPathBuf,
 	ItemRef, Literal, Module, Registry, TermPattern, Type, TypeRef, Value,
@@ -799,7 +799,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListTypeExpr {
 }
 
 impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapTypeExpr {
-	type Target = ty::Struct<TypeVariableRef>;
+	type Target = ty::Struct<R, TypeVariableRef>;
 
 	fn build<D>(
 		&'ast self,
@@ -817,6 +817,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapTypeExpr {
 					Ok((
 						f.key.build(context, scope)?,
 						ty::Field {
+							attributes: f.metadata.build(context, scope)?,
 							type_: f.value.build(context, scope)?,
 							required: self.optional.is_none(),
 						},
@@ -828,7 +829,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapTypeExpr {
 }
 
 impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::EnumTypeExpr {
-	type Target = ty::Enum<TypeVariableRef>;
+	type Target = ty::Enum<R, TypeVariableRef>;
 
 	fn build<D>(
 		&'ast self,
@@ -842,7 +843,14 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::EnumTypeExpr {
 			variants: self
 				.variants
 				.iter()
-				.map(|v| Ok((v.ident.as_str().to_owned(), v.type_.build(context, scope)?)))
+				.map(|v| {
+					let variant = Variant {
+						attributes: v.metadata.build(context, scope)?,
+						type_: v.type_.build(context, scope)?,
+					};
+
+					Ok((v.ident.as_str().to_owned(), variant))
+				})
 				.collect::<Result<_, _>>()?,
 		})
 	}
@@ -1257,7 +1265,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListExpr {
 }
 
 impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
-	type Target = (expr::Map<R, TypeVariableRef>, ty::Struct<TypeVariableRef>);
+	type Target = (
+		expr::Map<R, TypeVariableRef>,
+		ty::Struct<R, TypeVariableRef>,
+	);
 
 	fn build<D>(
 		&'ast self,
@@ -1277,6 +1288,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
 			fields.insert(
 				key.type_,
 				ty::Field {
+					attributes: entry.metadata.build(context, scope)?,
 					type_: value.type_,
 					required: entry.optional.is_none(),
 				},
@@ -1402,7 +1414,7 @@ impl ast::ConstMap {
 impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
 	type Target = (
 		TypedMap<R, TypedValue<R, TypeVariableRef>, TypeVariableRef>,
-		ty::Struct<TypeVariableRef>,
+		ty::Struct<R, TypeVariableRef>,
 	);
 
 	fn build<D>(
@@ -1423,6 +1435,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
 			fields.insert(
 				key.type_,
 				ty::Field {
+					attributes: Attributes::new(),
 					type_: value.type_,
 					required: true,
 				},
@@ -1438,7 +1451,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
 }
 
 impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MatchExpr {
-	type Target = (expr::Match<R, TypeVariableRef>, ty::Enum<TypeVariableRef>);
+	type Target = (
+		expr::Match<R, TypeVariableRef>,
+		ty::Enum<R, TypeVariableRef>,
+	);
 
 	fn build<D>(
 		&'ast self,
@@ -1459,8 +1475,11 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MatchExpr {
 
 		for case in &self.cases {
 			let value = case.value.build(context, scope)?;
-			t.variants
-				.insert(case.name.as_str().to_owned(), value.type_);
+			let variant = Variant {
+				attributes: case.metadata.build(context, scope)?,
+				type_: value.type_,
+			};
+			t.variants.insert(case.name.as_str().to_owned(), variant);
 			e.cases.insert(case.name.as_str().to_owned(), value);
 			e.order.push(case.name.as_str().to_owned());
 		}

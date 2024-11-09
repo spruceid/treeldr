@@ -306,6 +306,7 @@ pub struct MatchExpr {
 
 #[derive(Debug, ll1::Parse)]
 pub struct MatchCase {
+	pub metadata: Metadata,
 	pub name: Ident,
 	pub value: Expr,
 }

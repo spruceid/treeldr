@@ -126,7 +126,7 @@ impl<R, T> Type<R, T> {
 		self.desc.as_list()
 	}
 
-	pub fn as_struct(&self) -> Option<&Struct<T>> {
+	pub fn as_struct(&self) -> Option<&Struct<R, T>> {
 		self.desc.as_struct()
 	}
 
@@ -144,6 +144,18 @@ impl<R, T> From<TypeDesc<R, T>> for Type<R, T> {
 	}
 }
 
+impl<R: Clone + PartialEq> Attributes<R> {
+	pub fn unify_with(&self, other: &Self) -> Result<Self, TypeUnificationError> {
+		if self.is_empty() {
+			Ok(other.clone())
+		} else if other.is_empty() || self == other {
+			Ok(self.clone())
+		} else {
+			Err(TypeUnificationError)
+		}
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypeDesc<R, T = TypeRef> {
 	/// RDF resource.
@@ -153,10 +165,10 @@ pub enum TypeDesc<R, T = TypeRef> {
 	Literal(LiteralType),
 
 	/// Struct.
-	Struct(Struct<T>),
+	Struct(Struct<R, T>),
 
 	/// Enum.
-	Enum(Enum<T>),
+	Enum(Enum<R, T>),
 
 	/// List.
 	List(List<T>),
@@ -181,7 +193,7 @@ impl<R, T> TypeDesc<R, T> {
 		}
 	}
 
-	pub fn as_struct(&self) -> Option<&Struct<T>> {
+	pub fn as_struct(&self) -> Option<&Struct<R, T>> {
 		match self {
 			Self::Struct(m) => Some(m),
 			_ => None,
@@ -207,8 +219,8 @@ impl<R, T> TypeDesc<R, T> {
 				}
 			}
 			Self::Enum(ty) => {
-				for c_ref in ty.variants.values() {
-					f(c_ref, false);
+				for variant in ty.variants.values() {
+					f(&variant.type_, false);
 				}
 			}
 		}
@@ -302,11 +314,15 @@ impl<R: Clone + Ord, T> TypeDesc<R, T> {
 
 						match b_entry {
 							Some((b_key, b_field)) => {
+								let attributes =
+									a_field.attributes.unify_with(&b_field.attributes)?;
+
 								if a_field.required == b_field.required {
 									let key = unifier.unify(a_key, b_key);
 									fields.insert(
 										key,
 										Field {
+											attributes,
 											type_: unifier.unify(&a_field.type_, &b_field.type_),
 											required: a_field.required,
 										},
@@ -328,10 +344,18 @@ impl<R: Clone + Ord, T> TypeDesc<R, T> {
 				if a.variants.len() == b.variants.len() {
 					let mut variants = BTreeMap::new();
 
-					for (key, a_type) in &a.variants {
+					for (key, a_variant) in &a.variants {
 						match b.variants.get(key) {
-							Some(b_type) => {
-								variants.insert(key.clone(), unifier.unify(a_type, b_type));
+							Some(b_variant) => {
+								variants.insert(
+									key.clone(),
+									Variant {
+										attributes: a_variant
+											.attributes
+											.unify_with(&b_variant.attributes)?,
+										type_: unifier.unify(&a_variant.type_, &b_variant.type_),
+									},
+								);
 							}
 							None => return Err(TypeUnificationError),
 						}
@@ -484,17 +508,17 @@ impl<R: fmt::Display> DisplaySignature<R> for Resource<R> {
 
 /// Struct type.
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Struct<T = TypeRef> {
+pub struct Struct<R, T = TypeRef> {
 	/// Fields definitions.
 	///
 	/// # Soundness
 	///
 	/// It is a logical error for two keys to have a non-null intersection.
-	pub fields: BTreeMap<T, Field<T>>,
+	pub fields: BTreeMap<T, Field<R, T>>,
 }
 
-impl Struct<TypeRef> {
-	pub fn subtype_cmp<R: Ord>(&self, registry: &Registry<R>, other: &Self) -> Option<Ordering> {
+impl<R: Ord> Struct<R, TypeRef> {
+	pub fn subtype_cmp(&self, registry: &Registry<R>, other: &Self) -> Option<Ordering> {
 		if self.is_subtype_of(registry, other) {
 			if other.is_subtype_of(registry, self) {
 				Some(Ordering::Equal)
@@ -508,7 +532,7 @@ impl Struct<TypeRef> {
 		}
 	}
 
-	pub fn is_subtype_of<R: Ord>(&self, registry: &Registry<R>, other: &Self) -> bool {
+	pub fn is_subtype_of(&self, registry: &Registry<R>, other: &Self) -> bool {
 		let mut fields: Vec<_> = other.fields.iter().collect();
 
 		for (key, field) in &self.fields {
@@ -535,11 +559,7 @@ impl Struct<TypeRef> {
 		fields.into_iter().all(|(_, field)| !field.required)
 	}
 
-	pub fn contains<R: Ord>(
-		&self,
-		registry: &Registry<R>,
-		map: &BTreeMap<Value<R>, Value<R>>,
-	) -> bool {
+	pub fn contains(&self, registry: &Registry<R>, map: &BTreeMap<Value<R>, Value<R>>) -> bool {
 		let mut fields: Vec<_> = self.fields.iter().collect();
 
 		for (key, _) in map {
@@ -560,7 +580,7 @@ impl Struct<TypeRef> {
 	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for Struct {
+impl<R: fmt::Display> DisplaySignature<R> for Struct<R> {
 	fn fmt_signature(
 		&self,
 		context: &crate::display::DisplayContext<R>,
@@ -591,35 +611,32 @@ impl<R: fmt::Display> DisplaySignature<R> for Struct {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Field<T> {
+pub struct Field<R, T> {
+	pub attributes: Attributes<R>,
 	pub type_: T,
 	pub required: bool,
 }
 
-impl Field<TypeRef> {
-	pub fn is_subfield_of<R: Ord>(&self, registry: &Registry<R>, other: &Self) -> bool {
+impl<R: Ord> Field<R, TypeRef> {
+	pub fn is_subfield_of(&self, registry: &Registry<R>, other: &Self) -> bool {
 		(!other.required || self.required) && self.type_.is_subtype_of(registry, other.type_)
 	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Enum<T = TypeRef> {
-	pub variants: BTreeMap<String, T>,
+pub struct Enum<R, T = TypeRef> {
+	pub variants: BTreeMap<String, Variant<R, T>>,
 }
 
-impl Enum<TypeRef> {
-	pub fn subtype_cmp<R: Ord>(
-		&self,
-		registry: &Registry<R>,
-		other: &TypeDesc<R>,
-	) -> Option<Ordering> {
+impl<R: Ord> Enum<R, TypeRef> {
+	pub fn subtype_cmp(&self, registry: &Registry<R>, other: &TypeDesc<R>) -> Option<Ordering> {
 		match other {
 			TypeDesc::Enum(other) => {
 				let mut cmp = Ordering::Equal;
 
-				for &a in self.variants.values() {
-					for &b in other.variants.values() {
-						cmp = refine_cmp(cmp, a.subtype_cmp(registry, b))?
+				for a in self.variants.values() {
+					for b in other.variants.values() {
+						cmp = refine_cmp(cmp, a.type_.subtype_cmp(registry, b.type_))?
 					}
 				}
 
@@ -629,8 +646,8 @@ impl Enum<TypeRef> {
 				let mut cmp = None;
 				let mut leq = true;
 
-				for (_, &ty_ref) in &self.variants {
-					let ty: &Type<R> = registry.get_type(ty_ref)?;
+				for (_, variant) in &self.variants {
+					let ty: &Type<R> = registry.get_type(variant.type_)?;
 					match (cmp, ty.desc.subtype_cmp(registry, other)) {
 						(
 							None | Some(Ordering::Greater | Ordering::Equal),
@@ -656,14 +673,14 @@ impl Enum<TypeRef> {
 		}
 	}
 
-	pub fn contains<R: Ord>(&self, registry: &Registry<R>, value: &Value<R>) -> bool {
+	pub fn contains(&self, registry: &Registry<R>, value: &Value<R>) -> bool {
 		self.variants
 			.values()
-			.any(|ty| ty.contains(registry, value))
+			.any(|variant| variant.type_.contains(registry, value))
 	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for Enum {
+impl<R: fmt::Display> DisplaySignature<R> for Enum<R> {
 	fn fmt_signature(
 		&self,
 		context: &crate::display::DisplayContext<R>,
@@ -675,12 +692,18 @@ impl<R: fmt::Display> DisplaySignature<R> for Enum {
 			write!(
 				f,
 				"{name}: {}",
-				variant.display_signature_with(context.inner())
+				variant.type_.display_signature_with(context.inner())
 			)?;
 		}
 
 		write!(f, "}}")
 	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Variant<R, T = TypeRef> {
+	pub attributes: Attributes<R>,
+	pub type_: T,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
