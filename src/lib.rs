@@ -28,6 +28,7 @@ use display::DisplaySignature;
 use educe::Educe;
 pub use function::Function;
 use function::FunctionRef;
+use iref::{Iri, IriBuf};
 pub use layout::Layout;
 pub use matching::Matching;
 pub use pattern::{DatasetPattern, Graph, TermPattern};
@@ -126,6 +127,7 @@ impl<R: fmt::Display> DisplaySignature<R> for Module<R> {
 	) -> fmt::Result {
 		for (name, item) in &self.items {
 			match item {
+				Item::Prefix(item) => writeln!(f, "{}prefix = <{item}>", context.indent)?,
 				Item::Type(item) => writeln!(
 					f,
 					"{}type {} = {}",
@@ -177,6 +179,7 @@ pub enum CompileError {
 
 #[derive(Debug, Clone)]
 pub enum Item<R, T = TypeRef> {
+	Prefix(IriBuf),
 	Type(T),
 	Function(FunctionRef),
 	Module(Module<R, T>),
@@ -188,6 +191,7 @@ impl<R, T> Item<R, T> {
 		T: Clone,
 	{
 		match self {
+			Self::Prefix(i) => ItemRef::Prefix(i),
 			Self::Type(t) => ItemRef::Type(t.clone()),
 			Self::Function(f) => ItemRef::Function(*f),
 			Self::Module(m) => ItemRef::Module(m),
@@ -200,6 +204,7 @@ impl<R, T> Item<R, T> {
 
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Item<R, U> {
 		match self {
+			Self::Prefix(i) => Item::Prefix(i),
 			Self::Type(t) => Item::Type(f(t)),
 			Self::Function(f) => Item::Function(f),
 			Self::Module(m) => Item::Module(m.map_types_ref_mut(f)),
@@ -209,6 +214,7 @@ impl<R, T> Item<R, T> {
 
 #[derive(Debug, Clone, Copy)]
 pub enum ItemRef<'a, R, T = TypeRef> {
+	Prefix(&'a Iri),
 	Type(T),
 	Function(FunctionRef),
 	Module(&'a Module<R, T>),

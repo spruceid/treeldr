@@ -144,6 +144,7 @@ impl<'a, 'ast, R> BuildItemRef<'a, 'ast, R> {
 impl<'a, 'ast, R> From<ItemRef<'a, R>> for BuildItemRef<'a, 'ast, R> {
 	fn from(value: ItemRef<'a, R>) -> Self {
 		match value {
+			ItemRef::Prefix(i) => BuildItemRef::Prefix(i),
 			ItemRef::Type(t) => BuildItemRef::Type(t),
 			ItemRef::Function(f) => BuildItemRef::Function(f),
 			ItemRef::Module(m) => BuildItemRef::Module(m),
@@ -570,7 +571,9 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for BuildModule<'ast> {
 
 		for (name, item) in &self.items {
 			match item {
-				BuildItem::Prefix(_) => (),
+				BuildItem::Prefix(i) => {
+					result.insert(name, Item::Prefix(i.clone()));
+				}
 				BuildItem::Type(x, ast, metadata) => {
 					let attributes = metadata.build(context, scope)?;
 					let y = ast
