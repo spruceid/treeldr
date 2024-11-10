@@ -45,6 +45,9 @@ pub enum TokenKind {
 	#[token("list")]
 	ListKeyword,
 
+	#[token("super")]
+	Super,
+
 	#[token("as")]
 	As,
 
@@ -153,8 +156,14 @@ pub struct ModuleDefinition {
 
 #[derive(Debug, ll1::Parse)]
 pub struct ItemPath {
-	pub first: Ident,
+	pub first: ItemPathSegment,
 	pub rest: Option<ItemPathRest>,
+}
+
+#[derive(Debug, ll1::Parse)]
+pub enum ItemPathSegment {
+	Super(Super),
+	Ident(Ident),
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -168,7 +177,7 @@ pub struct PrefixDefinition {
 	pub prefix: Prefix,
 	pub ident: Ident,
 	pub eq: Equal,
-	pub value: Iri,
+	pub value: FullIri,
 }
 
 #[derive(Debug, ll1::Parse)]

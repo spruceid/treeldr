@@ -1,0 +1,8 @@
+prefix xsd = <http://www.w3.org/2001/XMLSchema#>
+prefix ex = <http://example.org/>
+
+let (_ input) = [
+	(bool_of (get ex:prop1 input)),
+	(int_of (get ex:prop2 input)),
+	(string_of (get ex:prop2 input))
+]

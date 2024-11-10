@@ -83,6 +83,16 @@ pub struct Function<R, T = TypeRef> {
 	pub body: Body<R, T>,
 }
 
+impl<R: Ord, T> Function<R, T> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Function<R, U> {
+		Function {
+			attributes: self.attributes,
+			signature: self.signature.map_types(&mut f),
+			body: self.body.map_types(f),
+		}
+	}
+}
+
 impl<R> Function<R> {
 	pub fn built_in(b: BuiltInFunction, ty: impl Fn(BuiltInType) -> TypeRef) -> Self {
 		Self {

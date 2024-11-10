@@ -1,6 +1,8 @@
 use educe::Educe;
 
-use crate::{function::FunctionRef, ty::TypeDefinition, Function, Type, TypeRef};
+use crate::{
+	function::FunctionRef, ty::TypeDefinition, Function, Module, ModuleRef, Type, TypeRef,
+};
 
 /// Registry.
 #[derive(Debug, Educe)]
@@ -44,6 +46,11 @@ impl<R> Registry<R> {
 			.get_function(function_ref.index)
 	}
 
+	pub fn get_module(&self, module_ref: ModuleRef) -> Option<&Module<R>> {
+		self.get_namespace(module_ref.namespace)?
+			.get_module(module_ref.index)
+	}
+
 	pub fn insert_type(&mut self, namespace: u32, type_: impl Into<Type<R>>) -> TypeRef {
 		let index = self
 			.get_namespace_mut(namespace)
@@ -59,6 +66,20 @@ impl<R> Registry<R> {
 			.insert_function(function);
 		FunctionRef::new(namespace, index)
 	}
+
+	pub fn insert_module(&mut self, namespace: u32, module: Module<R>) -> ModuleRef {
+		let index = self
+			.get_namespace_mut(namespace)
+			.unwrap()
+			.insert_module(module);
+		ModuleRef::new(namespace, index)
+	}
+
+	pub fn add_prelude(&mut self) -> ModuleRef {
+		let ns = self.create_namespace();
+		let prelude = Module::prelude(self);
+		self.insert_module(ns, prelude)
+	}
 }
 
 #[derive(Debug, Educe)]
@@ -69,6 +90,9 @@ pub struct Namespace<R> {
 
 	/// Functions.
 	functions: Vec<Function<R>>,
+
+	/// Modules.
+	modules: Vec<Module<R>>,
 }
 
 impl<R> Namespace<R> {
@@ -80,6 +104,10 @@ impl<R> Namespace<R> {
 		self.functions.get(i as usize)
 	}
 
+	pub fn get_module(&self, i: u32) -> Option<&Module<R>> {
+		self.modules.get(i as usize)
+	}
+
 	pub fn insert_type(&mut self, type_: Type<R>) -> u32 {
 		let i = self.types.len() as u32;
 		self.types.push(TypeDefinition::new(type_));
@@ -89,6 +117,12 @@ impl<R> Namespace<R> {
 	pub fn insert_function(&mut self, function: Function<R>) -> u32 {
 		let i = self.functions.len() as u32;
 		self.functions.push(function);
+		i
+	}
+
+	pub fn insert_module(&mut self, module: Module<R>) -> u32 {
+		let i = self.modules.len() as u32;
+		self.modules.push(module);
 		i
 	}
 }

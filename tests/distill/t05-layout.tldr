@@ -1,0 +1,1 @@
+let (_ values) = [list item in values; (string_of item)]

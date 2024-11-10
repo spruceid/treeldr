@@ -31,6 +31,8 @@ pub enum BuiltInType {
 	Unit,
 	Boolean,
 	Number,
+	Int,
+	Uint,
 	ByteString,
 	TextString,
 }
@@ -51,6 +53,14 @@ impl LiteralType {
 
 	pub fn number() -> Self {
 		Self::Number(Number::default())
+	}
+
+	pub fn int() -> Self {
+		Self::Number(Number::int())
+	}
+
+	pub fn uint() -> Self {
+		Self::Number(Number::uint())
 	}
 
 	pub fn byte_string() -> Self {
@@ -976,6 +986,14 @@ impl Number {
 			min: MinBound::Included(value.clone()),
 			max: MaxBound::Included(value),
 		}
+	}
+
+	pub fn int() -> Self {
+		todo!()
+	}
+
+	pub fn uint() -> Self {
+		todo!()
 	}
 
 	pub fn as_singleton(&self) -> Option<&value::Number> {

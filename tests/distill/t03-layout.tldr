@@ -1,0 +1,31 @@
+prefix xsd = <http://www.w3.org/2001/XMLSchema#>
+prefix schema = <https://schema.org/>
+prefix ex = <https://example.org/#>
+
+let (_ receipt) = {
+	"date" = (string_of (get ex:date receipt)),
+	"bill" = begin {
+		let bill = (get ex:bill receipt);
+		{
+			"milk1L": (by_unit (get ex:milk1L)),
+			"beef": (by_volume (get ex:beef))
+		}
+	},
+	"pointOfSale" = begin {
+		let point_of_sale = (get ex:pointOfSale receipt);
+		{
+			"address": (typed_string_of schema:Text (get schema:address point_of_sale)),
+			"till": (typed_number_of ex:nonNegativeInteger (get ex:till point_of_sale))
+		}
+	}
+}
+
+let (by_unit item) = {
+	"unitPrice": (typed_number_of xsd:decimal (get ex:unitPrice item)),
+	"units": (typed_number_of xsd:nonNegativeInteger (get ex:units item))
+}
+
+let (by_volume item) = {
+	"volumePrice": (typed_number_of xsd:decimal (get ex:volumePrice item)),
+	"volume": (typed_number_of xsd:decimal (get ex:volume item))
+}

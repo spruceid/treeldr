@@ -1,7 +1,0 @@
-{
-	"type": "unit",
-	"const": "Hello World!",
-	"dataset": [
-		["_:self", "http://example.org/prop", "http://example.org/HelloWorld"]
-	]
-}

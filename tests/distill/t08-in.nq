@@ -1,3 +1,0 @@
-_:subject <http://example.org/prop> "foo" .
-_:subject <http://example.org/prop> "bar" .
-_:subject <http://example.org/prop> "baz" .

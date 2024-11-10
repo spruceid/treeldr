@@ -1,0 +1,6 @@
+prefix schema = <https://schema.org/>
+
+let (_ subject) = {
+	"name": let name where { subject schema:name name }; (string_of name),
+	"email"?: let email where { subject schema:email email }; (string_of email)
+}

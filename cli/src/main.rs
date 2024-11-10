@@ -7,18 +7,18 @@ use codespan_reporting::{
 	},
 };
 use std::{
-	borrow::Cow,
 	fs,
 	io::{self, BufReader},
 	path::PathBuf,
 	process::ExitCode,
 };
 use treeldr::{
+	build::TypeResolutionError,
 	display::DisplaySignature,
 	rdf::{dataset::BTreeDataset, Rdf},
-	syntax::{build::TypeResolutionError, Spanned},
+	syntax::Spanned,
 	value::ValueParseError,
-	CompileError, Environment, ItemRef, Module, Registry, Value,
+	CompileError, Environment, ItemRef, ModuleRef, Registry, Value,
 };
 
 mod format;
@@ -85,7 +85,8 @@ fn main() -> ExitCode {
 
 	let mut rdf = Rdf::default();
 	let mut registry = Registry::new();
-	let env = Environment::new(Some(Cow::Owned(Module::prelude(&mut registry))));
+	let prelude_ref = registry.add_prelude();
+	let env = Environment::new(Some(prelude_ref));
 
 	match args.run(&mut rdf, &mut registry, &env, &mut files) {
 		Ok(()) => ExitCode::SUCCESS,
@@ -110,7 +111,7 @@ impl Args {
 		let content = fs::read_to_string(&self.input).map_err(Error::IO)?;
 		let file_id = files.add(self.input.to_string_lossy().into_owned(), content);
 
-		let module = treeldr::Module::compile(
+		let module_ref = treeldr::Module::compile(
 			rdf,
 			registry,
 			env,
@@ -119,8 +120,9 @@ impl Args {
 		.map_err(|e| Error::Compile(file_id, e))?;
 
 		match self.command {
-			Some(command) => command.run(rdf, registry, &module),
+			Some(command) => command.run(rdf, registry, module_ref),
 			None => {
+				let module = registry.get_module(module_ref).unwrap();
 				println!("{}", module.display_signature(registry));
 				Ok(())
 			}
@@ -129,7 +131,7 @@ impl Args {
 }
 
 impl Command {
-	fn run(self, rdf: &mut Rdf, registry: &Registry, module: &Module) -> Result<(), Error> {
+	fn run(self, rdf: &mut Rdf, registry: &Registry, module_ref: ModuleRef) -> Result<(), Error> {
 		match self {
 			Self::Hydrate {
 				input_format,
@@ -137,6 +139,8 @@ impl Command {
 				args,
 				pretty,
 			} => {
+				let module = registry.get_module(module_ref).unwrap();
+
 				let name = "_";
 
 				let f_ref = match module.get_by_name(name) {
@@ -167,6 +171,8 @@ impl Command {
 				input_format,
 				output_format,
 			} => {
+				let module = registry.get_module(module_ref).unwrap();
+
 				let name = "_";
 
 				let f_ref = match module.get_by_name(name) {
