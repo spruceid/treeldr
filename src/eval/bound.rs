@@ -6,28 +6,71 @@ use rdf_types::{
 };
 
 use crate::{
-	expr::Bound,
+	expr::Bindings,
 	pattern::Substitution,
+	rdf::RdfContext,
 	utils::{QuadsExt, QuadsWithDefaultGraph},
-	Matching, TermPattern, Value,
+	Matching, Registry, TermPattern, Value,
 };
 
-use super::{EvalError, RdfContextMut, ReverseScope, Scope, ScopeTypes};
+use super::{Eval, EvalError, RdfContextMut, Scope, ScopeTypes, ScopeValues};
 
-impl<R: Clone + PartialEq> Bound<R> {
-	pub fn find_one<'s>(
+impl<R: Clone + Ord> Bindings<R> {
+	pub fn eval<'s>(
 		&'s self,
+		registry: &Registry<R>,
+		rdf: &impl RdfContext<R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		scope: &'s Scope<'s, R>,
 	) -> Result<Option<Cow<'s, Scope<'s, R>>>, EvalError<R>> {
-		self.find_one_with(dataset, scope, |_| None)
+		self.find_one_with(dataset, scope, |i| {
+			self.intro[i as usize]
+				.assignment
+				.as_ref()
+				.map(|e| e.eval(registry, rdf, dataset, scope))
+				.transpose()
+		})
 	}
 
+	pub fn eval_inverse<C, D>(
+		&self,
+		registry: &Registry<R>,
+		rdf: &mut C,
+		dataset: &mut D,
+		scope: &mut Scope<R>,
+		f: impl FnOnce(&mut C, &mut D, &mut Scope<R>) -> Result<(), EvalError<R>>,
+	) -> Result<(), EvalError<R>>
+	where
+		C: RdfContextMut<R>,
+		D: DatasetMut<Resource = R>,
+	{
+		let values = scope.begin_mut(
+			rdf,
+			dataset,
+			None,
+			ScopeTypes::Bindings(&self.intro),
+			move |rdf, dataset, scope| {
+				scope.extend_dataset(self.dataset.iter().map(Quad::into_cloned));
+				f(rdf, dataset, scope)
+			},
+		)?;
+
+		for (i, value) in values.iter().enumerate() {
+			if let Some(e) = &self.intro[i].assignment {
+				e.eval_inverse(registry, rdf, dataset, scope, value)?;
+			}
+		}
+
+		Ok(())
+	}
+}
+
+impl<R: Clone + PartialEq> Bindings<R> {
 	pub fn find_one_with<'s>(
 		&'s self,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		scope: &'s Scope<'s, R>,
-		f: impl Fn(u32) -> Option<R>,
+		f: impl Fn(u32) -> Result<Option<Value<R>>, EvalError<R>>,
 	) -> Result<Option<Cow<'s, Scope<'s, R>>>, EvalError<R>> {
 		if self.intro.is_empty() {
 			Ok(Some(Cow::Borrowed(scope)))
@@ -35,7 +78,7 @@ impl<R: Clone + PartialEq> Bound<R> {
 			let mut matching = Matching::new(
 				dataset,
 				scope,
-				Substitution::new(self.intro.len() as u32, |i| f(i).map(Value::Resource)),
+				Substitution::try_new(self.intro.len() as u32, f)?,
 				self.dataset.quads().with_default_graph(scope.graph()),
 			);
 
@@ -44,40 +87,16 @@ impl<R: Clone + PartialEq> Bound<R> {
 					if matching.next().is_some() {
 						Err(EvalError::Ambiguity)
 					} else {
-						Ok(Some(Cow::Owned(Scope::new(
-							Some(scope),
+						Ok(Some(Cow::Owned(scope.begin(
 							None,
-							ScopeTypes::Slice(&self.intro),
-							Cow::Owned(values),
+							ScopeTypes::Bindings(&self.intro),
+							ScopeValues::ConstOwned(values),
 						))))
 					}
 				}
 				None => Ok(None),
 			}
 		}
-	}
-
-	pub fn inverse_once<C, D>(
-		&self,
-		rdf: &mut C,
-		dataset: &mut D,
-		scope: &mut ReverseScope<R>,
-		f: impl FnOnce(&mut C, &mut D, &mut ReverseScope<R>) -> Result<(), EvalError<R>>,
-	) -> Result<Vec<Value<R>>, EvalError<R>>
-	where
-		C: RdfContextMut<R>,
-		D: DatasetMut<Resource = R>,
-	{
-		scope.begin(
-			rdf,
-			dataset,
-			None,
-			&self.intro,
-			move |rdf, dataset, scope| {
-				scope.extend_dataset(self.dataset.iter().map(Quad::into_cloned));
-				f(rdf, dataset, scope)
-			},
-		)
 	}
 
 	pub fn find_all<'a, D>(
@@ -94,6 +113,31 @@ impl<R: Clone + PartialEq> Bound<R> {
 			Substitution::new(self.intro.len() as u32, |_| None),
 			self.dataset.quads().with_default_graph(scope.graph()),
 		)
+	}
+
+	pub fn find_one_inverse<C, D>(
+		&self,
+		rdf: &mut C,
+		dataset: &mut D,
+		scope: &mut Scope<R>,
+		f: impl FnOnce(&mut C, &mut D, &mut Scope<R>) -> Result<(), EvalError<R>>,
+	) -> Result<Vec<Value<R>>, EvalError<R>>
+	where
+		C: RdfContextMut<R>,
+		D: DatasetMut<Resource = R>,
+	{
+		let values = scope.begin_mut(
+			rdf,
+			dataset,
+			None,
+			ScopeTypes::Bindings(&self.intro),
+			move |rdf, dataset, scope| {
+				scope.extend_dataset(self.dataset.iter().map(Quad::into_cloned));
+				f(rdf, dataset, scope)
+			},
+		);
+
+		values
 	}
 }
 

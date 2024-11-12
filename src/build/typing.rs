@@ -204,7 +204,7 @@ impl<R> TypeVariables<R> {
 			.collect();
 
 		for (x, value) in self.list.iter().enumerate() {
-			for y in self.subtype_relation.supertypes_of(x) {
+			for y in self.subtype_relation.subtypes_of(x) {
 				groups.merge(x, y, |mut a, b| {
 					a.extend(b);
 					a
@@ -281,15 +281,15 @@ impl<R> TypeVariables<R> {
 		}
 
 		// Resolve sub-typing relation.
-		let super_types = self.subtype_relation.resolve(|x| result[&x]);
+		let subtypes_types = self.subtype_relation.resolve(|x| result[&x]);
 
 		// Check sub-type constraints.
-		for (&a, a_super_types) in &super_types {
-			for &b in a_super_types {
-				if !a.subtype_cmp(registry, b).is_some_and(Ordering::is_le) {
+		for (&a, a_subtypes) in &subtypes_types {
+			for &b in a_subtypes {
+				if !b.subtype_cmp(registry, a).is_some_and(Ordering::is_le) {
 					return Err(TypeResolutionError::Subtyping {
-						sub_type: a,
-						super_type: b,
+						sub_type: b,
+						super_type: a,
 					});
 				}
 			}
@@ -561,7 +561,7 @@ impl SubtypeRelation {
 		self.0.get_mut(&b).unwrap().insert(a)
 	}
 
-	fn supertypes_of(&self, b: TypeVariableRef) -> impl '_ + Iterator<Item = TypeVariableRef> {
+	fn subtypes_of(&self, b: TypeVariableRef) -> impl '_ + Iterator<Item = TypeVariableRef> {
 		self.0[&b].iter().copied()
 	}
 

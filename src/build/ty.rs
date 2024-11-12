@@ -1,5 +1,7 @@
 use std::hash::Hash;
 
+use ll1::Spanned;
+
 use crate::{
 	rdf::RdfContextMut,
 	syntax::ast,
@@ -29,6 +31,7 @@ impl<'ast> TypeDefinition<'ast> {
 		let scope = Scope {
 			module: Some(self.module),
 			expr: ExprScope::new(None),
+			const_: false,
 		};
 
 		let attributes = self.metadata.build(context, namespace, &scope)?;
@@ -72,15 +75,15 @@ impl ast::TypeExpr {
 		D: RdfContextMut<R>,
 	{
 		match self {
-			Self::Path(path) => {
-				let path = path.build(context, namespace, scope)?;
+			Self::Path(path_ast) => {
+				let path = path_ast.build(context, namespace, scope)?;
 
 				scope
 					.get(context, namespace, &path)
-					.ok_or_else(|| Error::UnknownType(path.clone()))?
+					.ok_or_else(|| Error::UnknownType(path_ast.span(), path.clone()))?
 					.into_owned()
 					.import_type(context.registry, &mut context.type_variables)
-					.ok_or_else(|| Error::NotAType(path.clone()))
+					.ok_or_else(|| Error::NotAType(path_ast.span(), path.clone()))
 			}
 			Self::Literal(expr) => {
 				let (_, ty) = expr.build(context, namespace, scope)?;

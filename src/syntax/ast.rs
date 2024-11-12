@@ -253,16 +253,9 @@ pub struct ConstEntry {
 
 #[derive(Debug, ll1::Parse)]
 pub enum Expr {
-	/// ```
-	/// let x where {}; foo
-	/// ```
-	Let(Let, Bindings, Semicolon, InnerExpr),
-	Inner(InnerExpr),
-}
-
-#[derive(Debug, ll1::Parse)]
-pub enum InnerExpr {
+	Let(Let, Bindings, Semicolon, Box<Self>),
 	Var(Ident),
+	Resource(Iri),
 	Literal(LiteralExpr),
 	List(ListExpr),
 	Map(MapExpr),
@@ -330,8 +323,20 @@ pub struct CallExpr {
 
 #[derive(Debug, ll1::Parse)]
 pub struct Bindings {
-	pub variables: List<Ident>,
+	pub variables: List<Binding>,
 	pub bound: Option<WhereBound>,
+}
+
+#[derive(Debug, ll1::Parse)]
+pub struct Binding {
+	pub ident: Ident,
+	pub assignment: Option<Assignment>,
+}
+
+#[derive(Debug, ll1::Parse)]
+pub struct Assignment {
+	pub eq: Equal,
+	pub value: Expr,
 }
 
 #[derive(Debug, ll1::Parse)]

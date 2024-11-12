@@ -1,19 +1,44 @@
-use rdf_types::{dataset::DatasetMut, Quad};
-
 use super::EvalError;
-use crate::{pattern::Substitution, rdf::RdfContextMut, TermPattern, TypeRef, Value};
-use std::borrow::Cow;
+use crate::{
+	expr::Binding,
+	pattern::Substitution,
+	rdf::{DebugSubstitution, RdfContext, RdfContextMut},
+	DatasetPattern, TermPattern, TypeRef, Value,
+};
+use rdf_types::{
+	dataset::{BTreeDataset, DatasetMut},
+	Quad, Term,
+};
 
 #[derive(Clone, Copy)]
-pub enum ScopeTypes<'a> {
+pub enum ScopeTypes<'a, R> {
 	Slice(&'a [TypeRef]),
+	TwoSlices(&'a [TypeRef], &'a [TypeRef]),
+	Bindings(&'a [Binding<R>]),
 	Repeat(TypeRef, u32),
 }
 
-impl<'a> ScopeTypes<'a> {
+impl<'a, R> ScopeTypes<'a, R> {
+	pub fn len(&self) -> u32 {
+		match self {
+			Self::Slice(s) => s.len() as u32,
+			Self::TwoSlices(a, b) => (a.len() + b.len()) as u32,
+			Self::Bindings(b) => b.len() as u32,
+			Self::Repeat(_, len) => *len,
+		}
+	}
+
 	pub fn get(&self, i: u32) -> Option<TypeRef> {
 		match self {
 			Self::Slice(slice) => slice.get(i as usize).copied(),
+			Self::TwoSlices(a, b) => {
+				if i < a.len() as u32 {
+					a.get(i as usize).copied()
+				} else {
+					b.get(i as usize - a.len()).copied()
+				}
+			}
+			Self::Bindings(b) => b.get(i as usize).map(|b| b.type_),
 			Self::Repeat(ty, count) => {
 				if i < *count {
 					Some(*ty)
@@ -26,34 +51,43 @@ impl<'a> ScopeTypes<'a> {
 }
 
 #[derive(Clone)]
-pub struct Scope<'parent, R: Clone> {
+pub struct Scope<'parent, R> {
 	parent: Option<(&'parent Self, u32)>,
 	graph: Option<R>,
-	types: ScopeTypes<'parent>,
-	values: Cow<'parent, [Value<R>]>,
+	types: ScopeTypes<'parent, R>,
+	values: ScopeValues<'parent, R>,
+	dataset: Vec<Quad<TermPattern<R>>>,
 }
 
-impl<'parent, R: Clone> Scope<'parent, R> {
-	/// Create a new scope with the given parent, graph, and newly bound values.
-	///
-	/// If graph is `None` then is will inherit the graph is the parent scope.
-	/// If the parent graph is `None`, the inherited graph will be `None`.
+impl<'parent, R> Scope<'parent, R> {
 	pub fn new(
-		parent: Option<&'parent Self>,
-		graph: Option<Option<R>>,
-		types: ScopeTypes<'parent>,
-		values: Cow<'parent, [Value<R>]>,
+		graph: Option<R>,
+		types: ScopeTypes<'parent, R>,
+		values: ScopeValues<'parent, R>,
 	) -> Self {
 		Self {
-			parent: parent.map(|p| (p, p.len())),
-			graph: graph.unwrap_or_else(|| parent.map(|p| p.graph.clone()).unwrap_or_default()),
+			parent: None,
+			graph,
 			types,
 			values,
+			dataset: Vec::new(),
 		}
 	}
 
-	pub fn top_values(&self) -> &[Value<R>] {
-		&self.values
+	pub fn root(graph: Option<R>) -> Self {
+		Self::new(
+			graph,
+			ScopeTypes::Bindings(&[]),
+			ScopeValues::ConstOwned(Vec::new()),
+		)
+	}
+
+	pub fn parent(&self) -> Option<&Scope<R>> {
+		self.parent.map(|(p, _)| p)
+	}
+
+	pub fn top_const_values(&self) -> &[Value<R>] {
+		self.values.as_const().unwrap()
 	}
 
 	pub fn is_empty(&self) -> bool {
@@ -62,8 +96,8 @@ impl<'parent, R: Clone> Scope<'parent, R> {
 
 	pub fn len(&self) -> u32 {
 		match self.parent {
-			Some((_, parent_len)) => parent_len + self.values.len() as u32,
-			None => self.values.len() as u32,
+			Some((_, parent_len)) => parent_len + self.values.len(),
+			None => self.values.len(),
 		}
 	}
 
@@ -82,54 +116,6 @@ impl<'parent, R: Clone> Scope<'parent, R> {
 			}
 			None => self.types.get(i),
 		}
-	}
-
-	pub fn get(&self, i: u32) -> Option<&Value<R>> {
-		match self.parent {
-			Some((parent, parent_len)) => {
-				if i < parent_len {
-					parent.get(i)
-				} else {
-					self.values.get((i - parent_len) as usize)
-				}
-			}
-			None => self.values.get(i as usize),
-		}
-	}
-}
-
-impl<'a, R: Clone> Default for Scope<'a, R> {
-	fn default() -> Self {
-		Self {
-			parent: None,
-			graph: None,
-			types: ScopeTypes::Slice(&[]),
-			values: Cow::Borrowed(&[]),
-		}
-	}
-}
-
-pub struct ReverseScope<'parent, R> {
-	parent: Option<(&'parent Self, u32)>,
-	graph: Option<R>,
-	values: Substitution<R>,
-	dataset: Vec<Quad<TermPattern<R>>>,
-}
-
-impl<'a, R> ReverseScope<'a, R> {
-	pub fn is_empty(&self) -> bool {
-		self.len() == 0
-	}
-
-	pub fn len(&self) -> u32 {
-		match self.parent {
-			Some((_, parent_len)) => parent_len + self.values.len() as u32,
-			None => self.values.len() as u32,
-		}
-	}
-
-	pub fn graph(&self) -> Option<&R> {
-		self.graph.as_ref()
 	}
 
 	pub fn get(&self, i: u32) -> Option<&Value<R>> {
@@ -158,38 +144,96 @@ impl<'a, R> ReverseScope<'a, R> {
 		}
 	}
 
-	pub fn set(&self, i: u32, value: Value<R>) -> Result<(), EvalError<R>>
+	pub fn set(
+		&self,
+		rdf: &mut impl RdfContextMut<R>,
+		i: u32,
+		value: Value<R>,
+	) -> Result<(), EvalError<R>>
 	where
 		R: Eq,
 	{
 		match self.parent {
 			Some((parent, parent_len)) => {
 				if i < parent_len {
-					parent.set(i, value)
+					parent.set(rdf, i, value)
 				} else {
 					let j = i - parent_len;
-					self.values.set(j, value).map_err(|_| EvalError::Ambiguity)
+					self.values
+						.set(rdf, j, value)
+						.map_err(|_| EvalError::Ambiguity)
 				}
 			}
-			None => self.values.set(i, value).map_err(|_| EvalError::Ambiguity),
+			None => self
+				.values
+				.set(rdf, i, value)
+				.map_err(|_| EvalError::Ambiguity),
 		}
 	}
 
 	pub fn extend_dataset(&mut self, quads: impl Iterator<Item = Quad<TermPattern<R>>>) {
 		self.dataset.extend(quads);
 	}
-}
 
-impl<'a, R: Clone> ReverseScope<'a, R> {
-	pub fn root(graph: Option<R>) -> Self {
-		Self::new(graph, &[])
+	pub fn substitute_pattern(
+		&self,
+		rdf: &impl RdfContext<R>,
+		substitution: &mut DebugSubstitution<R>,
+		pattern: &TermPattern<R>,
+	) -> Term
+	where
+		R: Ord + Clone,
+	{
+		match pattern {
+			TermPattern::Resource(r) => substitution.insert_resource(rdf, r),
+			TermPattern::Var(x) => match self.get(*x) {
+				Some(Value::Resource(r)) => substitution.insert_resource(rdf, r),
+				Some(_) => panic!("not a resource"),
+				None => substitution.insert_var(*x),
+			},
+		}
 	}
 
-	pub fn new(graph: Option<R>, types: &[TypeRef]) -> Self {
+	pub fn substitute_dataset(
+		&self,
+		rdf: &impl RdfContext<R>,
+		substitution: &mut DebugSubstitution<R>,
+		dataset: &DatasetPattern<R>,
+	) -> BTreeDataset
+	where
+		R: Clone + Ord,
+	{
+		dataset
+			.iter()
+			.map(|q| q.map(|pattern| self.substitute_pattern(rdf, substitution, pattern)))
+			.collect()
+	}
+}
+
+impl<'a, R: Clone> Default for Scope<'a, R> {
+	fn default() -> Self {
 		Self {
 			parent: None,
-			graph,
-			values: Substitution::new(types.len() as u32, |_| None),
+			graph: None,
+			types: ScopeTypes::Bindings(&[]),
+			values: ScopeValues::ConstBorrowed(&[]),
+			dataset: Vec::new(),
+		}
+	}
+}
+
+impl<'a, R: Clone> Scope<'a, R> {
+	pub fn begin(
+		&self,
+		graph: Option<Option<R>>,
+		types: ScopeTypes<'a, R>,
+		values: ScopeValues<'a, R>,
+	) -> Scope<R> {
+		Scope {
+			parent: Some((self, self.len())),
+			graph: graph.unwrap_or_else(|| self.graph.clone()),
+			types,
+			values,
 			dataset: Vec::new(),
 		}
 	}
@@ -201,23 +245,27 @@ impl<'a, R: Clone> ReverseScope<'a, R> {
 	///
 	/// This guarantees that the sub scopes does not outlive the parent scope
 	/// and that is has exclusive access over the parent scope.
-	pub fn begin<C, D>(
+	pub fn begin_mut<C, D>(
 		&mut self,
 		rdf: &mut C,
 		dataset: &mut D,
 		graph: Option<Option<R>>,
-		types: &[TypeRef],
-		f: impl FnOnce(&mut C, &mut D, &mut ReverseScope<R>) -> Result<(), EvalError<R>>,
+		// types: &[TypeRef],
+		types: ScopeTypes<R>,
+		f: impl FnOnce(&mut C, &mut D, &mut Scope<R>) -> Result<(), EvalError<R>>,
 	) -> Result<Vec<Value<R>>, EvalError<R>>
 	where
 		C: RdfContextMut<R>,
 		D: DatasetMut<Resource = R>,
 	{
+		let types_len = types.len();
 		let (substitution, more_patterns) = {
-			let mut sub_scope = ReverseScope::<R> {
+			let mut sub_scope = Scope::<R> {
 				parent: Some((self, self.len())),
 				graph: graph.unwrap_or_else(|| self.graph.clone()),
-				values: Substitution::new(types.len() as u32, |_| None),
+				// types: ScopeTypes::Slice(types),
+				types,
+				values: ScopeValues::Mut(Substitution::new(types_len, |_| None)),
 				dataset: Vec::new(),
 			};
 
@@ -247,6 +295,8 @@ impl<'a, R: Clone> ReverseScope<'a, R> {
 
 		let substitution = self
 			.values
+			.into_mut()
+			.unwrap()
 			.try_into_total_with(|_| Ok(Value::Resource(rdf.new_resource())))?;
 
 		Ok((substitution, patterns))
@@ -282,6 +332,74 @@ impl<'a, R: Clone> ReverseScope<'a, R> {
 				}
 			}
 			TermPattern::Resource(r) => Ok(TermPattern::Resource(r.clone())),
+		}
+	}
+}
+
+#[derive(Clone)]
+pub enum ScopeValues<'a, R> {
+	ConstBorrowed(&'a [Value<R>]),
+	ConstOwned(Vec<Value<R>>),
+	Mut(Substitution<R>),
+}
+
+impl<'a, R> ScopeValues<'a, R> {
+	fn len(&self) -> u32 {
+		match self {
+			Self::ConstBorrowed(values) => values.len() as u32,
+			Self::ConstOwned(values) => values.len() as u32,
+			Self::Mut(values) => values.len(),
+		}
+	}
+
+	fn as_const(&self) -> Option<&[Value<R>]> {
+		match self {
+			Self::ConstBorrowed(values) => Some(values),
+			Self::ConstOwned(values) => Some(values),
+			Self::Mut(_) => None,
+		}
+	}
+
+	fn into_mut(self) -> Option<Substitution<R>> {
+		match self {
+			Self::Mut(values) => Some(values),
+			_ => None,
+		}
+	}
+
+	fn get(&self, i: u32) -> Option<&Value<R>> {
+		match self {
+			Self::ConstBorrowed(values) => values.get(i as usize),
+			Self::ConstOwned(values) => values.get(i as usize),
+			Self::Mut(values) => values.get(i),
+		}
+	}
+
+	pub fn get_or_insert(&self, i: u32, f: impl FnOnce() -> Value<R>) -> &Value<R> {
+		match self {
+			Self::Mut(values) => values.get_or_insert(i, f),
+			_ => panic!("cannot mutate const scope"),
+		}
+	}
+
+	pub fn set(
+		&self,
+		rdf: &mut impl RdfContextMut<R>,
+		i: u32,
+		value: Value<R>,
+	) -> Result<(), EvalError<R>>
+	where
+		R: Eq,
+	{
+		match self {
+			Self::Mut(values) => match values.set(i, value) {
+				Ok(()) => Ok(()),
+				Err((Value::Resource(a), Value::Resource(b))) => rdf
+					.unify(a, &b)
+					.map_err(|_| EvalError::ResourceUnificationError),
+				Err(_) => Err(EvalError::Ambiguity),
+			},
+			_ => panic!("cannot mutate const scope"),
 		}
 	}
 }

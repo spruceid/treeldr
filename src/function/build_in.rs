@@ -2,16 +2,18 @@ use std::borrow::Cow;
 
 use iref::Iri;
 use rdf_types::{
-	dataset::PatternMatchingDataset,
+	dataset::{DatasetMut, PatternMatchingDataset},
 	interpretation::{IriInterpretation, ReverseIriInterpretation, ReverseLiteralInterpretation},
 	vocabulary::{IriVocabulary, LiteralVocabulary},
-	LiteralTypeRef, RDF_LANG_STRING,
+	LiteralTypeRef, Quad, RDF_LANG_STRING,
 };
-use xsd_types::XSD_STRING;
+use xsd_types::{
+	ParseXsd, XSD_BOOLEAN, XSD_DECIMAL, XSD_INTEGER, XSD_NON_NEGATIVE_INTEGER, XSD_STRING,
+};
 
 use crate::{
-	eval::{EvalError, MissingData, ReverseScope},
-	rdf::{RdfContext, RdfContextMut},
+	eval::{EvalError, MissingData, Scope},
+	rdf::{DebugSubstitution, RdfContext, RdfContextMut},
 	ty::BuiltInType,
 	DatasetPattern, TypeRef, Value,
 };
@@ -38,62 +40,74 @@ impl BuiltInFunction {
 	pub fn signature<R>(&self, ty: impl Fn(BuiltInType) -> TypeRef) -> Signature<R> {
 		match self {
 			Self::Get => Signature {
+				const_args: vec![],
 				args: vec![ty(BuiltInType::Resource), ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::Resource),
 				dataset: DatasetPattern::new(),
 			},
 			Self::IriOf => Signature {
+				const_args: vec![],
 				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::TextString),
 				dataset: DatasetPattern::new(),
 			},
 			Self::BoolOf => Signature {
+				const_args: vec![],
 				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::Boolean),
 				dataset: DatasetPattern::new(),
 			},
 			Self::TypedBoolOf => Signature {
-				args: vec![ty(BuiltInType::Resource), ty(BuiltInType::Resource)],
+				const_args: vec![ty(BuiltInType::Resource)],
+				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::Boolean),
 				dataset: DatasetPattern::new(),
 			},
 			Self::NumberOf => Signature {
+				const_args: vec![],
 				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::Number),
 				dataset: DatasetPattern::new(),
 			},
 			Self::TypedNumberOf => Signature {
-				args: vec![ty(BuiltInType::Resource), ty(BuiltInType::Resource)],
+				const_args: vec![ty(BuiltInType::Resource)],
+				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::Number),
 				dataset: DatasetPattern::new(),
 			},
 			Self::IntOf => Signature {
+				const_args: vec![],
 				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::Int),
 				dataset: DatasetPattern::new(),
 			},
 			Self::TypedIntOf => Signature {
-				args: vec![ty(BuiltInType::Resource), ty(BuiltInType::Resource)],
+				const_args: vec![ty(BuiltInType::Resource)],
+				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::Int),
 				dataset: DatasetPattern::new(),
 			},
 			Self::UintOf => Signature {
+				const_args: vec![],
 				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::Uint),
 				dataset: DatasetPattern::new(),
 			},
 			Self::TypedUintOf => Signature {
-				args: vec![ty(BuiltInType::Resource), ty(BuiltInType::Resource)],
+				const_args: vec![ty(BuiltInType::Resource)],
+				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::Uint),
 				dataset: DatasetPattern::new(),
 			},
 			Self::StringOf => Signature {
+				const_args: vec![],
 				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::TextString),
 				dataset: DatasetPattern::new(),
 			},
 			Self::TypedStringOf => Signature {
-				args: vec![ty(BuiltInType::Resource), ty(BuiltInType::Resource)],
+				const_args: vec![ty(BuiltInType::Resource)],
+				args: vec![ty(BuiltInType::Resource)],
 				return_type: ty(BuiltInType::TextString),
 				dataset: DatasetPattern::new(),
 			},
@@ -121,7 +135,19 @@ impl BuiltInFunction {
 							Ok(Value::Resource(object.clone()))
 						}
 					}
-					None => Err(EvalError::MissingData(MissingData::Empty)),
+					None => {
+						let mut substitution = DebugSubstitution::new();
+						Err(EvalError::MissingData(MissingData::Empty(
+							[Quad(
+								substitution.insert_resource(rdf, subject),
+								substitution.insert_resource(rdf, prop),
+								substitution.new_resource(),
+								None,
+							)]
+							.into_iter()
+							.collect(),
+						)))
+					}
 				}
 			}
 			Self::IriOf => {
@@ -146,28 +172,61 @@ impl BuiltInFunction {
 				}
 			}
 			Self::BoolOf => {
-				todo!()
+				let r = args[0].as_resource().unwrap();
+				let v = xsd_types::Boolean::parse_xsd(find_literal_lexical(rdf, r, XSD_BOOLEAN)?)
+					.map_err(|_| EvalError::InvalidValue)?;
+				Ok(Value::boolean(v.into()))
 			}
 			Self::TypedBoolOf => {
-				todo!()
+				let ty = args[0].as_resource().unwrap();
+				let r = args[1].as_resource().unwrap();
+				let v = xsd_types::Boolean::parse_xsd(find_literal_interpreted(rdf, r, ty)?)
+					.map_err(|_| EvalError::InvalidValue)?;
+				Ok(Value::boolean(v.into()))
 			}
 			Self::NumberOf => {
-				todo!()
+				let r = args[0].as_resource().unwrap();
+				let v = xsd_types::Decimal::parse_xsd(find_literal_lexical(rdf, r, XSD_DECIMAL)?)
+					.map_err(|_| EvalError::InvalidValue)?;
+				Ok(Value::number(v.into()))
 			}
 			Self::TypedNumberOf => {
-				todo!()
+				let ty = args[0].as_resource().unwrap();
+				let r = args[1].as_resource().unwrap();
+				let v = xsd_types::Decimal::parse_xsd(find_literal_interpreted(rdf, r, ty)?)
+					.map_err(|_| EvalError::InvalidValue)?;
+				Ok(Value::number(v.into()))
 			}
 			Self::IntOf => {
-				todo!()
+				let r = args[0].as_resource().unwrap();
+				let v = xsd_types::Integer::parse_xsd(find_literal_lexical(rdf, r, XSD_INTEGER)?)
+					.map_err(|_| EvalError::InvalidValue)?;
+				Ok(Value::number(v.into()))
 			}
 			Self::TypedIntOf => {
-				todo!()
+				let ty = args[0].as_resource().unwrap();
+				let r = args[1].as_resource().unwrap();
+				let v = xsd_types::Integer::parse_xsd(find_literal_interpreted(rdf, r, ty)?)
+					.map_err(|_| EvalError::InvalidValue)?;
+				Ok(Value::number(v.into()))
 			}
 			Self::UintOf => {
-				todo!()
+				let r = args[0].as_resource().unwrap();
+				let v = xsd_types::NonNegativeInteger::parse_xsd(find_literal_lexical(
+					rdf,
+					r,
+					XSD_NON_NEGATIVE_INTEGER,
+				)?)
+				.map_err(|_| EvalError::InvalidValue)?;
+				Ok(Value::number(v.into()))
 			}
 			Self::TypedUintOf => {
-				todo!()
+				let ty = args[0].as_resource().unwrap();
+				let r = args[1].as_resource().unwrap();
+				let v =
+					xsd_types::NonNegativeInteger::parse_xsd(find_literal_interpreted(rdf, r, ty)?)
+						.map_err(|_| EvalError::InvalidValue)?;
+				Ok(Value::number(v.into()))
 			}
 			Self::StringOf => {
 				let r = args[0].as_resource().unwrap();
@@ -190,12 +249,26 @@ impl BuiltInFunction {
 	pub fn eval_inverse<R>(
 		&self,
 		rdf: &mut impl RdfContextMut<R>,
-		_scope: &mut ReverseScope<R>,
+		dataset: &mut impl DatasetMut<Resource = R>,
+		scope: &mut Scope<R>,
 		output: &Value<R>,
-	) -> Result<Vec<Value<R>>, EvalError<R>> {
+	) -> Result<Vec<Value<R>>, EvalError<R>>
+	where
+		R: Clone,
+	{
 		match self {
 			Self::Get => {
-				todo!()
+				let predicate = rdf.new_resource();
+				let subject = rdf.new_resource();
+
+				dataset.insert(Quad(
+					subject.clone(),
+					predicate.clone(),
+					output.as_resource().unwrap().clone(),
+					None,
+				));
+
+				Ok(vec![Value::Resource(predicate), Value::Resource(subject)])
 			}
 			Self::IriOf => {
 				let value = output.as_str().unwrap();
@@ -204,28 +277,83 @@ impl BuiltInFunction {
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::BoolOf => {
-				todo!()
+				let value = xsd_types::Boolean(output.as_bool().unwrap());
+				let r = rdf.insert_literal(value.to_string(), Cow::Borrowed(XSD_BOOLEAN));
+				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedBoolOf => {
-				todo!()
+				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
+
+				let value = xsd_types::Boolean(output.as_bool().unwrap());
+				let r = rdf.insert_literal(value.to_string(), Cow::Owned(ty));
+				Ok(vec![Value::Resource(r)])
 			}
 			Self::NumberOf => {
-				todo!()
+				let value: xsd_types::Decimal = output
+					.as_number()
+					.unwrap()
+					.clone()
+					.try_into()
+					.map_err(|_| EvalError::InvalidValue)?;
+				let r = rdf.insert_literal(value.to_string(), Cow::Borrowed(XSD_DECIMAL));
+				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedNumberOf => {
-				todo!()
+				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
+
+				let value: xsd_types::Decimal = output
+					.as_number()
+					.unwrap()
+					.clone()
+					.try_into()
+					.map_err(|_| EvalError::InvalidValue)?;
+				let r = rdf.insert_literal(value.to_string(), Cow::Owned(ty));
+				Ok(vec![Value::Resource(r)])
 			}
 			Self::IntOf => {
-				todo!()
+				let value: xsd_types::Integer = output
+					.as_number()
+					.unwrap()
+					.clone()
+					.try_into()
+					.map_err(|_| EvalError::InvalidValue)?;
+				let r = rdf.insert_literal(value.to_string(), Cow::Borrowed(XSD_INTEGER));
+				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedIntOf => {
-				todo!()
+				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
+
+				let value: xsd_types::Integer = output
+					.as_number()
+					.unwrap()
+					.clone()
+					.try_into()
+					.map_err(|_| EvalError::InvalidValue)?;
+				let r = rdf.insert_literal(value.to_string(), Cow::Owned(ty));
+				Ok(vec![Value::Resource(r)])
 			}
 			Self::UintOf => {
-				todo!()
+				let value: xsd_types::NonNegativeInteger = output
+					.as_number()
+					.unwrap()
+					.clone()
+					.try_into()
+					.map_err(|_| EvalError::InvalidValue)?;
+				let r =
+					rdf.insert_literal(value.to_string(), Cow::Borrowed(XSD_NON_NEGATIVE_INTEGER));
+				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedUintOf => {
-				todo!()
+				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
+
+				let value: xsd_types::NonNegativeInteger = output
+					.as_number()
+					.unwrap()
+					.clone()
+					.try_into()
+					.map_err(|_| EvalError::InvalidValue)?;
+				let r = rdf.insert_literal(value.to_string(), Cow::Owned(ty));
+				Ok(vec![Value::Resource(r)])
 			}
 			Self::StringOf => {
 				let value = output.as_str().unwrap();
@@ -233,9 +361,30 @@ impl BuiltInFunction {
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedStringOf => {
-				todo!()
+				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
+
+				let value = output.as_str().unwrap();
+				let r = rdf.insert_literal(value.to_string(), Cow::Owned(ty));
+				Ok(vec![Value::Resource(r)])
 			}
 		}
+	}
+}
+
+fn iri_of<'a, R>(rdf: &'a impl RdfContext<R>, resource: &'a R) -> Result<&'a Iri, EvalError<R>> {
+	let mut iris = rdf.interpretation().iris_of(resource);
+
+	match iris.next() {
+		Some(i) => {
+			if iris.next().is_some() {
+				Err(EvalError::Ambiguity)
+			} else {
+				Ok(rdf.vocabulary().iri(i).unwrap())
+			}
+		}
+		None => Err(EvalError::MissingData(
+			MissingData::NoMatchingIriRepresentation,
+		)),
 	}
 }
 

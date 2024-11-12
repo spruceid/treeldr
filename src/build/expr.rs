@@ -6,7 +6,7 @@ use ll1::{Span, Spanned};
 use rdf_types::{LiteralType, Quad, Term, RDF_FIRST, RDF_NIL, RDF_REST, XSD_STRING};
 
 use crate::{
-	expr::{self, Bound, Expr, InnerExpr, ListComponents},
+	expr::{self, Binding, Expr, InnerExpr, ListComponents},
 	rdf::RdfContextMut,
 	syntax::ast::{self, ListDescription},
 	ty::{self, TypeDesc},
@@ -16,45 +16,13 @@ use crate::{
 
 use super::{Build, BuildContext, BuildingNamespace, Error, Scope, TypeValue, TypeVariableRef};
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
-	type Target = Expr<R, TypeVariableRef>;
-
-	fn build<D>(
-		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
-	where
-		D: RdfContextMut<R>,
-	{
-		let (bound, inner, type_) = match self {
-			Self::Let(_, bindings, _, inner) => {
-				let (bound, sub_scope) = bindings.build(context, namespace, scope)?;
-				let (inner, type_) = inner.build(context, namespace, &sub_scope)?;
-				(bound, inner, type_)
-			}
-			Self::Inner(inner) => {
-				let (inner, type_) = inner.build(context, namespace, scope)?;
-				(expr::Bound::default(), inner, type_)
-			}
-		};
-
-		Ok(Expr {
-			type_,
-			bound,
-			inner,
-		})
-	}
-}
-
 impl ast::Bindings {
 	fn build<'ast, 'a, R, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
 		namespace: &BuildingNamespace<'ast>,
 		scope: &'a Scope,
-	) -> Result<(expr::Bound<R, TypeVariableRef>, Scope<'a>), Error>
+	) -> Result<(expr::Bindings<R, TypeVariableRef>, Scope<'a>), Error>
 	where
 		R: Clone + Ord + Hash,
 		D: RdfContextMut<R>,
@@ -62,10 +30,10 @@ impl ast::Bindings {
 		let mut intro = Vec::with_capacity(self.variables.len());
 		let mut sub_scope = scope.begin();
 
-		for ident in &self.variables {
-			let ty_ref = context.type_variables.fresh(Type::resource());
-			intro.push(ty_ref);
-			sub_scope.expr.insert(ident, ty_ref);
+		for binding in &self.variables {
+			let b = binding.build(context, namespace, scope)?;
+			sub_scope.expr.insert(&binding.ident, b.type_);
+			intro.push(b);
 		}
 
 		let dataset = match &self.bound {
@@ -73,7 +41,33 @@ impl ast::Bindings {
 			None => DatasetPattern::new(),
 		};
 
-		Ok((expr::Bound { intro, dataset }, sub_scope))
+		Ok((expr::Bindings { intro, dataset }, sub_scope))
+	}
+}
+
+impl ast::Binding {
+	fn build<'ast, 'a, R, D>(
+		&'ast self,
+		context: &mut BuildContext<'_, R, D>,
+		namespace: &BuildingNamespace<'ast>,
+		scope: &'a Scope,
+	) -> Result<Binding<R, TypeVariableRef>, Error>
+	where
+		R: Clone + Ord + Hash,
+		D: RdfContextMut<R>,
+	{
+		let assignment = self
+			.assignment
+			.as_ref()
+			.map(|a| a.value.build(context, namespace, scope))
+			.transpose()?;
+
+		let type_ = match &assignment {
+			Some(a) => a.type_,
+			None => context.type_variables.fresh(Type::resource()),
+		};
+
+		Ok(Binding { type_, assignment })
 	}
 }
 
@@ -296,8 +290,8 @@ impl ast::CompactIri {
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::InnerExpr {
-	type Target = (InnerExpr<R, TypeVariableRef>, TypeVariableRef);
+impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
+	type Target = Expr<R, TypeVariableRef>;
 
 	fn build<D>(
 		&'ast self,
@@ -309,6 +303,14 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::InnerExpr {
 		D: RdfContextMut<R>,
 	{
 		match self {
+			Self::Let(_, bindings, _, inner) => {
+				let (bindings, sub_scope) = bindings.build(context, namespace, scope)?;
+				let inner = inner.build(context, namespace, &sub_scope)?;
+				Ok(Expr {
+					type_: inner.type_,
+					inner: InnerExpr::Let(bindings, Box::new(inner)),
+				})
+			}
 			Self::Var(ident) => {
 				let x = scope
 					.get_by_name(context, namespace, ident.as_str())
@@ -316,39 +318,69 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::InnerExpr {
 					.as_variable()
 					.ok_or_else(|| Error::NotAVariable(ident.clone()))?;
 				let type_ = scope.expr.type_of(x).unwrap();
-				Ok((InnerExpr::Var(x), type_))
+				Ok(Expr {
+					type_,
+					inner: InnerExpr::Var(x),
+				})
+			}
+			Self::Resource(iri) => {
+				let iri = iri.build(context, namespace, scope)?;
+				let resource = context.rdf.insert_iri(Cow::Owned(iri));
+				let type_ = context.type_variables.fresh(Type::new(
+					Attributes::new(),
+					TypeDesc::Resource(ty::Resource::singleton(resource.clone())),
+				));
+				Ok(Expr {
+					type_,
+					inner: InnerExpr::Resource(resource),
+				})
 			}
 			Self::Literal(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let ty = context
+				let type_ = context
 					.type_variables
 					.fresh(Type::new(Attributes::new(), TypeDesc::Literal(ty)));
-				Ok((InnerExpr::Literal(e), ty))
+				Ok(Expr {
+					type_,
+					inner: InnerExpr::Literal(e),
+				})
 			}
 			Self::List(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let ty = context
+				let type_ = context
 					.type_variables
 					.fresh(Type::new(Attributes::new(), TypeDesc::List(ty)));
-				Ok((InnerExpr::List(e), ty))
+				Ok(Expr {
+					type_,
+					inner: InnerExpr::List(e),
+				})
 			}
 			Self::Map(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let ty = context
+				let type_ = context
 					.type_variables
 					.fresh(Type::new(Attributes::new(), TypeDesc::Struct(ty)));
-				Ok((InnerExpr::Map(e), ty))
+				Ok(Expr {
+					type_,
+					inner: InnerExpr::Map(e),
+				})
 			}
 			Self::Match(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let ty = context
+				let type_ = context
 					.type_variables
 					.fresh(Type::new(Attributes::new(), TypeDesc::Enum(ty)));
-				Ok((InnerExpr::Match(e), ty))
+				Ok(Expr {
+					type_,
+					inner: InnerExpr::Match(e),
+				})
 			}
 			Self::Call(expr) => {
-				let (e, ty) = expr.build(context, namespace, scope)?;
-				Ok((InnerExpr::Call(e), ty))
+				let (e, type_) = expr.build(context, namespace, scope)?;
+				Ok(Expr {
+					type_,
+					inner: InnerExpr::Call(e),
+				})
 			}
 		}
 	}
@@ -386,23 +418,27 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListExpr {
 				let (bound, sub_scope) = bindings.build(context, namespace, scope)?;
 
 				match bound.intro.as_slice() {
-					&[item_ty] => {
+					[item] => {
+						if item.assignment.is_some() {
+							todo!()
+						}
+
 						let body = Box::new(match mapping {
 							Some(m) => m.expr.build(context, namespace, &sub_scope)?,
 							None => Expr {
-								type_: item_ty,
-								bound: Bound::default(),
+								type_: item.type_,
 								inner: InnerExpr::Var(sub_scope.expr.offset()),
 							},
 						});
 
-						context.type_variables.assert_eq(item_ty, body.type_);
+						context.type_variables.assert_eq(item.type_, body.type_);
 
+						let ty = ty::List::uniform(item.type_);
 						let e = expr::List::Implicit(expr::ImplicitList::Unordered(
 							expr::UnorderedList { bound, body },
 						));
 
-						Ok((e, ty::List::uniform(item_ty)))
+						Ok((e, ty))
 					}
 					_ => Err(Error::ExpectedExactlyOneBinding(self.span())),
 				}
@@ -411,18 +447,22 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListExpr {
 				let (bound, sub_scope) = bindings.build(context, namespace, scope)?;
 
 				match bound.intro.as_slice() {
-					&[item_ty] => {
+					[item] => {
+						if item.assignment.is_some() {
+							todo!()
+						}
+
 						let body = Box::new(match mapping {
 							Some(m) => m.expr.build(context, namespace, &sub_scope)?,
 							None => Expr {
-								type_: item_ty,
-								bound: Bound::default(),
+								type_: item.type_,
 								inner: InnerExpr::Var(sub_scope.expr.offset()),
 							},
 						});
 
-						context.type_variables.assert_eq(item_ty, body.type_);
+						context.type_variables.assert_eq(item.type_, body.type_);
 
+						let ty = ty::List::uniform(item.type_);
 						let e =
 							expr::List::Implicit(expr::ImplicitList::Ordered(expr::OrderedList {
 								components: ListComponents {
@@ -435,7 +475,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListExpr {
 								body,
 							}));
 
-						Ok((e, ty::List::uniform(item_ty)))
+						Ok((e, ty))
 					}
 					_ => Err(Error::ExpectedExactlyOneBinding(self.span())),
 				}
@@ -689,27 +729,42 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::CallExpr {
 
 		let f_ref = scope
 			.get(context, namespace, &path)
-			.ok_or_else(|| Error::UnknownFunction(path.clone()))?
+			.ok_or_else(|| Error::UnknownFunction(self.function.span(), path.clone()))?
 			.as_function()
-			.ok_or_else(|| Error::NotAFunction(path.clone()))?;
+			.ok_or_else(|| Error::NotAFunction(self.function.span(), path.clone()))?;
 
 		let signature = namespace
 			.import_function_signature(context, f_ref)
 			.unwrap()
 			.clone();
 
-		if self.args.len() != signature.args.len() {
+		if self.args.len() != signature.arity() {
 			return Err(Error::ArgumentCount {
+				span: self.span(),
 				expected: signature.args.len(),
 				found: self.args.len(),
 			});
 		}
 
-		let args = self
+		let mut ast_args = self.args.iter();
+
+		let const_args = signature
+			.const_args
+			.iter()
+			.map(|&a_ty| {
+				let const_scope = scope.begin();
+				let a = ast_args.next().unwrap();
+				let e = a.build(context, namespace, &const_scope)?;
+				context.type_variables.assert_subtype_of(e.type_, a_ty);
+				Ok(e)
+			})
+			.collect::<Result<_, _>>()?;
+
+		let args = signature
 			.args
 			.iter()
-			.zip(&signature.args)
-			.map(|(a, &a_ty)| {
+			.map(|&a_ty| {
+				let a = ast_args.next().unwrap();
 				let e = a.build(context, namespace, scope)?;
 				context.type_variables.assert_subtype_of(e.type_, a_ty);
 				Ok(e)
@@ -718,6 +773,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::CallExpr {
 
 		let e = expr::Call {
 			function: f_ref,
+			const_args,
 			args,
 		};
 

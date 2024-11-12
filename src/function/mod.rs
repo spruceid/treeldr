@@ -3,11 +3,11 @@ use rdf_types::{
 	dataset::{DatasetMut, PatternMatchingDataset},
 	Quad,
 };
-use std::{borrow::Cow, hash::Hash};
+use std::hash::Hash;
 
 use crate::{
 	display::DisplaySignature,
-	eval::{EvalError, ReverseScope, Scope, ScopeTypes},
+	eval::{EvalError, Scope, ScopeTypes, ScopeValues},
 	rdf::{RdfContext, RdfContextMut},
 	ty::{BuiltInType, TypeRef},
 	Attributes, DatasetPattern, Layout, Registry, Value,
@@ -21,6 +21,7 @@ pub use build_in::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Signature<R, T = TypeRef> {
+	pub const_args: Vec<T>,
 	pub args: Vec<T>,
 	pub return_type: T,
 	pub dataset: DatasetPattern<R>,
@@ -28,7 +29,7 @@ pub struct Signature<R, T = TypeRef> {
 
 impl<R, T> Signature<R, T> {
 	pub fn arity(&self) -> u32 {
-		self.args.len() as u32
+		self.const_args.len() as u32 + self.args.len() as u32
 	}
 
 	pub fn mapped_types<U>(&self, mut f: impl FnMut(&T) -> U) -> Signature<R, U>
@@ -36,6 +37,7 @@ impl<R, T> Signature<R, T> {
 		R: Clone,
 	{
 		Signature {
+			const_args: self.const_args.iter().map(&mut f).collect(),
 			args: self.args.iter().map(&mut f).collect(),
 			return_type: f(&self.return_type),
 			dataset: self.dataset.clone(),
@@ -44,6 +46,7 @@ impl<R, T> Signature<R, T> {
 
 	pub fn map_types<U>(self, mut f: impl FnMut(T) -> U) -> Signature<R, U> {
 		Signature {
+			const_args: self.const_args.into_iter().map(&mut f).collect(),
 			args: self.args.into_iter().map(&mut f).collect(),
 			return_type: f(self.return_type),
 			dataset: self.dataset,
@@ -125,10 +128,11 @@ impl<R: Clone + Ord> Function<R> {
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		args: &[Value<R>],
 	) -> Result<Value<R>, EvalError<R>> {
-		if args.len() != self.signature.args.len() {
+		let arg_count = args.len() as u32;
+		if args.len() as u32 != self.signature.arity() {
 			return Err(EvalError::ArgumentCount {
-				expected: self.signature.args.len(),
-				found: args.len(),
+				expected: self.signature.arity(),
+				found: arg_count,
 			});
 		}
 
@@ -136,9 +140,8 @@ impl<R: Clone + Ord> Function<R> {
 
 		let scope = Scope::new(
 			None,
-			None,
-			ScopeTypes::Slice(&self.signature.args),
-			Cow::Borrowed(args),
+			ScopeTypes::TwoSlices(&self.signature.const_args, &self.signature.args),
+			ScopeValues::ConstBorrowed(args),
 		);
 
 		self.body.eval(registry, rdf, dataset, &scope)
@@ -149,15 +152,30 @@ impl<R: Clone + Ord> Function<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
+		const_args: &[Value<R>],
 		output: &Value<R>,
 	) -> Result<Vec<Value<R>>, EvalError<R>> {
-		let input_types: Vec<_> = self.signature.args.iter().map(|a| a.clone()).collect();
+		if const_args.len() != self.signature.const_args.len() {
+			todo!()
+		}
 
-		ReverseScope::root(None).begin(rdf, dataset, None, &input_types, |rdf, dataset, scope| {
-			scope.extend_dataset(self.signature.dataset.iter().map(Quad::into_cloned));
-			self.body
-				.eval_inverse(registry, rdf, dataset, scope, output)
-		})
+		Scope::root(None)
+			.begin(
+				None,
+				ScopeTypes::Slice(&self.signature.const_args),
+				ScopeValues::ConstBorrowed(const_args),
+			)
+			.begin_mut(
+				rdf,
+				dataset,
+				None,
+				ScopeTypes::Slice(&self.signature.args),
+				|rdf, dataset, scope| {
+					scope.extend_dataset(self.signature.dataset.iter().map(Quad::into_cloned));
+					self.body
+						.eval_inverse(registry, rdf, dataset, scope, output)
+				},
+			)
 	}
 }
 

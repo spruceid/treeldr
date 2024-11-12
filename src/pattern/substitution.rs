@@ -25,6 +25,23 @@ impl<R> Substitution<R> {
 		Self(result)
 	}
 
+	/// Create a new empty substitution without declared variables.
+	pub fn try_new<E>(len: u32, f: impl Fn(u32) -> Result<Option<Value<R>>, E>) -> Result<Self, E> {
+		let mut result = Vec::with_capacity(len as usize);
+
+		for i in 0..len {
+			let cell = OnceCell::new();
+
+			if let Some(value) = f(i)? {
+				let _ = cell.set(value);
+			}
+
+			result.push(cell)
+		}
+
+		Ok(Self(result))
+	}
+
 	/// Returns the number of variables declared in the substitution.
 	pub fn len(&self) -> u32 {
 		self.0.len() as u32
@@ -53,18 +70,18 @@ impl<R> Substitution<R> {
 	/// ## Panics
 	///
 	/// Panics if the variable `x` if not declared in the substitution.
-	pub fn set(&self, x: u32, value: Value<R>) -> Result<(), Value<R>>
+	pub fn set(&self, x: u32, value: Value<R>) -> Result<(), (&Value<R>, Value<R>)>
 	where
 		R: PartialEq,
 	{
-		// std::mem::replace(&mut self.0[x as usize], value)
 		match self.0.get(x as usize).unwrap().set(value) {
 			Ok(()) => Ok(()),
 			Err(value) => {
-				if *self.get(x).unwrap() == value {
+				let current_value = self.get(x).unwrap();
+				if *current_value == value {
 					Ok(())
 				} else {
-					Err(value)
+					Err((current_value, value))
 				}
 			}
 		}

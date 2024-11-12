@@ -64,6 +64,7 @@ impl<'ast> BuildModule<'ast> {
 		let scope = Scope {
 			module: self.parent,
 			expr: ExprScope::new(None),
+			const_: false,
 		};
 
 		result.attributes = self
@@ -268,6 +269,7 @@ impl<'ast> ast::Module {
 			let scope = Scope {
 				module: Some(module_ref),
 				expr: ExprScope::new(None),
+				const_: false,
 			};
 
 			for item in &self.items {
@@ -288,8 +290,8 @@ impl<'ast> ast::Module {
 							todo!() // type redefinition.
 						}
 					}
-					ast::Item::Function(f_ast) => {
-						let args = f_ast
+					ast::Item::Function(ast) => {
+						let args = ast
 							.args
 							.iter()
 							.map(|_| {
@@ -299,19 +301,16 @@ impl<'ast> ast::Module {
 							.collect();
 
 						let signature = BuildSignature {
+							const_args: vec![],
 							args,
 							return_type: context.type_variables.fresh(TypeValue::Undefined),
 						};
 
-						let f_ref = namespace.declare_function(
-							module_ref,
-							&item.metadata,
-							f_ast,
-							signature,
-						);
+						let f_ref =
+							namespace.declare_function(module_ref, &item.metadata, ast, signature);
 						if let Some(_) = result
 							.items
-							.insert(f_ast.ident.as_str().to_owned(), BuildItem::Function(f_ref))
+							.insert(ast.ident.as_str().to_owned(), BuildItem::Function(f_ref))
 						{
 							todo!() // function redefinition
 						}

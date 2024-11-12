@@ -2,7 +2,7 @@ use crate::{expr::Map, Registry, TypeRef, Value};
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 use std::collections::BTreeMap;
 
-use super::{Eval, EvalError, EvalTyped, RdfContext, RdfContextMut, ReverseScope, Scope};
+use super::{Eval, EvalError, EvalTyped, RdfContext, RdfContextMut, Scope};
 
 impl<R: Clone + Ord> EvalTyped<R> for Map<R> {
 	fn eval_typed(
@@ -37,7 +37,7 @@ impl<R: Clone + Ord> EvalTyped<R> for Map<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		_type_ref: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {

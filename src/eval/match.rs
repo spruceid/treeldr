@@ -1,6 +1,4 @@
-use super::{
-	Eval, EvalError, EvalTyped, MissingData, RdfContext, RdfContextMut, ReverseScope, Scope,
-};
+use super::{Eval, EvalError, EvalTyped, MissingData, RdfContext, RdfContextMut, Scope};
 use crate::{expr::Match, Registry, TypeRef, Value};
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 
@@ -15,17 +13,14 @@ impl<R: Clone + Ord> EvalTyped<R> for Match<R> {
 	) -> Result<Value<R>, EvalError<R>> {
 		for name in &self.order {
 			let expr = self.cases.get(name).unwrap();
-			if let Some(scope) = expr.bound.find_one(dataset, scope)? {
-				if let Ok(value) = expr
-					.inner
-					.eval_typed(registry, rdf, dataset, &scope, expr.type_)
-				{
-					return Ok(value);
-				}
+			match expr.eval(registry, rdf, dataset, scope) {
+				Ok(value) => return Ok(value),
+				Err(EvalError::MissingData(_)) => (),
+				Err(e) => return Err(e),
 			}
 		}
 
-		Err(EvalError::MissingData(MissingData::Empty))
+		Err(EvalError::MissingData(MissingData::NotVariantMatch))
 	}
 
 	fn eval_inverse_typed(
@@ -33,7 +28,7 @@ impl<R: Clone + Ord> EvalTyped<R> for Match<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		_type_ref: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {

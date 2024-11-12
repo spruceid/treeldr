@@ -1,5 +1,5 @@
 use crate::{
-	expr::{Bound, Expr},
+	expr::{Bindings, Expr},
 	TypeRef,
 };
 
@@ -13,7 +13,7 @@ pub struct OrderedList<R, T = TypeRef> {
 	pub head: Box<Expr<R, T>>,
 
 	/// Bound.
-	pub bound: Bound<R, T>,
+	pub bound: Bindings<R, T>,
 
 	/// Expression mapping the items.
 	pub body: Box<Expr<R, T>>,
@@ -28,7 +28,7 @@ impl<R: Ord, T> OrderedList<R, T> {
 		OrderedList {
 			components: self.components,
 			head: Box::new(self.head.map_types_ref_mut(f)),
-			bound: self.bound.map_types(&mut *f),
+			bound: self.bound.map_types_ref_mut(f),
 			body: Box::new(self.body.map_types_ref_mut(f)),
 		}
 	}

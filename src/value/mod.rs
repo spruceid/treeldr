@@ -41,6 +41,14 @@ impl<R> Value<R> {
 		matches!(self, Self::Literal(Literal::Unit))
 	}
 
+	pub fn boolean(value: bool) -> Self {
+		Self::Literal(Literal::Boolean(value))
+	}
+
+	pub fn number(value: Number) -> Self {
+		Self::Literal(Literal::Number(value))
+	}
+
 	/// Creates a text string value.
 	pub fn string(value: String) -> Self {
 		Self::Literal(Literal::TextString(value))
@@ -60,6 +68,20 @@ impl<R> Value<R> {
 	pub fn into_resource(self) -> Option<R> {
 		match self {
 			Self::Resource(r) => Some(r),
+			_ => None,
+		}
+	}
+
+	pub fn as_bool(&self) -> Option<bool> {
+		match self {
+			Self::Literal(l) => l.as_bool(),
+			_ => None,
+		}
+	}
+
+	pub fn as_number(&self) -> Option<&Number> {
+		match self {
+			Self::Literal(l) => l.as_number(),
 			_ => None,
 		}
 	}

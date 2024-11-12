@@ -29,6 +29,7 @@ impl<'ast> FunctionDefinition<'ast> {
 		let scope = Scope {
 			module: Some(self.module),
 			expr: ExprScope::new(None),
+			const_: false,
 		};
 
 		let attributes = self.metadata.build(context, namespace, &scope)?;
@@ -61,8 +62,6 @@ impl<'ast> FunctionDefinition<'ast> {
 			None => body.type_,
 		};
 
-		// let signature = context.import_function_signature(*f_ref).unwrap().clone();
-
 		for (&a, &b) in args.iter().zip(&self.signature.args) {
 			context.type_variables.assert_eq(a, b);
 		}
@@ -82,6 +81,7 @@ impl<'ast> FunctionDefinition<'ast> {
 		Ok(Function {
 			attributes,
 			signature: Signature {
+				const_args: self.signature.const_args.clone(),
 				args: self.signature.args.clone(),
 				return_type: self.signature.return_type,
 				dataset,
@@ -93,16 +93,22 @@ impl<'ast> FunctionDefinition<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct BuildSignature {
+	pub const_args: Vec<TypeVariableRef>,
 	pub args: Vec<TypeVariableRef>,
 	pub return_type: TypeVariableRef,
 }
 
 impl BuildSignature {
+	pub fn arity(&self) -> usize {
+		self.const_args.len() + self.args.len()
+	}
+
 	pub fn import<R, T>(
 		signature: &Signature<R, T>,
 		mut f: impl FnMut(&T) -> TypeVariableRef,
 	) -> Self {
 		Self {
+			const_args: signature.const_args.iter().map(&mut f).collect(),
 			args: signature.args.iter().map(&mut f).collect(),
 			return_type: f(&signature.return_type),
 		}

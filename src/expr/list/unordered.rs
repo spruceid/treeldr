@@ -1,5 +1,5 @@
 use crate::{
-	expr::{Bound, Expr},
+	expr::{Bindings, Expr},
 	TypeRef,
 };
 
@@ -15,7 +15,7 @@ use crate::{
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UnorderedList<R, T = TypeRef> {
-	pub bound: Bound<R, T>,
+	pub bound: Bindings<R, T>,
 
 	/// Expression mapping the selected resources.
 	pub body: Box<Expr<R, T>>,
@@ -28,7 +28,7 @@ impl<R: Ord, T> UnorderedList<R, T> {
 
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> UnorderedList<R, U> {
 		UnorderedList {
-			bound: self.bound.map_types(&mut *f),
+			bound: self.bound.map_types_ref_mut(f),
 			body: Box::new(self.body.map_types_ref_mut(f)),
 		}
 	}

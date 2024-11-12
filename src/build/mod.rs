@@ -56,17 +56,17 @@ pub enum Error {
 	#[error("`{0}` is not a variable")]
 	NotAVariable(Ident),
 
-	#[error("unknown type `{0}`")]
-	UnknownType(ItemPathBuf),
+	#[error("unknown type `{1}`")]
+	UnknownType(Span, ItemPathBuf),
 
-	#[error("`{0}` is not a type")]
-	NotAType(ItemPathBuf),
+	#[error("`{1}` is not a type")]
+	NotAType(Span, ItemPathBuf),
 
-	#[error("unknown function `{0}`")]
-	UnknownFunction(ItemPathBuf),
+	#[error("unknown function `{1}`")]
+	UnknownFunction(Span, ItemPathBuf),
 
-	#[error("`{0}` is not a function")]
-	NotAFunction(ItemPathBuf),
+	#[error("`{1}` is not a function")]
+	NotAFunction(Span, ItemPathBuf),
 
 	#[error("unknown field")]
 	UnknownField(Span),
@@ -75,7 +75,11 @@ pub enum Error {
 	UnknownVariant(Ident),
 
 	#[error("invalid number of arguments (expected {expected}, found {found})")]
-	ArgumentCount { expected: usize, found: usize },
+	ArgumentCount {
+		span: Span,
+		expected: usize,
+		found: usize,
+	},
 
 	#[error("type mismatch")]
 	TypeMismatch(Span),
@@ -85,6 +89,35 @@ pub enum Error {
 
 	#[error("expected exactly one binding")]
 	ExpectedExactlyOneBinding(Span),
+
+	#[error("expected const value")]
+	ExpectedConstValue(Span),
+}
+
+impl Error {
+	pub fn span(&self) -> Span {
+		match self {
+			Self::Number(span, _) => *span,
+			Self::String(span) => *span,
+			Self::Iri(span, _) => *span,
+			Self::Language(span, _) => *span,
+			Self::UnknownPrefix(span, _) => *span,
+			Self::NotAPrefix(span, _) => *span,
+			Self::UnknownVariable(i) => i.span(),
+			Self::NotAVariable(i) => i.span(),
+			Self::UnknownType(span, _) => *span,
+			Self::NotAType(span, _) => *span,
+			Self::UnknownFunction(span, _) => *span,
+			Self::NotAFunction(span, _) => *span,
+			Self::UnknownField(span) => *span,
+			Self::UnknownVariant(i) => i.span(),
+			Self::ArgumentCount { span, .. } => *span,
+			Self::TypeMismatch(span) => *span,
+			Self::ExpectedResource(span) => *span,
+			Self::ExpectedExactlyOneBinding(span) => *span,
+			Self::ExpectedConstValue(span) => *span,
+		}
+	}
 }
 
 pub struct BuildContext<'a, R, D> {

@@ -15,6 +15,7 @@ use std::{
 use treeldr::{
 	build::TypeResolutionError,
 	display::DisplaySignature,
+	eval::{EvalError, MissingData},
 	rdf::{dataset::BTreeDataset, Rdf},
 	syntax::Spanned,
 	value::ValueParseError,
@@ -187,7 +188,12 @@ impl Command {
 				let tree = input_format.load(stdin).map_err(Error::LoadTree)?;
 
 				let mut dataset = BTreeDataset::new();
-				let _ = function.call_inverse(registry, rdf, &mut dataset, &tree)?;
+				let _ = function.call_inverse(registry, rdf, &mut dataset, &[], &tree)?;
+
+				let dataset: BTreeDataset = dataset
+					.into_iter()
+					.map(|quad| quad.map(|t| rdf.interpretation.map_term(t)))
+					.collect();
 
 				output_format
 					.write(dataset, io::stdout())
@@ -247,6 +253,11 @@ impl Error {
 						),
 					])
 					.with_message(e.to_string()),
+				CompileError::Build(e) => Diagnostic::error()
+					.with_labels(vec![
+						Label::primary(file_id, e.span()).with_message(e.to_string())
+					])
+					.with_message("build error"),
 				CompileError::Parse(e) => Diagnostic::error()
 					.with_labels(vec![
 						Label::primary(file_id, e.span()).with_message(e.to_string())
@@ -254,6 +265,9 @@ impl Error {
 					.with_message("invalid syntax"),
 				e => Diagnostic::error().with_message(e.to_string()),
 			},
+			Self::Eval(EvalError::MissingData(MissingData::Empty(dataset))) => Diagnostic::error()
+				.with_message("no matching data")
+				.with_notes(dataset.iter().map(|quad| quad.to_string()).collect()),
 			e => Diagnostic::error().with_message(e.to_string()),
 		}
 	}

@@ -123,7 +123,7 @@ impl<'a, R: Clone + PartialEq> MatchingScope<'a, R> {
 			}
 		} else {
 			let j = i - scope_len;
-			self.substitution.set(j, value)
+			self.substitution.set(j, value).map_err(|(_, v)| v)
 		}
 	}
 

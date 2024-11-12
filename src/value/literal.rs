@@ -4,6 +4,8 @@ use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use std::{str::FromStr, sync::LazyLock};
 
+pub use xsd_types::NoDecimalRepresentation;
+
 static TEN: LazyLock<BigInt> = LazyLock::new(|| 10u32.into());
 
 pub static NUMBER_ZERO: LazyLock<Number> = LazyLock::new(|| 0u32.into());
@@ -230,6 +232,65 @@ impl From<xsd_types::Decimal> for Number {
 	}
 }
 
+impl TryFrom<Number> for xsd_types::Decimal {
+	type Error = NoDecimalRepresentation;
+
+	fn try_from(value: Number) -> Result<Self, Self::Error> {
+		value.0.try_into()
+	}
+}
+
+impl From<xsd_types::Integer> for Number {
+	fn from(value: xsd_types::Integer) -> Self {
+		let n: BigInt = value.into();
+		Self(n.into())
+	}
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("not an integer")]
+pub struct NotAnInteger;
+
+impl TryFrom<Number> for xsd_types::Integer {
+	type Error = NotAnInteger;
+
+	fn try_from(value: Number) -> Result<Self, Self::Error> {
+		if value.0.is_integer() {
+			Ok(value.0.into_raw().0.into())
+		} else {
+			Err(NotAnInteger)
+		}
+	}
+}
+
+impl From<xsd_types::NonNegativeInteger> for Number {
+	fn from(value: xsd_types::NonNegativeInteger) -> Self {
+		let n: BigInt = value.into();
+		Self(n.into())
+	}
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("not a non-negative integer")]
+pub struct NotANonNegativeInteger;
+
+impl TryFrom<Number> for xsd_types::NonNegativeInteger {
+	type Error = NotANonNegativeInteger;
+
+	fn try_from(value: Number) -> Result<Self, Self::Error> {
+		if value.0.is_integer() {
+			let numer = value.0.into_raw().0;
+			if numer.is_negative() {
+				Err(NotANonNegativeInteger)
+			} else {
+				Ok(unsafe { Self::new_unchecked(numer) })
+			}
+		} else {
+			Err(NotANonNegativeInteger)
+		}
+	}
+}
+
 pub enum NativeNumber {
 	U64(u64),
 	I64(i64),
@@ -326,6 +387,20 @@ pub enum Literal {
 }
 
 impl Literal {
+	pub fn as_bool(&self) -> Option<bool> {
+		match self {
+			Self::Boolean(b) => Some(*b),
+			_ => None,
+		}
+	}
+
+	pub fn as_number(&self) -> Option<&Number> {
+		match self {
+			Self::Number(n) => Some(n),
+			_ => None,
+		}
+	}
+
 	pub fn as_str(&self) -> Option<&str> {
 		match self {
 			Self::TextString(s) => Some(s),

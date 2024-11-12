@@ -1,16 +1,16 @@
 use super::{
-	Eval, EvalError, EvalTyped, MissingData, RdfContext, RdfContextMut, ReverseScope, Scope,
-	ScopeTypes,
+	Eval, EvalError, EvalTyped, MissingData, RdfContext, RdfContextMut, Scope, ScopeTypes,
+	ScopeValues,
 };
 use crate::{
 	expr::{ExplicitList, ImplicitList, List, OrderedList, UnorderedList},
+	rdf::DebugSubstitution,
 	Registry, TypeRef, Value,
 };
 use rdf_types::{
 	dataset::{DatasetMut, PatternMatchingDataset},
 	Quad,
 };
-use std::borrow::Cow;
 
 impl<R: Clone + Ord> EvalTyped<R> for List<R> {
 	fn eval_typed(
@@ -32,7 +32,7 @@ impl<R: Clone + Ord> EvalTyped<R> for List<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		type_: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
@@ -70,7 +70,7 @@ impl<R: Clone + Ord> EvalTyped<R> for ExplicitList<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		_type_: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
@@ -107,7 +107,7 @@ impl<R: Clone + Ord> EvalTyped<R> for ImplicitList<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		type_: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
@@ -142,11 +142,10 @@ impl<R: Clone + Ord> EvalTyped<R> for UnorderedList<R> {
 		let mut result = Vec::new();
 
 		for values in self.bound.find_all(dataset, scope) {
-			let scope = Scope::new(
-				Some(scope),
+			let scope = scope.begin(
 				None,
 				ScopeTypes::Repeat(item_ty, values.len() as u32),
-				Cow::Owned(values),
+				ScopeValues::ConstOwned(values),
 			);
 
 			result.push(self.body.eval(registry, rdf, dataset, &scope)?);
@@ -160,17 +159,22 @@ impl<R: Clone + Ord> EvalTyped<R> for UnorderedList<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		_type_ref: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match output {
 			Value::List(list) => {
 				for item in list {
-					self.bound
-						.inverse_once(rdf, dataset, scope, |rdf, dataset, scope| {
+					self.bound.eval_inverse(
+						registry,
+						rdf,
+						dataset,
+						scope,
+						|rdf, dataset, scope| {
 							self.body.eval_inverse(registry, rdf, dataset, scope, item)
-						})?;
+						},
+					)?;
 				}
 
 				Ok(())
@@ -210,7 +214,17 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 				);
 
 				let Some(Quad(_, _, first, _)) = first_candidates.next() else {
-					return Err(EvalError::MissingData(MissingData::Empty));
+					let mut substitution = DebugSubstitution::new();
+					return Err(EvalError::MissingData(MissingData::Empty(
+						[Quad(
+							substitution.insert_resource(rdf, &head),
+							substitution.insert_resource(rdf, &self.components.first),
+							substitution.new_resource(),
+							scope.graph().map(|g| substitution.insert_resource(rdf, g)),
+						)]
+						.into_iter()
+						.collect(),
+					)));
 				};
 
 				if first_candidates.next().is_some() {
@@ -228,7 +242,17 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 				);
 
 				let Some(Quad(_, _, rest, _)) = rest_candidates.next() else {
-					return Err(EvalError::MissingData(MissingData::Empty));
+					let mut substitution = DebugSubstitution::new();
+					return Err(EvalError::MissingData(MissingData::Empty(
+						[Quad(
+							substitution.insert_resource(rdf, &head),
+							substitution.insert_resource(rdf, &self.components.rest),
+							substitution.new_resource(),
+							scope.graph().map(|g| substitution.insert_resource(rdf, g)),
+						)]
+						.into_iter()
+						.collect(),
+					)));
 				};
 
 				if rest_candidates.next().is_some() {
@@ -240,8 +264,17 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 
 			let scope = self
 				.bound
-				.find_one_with(dataset, &scope, |_| Some(first.clone()))?
-				.ok_or(EvalError::MissingData(MissingData::Empty))?;
+				.find_one_with(dataset, &scope, |_| {
+					Ok(Some(Value::Resource(first.clone())))
+				})?
+				.ok_or_else(|| {
+					let mut substitution = DebugSubstitution::new();
+					EvalError::MissingData(MissingData::Empty(scope.substitute_dataset(
+						rdf,
+						&mut substitution,
+						&self.bound.dataset,
+					)))
+				})?;
 
 			result.push(self.body.eval(registry, rdf, dataset, &scope)?);
 
@@ -256,7 +289,7 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		_type_ref: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
@@ -271,7 +304,7 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 
 					let first = self
 						.bound
-						.inverse_once(rdf, dataset, scope, |rdf, dataset, scope| {
+						.find_one_inverse(rdf, dataset, scope, |rdf, dataset, scope| {
 							self.body.eval_inverse(registry, rdf, dataset, scope, item)
 						})?
 						.into_iter()

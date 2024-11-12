@@ -1,12 +1,12 @@
 mod scope;
 
 use iref::IriBuf;
-use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
+use rdf_types::dataset::{BTreeDataset, DatasetMut, PatternMatchingDataset};
 pub use scope::*;
 
 use crate::{
 	expr::{Expr, InnerExpr},
-	rdf::{RdfContext, RdfContextMut},
+	rdf::{DebugSubstitution, RdfContext, RdfContextMut},
 	Registry, TypeRef, Value,
 };
 
@@ -20,7 +20,10 @@ mod r#match;
 #[derive(Debug, thiserror::Error)]
 pub enum MissingData {
 	#[error("empty selection")]
-	Empty,
+	Empty(BTreeDataset),
+
+	#[error("no variant match")]
+	NotVariantMatch,
 
 	#[error("no matching IRI representation")]
 	NoMatchingIriRepresentation,
@@ -31,7 +34,7 @@ pub enum MissingData {
 
 #[derive(Debug, thiserror::Error)]
 pub enum EvalError<R = rdf_types::Term> {
-	#[error("empty selection")]
+	#[error(transparent)]
 	MissingData(MissingData),
 
 	#[error("ambiguity")]
@@ -50,13 +53,16 @@ pub enum EvalError<R = rdf_types::Term> {
 	UnknownVariant(String),
 
 	#[error("invalid number of arguments (expected {expected}, found {found})")]
-	ArgumentCount { expected: usize, found: usize },
+	ArgumentCount { expected: u32, found: u32 },
 
 	#[error("ambiguous IRI representation")]
 	AmbiguousIriRepresentation(IriBuf, IriBuf),
 
 	#[error("ambiguous literal representation")]
 	AmbiguousLiteralRepresentation(String, String),
+
+	#[error("resource unification error")]
+	ResourceUnificationError,
 }
 
 pub trait Eval<R: Clone> {
@@ -73,7 +79,7 @@ pub trait Eval<R: Clone> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>>;
 }
@@ -93,7 +99,7 @@ pub trait EvalTyped<R: Clone> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		type_: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>>;
@@ -107,13 +113,8 @@ impl<R: Ord + Clone> Eval<R> for Expr<R> {
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		scope: &Scope<R>,
 	) -> Result<Value<R>, EvalError<R>> {
-		let scope = self
-			.bound
-			.find_one(dataset, scope)?
-			.ok_or(EvalError::MissingData(MissingData::Empty))?;
-
 		self.inner
-			.eval_typed(registry, rdf, dataset, &scope, self.type_)
+			.eval_typed(registry, rdf, dataset, scope, self.type_)
 	}
 
 	fn eval_inverse(
@@ -121,15 +122,11 @@ impl<R: Ord + Clone> Eval<R> for Expr<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
-		self.bound
-			.inverse_once(rdf, dataset, scope, |rdf, dataset, scope| {
-				self.inner
-					.eval_inverse_typed(registry, rdf, dataset, scope, self.type_, output)
-			})?;
-		Ok(())
+		self.inner
+			.eval_inverse_typed(registry, rdf, dataset, scope, self.type_, output)
 	}
 }
 
@@ -143,7 +140,21 @@ impl<R: Ord + Clone> EvalTyped<R> for InnerExpr<R> {
 		type_: TypeRef,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
+			Self::Let(bindings, e) => {
+				let sub_scope = bindings
+					.eval(registry, rdf, dataset, scope)?
+					.ok_or_else(|| {
+						let mut substitution = DebugSubstitution::new();
+						EvalError::MissingData(MissingData::Empty(scope.substitute_dataset(
+							rdf,
+							&mut substitution,
+							&bindings.dataset,
+						)))
+					})?;
+				e.eval(registry, rdf, dataset, &sub_scope)
+			}
 			Self::Var(i) => Ok(scope.get(*i).unwrap().clone()),
+			Self::Resource(r) => Ok(Value::Resource(r.clone())),
 			Self::Literal(l) => l.eval_typed(registry, rdf, dataset, scope, type_),
 			Self::List(list) => list.eval_typed(registry, rdf, dataset, scope, type_),
 			Self::Map(map) => map.eval_typed(registry, rdf, dataset, scope, type_),
@@ -157,12 +168,23 @@ impl<R: Ord + Clone> EvalTyped<R> for InnerExpr<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		type_: TypeRef,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {
-			Self::Var(i) => scope.set(*i, output.clone()),
+			Self::Let(bindings, e) => {
+				bindings.eval_inverse(registry, rdf, dataset, scope, |rdf, dataset, scope| {
+					e.eval_inverse(registry, rdf, dataset, scope, output)
+				})
+			}
+			Self::Var(i) => scope.set(rdf, *i, output.clone()),
+			Self::Resource(a) => match output {
+				Value::Resource(b) => rdf
+					.unify(a, b)
+					.map_err(|_| EvalError::ResourceUnificationError),
+				_ => Err(EvalError::InvalidType),
+			},
 			Self::Literal(l) => l.eval_inverse_typed(registry, rdf, dataset, scope, type_, output),
 			Self::List(list) => {
 				list.eval_inverse_typed(registry, rdf, dataset, scope, type_, output)

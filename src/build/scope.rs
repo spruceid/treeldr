@@ -7,6 +7,7 @@ use super::{BuildContext, BuildingNamespace, ScopeItemRef, TypeVariableRef};
 pub struct Scope<'a> {
 	pub module: Option<ModuleRef>,
 	pub expr: ExprScope<'a>,
+	pub const_: bool,
 }
 
 impl<'a> Scope<'a> {
@@ -14,6 +15,7 @@ impl<'a> Scope<'a> {
 		Self {
 			module: None,
 			expr: ExprScope::new(None),
+			const_: false,
 		}
 	}
 
@@ -88,6 +90,15 @@ impl<'a> Scope<'a> {
 		Self {
 			module: self.module,
 			expr: ExprScope::new(Some(&self.expr)),
+			const_: self.const_,
+		}
+	}
+
+	pub fn begin_const(&'a self) -> Scope<'a> {
+		Self {
+			module: self.module,
+			expr: ExprScope::new(Some(&self.expr)),
+			const_: true,
 		}
 	}
 
@@ -95,6 +106,7 @@ impl<'a> Scope<'a> {
 		Self {
 			module: Some(self_),
 			expr: ExprScope::new(None),
+			const_: self.const_,
 		}
 	}
 }

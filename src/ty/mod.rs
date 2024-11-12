@@ -989,11 +989,19 @@ impl Number {
 	}
 
 	pub fn int() -> Self {
-		todo!()
+		Self {
+			domain: NumberDomain::Integer,
+			min: MinBound::Unbounded,
+			max: MaxBound::Unbounded,
+		}
 	}
 
 	pub fn uint() -> Self {
-		todo!()
+		Self {
+			domain: NumberDomain::Integer,
+			min: MinBound::Included(NUMBER_ZERO.clone()),
+			max: MaxBound::Unbounded,
+		}
 	}
 
 	pub fn as_singleton(&self) -> Option<&value::Number> {

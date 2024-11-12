@@ -20,8 +20,6 @@ use crate::{Literal, TypeRef};
 pub struct Expr<R, T = TypeRef> {
 	pub type_: T,
 
-	pub bound: Bound<R, T>,
-
 	pub inner: InnerExpr<R, T>,
 }
 
@@ -33,7 +31,6 @@ impl<R: Ord, T> Expr<R, T> {
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Expr<R, U> {
 		Expr {
 			type_: f(self.type_),
-			bound: self.bound.map_types(&mut *f),
 			inner: self.inner.map_types_ref_mut(f),
 		}
 	}
@@ -42,12 +39,17 @@ impl<R: Ord, T> Expr<R, T> {
 /// Inner expression.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum InnerExpr<R, T = TypeRef> {
+	/// Let binding.
+	Let(Bindings<R, T>, Box<Expr<R, T>>),
+
 	/// Resource variable.
 	///
 	/// ```tldr
 	/// ?variable
 	/// ```
 	Var(u32),
+
+	Resource(R),
 
 	/// Literal value.
 	///
@@ -95,7 +97,11 @@ impl<R: Ord, T> InnerExpr<R, T> {
 
 	fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> InnerExpr<R, U> {
 		match self {
+			Self::Let(b, e) => {
+				InnerExpr::Let(b.map_types_ref_mut(f), Box::new(e.map_types_ref_mut(f)))
+			}
 			Self::Var(x) => InnerExpr::Var(x),
+			Self::Resource(r) => InnerExpr::Resource(r),
 			Self::Literal(l) => InnerExpr::Literal(l),
 			Self::List(l) => InnerExpr::List(l.map_types_ref_mut(f)),
 			Self::Map(m) => InnerExpr::Map(m.map_types_ref_mut(f)),

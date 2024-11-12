@@ -1,6 +1,6 @@
 use super::BuiltInFunction;
 use crate::{
-	eval::{Eval, EvalError, ReverseScope, Scope},
+	eval::{Eval, EvalError, Scope},
 	expr::Expr,
 	rdf::{RdfContext, RdfContextMut},
 	Registry, TypeRef, Value,
@@ -32,7 +32,7 @@ impl<R: Ord + Clone> Body<R> {
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
 			Self::Expr(e) => e.eval(registry, rdf, dataset, scope),
-			Self::BuiltIn(b) => b.eval(rdf, dataset, scope.top_values()),
+			Self::BuiltIn(b) => b.eval(rdf, dataset, scope.top_const_values()),
 		}
 	}
 
@@ -41,16 +41,18 @@ impl<R: Ord + Clone> Body<R> {
 		registry: &Registry<R>,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut ReverseScope<R>,
+		scope: &mut Scope<R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {
 			Self::Expr(e) => e.eval_inverse(registry, rdf, dataset, scope, output),
 			Self::BuiltIn(b) => {
-				let values = b.eval_inverse(rdf, scope, output)?;
+				let offset = scope.parent().unwrap().top_const_values().len() as u32;
+
+				let values = b.eval_inverse(rdf, dataset, scope, output)?;
 
 				for (i, value) in values.into_iter().enumerate() {
-					scope.set(i as u32, value)?;
+					scope.set(rdf, offset + i as u32, value)?;
 				}
 
 				Ok(())
