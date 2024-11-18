@@ -1,0 +1,35 @@
+{
+	"type": "record",
+	"fields": {
+		"name": { "property": "https://schema.org/name", "value": { "type": "string" } },
+		"email": { "property": "https://schema.org/email", "value": { "type": "string" } },
+		"achievement": {
+			"intro": [],
+			"value": {
+				"input": ["_:self"],
+				"layout": {
+					"type": "sum",
+					"variants": {
+						"projectExecution": {
+							"intro": [],
+							"value": {
+								"input": ["_:self"],
+								"layout": {
+									"type": "unit",
+									"const": "projectExecution",
+									"dataset": [
+										["_:self", "https://purl.imsglobal.org/spec/vc/ob/vocab.html#achievement", "http://example.com/#projectExecution"],
+										["http://example.com/#projectExecution", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", "https://purl.imsglobal.org/spec/vc/ob/vocab.html#Achievement"],
+										["http://example.com/#projectExecution", "https://schema.org/name", { "value": "Project execution", "language": "en" }],
+										["http://example.com/#projectExecution", "https://purl.imsglobal.org/spec/vc/ob/vocab.html#Criteria", "http://example.com/#projectExecutionCriteria"],
+										["http://example.com/#projectExecutionCriteria", "https://purl.imsglobal.org/spec/vc/ob/vocab.html#narrative", { "value": "Contribute to solution design and implementation.", "language": "en" }]
+									]
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

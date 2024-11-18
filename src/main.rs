@@ -6,7 +6,7 @@ use codespan_reporting::{
 		termcolor::{ColorChoice, StandardStream},
 	},
 };
-use rdf_types::Term;
+use rdf_types::{generator, Generator, Term};
 use std::{
 	fs,
 	io::{self, BufReader},
@@ -190,19 +190,20 @@ impl DefaultLayoutRef {
 
 fn run(files: &mut SimpleFiles<String, String>, args: Args) -> Result<(), Error> {
 	let mut layouts = Layouts::new();
+	let mut generator = generator::Blank::new();
 	let prelude = args.prelude();
 	let mut default_layout = DefaultLayoutRef::None;
 	for filename in args.layouts {
 		let content = fs::read_to_string(&filename).map_err(Error::IO)?;
 		let file_id = files.add(filename.to_string_lossy().into_owned(), content);
-		let layout_ref = load_layout(files, file_id, &mut layouts)?;
+		let layout_ref = load_layout(files, file_id, &mut layouts, &mut generator)?;
 		default_layout.set(layout_ref);
 	}
 
 	for filename in args.include {
 		let content = fs::read_to_string(&filename).map_err(Error::IO)?;
 		let file_id = files.add(filename.to_string_lossy().into_owned(), content);
-		load_layout(files, file_id, &mut layouts)?;
+		load_layout(files, file_id, &mut layouts, &mut generator)?;
 	}
 
 	let layouts = layouts.with(prelude);
@@ -357,14 +358,17 @@ fn load_layout(
 	files: &SimpleFiles<String, String>,
 	file_id: usize,
 	layouts: &mut Layouts,
+	generator: &mut impl Generator,
 ) -> Result<Ref<LayoutType>, Error> {
 	use json_syntax::{Parse, TryFromJson};
 
 	let mut builder = treeldr_layouts::abs::Builder::new();
+	let mut context = builder.with_generator_mut(generator);
+
 	match json_syntax::Value::parse_str(files.get(file_id).unwrap().source().as_str()) {
 		Ok((json, code_map)) => {
 			match treeldr_layouts::abs::syntax::Layout::try_from_json(&json, &code_map) {
-				Ok(layout) => match layout.build(&mut builder) {
+				Ok(layout) => match layout.build_with_context(&mut context) {
 					Ok(layout_ref) => {
 						let new_layouts = builder.build();
 

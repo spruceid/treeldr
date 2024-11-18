@@ -1,0 +1,7 @@
+_:subject <https://schema.org/name> "John Smith" .
+_:subject <https://schema.org/email> "john.smith@example.com" .
+_:subject <https://purl.imsglobal.org/spec/vc/ob/vocab.html#achievement> <http://example.com/#projectExecution> .
+<http://example.com/#projectExecution> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://purl.imsglobal.org/spec/vc/ob/vocab.html#Achievement> .
+<http://example.com/#projectExecution> <https://schema.org/name> "Project execution"@en .
+<http://example.com/#projectExecution> <https://purl.imsglobal.org/spec/vc/ob/vocab.html#Criteria> <http://example.com/#projectExecutionCriteria> .
+<http://example.com/#projectExecutionCriteria> <https://purl.imsglobal.org/spec/vc/ob/vocab.html#narrative> "Contribute to solution design and implementation."@en .
