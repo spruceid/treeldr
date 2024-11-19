@@ -17,7 +17,7 @@ use treeldr::{
 fn file_path(path: impl AsRef<Path>) -> PathBuf {
 	let mut absolute_path: PathBuf = env!("CARGO_MANIFEST_DIR").into();
 	absolute_path.push("tests");
-	absolute_path.push("distill");
+	absolute_path.push("suite");
 	absolute_path.extend(path.as_ref());
 	absolute_path
 }
