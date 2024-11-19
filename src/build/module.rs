@@ -3,8 +3,8 @@ use ll1::Spanned;
 use std::{collections::HashMap, hash::Hash};
 
 use crate::{
-	function::FunctionRef, rdf::RdfContextMut, syntax::ast, Item, ItemPath, ItemPathSegment,
-	ItemRef, Module, ModuleRef, Registry, TypeRef,
+	function::FunctionRef, module::Item, rdf::RdfContextMut, syntax::ast, ItemPath,
+	ItemPathSegment, ItemRef, Module, ModuleRef, Registry, TypeRef,
 };
 
 use super::{

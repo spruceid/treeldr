@@ -16,10 +16,11 @@ use treeldr::{
 	build::TypeResolutionError,
 	display::DisplaySignature,
 	eval::{EvalError, MissingData},
+	module::{CompileError, ItemRef},
 	rdf::{dataset::BTreeDataset, Rdf},
 	syntax::Spanned,
 	value::ValueParseError,
-	CompileError, Environment, ItemRef, ModuleRef, Registry, Value,
+	Environment, ModuleRef, Registry, Value,
 };
 
 mod format;
@@ -213,7 +214,7 @@ pub enum Error {
 	IO(#[from] io::Error),
 
 	#[error("{1}")]
-	Compile(usize, treeldr::CompileError),
+	Compile(usize, CompileError),
 
 	#[error("undefined function `{0}`")]
 	UndefinedFunction(String),

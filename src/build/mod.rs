@@ -1,12 +1,13 @@
 use crate::{
 	function::FunctionRef,
+	module::ItemPathBuf,
 	rdf::RdfContextMut,
 	syntax::{
 		ast::{self, Ident},
 		Span,
 	},
 	value::NumberParseError,
-	Attribute, Attributes, Environment, Function, ItemPathBuf, Module, ModuleRef, Registry, Value,
+	Attribute, Attributes, Environment, Function, Module, ModuleRef, Registry, Value,
 };
 use std::hash::Hash;
 

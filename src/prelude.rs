@@ -1,7 +1,8 @@
 use crate::{
 	function::BuiltInFunction,
+	module::Item,
 	ty::{BuiltInType, LiteralType, TypeDesc},
-	Function, Item, Module, Registry,
+	Function, Module, Registry,
 };
 
 impl<R> Module<R> {

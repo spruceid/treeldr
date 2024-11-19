@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::{rdf::RdfContextMut, syntax::ast, ItemPathBuf, ItemPathSegment};
+use crate::{module::ItemPathBuf, rdf::RdfContextMut, syntax::ast, ItemPathSegment};
 
 use super::{Build, BuildContext, BuildingNamespace, Error, Scope};
 
