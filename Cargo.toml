@@ -88,12 +88,11 @@ serde_json = { workspace = true, optional = true }
 serde_cbor = { workspace = true, optional = true }
 # parking_lot = "0.12.3"
 
-ll1 = { path = "/home/timothee/Projets/utils/parsing/ll1" }
-iregex = { path = "/home/timothee/Projets/utils/parsing/iregex" }
-iregex-syntax = { path = "/home/timothee/Projets/utils/parsing/iregex/crates/syntax" }
-disjoint-collections = { path = "/home/timothee/Projets/utils/data-structures/disjoint-collections" }
-# scc-trait = "0.1.0"
-scc-trait = { path = "/home/timothee/Projets/utils/traits/scc-trait" }
+ll1 = { git = "https://github.com/timothee-haudebourg/ll1-rs.git", rev = "aeb9c32" }
+iregex = "0.1"
+iregex-syntax = "0.1"
+disjoint-collections = "0.1"
+scc-trait = "1.0"
 langtag = "0.4.0"
 
 [dev-dependencies]
