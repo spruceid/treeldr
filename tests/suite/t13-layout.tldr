@@ -1,0 +1,3 @@
+prefix ex = <http://example.org#>
+
+let (_ input) where { input ex:prop ex:HelloWorld } = "Hello World!"

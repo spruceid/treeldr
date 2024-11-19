@@ -105,6 +105,12 @@ pub enum TokenKind {
 	#[token("}")]
 	BraceR,
 
+	#[token("{{")]
+	DoubleBraceL,
+
+	#[token("}}")]
+	DoubleBraceR,
+
 	#[token("(")]
 	ParenthesisL,
 
@@ -261,6 +267,7 @@ pub enum Expr {
 	Map(MapExpr),
 	Match(MatchExpr),
 	Call(CallExpr),
+	Block(DoubleBraceL, Box<Self>, DoubleBraceR),
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -397,7 +404,7 @@ pub enum RdfLiteralAnnotation {
 
 #[derive(Debug, ll1::Parse)]
 pub struct Mapping {
-	pub arrow: Arrow,
+	pub semicolon: Semicolon,
 	pub expr: Box<Expr>,
 }
 
@@ -421,7 +428,7 @@ pub enum TypeExpr {
 
 /// List type expression.
 ///
-/// ```
+/// ```text
 /// [A, B, C]
 /// [A, B, C, ... T],
 /// [... T]

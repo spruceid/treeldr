@@ -1,0 +1,1 @@
+let (_ values) = [all item where { values <http://example.org#prop> item }; (string_of item)]

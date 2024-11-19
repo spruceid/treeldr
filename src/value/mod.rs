@@ -15,13 +15,17 @@ pub mod serde;
 
 use crate::{ty::TypeDesc, utils::try_map_list, Registry, Type, TypeRef};
 
+pub type List<R = rdf_types::Term> = Vec<Value<R>>;
+
+pub type Map<R = rdf_types::Term> = BTreeMap<Value<R>, Value<R>>;
+
 /// Untyped tree value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Value<R = rdf_types::Term> {
 	Resource(R),
 	Literal(Literal),
-	Map(BTreeMap<Self, Self>),
-	List(Vec<Self>),
+	Map(Map<R>),
+	List(List<R>),
 }
 
 impl<R> Default for Value<R> {
@@ -113,7 +117,7 @@ impl<R> Value<R> {
 					})
 					.map(TypedValueInnerDesc::List)
 					.map_err(Self::List)?,
-					Value::Map(m) => map_into_typed(m, TypedValue::into_untyped, |item| {
+					Value::Map(m) => try_map_into_typed(m, TypedValue::into_untyped, |item| {
 						item.into_typed(registry, ty_ref)
 					})
 					.map(TypedValueInnerDesc::Map)
@@ -122,13 +126,13 @@ impl<R> Value<R> {
 				.into(),
 			}),
 			(TypeDesc::Resource(_), Self::Resource(r)) => Ok(TypedValue {
-				type_: ty_ref.clone(),
+				type_: ty_ref,
 				desc: TypedValueInnerDesc::Resource(r).into(),
 			}),
 			(TypeDesc::Literal(ty), Self::Literal(l)) => {
 				if ty.contains(&l) {
 					Ok(TypedValue {
-						type_: ty_ref.clone(),
+						type_: ty_ref,
 						desc: TypedValueInnerDesc::Literal(l).into(),
 					})
 				} else {
@@ -145,7 +149,7 @@ impl<R> Value<R> {
 				}
 
 				Ok(TypedValue {
-					type_: ty_ref.clone(),
+					type_: ty_ref,
 					desc: TypedValueInnerDesc::List(
 						items
 							.into_iter()
@@ -156,8 +160,8 @@ impl<R> Value<R> {
 					.into(),
 				})
 			}
-			(TypeDesc::Struct(ty), Self::Map(mut map)) => {
-				let mut result = TypedMap::new();
+			(TypeDesc::Map(ty), Self::Map(mut map)) => {
+				let mut result = TypedValueMap::new();
 
 				for (&key_pattern, field) in &ty.fields {
 					let mut found = false;
@@ -201,7 +205,7 @@ impl<R> Value<R> {
 				}
 
 				Ok(TypedValue {
-					type_: ty_ref.clone(),
+					type_: ty_ref,
 					desc: TypedValueInnerDesc::Map(result).into(),
 				})
 			}
@@ -210,7 +214,7 @@ impl<R> Value<R> {
 					match std::mem::take(&mut value).into_typed(registry, variant.type_) {
 						Ok(typed_value) => {
 							return Ok(TypedValue {
-								type_: ty_ref.clone(),
+								type_: ty_ref,
 								desc: TypedValueDesc::Variant(name.clone(), Box::new(typed_value)),
 							})
 						}
@@ -319,11 +323,11 @@ impl<R: fmt::Display> fmt::Display for Value<R> {
 	}
 }
 
-fn map_into_typed<R: Ord>(
-	l: BTreeMap<Value<R>, Value<R>>,
+fn try_map_into_typed<R: Ord>(
+	l: Map<R>,
 	revert: impl Fn(TypedValue<R>) -> Value<R>,
 	f: impl Fn(Value<R>) -> Result<TypedValue<R>, Value<R>>,
-) -> Result<TypedMap<R, TypedValue<R>>, BTreeMap<Value<R>, Value<R>>> {
+) -> Result<TypedMap<R>, Map<R>> {
 	let mut result = TypedMap::new();
 
 	let mut entries = l.into_iter();

@@ -1,3 +1,0 @@
-prefix ex = <https://example.org/#>
-
-let (_ input) where { input ex:foo "Foo"^^ex:Type } = null

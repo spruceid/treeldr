@@ -95,7 +95,7 @@ impl<R> Substitution<R> {
 		self,
 		mut f: impl FnMut(u32) -> Result<Value<R>, E>,
 	) -> Result<Vec<Value<R>>, E> {
-		let mut result = Vec::with_capacity(self.0.len() as usize);
+		let mut result = Vec::with_capacity(self.0.len());
 
 		for (i, value) in self.0.into_iter().enumerate() {
 			result.push(match value.into_inner() {

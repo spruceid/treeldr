@@ -1,11 +1,11 @@
 use super::Expr;
-use crate::{value::TypedMap, TypeRef};
+use crate::{value::TypedValueMap, TypeRef};
 
 /// Map expression.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Map<R, T = TypeRef> {
 	/// Entries.
-	pub entries: TypedMap<R, Expr<R, T>, T>,
+	pub entries: TypedValueMap<R, Expr<R, T>, T>,
 }
 
 impl<R: Ord, T> Map<R, T> {

@@ -114,7 +114,7 @@ impl<'a, R: Clone + PartialEq> MatchingScope<'a, R> {
 
 	pub fn assign_with(&mut self, i: u32, f: impl FnOnce() -> Value<R>) -> Result<(), Value<R>> {
 		let value = f();
-		let scope_len = self.scope.len() as u32;
+		let scope_len = self.scope.len();
 		if i < scope_len {
 			if self.scope.get(i).is_some_and(|r| *r == value) {
 				Ok(())

@@ -10,7 +10,7 @@ use crate::{
 	rdf::RdfContextMut,
 	syntax::ast::{self, ListDescription},
 	ty::{self, TypeDesc},
-	value::{Number, TypedMap, TypedValue, TypedValueDesc, TypedValueInnerDesc},
+	value::{Number, TypedValue, TypedValueDesc, TypedValueInnerDesc, TypedValueMap},
 	Attributes, DatasetPattern, Literal, TermPattern, Type, Value,
 };
 
@@ -46,11 +46,11 @@ impl ast::Bindings {
 }
 
 impl ast::Binding {
-	fn build<'ast, 'a, R, D>(
+	fn build<'ast, R, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, R, D>,
 		namespace: &BuildingNamespace<'ast>,
-		scope: &'a Scope,
+		scope: &Scope,
 	) -> Result<Binding<R, TypeVariableRef>, Error>
 	where
 		R: Clone + Ord + Hash,
@@ -64,7 +64,9 @@ impl ast::Binding {
 
 		let type_ = match &assignment {
 			Some(a) => a.type_,
-			None => context.type_variables.fresh(Type::resource()),
+			None => context
+				.type_variables
+				.fresh(Type::resource(), Some(self.span())),
 		};
 
 		Ok(Binding { type_, assignment })
@@ -326,10 +328,13 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
 			Self::Resource(iri) => {
 				let iri = iri.build(context, namespace, scope)?;
 				let resource = context.rdf.insert_iri(Cow::Owned(iri));
-				let type_ = context.type_variables.fresh(Type::new(
-					Attributes::new(),
-					TypeDesc::Resource(ty::Resource::singleton(resource.clone())),
-				));
+				let type_ = context.type_variables.fresh(
+					Type::new(
+						Attributes::new(),
+						TypeDesc::Resource(ty::Resource::singleton(resource.clone())),
+					),
+					Some(self.span()),
+				);
 				Ok(Expr {
 					type_,
 					inner: InnerExpr::Resource(resource),
@@ -337,9 +342,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
 			}
 			Self::Literal(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let type_ = context
-					.type_variables
-					.fresh(Type::new(Attributes::new(), TypeDesc::Literal(ty)));
+				let type_ = context.type_variables.fresh(
+					Type::new(Attributes::new(), TypeDesc::Literal(ty)),
+					Some(self.span()),
+				);
 				Ok(Expr {
 					type_,
 					inner: InnerExpr::Literal(e),
@@ -347,9 +353,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
 			}
 			Self::List(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let type_ = context
-					.type_variables
-					.fresh(Type::new(Attributes::new(), TypeDesc::List(ty)));
+				let type_ = context.type_variables.fresh(
+					Type::new(Attributes::new(), TypeDesc::List(ty)),
+					Some(self.span()),
+				);
 				Ok(Expr {
 					type_,
 					inner: InnerExpr::List(e),
@@ -357,9 +364,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
 			}
 			Self::Map(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let type_ = context
-					.type_variables
-					.fresh(Type::new(Attributes::new(), TypeDesc::Struct(ty)));
+				let type_ = context.type_variables.fresh(
+					Type::new(Attributes::new(), TypeDesc::Map(ty)),
+					Some(self.span()),
+				);
 				Ok(Expr {
 					type_,
 					inner: InnerExpr::Map(e),
@@ -367,9 +375,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
 			}
 			Self::Match(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let type_ = context
-					.type_variables
-					.fresh(Type::new(Attributes::new(), TypeDesc::Enum(ty)));
+				let type_ = context.type_variables.fresh(
+					Type::new(Attributes::new(), TypeDesc::Enum(ty)),
+					Some(self.span()),
+				);
 				Ok(Expr {
 					type_,
 					inner: InnerExpr::Match(e),
@@ -382,6 +391,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
 					inner: InnerExpr::Call(e),
 				})
 			}
+			Self::Block(_, e, _) => e.build(context, namespace, scope),
 		}
 	}
 }
@@ -431,9 +441,12 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListExpr {
 							},
 						});
 
-						context.type_variables.assert_eq(item.type_, body.type_);
+						let resource_ty = context
+							.type_variables
+							.fresh(TypeValue::Pattern(Type::resource()), None);
+						context.type_variables.assert_eq(item.type_, resource_ty);
 
-						let ty = ty::List::uniform(item.type_);
+						let ty = ty::List::uniform(body.type_);
 						let e = expr::List::Implicit(expr::ImplicitList::Unordered(
 							expr::UnorderedList { bound, body },
 						));
@@ -460,9 +473,12 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListExpr {
 							},
 						});
 
-						context.type_variables.assert_eq(item.type_, body.type_);
+						let resource_ty = context
+							.type_variables
+							.fresh(TypeValue::Pattern(Type::resource()), None);
+						context.type_variables.assert_eq(item.type_, resource_ty);
 
-						let ty = ty::List::uniform(item.type_);
+						let ty = ty::List::uniform(body.type_);
 						let e =
 							expr::List::Implicit(expr::ImplicitList::Ordered(expr::OrderedList {
 								components: ListComponents {
@@ -485,10 +501,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListExpr {
 }
 
 impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
-	type Target = (
-		expr::Map<R, TypeVariableRef>,
-		ty::Struct<R, TypeVariableRef>,
-	);
+	type Target = (expr::Map<R, TypeVariableRef>, ty::Map<R, TypeVariableRef>);
 
 	fn build<D>(
 		&'ast self,
@@ -500,7 +513,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
 		D: RdfContextMut<R>,
 	{
 		let mut fields = BTreeMap::new();
-		let mut entries = TypedMap::new();
+		let mut entries = TypedValueMap::new();
 
 		for entry in &self.entries {
 			let key = entry.key.build(context, namespace, scope)?;
@@ -508,7 +521,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
 
 			fields.insert(
 				key.type_,
-				ty::Field {
+				ty::map::Field {
 					attributes: entry.metadata.build(context, namespace, scope)?,
 					type_: value.type_,
 					required: entry.optional.is_none(),
@@ -520,7 +533,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
 
 		let e = expr::Map { entries };
 
-		let t = ty::Struct { fields };
+		let t = ty::Map { fields };
 
 		Ok((e, t))
 	}
@@ -552,31 +565,37 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstValue {
 		let (inner, type_) = match self {
 			Self::Resource(term) => {
 				let term = term.build(context, namespace, scope)?;
-				let ty = context.type_variables.fresh(Type::new(
-					Attributes::new(),
-					TypeDesc::Resource(ty::Resource::singleton(term.clone())),
-				));
+				let ty = context.type_variables.fresh(
+					Type::new(
+						Attributes::new(),
+						TypeDesc::Resource(ty::Resource::singleton(term.clone())),
+					),
+					Some(self.span()),
+				);
 				(TypedValueInnerDesc::Resource(term), ty)
 			}
 			Self::Literal(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let ty = context
-					.type_variables
-					.fresh(Type::new(Attributes::new(), TypeDesc::Literal(ty)));
+				let ty = context.type_variables.fresh(
+					Type::new(Attributes::new(), TypeDesc::Literal(ty)),
+					Some(self.span()),
+				);
 				(TypedValueInnerDesc::Literal(e), ty)
 			}
 			Self::List(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let ty = context
-					.type_variables
-					.fresh(Type::new(Attributes::new(), TypeDesc::List(ty)));
+				let ty = context.type_variables.fresh(
+					Type::new(Attributes::new(), TypeDesc::List(ty)),
+					Some(self.span()),
+				);
 				(TypedValueInnerDesc::List(e), ty)
 			}
 			Self::Map(expr) => {
 				let (e, ty) = expr.build(context, namespace, scope)?;
-				let ty = context
-					.type_variables
-					.fresh(Type::new(Attributes::new(), TypeDesc::Struct(ty)));
+				let ty = context.type_variables.fresh(
+					Type::new(Attributes::new(), TypeDesc::Map(ty)),
+					Some(self.span()),
+				);
 				(TypedValueInnerDesc::Map(e), ty)
 			}
 		};
@@ -636,8 +655,8 @@ impl ast::ConstMap {
 
 impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
 	type Target = (
-		TypedMap<R, TypedValue<R, TypeVariableRef>, TypeVariableRef>,
-		ty::Struct<R, TypeVariableRef>,
+		TypedValueMap<R, TypedValue<R, TypeVariableRef>, TypeVariableRef>,
+		ty::Map<R, TypeVariableRef>,
 	);
 
 	fn build<D>(
@@ -650,7 +669,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
 		D: RdfContextMut<R>,
 	{
 		let mut fields = BTreeMap::new();
-		let mut entries = TypedMap::new();
+		let mut entries = TypedValueMap::new();
 
 		for entry in &self.entries {
 			let key = entry.key.build(context, namespace, scope)?;
@@ -658,7 +677,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
 
 			fields.insert(
 				key.type_,
-				ty::Field {
+				ty::map::Field {
 					attributes: Attributes::new(),
 					type_: value.type_,
 					required: true,
@@ -668,7 +687,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
 			entries.insert(key, value);
 		}
 
-		let t = ty::Struct { fields };
+		let t = ty::Map { fields };
 
 		Ok((entries, t))
 	}
@@ -700,7 +719,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MatchExpr {
 
 		for case in &self.cases {
 			let value = case.value.build(context, namespace, scope)?;
-			let variant = ty::Variant {
+			let variant = ty::r#enum::Variant {
 				attributes: case.metadata.build(context, namespace, scope)?,
 				type_: value.type_,
 			};
@@ -777,7 +796,9 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::CallExpr {
 			args,
 		};
 
-		let t = context.type_variables.fresh(TypeValue::Undefined);
+		let t = context
+			.type_variables
+			.fresh(TypeValue::Undefined, Some(self.span()));
 		context.type_variables.assert_eq(signature.return_type, t);
 
 		Ok((e, t))
@@ -930,14 +951,14 @@ fn decode_string_literal(s: &str, span: Span) -> Result<String, Error> {
 					let a = chars
 						.next()
 						.and_then(|c| c.to_digit(16))
-						.ok_or_else(|| Error::String(span))?;
+						.ok_or(Error::String(span))?;
 
 					let b = chars
 						.next()
 						.and_then(|c| c.to_digit(16))
-						.ok_or_else(|| Error::String(span))?;
+						.ok_or(Error::String(span))?;
 
-					char::from_u32(a << 4 | b).ok_or_else(|| Error::String(span))?
+					char::from_u32(a << 4 | b).ok_or(Error::String(span))?
 				}
 				Some('u' | 'U') => match chars.next() {
 					Some('{') => {
@@ -948,15 +969,15 @@ fn decode_string_literal(s: &str, span: Span) -> Result<String, Error> {
 							match chars.next() {
 								Some('}') if i >= 2 => break,
 								Some(d) if i < 6 => {
-									value = value << 4
-										| d.to_digit(16).ok_or_else(|| Error::String(span))?;
+									value =
+										value << 4 | d.to_digit(16).ok_or(Error::String(span))?;
 									i += 1
 								}
 								_ => return Err(Error::String(span)),
 							}
 						}
 
-						char::from_u32(value).ok_or_else(|| Error::String(span))?
+						char::from_u32(value).ok_or(Error::String(span))?
 					}
 					_ => return Err(Error::String(span)),
 				},

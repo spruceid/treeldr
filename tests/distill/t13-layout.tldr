@@ -1,1 +1,0 @@
-let (_ input) = (string_of (get <http://example.org/prop> input))

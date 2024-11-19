@@ -148,7 +148,7 @@ impl Number {
 			None => (),
 		}
 
-		while let Some(c) = chars.next() {
+		for c in chars {
 			match c {
 				'.' if !fractional_part => {
 					if empty {
@@ -330,7 +330,7 @@ macro_rules! number_from_integer {
 				type Output = Self;
 
 				fn sub(self, other: $ty) -> Self::Output {
-					Self(self.0 + Self::from(other).0)
+					Self(self.0 - Self::from(other).0)
 				}
 			}
 		)*

@@ -151,6 +151,8 @@ impl<R: Clone + Ord> EvalTyped<R> for UnorderedList<R> {
 			result.push(self.body.eval(registry, rdf, dataset, &scope)?);
 		}
 
+		result.sort_unstable();
+
 		Ok(Value::List(result))
 	}
 
@@ -264,9 +266,7 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 
 			let scope = self
 				.bound
-				.find_one_with(dataset, &scope, |_| {
-					Ok(Some(Value::Resource(first.clone())))
-				})?
+				.find_one_with(dataset, scope, |_| Ok(Some(Value::Resource(first.clone()))))?
 				.ok_or_else(|| {
 					let mut substitution = DebugSubstitution::new();
 					EvalError::MissingData(MissingData::Empty(scope.substitute_dataset(
@@ -328,7 +328,8 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 					rest = head;
 				}
 
-				Ok(())
+				self.head
+					.eval_inverse(registry, rdf, dataset, scope, &Value::Resource(rest))
 			}
 			_ => Err(EvalError::InvalidType),
 		}

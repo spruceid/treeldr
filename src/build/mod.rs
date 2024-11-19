@@ -92,6 +92,9 @@ pub enum Error {
 
 	#[error("expected const value")]
 	ExpectedConstValue(Span),
+
+	#[error("item `{0}` is already defined")]
+	ItemRedefinition(Ident, BuildItem, BuildItem),
 }
 
 impl Error {
@@ -116,6 +119,7 @@ impl Error {
 			Self::ExpectedResource(span) => *span,
 			Self::ExpectedExactlyOneBinding(span) => *span,
 			Self::ExpectedConstValue(span) => *span,
+			Self::ItemRedefinition(id, _, _) => id.span(),
 		}
 	}
 }
@@ -170,7 +174,7 @@ impl<'ast> BuildingNamespace<'ast> {
 	}
 
 	pub fn get_module(&self, i: u32) -> Option<&BuildModule<'ast>> {
-		self.modules.get(i as usize).map(Option::as_ref).flatten()
+		self.modules.get(i as usize).and_then(Option::as_ref)
 	}
 
 	fn begin_module(

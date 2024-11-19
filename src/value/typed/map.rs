@@ -7,9 +7,9 @@ use crate::{value::ValueLike, TypeRef};
 use super::TypedValue;
 
 #[derive(Clone)]
-pub struct TypedMap<R, V, T = TypeRef>(RawBTree<Entry<R, V, T>>);
+pub struct TypedValueMap<R, V, T = TypeRef>(RawBTree<Entry<R, V, T>>);
 
-impl<R, V, T> TypedMap<R, V, T> {
+impl<R, V, T> TypedValueMap<R, V, T> {
 	pub fn new() -> Self {
 		Self(RawBTree::new())
 	}
@@ -27,13 +27,13 @@ impl<R, V, T> TypedMap<R, V, T> {
 	}
 }
 
-impl<R, V, T> Default for TypedMap<R, V, T> {
+impl<R, V, T> Default for TypedValueMap<R, V, T> {
 	fn default() -> Self {
 		Self::new()
 	}
 }
 
-impl<R: Ord, V, T> TypedMap<R, V, T> {
+impl<R: Ord, V, T> TypedValueMap<R, V, T> {
 	pub fn get_entry_untyped(
 		&self,
 		key: &impl ValueLike<Resource = R>,
@@ -56,7 +56,7 @@ impl<R: Ord, V, T> TypedMap<R, V, T> {
 	// }
 }
 
-impl<R: Ord, V, T: PartialEq> TypedMap<R, V, T> {
+impl<R: Ord, V, T: PartialEq> TypedValueMap<R, V, T> {
 	pub fn get_entry(&self, key: &TypedValue<R, T>) -> Option<(&TypedValue<R, T>, &V)> {
 		self.get_entry_untyped(key)
 			.filter(|(entry_key, _)| *entry_key == key)
@@ -67,33 +67,33 @@ impl<R: Ord, V, T: PartialEq> TypedMap<R, V, T> {
 	}
 }
 
-impl<R: fmt::Debug, V: fmt::Debug, T: fmt::Debug> fmt::Debug for TypedMap<R, V, T> {
+impl<R: fmt::Debug, V: fmt::Debug, T: fmt::Debug> fmt::Debug for TypedValueMap<R, V, T> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_map().entries(self.iter()).finish()
 	}
 }
 
-impl<R: PartialEq, V: PartialEq, T: PartialEq> PartialEq for TypedMap<R, V, T> {
+impl<R: PartialEq, V: PartialEq, T: PartialEq> PartialEq for TypedValueMap<R, V, T> {
 	fn eq(&self, other: &Self) -> bool {
 		self.iter().eq(other.iter())
 	}
 }
 
-impl<R: Eq, V: Eq, T: Eq> Eq for TypedMap<R, V, T> {}
+impl<R: Eq, V: Eq, T: Eq> Eq for TypedValueMap<R, V, T> {}
 
-impl<R: PartialOrd, V: PartialOrd, T: PartialOrd> PartialOrd for TypedMap<R, V, T> {
+impl<R: PartialOrd, V: PartialOrd, T: PartialOrd> PartialOrd for TypedValueMap<R, V, T> {
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
 		self.iter().partial_cmp(other.iter())
 	}
 }
 
-impl<R: Ord, V: Ord, T: Ord> Ord for TypedMap<R, V, T> {
+impl<R: Ord, V: Ord, T: Ord> Ord for TypedValueMap<R, V, T> {
 	fn cmp(&self, other: &Self) -> Ordering {
 		self.iter().cmp(other.iter())
 	}
 }
 
-impl<R: Hash, V: Hash, T: Hash> Hash for TypedMap<R, V, T> {
+impl<R: Hash, V: Hash, T: Hash> Hash for TypedValueMap<R, V, T> {
 	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
 		for entry in &self.0 {
 			entry.hash(state);
@@ -101,7 +101,7 @@ impl<R: Hash, V: Hash, T: Hash> Hash for TypedMap<R, V, T> {
 	}
 }
 
-impl<R: Ord, V, T: Ord> Extend<(TypedValue<R, T>, V)> for TypedMap<R, V, T> {
+impl<R: Ord, V, T: Ord> Extend<(TypedValue<R, T>, V)> for TypedValueMap<R, V, T> {
 	fn extend<I: IntoIterator<Item = (TypedValue<R, T>, V)>>(&mut self, iter: I) {
 		for (key, value) in iter {
 			self.insert(key, value);
@@ -109,7 +109,7 @@ impl<R: Ord, V, T: Ord> Extend<(TypedValue<R, T>, V)> for TypedMap<R, V, T> {
 	}
 }
 
-impl<R: Ord, V, T: Ord> FromIterator<(TypedValue<R, T>, V)> for TypedMap<R, V, T> {
+impl<R: Ord, V, T: Ord> FromIterator<(TypedValue<R, T>, V)> for TypedValueMap<R, V, T> {
 	fn from_iter<I: IntoIterator<Item = (TypedValue<R, T>, V)>>(iter: I) -> Self {
 		let mut result = Self::default();
 		result.extend(iter);
@@ -127,7 +127,7 @@ impl<'a, R, V, T> Iterator for Iter<'a, R, V, T> {
 	}
 }
 
-impl<'a, R, V, T> IntoIterator for &'a TypedMap<R, V, T> {
+impl<'a, R, V, T> IntoIterator for &'a TypedValueMap<R, V, T> {
 	type Item = (&'a TypedValue<R, T>, &'a V);
 	type IntoIter = Iter<'a, R, V, T>;
 
@@ -146,7 +146,7 @@ impl<R, V, T> Iterator for IntoIter<R, V, T> {
 	}
 }
 
-impl<R, V, T> IntoIterator for TypedMap<R, V, T> {
+impl<R, V, T> IntoIterator for TypedValueMap<R, V, T> {
 	type Item = (TypedValue<R, T>, V);
 	type IntoIter = IntoIter<R, V, T>;
 

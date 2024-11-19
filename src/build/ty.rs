@@ -87,27 +87,28 @@ impl ast::TypeExpr {
 			}
 			Self::Literal(expr) => {
 				let (_, ty) = expr.build(context, namespace, scope)?;
-				Ok(context
-					.type_variables
-					.fresh(Type::new(attributes, TypeDesc::Literal(ty))))
+				Ok(context.type_variables.fresh(
+					Type::new(attributes, TypeDesc::Literal(ty)),
+					Some(expr.span()),
+				))
 			}
 			Self::List(expr) => {
 				let ty = expr.build(context, namespace, scope)?;
 				Ok(context
 					.type_variables
-					.fresh(Type::new(attributes, TypeDesc::List(ty))))
+					.fresh(Type::new(attributes, TypeDesc::List(ty)), Some(expr.span())))
 			}
 			Self::Map(expr) => {
 				let ty = expr.build(context, namespace, scope)?;
 				Ok(context
 					.type_variables
-					.fresh(Type::new(attributes, TypeDesc::Struct(ty))))
+					.fresh(Type::new(attributes, TypeDesc::Map(ty)), Some(expr.span())))
 			}
 			Self::Enum(expr) => {
 				let ty = expr.build(context, namespace, scope)?;
 				Ok(context
 					.type_variables
-					.fresh(Type::new(attributes, TypeDesc::Enum(ty))))
+					.fresh(Type::new(attributes, TypeDesc::Enum(ty)), Some(expr.span())))
 			}
 		}
 	}
@@ -141,7 +142,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListTypeExpr {
 }
 
 impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapTypeExpr {
-	type Target = ty::Struct<R, TypeVariableRef>;
+	type Target = ty::Map<R, TypeVariableRef>;
 
 	fn build<D>(
 		&'ast self,
@@ -152,14 +153,14 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapTypeExpr {
 	where
 		D: RdfContextMut<R>,
 	{
-		Ok(ty::Struct {
+		Ok(ty::Map {
 			fields: self
 				.entries
 				.iter()
 				.map(|f| {
 					Ok((
 						f.key.build(context, namespace, scope)?,
-						ty::Field {
+						ty::map::Field {
 							attributes: f.metadata.build(context, namespace, scope)?,
 							type_: f.value.build(context, namespace, scope)?,
 							required: self.optional.is_none(),
@@ -188,7 +189,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::EnumTypeExpr {
 				.variants
 				.iter()
 				.map(|v| {
-					let variant = ty::Variant {
+					let variant = ty::r#enum::Variant {
 						attributes: v.metadata.build(context, namespace, scope)?,
 						type_: v.type_.build(context, namespace, scope)?,
 					};

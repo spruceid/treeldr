@@ -1,0 +1,3 @@
+<https://example.org#input> <http://example.org#prop> "foo" .
+<https://example.org#input> <http://example.org#prop> "bar" .
+<https://example.org#input> <http://example.org#prop> "baz" .

@@ -10,13 +10,19 @@ pub struct Scope<'a> {
 	pub const_: bool,
 }
 
-impl<'a> Scope<'a> {
-	pub fn new() -> Self {
+impl<'a> Default for Scope<'a> {
+	fn default() -> Self {
 		Self {
 			module: None,
 			expr: ExprScope::new(None),
 			const_: false,
 		}
+	}
+}
+
+impl<'a> Scope<'a> {
+	pub fn new() -> Self {
+		Self::default()
 	}
 
 	pub fn get<'c, R, D>(
@@ -130,6 +136,10 @@ impl<'a> ExprScope<'a> {
 
 	pub fn offset(&self) -> u32 {
 		self.parent.map(|p| p.len).unwrap_or_default()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.len == 0
 	}
 
 	pub fn len(&self) -> u32 {

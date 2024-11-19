@@ -1,4 +1,5 @@
 use iref::{Iri, IriBuf};
+use ll1::Spanned;
 use std::{collections::HashMap, hash::Hash};
 
 use crate::{
@@ -95,7 +96,7 @@ impl<'ast> BuildModule<'ast> {
 }
 
 #[derive(Debug)]
-enum BuildItem {
+pub enum BuildItem {
 	Prefix(IriBuf),
 	Type(TypeVariableRef),
 	Function(FunctionRef),
@@ -281,38 +282,51 @@ impl<'ast> ast::Module {
 							.insert(ast.ident.as_str().to_owned(), BuildItem::Prefix(iri));
 					}
 					ast::Item::Type(t_ast) => {
-						let x = context.type_variables.fresh(TypeValue::Undefined);
+						let x = context
+							.type_variables
+							.fresh(TypeValue::Undefined, Some(t_ast.ident.span()));
 						namespace.declare_type(module_ref, &item.metadata, t_ast, x);
-						if let Some(_) = result
+						if let Some(item) = result
 							.items
 							.insert(t_ast.ident.as_str().to_owned(), BuildItem::Type(x))
 						{
-							todo!() // type redefinition.
+							return Err(Error::ItemRedefinition(
+								t_ast.ident.clone(),
+								item,
+								BuildItem::Type(x),
+							));
 						}
 					}
 					ast::Item::Function(ast) => {
 						let args = ast
 							.args
 							.iter()
-							.map(|_| {
-								let type_ref = context.type_variables.fresh(TypeValue::Undefined);
-								type_ref
+							.map(|a| {
+								context
+									.type_variables
+									.fresh(TypeValue::Undefined, Some(a.span()))
 							})
 							.collect();
 
 						let signature = BuildSignature {
 							const_args: vec![],
 							args,
-							return_type: context.type_variables.fresh(TypeValue::Undefined),
+							return_type: context
+								.type_variables
+								.fresh(TypeValue::Undefined, Some(ast.ident.span())),
 						};
 
 						let f_ref =
 							namespace.declare_function(module_ref, &item.metadata, ast, signature);
-						if let Some(_) = result
+						if let Some(item) = result
 							.items
 							.insert(ast.ident.as_str().to_owned(), BuildItem::Function(f_ref))
 						{
-							todo!() // function redefinition
+							return Err(Error::ItemRedefinition(
+								ast.ident.clone(),
+								item,
+								BuildItem::Function(f_ref),
+							));
 						}
 					}
 					ast::Item::Module(m) => {
@@ -320,11 +334,15 @@ impl<'ast> ast::Module {
 						let m_ref =
 							m.value
 								.declare(context, namespace, &m_scope, Some(&item.metadata))?;
-						if let Some(_) = result
+						if let Some(item) = result
 							.items
 							.insert(m.ident.as_str().to_owned(), BuildItem::Module(m_ref))
 						{
-							todo!() // module redefinition
+							return Err(Error::ItemRedefinition(
+								m.ident.clone(),
+								item,
+								BuildItem::Module(m_ref),
+							));
 						}
 					}
 				}

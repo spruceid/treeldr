@@ -3,6 +3,7 @@ use crate::{
 	expr::Binding,
 	pattern::Substitution,
 	rdf::{DebugSubstitution, RdfContext, RdfContextMut},
+	value::List,
 	DatasetPattern, TermPattern, TypeRef, Value,
 };
 use rdf_types::{
@@ -26,6 +27,10 @@ impl<'a, R> ScopeTypes<'a, R> {
 			Self::Bindings(b) => b.len() as u32,
 			Self::Repeat(_, len) => *len,
 		}
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
 	}
 
 	pub fn get(&self, i: u32) -> Option<TypeRef> {
@@ -282,7 +287,7 @@ impl<'a, R: Clone> Scope<'a, R> {
 		self,
 		rdf: &mut impl RdfContextMut<R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-	) -> Result<(Vec<Value<R>>, Vec<Quad<TermPattern<R>>>), EvalError<R>> {
+	) -> Result<(List<R>, UnresolvedQuads<R>), EvalError<R>> {
 		let mut patterns = Vec::new();
 		for quad_pattern in &self.dataset {
 			match TermPattern::quad_into_resources(self.realize_quad(rdf, quad_pattern)?) {
@@ -335,6 +340,8 @@ impl<'a, R: Clone> Scope<'a, R> {
 		}
 	}
 }
+
+pub type UnresolvedQuads<R> = Vec<Quad<TermPattern<R>>>;
 
 #[derive(Clone)]
 pub enum ScopeValues<'a, R> {

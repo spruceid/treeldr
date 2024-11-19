@@ -33,15 +33,14 @@ pub trait RdfContext<R> {
 	fn term_of(&self, r: &R) -> Option<Term> {
 		match self.interpretation().iris_of(r).next() {
 			Some(i) => Some(Term::iri(self.vocabulary().iri(i).unwrap().to_owned())),
-			None => match self.interpretation().literals_of(r).next() {
-				Some(l) => Some(Term::Literal(
+			None => self.interpretation().literals_of(r).next().map(|l| {
+				Term::Literal(
 					self.vocabulary()
 						.literal(l)
 						.unwrap()
 						.extract_from_vocabulary(self.vocabulary()),
-				)),
-				None => None,
-			},
+				)
+			}),
 		}
 	}
 }
@@ -237,16 +236,18 @@ impl Interpretation for UnifyLiteralInterpretation {
 	type Resource = Term;
 }
 
-pub struct ResourceUnificationError;
+#[derive(Debug, thiserror::Error)]
+#[error("resource unification failed")]
+pub struct ResourceUnificationFailed;
 
 impl TryUnifyInterpretation for UnifyLiteralInterpretation {
-	type UnificationError = ResourceUnificationError;
+	type UnificationError = ResourceUnificationFailed;
 
 	fn try_unify(
 		&mut self,
 		a: &Self::Resource,
 		b: &Self::Resource,
-	) -> Result<(), ResourceUnificationError> {
+	) -> Result<(), ResourceUnificationFailed> {
 		match (a, b) {
 			(Term::Id(Id::Blank(a)), Term::Id(Id::Blank(b))) => {
 				self.classes.try_merge(a, b, |a, b| match (a, b) {
@@ -257,7 +258,7 @@ impl TryUnifyInterpretation for UnifyLiteralInterpretation {
 						if a == b {
 							Ok(a)
 						} else {
-							Err(ResourceUnificationError)
+							Err(ResourceUnificationFailed)
 						}
 					}
 				})?;
@@ -270,10 +271,10 @@ impl TryUnifyInterpretation for UnifyLiteralInterpretation {
 					if c == *b {
 						Ok(())
 					} else {
-						Err(ResourceUnificationError)
+						Err(ResourceUnificationFailed)
 					}
 				}
-				Err(_) => Err(ResourceUnificationError),
+				Err(_) => Err(ResourceUnificationFailed),
 			},
 			(a, Term::Id(Id::Blank(b))) => match self.classes.replace(b, a.clone()) {
 				Ok(Term::Id(Id::Blank(_))) => Ok(()),
@@ -281,16 +282,16 @@ impl TryUnifyInterpretation for UnifyLiteralInterpretation {
 					if c == *a {
 						Ok(())
 					} else {
-						Err(ResourceUnificationError)
+						Err(ResourceUnificationFailed)
 					}
 				}
-				Err(_) => Err(ResourceUnificationError),
+				Err(_) => Err(ResourceUnificationFailed),
 			},
 			(a, b) => {
 				if a == b {
 					Ok(())
 				} else {
-					Err(ResourceUnificationError)
+					Err(ResourceUnificationFailed)
 				}
 			}
 		}

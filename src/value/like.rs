@@ -15,14 +15,14 @@ pub trait ValueLike {
 	where
 		Self::Resource: Eq,
 	{
-		self.destruct().eq(other.destruct())
+		self.destruct().into_eq(other.destruct())
 	}
 
 	fn cmp(&self, other: &impl ValueLike<Resource = Self::Resource>) -> Ordering
 	where
 		Self::Resource: Ord,
 	{
-		self.destruct().cmp(other.destruct())
+		self.destruct().into_cmp(other.destruct())
 	}
 }
 
@@ -31,6 +31,10 @@ pub trait ListLike {
 	type Value: ValueLike<Resource = Self::Resource>;
 
 	fn len(&self) -> usize;
+
+	fn is_empty(&self) -> bool {
+		self.len() == 0
+	}
 
 	fn iter(&self) -> impl Iterator<Item = &Self::Value>;
 
@@ -80,6 +84,10 @@ pub trait MapLike {
 	type Value: ValueLike<Resource = Self::Resource>;
 
 	fn len(&self) -> usize;
+
+	fn is_empty(&self) -> bool {
+		self.len() == 0
+	}
 
 	fn iter(&self) -> impl Iterator<Item = (&Self::Value, &Self::Value)>;
 
@@ -140,7 +148,10 @@ impl<'a, T: ?Sized + ValueLike> Destruct<'a, T>
 where
 	T::Resource: Eq,
 {
-	pub fn eq<U: ?Sized + ValueLike<Resource = T::Resource>>(self, other: Destruct<'a, U>) -> bool {
+	pub fn into_eq<U: ?Sized + ValueLike<Resource = T::Resource>>(
+		self,
+		other: Destruct<'a, U>,
+	) -> bool {
 		match (self, other) {
 			(Self::Resource(a), Destruct::Resource(b)) => a.eq(b),
 			(Self::Literal(a), Destruct::Literal(b)) => a.eq(b),
@@ -155,7 +166,7 @@ impl<'a, T: ?Sized + ValueLike> Destruct<'a, T>
 where
 	T::Resource: Ord,
 {
-	pub fn cmp<U: ?Sized + ValueLike<Resource = T::Resource>>(
+	pub fn into_cmp<U: ?Sized + ValueLike<Resource = T::Resource>>(
 		self,
 		other: Destruct<'a, U>,
 	) -> Ordering {
@@ -180,7 +191,7 @@ where
 	T::Resource: Eq,
 {
 	fn eq(&self, other: &Destruct<'a, U>) -> bool {
-		Self::eq(*self, *other)
+		Self::into_eq(*self, *other)
 	}
 }
 
@@ -192,7 +203,7 @@ where
 	T::Resource: Ord,
 {
 	fn partial_cmp(&self, other: &Destruct<'a, U>) -> Option<Ordering> {
-		Some(Self::cmp(*self, *other))
+		Some(Self::into_cmp(*self, *other))
 	}
 }
 
@@ -201,6 +212,6 @@ where
 	T::Resource: Ord,
 {
 	fn cmp(&self, other: &Self) -> Ordering {
-		Self::cmp(*self, *other)
+		Self::into_cmp(*self, *other)
 	}
 }

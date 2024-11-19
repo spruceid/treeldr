@@ -274,6 +274,13 @@ pub enum ItemRef<'a, T = TypeRef> {
 }
 
 impl<'a, T> ItemRef<'a, T> {
+	pub fn as_function(&self) -> Option<FunctionRef> {
+		match self {
+			Self::Function(f) => Some(*f),
+			_ => None,
+		}
+	}
+
 	pub fn as_module(&self) -> Option<ModuleRef> {
 		match self {
 			Self::Module(m) => Some(*m),

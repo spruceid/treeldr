@@ -1,6 +1,0 @@
-prefix schema = <https://schema.org/>
-
-let (_ subject) = {
-	"name": (string_of (get schema:name subject)),
-	"email"?: (string_of (get schema:email subject))
-}

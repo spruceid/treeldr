@@ -253,6 +253,21 @@ impl Error {
 						),
 					])
 					.with_message(e.to_string()),
+				CompileError::Typing(TypeResolutionError::Unification(a, b)) => {
+					let mut labels = Vec::new();
+
+					if let Some(span) = a {
+						labels.push(Label::primary(file_id, span));
+					}
+
+					if let Some(span) = b {
+						labels.push(Label::primary(file_id, span));
+					}
+
+					Diagnostic::error()
+						.with_labels(labels)
+						.with_message("type mismatch")
+				}
 				CompileError::Build(e) => Diagnostic::error()
 					.with_labels(vec![
 						Label::primary(file_id, e.span()).with_message(e.to_string())

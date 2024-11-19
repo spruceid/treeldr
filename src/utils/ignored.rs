@@ -16,8 +16,8 @@ impl<T> PartialEq for Ignored<T> {
 impl<T> Eq for Ignored<T> {}
 
 impl<T> PartialOrd for Ignored<T> {
-	fn partial_cmp(&self, _other: &Self) -> Option<Ordering> {
-		Some(Ordering::Equal)
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
 	}
 }
 

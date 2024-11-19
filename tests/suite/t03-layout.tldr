@@ -4,19 +4,20 @@ prefix ex = <https://example.org/#>
 
 let (_ receipt) = {
 	"date" = (typed_string_of xsd:dateTime (get ex:date receipt)),
-	"bill" =
+	"bill" = {{
 		let bill = (get ex:bill receipt);
 		{
 			"milk1L" = (by_unit (get ex:milk1L bill)),
 			"beef" = (by_volume (get ex:beef bill))
 		}
-	,
-	"pointOfSale" =
+	}},
+	"pointOfSale" = {{
 		let point_of_sale = (get ex:pointOfSale receipt);
 		{
 			"address" = (typed_string_of schema:Text (get schema:address point_of_sale)),
 			"till" = (typed_number_of xsd:nonNegativeInteger (get ex:till point_of_sale))
 		}
+	}}
 }
 
 let (by_unit item) = {

@@ -8,12 +8,12 @@ use super::Expr;
 ///
 /// ```tldr
 /// match {
-/// 	foo: ?x where { ... } {
-/// 		// ...
-/// 	},
-/// 	bar: ?y where { ... } {
-/// 		// ...
-/// 	}
+///   foo: ?x where { ... } {
+///     // ...
+///   },
+///   bar: ?y where { ... } {
+///     // ...
+///   }
 /// }
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

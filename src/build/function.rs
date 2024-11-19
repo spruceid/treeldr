@@ -1,5 +1,7 @@
 use std::hash::Hash;
 
+use ll1::Spanned;
+
 use crate::{
 	function::{self, Signature},
 	rdf::RdfContextMut,
@@ -47,8 +49,10 @@ impl<'ast> FunctionDefinition<'ast> {
 						type_ref
 					}
 					ast::ArgDef::Untyped(ident) => {
-						let type_ref = context.type_variables.fresh(Type::resource());
-						sub_scope.expr.insert(ident, type_ref.clone());
+						let type_ref = context
+							.type_variables
+							.fresh(Type::resource(), Some(ident.span()));
+						sub_scope.expr.insert(ident, type_ref);
 						type_ref
 					}
 				})

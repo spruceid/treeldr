@@ -2,7 +2,7 @@ use super::{Destruct, ListLike, Literal, MapLike, Value, ValueLike};
 use crate::TypeRef;
 
 pub mod map;
-pub use map::TypedMap;
+pub use map::TypedValueMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypedValue<R = rdf_types::Term, T = TypeRef> {
@@ -72,7 +72,7 @@ impl<R: Ord, T> TypedValue<R, T> {
 impl<R, T> ValueLike for TypedValue<R, T> {
 	type Resource = R;
 	type List = Vec<Self>;
-	type Map = TypedMap<R, Self, T>;
+	type Map = TypedValueMap<R, Self, T>;
 
 	fn destruct(&self) -> Destruct<Self> {
 		match self.desc.inner_description() {
@@ -97,7 +97,7 @@ impl<R, T> ListLike for Vec<TypedValue<R, T>> {
 	}
 }
 
-impl<R, T> MapLike for TypedMap<R, TypedValue<R, T>, T> {
+impl<R, T> MapLike for TypedValueMap<R, TypedValue<R, T>, T> {
 	type Resource = R;
 	type Value = TypedValue<R, T>;
 
@@ -106,7 +106,7 @@ impl<R, T> MapLike for TypedMap<R, TypedValue<R, T>, T> {
 	}
 
 	fn iter(&self) -> impl Iterator<Item = (&Self::Value, &Self::Value)> {
-		TypedMap::iter(self)
+		TypedValueMap::iter(self)
 	}
 }
 
@@ -179,6 +179,8 @@ impl<R, T> From<TypedValueInnerDesc<R, T>> for TypedValueDesc<R, T> {
 	}
 }
 
+pub type TypedMap<R = rdf_types::Term, T = TypeRef> = TypedValueMap<R, TypedValue<R, T>, T>;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedValueInnerDesc<R = rdf_types::Term, T = TypeRef> {
 	/// RDF resource.
@@ -191,7 +193,7 @@ pub enum TypedValueInnerDesc<R = rdf_types::Term, T = TypeRef> {
 	List(Vec<TypedValue<R, T>>),
 
 	/// Record.
-	Map(TypedMap<R, TypedValue<R, T>, T>),
+	Map(TypedMap<R, T>),
 }
 
 impl<R, T> TypedValueInnerDesc<R, T> {

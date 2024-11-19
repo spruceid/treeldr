@@ -1,4 +1,0 @@
-let (_ input) = {
-	"id": (iri_of input),
-	"name": (string_of (get <https://schema.org/name> input))
-}

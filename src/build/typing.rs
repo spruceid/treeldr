@@ -4,6 +4,7 @@ use std::{
 };
 
 use disjoint_collections::DisjointVec;
+use ll1::Span;
 use scc_trait::{Components, Scc};
 
 use crate::{
@@ -50,7 +51,7 @@ impl<R> TypeValue<R> {
 			}
 			(Self::Pattern(a), Self::Type(b_ref)) => {
 				let b = registry.get_type(b_ref.ty_ref).unwrap();
-				a.unify_with(registry, &mut unifier.import(b_ref.import), &b)
+				a.unify_with(registry, &mut unifier.import(b_ref.import), b)
 					.map(Self::Pattern)
 			}
 			(Self::Type(a_ref), Self::Pattern(b)) => {
@@ -60,7 +61,7 @@ impl<R> TypeValue<R> {
 			}
 			(Self::Type(a), Self::Type(b)) => {
 				if a == b {
-					Ok(Self::Type(a.clone()))
+					Ok(Self::Type(a))
 				} else {
 					Err(TypeUnificationError)
 				}
@@ -96,23 +97,38 @@ pub struct TypeVariables<R> {
 	subtype_relation: SubtypeRelation,
 	import_count: u32,
 	imported_types: HashMap<ImportedTypeRef, TypeVariableRef>,
+	spans: HashMap<TypeVariableRef, Span>,
 }
 
-impl<R> TypeVariables<R> {
-	pub fn new() -> Self {
+impl<R> Default for TypeVariables<R> {
+	fn default() -> Self {
 		Self {
 			list: Vec::new(),
 			subtype_relation: SubtypeRelation::default(),
 			import_count: 0,
 			imported_types: HashMap::new(),
+			spans: HashMap::new(),
 		}
 	}
+}
 
-	pub fn fresh(&mut self, value: impl Into<TypeValue<R>>) -> TypeVariableRef {
+impl<R> TypeVariables<R> {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	pub fn fresh(&mut self, value: impl Into<TypeValue<R>>, span: Option<Span>) -> TypeVariableRef {
 		let x = self.list.len();
 		self.list.push(value.into());
 		self.subtype_relation.declare(x);
+		if let Some(span) = span {
+			self.spans.insert(x, span);
+		}
 		x
+	}
+
+	pub fn span_of(&self, x: TypeVariableRef) -> Option<Span> {
+		self.spans.get(&x).copied()
 	}
 
 	/// Import a type reference as a type variable.
@@ -127,7 +143,7 @@ impl<R> TypeVariables<R> {
 			if visited.insert(ty_ref) {
 				let imported = ImportedTypeRef { ty_ref, import };
 
-				let x = self.fresh(imported);
+				let x = self.fresh(imported, None);
 				self.imported_types.insert(imported, x);
 
 				let ty = registry.get_type(ty_ref).unwrap();
@@ -232,7 +248,7 @@ impl<R> TypeVariables<R> {
 		for (x, value) in self.list.iter().enumerate() {
 			let x_class = groups.class_of(x).unwrap();
 			if let TypeValue::Pattern(Type {
-				desc: TypeDesc::Struct(s),
+				desc: TypeDesc::Map(s),
 				..
 			}) = value
 			{
@@ -365,12 +381,19 @@ impl<'a, R: Clone> Resolver<'a, R> {
 		// Unify types.
 		while let Some((a, b)) = to_unify.pop() {
 			let mut unifier = Unifier::new(&self.variables.imported_types, resolved, &mut to_unify);
-			self.classes.try_merge(a, b, |a, b| {
-				// Unify `a` and `b`. This might trigger the unification of some
-				// constituents of `a` and `b`. We know the constituents are
-				// in the same resolution group.
-				a.unify(registry, &mut unifier, b)
-			})?;
+			self.classes
+				.try_merge(a, b, |a, b| {
+					// Unify `a` and `b`. This might trigger the unification of some
+					// constituents of `a` and `b`. We know the constituents are
+					// in the same resolution group.
+					a.unify(registry, &mut unifier, b)
+				})
+				.map_err(|TypeUnificationError| {
+					TypeResolutionError::Unification(
+						self.variables.span_of(a),
+						self.variables.span_of(b),
+					)
+				})?;
 		}
 
 		// Resolve classes.
@@ -421,14 +444,14 @@ impl<R: Clone> TypePattern<R> {
 				prefix: l.prefix.iter().map(realize_var).collect(),
 				rest: l.rest.as_ref().map(realize_var),
 			}),
-			TypeDesc::Struct(ty) => TypeDesc::Struct(ty::Struct {
+			TypeDesc::Map(ty) => TypeDesc::Map(ty::Map {
 				fields: ty
 					.fields
 					.iter()
 					.map(|(key, field)| {
 						(
 							realize_var(key),
-							ty::Field {
+							ty::map::Field {
 								attributes: field.attributes.clone(),
 								type_: realize_var(&field.type_),
 								required: field.required,
@@ -442,7 +465,7 @@ impl<R: Clone> TypePattern<R> {
 					.variants
 					.iter()
 					.map(|(name, v)| {
-						let variant = ty::Variant {
+						let variant = ty::r#enum::Variant {
 							attributes: v.attributes.clone(),
 							type_: realize_var(&v.type_),
 						};
@@ -628,8 +651,8 @@ pub enum TypeResolutionError {
 		super_type: TypeRef,
 	},
 
-	#[error(transparent)]
-	Unification(#[from] TypeUnificationError),
+	#[error("type unification failed")]
+	Unification(Option<Span>, Option<Span>),
 
 	#[error(transparent)]
 	Definition(#[from] UndefinedType),

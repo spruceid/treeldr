@@ -21,7 +21,7 @@
 		},
 		{
 			"name": "keyword.treeldr",
-			"match": "\\b(prefix|type|let|mod|where|in|as|all|set)\\b"
+			"match": "\\b(prefix|type|let|mod|where|in|as|all|set|begin)\\b"
 		},
 		{
 			"name": "entity.name.type.treeldr",
@@ -47,6 +47,16 @@
 		{
 			"name": "string.quoted.double.treeldr",
 			"match": "\"[^\"\\\\]*(?:\\\\.[^\"\\\\]*)*\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.treeldr",
+					"match": "\\."
+				}
+			]
+		},
+		{
+			"name": "string.quoted.single.treeldr",
+			"match": "'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'",
 			"patterns": [
 				{
 					"name": "constant.character.escape.treeldr",

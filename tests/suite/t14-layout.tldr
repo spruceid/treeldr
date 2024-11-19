@@ -1,0 +1,6 @@
+prefix ex = <https://example.org#>
+
+let (_ input) = {
+	"foo" = (bool_of (get ex:foo input)),
+	"bar" = (bool_of (get ex:bar input))
+}
