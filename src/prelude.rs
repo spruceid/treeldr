@@ -2,23 +2,31 @@ use crate::{
 	function::BuiltInFunction,
 	module::Item,
 	ty::{BuiltInType, LiteralType, TypeDesc},
-	Function, Module, Registry,
+	Function, Module, Package,
 };
 
-impl<R> Module<R> {
-	pub fn prelude(registry: &mut Registry<R>) -> Self {
-		let n = registry.create_namespace();
+impl<P: Copy, R> Package<P, R> {
+	pub fn prelude(id: P) -> Self {
+		let mut result = Self::new(id);
+		let root = Module::prelude(&mut result);
+		result.set_root(root);
+		result
+	}
+}
+
+impl<P: Copy, R> Module<P, R> {
+	pub fn prelude(package: &mut Package<P, R>) -> Self {
 		let mut result = Self::new();
 
-		let ty_any = registry.insert_type(n, TypeDesc::Any);
-		let ty_resource = registry.insert_type(n, TypeDesc::resource());
-		let ty_unit = registry.insert_type(n, TypeDesc::Literal(LiteralType::Unit));
-		let ty_bool = registry.insert_type(n, TypeDesc::Literal(LiteralType::boolean()));
-		let ty_number = registry.insert_type(n, TypeDesc::Literal(LiteralType::number()));
-		let ty_int = registry.insert_type(n, TypeDesc::Literal(LiteralType::int()));
-		let ty_uint = registry.insert_type(n, TypeDesc::Literal(LiteralType::uint()));
-		let ty_string = registry.insert_type(n, TypeDesc::Literal(LiteralType::text_string()));
-		let ty_bytes = registry.insert_type(n, TypeDesc::Literal(LiteralType::byte_string()));
+		let ty_any = package.insert_type(TypeDesc::Any);
+		let ty_resource = package.insert_type(TypeDesc::resource());
+		let ty_unit = package.insert_type(TypeDesc::Literal(LiteralType::Unit));
+		let ty_bool = package.insert_type(TypeDesc::Literal(LiteralType::boolean()));
+		let ty_number = package.insert_type(TypeDesc::Literal(LiteralType::number()));
+		let ty_int = package.insert_type(TypeDesc::Literal(LiteralType::int()));
+		let ty_uint = package.insert_type(TypeDesc::Literal(LiteralType::uint()));
+		let ty_string = package.insert_type(TypeDesc::Literal(LiteralType::text_string()));
+		let ty_bytes = package.insert_type(TypeDesc::Literal(LiteralType::byte_string()));
 
 		result.insert("any", Item::Type(ty_any));
 		result.insert("resource", Item::Type(ty_resource));
@@ -45,7 +53,7 @@ impl<R> Module<R> {
 		let mut declare = |name, f| {
 			result.insert(
 				name,
-				Item::Function(registry.insert_function(n, Function::built_in(f, ty))),
+				Item::Function(package.insert_function(Function::built_in(f, ty))),
 			)
 		};
 

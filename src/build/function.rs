@@ -9,24 +9,28 @@ use crate::{
 	Function, ModuleRef, Type,
 };
 
-use super::{Build, BuildContext, BuildingNamespace, Error, ExprScope, Scope, TypeVariableRef};
+use super::{
+	Build, BuildContext, BuildEnvironment, BuildingNamespace, Error, ExprScope, Scope,
+	TypeVariableRef,
+};
 
-pub struct FunctionDefinition<'ast> {
-	pub module: ModuleRef,
+pub struct FunctionDefinition<'ast, P> {
+	pub module: ModuleRef<P>,
 	pub metadata: &'ast ast::Metadata,
 	pub value: &'ast ast::FunctionDefinition,
 	pub signature: BuildSignature,
 }
 
-impl<'ast> FunctionDefinition<'ast> {
-	pub fn build<R, D>(
+impl<'ast, P: Copy + Ord + Hash> FunctionDefinition<'ast, P> {
+	pub fn build<E, D>(
 		&self,
-		context: &mut BuildContext<R, D>,
-		namespace: &BuildingNamespace<'ast>,
-	) -> Result<Function<R, TypeVariableRef>, Error>
+		context: &mut BuildContext<E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+	) -> Result<Function<P, E::Resource, TypeVariableRef>, Error<P>>
 	where
-		R: Clone + Ord + Hash,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P>,
+		E::Resource: Clone + Ord + Hash,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		let scope = Scope {
 			module: Some(self.module),
@@ -84,12 +88,12 @@ impl<'ast> FunctionDefinition<'ast> {
 
 		Ok(Function {
 			attributes,
-			signature: Signature {
-				const_args: self.signature.const_args.clone(),
-				args: self.signature.args.clone(),
-				return_type: self.signature.return_type,
+			signature: Signature::new(
+				self.signature.const_args.clone(),
+				self.signature.args.clone(),
+				self.signature.return_type,
 				dataset,
-			},
+			),
 			body: function::Body::Expr(Box::new(body)),
 		})
 	}
@@ -107,8 +111,8 @@ impl BuildSignature {
 		self.const_args.len() + self.args.len()
 	}
 
-	pub fn import<R, T>(
-		signature: &Signature<R, T>,
+	pub fn import<P, R, T>(
+		signature: &Signature<P, R, T>,
 		mut f: impl FnMut(&T) -> TypeVariableRef,
 	) -> Self {
 		Self {

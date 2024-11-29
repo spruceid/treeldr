@@ -9,6 +9,7 @@ pub use literal::*;
 
 mod typed;
 use ll1::Parse;
+use treeldr_macros::{DeserializeIndexed, SerializeIndexed};
 pub use typed::*;
 
 pub mod serde;
@@ -19,10 +20,21 @@ pub type List<R = rdf_types::Term> = Vec<Value<R>>;
 
 pub type Map<R = rdf_types::Term> = BTreeMap<Value<R>, Value<R>>;
 
+mod serde_indexed_resource {
+	use crate::rdf::ResourceBackwardIndex;
+
+	pub fn deserialize_seed<R>(index: &ResourceBackwardIndex<R>) -> &ResourceBackwardIndex<R> {
+		index
+	}
+}
+
 /// Untyped tree value.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeIndexed, DeserializeIndexed,
+)]
+#[serde_indexed(deserialize_bounds(R: Clone + Ord))]
 pub enum Value<R = rdf_types::Term> {
-	Resource(R),
+	Resource(#[serde_indexed(with = serde_indexed_resource)] R),
 	Literal(Literal),
 	Map(Map<R>),
 	List(List<R>),
@@ -97,15 +109,16 @@ impl<R> Value<R> {
 		}
 	}
 
-	pub fn into_typed(
+	pub fn into_typed<P>(
 		self,
-		registry: &Registry<R>,
-		ty_ref: TypeRef,
-	) -> Result<TypedValue<R>, Value<R>>
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		ty_ref: TypeRef<P>,
+	) -> Result<TypedValue<P, R>, Value<R>>
 	where
+		P: Copy,
 		R: Clone + Ord + Hash,
 	{
-		let ty: &Type<R> = registry.get_type(ty_ref).unwrap();
+		let ty: &Type<P, R> = registry.get_type(ty_ref).unwrap();
 		match (&ty.desc, self) {
 			(TypeDesc::Any, value) => Ok(TypedValue {
 				type_: ty_ref,
@@ -236,7 +249,7 @@ impl FromStr for Value {
 		let ast = crate::syntax::ast::ConstValue::parse_str(s)
 			.map_err(|_| ValueParseError(s.to_owned()))?;
 
-		ast.build_unscoped()
+		ast.build_unscoped::<()>()
 			.map_err(|_| ValueParseError(s.to_owned()))
 	}
 }
@@ -323,11 +336,11 @@ impl<R: fmt::Display> fmt::Display for Value<R> {
 	}
 }
 
-fn try_map_into_typed<R: Ord>(
+fn try_map_into_typed<P, R: Ord>(
 	l: Map<R>,
-	revert: impl Fn(TypedValue<R>) -> Value<R>,
-	f: impl Fn(Value<R>) -> Result<TypedValue<R>, Value<R>>,
-) -> Result<TypedMap<R>, Map<R>> {
+	revert: impl Fn(TypedValue<P, R>) -> Value<R>,
+	f: impl Fn(Value<R>) -> Result<TypedValue<P, R>, Value<R>>,
+) -> Result<TypedMap<P, R>, Map<R>> {
 	let mut result = TypedMap::new();
 
 	let mut entries = l.into_iter();

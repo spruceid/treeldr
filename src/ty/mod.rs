@@ -25,14 +25,17 @@ pub use r#ref::*;
 mod build_in;
 pub use build_in::*;
 
+mod allocator;
+pub use allocator::TypeAllocator;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Type<R, T = TypeRef> {
+pub struct Type<P, R, T = TypeRef<P>> {
 	pub attributes: Attributes<R>,
-	pub desc: TypeDesc<R, T>,
+	pub desc: TypeDesc<P, R, T>,
 }
 
-impl<R, T> Type<R, T> {
-	pub fn new(attributes: Attributes<R>, desc: TypeDesc<R, T>) -> Self {
+impl<P, R, T> Type<P, R, T> {
+	pub fn new(attributes: Attributes<R>, desc: TypeDesc<P, R, T>) -> Self {
 		Self { attributes, desc }
 	}
 
@@ -47,11 +50,11 @@ impl<R, T> Type<R, T> {
 		self.desc.is_resource()
 	}
 
-	pub fn as_list(&self) -> Option<&List<T>> {
+	pub fn as_list(&self) -> Option<&List<P, T>> {
 		self.desc.as_list()
 	}
 
-	pub fn as_struct(&self) -> Option<&Map<R, T>> {
+	pub fn as_struct(&self) -> Option<&Map<P, R, T>> {
 		self.desc.as_struct()
 	}
 
@@ -60,8 +63,8 @@ impl<R, T> Type<R, T> {
 	}
 }
 
-impl<R, T> From<TypeDesc<R, T>> for Type<R, T> {
-	fn from(desc: TypeDesc<R, T>) -> Self {
+impl<P, R, T> From<TypeDesc<P, R, T>> for Type<P, R, T> {
+	fn from(desc: TypeDesc<P, R, T>) -> Self {
 		Self {
 			attributes: Attributes::new(),
 			desc,
@@ -82,7 +85,7 @@ impl<R: Clone + PartialEq> Attributes<R> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum TypeDesc<R, T = TypeRef> {
+pub enum TypeDesc<P, R, T = TypeRef<P>> {
 	/// RDF resource.
 	Resource(Resource<R>),
 
@@ -90,19 +93,19 @@ pub enum TypeDesc<R, T = TypeRef> {
 	Literal(LiteralType),
 
 	/// List.
-	List(List<T>),
+	List(List<P, T>),
 
 	/// Map.
-	Map(Map<R, T>),
+	Map(Map<P, R, T>),
 
 	/// Enum.
-	Enum(Enum<R, T>),
+	Enum(Enum<P, R, T>),
 
 	/// Any.
 	Any,
 }
 
-impl<R, T> TypeDesc<R, T> {
+impl<P, R, T> TypeDesc<P, R, T> {
 	pub fn resource() -> Self {
 		Self::Resource(Resource::default())
 	}
@@ -111,14 +114,14 @@ impl<R, T> TypeDesc<R, T> {
 		matches!(self, Self::Resource(_))
 	}
 
-	pub fn as_list(&self) -> Option<&List<T>> {
+	pub fn as_list(&self) -> Option<&List<P, T>> {
 		match self {
 			Self::List(l) => Some(l),
 			_ => None,
 		}
 	}
 
-	pub fn as_struct(&self) -> Option<&Map<R, T>> {
+	pub fn as_struct(&self) -> Option<&Map<P, R, T>> {
 		match self {
 			Self::Map(m) => Some(m),
 			_ => None,
@@ -152,23 +155,23 @@ impl<R, T> TypeDesc<R, T> {
 	}
 }
 
-pub trait TypeUnifier<T, U> {
+pub trait TypeUnifier<P, T, U> {
 	type Target;
 
-	fn left_key_type(&mut self, t: &T) -> TypeRef;
+	fn left_key_type(&mut self, t: &T) -> TypeRef<P>;
 
-	fn right_key_type(&mut self, u: &U) -> TypeRef;
+	fn right_key_type(&mut self, u: &U) -> TypeRef<P>;
 
 	fn unify(&mut self, t: &T, u: &U) -> Self::Target;
 }
 
-impl<R: Clone + Ord, T> Type<R, T> {
+impl<P: Copy + Ord + Hash, R: Clone + Ord, T> Type<P, R, T> {
 	pub fn unify_with<U, V>(
 		&self,
-		registry: &Registry<R>,
-		unifier: &mut impl TypeUnifier<T, U, Target = V>,
-		other: &Type<R, U>,
-	) -> Result<Type<R, V>, TypeUnificationError>
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		unifier: &mut impl TypeUnifier<P, T, U, Target = V>,
+		other: &Type<P, R, U>,
+	) -> Result<Type<P, R, V>, TypeUnificationError>
 	where
 		V: Ord,
 	{
@@ -186,13 +189,13 @@ impl<R: Clone + Ord, T> Type<R, T> {
 	}
 }
 
-impl<R: Clone + Ord, T> TypeDesc<R, T> {
+impl<P: Copy + Ord + Hash, R: Clone + Ord, T> TypeDesc<P, R, T> {
 	pub fn unify_with<U, V>(
 		&self,
-		registry: &Registry<R>,
-		unifier: &mut impl TypeUnifier<T, U, Target = V>,
-		other: &TypeDesc<R, U>,
-	) -> Result<TypeDesc<R, V>, TypeUnificationError>
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		unifier: &mut impl TypeUnifier<P, T, U, Target = V>,
+		other: &TypeDesc<P, R, U>,
+	) -> Result<TypeDesc<P, R, V>, TypeUnificationError>
 	where
 		V: Ord,
 	{
@@ -209,8 +212,8 @@ impl<R: Clone + Ord, T> TypeDesc<R, T> {
 				Some(Ordering::Equal) => Ok(TypeDesc::Literal(a.clone())),
 				_ => Err(TypeUnificationError),
 			},
-			(Self::List(a), TypeDesc::List(b)) => Ok(TypeDesc::List(List {
-				prefix: if a.prefix.len() == b.prefix.len() {
+			(Self::List(a), TypeDesc::List(b)) => Ok(TypeDesc::List(List::new(
+				if a.prefix.len() == b.prefix.len() {
 					a.prefix
 						.iter()
 						.zip(&b.prefix)
@@ -219,12 +222,12 @@ impl<R: Clone + Ord, T> TypeDesc<R, T> {
 				} else {
 					return Err(TypeUnificationError);
 				},
-				rest: match (&a.rest, &b.rest) {
+				match (&a.rest, &b.rest) {
 					(Some(a), Some(b)) => Some(unifier.unify(a, b)),
 					(None, None) => None,
 					_ => return Err(TypeUnificationError),
 				},
-			})),
+			))),
 			(Self::Map(a), TypeDesc::Map(b)) => {
 				if a.fields.len() == b.fields.len() {
 					let mut fields = BTreeMap::new();
@@ -246,11 +249,11 @@ impl<R: Clone + Ord, T> TypeDesc<R, T> {
 									let key = unifier.unify(a_key, b_key);
 									fields.insert(
 										key,
-										Field {
+										Field::new(
 											attributes,
-											type_: unifier.unify(&a_field.type_, &b_field.type_),
-											required: a_field.required,
-										},
+											unifier.unify(&a_field.type_, &b_field.type_),
+											a_field.required,
+										),
 									);
 								} else {
 									return Err(TypeUnificationError);
@@ -274,12 +277,10 @@ impl<R: Clone + Ord, T> TypeDesc<R, T> {
 							Some(b_variant) => {
 								variants.insert(
 									key.clone(),
-									Variant {
-										attributes: a_variant
-											.attributes
-											.unify_with(&b_variant.attributes)?,
-										type_: unifier.unify(&a_variant.type_, &b_variant.type_),
-									},
+									Variant::new(
+										a_variant.attributes.unify_with(&b_variant.attributes)?,
+										unifier.unify(&a_variant.type_, &b_variant.type_),
+									),
 								);
 							}
 							None => return Err(TypeUnificationError),
@@ -300,18 +301,50 @@ impl<R: Clone + Ord, T> TypeDesc<R, T> {
 #[error("type unification failed")]
 pub struct TypeUnificationError;
 
-impl<R: Ord> Type<R> {
-	pub fn subtype_cmp(&self, registry: &Registry<R>, other: &Self) -> Option<Ordering> {
-		self.desc.subtype_cmp(registry, &other.desc)
-	}
-
-	pub fn contains(&self, registry: &Registry<R>, value: &Value<R>) -> bool {
+impl<P: Copy + Ord, R: Ord> Type<P, R> {
+	pub fn contains(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		value: &Value<R>,
+	) -> bool {
 		self.desc.contains(registry, value)
 	}
 }
 
-impl<R: Ord> TypeDesc<R> {
-	pub fn subtype_cmp(&self, registry: &Registry<R>, other: &Self) -> Option<Ordering> {
+impl<P: Copy + Ord + Hash, R: Ord> Type<P, R> {
+	pub fn subtype_cmp(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other: &Self,
+	) -> Option<Ordering> {
+		self.desc.subtype_cmp(registry, &other.desc)
+	}
+}
+
+impl<P: Copy + Ord, R: Ord> TypeDesc<P, R> {
+	pub fn contains(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		value: &Value<R>,
+	) -> bool {
+		match (self, value) {
+			(Self::Any, _) => true,
+			(Self::Resource(ty), Value::Resource(r)) => ty.contains(r),
+			(Self::Literal(ty), Value::Literal(l)) => ty.contains(l),
+			(Self::List(ty), Value::List(list)) => ty.contains(registry, list),
+			(Self::Map(ty), Value::Map(map)) => ty.contains(registry, map),
+			(Self::Enum(ty), value) => ty.contains(registry, value),
+			_ => false,
+		}
+	}
+}
+
+impl<P: Copy + Ord + Hash, R: Ord> TypeDesc<P, R> {
+	pub fn subtype_cmp(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other: &Self,
+	) -> Option<Ordering> {
 		match (self, other) {
 			(Self::Any, Self::Any) => Some(Ordering::Equal),
 			(Self::Any, _) => Some(Ordering::Greater),
@@ -325,34 +358,22 @@ impl<R: Ord> TypeDesc<R> {
 			_ => None,
 		}
 	}
-
-	pub fn contains(&self, registry: &Registry<R>, value: &Value<R>) -> bool {
-		match (self, value) {
-			(Self::Any, _) => true,
-			(Self::Resource(ty), Value::Resource(r)) => ty.contains(r),
-			(Self::Literal(ty), Value::Literal(l)) => ty.contains(l),
-			(Self::List(ty), Value::List(list)) => ty.contains(registry, list),
-			(Self::Map(ty), Value::Map(map)) => ty.contains(registry, map),
-			(Self::Enum(ty), value) => ty.contains(registry, value),
-			_ => false,
-		}
-	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for Type<R> {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Type<P, R> {
 	fn fmt_signature(
 		&self,
-		context: &crate::display::DisplayContext<R>,
+		context: &crate::display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		self.desc.fmt_signature(context, f)
 	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for TypeDesc<R> {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for TypeDesc<P, R> {
 	fn fmt_signature(
 		&self,
-		context: &crate::display::DisplayContext<R>,
+		context: &crate::display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		match self {

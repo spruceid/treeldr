@@ -15,14 +15,14 @@ use crate::{
 
 use super::{Eval, EvalError, RdfContextMut, Scope, ScopeTypes, ScopeValues};
 
-impl<R: Clone + Ord> Bindings<R> {
+impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 	pub fn eval<'s>(
 		&'s self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &'s Scope<'s, R>,
-	) -> Result<Option<Cow<'s, Scope<'s, R>>>, EvalError<R>> {
+		scope: &'s Scope<'s, P, R>,
+	) -> Result<Option<Cow<'s, Scope<'s, P, R>>>, EvalError<R>> {
 		self.find_one_with(dataset, scope, |i| {
 			self.intro[i as usize]
 				.assignment
@@ -34,14 +34,14 @@ impl<R: Clone + Ord> Bindings<R> {
 
 	pub fn eval_inverse<C, D>(
 		&self,
-		registry: &Registry<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut C,
 		dataset: &mut D,
-		scope: &mut Scope<R>,
-		f: impl FnOnce(&mut C, &mut D, &mut Scope<R>) -> Result<(), EvalError<R>>,
+		scope: &mut Scope<P, R>,
+		f: impl FnOnce(&mut C, &mut D, &mut Scope<P, R>) -> Result<(), EvalError<R>>,
 	) -> Result<(), EvalError<R>>
 	where
-		C: RdfContextMut<R>,
+		C: RdfContextMut<Resource = R>,
 		D: DatasetMut<Resource = R>,
 	{
 		let values = scope.begin_mut(
@@ -65,13 +65,13 @@ impl<R: Clone + Ord> Bindings<R> {
 	}
 }
 
-impl<R: Clone + PartialEq> Bindings<R> {
+impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 	pub fn find_one_with<'s>(
 		&'s self,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &'s Scope<'s, R>,
+		scope: &'s Scope<'s, P, R>,
 		f: impl Fn(u32) -> Result<Option<Value<R>>, EvalError<R>>,
-	) -> Result<Option<Cow<'s, Scope<'s, R>>>, EvalError<R>> {
+	) -> Result<Option<Cow<'s, Scope<'s, P, R>>>, EvalError<R>> {
 		if self.intro.is_empty() {
 			Ok(Some(Cow::Borrowed(scope)))
 		} else {
@@ -102,8 +102,8 @@ impl<R: Clone + PartialEq> Bindings<R> {
 	pub fn find_all<'a, D>(
 		&'a self,
 		dataset: &'a D,
-		scope: &'a Scope<'a, R>,
-	) -> Matching<R, D, EmbeddedQuads<'_, R>>
+		scope: &'a Scope<'a, P, R>,
+	) -> Matching<P, R, D, EmbeddedQuads<'_, R>>
 	where
 		D: PatternMatchingDataset<Resource = R>,
 	{
@@ -119,11 +119,11 @@ impl<R: Clone + PartialEq> Bindings<R> {
 		&self,
 		rdf: &mut C,
 		dataset: &mut D,
-		scope: &mut Scope<R>,
-		f: impl FnOnce(&mut C, &mut D, &mut Scope<R>) -> Result<(), EvalError<R>>,
+		scope: &mut Scope<P, R>,
+		f: impl FnOnce(&mut C, &mut D, &mut Scope<P, R>) -> Result<(), EvalError<R>>,
 	) -> Result<Vec<Value<R>>, EvalError<R>>
 	where
-		C: RdfContextMut<R>,
+		C: RdfContextMut<Resource = R>,
 		D: DatasetMut<Resource = R>,
 	{
 		let values = scope.begin_mut(

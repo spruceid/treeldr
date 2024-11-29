@@ -4,14 +4,14 @@ use std::collections::BTreeMap;
 
 use super::{Eval, EvalError, EvalTyped, RdfContext, RdfContextMut, Scope};
 
-impl<R: Clone + Ord> EvalTyped<R> for Map<R> {
+impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Map<P, R> {
 	fn eval_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
-		type_ref: TypeRef,
+		scope: &Scope<P, R>,
+		type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		let type_ = registry.get_type(type_ref).unwrap().as_struct().unwrap();
 
@@ -34,11 +34,11 @@ impl<R: Clone + Ord> EvalTyped<R> for Map<R> {
 
 	fn eval_inverse_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
-		_type_ref: TypeRef,
+		scope: &mut Scope<P, R>,
+		_type_ref: TypeRef<P>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match output {

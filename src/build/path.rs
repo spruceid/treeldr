@@ -2,19 +2,20 @@ use std::hash::Hash;
 
 use crate::{module::ItemPathBuf, rdf::RdfContextMut, syntax::ast, ItemPathSegment};
 
-use super::{Build, BuildContext, BuildingNamespace, Error, Scope};
+use super::{Build, BuildContext, BuildEnvironment, BuildingNamespace, Error, Scope};
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ItemPath {
+impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::ItemPath {
 	type Target = ItemPathBuf;
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		_context: &mut BuildContext<'_, R, D>,
-		_namespace: &BuildingNamespace<'ast>,
-		_scope: &Scope,
-	) -> Result<Self::Target, Error>
+		_context: &mut BuildContext<'_, E, D>,
+		_namespace: &BuildingNamespace<'ast, P>,
+		_scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		let mut result = Vec::new();
 		self.build_into(&mut result);

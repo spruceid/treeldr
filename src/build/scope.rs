@@ -2,15 +2,15 @@ use std::collections::HashMap;
 
 use crate::{syntax::ast, ItemPath, ItemPathSegment, ModuleRef};
 
-use super::{BuildContext, BuildingNamespace, ScopeItemRef, TypeVariableRef};
+use super::{BuildContext, BuildEnvironment, BuildingNamespace, ScopeItemRef, TypeVariableRef};
 
-pub struct Scope<'a> {
-	pub module: Option<ModuleRef>,
+pub struct Scope<'a, P> {
+	pub module: Option<ModuleRef<P>>,
 	pub expr: ExprScope<'a>,
 	pub const_: bool,
 }
 
-impl<'a> Default for Scope<'a> {
+impl<'a, P> Default for Scope<'a, P> {
 	fn default() -> Self {
 		Self {
 			module: None,
@@ -20,31 +20,45 @@ impl<'a> Default for Scope<'a> {
 	}
 }
 
-impl<'a> Scope<'a> {
+impl<'a, P> Scope<'a, P> {
 	pub fn new() -> Self {
 		Self::default()
 	}
+}
 
-	pub fn get<'c, R, D>(
+impl<'a, P: Copy + PartialEq> Scope<'a, P> {
+	pub fn get<'c, E, D>(
 		&self,
-		context: &'c BuildContext<'c, R, D>,
-		namespace: &'c BuildingNamespace,
+		context: &'c BuildContext<'c, E, D>,
+		namespace: &'c BuildingNamespace<P>,
 		path: &ItemPath,
-	) -> Option<ScopeItemRef<'c>> {
+	) -> Option<ScopeItemRef<'c, P>>
+	where
+		E: BuildEnvironment<PackageId = P>,
+	{
 		match path.split_first() {
 			Some((first, rest)) => self
 				.get_by_segment(context, namespace, first)
-				.and_then(|i| i.get(context.registry, namespace, ItemPath::from_slice(rest))),
+				.and_then(|i| {
+					i.get(
+						context.environment.registry(),
+						namespace,
+						ItemPath::from_slice(rest),
+					)
+				}),
 			None => self.module.map(ScopeItemRef::Module),
 		}
 	}
 
-	pub fn get_by_segment<'c, R, D>(
+	pub fn get_by_segment<'c, E, D>(
 		&self,
-		context: &'c BuildContext<'c, R, D>,
-		namespace: &'c BuildingNamespace,
+		context: &'c BuildContext<'c, E, D>,
+		namespace: &'c BuildingNamespace<P>,
 		segment: &ItemPathSegment,
-	) -> Option<ScopeItemRef<'c>> {
+	) -> Option<ScopeItemRef<'c, P>>
+	where
+		E: BuildEnvironment<PackageId = P>,
+	{
 		if let ItemPathSegment::Item(name) = segment {
 			if let Some(x) = self.expr.get_by_name(name) {
 				return Some(ScopeItemRef::Variable(x));
@@ -52,47 +66,46 @@ impl<'a> Scope<'a> {
 		}
 
 		if let Some(m) = self.module {
-			if let Some(item) =
-				ScopeItemRef::Module(m).get_by_segment(context.registry, namespace, segment)
-			{
+			if let Some(item) = ScopeItemRef::Module(m).get_by_segment(
+				context.environment.registry(),
+				namespace,
+				segment,
+			) {
 				return Some(item);
 			}
 		}
 
 		match segment {
 			ItemPathSegment::Super => None,
-			ItemPathSegment::Item(name) => context
-				.environment
-				.get_by_name(context.registry, name)
-				.map(Into::into),
+			ItemPathSegment::Item(name) => context.environment.get_by_name(name).map(Into::into),
 		}
 	}
 
-	pub fn get_by_name<'c, R, D>(
+	pub fn get_by_name<'c, E, D>(
 		&self,
-		context: &'c BuildContext<'c, R, D>,
-		namespace: &'c BuildingNamespace,
+		context: &'c BuildContext<'c, E, D>,
+		namespace: &'c BuildingNamespace<P>,
 		name: &str,
-	) -> Option<ScopeItemRef<'c>> {
+	) -> Option<ScopeItemRef<'c, P>>
+	where
+		E: BuildEnvironment<PackageId = P>,
+	{
 		if let Some(x) = self.expr.get_by_name(name) {
 			return Some(ScopeItemRef::Variable(x));
 		}
 
 		if let Some(m) = self.module {
 			if let Some(item) =
-				ScopeItemRef::Module(m).get_by_name(context.registry, namespace, name)
+				ScopeItemRef::Module(m).get_by_name(context.environment.registry(), namespace, name)
 			{
 				return Some(item);
 			}
 		}
 
-		context
-			.environment
-			.get_by_name(context.registry, name)
-			.map(Into::into)
+		context.environment.get_by_name(name).map(Into::into)
 	}
 
-	pub fn begin(&'a self) -> Scope<'a> {
+	pub fn begin(&'a self) -> Scope<'a, P> {
 		Self {
 			module: self.module,
 			expr: ExprScope::new(Some(&self.expr)),
@@ -100,7 +113,7 @@ impl<'a> Scope<'a> {
 		}
 	}
 
-	pub fn begin_const(&'a self) -> Scope<'a> {
+	pub fn begin_const(&'a self) -> Scope<'a, P> {
 		Self {
 			module: self.module,
 			expr: ExprScope::new(Some(&self.expr)),
@@ -108,7 +121,7 @@ impl<'a> Scope<'a> {
 		}
 	}
 
-	pub fn begin_sub_module(&'a self, self_: ModuleRef) -> Scope<'a> {
+	pub fn begin_sub_module(&'a self, self_: ModuleRef<P>) -> Scope<'a, P> {
 		Self {
 			module: Some(self_),
 			expr: ExprScope::new(None),

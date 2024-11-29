@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{cmp::Ordering, hash::Hash, ops::Deref};
+use std::{cmp::Ordering, hash::Hash, ops::Deref, sync::OnceLock};
 
 use crate::{display::DisplaySignature, Registry, Value};
 use dashmap::DashMap;
@@ -8,41 +8,53 @@ use super::Type;
 
 /// Type reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TypeRef {
-	pub namespace: u32,
+pub struct TypeRef<P> {
+	pub package: P,
 	pub index: u32,
 }
 
-impl TypeRef {
-	pub fn new(namespace: u32, index: u32) -> Self {
-		Self { namespace, index }
+impl<P> TypeRef<P> {
+	pub fn new(package: P, index: u32) -> Self {
+		Self { package, index }
 	}
+}
 
-	pub fn contains<R: Ord>(&self, registry: &Registry<R>, value: &Value<R>) -> bool {
+impl<P: Copy + Ord> TypeRef<P> {
+	pub fn contains<R: Ord>(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		value: &Value<R>,
+	) -> bool {
 		registry
 			.get_type(*self)
 			.is_some_and(|ty| ty.value.contains(registry, value))
 	}
+}
 
+impl<P: Copy + Ord + Hash> TypeRef<P> {
 	pub fn subtype_cmp<R: Ord>(
 		&self,
-		registry: &Registry<R>,
-		other_ref: TypeRef,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other_ref: TypeRef<P>,
 	) -> Option<Ordering> {
 		registry.get_type(*self)?.subtype_cmp(registry, other_ref)
 	}
 
-	pub fn is_subtype_of<R: Ord>(&self, registry: &Registry<R>, other_ref: TypeRef) -> bool {
+	pub fn is_subtype_of<R: Ord>(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other_ref: TypeRef<P>,
+	) -> bool {
 		registry
 			.get_type(*self)
 			.is_some_and(|ty| ty.is_subtype_of(registry, other_ref))
 	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for TypeRef {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for TypeRef<P> {
 	fn fmt_signature(
 		&self,
-		context: &crate::display::DisplayContext<R>,
+		context: &crate::display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		if context.self_ == Some(*self) {
@@ -58,58 +70,73 @@ impl<R: fmt::Display> DisplaySignature<R> for TypeRef {
 }
 
 /// Type definition.
-pub struct TypeDefinition<R> {
-	value: Type<R>,
-	subtype_cmp: DashMap<TypeRef, Option<Ordering>>,
+pub struct TypeDefinition<P, R> {
+	value: Type<P, R>,
+	subtype_cmp: OnceLock<DashMap<TypeRef<P>, Option<Ordering>>>,
 }
 
-impl<R> TypeDefinition<R> {
-	pub fn new(value: Type<R>) -> Self {
+impl<P, R> TypeDefinition<P, R> {
+	pub fn new(value: Type<P, R>) -> Self {
 		Self {
 			value,
-			subtype_cmp: DashMap::default(),
+			subtype_cmp: OnceLock::new(),
 		}
 	}
 }
 
-impl<R: Ord> TypeDefinition<R> {
-	pub fn subtype_cmp(&self, registry: &Registry<R>, other_ref: TypeRef) -> Option<Ordering> {
-		match self.subtype_cmp.get(&other_ref) {
+impl<P: Copy + Ord + Hash, R: Ord> TypeDefinition<P, R> {
+	pub fn subtype_cmp(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other_ref: TypeRef<P>,
+	) -> Option<Ordering> {
+		let map = self.subtype_cmp.get_or_init(Default::default);
+		match map.get(&other_ref) {
 			Some(cmp) => *cmp,
 			None => {
 				let other = registry.get_type(other_ref)?;
-				self.subtype_cmp.insert(other_ref, Some(Ordering::Equal));
+				map.insert(other_ref, Some(Ordering::Equal));
 				let cmp = self.value.subtype_cmp(registry, other);
-				self.subtype_cmp.insert(other_ref, cmp);
+				map.insert(other_ref, cmp);
 				cmp
 			}
 		}
 	}
 
-	pub fn is_subtype_of(&self, registry: &Registry<R>, other_ref: TypeRef) -> bool {
+	pub fn is_subtype_of(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other_ref: TypeRef<P>,
+	) -> bool {
 		self.subtype_cmp(registry, other_ref)
 			.is_some_and(Ordering::is_le)
 	}
 }
 
-impl<R> Deref for TypeDefinition<R> {
-	type Target = Type<R>;
+impl<P, R> From<Type<P, R>> for TypeDefinition<P, R> {
+	fn from(value: Type<P, R>) -> Self {
+		Self::new(value)
+	}
+}
+
+impl<P, R> Deref for TypeDefinition<P, R> {
+	type Target = Type<P, R>;
 
 	fn deref(&self) -> &Self::Target {
 		&self.value
 	}
 }
 
-impl<R: fmt::Debug> fmt::Debug for TypeDefinition<R> {
+impl<P: fmt::Debug, R: fmt::Debug> fmt::Debug for TypeDefinition<P, R> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		self.value.fmt(f)
 	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for TypeDefinition<R> {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for TypeDefinition<P, R> {
 	fn fmt_signature(
 		&self,
-		context: &crate::display::DisplayContext<R>,
+		context: &crate::display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		self.value.fmt_signature(context, f)

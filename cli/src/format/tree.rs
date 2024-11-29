@@ -3,10 +3,9 @@ use std::io::{self, BufRead, Write};
 
 use clap::builder::TypedValueParser;
 use json_syntax::Print;
-use treeldr::{
-	value::{serde::json::NonJsonValue, TypedValue},
-	Registry,
-};
+use treeldr::value::{serde::json::NonJsonValue, TypedValue};
+
+use crate::{PackageId, Registry};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
@@ -76,7 +75,7 @@ impl TreeFormat {
 	pub fn write(
 		&self,
 		_registry: &Registry,
-		value: &TypedValue,
+		value: &TypedValue<PackageId>,
 		pretty: bool,
 		mut output: impl Write,
 	) -> Result<(), WriteError> {

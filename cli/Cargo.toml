@@ -18,3 +18,5 @@ thiserror.workspace = true
 treeldr = { workspace = true, features = ["json-syntax"] }
 json-syntax.workspace = true
 serde_cbor.workspace = true
+
+serde_json = "*"

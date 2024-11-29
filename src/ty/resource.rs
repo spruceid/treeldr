@@ -47,10 +47,12 @@ impl<R: Ord> Resource<R> {
 	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for Resource<R> {
+impl<P, R: fmt::Display> DisplaySignature<P, R> for Resource<R> {
 	fn fmt_signature(
 		&self,
-		_context: &crate::display::DisplayContext<R>,
+		_context: &crate::display::DisplayContext<
+			impl crate::Registry<PackageId = P, Resource = R>,
+		>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		match &self.set {

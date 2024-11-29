@@ -13,14 +13,15 @@ use std::{
 	process::ExitCode,
 };
 use treeldr::{
-	build::TypeResolutionError,
+	build::{BuildEnvironment, TypeResolutionError},
 	display::DisplaySignature,
 	eval::{EvalError, MissingData},
-	module::{CompileError, ItemRef},
+	module::ItemRef,
+	package::CompileError,
 	rdf::{dataset::BTreeDataset, Rdf},
 	syntax::Spanned,
 	value::ValueParseError,
-	Environment, ModuleRef, Registry, Value,
+	Package, Registry as _, Value,
 };
 
 mod format;
@@ -42,6 +43,8 @@ struct Args {
 
 #[derive(clap::Subcommand)]
 enum Command {
+	Compile,
+
 	/// Serializes an RDF dataset into a tree value.
 	Hydrate {
 		/// Format of the input RDF dataset.
@@ -73,6 +76,63 @@ enum Command {
 	},
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum PackageId {
+	Prelude,
+	Target,
+}
+
+struct Registry {
+	prelude: Package<PackageId>,
+	target: Option<Package<PackageId>>,
+}
+
+impl Registry {
+	fn new() -> Self {
+		Self {
+			prelude: Package::prelude(PackageId::Prelude),
+			target: None,
+		}
+	}
+}
+
+impl treeldr::Registry for Registry {
+	type PackageId = PackageId;
+	type Resource = treeldr::rdf::Term;
+
+	fn len(&self) -> usize {
+		if self.target.is_some() {
+			2
+		} else {
+			1
+		}
+	}
+
+	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>> {
+		match id {
+			PackageId::Prelude => Some(&self.prelude),
+			PackageId::Target => self.target.as_ref(),
+		}
+	}
+}
+
+impl BuildEnvironment for Registry {
+	type PackageId = PackageId;
+	type Resource = treeldr::rdf::Term;
+	type Registry = Self;
+
+	fn registry(&self) -> &Self::Registry {
+		self
+	}
+
+	fn package(&self, name: Option<&str>) -> Option<Self::PackageId> {
+		match name {
+			Some(_) => None,
+			None => Some(PackageId::Prelude),
+		}
+	}
+}
+
 fn main() -> ExitCode {
 	// Parse options.
 	let args: Args = clap::Parser::parse();
@@ -87,10 +147,8 @@ fn main() -> ExitCode {
 
 	let mut rdf = Rdf::default();
 	let mut registry = Registry::new();
-	let prelude_ref = registry.add_prelude();
-	let env = Environment::new(Some(prelude_ref));
 
-	match args.run(&mut rdf, &mut registry, &env, &mut files) {
+	match args.run(&mut rdf, &mut registry, &mut files) {
 		Ok(()) => ExitCode::SUCCESS,
 		Err(e) => {
 			let diagnostic = e.into_diagnostic(&registry);
@@ -107,25 +165,33 @@ impl Args {
 		self,
 		rdf: &mut Rdf,
 		registry: &mut Registry,
-		env: &Environment,
 		files: &mut SimpleFiles<String, String>,
 	) -> Result<(), Error> {
 		let content = fs::read_to_string(&self.input).map_err(Error::IO)?;
 		let file_id = files.add(self.input.to_string_lossy().into_owned(), content);
 
-		let module_ref = treeldr::Module::compile(
-			rdf,
-			registry,
-			env,
-			files.get(file_id).unwrap().source().as_str(),
-		)
-		.map_err(|e| Error::Compile(file_id, e))?;
+		registry.target = Some(
+			treeldr::Module::compile(
+				rdf,
+				registry,
+				PackageId::Target,
+				files.get(file_id).unwrap().source().as_str(),
+			)
+			.map_err(|e| Error::Compile(file_id, e))?,
+		);
 
 		match self.command {
-			Some(command) => command.run(rdf, registry, module_ref),
+			Some(command) => command.run(rdf, &registry),
 			None => {
-				let module = registry.get_module(module_ref).unwrap();
-				println!("{}", module.display_signature(registry));
+				println!(
+					"{}",
+					registry
+						.target
+						.as_ref()
+						.unwrap()
+						.root()
+						.display_signature(&registry)
+				);
 				Ok(())
 			}
 		}
@@ -133,15 +199,19 @@ impl Args {
 }
 
 impl Command {
-	fn run(self, rdf: &mut Rdf, registry: &Registry, module_ref: ModuleRef) -> Result<(), Error> {
+	fn run(self, rdf: &mut Rdf, registry: &Registry) -> Result<(), Error> {
 		match self {
+			Self::Compile => {
+				// println!("{}", serde_json::to_string_pretty(&registry.with_rdf(rdf)).unwrap());
+				Ok(())
+			}
 			Self::Hydrate {
 				input_format,
 				output_format,
 				args,
 				pretty,
 			} => {
-				let module = registry.get_module(module_ref).unwrap();
+				let module = registry.target.as_ref().unwrap().root();
 
 				let name = "_";
 
@@ -173,7 +243,7 @@ impl Command {
 				input_format,
 				output_format,
 			} => {
-				let module = registry.get_module(module_ref).unwrap();
+				let module = registry.target.as_ref().unwrap().root();
 
 				let name = "_";
 
@@ -209,12 +279,12 @@ fn value_parser(s: &str) -> Result<Value, ValueParseError> {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+enum Error {
 	#[error(transparent)]
 	IO(#[from] io::Error),
 
 	#[error("{1}")]
-	Compile(usize, CompileError),
+	Compile(usize, CompileError<PackageId>),
 
 	#[error("undefined function `{0}`")]
 	UndefinedFunction(String),

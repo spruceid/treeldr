@@ -11,7 +11,7 @@ use rdf_types::{
 use treeldr::{
 	rdf::{Rdf, RdfContextMut},
 	utils::strip_rdf_quad,
-	Environment, Registry, Value,
+	Package, Registry, RegistryUnion, Value,
 };
 
 fn file_path(path: impl AsRef<Path>) -> PathBuf {
@@ -26,23 +26,32 @@ pub struct PositiveTest {
 	pub inputs: Vec<&'static str>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum PackageId {
+	Prelude,
+	Target,
+}
+
 impl PositiveTest {
 	pub fn run(&self, id: &str, forward: bool) {
 		let mut rdf = Rdf::default();
-		let mut registry = Registry::new();
-		let prelude_ref = registry.add_prelude();
-		let env = Environment::new(Some(prelude_ref));
+		let prelude = Package::prelude(PackageId::Prelude);
 
 		// Parse layout.
 		let layout_text = fs::read_to_string(file_path(format!("{id}-layout.tldr")))
 			.expect("unable to read layout");
-		let module_ref = treeldr::Module::compile(&mut rdf, &mut registry, &env, &layout_text)
+		let package = treeldr::Module::compile(&mut rdf, &prelude, PackageId::Target, &layout_text)
 			.expect("compile error");
 
-		let module = registry.get_module(module_ref).unwrap();
+		let registry = RegistryUnion(prelude, &package);
 
 		let f_name = "_";
-		let f_ref = module.get_by_name(f_name).unwrap().as_function().unwrap();
+		let f_ref = package
+			.root()
+			.get_by_name(f_name)
+			.unwrap()
+			.as_function()
+			.unwrap();
 		let function = registry.get_function(f_ref).unwrap();
 
 		// Parse input.

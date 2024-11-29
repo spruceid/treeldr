@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::{cmp::Ordering, collections::BTreeMap, hash::Hash, marker::PhantomData};
 
 use crate::{
 	display::DisplaySignature,
@@ -11,17 +11,47 @@ use super::TypeRef;
 
 /// Map type.
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Map<R, T = TypeRef> {
+pub struct Map<P, R, T = TypeRef<P>> {
 	/// Fields definitions.
 	///
 	/// # Soundness
 	///
 	/// It is a logical error for two keys to have a non-null intersection.
-	pub fields: BTreeMap<T, Field<R, T>>,
+	pub fields: BTreeMap<T, Field<P, R, T>>,
 }
 
-impl<R: Ord> Map<R, TypeRef> {
-	pub fn subtype_cmp(&self, registry: &Registry<R>, other: &Self) -> Option<Ordering> {
+impl<P: Copy + Ord, R: Ord> Map<P, R> {
+	pub fn contains(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		map: &BTreeMap<Value<R>, Value<R>>,
+	) -> bool {
+		let mut fields: Vec<_> = self.fields.iter().collect();
+
+		for key in map.keys() {
+			if take_first(&mut fields, |(ty, _)| ty.contains(registry, key)).is_none()
+				&& !self.fields.keys().any(|ty| ty.contains(registry, key))
+			{
+				return false; // unexpected field
+			}
+		}
+
+		for (_, field) in fields {
+			if field.required {
+				return false; // missing required field
+			}
+		}
+
+		true
+	}
+}
+
+impl<P: Copy + Ord + Hash, R: Ord> Map<P, R> {
+	pub fn subtype_cmp(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other: &Self,
+	) -> Option<Ordering> {
 		if self.is_subtype_of(registry, other) {
 			if other.is_subtype_of(registry, self) {
 				Some(Ordering::Equal)
@@ -35,7 +65,11 @@ impl<R: Ord> Map<R, TypeRef> {
 		}
 	}
 
-	pub fn is_subtype_of(&self, registry: &Registry<R>, other: &Self) -> bool {
+	pub fn is_subtype_of(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other: &Self,
+	) -> bool {
 		let mut fields: Vec<_> = other.fields.iter().collect();
 
 		for (key, field) in &self.fields {
@@ -61,32 +95,12 @@ impl<R: Ord> Map<R, TypeRef> {
 
 		fields.into_iter().all(|(_, field)| !field.required)
 	}
-
-	pub fn contains(&self, registry: &Registry<R>, map: &BTreeMap<Value<R>, Value<R>>) -> bool {
-		let mut fields: Vec<_> = self.fields.iter().collect();
-
-		for key in map.keys() {
-			if take_first(&mut fields, |(ty, _)| ty.contains(registry, key)).is_none()
-				&& !self.fields.keys().any(|ty| ty.contains(registry, key))
-			{
-				return false; // unexpected field
-			}
-		}
-
-		for (_, field) in fields {
-			if field.required {
-				return false; // missing required field
-			}
-		}
-
-		true
-	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for Map<R> {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Map<P, R> {
 	fn fmt_signature(
 		&self,
-		context: &crate::display::DisplayContext<R>,
+		context: &crate::display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		write!(f, "{{")?;
@@ -114,14 +128,30 @@ impl<R: fmt::Display> DisplaySignature<R> for Map<R> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Field<R, T> {
+pub struct Field<P, R, T = TypeRef<P>> {
 	pub attributes: Attributes<R>,
 	pub type_: T,
 	pub required: bool,
+	p: PhantomData<P>,
 }
 
-impl<R: Ord> Field<R, TypeRef> {
-	pub fn is_subfield_of(&self, registry: &Registry<R>, other: &Self) -> bool {
+impl<P, R, T> Field<P, R, T> {
+	pub fn new(attributes: Attributes<R>, type_: T, required: bool) -> Self {
+		Self {
+			attributes,
+			type_,
+			required,
+			p: PhantomData,
+		}
+	}
+}
+
+impl<P: Copy + Ord + Hash, R: Ord> Field<P, R> {
+	pub fn is_subfield_of(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other: &Self,
+	) -> bool {
 		(!other.required || self.required) && self.type_.is_subtype_of(registry, other.type_)
 	}
 }

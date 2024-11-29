@@ -5,28 +5,27 @@ use educe::Educe;
 use iref::{Iri, IriBuf};
 
 use crate::{
-	build,
 	display::{self, DisplaySignature},
 	function::FunctionRef,
-	rdf::RdfContextMut,
-	syntax, Attributes, Environment, Registry, TypeRef,
+	Attributes, Registry, TypeRef,
 };
 
 #[derive(Debug, Clone, Educe)]
 #[educe(Default)]
-pub struct Module<R = rdf_types::Term, T = TypeRef> {
-	pub parent: Option<ModuleRef>,
+pub struct Module<P, R = rdf_types::Term, T = TypeRef<P>> {
+	pub parent: Option<ModuleRef<P>>,
 	pub attributes: Attributes<R>,
-	pub items: BTreeMap<String, Item<T>>,
+	pub items: BTreeMap<String, Item<P, T>>,
 }
 
-impl<R, T> Module<R, T> {
+impl<P, R, T> Module<P, R, T> {
 	pub fn new() -> Self {
 		Self::default()
 	}
 
-	pub fn get_by_segment(&self, segment: &ItemPathSegment) -> Option<ItemRef<T>>
+	pub fn get_by_segment(&self, segment: &ItemPathSegment) -> Option<ItemRef<P, T>>
 	where
+		P: Copy,
 		T: Clone,
 	{
 		match segment {
@@ -35,22 +34,23 @@ impl<R, T> Module<R, T> {
 		}
 	}
 
-	pub fn get_by_name(&self, name: &str) -> Option<ItemRef<T>>
+	pub fn get_by_name(&self, name: &str) -> Option<ItemRef<P, T>>
 	where
+		P: Copy,
 		T: Clone,
 	{
 		Some(self.items.get(name)?.as_ref())
 	}
 
-	pub fn insert(&mut self, name: impl Into<String>, item: Item<T>) -> Option<Item<T>> {
+	pub fn insert(&mut self, name: impl Into<String>, item: Item<P, T>) -> Option<Item<P, T>> {
 		self.items.insert(name.into(), item)
 	}
 
-	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Module<R, U> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Module<P, R, U> {
 		self.map_types_ref_mut(&mut f)
 	}
 
-	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Module<R, U> {
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Module<P, R, U> {
 		Module {
 			parent: self.parent,
 			attributes: self.attributes,
@@ -63,13 +63,13 @@ impl<R, T> Module<R, T> {
 	}
 }
 
-impl<R> Module<R> {
+impl<P: Copy, R> Module<P, R> {
 	pub fn get<'a>(
 		&'a self,
-		registry: &'a Registry<R>,
-		this: ModuleRef,
+		registry: &'a impl Registry<PackageId = P, Resource = R>,
+		this: ModuleRef<P>,
 		path: &ItemPath,
-	) -> Option<ItemRef<'a>> {
+	) -> Option<ItemRef<'a, P>> {
 		match path.split_first() {
 			Some((first, rest)) => self
 				.get_by_segment(first)
@@ -79,36 +79,10 @@ impl<R> Module<R> {
 	}
 }
 
-impl<R: Clone + Ord + Hash> Module<R> {
-	/// Compiles a module.
-	pub fn compile(
-		rdf: &mut impl RdfContextMut<R>,
-		registry: &mut Registry<R>,
-		env: &Environment,
-		text: &str,
-	) -> Result<ModuleRef, CompileError> {
-		use crate::build::{self, BuildContext, BuildingNamespace};
-		use crate::syntax::{self, Parse};
-
-		let ast = syntax::ast::Module::parse_str(text)?;
-
-		let mut namespace = BuildingNamespace::new(registry.create_namespace());
-		let mut context = BuildContext::new(rdf, registry, env);
-
-		let scope = build::Scope::new();
-
-		let module_ref = ast.declare(&mut context, &mut namespace, &scope, None)?;
-
-		namespace.build(&mut context)?.resolve(context)?;
-
-		Ok(module_ref)
-	}
-}
-
-impl<R: fmt::Display> DisplaySignature<R> for Module<R> {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Module<P, R> {
 	fn fmt_signature(
 		&self,
-		context: &display::DisplayContext<R>,
+		context: &display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		for (name, item) in &self.items {
@@ -151,50 +125,57 @@ impl<R: fmt::Display> DisplaySignature<R> for Module<R> {
 	}
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum CompileError {
-	#[error(transparent)]
-	Parse(#[from] syntax::ParseError),
-
-	#[error(transparent)]
-	Build(#[from] build::Error),
-
-	#[error(transparent)]
-	Typing(#[from] build::TypeResolutionError),
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ModuleRef {
-	pub namespace: u32,
+pub struct ModuleRef<P> {
+	pub package: P,
 	pub index: u32,
 }
 
-impl ModuleRef {
-	pub fn new(namespace: u32, index: u32) -> Self {
-		Self { namespace, index }
+impl<P> ModuleRef<P> {
+	pub fn new(package: P, index: u32) -> Self {
+		Self { package, index }
 	}
+}
 
-	pub fn get<'a, R>(&self, registry: &'a Registry<R>, path: &ItemPath) -> Option<ItemRef<'a>> {
+impl<P: Copy> ModuleRef<P> {
+	pub fn get<'a>(
+		&self,
+		registry: &'a impl Registry<PackageId = P>,
+		path: &ItemPath,
+	) -> Option<ItemRef<'a, P>>
+	where
+		P: 'a,
+	{
 		registry.get_module(*self)?.get(registry, *self, path)
 	}
 
-	pub fn get_by_segment<'a, R>(
+	pub fn get_by_segment<'a>(
 		&self,
-		registry: &'a Registry<R>,
+		registry: &'a impl Registry<PackageId = P>,
 		segment: &ItemPathSegment,
-	) -> Option<ItemRef<'a>> {
+	) -> Option<ItemRef<'a, P>>
+	where
+		P: 'a,
+	{
 		registry.get_module(*self)?.get_by_segment(segment)
 	}
 
-	pub fn get_by_name<'a, R>(&self, registry: &'a Registry<R>, name: &str) -> Option<ItemRef<'a>> {
+	pub fn get_by_name<'a>(
+		&self,
+		registry: &'a impl Registry<PackageId = P>,
+		name: &str,
+	) -> Option<ItemRef<'a, P>>
+	where
+		P: 'a,
+	{
 		registry.get_module(*self)?.get_by_name(name)
 	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for ModuleRef {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for ModuleRef<P> {
 	fn fmt_signature(
 		&self,
-		context: &display::DisplayContext<R>,
+		context: &display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		context
@@ -206,16 +187,17 @@ impl<R: fmt::Display> DisplaySignature<R> for ModuleRef {
 }
 
 #[derive(Debug, Clone)]
-pub enum Item<T = TypeRef> {
+pub enum Item<P, T = TypeRef<P>> {
 	Prefix(IriBuf),
 	Type(T),
-	Function(FunctionRef),
-	Module(ModuleRef),
+	Function(FunctionRef<P>),
+	Module(ModuleRef<P>),
 }
 
-impl<T> Item<T> {
-	pub fn as_ref(&self) -> ItemRef<T>
+impl<P, T> Item<P, T> {
+	pub fn as_ref(&self) -> ItemRef<P, T>
 	where
+		P: Copy,
 		T: Clone,
 	{
 		match self {
@@ -226,11 +208,11 @@ impl<T> Item<T> {
 		}
 	}
 
-	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Item<U> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Item<P, U> {
 		self.map_types_ref_mut(&mut f)
 	}
 
-	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Item<U> {
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Item<P, U> {
 		match self {
 			Self::Prefix(i) => Item::Prefix(i),
 			Self::Type(t) => Item::Type(f(t)),
@@ -241,22 +223,22 @@ impl<T> Item<T> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum ItemRef<'a, T = TypeRef> {
+pub enum ItemRef<'a, P, T = TypeRef<P>> {
 	Prefix(&'a Iri),
 	Type(T),
-	Function(FunctionRef),
-	Module(ModuleRef),
+	Function(FunctionRef<P>),
+	Module(ModuleRef<P>),
 }
 
-impl<'a, T> ItemRef<'a, T> {
-	pub fn as_function(&self) -> Option<FunctionRef> {
+impl<'a, P: Copy, T> ItemRef<'a, P, T> {
+	pub fn as_function(&self) -> Option<FunctionRef<P>> {
 		match self {
 			Self::Function(f) => Some(*f),
 			_ => None,
 		}
 	}
 
-	pub fn as_module(&self) -> Option<ModuleRef> {
+	pub fn as_module(&self) -> Option<ModuleRef<P>> {
 		match self {
 			Self::Module(m) => Some(*m),
 			_ => None,
@@ -264,8 +246,8 @@ impl<'a, T> ItemRef<'a, T> {
 	}
 }
 
-impl<'a> ItemRef<'a> {
-	pub fn get<R>(&self, registry: &'a Registry<R>, path: &ItemPath) -> Option<Self> {
+impl<'a, P: 'a + Copy> ItemRef<'a, P> {
+	pub fn get(&self, registry: &'a impl Registry<PackageId = P>, path: &ItemPath) -> Option<Self> {
 		if path.is_empty() {
 			Some(*self)
 		} else {

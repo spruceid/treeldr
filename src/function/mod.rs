@@ -3,14 +3,14 @@ use rdf_types::{
 	dataset::{DatasetMut, PatternMatchingDataset},
 	Quad,
 };
-use std::hash::Hash;
+use std::{hash::Hash, marker::PhantomData};
 
 use crate::{
 	display::DisplaySignature,
 	eval::{EvalError, Scope, ScopeTypes, ScopeValues},
 	rdf::{RdfContext, RdfContextMut},
 	ty::{BuiltInType, TypeRef},
-	Attributes, DatasetPattern, Layout, Registry, Value,
+	Attributes, DatasetPattern, Registry, Value,
 };
 
 mod body;
@@ -20,19 +20,35 @@ pub use body::*;
 pub use build_in::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Signature<R, T = TypeRef> {
+pub struct Signature<P, R, T = TypeRef<P>> {
 	pub const_args: Vec<T>,
 	pub args: Vec<T>,
 	pub return_type: T,
 	pub dataset: DatasetPattern<R>,
+	p: PhantomData<P>,
 }
 
-impl<R, T> Signature<R, T> {
+impl<P, R, T> Signature<P, R, T> {
+	pub fn new(
+		const_args: Vec<T>,
+		args: Vec<T>,
+		return_type: T,
+		dataset: DatasetPattern<R>,
+	) -> Self {
+		Self {
+			const_args,
+			args,
+			return_type,
+			dataset,
+			p: PhantomData,
+		}
+	}
+
 	pub fn arity(&self) -> u32 {
 		self.const_args.len() as u32 + self.args.len() as u32
 	}
 
-	pub fn mapped_types<U>(&self, mut f: impl FnMut(&T) -> U) -> Signature<R, U>
+	pub fn mapped_types<U>(&self, mut f: impl FnMut(&T) -> U) -> Signature<P, R, U>
 	where
 		R: Clone,
 	{
@@ -41,25 +57,27 @@ impl<R, T> Signature<R, T> {
 			args: self.args.iter().map(&mut f).collect(),
 			return_type: f(&self.return_type),
 			dataset: self.dataset.clone(),
+			p: PhantomData,
 		}
 	}
 
-	pub fn map_types<U>(self, mut f: impl FnMut(T) -> U) -> Signature<R, U> {
+	pub fn map_types<U>(self, mut f: impl FnMut(T) -> U) -> Signature<P, R, U> {
 		Signature {
 			const_args: self.const_args.into_iter().map(&mut f).collect(),
 			args: self.args.into_iter().map(&mut f).collect(),
 			return_type: f(self.return_type),
 			dataset: self.dataset,
+			p: PhantomData,
 		}
 	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for Signature<R> {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Signature<P, R> {
 	fn fmt_signature(
 		&self,
-		context: &crate::display::DisplayContext<R>,
-		f: &mut core::fmt::Formatter,
-	) -> core::fmt::Result {
+		context: &crate::display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		write!(f, "(")?;
 
 		for (i, a) in self.args.iter().enumerate() {
@@ -80,14 +98,14 @@ impl<R: fmt::Display> DisplaySignature<R> for Signature<R> {
 
 /// Function.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Function<R, T = TypeRef> {
+pub struct Function<P, R, T = TypeRef<P>> {
 	pub attributes: Attributes<R>,
-	pub signature: Signature<R, T>,
-	pub body: Body<R, T>,
+	pub signature: Signature<P, R, T>,
+	pub body: Body<P, R, T>,
 }
 
-impl<R: Ord, T> Function<R, T> {
-	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Function<R, U> {
+impl<P, R: Ord, T> Function<P, R, T> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Function<P, R, U> {
 		Function {
 			attributes: self.attributes,
 			signature: self.signature.map_types(&mut f),
@@ -96,35 +114,21 @@ impl<R: Ord, T> Function<R, T> {
 	}
 }
 
-impl<R> Function<R> {
-	pub fn built_in(b: BuiltInFunction, ty: impl Fn(BuiltInType) -> TypeRef) -> Self {
+impl<P, R> Function<P, R> {
+	pub fn built_in(b: BuiltInFunction, ty: impl Fn(BuiltInType) -> TypeRef<P>) -> Self {
 		Self {
 			attributes: Attributes::new(),
 			signature: b.signature(ty),
 			body: Body::BuiltIn(b),
 		}
 	}
-
-	pub fn as_layout(&self, registry: &Registry<R>) -> Option<&Layout<R>> {
-		for &a in &self.signature.args {
-			if registry.get_type(a)?.is_resource() {
-				return None;
-			}
-		}
-
-		Some(self.as_layout_unchecked())
-	}
-
-	fn as_layout_unchecked(&self) -> &Layout<R> {
-		unsafe { std::mem::transmute::<&Function<R>, &Layout<R>>(self) }
-	}
 }
 
-impl<R: Clone + Ord> Function<R> {
+impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 	pub fn call(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		args: &[Value<R>],
 	) -> Result<Value<R>, EvalError<R>> {
@@ -149,8 +153,8 @@ impl<R: Clone + Ord> Function<R> {
 
 	pub fn call_inverse(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
 		const_args: &[Value<R>],
 		output: &Value<R>,
@@ -187,23 +191,23 @@ pub struct Arg<T> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct FunctionRef {
-	pub namespace: u32,
+pub struct FunctionRef<P> {
+	pub package: P,
 	pub index: u32,
 }
 
-impl FunctionRef {
-	pub fn new(namespace: u32, index: u32) -> Self {
-		Self { namespace, index }
+impl<P> FunctionRef<P> {
+	pub fn new(package: P, index: u32) -> Self {
+		Self { package, index }
 	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for FunctionRef {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for FunctionRef<P> {
 	fn fmt_signature(
 		&self,
-		context: &crate::display::DisplayContext<R>,
-		f: &mut core::fmt::Formatter,
-	) -> core::fmt::Result {
+		context: &crate::display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result {
 		let function = context.registry.get_function(*self).unwrap();
 		function.signature.fmt_signature(context, f)
 	}

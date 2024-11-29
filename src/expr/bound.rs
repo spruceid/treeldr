@@ -6,16 +6,16 @@ use super::Expr;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Educe)]
 #[educe(Default)]
-pub struct Bindings<R, T = TypeRef> {
+pub struct Bindings<P, R, T = TypeRef<P>> {
 	/// Introduced variables.
-	pub intro: Vec<Binding<R, T>>,
+	pub intro: Vec<Binding<P, R, T>>,
 
 	/// Dataset constraints.
 	pub dataset: DatasetPattern<R>,
 }
 
-impl<R: Ord, T> Bindings<R, T> {
-	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Bindings<R, U> {
+impl<P, R: Ord, T> Bindings<P, R, T> {
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Bindings<P, R, U> {
 		Bindings {
 			intro: self
 				.intro
@@ -28,13 +28,13 @@ impl<R: Ord, T> Bindings<R, T> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Binding<R, T = TypeRef> {
+pub struct Binding<P, R, T = TypeRef<P>> {
 	pub type_: T,
-	pub assignment: Option<Expr<R, T>>,
+	pub assignment: Option<Expr<P, R, T>>,
 }
 
-impl<R: Ord, T> Binding<R, T> {
-	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Binding<R, U> {
+impl<P, R: Ord, T> Binding<P, R, T> {
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Binding<P, R, U> {
 		Binding {
 			type_: f(self.type_),
 			assignment: self.assignment.map(|a| a.map_types_ref_mut(f)),

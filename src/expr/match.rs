@@ -17,18 +17,18 @@ use super::Expr;
 /// }
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Match<R, T = TypeRef> {
-	pub cases: BTreeMap<String, Expr<R, T>>,
+pub struct Match<P, R, T = TypeRef<P>> {
+	pub cases: BTreeMap<String, Expr<P, R, T>>,
 
 	pub order: Vec<String>,
 }
 
-impl<R: Ord, T> Match<R, T> {
-	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Match<R, U> {
+impl<P, R: Ord, T> Match<P, R, T> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Match<P, R, U> {
 		self.map_types_ref_mut(&mut f)
 	}
 
-	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Match<R, U> {
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Match<P, R, U> {
 		Match {
 			cases: self
 				.cases

@@ -1,0 +1,219 @@
+use std::hash::Hash;
+
+use crate::{
+	build::{self, BuildEnvironment},
+	function::FunctionRef,
+	rdf::RdfContextMut,
+	syntax,
+	ty::TypeDefinition,
+	Function, Module, ModuleRef, Registry, Type, TypeRef,
+};
+use educe::Educe;
+
+/// Package.
+///
+/// A package is a collection of types, functions and modules.
+#[derive(Debug)]
+pub struct Package<P, R = rdf_types::Term> {
+	pub id: P,
+
+	/// Types.
+	pub types: Collection<TypeDefinition<P, R>>,
+
+	/// Functions.
+	pub functions: Collection<Function<P, R>>,
+
+	/// Modules.
+	pub modules: NonEmptyCollection<Module<P, R>>,
+}
+
+impl<P, R> Package<P, R> {
+	pub fn new(id: P) -> Self {
+		Self::new_with_root(id, Module::new())
+	}
+
+	pub fn new_with_root(id: P, root: Module<P, R>) -> Self {
+		Self {
+			id,
+			types: Collection::default(),
+			functions: Collection::default(),
+			modules: NonEmptyCollection::new(root),
+		}
+	}
+
+	pub fn root(&self) -> &Module<P, R> {
+		self.modules.first()
+	}
+
+	pub fn root_mut(&mut self) -> &mut Module<P, R> {
+		self.modules.first_mut()
+	}
+
+	pub fn set_root(&mut self, value: Module<P, R>) -> Module<P, R> {
+		std::mem::replace(self.root_mut(), value)
+	}
+}
+
+impl<P: Copy, R> Package<P, R> {
+	pub fn root_ref(&self) -> ModuleRef<P> {
+		ModuleRef::new(self.id, 0)
+	}
+
+	pub fn insert_type(&mut self, value: impl Into<Type<P, R>>) -> TypeRef<P> {
+		TypeRef::new(self.id, self.types.insert(value.into()))
+	}
+
+	pub fn insert_function(&mut self, value: Function<P, R>) -> FunctionRef<P> {
+		FunctionRef::new(self.id, self.functions.insert(value))
+	}
+
+	pub fn insert_module(&mut self, value: Module<P, R>) -> ModuleRef<P> {
+		ModuleRef::new(self.id, self.modules.insert(value))
+	}
+}
+
+impl<P: Copy + Ord + Hash, R: Clone + Ord + Hash> Module<P, R> {
+	/// Compiles a module.
+	pub fn compile(
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		env: &impl BuildEnvironment<PackageId = P, Resource = R>,
+		package_id: P,
+		text: &str,
+	) -> Result<Package<P, R>, CompileError<P>> {
+		use crate::build::{self, BuildContext, BuildingNamespace};
+		use crate::syntax::{self, Parse};
+
+		let ast = syntax::ast::Module::parse_str(text)?;
+
+		let mut namespace = BuildingNamespace::new(package_id);
+		let mut context = BuildContext::new(rdf, env);
+
+		let scope = build::Scope::new();
+
+		ast.declare(&mut context, &mut namespace, &scope, None)?;
+
+		namespace
+			.build(&mut context)?
+			.resolve(context)
+			.map_err(Into::into)
+	}
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CompileError<P> {
+	#[error(transparent)]
+	Parse(#[from] syntax::ParseError),
+
+	#[error(transparent)]
+	Build(#[from] build::Error<P>),
+
+	#[error(transparent)]
+	Typing(#[from] build::TypeResolutionError<P>),
+}
+
+#[derive(Debug, Educe)]
+#[educe(Default)]
+pub struct Collection<T>(Vec<T>);
+
+impl<T> Collection<T> {
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	pub fn get(&self, i: u32) -> Option<&T> {
+		self.0.get(i as usize)
+	}
+
+	pub fn get_mut(&mut self, i: u32) -> Option<&mut T> {
+		self.0.get_mut(i as usize)
+	}
+
+	pub fn insert(&mut self, value: impl Into<T>) -> u32 {
+		let i = self.0.len() as u32;
+		self.0.push(value.into());
+		i
+	}
+
+	pub fn replace(&mut self, i: u32, value: T) -> Result<T, T> {
+		match self.0.get_mut(i as usize) {
+			Some(t) => Ok(std::mem::replace(t, value)),
+			None => Err(value),
+		}
+	}
+}
+
+#[derive(Debug)]
+pub struct NonEmptyCollection<T>(Vec<T>);
+
+impl<T> NonEmptyCollection<T> {
+	pub fn new(first: T) -> Self {
+		Self(vec![first])
+	}
+
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	pub fn first(&self) -> &T {
+		self.0.first().unwrap()
+	}
+
+	pub fn first_mut(&mut self) -> &mut T {
+		self.0.first_mut().unwrap()
+	}
+
+	pub fn get(&self, i: u32) -> Option<&T> {
+		self.0.get(i as usize)
+	}
+
+	pub fn get_mut(&mut self, i: u32) -> Option<&mut T> {
+		self.0.get_mut(i as usize)
+	}
+
+	pub fn insert(&mut self, value: impl Into<T>) -> u32 {
+		let i = self.0.len() as u32;
+		self.0.push(value.into());
+		i
+	}
+
+	pub fn replace(&mut self, i: u32, value: T) -> Result<T, T> {
+		match self.0.get_mut(i as usize) {
+			Some(t) => Ok(std::mem::replace(t, value)),
+			None => Err(value),
+		}
+	}
+}
+
+impl<P: Copy + PartialEq, R> Registry for Package<P, R> {
+	type PackageId = P;
+	type Resource = R;
+
+	fn len(&self) -> usize {
+		1
+	}
+
+	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>> {
+		if id == self.id {
+			Some(self)
+		} else {
+			None
+		}
+	}
+}
+
+impl<P: Copy + PartialEq, R> BuildEnvironment for Package<P, R> {
+	type PackageId = P;
+	type Resource = R;
+	type Registry = Self;
+
+	fn registry(&self) -> &Self::Registry {
+		self
+	}
+
+	fn package(&self, name: Option<&str>) -> Option<Self::PackageId> {
+		match name {
+			Some(_) => None,
+			None => Some(self.id),
+		}
+	}
+}

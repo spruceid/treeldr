@@ -1,38 +1,44 @@
 use core::fmt;
-use std::cmp::Ordering;
+use std::{cmp::Ordering, hash::Hash, marker::PhantomData};
 
 use crate::{display::DisplaySignature, Registry, Value};
 
 use super::{refine_cmp, TypeRef};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct List<T = TypeRef> {
+pub struct List<P, T = TypeRef<P>> {
 	pub prefix: Vec<T>,
 	pub rest: Option<T>,
+	p: PhantomData<P>,
 }
 
-impl<T> List<T> {
+impl<P, T> List<P, T> {
+	pub fn new(prefix: Vec<T>, rest: Option<T>) -> Self {
+		Self {
+			prefix,
+			rest,
+			p: PhantomData,
+		}
+	}
+
 	pub fn from_prefix(prefix: Vec<T>) -> Self {
-		Self { prefix, rest: None }
+		Self {
+			prefix,
+			rest: None,
+			p: PhantomData,
+		}
 	}
 
 	pub fn uniform(ty: T) -> Self {
 		Self {
 			prefix: Vec::new(),
 			rest: Some(ty),
+			p: PhantomData,
 		}
 	}
 }
 
-impl List<TypeRef> {
-	pub fn item_type(&self, i: usize) -> Option<TypeRef> {
-		if i < self.prefix.len() {
-			Some(self.prefix[i])
-		} else {
-			self.rest
-		}
-	}
-
+impl<P> List<P> {
 	pub fn min_len(&self) -> usize {
 		self.prefix.len()
 	}
@@ -44,16 +50,49 @@ impl List<TypeRef> {
 			Some(self.prefix.len())
 		}
 	}
+}
 
-	pub fn as_uniform(&self) -> Option<TypeRef> {
+impl<P: Copy> List<P> {
+	pub fn item_type(&self, i: usize) -> Option<TypeRef<P>> {
+		if i < self.prefix.len() {
+			Some(self.prefix[i])
+		} else {
+			self.rest
+		}
+	}
+
+	pub fn as_uniform(&self) -> Option<TypeRef<P>> {
 		if self.prefix.is_empty() {
 			self.rest
 		} else {
 			None
 		}
 	}
+}
 
-	pub fn subtype_cmp<R: Ord>(&self, registry: &Registry<R>, other: &Self) -> Option<Ordering> {
+impl<P: Copy + Ord> List<P> {
+	pub fn contains<R: Ord>(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		value: &[Value<R>],
+	) -> bool {
+		if value.len() < self.min_len() {
+			return false;
+		}
+
+		value.iter().enumerate().all(|(i, item)| {
+			self.item_type(i)
+				.is_some_and(|ty| ty.contains(registry, item))
+		})
+	}
+}
+
+impl<P: Copy + Ord + Hash> List<P> {
+	pub fn subtype_cmp<R: Ord>(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other: &Self,
+	) -> Option<Ordering> {
 		let mut a_prefix = self.prefix.iter().copied();
 		let mut b_prefix = other.prefix.iter().copied();
 
@@ -77,23 +116,12 @@ impl List<TypeRef> {
 
 		refine_cmp(cmp, rest_cmp)
 	}
-
-	pub fn contains<R: Ord>(&self, registry: &Registry<R>, value: &[Value<R>]) -> bool {
-		if value.len() < self.min_len() {
-			return false;
-		}
-
-		value.iter().enumerate().all(|(i, item)| {
-			self.item_type(i)
-				.is_some_and(|ty| ty.contains(registry, item))
-		})
-	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for List {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for List<P> {
 	fn fmt_signature(
 		&self,
-		context: &crate::display::DisplayContext<R>,
+		context: &crate::display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		write!(f, "[")?;

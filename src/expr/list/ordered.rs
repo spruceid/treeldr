@@ -5,26 +5,26 @@ use crate::{
 
 /// Select a list of resources and map them.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct OrderedList<R, T = TypeRef> {
+pub struct OrderedList<P, R, T = TypeRef<P>> {
 	/// List components.
 	pub components: ListComponents<R>,
 
 	/// List head expressions.
-	pub head: Box<Expr<R, T>>,
+	pub head: Box<Expr<P, R, T>>,
 
 	/// Bound.
-	pub bound: Bindings<R, T>,
+	pub bound: Bindings<P, R, T>,
 
 	/// Expression mapping the items.
-	pub body: Box<Expr<R, T>>,
+	pub body: Box<Expr<P, R, T>>,
 }
 
-impl<R: Ord, T> OrderedList<R, T> {
-	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> OrderedList<R, U> {
+impl<P, R: Ord, T> OrderedList<P, R, T> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> OrderedList<P, R, U> {
 		self.map_types_ref_mut(&mut f)
 	}
 
-	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> OrderedList<R, U> {
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> OrderedList<P, R, U> {
 		OrderedList {
 			components: self.components,
 			head: Box::new(self.head.map_types_ref_mut(f)),

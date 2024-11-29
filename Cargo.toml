@@ -27,7 +27,8 @@ serde_cbor = ["cbor", "dep:serde_cbor"]
 
 [workspace]
 members = [
-	"cli"
+	"cli",
+	"macros"
 	# "layouts",
 	# "generators/rust/treeldr-rs",
 	# "generators/rust/treeldr-rs-macros",
@@ -55,12 +56,13 @@ serde_cbor = "0.11.2"
 locspan = "0.8.2"
 
 [dependencies]
+treeldr-macros = { path = "macros" }
 educe.workspace = true
 iref = { version = "3.2.2", features = ["macros", "serde"] }
-num-bigint = "0.4.6"
-num-rational = "0.4.2"
+num-bigint = { version = "0.4.6", features = ["serde"] }
+num-rational = { version = "0.4.2", features = ["serde"] }
 num-traits = "0.2.19"
-rdf-types = "0.22.4"
+rdf-types = { version = "0.22.4", features = ["serde"] }
 serde = { version = "1.0.210", features = ["derive"] }
 xsd-types = "0.9.6"
 thiserror.workspace = true

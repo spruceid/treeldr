@@ -12,14 +12,14 @@ use rdf_types::{
 };
 
 #[derive(Clone, Copy)]
-pub enum ScopeTypes<'a, R> {
-	Slice(&'a [TypeRef]),
-	TwoSlices(&'a [TypeRef], &'a [TypeRef]),
-	Bindings(&'a [Binding<R>]),
-	Repeat(TypeRef, u32),
+pub enum ScopeTypes<'a, P, R> {
+	Slice(&'a [TypeRef<P>]),
+	TwoSlices(&'a [TypeRef<P>], &'a [TypeRef<P>]),
+	Bindings(&'a [Binding<P, R>]),
+	Repeat(TypeRef<P>, u32),
 }
 
-impl<'a, R> ScopeTypes<'a, R> {
+impl<'a, P, R> ScopeTypes<'a, P, R> {
 	pub fn len(&self) -> u32 {
 		match self {
 			Self::Slice(s) => s.len() as u32,
@@ -33,7 +33,10 @@ impl<'a, R> ScopeTypes<'a, R> {
 		self.len() == 0
 	}
 
-	pub fn get(&self, i: u32) -> Option<TypeRef> {
+	pub fn get(&self, i: u32) -> Option<TypeRef<P>>
+	where
+		P: Copy,
+	{
 		match self {
 			Self::Slice(slice) => slice.get(i as usize).copied(),
 			Self::TwoSlices(a, b) => {
@@ -56,18 +59,18 @@ impl<'a, R> ScopeTypes<'a, R> {
 }
 
 #[derive(Clone)]
-pub struct Scope<'parent, R> {
+pub struct Scope<'parent, P, R> {
 	parent: Option<(&'parent Self, u32)>,
 	graph: Option<R>,
-	types: ScopeTypes<'parent, R>,
+	types: ScopeTypes<'parent, P, R>,
 	values: ScopeValues<'parent, R>,
 	dataset: Vec<Quad<TermPattern<R>>>,
 }
 
-impl<'parent, R> Scope<'parent, R> {
+impl<'parent, P, R> Scope<'parent, P, R> {
 	pub fn new(
 		graph: Option<R>,
-		types: ScopeTypes<'parent, R>,
+		types: ScopeTypes<'parent, P, R>,
 		values: ScopeValues<'parent, R>,
 	) -> Self {
 		Self {
@@ -87,7 +90,7 @@ impl<'parent, R> Scope<'parent, R> {
 		)
 	}
 
-	pub fn parent(&self) -> Option<&Scope<R>> {
+	pub fn parent(&self) -> Option<&Scope<P, R>> {
 		self.parent.map(|(p, _)| p)
 	}
 
@@ -110,7 +113,10 @@ impl<'parent, R> Scope<'parent, R> {
 		self.graph.as_ref()
 	}
 
-	pub fn type_of(&self, i: u32) -> Option<TypeRef> {
+	pub fn type_of(&self, i: u32) -> Option<TypeRef<P>>
+	where
+		P: Copy,
+	{
 		match self.parent {
 			Some((parent, parent_len)) => {
 				if i < parent_len {
@@ -151,7 +157,7 @@ impl<'parent, R> Scope<'parent, R> {
 
 	pub fn set(
 		&self,
-		rdf: &mut impl RdfContextMut<R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		i: u32,
 		value: Value<R>,
 	) -> Result<(), EvalError<R>>
@@ -182,7 +188,7 @@ impl<'parent, R> Scope<'parent, R> {
 
 	pub fn substitute_pattern(
 		&self,
-		rdf: &impl RdfContext<R>,
+		rdf: &impl RdfContext<Resource = R>,
 		substitution: &mut DebugSubstitution<R>,
 		pattern: &TermPattern<R>,
 	) -> Term
@@ -201,7 +207,7 @@ impl<'parent, R> Scope<'parent, R> {
 
 	pub fn substitute_dataset(
 		&self,
-		rdf: &impl RdfContext<R>,
+		rdf: &impl RdfContext<Resource = R>,
 		substitution: &mut DebugSubstitution<R>,
 		dataset: &DatasetPattern<R>,
 	) -> BTreeDataset
@@ -215,7 +221,7 @@ impl<'parent, R> Scope<'parent, R> {
 	}
 }
 
-impl<'a, R: Clone> Default for Scope<'a, R> {
+impl<'a, P, R: Clone> Default for Scope<'a, P, R> {
 	fn default() -> Self {
 		Self {
 			parent: None,
@@ -227,13 +233,13 @@ impl<'a, R: Clone> Default for Scope<'a, R> {
 	}
 }
 
-impl<'a, R: Clone> Scope<'a, R> {
+impl<'a, P, R: Clone> Scope<'a, P, R> {
 	pub fn begin(
 		&self,
 		graph: Option<Option<R>>,
-		types: ScopeTypes<'a, R>,
+		types: ScopeTypes<'a, P, R>,
 		values: ScopeValues<'a, R>,
-	) -> Scope<R> {
+	) -> Scope<P, R> {
 		Scope {
 			parent: Some((self, self.len())),
 			graph: graph.unwrap_or_else(|| self.graph.clone()),
@@ -256,16 +262,16 @@ impl<'a, R: Clone> Scope<'a, R> {
 		dataset: &mut D,
 		graph: Option<Option<R>>,
 		// types: &[TypeRef],
-		types: ScopeTypes<R>,
-		f: impl FnOnce(&mut C, &mut D, &mut Scope<R>) -> Result<(), EvalError<R>>,
+		types: ScopeTypes<P, R>,
+		f: impl FnOnce(&mut C, &mut D, &mut Scope<P, R>) -> Result<(), EvalError<R>>,
 	) -> Result<Vec<Value<R>>, EvalError<R>>
 	where
-		C: RdfContextMut<R>,
+		C: RdfContextMut<Resource = R>,
 		D: DatasetMut<Resource = R>,
 	{
 		let types_len = types.len();
 		let (substitution, more_patterns) = {
-			let mut sub_scope = Scope::<R> {
+			let mut sub_scope = Scope::<P, R> {
 				parent: Some((self, self.len())),
 				graph: graph.unwrap_or_else(|| self.graph.clone()),
 				// types: ScopeTypes::Slice(types),
@@ -285,7 +291,7 @@ impl<'a, R: Clone> Scope<'a, R> {
 
 	fn end(
 		self,
-		rdf: &mut impl RdfContextMut<R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
 	) -> Result<(List<R>, UnresolvedQuads<R>), EvalError<R>> {
 		let mut patterns = Vec::new();
@@ -309,7 +315,7 @@ impl<'a, R: Clone> Scope<'a, R> {
 
 	fn realize_quad(
 		&self,
-		rdf: &mut impl RdfContextMut<R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		quad: &Quad<TermPattern<R>>,
 	) -> Result<Quad<TermPattern<R>>, EvalError<R>> {
 		Ok(Quad(
@@ -325,7 +331,7 @@ impl<'a, R: Clone> Scope<'a, R> {
 
 	fn realize_term(
 		&self,
-		rdf: &mut impl RdfContextMut<R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		t: &TermPattern<R>,
 	) -> Result<TermPattern<R>, EvalError<R>> {
 		match t {
@@ -391,7 +397,7 @@ impl<'a, R> ScopeValues<'a, R> {
 
 	pub fn set(
 		&self,
-		rdf: &mut impl RdfContextMut<R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		i: u32,
 		value: Value<R>,
 	) -> Result<(), EvalError<R>>

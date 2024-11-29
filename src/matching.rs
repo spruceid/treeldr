@@ -24,7 +24,7 @@ pub enum Error {
 ///
 /// Iterates over all the substitutions mapping the input pattern to a fragment
 /// of the given RDF dataset.
-pub struct Matching<'a, 'p, R: Clone, D, Q>
+pub struct Matching<'a, 'p, P, R: Clone, D, Q>
 where
 	D: PatternMatchingDataset<Resource = R>,
 {
@@ -32,14 +32,14 @@ where
 	dataset: &'a D,
 
 	/// Working stack.
-	stack: Vec<State<'a, 'p, R, D, Q>>,
+	stack: Vec<State<'a, 'p, P, R, D, Q>>,
 }
 
-pub struct State<'a, 'p, R: Clone, D, Q>
+pub struct State<'a, 'p, P, R: Clone, D, Q>
 where
 	D: 'a + PatternMatchingDataset<Resource = R>,
 {
-	scope: MatchingScope<'a, R>,
+	scope: MatchingScope<'a, P, R>,
 	quad_state: Option<QuadState<'a, 'p, R, D>>,
 	rest: Q,
 }
@@ -52,7 +52,7 @@ where
 	quad_matching: D::QuadPatternMatching<'a, 'p>,
 }
 
-impl<'a, 'p, R: Clone, D, Q> Matching<'a, 'p, R, D, Q>
+impl<'a, 'p, P, R: Clone, D, Q> Matching<'a, 'p, P, R, D, Q>
 where
 	D: PatternMatchingDataset<Resource = R>,
 {
@@ -68,7 +68,7 @@ where
 	/// will be iterated over.
 	pub fn new(
 		dataset: &'a D,
-		scope: &'a Scope<'a, R>,
+		scope: &'a Scope<'a, P, R>,
 		substitution: Substitution<R>,
 		patterns: Q,
 	) -> Self {
@@ -87,12 +87,12 @@ where
 }
 
 #[derive(Clone)]
-struct MatchingScope<'a, R: Clone> {
-	scope: &'a Scope<'a, R>,
+struct MatchingScope<'a, P, R: Clone> {
+	scope: &'a Scope<'a, P, R>,
 	substitution: Substitution<R>,
 }
 
-impl<'a, R: Clone + PartialEq> MatchingScope<'a, R> {
+impl<'a, P: Copy, R: Clone + PartialEq> MatchingScope<'a, P, R> {
 	// pub fn assign(&mut self, i: u32, value: TypedValue<R>) -> Result<(), TypedValue<R>> {
 	// 	let scope_len = self.scope.len() as u32;
 	// 	if i < scope_len {
@@ -190,8 +190,9 @@ impl<'a, R: Clone + PartialEq> MatchingScope<'a, R> {
 	}
 }
 
-impl<'a, 'p, R, D, Q> Matching<'a, 'p, R, D, Q>
+impl<'a, 'p, P, R, D, Q> Matching<'a, 'p, P, R, D, Q>
 where
+	P: Copy,
 	R: Clone + PartialEq + 'a,
 	D: PatternMatchingDataset<Resource = R>,
 	Q: Clone + Iterator<Item = PatternRefQuad<'p, R>>,
@@ -214,8 +215,9 @@ where
 	}
 }
 
-impl<'a, 'p, R, D, Q> Iterator for Matching<'a, 'p, R, D, Q>
+impl<'a, 'p, P, R, D, Q> Iterator for Matching<'a, 'p, P, R, D, Q>
 where
+	P: Copy,
 	R: Clone + PartialEq + 'a,
 	D: PatternMatchingDataset<Resource = R>,
 	Q: Clone + Iterator<Item = PatternRefQuad<'p, R>>,

@@ -16,10 +16,12 @@ impl ByteString {
 	}
 }
 
-impl<R> DisplaySignature<R> for ByteString {
+impl<P, R> DisplaySignature<P, R> for ByteString {
 	fn fmt_signature(
 		&self,
-		_context: &crate::display::DisplayContext<R>,
+		_context: &crate::display::DisplayContext<
+			impl crate::Registry<PackageId = P, Resource = R>,
+		>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		write!(f, "bytes")

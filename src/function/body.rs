@@ -8,13 +8,13 @@ use crate::{
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Body<R, T = TypeRef> {
+pub enum Body<P, R, T = TypeRef<P>> {
 	BuiltIn(BuiltInFunction),
-	Expr(Box<Expr<R, T>>),
+	Expr(Box<Expr<P, R, T>>),
 }
 
-impl<R: Ord, T> Body<R, T> {
-	pub fn map_types<U: Ord>(self, f: impl FnMut(T) -> U) -> Body<R, U> {
+impl<P, R: Ord, T> Body<P, R, T> {
+	pub fn map_types<U: Ord>(self, f: impl FnMut(T) -> U) -> Body<P, R, U> {
 		match self {
 			Self::BuiltIn(b) => Body::BuiltIn(b),
 			Self::Expr(e) => Body::Expr(Box::new(e.map_types(f))),
@@ -22,13 +22,13 @@ impl<R: Ord, T> Body<R, T> {
 	}
 }
 
-impl<R: Ord + Clone> Body<R> {
+impl<P: Copy + Ord, R: Ord + Clone> Body<P, R> {
 	pub fn eval(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
+		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
 			Self::Expr(e) => e.eval(registry, rdf, dataset, scope),
@@ -38,10 +38,10 @@ impl<R: Ord + Clone> Body<R> {
 
 	pub fn eval_inverse(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
+		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {

@@ -14,18 +14,29 @@ use crate::{
 	Attributes, DatasetPattern, Literal, TermPattern, Type, Value,
 };
 
-use super::{Build, BuildContext, BuildingNamespace, Error, Scope, TypeValue, TypeVariableRef};
+use super::{
+	Build, BuildContext, BuildEnvironment, BuildingNamespace, Error, Scope, TypeValue,
+	TypeVariableRef,
+};
 
 impl ast::Bindings {
-	fn build<'ast, 'a, R, D>(
+	fn build<'ast, 'a, E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &'a Scope,
-	) -> Result<(expr::Bindings<R, TypeVariableRef>, Scope<'a>), Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, E::PackageId>,
+		scope: &'a Scope<E::PackageId>,
+	) -> Result<
+		(
+			expr::Bindings<E::PackageId, E::Resource, TypeVariableRef>,
+			Scope<'a, E::PackageId>,
+		),
+		Error<E::PackageId>,
+	>
 	where
-		R: Clone + Ord + Hash,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment,
+		E::PackageId: Copy + Ord + Hash,
+		E::Resource: Clone + Ord + Hash,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		let mut intro = Vec::with_capacity(self.variables.len());
 		let mut sub_scope = scope.begin();
@@ -46,15 +57,17 @@ impl ast::Bindings {
 }
 
 impl ast::Binding {
-	fn build<'ast, R, D>(
+	fn build<'ast, E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Binding<R, TypeVariableRef>, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, E::PackageId>,
+		scope: &Scope<E::PackageId>,
+	) -> Result<Binding<E::PackageId, E::Resource, TypeVariableRef>, Error<E::PackageId>>
 	where
-		R: Clone + Ord + Hash,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment,
+		E::PackageId: Copy + Ord + Hash,
+		E::Resource: Clone + Ord + Hash,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		let assignment = self
 			.assignment
@@ -73,17 +86,18 @@ impl ast::Binding {
 	}
 }
 
-impl<'ast, R: Clone + Ord> Build<'ast, R> for ast::RdfDataset {
+impl<'ast, P: Copy + PartialEq, R: Clone + Ord> Build<'ast, P, R> for ast::RdfDataset {
 	type Target = DatasetPattern<R>;
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		let mut result = DatasetPattern::new();
 
@@ -96,16 +110,18 @@ impl<'ast, R: Clone + Ord> Build<'ast, R> for ast::RdfDataset {
 }
 
 impl ast::RdfStatement {
-	fn build<R, D>(
+	fn build<E, D>(
 		&self,
-		context: &mut BuildContext<R, D>,
-		namespace: &BuildingNamespace,
-		scope: &Scope,
-		result: &mut DatasetPattern<R>,
-	) -> Result<(), Error>
+		context: &mut BuildContext<E, D>,
+		namespace: &BuildingNamespace<E::PackageId>,
+		scope: &Scope<E::PackageId>,
+		result: &mut DatasetPattern<E::Resource>,
+	) -> Result<(), Error<E::PackageId>>
 	where
-		R: Clone + Ord,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment,
+		E::PackageId: Copy + PartialEq,
+		E::Resource: Clone + Ord,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		let subject = self.subject.build(context, namespace, scope)?;
 
@@ -118,17 +134,19 @@ impl ast::RdfStatement {
 }
 
 impl ast::RdfPredicateObjects {
-	fn build<R, D>(
+	fn build<E, D>(
 		&self,
-		context: &mut BuildContext<R, D>,
-		namespace: &BuildingNamespace,
-		scope: &Scope,
-		result: &mut DatasetPattern<R>,
-		subject: &TermPattern<R>,
-	) -> Result<(), Error>
+		context: &mut BuildContext<E, D>,
+		namespace: &BuildingNamespace<E::PackageId>,
+		scope: &Scope<E::PackageId>,
+		result: &mut DatasetPattern<E::Resource>,
+		subject: &TermPattern<E::Resource>,
+	) -> Result<(), Error<E::PackageId>>
 	where
-		R: Clone + Ord,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment,
+		E::PackageId: Copy + PartialEq,
+		E::Resource: Clone + Ord,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		let predicate = self.predicate.build(context, namespace, scope)?;
 
@@ -142,22 +160,24 @@ impl ast::RdfPredicateObjects {
 }
 
 impl ast::RdfTerm {
-	fn build_unscoped(&self) -> Result<Term, Error> {
+	fn build_unscoped<P>(&self) -> Result<Term, Error<P>> {
 		match self {
 			Self::Iri(i) => i.build_unscoped().map(Term::iri),
 			Self::Literal(l) => l.build_unscoped().map(Term::Literal),
 		}
 	}
 
-	fn build<R, D>(
+	fn build<E, D>(
 		&self,
-		context: &mut BuildContext<R, D>,
-		namespace: &BuildingNamespace,
-		scope: &Scope,
-	) -> Result<R, Error>
+		context: &mut BuildContext<E, D>,
+		namespace: &BuildingNamespace<E::PackageId>,
+		scope: &Scope<E::PackageId>,
+	) -> Result<E::Resource, Error<E::PackageId>>
 	where
-		R: Clone,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment,
+		E::PackageId: Copy + PartialEq,
+		E::Resource: Clone,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		match self {
 			Self::Iri(i) => {
@@ -170,22 +190,24 @@ impl ast::RdfTerm {
 }
 
 impl ast::RdfPattern {
-	fn build<R, D>(
+	fn build<E, D>(
 		&self,
-		context: &mut BuildContext<R, D>,
-		namespace: &BuildingNamespace,
-		scope: &Scope,
-	) -> Result<TermPattern<R>, Error>
+		context: &mut BuildContext<E, D>,
+		namespace: &BuildingNamespace<E::PackageId>,
+		scope: &Scope<E::PackageId>,
+	) -> Result<TermPattern<E::Resource>, Error<E::PackageId>>
 	where
-		R: Clone,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment,
+		E::PackageId: Copy + PartialEq,
+		E::Resource: Clone,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		match self {
 			Self::Var(ident) => scope
 				.get_by_name(context, namespace, ident.as_str())
-				.ok_or_else(|| Error::UnknownVariable(ident.clone()))?
+				.ok_or_else(|| Error::<E::PackageId>::UnknownVariable(ident.clone()))?
 				.as_variable()
-				.ok_or_else(|| Error::NotAVariable(ident.clone()))
+				.ok_or_else(|| Error::<E::PackageId>::NotAVariable(ident.clone()))
 				.map(TermPattern::Var),
 			Self::Iri(i) => {
 				let iri = i.build(context, namespace, scope)?;
@@ -201,7 +223,7 @@ impl ast::RdfPattern {
 }
 
 impl ast::RdfLiteral {
-	fn build_unscoped(&self) -> Result<rdf_types::Literal, Error> {
+	fn build_unscoped<P>(&self) -> Result<rdf_types::Literal, Error<P>> {
 		let value = self.value.decode()?;
 		match &self.annotation {
 			None => Ok(rdf_types::Literal::new(
@@ -219,15 +241,17 @@ impl ast::RdfLiteral {
 		}
 	}
 
-	fn build<R, D>(
+	fn build<E, D>(
 		&self,
-		context: &mut BuildContext<R, D>,
-		namespace: &BuildingNamespace,
-		scope: &Scope,
-	) -> Result<R, Error>
+		context: &mut BuildContext<E, D>,
+		namespace: &BuildingNamespace<E::PackageId>,
+		scope: &Scope<E::PackageId>,
+	) -> Result<E::Resource, Error<E::PackageId>>
 	where
-		R: Clone,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment,
+		E::PackageId: Copy + PartialEq,
+		E::Resource: Clone,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		let value = self.value.decode()?;
 		match &self.annotation {
@@ -245,14 +269,14 @@ impl ast::RdfLiteral {
 }
 
 impl ast::LangTag {
-	fn decode(&self) -> Result<LangTagBuf, Error> {
+	fn decode<P>(&self) -> Result<LangTagBuf, Error<P>> {
 		LangTagBuf::new(self.as_str()[1..].to_owned())
 			.map_err(|InvalidLangTag(t)| Error::Language(self.span(), t))
 	}
 }
 
 impl ast::Iri {
-	fn build_unscoped(&self) -> Result<IriBuf, Error> {
+	fn build_unscoped<P>(&self) -> Result<IriBuf, Error<P>> {
 		match self {
 			Self::Full(iri) => iri.decode(),
 			Self::Compact(compact_iri) => {
@@ -262,12 +286,16 @@ impl ast::Iri {
 		}
 	}
 
-	fn build<R, D>(
+	fn build<E, D>(
 		&self,
-		context: &BuildContext<R, D>,
-		namespace: &BuildingNamespace,
-		scope: &Scope,
-	) -> Result<IriBuf, Error> {
+		context: &BuildContext<E, D>,
+		namespace: &BuildingNamespace<E::PackageId>,
+		scope: &Scope<E::PackageId>,
+	) -> Result<IriBuf, Error<E::PackageId>>
+	where
+		E: BuildEnvironment,
+		E::PackageId: Copy + PartialEq,
+	{
 		match self {
 			Self::Full(iri) => iri.decode(),
 			Self::Compact(compact_iri) => compact_iri.build(context, namespace, scope),
@@ -276,33 +304,43 @@ impl ast::Iri {
 }
 
 impl ast::CompactIri {
-	fn build<R, D>(
+	fn build<E, D>(
 		&self,
-		context: &BuildContext<R, D>,
-		namespace: &BuildingNamespace,
-		scope: &Scope,
-	) -> Result<IriBuf, Error> {
+		context: &BuildContext<E, D>,
+		namespace: &BuildingNamespace<E::PackageId>,
+		scope: &Scope<E::PackageId>,
+	) -> Result<IriBuf, Error<E::PackageId>>
+	where
+		E: BuildEnvironment,
+		E::PackageId: Copy + PartialEq,
+	{
 		let (prefix_name, suffix) = self.as_str().split_once(':').unwrap();
 		let prefix = scope
 			.get_by_name(context, namespace, prefix_name)
-			.ok_or_else(|| Error::UnknownPrefix(self.span(), prefix_name.to_owned()))?
+			.ok_or_else(|| {
+				Error::<E::PackageId>::UnknownPrefix(self.span(), prefix_name.to_owned())
+			})?
 			.as_prefix()
-			.ok_or_else(|| Error::NotAPrefix(self.span(), prefix_name.to_owned()))?;
-		IriBuf::new(format!("{prefix}{suffix}")).map_err(|InvalidIri(i)| Error::Iri(self.span(), i))
+			.ok_or_else(|| {
+				Error::<E::PackageId>::NotAPrefix(self.span(), prefix_name.to_owned())
+			})?;
+		IriBuf::new(format!("{prefix}{suffix}"))
+			.map_err(|InvalidIri(i)| Error::<E::PackageId>::Iri(self.span(), i))
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
-	type Target = Expr<R, TypeVariableRef>;
+impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::Expr {
+	type Target = Expr<P, R, TypeVariableRef>;
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		match self {
 			Self::Let(_, bindings, _, inner) => {
@@ -396,17 +434,21 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Expr {
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListExpr {
-	type Target = (expr::List<R, TypeVariableRef>, ty::List<TypeVariableRef>);
+impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::ListExpr {
+	type Target = (
+		expr::List<P, R, TypeVariableRef>,
+		ty::List<P, TypeVariableRef>,
+	);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		match &self.desc {
 			ListDescription::Given(list) => {
@@ -500,17 +542,21 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ListExpr {
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
-	type Target = (expr::Map<R, TypeVariableRef>, ty::Map<R, TypeVariableRef>);
+impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::MapExpr {
+	type Target = (
+		expr::Map<P, R, TypeVariableRef>,
+		ty::Map<P, R, TypeVariableRef>,
+	);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		let mut fields = BTreeMap::new();
 		let mut entries = TypedValueMap::new();
@@ -521,11 +567,11 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
 
 			fields.insert(
 				key.type_,
-				ty::map::Field {
-					attributes: entry.metadata.build(context, namespace, scope)?,
-					type_: value.type_,
-					required: entry.optional.is_none(),
-				},
+				ty::map::Field::new(
+					entry.metadata.build(context, namespace, scope)?,
+					value.type_,
+					entry.optional.is_none(),
+				),
 			);
 
 			entries.insert(key, value);
@@ -540,7 +586,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MapExpr {
 }
 
 impl ast::ConstValue {
-	pub fn build_unscoped(&self) -> Result<Value, Error> {
+	pub fn build_unscoped<P>(&self) -> Result<Value, Error<P>> {
 		match self {
 			Self::Resource(term) => term.build_unscoped().map(Value::Resource),
 			Self::Literal(expr) => expr.build_unscoped().map(Value::Literal),
@@ -550,17 +596,18 @@ impl ast::ConstValue {
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstValue {
-	type Target = TypedValue<R, TypeVariableRef>;
+impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::ConstValue {
+	type Target = TypedValue<P, R, TypeVariableRef>;
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		let (inner, type_) = match self {
 			Self::Resource(term) => {
@@ -608,7 +655,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstValue {
 }
 
 impl ast::ConstList {
-	pub fn build_unscoped(&self) -> Result<Vec<Value>, Error> {
+	pub fn build_unscoped<P>(&self) -> Result<Vec<Value>, Error<P>> {
 		self.items
 			.iter()
 			.map(|v| v.build_unscoped())
@@ -616,20 +663,21 @@ impl ast::ConstList {
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstList {
+impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::ConstList {
 	type Target = (
-		Vec<TypedValue<R, TypeVariableRef>>,
-		ty::List<TypeVariableRef>,
+		Vec<TypedValue<P, R, TypeVariableRef>>,
+		ty::List<P, TypeVariableRef>,
 	);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		let mut items = Vec::with_capacity(self.items.len());
 		let mut types = Vec::with_capacity(self.items.len());
@@ -645,7 +693,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstList {
 }
 
 impl ast::ConstMap {
-	pub fn build_unscoped(&self) -> Result<BTreeMap<Value, Value>, Error> {
+	pub fn build_unscoped<P>(&self) -> Result<BTreeMap<Value, Value>, Error<P>> {
 		self.entries
 			.iter()
 			.map(|entry| Ok((entry.key.build_unscoped()?, entry.value.build_unscoped()?)))
@@ -653,20 +701,21 @@ impl ast::ConstMap {
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
+impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::ConstMap {
 	type Target = (
-		TypedValueMap<R, TypedValue<R, TypeVariableRef>, TypeVariableRef>,
-		ty::Map<R, TypeVariableRef>,
+		TypedValueMap<P, R, TypedValue<P, R, TypeVariableRef>, TypeVariableRef>,
+		ty::Map<P, R, TypeVariableRef>,
 	);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		let mut fields = BTreeMap::new();
 		let mut entries = TypedValueMap::new();
@@ -677,11 +726,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
 
 			fields.insert(
 				key.type_,
-				ty::map::Field {
-					attributes: Attributes::new(),
-					type_: value.type_,
-					required: true,
-				},
+				ty::map::Field::new(Attributes::new(), value.type_, true),
 			);
 
 			entries.insert(key, value);
@@ -693,20 +738,21 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::ConstMap {
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MatchExpr {
+impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::MatchExpr {
 	type Target = (
-		expr::Match<R, TypeVariableRef>,
-		ty::Enum<R, TypeVariableRef>,
+		expr::Match<P, R, TypeVariableRef>,
+		ty::Enum<P, R, TypeVariableRef>,
 	);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		let mut t = ty::Enum {
 			variants: BTreeMap::new(),
@@ -719,10 +765,10 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MatchExpr {
 
 		for case in &self.cases {
 			let value = case.value.build(context, namespace, scope)?;
-			let variant = ty::r#enum::Variant {
-				attributes: case.metadata.build(context, namespace, scope)?,
-				type_: value.type_,
-			};
+			let variant = ty::r#enum::Variant::new(
+				case.metadata.build(context, namespace, scope)?,
+				value.type_,
+			);
 			t.variants.insert(case.name.as_str().to_owned(), variant);
 			e.cases.insert(case.name.as_str().to_owned(), value);
 			e.order.push(case.name.as_str().to_owned());
@@ -732,17 +778,18 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::MatchExpr {
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::CallExpr {
-	type Target = (expr::Call<R, TypeVariableRef>, TypeVariableRef);
+impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::CallExpr {
+	type Target = (expr::Call<P, R, TypeVariableRef>, TypeVariableRef);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		let path = self.function.build(context, namespace, scope)?;
 
@@ -806,7 +853,7 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::CallExpr {
 }
 
 impl ast::LiteralExpr {
-	pub fn build_unscoped(&self) -> Result<Literal, Error> {
+	pub fn build_unscoped<P>(&self) -> Result<Literal, Error<P>> {
 		match self {
 			Self::Unit(_) => Ok(Literal::Unit),
 			Self::True(_) => Ok(Literal::Boolean(true)),
@@ -817,17 +864,18 @@ impl ast::LiteralExpr {
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::LiteralExpr {
+impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::LiteralExpr {
 	type Target = (Literal, ty::LiteralType);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		match self {
 			Self::Unit(_) => Ok((Literal::Unit, ty::LiteralType::Unit)),
@@ -851,95 +899,110 @@ impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::LiteralExpr {
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::True {
+impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::True {
 	type Target = (bool, ty::Boolean);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		_context: &mut BuildContext<'_, R, D>,
-		_namespace: &BuildingNamespace<'ast>,
-		_scope: &Scope,
-	) -> Result<Self::Target, Error> {
+		_context: &mut BuildContext<'_, E, D>,
+		_namespace: &BuildingNamespace<'ast, P>,
+		_scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
+	where
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+	{
 		Ok((true, ty::Boolean::singleton(true)))
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::False {
+impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::False {
 	type Target = (bool, ty::Boolean);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		_context: &mut BuildContext<'_, R, D>,
-		_namespace: &BuildingNamespace<'ast>,
-		_scope: &Scope,
-	) -> Result<Self::Target, Error> {
+		_context: &mut BuildContext<'_, E, D>,
+		_namespace: &BuildingNamespace<'ast, P>,
+		_scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
+	where
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+	{
 		Ok((false, ty::Boolean::singleton(false)))
 	}
 }
 
 impl ast::Number {
-	pub fn build_unscoped(&self) -> Result<Number, Error> {
+	pub fn build_unscoped<P>(&self) -> Result<Number, Error<P>> {
 		self.as_str()
 			.parse()
 			.map_err(|e| Error::Number(self.span(), e))
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::Number {
+impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::Number {
 	type Target = (Number, ty::Number);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		_context: &mut BuildContext<'_, R, D>,
-		_namespace: &BuildingNamespace<'ast>,
-		_scope: &Scope,
-	) -> Result<Self::Target, Error> {
+		_context: &mut BuildContext<'_, E, D>,
+		_namespace: &BuildingNamespace<'ast, P>,
+		_scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
+	where
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+	{
 		let value = self.build_unscoped()?;
 		Ok((value.clone(), ty::Number::singleton(value)))
 	}
 }
 
 impl ast::TextString {
-	pub fn decode(&self) -> Result<String, Error> {
+	pub fn decode<P>(&self) -> Result<String, Error<P>> {
 		decode_string_literal(self.as_str(), self.span())
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::TextString {
+impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::TextString {
 	type Target = (String, ty::TextString);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		_context: &mut BuildContext<'_, R, D>,
-		_namespace: &BuildingNamespace<'ast>,
-		_scope: &Scope,
-	) -> Result<Self::Target, Error> {
+		_context: &mut BuildContext<'_, E, D>,
+		_namespace: &BuildingNamespace<'ast, P>,
+		_scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
+	where
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+	{
 		let value = self.decode()?;
 		Ok((value.clone(), ty::TextString::singleton(value)))
 	}
 }
 
 impl ast::RdfString {
-	pub fn decode(&self) -> Result<String, Error> {
+	pub fn decode<P>(&self) -> Result<String, Error<P>> {
 		decode_string_literal(self.as_str(), self.span())
 	}
 }
 
-impl<'ast, R: Clone + Ord + Hash> Build<'ast, R> for ast::RdfString {
+impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::RdfString {
 	type Target = (String, ty::TextString);
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		_context: &mut BuildContext<'_, R, D>,
-		_namespace: &BuildingNamespace<'ast>,
-		_scope: &Scope,
-	) -> Result<Self::Target, Error> {
+		_context: &mut BuildContext<'_, E, D>,
+		_namespace: &BuildingNamespace<'ast, P>,
+		_scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
+	where
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+	{
 		let value = self.decode()?;
 		Ok((value.clone(), ty::TextString::singleton(value)))
 	}
 }
 
-fn decode_string_literal(s: &str, span: Span) -> Result<String, Error> {
+fn decode_string_literal<P>(s: &str, span: Span) -> Result<String, Error<P>> {
 	let content = &s[1..(s.len() - 1)];
 	let mut chars = content.chars();
 	let mut value = String::with_capacity(content.len());

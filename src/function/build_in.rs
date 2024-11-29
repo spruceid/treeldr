@@ -37,86 +37,86 @@ pub enum BuiltInFunction {
 }
 
 impl BuiltInFunction {
-	pub fn signature<R>(&self, ty: impl Fn(BuiltInType) -> TypeRef) -> Signature<R> {
+	pub fn signature<P, R>(&self, ty: impl Fn(BuiltInType) -> TypeRef<P>) -> Signature<P, R> {
 		match self {
-			Self::Get => Signature {
-				const_args: vec![],
-				args: vec![ty(BuiltInType::Resource), ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::Resource),
-				dataset: DatasetPattern::new(),
-			},
-			Self::IriOf => Signature {
-				const_args: vec![],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::TextString),
-				dataset: DatasetPattern::new(),
-			},
-			Self::BoolOf => Signature {
-				const_args: vec![],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::Boolean),
-				dataset: DatasetPattern::new(),
-			},
-			Self::TypedBoolOf => Signature {
-				const_args: vec![ty(BuiltInType::Resource)],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::Boolean),
-				dataset: DatasetPattern::new(),
-			},
-			Self::NumberOf => Signature {
-				const_args: vec![],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::Number),
-				dataset: DatasetPattern::new(),
-			},
-			Self::TypedNumberOf => Signature {
-				const_args: vec![ty(BuiltInType::Resource)],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::Number),
-				dataset: DatasetPattern::new(),
-			},
-			Self::IntOf => Signature {
-				const_args: vec![],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::Int),
-				dataset: DatasetPattern::new(),
-			},
-			Self::TypedIntOf => Signature {
-				const_args: vec![ty(BuiltInType::Resource)],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::Int),
-				dataset: DatasetPattern::new(),
-			},
-			Self::UintOf => Signature {
-				const_args: vec![],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::Uint),
-				dataset: DatasetPattern::new(),
-			},
-			Self::TypedUintOf => Signature {
-				const_args: vec![ty(BuiltInType::Resource)],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::Uint),
-				dataset: DatasetPattern::new(),
-			},
-			Self::StringOf => Signature {
-				const_args: vec![],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::TextString),
-				dataset: DatasetPattern::new(),
-			},
-			Self::TypedStringOf => Signature {
-				const_args: vec![ty(BuiltInType::Resource)],
-				args: vec![ty(BuiltInType::Resource)],
-				return_type: ty(BuiltInType::TextString),
-				dataset: DatasetPattern::new(),
-			},
+			Self::Get => Signature::new(
+				vec![],
+				vec![ty(BuiltInType::Resource), ty(BuiltInType::Resource)],
+				ty(BuiltInType::Resource),
+				DatasetPattern::new(),
+			),
+			Self::IriOf => Signature::new(
+				vec![],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::TextString),
+				DatasetPattern::new(),
+			),
+			Self::BoolOf => Signature::new(
+				vec![],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::Boolean),
+				DatasetPattern::new(),
+			),
+			Self::TypedBoolOf => Signature::new(
+				vec![ty(BuiltInType::Resource)],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::Boolean),
+				DatasetPattern::new(),
+			),
+			Self::NumberOf => Signature::new(
+				vec![],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::Number),
+				DatasetPattern::new(),
+			),
+			Self::TypedNumberOf => Signature::new(
+				vec![ty(BuiltInType::Resource)],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::Number),
+				DatasetPattern::new(),
+			),
+			Self::IntOf => Signature::new(
+				vec![],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::Int),
+				DatasetPattern::new(),
+			),
+			Self::TypedIntOf => Signature::new(
+				vec![ty(BuiltInType::Resource)],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::Int),
+				DatasetPattern::new(),
+			),
+			Self::UintOf => Signature::new(
+				vec![],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::Uint),
+				DatasetPattern::new(),
+			),
+			Self::TypedUintOf => Signature::new(
+				vec![ty(BuiltInType::Resource)],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::Uint),
+				DatasetPattern::new(),
+			),
+			Self::StringOf => Signature::new(
+				vec![],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::TextString),
+				DatasetPattern::new(),
+			),
+			Self::TypedStringOf => Signature::new(
+				vec![ty(BuiltInType::Resource)],
+				vec![ty(BuiltInType::Resource)],
+				ty(BuiltInType::TextString),
+				DatasetPattern::new(),
+			),
 		}
 	}
 
 	pub fn eval<R: Ord + Clone>(
 		&self,
-		rdf: &impl RdfContext<R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		args: &[Value<R>],
 	) -> Result<Value<R>, EvalError<R>> {
@@ -246,11 +246,11 @@ impl BuiltInFunction {
 		}
 	}
 
-	pub fn eval_inverse<R>(
+	pub fn eval_inverse<P, R>(
 		&self,
-		rdf: &mut impl RdfContextMut<R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
+		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<Vec<Value<R>>, EvalError<R>>
 	where
@@ -371,7 +371,10 @@ impl BuiltInFunction {
 	}
 }
 
-fn iri_of<'a, R>(rdf: &'a impl RdfContext<R>, resource: &'a R) -> Result<&'a Iri, EvalError<R>> {
+fn iri_of<'a, R>(
+	rdf: &'a impl RdfContext<Resource = R>,
+	resource: &'a R,
+) -> Result<&'a Iri, EvalError<R>> {
 	let mut iris = rdf.interpretation().iris_of(resource);
 
 	match iris.next() {
@@ -389,7 +392,7 @@ fn iri_of<'a, R>(rdf: &'a impl RdfContext<R>, resource: &'a R) -> Result<&'a Iri
 }
 
 fn find_literal_lexical<'a, R: PartialEq>(
-	rdf: &'a impl RdfContext<R>,
+	rdf: &'a impl RdfContext<Resource = R>,
 	resource: &'a R,
 	expected_ty: &Iri,
 ) -> Result<&'a str, EvalError<R>> {
@@ -421,7 +424,7 @@ fn find_literal_lexical<'a, R: PartialEq>(
 }
 
 fn find_literal_interpreted<'a, R: PartialEq>(
-	rdf: &'a impl RdfContext<R>,
+	rdf: &'a impl RdfContext<Resource = R>,
 	resource: &'a R,
 	expected_ty: &R,
 ) -> Result<&'a str, EvalError<R>> {

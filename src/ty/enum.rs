@@ -1,17 +1,33 @@
 use core::fmt;
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::{cmp::Ordering, collections::BTreeMap, hash::Hash, marker::PhantomData};
 
 use crate::{display::DisplaySignature, Attributes, Registry, Value};
 
 use super::{refine_cmp, Type, TypeDesc, TypeRef};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Enum<R, T = TypeRef> {
-	pub variants: BTreeMap<String, Variant<R, T>>,
+pub struct Enum<P, R, T = TypeRef<P>> {
+	pub variants: BTreeMap<String, Variant<P, R, T>>,
 }
 
-impl<R: Ord> Enum<R, TypeRef> {
-	pub fn subtype_cmp(&self, registry: &Registry<R>, other: &TypeDesc<R>) -> Option<Ordering> {
+impl<P: Copy + Ord, R: Ord> Enum<P, R> {
+	pub fn contains(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		value: &Value<R>,
+	) -> bool {
+		self.variants
+			.values()
+			.any(|variant| variant.type_.contains(registry, value))
+	}
+}
+
+impl<P: Copy + Ord + Hash, R: Ord> Enum<P, R> {
+	pub fn subtype_cmp(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		other: &TypeDesc<P, R>,
+	) -> Option<Ordering> {
 		match other {
 			TypeDesc::Enum(other) => {
 				let mut cmp = Ordering::Equal;
@@ -29,7 +45,7 @@ impl<R: Ord> Enum<R, TypeRef> {
 				let mut leq = true;
 
 				for variant in self.variants.values() {
-					let ty: &Type<R> = registry.get_type(variant.type_)?;
+					let ty: &Type<P, R> = registry.get_type(variant.type_)?;
 					match (cmp, ty.desc.subtype_cmp(registry, other)) {
 						(
 							None | Some(Ordering::Greater | Ordering::Equal),
@@ -54,18 +70,12 @@ impl<R: Ord> Enum<R, TypeRef> {
 			}
 		}
 	}
-
-	pub fn contains(&self, registry: &Registry<R>, value: &Value<R>) -> bool {
-		self.variants
-			.values()
-			.any(|variant| variant.type_.contains(registry, value))
-	}
 }
 
-impl<R: fmt::Display> DisplaySignature<R> for Enum<R> {
+impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Enum<P, R> {
 	fn fmt_signature(
 		&self,
-		context: &crate::display::DisplayContext<R>,
+		context: &crate::display::DisplayContext<impl Registry<PackageId = P, Resource = R>>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		write!(f, "enum {{")?;
@@ -83,7 +93,18 @@ impl<R: fmt::Display> DisplaySignature<R> for Enum<R> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Variant<R, T = TypeRef> {
+pub struct Variant<P, R, T = TypeRef<P>> {
 	pub attributes: Attributes<R>,
 	pub type_: T,
+	p: PhantomData<P>,
+}
+
+impl<P, R, T> Variant<P, R, T> {
+	pub fn new(attributes: Attributes<R>, type_: T) -> Self {
+		Self {
+			attributes,
+			type_,
+			p: PhantomData,
+		}
+	}
 }

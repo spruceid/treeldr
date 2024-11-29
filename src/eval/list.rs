@@ -12,14 +12,14 @@ use rdf_types::{
 	Quad,
 };
 
-impl<R: Clone + Ord> EvalTyped<R> for List<R> {
+impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for List<P, R> {
 	fn eval_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
-		type_: TypeRef,
+		scope: &Scope<P, R>,
+		type_: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
 			Self::Explicit(list) => list.eval_typed(registry, rdf, dataset, scope, type_),
@@ -29,11 +29,11 @@ impl<R: Clone + Ord> EvalTyped<R> for List<R> {
 
 	fn eval_inverse_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
-		type_: TypeRef,
+		scope: &mut Scope<P, R>,
+		type_: TypeRef<P>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {
@@ -47,14 +47,14 @@ impl<R: Clone + Ord> EvalTyped<R> for List<R> {
 	}
 }
 
-impl<R: Clone + Ord> EvalTyped<R> for ExplicitList<R> {
+impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for ExplicitList<P, R> {
 	fn eval_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
-		_type_: TypeRef,
+		scope: &Scope<P, R>,
+		_type_: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		let mut items = Vec::with_capacity(self.items.len());
 
@@ -67,11 +67,11 @@ impl<R: Clone + Ord> EvalTyped<R> for ExplicitList<R> {
 
 	fn eval_inverse_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
-		_type_: TypeRef,
+		scope: &mut Scope<P, R>,
+		_type_: TypeRef<P>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match &output {
@@ -87,14 +87,14 @@ impl<R: Clone + Ord> EvalTyped<R> for ExplicitList<R> {
 	}
 }
 
-impl<R: Clone + Ord> EvalTyped<R> for ImplicitList<R> {
+impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for ImplicitList<P, R> {
 	fn eval_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
-		type_: TypeRef,
+		scope: &Scope<P, R>,
+		type_: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
 			Self::Ordered(list) => list.eval_typed(registry, rdf, dataset, scope, type_),
@@ -104,11 +104,11 @@ impl<R: Clone + Ord> EvalTyped<R> for ImplicitList<R> {
 
 	fn eval_inverse_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
-		type_: TypeRef,
+		scope: &mut Scope<P, R>,
+		type_: TypeRef<P>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {
@@ -122,14 +122,14 @@ impl<R: Clone + Ord> EvalTyped<R> for ImplicitList<R> {
 	}
 }
 
-impl<R: Clone + Ord> EvalTyped<R> for UnorderedList<R> {
+impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for UnorderedList<P, R> {
 	fn eval_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
-		type_ref: TypeRef,
+		scope: &Scope<P, R>,
+		type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		let item_ty = registry
 			.get_type(type_ref)
@@ -158,11 +158,11 @@ impl<R: Clone + Ord> EvalTyped<R> for UnorderedList<R> {
 
 	fn eval_inverse_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
-		_type_ref: TypeRef,
+		scope: &mut Scope<P, R>,
+		_type_ref: TypeRef<P>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match output {
@@ -186,14 +186,14 @@ impl<R: Clone + Ord> EvalTyped<R> for UnorderedList<R> {
 	}
 }
 
-impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
+impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 	fn eval_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
-		_type_ref: TypeRef,
+		scope: &Scope<P, R>,
+		_type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		let mut result = Vec::new();
 
@@ -286,11 +286,11 @@ impl<R: Clone + Ord> EvalTyped<R> for OrderedList<R> {
 
 	fn eval_inverse_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
-		_type_ref: TypeRef,
+		scope: &mut Scope<P, R>,
+		_type_ref: TypeRef<P>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		assert_eq!(self.bound.intro.len(), 1);

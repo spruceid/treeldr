@@ -8,28 +8,28 @@ use crate::{
 };
 
 use super::{
-	Build, BuildContext, BuildSignature, BuildingNamespace, Error, ExprScope, Scope, TypeValue,
-	TypeVariableRef, TypeVariables,
+	Build, BuildContext, BuildEnvironment, BuildSignature, BuildingNamespace, Error, ExprScope,
+	Scope, TypeValue, TypeVariableRef, TypeVariables,
 };
 
-pub struct BuildModule<'ast> {
-	self_: ModuleRef,
+pub struct BuildModule<'ast, P> {
+	self_: ModuleRef<P>,
 
 	metadata: Option<&'ast ast::Metadata>,
 
-	parent: Option<ModuleRef>,
+	parent: Option<ModuleRef<P>>,
 
 	/// Items.
-	items: HashMap<String, BuildItem>,
+	items: HashMap<String, BuildItem<P>>,
 }
 
-impl<'ast> BuildModule<'ast> {
+impl<'ast, P: Copy + PartialEq> BuildModule<'ast, P> {
 	pub fn get<'a, R>(
 		&'a self,
-		registry: &'a Registry<R>,
-		namespace: &'a BuildingNamespace<'ast>,
+		registry: &'a impl Registry<PackageId = P, Resource = R>,
+		namespace: &'a BuildingNamespace<'ast, P>,
 		path: &ItemPath,
-	) -> Option<ScopeItemRef<'a>> {
+	) -> Option<ScopeItemRef<'a, P>> {
 		match path.split_first() {
 			Some((first, rest)) => self
 				.get_by_segment(first)
@@ -38,27 +38,28 @@ impl<'ast> BuildModule<'ast> {
 		}
 	}
 
-	fn get_by_segment(&self, segment: &ItemPathSegment) -> Option<ScopeItemRef<'_>> {
+	fn get_by_segment(&self, segment: &ItemPathSegment) -> Option<ScopeItemRef<'_, P>> {
 		match segment {
 			ItemPathSegment::Super => self.parent.map(ScopeItemRef::Module),
 			ItemPathSegment::Item(name) => self.get_by_name(name),
 		}
 	}
 
-	fn get_by_name(&self, name: &str) -> Option<ScopeItemRef<'_>> {
+	fn get_by_name(&self, name: &str) -> Option<ScopeItemRef<'_, P>> {
 		self.items.get(name).map(BuildItem::as_ref)
 	}
 }
 
-impl<'ast> BuildModule<'ast> {
-	pub fn build<R, D>(
+impl<'ast, P: Copy> BuildModule<'ast, P> {
+	pub fn build<E, D>(
 		&self,
-		context: &mut BuildContext<R, D>,
-		namespace: &BuildingNamespace,
-	) -> Result<Module<R, TypeVariableRef>, Error>
+		context: &mut BuildContext<E, D>,
+		namespace: &BuildingNamespace<E::PackageId>,
+	) -> Result<Module<P, E::Resource, TypeVariableRef>, Error<P>>
 	where
-		R: Clone + Ord,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P>,
+		E::Resource: Clone + Ord,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		let mut result = Module::default();
 
@@ -96,15 +97,15 @@ impl<'ast> BuildModule<'ast> {
 }
 
 #[derive(Debug)]
-pub enum BuildItem {
+pub enum BuildItem<P> {
 	Prefix(IriBuf),
 	Type(TypeVariableRef),
-	Function(FunctionRef),
-	Module(ModuleRef),
+	Function(FunctionRef<P>),
+	Module(ModuleRef<P>),
 }
 
-impl BuildItem {
-	fn as_ref(&self) -> ScopeItemRef<'_> {
+impl<P: Copy> BuildItem<P> {
+	fn as_ref(&self) -> ScopeItemRef<'_, P> {
 		match self {
 			Self::Prefix(p) => ScopeItemRef::Prefix(p),
 			Self::Type(r) => ScopeItemRef::TypeVariable(*r),
@@ -115,20 +116,20 @@ impl BuildItem {
 }
 
 #[derive(Debug, Clone)]
-pub enum ScopeItem {
+pub enum ScopeItem<P> {
 	Prefix(IriBuf),
 	Variable(u32),
-	Type(TypeRef),
+	Type(TypeRef<P>),
 	TypeVariable(TypeVariableRef),
-	Function(FunctionRef),
-	Module(ModuleRef),
+	Function(FunctionRef<P>),
+	Module(ModuleRef<P>),
 }
 
-impl ScopeItem {
+impl<P: Copy + Ord + Hash> ScopeItem<P> {
 	pub fn import_type<R>(
 		&self,
-		registry: &mut Registry<R>,
-		type_variables: &mut TypeVariables<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		type_variables: &mut TypeVariables<P, R>,
 	) -> Option<TypeVariableRef> {
 		match self {
 			Self::Type(t) => Some(type_variables.import_type_ref(registry, *t)),
@@ -139,70 +140,16 @@ impl ScopeItem {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum ScopeItemRef<'a> {
+pub enum ScopeItemRef<'a, P> {
 	Prefix(&'a Iri),
 	Variable(u32),
-	Type(TypeRef),
+	Type(TypeRef<P>),
 	TypeVariable(TypeVariableRef),
-	Function(FunctionRef),
-	Module(ModuleRef),
+	Function(FunctionRef<P>),
+	Module(ModuleRef<P>),
 }
 
-impl<'a> ScopeItemRef<'a> {
-	pub fn get<R>(
-		&self,
-		registry: &'a Registry<R>,
-		namespace: &'a BuildingNamespace,
-		path: &ItemPath,
-	) -> Option<Self> {
-		match path.split_first() {
-			Some((first, rest)) => self
-				.get_by_segment(registry, namespace, first)
-				.and_then(|i| i.get(registry, namespace, ItemPath::from_slice(rest))),
-			None => Some(*self),
-		}
-	}
-
-	pub fn get_by_segment<R>(
-		&self,
-		registry: &'a Registry<R>,
-		namespace: &'a BuildingNamespace,
-		segment: &ItemPathSegment,
-	) -> Option<Self> {
-		match self {
-			Self::Module(m) => {
-				if m.namespace == namespace.id {
-					namespace
-						.get_module(m.index)
-						.and_then(|m| m.get_by_segment(segment))
-				} else {
-					m.get_by_segment(registry, segment).map(Into::into)
-				}
-			}
-			_ => None,
-		}
-	}
-
-	pub fn get_by_name<R>(
-		&self,
-		registry: &'a Registry<R>,
-		namespace: &'a BuildingNamespace,
-		name: &str,
-	) -> Option<Self> {
-		match self {
-			Self::Module(m) => {
-				if m.namespace == namespace.id {
-					namespace
-						.get_module(m.index)
-						.and_then(|m| m.get_by_name(name))
-				} else {
-					m.get_by_name(registry, name).map(Into::into)
-				}
-			}
-			_ => None,
-		}
-	}
-
+impl<'a, P> ScopeItemRef<'a, P> {
 	pub fn as_prefix(&self) -> Option<&'a str> {
 		match self {
 			Self::Prefix(p) => Some(p),
@@ -217,14 +164,7 @@ impl<'a> ScopeItemRef<'a> {
 		}
 	}
 
-	pub fn as_function(&self) -> Option<FunctionRef> {
-		match self {
-			Self::Function(f) => Some(*f),
-			_ => None,
-		}
-	}
-
-	pub fn into_owned(self) -> ScopeItem {
+	pub fn into_owned(self) -> ScopeItem<P> {
 		match self {
 			Self::Prefix(v) => ScopeItem::Prefix(v.to_owned()),
 			Self::Type(v) => ScopeItem::Type(v),
@@ -236,8 +176,73 @@ impl<'a> ScopeItemRef<'a> {
 	}
 }
 
-impl<'a> From<ItemRef<'a>> for ScopeItemRef<'a> {
-	fn from(value: ItemRef<'a>) -> Self {
+impl<'a, P: Copy> ScopeItemRef<'a, P> {
+	pub fn as_function(&self) -> Option<FunctionRef<P>> {
+		match self {
+			Self::Function(f) => Some(*f),
+			_ => None,
+		}
+	}
+}
+
+impl<'a, P: Copy + PartialEq> ScopeItemRef<'a, P> {
+	pub fn get<R>(
+		&self,
+		registry: &'a impl Registry<PackageId = P, Resource = R>,
+		namespace: &'a BuildingNamespace<P>,
+		path: &ItemPath,
+	) -> Option<Self> {
+		match path.split_first() {
+			Some((first, rest)) => self
+				.get_by_segment(registry, namespace, first)
+				.and_then(|i| i.get(registry, namespace, ItemPath::from_slice(rest))),
+			None => Some(*self),
+		}
+	}
+
+	pub fn get_by_segment<R>(
+		&self,
+		registry: &'a impl Registry<PackageId = P, Resource = R>,
+		namespace: &'a BuildingNamespace<P>,
+		segment: &ItemPathSegment,
+	) -> Option<Self> {
+		match self {
+			Self::Module(m) => {
+				if m.package == namespace.id {
+					namespace
+						.get_module(m.index)
+						.and_then(|m| m.get_by_segment(segment))
+				} else {
+					m.get_by_segment(registry, segment).map(Into::into)
+				}
+			}
+			_ => None,
+		}
+	}
+
+	pub fn get_by_name<R>(
+		&self,
+		registry: &'a impl Registry<PackageId = P, Resource = R>,
+		namespace: &'a BuildingNamespace<P>,
+		name: &str,
+	) -> Option<Self> {
+		match self {
+			Self::Module(m) => {
+				if m.package == namespace.id {
+					namespace
+						.get_module(m.index)
+						.and_then(|m| m.get_by_name(name))
+				} else {
+					m.get_by_name(registry, name).map(Into::into)
+				}
+			}
+			_ => None,
+		}
+	}
+}
+
+impl<'a, P> From<ItemRef<'a, P>> for ScopeItemRef<'a, P> {
+	fn from(value: ItemRef<'a, P>) -> Self {
 		match value {
 			ItemRef::Prefix(i) => ScopeItemRef::Prefix(i),
 			ItemRef::Type(t) => ScopeItemRef::Type(t),
@@ -248,16 +253,18 @@ impl<'a> From<ItemRef<'a>> for ScopeItemRef<'a> {
 }
 
 impl<'ast> ast::Module {
-	pub fn declare<R, D>(
+	pub fn declare<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &mut BuildingNamespace<'ast>,
-		scope: &Scope,
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &mut BuildingNamespace<'ast, E::PackageId>,
+		scope: &Scope<E::PackageId>,
 		metadata: Option<&'ast ast::Metadata>,
-	) -> Result<ModuleRef, Error>
+	) -> Result<ModuleRef<E::PackageId>, Error<E::PackageId>>
 	where
-		R: Clone + Ord + Hash,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment,
+		E::PackageId: Copy + Ord + Hash,
+		E::Resource: Clone + Ord + Hash,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		namespace.begin_module(|namespace, module_ref| {
 			let mut result = BuildModule {

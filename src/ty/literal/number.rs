@@ -4,10 +4,13 @@ use std::cmp::Ordering;
 use crate::{
 	display::DisplaySignature,
 	value::{
-		self, NUMBER_I128_MAX, NUMBER_I128_MIN, NUMBER_I16_MAX, NUMBER_I16_MIN, NUMBER_I32_MAX,
-		NUMBER_I32_MIN, NUMBER_I64_MAX, NUMBER_I64_MIN, NUMBER_I8_MAX, NUMBER_I8_MIN,
-		NUMBER_U128_MAX, NUMBER_U16_MAX, NUMBER_U32_MAX, NUMBER_U64_MAX, NUMBER_U8_MAX,
-		NUMBER_ZERO,
+		self,
+		number::{
+			NUMBER_I128_MAX, NUMBER_I128_MIN, NUMBER_I16_MAX, NUMBER_I16_MIN, NUMBER_I32_MAX,
+			NUMBER_I32_MIN, NUMBER_I64_MAX, NUMBER_I64_MIN, NUMBER_I8_MAX, NUMBER_I8_MIN,
+			NUMBER_U128_MAX, NUMBER_U16_MAX, NUMBER_U32_MAX, NUMBER_U64_MAX, NUMBER_U8_MAX,
+			NUMBER_ZERO,
+		},
 	},
 };
 
@@ -301,10 +304,12 @@ impl Number {
 	}
 }
 
-impl<R> DisplaySignature<R> for Number {
+impl<P, R> DisplaySignature<P, R> for Number {
 	fn fmt_signature(
 		&self,
-		_context: &crate::display::DisplayContext<R>,
+		_context: &crate::display::DisplayContext<
+			impl crate::Registry<PackageId = P, Resource = R>,
+		>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		match self.as_singleton() {

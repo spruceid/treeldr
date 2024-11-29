@@ -65,53 +65,53 @@ pub enum EvalError<R = rdf_types::Term> {
 	ResourceUnificationError,
 }
 
-pub trait Eval<R: Clone> {
+pub trait Eval<P, R: Clone> {
 	fn eval(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
+		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>>;
 
 	fn eval_inverse(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
+		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>>;
 }
 
-pub trait EvalTyped<R: Clone> {
+pub trait EvalTyped<P, R: Clone> {
 	fn eval_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
-		type_: TypeRef,
+		scope: &Scope<P, R>,
+		type_: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>>;
 
 	fn eval_inverse_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
-		type_: TypeRef,
+		scope: &mut Scope<P, R>,
+		type_: TypeRef<P>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>>;
 }
 
-impl<R: Ord + Clone> Eval<R> for Expr<R> {
+impl<P: Copy + Ord, R: Ord + Clone> Eval<P, R> for Expr<P, R> {
 	fn eval(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
+		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>> {
 		self.inner
 			.eval_typed(registry, rdf, dataset, scope, self.type_)
@@ -119,10 +119,10 @@ impl<R: Ord + Clone> Eval<R> for Expr<R> {
 
 	fn eval_inverse(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
+		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		self.inner
@@ -130,14 +130,14 @@ impl<R: Ord + Clone> Eval<R> for Expr<R> {
 	}
 }
 
-impl<R: Ord + Clone> EvalTyped<R> for InnerExpr<R> {
+impl<P: Copy + Ord, R: Ord + Clone> EvalTyped<P, R> for InnerExpr<P, R> {
 	fn eval_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
-		type_: TypeRef,
+		scope: &Scope<P, R>,
+		type_: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
 			Self::Let(bindings, e) => {
@@ -165,11 +165,11 @@ impl<R: Ord + Clone> EvalTyped<R> for InnerExpr<R> {
 
 	fn eval_inverse_typed(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
-		type_: TypeRef,
+		scope: &mut Scope<P, R>,
+		type_: TypeRef<P>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {

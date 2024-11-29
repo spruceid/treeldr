@@ -10,13 +10,13 @@ use crate::{expr::Call, Registry, Value};
 
 use super::{Eval, EvalError, RdfContext, RdfContextMut, Scope};
 
-impl<R: Clone + Ord> Eval<R> for Call<R> {
+impl<P: Copy + Ord, R: Clone + Ord> Eval<P, R> for Call<P, R> {
 	fn eval(
 		&self,
-		registry: &Registry<R>,
-		rdf: &impl RdfContext<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &impl RdfContext<Resource = R>,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
-		scope: &Scope<R>,
+		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>> {
 		let mut evaluated_args = Vec::with_capacity(self.const_args.len() + self.args.len());
 
@@ -36,10 +36,10 @@ impl<R: Clone + Ord> Eval<R> for Call<R> {
 
 	fn eval_inverse(
 		&self,
-		registry: &Registry<R>,
-		rdf: &mut impl RdfContextMut<R>,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
 		dataset: &mut impl DatasetMut<Resource = R>,
-		scope: &mut Scope<R>,
+		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		let const_args: Vec<_> = self

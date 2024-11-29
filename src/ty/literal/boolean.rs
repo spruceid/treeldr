@@ -36,10 +36,12 @@ impl Boolean {
 	}
 }
 
-impl<R> DisplaySignature<R> for Boolean {
+impl<P, R> DisplaySignature<P, R> for Boolean {
 	fn fmt_signature(
 		&self,
-		_context: &crate::display::DisplayContext<R>,
+		_context: &crate::display::DisplayContext<
+			impl crate::Registry<PackageId = P, Resource = R>,
+		>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		match self.const_ {

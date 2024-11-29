@@ -3,13 +3,13 @@ use std::fmt::Write;
 
 use crate::{Registry, TypeRef};
 
-pub struct DisplayContext<'a, R> {
-	pub registry: &'a Registry<R>,
-	pub self_: Option<TypeRef>,
+pub struct DisplayContext<'a, G: Registry> {
+	pub registry: &'a G,
+	pub self_: Option<TypeRef<G::PackageId>>,
 	pub indent: Indent,
 }
 
-impl<'a, R> DisplayContext<'a, R> {
+impl<'a, G: Registry> DisplayContext<'a, G> {
 	pub fn inner(&self) -> Self {
 		Self {
 			registry: self.registry,
@@ -18,7 +18,7 @@ impl<'a, R> DisplayContext<'a, R> {
 		}
 	}
 
-	pub fn inner_self(&self, self_: TypeRef) -> Self {
+	pub fn inner_self(&self, self_: TypeRef<G::PackageId>) -> Self {
 		Self {
 			registry: self.registry,
 			self_: Some(self_),
@@ -40,11 +40,11 @@ impl fmt::Display for Indent {
 	}
 }
 
-pub trait DisplaySignature<R> {
-	fn display_signature<'a>(
-		&'a self,
-		registry: &'a Registry<R>,
-	) -> DisplayedSignature<'a, R, Self> {
+pub trait DisplaySignature<P, R> {
+	fn display_signature<'a, G>(&'a self, registry: &'a G) -> DisplayedSignature<'a, G, Self>
+	where
+		G: Registry<PackageId = P, Resource = R>,
+	{
 		self.display_signature_with(DisplayContext {
 			registry,
 			self_: None,
@@ -52,23 +52,32 @@ pub trait DisplaySignature<R> {
 		})
 	}
 
-	fn display_signature_with<'a>(
+	fn display_signature_with<'a, G>(
 		&'a self,
-		context: DisplayContext<'a, R>,
-	) -> DisplayedSignature<'a, R, Self> {
+		context: DisplayContext<'a, G>,
+	) -> DisplayedSignature<'a, G, Self>
+	where
+		G: Registry<PackageId = P, Resource = R>,
+	{
 		DisplayedSignature { context, t: self }
 	}
 
-	fn fmt_signature(&self, context: &DisplayContext<R>, f: &mut fmt::Formatter) -> fmt::Result;
+	fn fmt_signature(
+		&self,
+		context: &DisplayContext<impl Registry<PackageId = P, Resource = R>>,
+		f: &mut fmt::Formatter,
+	) -> fmt::Result;
 }
 
-pub struct DisplayedSignature<'a, R, T: ?Sized> {
-	context: DisplayContext<'a, R>,
+pub struct DisplayedSignature<'a, G: Registry, T: ?Sized> {
+	context: DisplayContext<'a, G>,
 	t: &'a T,
 }
 
-impl<'a, R: fmt::Display, T: ?Sized + DisplaySignature<R>> fmt::Display
-	for DisplayedSignature<'a, R, T>
+impl<'a, G, T> fmt::Display for DisplayedSignature<'a, G, T>
+where
+	G: Registry,
+	T: ?Sized + DisplaySignature<G::PackageId, G::Resource>,
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		self.t.fmt_signature(&self.context, f)

@@ -1,13 +1,13 @@
 use crate::{
 	function::FunctionRef,
-	module::ItemPathBuf,
+	module::{ItemPath, ItemPathBuf, ItemPathSegment, ItemRef},
 	rdf::RdfContextMut,
 	syntax::{
 		ast::{self, Ident},
 		Span,
 	},
-	value::NumberParseError,
-	Attribute, Attributes, Environment, Function, Module, ModuleRef, Registry, Value,
+	value::number::NumberParseError,
+	Attribute, Attributes, Function, Module, ModuleRef, Package, Registry, Value,
 };
 use std::hash::Hash;
 
@@ -32,7 +32,7 @@ mod typing;
 pub use typing::*;
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum Error<P> {
 	#[error("invalid number: {1}")]
 	Number(Span, NumberParseError),
 
@@ -95,10 +95,10 @@ pub enum Error {
 	ExpectedConstValue(Span),
 
 	#[error("item `{0}` is already defined")]
-	ItemRedefinition(Ident, BuildItem, BuildItem),
+	ItemRedefinition(Ident, BuildItem<P>, BuildItem<P>),
 }
 
-impl Error {
+impl<P> Error<P> {
 	pub fn span(&self) -> Span {
 		match self {
 			Self::Number(span, _) => *span,
@@ -125,47 +125,78 @@ impl Error {
 	}
 }
 
-pub struct BuildContext<'a, R, D> {
+pub trait BuildEnvironment {
+	type PackageId: Copy;
+	type Resource;
+	type Registry: Registry<PackageId = Self::PackageId, Resource = Self::Resource>;
+
+	fn registry(&self) -> &Self::Registry;
+
+	fn package(&self, name: Option<&str>) -> Option<Self::PackageId>;
+
+	fn get_by_name(&self, name: &str) -> Option<ItemRef<Self::PackageId>> {
+		match self
+			.package(Some(name))
+			.and_then(|id| self.registry().package(id))
+		{
+			Some(p) => Some(ItemRef::Module(p.root_ref())),
+			None => self
+				.package(None)
+				.and_then(|id| self.registry().package(id))?
+				.root()
+				.get_by_name(name),
+		}
+	}
+
+	fn get(&self, path: &ItemPath) -> Option<ItemRef<Self::PackageId>> {
+		let (first, rest) = path.split_first()?;
+
+		match first {
+			ItemPathSegment::Super => None,
+			ItemPathSegment::Item(name) => self
+				.get_by_name(name)
+				.and_then(|i| i.get(self.registry(), ItemPath::from_slice(rest))),
+		}
+	}
+}
+
+pub struct BuildContext<'a, E: BuildEnvironment, D> {
 	/// RDF context.
 	rdf: &'a mut D,
 
-	/// Registry.
-	registry: &'a mut Registry<R>,
-
 	/// Environment.
-	environment: &'a Environment,
+	environment: &'a E,
 
 	/// Type variables.
-	type_variables: TypeVariables<R>,
+	type_variables: TypeVariables<E::PackageId, E::Resource>,
 }
 
-impl<'a, R, D> BuildContext<'a, R, D> {
-	pub fn new(rdf: &'a mut D, registry: &'a mut Registry<R>, env: &'a Environment) -> Self {
+impl<'a, E: BuildEnvironment, D> BuildContext<'a, E, D> {
+	pub fn new(rdf: &'a mut D, env: &'a E) -> Self {
 		Self {
 			rdf,
-			registry,
 			environment: env,
 			type_variables: TypeVariables::new(),
 		}
 	}
 }
 
-pub struct BuildingNamespace<'ast> {
+pub struct BuildingNamespace<'ast, P> {
 	/// Namespace index.
-	id: u32,
+	id: P,
 
 	/// Types.
-	types: Vec<TypeDefinition<'ast>>,
+	types: Vec<TypeDefinition<'ast, P>>,
 
 	/// Functions.
-	functions: Vec<FunctionDefinition<'ast>>,
+	functions: Vec<FunctionDefinition<'ast, P>>,
 
 	/// Modules.
-	modules: Vec<Option<BuildModule<'ast>>>,
+	modules: Vec<Option<BuildModule<'ast, P>>>,
 }
 
-impl<'ast> BuildingNamespace<'ast> {
-	pub fn new(id: u32) -> Self {
+impl<'ast, P> BuildingNamespace<'ast, P> {
+	pub fn new(id: P) -> Self {
 		Self {
 			id,
 			types: Vec::new(),
@@ -174,14 +205,17 @@ impl<'ast> BuildingNamespace<'ast> {
 		}
 	}
 
-	pub fn get_module(&self, i: u32) -> Option<&BuildModule<'ast>> {
+	pub fn get_module(&self, i: u32) -> Option<&BuildModule<'ast, P>> {
 		self.modules.get(i as usize).and_then(Option::as_ref)
 	}
 
 	fn begin_module(
 		&mut self,
-		f: impl FnOnce(&mut Self, ModuleRef) -> Result<BuildModule<'ast>, Error>,
-	) -> Result<ModuleRef, Error> {
+		f: impl FnOnce(&mut Self, ModuleRef<P>) -> Result<BuildModule<'ast, P>, Error<P>>,
+	) -> Result<ModuleRef<P>, Error<P>>
+	where
+		P: Copy,
+	{
 		let module_ref = ModuleRef::new(self.id, self.modules.len() as u32);
 		self.modules.push(None);
 		self.modules[module_ref.index as usize] = Some(f(self, module_ref)?);
@@ -190,7 +224,7 @@ impl<'ast> BuildingNamespace<'ast> {
 
 	pub fn declare_type(
 		&mut self,
-		module: ModuleRef,
+		module: ModuleRef<P>,
 		metadata: &'ast ast::Metadata,
 		value: &'ast ast::TypeDefinition,
 		variable: TypeVariableRef,
@@ -203,14 +237,39 @@ impl<'ast> BuildingNamespace<'ast> {
 		});
 	}
 
+	pub fn import_function_signature<E, D>(
+		&self,
+		context: &mut BuildContext<E, D>,
+		r: FunctionRef<E::PackageId>,
+	) -> Option<BuildSignature>
+	where
+		P: Copy + Ord + Hash,
+		E: BuildEnvironment<PackageId = P>,
+		E::Resource: Clone,
+	{
+		if r.package == self.id {
+			Some(self.functions[r.index as usize].signature.clone())
+		} else {
+			context.environment.registry().get_function(r).map(|f| {
+				BuildSignature::import(&f.signature, |&ty_ref| {
+					context
+						.type_variables
+						.import_type_ref(context.environment.registry(), ty_ref)
+				})
+			})
+		}
+	}
+}
+
+impl<'ast, P: Copy + Ord + Hash> BuildingNamespace<'ast, P> {
 	/// Declare a function.
 	pub fn declare_function(
 		&mut self,
-		module: ModuleRef,
+		module: ModuleRef<P>,
 		metadata: &'ast ast::Metadata,
 		value: &'ast ast::FunctionDefinition,
 		signature: BuildSignature,
-	) -> FunctionRef {
+	) -> FunctionRef<P> {
 		let f_ref = FunctionRef::new(self.id, self.functions.len() as u32);
 
 		self.functions.push(FunctionDefinition {
@@ -223,34 +282,14 @@ impl<'ast> BuildingNamespace<'ast> {
 		f_ref
 	}
 
-	pub fn import_function_signature<R, D>(
+	pub fn build<E, D>(
 		&self,
-		context: &mut BuildContext<R, D>,
-		r: FunctionRef,
-	) -> Option<BuildSignature>
+		context: &mut BuildContext<E, D>,
+	) -> Result<UnresolvedNamespace<E::PackageId, E::Resource>, Error<P>>
 	where
-		R: Clone,
-	{
-		if r.namespace == self.id {
-			Some(self.functions[r.index as usize].signature.clone())
-		} else {
-			context.registry.get_function(r).map(|f| {
-				BuildSignature::import(&f.signature, |&ty_ref| {
-					context
-						.type_variables
-						.import_type_ref(context.registry, ty_ref)
-				})
-			})
-		}
-	}
-
-	pub fn build<R, D>(
-		&self,
-		context: &mut BuildContext<R, D>,
-	) -> Result<UnresolvedNamespace<R>, Error>
-	where
-		R: Clone + Ord + Hash,
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P>,
+		E::Resource: Clone + Ord + Hash,
+		D: RdfContextMut<Resource = E::Resource>,
 	{
 		for item in &self.types {
 			item.build(context, self)?;
@@ -272,64 +311,73 @@ impl<'ast> BuildingNamespace<'ast> {
 	}
 }
 
-pub struct UnresolvedNamespace<R> {
-	id: u32,
+pub struct UnresolvedNamespace<P, R> {
+	id: P,
 
-	functions: Vec<Function<R, TypeVariableRef>>,
+	functions: Vec<Function<P, R, TypeVariableRef>>,
 
-	modules: Vec<Module<R, TypeVariableRef>>,
+	modules: Vec<Module<P, R, TypeVariableRef>>,
 }
 
-impl<R> UnresolvedNamespace<R> {
-	pub fn resolve<D>(self, context: BuildContext<R, D>) -> Result<(), TypeResolutionError>
+impl<P, R> UnresolvedNamespace<P, R>
+where
+	P: Copy + Ord + Hash,
+	R: Clone + Ord,
+{
+	pub fn resolve<E, D>(
+		self,
+		context: BuildContext<E, D>,
+	) -> Result<Package<P, R>, TypeResolutionError<P>>
 	where
-		R: Clone + Ord,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
 	{
-		let map = context.type_variables.resolve(context.registry, self.id)?;
+		let mut package = Package::new(self.id);
+
+		let map = context
+			.type_variables
+			.resolve(context.environment.registry(), &mut package)?;
 
 		for f in self.functions {
-			context
-				.registry
-				.insert_function(self.id, f.map_types(|x| map[&x]));
+			package.insert_function(f.map_types(|x| map[&x]));
 		}
 
 		for m in self.modules {
-			context
-				.registry
-				.insert_module(self.id, m.map_types(|x| map[&x]));
+			package.insert_module(m.map_types(|x| map[&x]));
 		}
 
-		Ok(())
+		Ok(package)
 	}
 }
 
-pub trait Declare<'ast, R> {
+pub trait Declare<'ast, P, R> {
 	type Target;
 
-	fn declare<D>(
+	fn declare<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &mut BuildingNamespace<'ast>,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &mut BuildingNamespace<'ast, P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>;
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>;
 }
 
-pub trait Build<'ast, R> {
+pub trait Build<'ast, P, R> {
 	type Target;
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>;
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>;
 }
 
 impl ast::FullIri {
-	fn decode(&self) -> Result<IriBuf, Error> {
+	fn decode<P>(&self) -> Result<IriBuf, Error<P>> {
 		let len = self.as_str().len();
 		let content = &self.as_str()[1..(len - 1)];
 		IriBuf::new(content.to_owned()).map_err(|InvalidIri(i)| Error::Iri(self.span(), i))
@@ -342,33 +390,35 @@ impl ast::DocComment {
 	}
 }
 
-impl<'ast, R> Build<'ast, R> for ast::DocComment {
+impl<'ast, P, R> Build<'ast, P, R> for ast::DocComment {
 	type Target = Value<R>;
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		_context: &mut BuildContext<'_, R, D>,
-		_namespace: &BuildingNamespace<'ast>,
-		_scope: &Scope,
-	) -> Result<Self::Target, Error>
+		_context: &mut BuildContext<'_, E, D>,
+		_namespace: &BuildingNamespace<'ast, P>,
+		_scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		Ok(Value::string(self.decode().to_owned()))
 	}
 }
 
-impl<'ast, R: Clone + Ord> Build<'ast, R> for ast::Metadata {
+impl<'ast, P, R: Clone + Ord> Build<'ast, P, R> for ast::Metadata {
 	type Target = Attributes<R>;
 
-	fn build<D>(
+	fn build<E, D>(
 		&'ast self,
-		context: &mut BuildContext<'_, R, D>,
-		namespace: &BuildingNamespace<'ast>,
-		scope: &Scope,
-	) -> Result<Self::Target, Error>
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingNamespace<'ast, P>,
+		scope: &Scope<P>,
+	) -> Result<Self::Target, Error<P>>
 	where
-		D: RdfContextMut<R>,
+		E: BuildEnvironment<PackageId = P, Resource = R>,
+		D: RdfContextMut<Resource = R>,
 	{
 		let mut result = Attributes::new();
 

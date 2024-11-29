@@ -72,10 +72,10 @@ impl LiteralType {
 	}
 }
 
-impl<R> DisplaySignature<R> for LiteralType {
+impl<P, R> DisplaySignature<P, R> for LiteralType {
 	fn fmt_signature(
 		&self,
-		context: &crate::display::DisplayContext<R>,
+		context: &crate::display::DisplayContext<impl crate::Registry<PackageId = P, Resource = R>>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		match self {

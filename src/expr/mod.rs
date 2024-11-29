@@ -17,18 +17,18 @@ use crate::{Literal, TypeRef};
 
 /// Expression.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Expr<R, T = TypeRef> {
+pub struct Expr<P, R, T = TypeRef<P>> {
 	pub type_: T,
 
-	pub inner: InnerExpr<R, T>,
+	pub inner: InnerExpr<P, R, T>,
 }
 
-impl<R: Ord, T> Expr<R, T> {
-	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Expr<R, U> {
+impl<P, R: Ord, T> Expr<P, R, T> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> Expr<P, R, U> {
 		self.map_types_ref_mut(&mut f)
 	}
 
-	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Expr<R, U> {
+	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Expr<P, R, U> {
 		Expr {
 			type_: f(self.type_),
 			inner: self.inner.map_types_ref_mut(f),
@@ -38,9 +38,9 @@ impl<R: Ord, T> Expr<R, T> {
 
 /// Inner expression.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum InnerExpr<R, T = TypeRef> {
+pub enum InnerExpr<P, R, T = TypeRef<P>> {
 	/// Let binding.
-	Let(Bindings<R, T>, Box<Expr<R, T>>),
+	Let(Bindings<P, R, T>, Box<Expr<P, R, T>>),
 
 	/// Resource variable.
 	///
@@ -65,24 +65,24 @@ pub enum InnerExpr<R, T = TypeRef> {
 	/// [ all ?x where { ... } expr ]
 	/// [ list ?x in ?list where { ... } expr ]
 	/// ```
-	List(List<R, T>),
+	List(List<P, R, T>),
 
 	/// Map.
 	///
 	/// ```tldr
 	/// { key1 = value1, ..., keyN = valueN }
 	/// ```
-	Map(Map<R, T>),
+	Map(Map<P, R, T>),
 
 	/// Match.
-	Match(Match<R, T>),
+	Match(Match<P, R, T>),
 
 	/// Function call.
-	Call(Call<R, T>),
+	Call(Call<P, R, T>),
 }
 
-impl<R, T> InnerExpr<R, T> {
-	pub fn as_map(&self) -> Option<&Map<R, T>> {
+impl<P, R, T> InnerExpr<P, R, T> {
+	pub fn as_map(&self) -> Option<&Map<P, R, T>> {
 		match self {
 			Self::Map(r) => Some(r),
 			_ => None,
@@ -90,12 +90,12 @@ impl<R, T> InnerExpr<R, T> {
 	}
 }
 
-impl<R: Ord, T> InnerExpr<R, T> {
-	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> InnerExpr<R, U> {
+impl<P, R: Ord, T> InnerExpr<P, R, T> {
+	pub fn map_types<U: Ord>(self, mut f: impl FnMut(T) -> U) -> InnerExpr<P, R, U> {
 		self.map_types_ref_mut(&mut f)
 	}
 
-	fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> InnerExpr<R, U> {
+	fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> InnerExpr<P, R, U> {
 		match self {
 			Self::Let(b, e) => {
 				InnerExpr::Let(b.map_types_ref_mut(f), Box::new(e.map_types_ref_mut(f)))

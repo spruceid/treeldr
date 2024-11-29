@@ -2,9 +2,12 @@ use core::fmt;
 use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
+use serde::{Deserialize, Serialize};
 use std::{str::FromStr, sync::LazyLock};
 
 pub use xsd_types::NoDecimalRepresentation;
+
+use crate::rdf::serde::{DeserializeIndexed, SerializeIndexed};
 
 static TEN: LazyLock<BigInt> = LazyLock::new(|| 10u32.into());
 
@@ -367,120 +370,27 @@ impl fmt::Display for Number {
 	}
 }
 
-/// Literal value.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Literal {
-	/// Unit.
-	Unit,
-
-	/// Boolean value.
-	Boolean(bool),
-
-	/// Any rational number.
-	Number(Number),
-
-	/// Byte string.
-	ByteString(Vec<u8>),
-
-	/// Text string.
-	TextString(String),
-}
-
-impl Literal {
-	pub fn as_bool(&self) -> Option<bool> {
-		match self {
-			Self::Boolean(b) => Some(*b),
-			_ => None,
-		}
-	}
-
-	pub fn as_number(&self) -> Option<&Number> {
-		match self {
-			Self::Number(n) => Some(n),
-			_ => None,
-		}
-	}
-
-	pub fn as_str(&self) -> Option<&str> {
-		match self {
-			Self::TextString(s) => Some(s),
-			_ => None,
-		}
+impl<R> SerializeIndexed<R> for Number {
+	fn serialize_indexed<S>(
+		&self,
+		_index: &crate::rdf::ResourceForwardIndex<R>,
+		serializer: S,
+	) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		self.0.serialize(serializer)
 	}
 }
 
-impl fmt::Display for Literal {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			Self::Unit => f.write_str("null"),
-			Self::Boolean(true) => f.write_str("true"),
-			Self::Boolean(false) => f.write_str("false"),
-			Self::Number(n) => n.fmt(f),
-			Self::ByteString(bytes) => {
-				f.write_str("x")?;
-				for b in bytes {
-					write!(f, "{b:02x}")?;
-				}
-				Ok(())
-			}
-			Self::TextString(s) => string_literal(s, f),
-		}
-	}
-}
-
-/// Formats a string literal according to [RFC8785](https://www.rfc-editor.org/rfc/rfc8785#name-serialization-of-strings).
-pub fn string_literal(s: &str, f: &mut fmt::Formatter) -> fmt::Result {
-	use fmt::Display;
-	f.write_str("\"")?;
-
-	for c in s.chars() {
-		match c {
-			'\\' => f.write_str("\\\\")?,
-			'\"' => f.write_str("\\\"")?,
-			'\u{0008}' => f.write_str("\\b")?,
-			'\u{0009}' => f.write_str("\\t")?,
-			'\u{000a}' => f.write_str("\\n")?,
-			'\u{000c}' => f.write_str("\\f")?,
-			'\u{000d}' => f.write_str("\\r")?,
-			'\u{0000}'..='\u{001f}' => {
-				f.write_str("\\u")?;
-
-				let codepoint = c as u32;
-				let d = codepoint & 0x000f;
-				let c = (codepoint & 0x00f0) >> 4;
-				let b = (codepoint & 0x0f00) >> 8;
-				let a = (codepoint & 0xf000) >> 12;
-
-				digit(a).fmt(f)?;
-				digit(b).fmt(f)?;
-				digit(c).fmt(f)?;
-				digit(d).fmt(f)?
-			}
-			_ => c.fmt(f)?,
-		}
-	}
-
-	f.write_str("\"")
-}
-
-fn digit(c: u32) -> char {
-	match c {
-		0x0 => '0',
-		0x1 => '1',
-		0x2 => '2',
-		0x3 => '3',
-		0x4 => '4',
-		0x5 => '5',
-		0x6 => '6',
-		0x7 => '7',
-		0x8 => '8',
-		0x9 => '9',
-		0xa => 'a',
-		0xb => 'b',
-		0xc => 'c',
-		0xd => 'd',
-		0xe => 'e',
-		0xf => 'f',
-		_ => panic!("invalid input: {}", c),
+impl<'de, R> DeserializeIndexed<'de, R> for Number {
+	fn deserialize_indexed<D>(
+		_index: &crate::rdf::ResourceBackwardIndex<R>,
+		deserializer: D,
+	) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		BigRational::deserialize(deserializer).map(Self)
 	}
 }

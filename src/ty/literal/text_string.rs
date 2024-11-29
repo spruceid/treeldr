@@ -151,10 +151,12 @@ impl TextString {
 	}
 }
 
-impl<R> DisplaySignature<R> for TextString {
+impl<P, R> DisplaySignature<P, R> for TextString {
 	fn fmt_signature(
 		&self,
-		_context: &crate::display::DisplayContext<R>,
+		_context: &crate::display::DisplayContext<
+			impl crate::Registry<PackageId = P, Resource = R>,
+		>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
 		match self.as_singleton() {

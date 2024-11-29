@@ -1,174 +1,177 @@
-use educe::Educe;
+use std::{collections::HashMap, hash::Hash, marker::PhantomData};
 
 use crate::{
-	function::FunctionRef, ty::TypeDefinition, Function, Module, ModuleRef, Type, TypeRef,
+	function::FunctionRef, ty::TypeDefinition, Function, Module, ModuleRef, Package, Type, TypeRef,
 };
 
-/// Registry.
-#[derive(Debug, Educe)]
-#[educe(Default)]
-pub struct Registry<R = rdf_types::Term> {
-	namespaces: Vec<Namespace<R>>,
+pub trait Registry {
+	type PackageId: Copy;
+	type Resource;
+
+	/// Returns the number of packages in the registry.
+	fn len(&self) -> usize;
+
+	/// Get the package with the given `id`.
+	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>>;
+
+	fn get_module(
+		&self,
+		id: ModuleRef<Self::PackageId>,
+	) -> Option<&Module<Self::PackageId, Self::Resource>> {
+		self.package(id.package)?.modules.get(id.index)
+	}
+
+	fn get_type(
+		&self,
+		id: TypeRef<Self::PackageId>,
+	) -> Option<&TypeDefinition<Self::PackageId, Self::Resource>> {
+		self.package(id.package)?.types.get(id.index)
+	}
+
+	fn get_function(
+		&self,
+		id: FunctionRef<Self::PackageId>,
+	) -> Option<&Function<Self::PackageId, Self::Resource>> {
+		self.package(id.package)?.functions.get(id.index)
+	}
 }
 
-impl<R> Registry<R> {
+pub trait RegistryMut: Registry {
+	fn insert_package(&mut self, package: Package<Self::PackageId, Self::Resource>);
+
+	fn package_mut(
+		&mut self,
+		id: Self::PackageId,
+	) -> Option<&mut Package<Self::PackageId, Self::Resource>>;
+
+	fn insert_module(
+		&mut self,
+		id: Self::PackageId,
+		m: Module<Self::PackageId, Self::Resource>,
+	) -> ModuleRef<Self::PackageId> {
+		let i = self.package_mut(id).unwrap().modules.insert(m);
+		ModuleRef::new(id, i)
+	}
+
+	fn insert_type(
+		&mut self,
+		id: Self::PackageId,
+		ty: impl Into<Type<Self::PackageId, Self::Resource>>,
+	) -> TypeRef<Self::PackageId> {
+		let i = self
+			.package_mut(id)
+			.unwrap()
+			.types
+			.insert(TypeDefinition::new(ty.into()));
+		TypeRef::new(id, i)
+	}
+
+	fn insert_function(
+		&mut self,
+		id: Self::PackageId,
+		f: Function<Self::PackageId, Self::Resource>,
+	) -> FunctionRef<Self::PackageId> {
+		let i = self.package_mut(id).unwrap().functions.insert(f);
+		FunctionRef::new(id, i)
+	}
+}
+
+impl<P: Copy + Eq + Hash, R> Registry for HashMap<P, Package<P, R>> {
+	type PackageId = P;
+	type Resource = R;
+
+	fn len(&self) -> usize {
+		self.len()
+	}
+
+	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>> {
+		self.get(&id)
+	}
+}
+
+impl<P: Copy + Eq + Hash, R> RegistryMut for HashMap<P, Package<P, R>> {
+	fn insert_package(&mut self, package: Package<Self::PackageId, Self::Resource>) {
+		self.insert(package.id, package);
+	}
+
+	fn package_mut(
+		&mut self,
+		id: Self::PackageId,
+	) -> Option<&mut Package<Self::PackageId, Self::Resource>> {
+		self.get_mut(&id)
+	}
+}
+
+pub struct EmptyRegistry<P, R>(PhantomData<(P, R)>);
+
+impl<P, R> Default for EmptyRegistry<P, R> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
+}
+
+impl<P, R> EmptyRegistry<P, R> {
 	pub fn new() -> Self {
 		Self::default()
 	}
+}
 
-	pub fn namespace_count(&self) -> u32 {
-		self.namespaces.len() as u32
+impl<P: Copy, R> Registry for EmptyRegistry<P, R> {
+	type PackageId = P;
+	type Resource = R;
+
+	fn len(&self) -> usize {
+		0
 	}
 
-	pub fn create_namespace(&mut self) -> u32 {
-		let i = self.namespace_count();
-		self.namespaces.push(Namespace::default());
-		i
-	}
-
-	pub fn get_namespace(&self, i: u32) -> Option<&Namespace<R>> {
-		self.namespaces.get(i as usize)
-	}
-
-	pub fn get_namespace_mut(&mut self, i: u32) -> Option<&mut Namespace<R>> {
-		self.namespaces.get_mut(i as usize)
-	}
-
-	/// Returns the type definition referenced by `type_ref`.
-	pub fn get_type(&self, type_ref: TypeRef) -> Option<&TypeDefinition<R>> {
-		self.get_namespace(type_ref.namespace)?
-			.get_type(type_ref.index)
-	}
-
-	/// Returns the function definition referenced by `function_ref`.
-	pub fn get_function(&self, function_ref: FunctionRef) -> Option<&Function<R>> {
-		self.get_namespace(function_ref.namespace)?
-			.get_function(function_ref.index)
-	}
-
-	pub fn get_module(&self, module_ref: ModuleRef) -> Option<&Module<R>> {
-		self.get_namespace(module_ref.namespace)?
-			.get_module(module_ref.index)
-	}
-
-	pub fn insert_type(&mut self, namespace: u32, type_: impl Into<Type<R>>) -> TypeRef {
-		let index = self
-			.get_namespace_mut(namespace)
-			.unwrap()
-			.insert_type(type_.into());
-		TypeRef::new(namespace, index)
-	}
-
-	pub fn insert_function(&mut self, namespace: u32, function: Function<R>) -> FunctionRef {
-		let index = self
-			.get_namespace_mut(namespace)
-			.unwrap()
-			.insert_function(function);
-		FunctionRef::new(namespace, index)
-	}
-
-	pub fn insert_module(&mut self, namespace: u32, module: Module<R>) -> ModuleRef {
-		let index = self
-			.get_namespace_mut(namespace)
-			.unwrap()
-			.insert_module(module);
-		ModuleRef::new(namespace, index)
-	}
-
-	pub fn add_prelude(&mut self) -> ModuleRef {
-		let ns = self.create_namespace();
-		let prelude = Module::prelude(self);
-		self.insert_module(ns, prelude)
+	fn package(&self, _id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>> {
+		None
 	}
 }
 
-#[derive(Debug, Educe)]
-#[educe(Default)]
-pub struct Namespace<R> {
-	/// Types.
-	types: Vec<TypeDefinition<R>>,
+impl<'a, T: Registry> Registry for &'a T {
+	type PackageId = T::PackageId;
 
-	/// Functions.
-	functions: Vec<Function<R>>,
+	type Resource = T::Resource;
 
-	/// Modules.
-	modules: Vec<Module<R>>,
-}
-
-impl<R> Namespace<R> {
-	pub fn get_type(&self, i: u32) -> Option<&TypeDefinition<R>> {
-		self.types.get(i as usize)
+	fn len(&self) -> usize {
+		T::len(*self)
 	}
 
-	pub fn get_function(&self, i: u32) -> Option<&Function<R>> {
-		self.functions.get(i as usize)
-	}
-
-	pub fn get_module(&self, i: u32) -> Option<&Module<R>> {
-		self.modules.get(i as usize)
-	}
-
-	pub fn insert_type(&mut self, type_: Type<R>) -> u32 {
-		let i = self.types.len() as u32;
-		self.types.push(TypeDefinition::new(type_));
-		i
-	}
-
-	pub fn insert_function(&mut self, function: Function<R>) -> u32 {
-		let i = self.functions.len() as u32;
-		self.functions.push(function);
-		i
-	}
-
-	pub fn insert_module(&mut self, module: Module<R>) -> u32 {
-		let i = self.modules.len() as u32;
-		self.modules.push(module);
-		i
+	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>> {
+		T::package(*self, id)
 	}
 }
 
-pub struct TypeAllocator<'a, R> {
-	registry: &'a mut Registry<R>,
-	namespace: u32,
-	reserved_types: Vec<Option<Type<R>>>,
-}
+impl<'a, T: Registry> Registry for &'a mut T {
+	type PackageId = T::PackageId;
 
-impl<'a, R> TypeAllocator<'a, R> {
-	pub fn new(registry: &'a mut Registry<R>, namespace: u32) -> Self {
-		Self {
-			registry,
-			namespace,
-			reserved_types: Vec::new(),
-		}
+	type Resource = T::Resource;
+
+	fn len(&self) -> usize {
+		T::len(*self)
 	}
 
-	pub fn reserve_type(&mut self) -> TypeRef {
-		let namespace = self.registry.get_namespace(self.namespace).unwrap();
-		let ty_ref = TypeRef::new(
-			self.namespace,
-			(namespace.types.len() + self.reserved_types.len()) as u32,
-		);
-		self.reserved_types.push(None);
-		ty_ref
-	}
-
-	pub fn define_type(&mut self, r: TypeRef, value: Type<R>) {
-		let namespace = self.registry.get_namespace(self.namespace).unwrap();
-		let i = r.index as usize - namespace.types.len();
-		self.reserved_types[i] = Some(value);
+	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>> {
+		T::package(*self, id)
 	}
 }
 
-impl<'a, R> Drop for TypeAllocator<'a, R> {
-	fn drop(&mut self) {
-		let namespace = self.registry.get_namespace_mut(self.namespace).unwrap();
-		for t in self.reserved_types.drain(..) {
-			match t {
-				Some(t) => {
-					namespace.insert_type(t);
-				}
-				None => return,
-			}
-		}
+pub struct RegistryUnion<A, B>(pub A, pub B);
+
+impl<A, B> Registry for RegistryUnion<A, B>
+where
+	A: Registry,
+	B: Registry<PackageId = A::PackageId, Resource = A::Resource>,
+{
+	type PackageId = A::PackageId;
+	type Resource = A::Resource;
+
+	fn len(&self) -> usize {
+		self.0.len() + self.1.len()
+	}
+
+	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>> {
+		self.0.package(id).or_else(|| self.1.package(id))
 	}
 }
