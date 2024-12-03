@@ -1,20 +1,27 @@
-use std::hash::Hash;
+use std::{cell::RefCell, hash::Hash, marker::PhantomData};
 
 use crate::{
 	build::{self, BuildEnvironment},
 	function::FunctionRef,
-	rdf::RdfContextMut,
+	rdf::{RdfContext, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
 	syntax,
 	ty::TypeDefinition,
 	Function, Module, ModuleRef, Registry, Type, TypeRef,
 };
 use educe::Educe;
+use serde::{ser::SerializeSeq, Deserialize, Serialize};
+use serde_seeded::{de::Seed, ser::Seeded, unseeded, DeserializeSeeded, SerializeSeeded};
 
 /// Package.
 ///
 /// A package is a collection of types, functions and modules.
-#[derive(Debug)]
+#[derive(Debug, SerializeSeeded, DeserializeSeeded)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord), bounds(P: Ord))
+)]
 pub struct Package<P, R = rdf_types::Term> {
+	#[seeded(with(unseeded))]
 	pub id: P,
 
 	/// Types.
@@ -52,6 +59,18 @@ impl<P, R> Package<P, R> {
 	pub fn set_root(&mut self, value: Module<P, R>) -> Module<P, R> {
 		std::mem::replace(self.root_mut(), value)
 	}
+
+	pub fn with_rdf<'a, C>(&self, rdf: &'a C) -> Seeded<'a, C, &Self> {
+		Seeded::new(rdf, self)
+	}
+}
+
+impl<P, R> VisitResources<R> for Package<P, R> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.types.visit_resources_ref_mut(f);
+		self.functions.visit_resources_ref_mut(f);
+		self.modules.visit_resources_ref_mut(f);
+	}
 }
 
 impl<P: Copy, R> Package<P, R> {
@@ -80,12 +99,12 @@ impl<P: Copy + Ord + Hash, R: Clone + Ord + Hash> Module<P, R> {
 		package_id: P,
 		text: &str,
 	) -> Result<Package<P, R>, CompileError<P>> {
-		use crate::build::{self, BuildContext, BuildingNamespace};
+		use crate::build::{self, BuildContext, BuildingPackage};
 		use crate::syntax::{self, Parse};
 
 		let ast = syntax::ast::Module::parse_str(text)?;
 
-		let mut namespace = BuildingNamespace::new(package_id);
+		let mut namespace = BuildingPackage::new(package_id);
 		let mut context = BuildContext::new(rdf, env);
 
 		let scope = build::Scope::new();
@@ -120,6 +139,14 @@ impl<T> Collection<T> {
 		self.0.len()
 	}
 
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+
+	pub fn iter(&self) -> std::slice::Iter<T> {
+		self.0.iter()
+	}
+
 	pub fn get(&self, i: u32) -> Option<&T> {
 		self.0.get(i as usize)
 	}
@@ -128,6 +155,9 @@ impl<T> Collection<T> {
 		self.0.get_mut(i as usize)
 	}
 
+	/// Inserts a new item into the collection and returns its index.
+	///
+	/// The returned index is guaranteed to be equal to `self.len()`.
 	pub fn insert(&mut self, value: impl Into<T>) -> u32 {
 		let i = self.0.len() as u32;
 		self.0.push(value.into());
@@ -142,6 +172,41 @@ impl<T> Collection<T> {
 	}
 }
 
+impl<'a, T> IntoIterator for &'a Collection<T> {
+	type IntoIter = std::slice::Iter<'a, T>;
+	type Item = &'a T;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter()
+	}
+}
+
+impl<R, T: VisitResources<R>> VisitResources<R> for Collection<T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		for item in self {
+			item.visit_resources_ref_mut(f);
+		}
+	}
+}
+
+impl<T: SerializeSeeded<Q>, Q> SerializeSeeded<Q> for Collection<T> {
+	fn serialize_seeded<S>(&self, seed: &Q, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		self.0.serialize_seeded(seed, serializer)
+	}
+}
+
+impl<'de, T: DeserializeSeeded<'de, Q>, Q> DeserializeSeeded<'de, Q> for Collection<T> {
+	fn deserialize_seeded<D>(seed: &Q, deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		Vec::deserialize_seeded(seed, deserializer).map(Self)
+	}
+}
+
 #[derive(Debug)]
 pub struct NonEmptyCollection<T>(Vec<T>);
 
@@ -150,6 +215,11 @@ impl<T> NonEmptyCollection<T> {
 		Self(vec![first])
 	}
 
+	pub fn iter(&self) -> std::slice::Iter<T> {
+		self.0.iter()
+	}
+
+	#[allow(clippy::len_without_is_empty)]
 	pub fn len(&self) -> usize {
 		self.0.len()
 	}
@@ -170,6 +240,9 @@ impl<T> NonEmptyCollection<T> {
 		self.0.get_mut(i as usize)
 	}
 
+	/// Inserts a new item into the collection and returns its index.
+	///
+	/// The returned index is guaranteed to be equal to `self.len()`.
 	pub fn insert(&mut self, value: impl Into<T>) -> u32 {
 		let i = self.0.len() as u32;
 		self.0.push(value.into());
@@ -181,6 +254,47 @@ impl<T> NonEmptyCollection<T> {
 			Some(t) => Ok(std::mem::replace(t, value)),
 			None => Err(value),
 		}
+	}
+}
+
+impl<'a, T> IntoIterator for &'a NonEmptyCollection<T> {
+	type IntoIter = std::slice::Iter<'a, T>;
+	type Item = &'a T;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter()
+	}
+}
+
+impl<R, T: VisitResources<R>> VisitResources<R> for NonEmptyCollection<T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		for item in self {
+			item.visit_resources_ref_mut(f);
+		}
+	}
+}
+
+impl<T: SerializeSeeded<Q>, Q> SerializeSeeded<Q> for NonEmptyCollection<T> {
+	fn serialize_seeded<S>(&self, index: &Q, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		self.0.serialize_seeded(index, serializer)
+	}
+}
+
+impl<'de, T: DeserializeSeeded<'de, Q>, Q> DeserializeSeeded<'de, Q> for NonEmptyCollection<T> {
+	fn deserialize_seeded<D>(index: &Q, deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		let inner = Vec::deserialize_seeded(index, deserializer)?;
+
+		if inner.is_empty() {
+			return Err(serde::de::Error::custom("empty collection"));
+		}
+
+		Ok(Self(inner))
 	}
 }
 
@@ -215,5 +329,69 @@ impl<P: Copy + PartialEq, R> BuildEnvironment for Package<P, R> {
 			Some(_) => None,
 			None => Some(self.id),
 		}
+	}
+}
+
+impl<C, P, R> SerializeSeeded<C> for Package<P, R>
+where
+	C: RdfContext<Resource = R>,
+	P: Serialize,
+	R: Clone + Eq + Hash,
+{
+	fn serialize_seeded<S>(&self, rdf: &C, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		let mut index = ResourceForwardIndex::new();
+		self.visit_resources(|r| {
+			index.insert(r.clone());
+		});
+
+		let mut s = serializer.serialize_seq(Some(2))?;
+
+		s.serialize_element(&Seeded::new(rdf, &index))?;
+		s.serialize_element(&Seeded::new(&index, self))?;
+
+		s.end()
+	}
+}
+
+impl<'de, C, P, R> DeserializeSeeded<'de, RefCell<C>> for Package<P, R>
+where
+	C: RdfContextMut<Resource = R>,
+	P: Ord + Deserialize<'de>,
+	R: Clone + Ord,
+{
+	fn deserialize_seeded<D>(rdf: &RefCell<C>, deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		struct Visitor<'seed, C, P, R>(&'seed RefCell<C>, PhantomData<(P, R)>);
+
+		impl<'de, 'seed, C, P, R> serde::de::Visitor<'de> for Visitor<'seed, C, P, R>
+		where
+			C: RdfContextMut<Resource = R>,
+			P: Ord + Deserialize<'de>,
+			R: Clone + Ord,
+		{
+			type Value = Package<P, R>;
+
+			fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+				write!(formatter, "a pair")
+			}
+
+			fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+			where
+				A: serde::de::SeqAccess<'de>,
+			{
+				let index: ResourceBackwardIndex<R> = seq
+					.next_element_seed(Seed::new(self.0))?
+					.ok_or_else(|| ::serde::de::Error::custom("missing resource index"))?;
+				seq.next_element_seed(Seed::new(&index))?
+					.ok_or_else(|| ::serde::de::Error::custom("missing package"))
+			}
+		}
+
+		deserializer.deserialize_seq(Visitor(rdf, PhantomData))
 	}
 }

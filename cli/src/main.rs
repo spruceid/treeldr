@@ -6,6 +6,7 @@ use codespan_reporting::{
 		termcolor::{ColorChoice, StandardStream},
 	},
 };
+use serde::{Deserialize, Serialize};
 use std::{
 	fs,
 	io::{self, BufReader},
@@ -76,7 +77,7 @@ enum Command {
 	},
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 enum PackageId {
 	Prelude,
 	Target,
@@ -202,7 +203,12 @@ impl Command {
 	fn run(self, rdf: &mut Rdf, registry: &Registry) -> Result<(), Error> {
 		match self {
 			Self::Compile => {
-				// println!("{}", serde_json::to_string_pretty(&registry.with_rdf(rdf)).unwrap());
+				let package = registry.target.as_ref().unwrap();
+				let config = ron::ser::PrettyConfig::new();
+				println!(
+					"{}",
+					ron::ser::to_string_pretty(&package.with_rdf(rdf), config).unwrap()
+				);
 				Ok(())
 			}
 			Self::Hydrate {

@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-	Build, BuildContext, BuildEnvironment, BuildingNamespace, Error, ExprScope, Scope,
+	Build, BuildContext, BuildEnvironment, BuildingPackage, Error, ExprScope, Scope,
 	TypeVariableRef,
 };
 
@@ -25,7 +25,7 @@ impl<'ast, P> TypeDefinition<'ast, P> {
 	pub fn build<E, D>(
 		&self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 	) -> Result<TypeVariableRef, Error<P>>
 	where
 		E: BuildEnvironment<PackageId = P>,
@@ -57,7 +57,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -72,7 +72,7 @@ impl ast::TypeExpr {
 	pub fn build_with_attributes<'ast, E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, E::PackageId>,
+		namespace: &BuildingPackage<'ast, E::PackageId>,
 		scope: &Scope<E::PackageId>,
 		attributes: Attributes<E::Resource>,
 	) -> Result<TypeVariableRef, Error<E::PackageId>>
@@ -128,7 +128,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -142,7 +142,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 				.collect::<Result<_, _>>()?,
 			self.rest
 				.as_ref()
-				.map(|r| r.type_.build(context, namespace, scope))
+				.map(|r| r.r#type.build(context, namespace, scope))
 				.transpose()?,
 		))
 	}
@@ -154,7 +154,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -186,7 +186,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -200,7 +200,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 				.map(|v| {
 					let variant = ty::r#enum::Variant::new(
 						v.metadata.build(context, namespace, scope)?,
-						v.type_.build(context, namespace, scope)?,
+						v.r#type.build(context, namespace, scope)?,
 					);
 
 					Ok((v.ident.as_str().to_owned(), variant))

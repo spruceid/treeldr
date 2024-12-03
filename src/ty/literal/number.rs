@@ -1,6 +1,8 @@
 use core::fmt;
 use std::cmp::Ordering;
 
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
+
 use crate::{
 	display::DisplaySignature,
 	value::{
@@ -14,7 +16,20 @@ use crate::{
 	},
 };
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug,
+	Default,
+	Clone,
+	Copy,
+	PartialEq,
+	Eq,
+	PartialOrd,
+	Ord,
+	Hash,
+	SerializeSeeded,
+	DeserializeSeeded,
+)]
+#[seeded(ser(params(Q), seed(Q)), de(params(Q), seed(Q)))]
 pub enum NumberDomain {
 	/// Rational numbers (ℚ).
 	#[default]
@@ -30,7 +45,10 @@ impl NumberDomain {
 	}
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(ser(params(Q), seed(Q)), de(params(Q), seed(Q)))]
 pub enum MinBound {
 	#[default]
 	Unbounded,
@@ -52,7 +70,10 @@ impl MinBound {
 	}
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(ser(params(Q), seed(Q)), de(params(Q), seed(Q)))]
 pub enum MaxBound {
 	Included(value::Number),
 	Excluded(value::Number),
@@ -81,7 +102,10 @@ impl MaxBound {
 	}
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(ser(params(Q), seed(Q)), de(params(Q), seed(Q)))]
 pub struct Number {
 	/// Number domain.
 	///
@@ -93,12 +117,14 @@ pub struct Number {
 	///
 	/// NOTE: this is not public because it is normalized differently depending
 	/// on the `domain` value.
+	#[seeded(default, skip_serializing_if(MinBound::is_unbounded))]
 	min: MinBound,
 
 	/// Max bound.
 	///
 	/// NOTE: this is not public because it is normalized differently depending
 	/// on the `domain` value.
+	#[seeded(default, skip_serializing_if(MaxBound::is_unbounded))]
 	max: MaxBound,
 }
 

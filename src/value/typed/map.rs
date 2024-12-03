@@ -1,8 +1,10 @@
-use std::{cmp::Ordering, fmt, hash::Hash};
+use std::{cmp::Ordering, fmt, hash::Hash, marker::PhantomData};
 
 use raw_btree::RawBTree;
+use serde::ser::SerializeMap;
+use serde_seeded::{de::Seed, ser::Seeded, DeserializeSeeded, SerializeSeeded};
 
-use crate::{value::ValueLike, TypeRef};
+use crate::{rdf::VisitResources, value::ValueLike, TypeRef};
 
 use super::TypedValue;
 
@@ -58,6 +60,15 @@ impl<P, R: Ord, V, T> TypedValueMap<P, R, V, T> {
 	// pub fn pattern_matching<'a>(&'a self, pattern: &'a TypedPattern<R>) -> impl 'a + Iterator<Item = (&TypedValue<P, R, T>, &V)> {
 	// 	self.iter().filter(|(key, _)| pattern.matches(key))
 	// }
+}
+
+impl<P, R, T, V: VisitResources<R>> VisitResources<R> for TypedValueMap<P, R, V, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		for (key, value) in self {
+			key.visit_resources_ref_mut(f);
+			value.visit_resources_ref_mut(f)
+		}
+	}
 }
 
 impl<P: PartialEq, R: Ord, V, T: PartialEq> TypedValueMap<P, R, V, T> {
@@ -196,5 +207,74 @@ impl<P, R, V, T> Entry<P, R, V, T> {
 
 	fn into_pair(self) -> (TypedValue<P, R, T>, V) {
 		(self.key, self.value)
+	}
+}
+
+impl<Q, P, R, V, T> SerializeSeeded<Q> for TypedValueMap<P, R, V, T>
+where
+	TypedValue<P, R, T>: SerializeSeeded<Q>,
+	V: SerializeSeeded<Q>,
+{
+	fn serialize_seeded<S>(&self, seed: &Q, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		let mut map = serializer.serialize_map(Some(self.len()))?;
+
+		for (key, value) in self {
+			map.serialize_entry(&Seeded::new(seed, key), &Seeded::new(seed, value))?
+		}
+
+		map.end()
+	}
+}
+
+impl<'de, Q, P, R, V, T> DeserializeSeeded<'de, Q> for TypedValueMap<P, R, V, T>
+where
+	R: Ord,
+	TypedValue<P, R, T>: DeserializeSeeded<'de, Q>,
+	V: DeserializeSeeded<'de, Q>,
+{
+	fn deserialize_seeded<D>(seed: &Q, deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		struct Visitor<'seed, Q, P, R, V, T> {
+			seed: &'seed Q,
+			p: PhantomData<(P, R, V, T)>,
+		}
+
+		impl<'de, 'seed, Q, P, R, V, T> serde::de::Visitor<'de> for Visitor<'seed, Q, P, R, V, T>
+		where
+			R: Ord,
+			TypedValue<P, R, T>: DeserializeSeeded<'de, Q>,
+			V: DeserializeSeeded<'de, Q>,
+		{
+			type Value = TypedValueMap<P, R, V, T>;
+
+			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+				write!(formatter, "a typed value map")
+			}
+
+			fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+			where
+				A: serde::de::MapAccess<'de>,
+			{
+				let mut result = TypedValueMap::new();
+
+				while let Some((key, value)) =
+					map.next_entry_seed(Seed::new(self.seed), Seed::new(self.seed))?
+				{
+					result.insert(key, value);
+				}
+
+				Ok(result)
+			}
+		}
+
+		deserializer.deserialize_map(Visitor {
+			seed,
+			p: PhantomData,
+		})
 	}
 }

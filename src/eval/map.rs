@@ -18,7 +18,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Map<P, R> {
 		let mut result = BTreeMap::new();
 
 		for (key, value) in &self.entries {
-			let field = type_.fields.get(&key.type_).unwrap();
+			let field = type_.fields.get(&key.r#type).unwrap();
 
 			match value.eval(registry, rdf, dataset, scope) {
 				Ok(value) => {

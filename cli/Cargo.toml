@@ -17,6 +17,6 @@ log.workspace = true
 thiserror.workspace = true
 treeldr = { workspace = true, features = ["json-syntax"] }
 json-syntax.workspace = true
+serde = { workspace = true, features = ["derive"] }
 serde_cbor.workspace = true
-
-serde_json = "*"
+ron = "0.8.1"

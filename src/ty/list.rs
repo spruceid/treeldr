@@ -1,14 +1,28 @@
 use core::fmt;
 use std::{cmp::Ordering, hash::Hash, marker::PhantomData};
 
+use serde::{Deserialize, Serialize};
+use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
+
 use crate::{display::DisplaySignature, Registry, Value};
 
 use super::{refine_cmp, TypeRef};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(params(Q), seed(Q), override_bounds(P:, T: Serialize)),
+	de(params(Q), seed(Q), override_bounds(P:, T: Deserialize<'de>))
+)]
 pub struct List<P, T = TypeRef<P>> {
+	#[seeded(with(unseeded))]
 	pub prefix: Vec<T>,
+
+	#[seeded(with(unseeded))]
 	pub rest: Option<T>,
+
+	#[seeded(skip)]
 	p: PhantomData<P>,
 }
 

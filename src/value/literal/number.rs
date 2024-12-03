@@ -3,11 +3,10 @@ use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use serde::{Deserialize, Serialize};
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 use std::{str::FromStr, sync::LazyLock};
 
 pub use xsd_types::NoDecimalRepresentation;
-
-use crate::rdf::serde::{DeserializeIndexed, SerializeIndexed};
 
 static TEN: LazyLock<BigInt> = LazyLock::new(|| 10u32.into());
 
@@ -370,12 +369,8 @@ impl fmt::Display for Number {
 	}
 }
 
-impl<R> SerializeIndexed<R> for Number {
-	fn serialize_indexed<S>(
-		&self,
-		_index: &crate::rdf::ResourceForwardIndex<R>,
-		serializer: S,
-	) -> Result<S::Ok, S::Error>
+impl<Q> SerializeSeeded<Q> for Number {
+	fn serialize_seeded<S>(&self, _seed: &Q, serializer: S) -> Result<S::Ok, S::Error>
 	where
 		S: serde::Serializer,
 	{
@@ -383,11 +378,8 @@ impl<R> SerializeIndexed<R> for Number {
 	}
 }
 
-impl<'de, R> DeserializeIndexed<'de, R> for Number {
-	fn deserialize_indexed<D>(
-		_index: &crate::rdf::ResourceBackwardIndex<R>,
-		deserializer: D,
-	) -> Result<Self, D::Error>
+impl<'de, Q> DeserializeSeeded<'de, Q> for Number {
+	fn deserialize_seeded<D>(_seed: &Q, deserializer: D) -> Result<Self, D::Error>
 	where
 		D: serde::Deserializer<'de>,
 	{

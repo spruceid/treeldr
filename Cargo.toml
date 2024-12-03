@@ -27,8 +27,7 @@ serde_cbor = ["cbor", "dep:serde_cbor"]
 
 [workspace]
 members = [
-	"cli",
-	"macros"
+	"cli"
 	# "layouts",
 	# "generators/rust/treeldr-rs",
 	# "generators/rust/treeldr-rs-macros",
@@ -51,19 +50,20 @@ educe = "0.4.23"
 thiserror = "1.0.64"
 json-syntax = "0.12.5"
 nquads-syntax = "0.19.0"
+serde = "1.0.210"
 serde_json = "1.0.128"
 serde_cbor = "0.11.2"
 locspan = "0.8.2"
 
 [dependencies]
-treeldr-macros = { path = "macros" }
 educe.workspace = true
 iref = { version = "3.2.2", features = ["macros", "serde"] }
 num-bigint = { version = "0.4.6", features = ["serde"] }
 num-rational = { version = "0.4.2", features = ["serde"] }
 num-traits = "0.2.19"
 rdf-types = { version = "0.22.4", features = ["serde"] }
-serde = { version = "1.0.210", features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+serde-seeded = { path = "/home/timothee/Projets/utils/serde-seeded" }
 xsd-types = "0.9.6"
 thiserror.workspace = true
 locspan.workspace = true
@@ -75,7 +75,7 @@ serde_json = { workspace = true, optional = true }
 serde_cbor = { workspace = true, optional = true }
 
 ll1 = { git = "https://github.com/timothee-haudebourg/ll1-rs.git", rev = "aeb9c32" }
-iregex = "0.1"
+iregex = { version = "0.1.2", features = ["serde"] }
 iregex-syntax = "0.1"
 disjoint-collections = "0.1"
 scc-trait = "1.0"

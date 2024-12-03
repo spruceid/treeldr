@@ -1,64 +1,43 @@
 use core::fmt;
-use std::{cmp::Ordering, fmt::Write, ops::Bound, sync::OnceLock};
+use std::{cmp::Ordering, fmt::Write};
 
-use iregex::automata::{AnyRange, Automaton, RangeSet};
+use iregex::automata::{any_char, Automaton};
+use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 
 use crate::{display::DisplaySignature, utils::Ignored};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct TextStringPrecomputedData {
+#[derive(Debug, Clone)]
+struct PrecomputedData {
+	singleton: Option<String>,
 	is_any: bool,
 	regex_string: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TextString {
-	automaton: iregex::automata::NFA<u32>,
-	singleton: Ignored<OnceLock<Option<String>>>,
-	precomputed_data: TextStringPrecomputedData,
-}
-
-impl Default for TextString {
-	fn default() -> Self {
-		let mut any_char = RangeSet::new();
-		any_char.insert(AnyRange::new(
-			Bound::Included('\0'),
-			Bound::Included('\u{D7FF}'),
-		));
-		any_char.insert(AnyRange::new(
-			Bound::Included('\u{E000}'),
-			Bound::Included('\u{10FFFF}'),
-		));
-
-		let mut automaton = iregex::automata::NFA::new();
-		automaton.add_initial_state(0);
-		automaton.add(0, Some(any_char), 0);
-		automaton.add_final_state(0);
-
-		Self {
-			automaton,
-			singleton: Ignored(OnceLock::new()),
-			precomputed_data: TextStringPrecomputedData {
-				is_any: true,
-				regex_string: ".*".to_owned(),
-			},
+impl PrecomputedData {
+	pub fn new(automaton: &iregex::automata::NFA<u32>) -> Self {
+		match automaton.to_singleton() {
+			Some(singleton) => Self::new_singleton(singleton.into_iter().collect()),
+			None => {
+				if automaton.is_universal(any_char()) {
+					Self::new_any()
+				} else {
+					todo!()
+				}
+			}
 		}
 	}
-}
 
-impl TextString {
-	pub fn new() -> Self {
-		Self::default()
+	pub fn new_any() -> Self {
+		Self {
+			singleton: None,
+			is_any: true,
+			regex_string: ".*".to_owned(),
+		}
 	}
 
-	pub fn singleton(value: String) -> Self {
-		let automaton = iregex::automata::NFA::singleton(value.chars(), |i| match i {
-			Some(i) => i as u32 + 1,
-			None => 0,
-		});
-
+	pub fn new_singleton(singleton: String) -> Self {
 		let mut regex_string = String::new();
-		for c in value.chars() {
+		for c in singleton.chars() {
 			match c {
 				'(' => regex_string.push_str("\\("),
 				')' => regex_string.push_str("\\)"),
@@ -74,16 +53,52 @@ impl TextString {
 			}
 		}
 
-		let singleton = OnceLock::new();
-		let _ = singleton.set(Some(value));
+		Self {
+			singleton: Some(singleton),
+			is_any: false,
+			regex_string,
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded)]
+#[seeded(ser(params(Q), seed(Q)))]
+pub struct TextString {
+	#[seeded(with(unseeded))]
+	automaton: iregex::automata::NFA<u32>,
+
+	#[seeded(skip)]
+	precomputed_data: Ignored<PrecomputedData>,
+}
+
+impl Default for TextString {
+	fn default() -> Self {
+		let mut automaton = iregex::automata::NFA::new();
+		automaton.add_initial_state(0);
+		automaton.add(0, Some(any_char()), 0);
+		automaton.add_final_state(0);
 
 		Self {
 			automaton,
-			singleton: Ignored(singleton),
-			precomputed_data: TextStringPrecomputedData {
-				is_any: false,
-				regex_string,
-			},
+			precomputed_data: Ignored(PrecomputedData::new_any()),
+		}
+	}
+}
+
+impl TextString {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	pub fn singleton(value: String) -> Self {
+		let automaton = iregex::automata::NFA::singleton(value.chars(), |i| match i {
+			Some(i) => i as u32 + 1,
+			None => 0,
+		});
+
+		Self {
+			automaton,
+			precomputed_data: Ignored(PrecomputedData::new_singleton(value)),
 		}
 	}
 
@@ -92,13 +107,7 @@ impl TextString {
 	}
 
 	pub fn as_singleton(&self) -> Option<&str> {
-		self.singleton
-			.get_or_init(|| {
-				self.automaton
-					.to_singleton()
-					.map(|chars| chars.into_iter().collect())
-			})
-			.as_deref()
+		self.precomputed_data.singleton.as_deref()
 	}
 
 	pub fn automaton(&self) -> &iregex::automata::NFA<u32> {
@@ -106,8 +115,8 @@ impl TextString {
 	}
 
 	pub fn set_automaton(&mut self, aut: iregex::automata::NFA<u32>) {
+		self.precomputed_data = Ignored(PrecomputedData::new(&aut));
 		self.automaton = aut;
-		self.singleton = Ignored(OnceLock::new())
 	}
 
 	pub fn subtype_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -185,5 +194,28 @@ impl<P, R> DisplaySignature<P, R> for TextString {
 				}
 			}
 		}
+	}
+}
+
+impl<'de, Q> DeserializeSeeded<'de, Q> for TextString {
+	fn deserialize_seeded<D>(seed: &Q, deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		#[derive(DeserializeSeeded)]
+		#[seeded(de(params(Q), seed(Q)))]
+		pub struct Inner {
+			#[seeded(with(unseeded))]
+			automaton: iregex::automata::NFA<u32>,
+		}
+
+		Inner::deserialize_seeded(seed, deserializer).map(|inner| {
+			let precomputed_data = PrecomputedData::new(&inner.automaton);
+
+			Self {
+				automaton: inner.automaton,
+				precomputed_data: Ignored(precomputed_data),
+			}
+		})
 	}
 }

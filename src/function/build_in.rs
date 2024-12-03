@@ -7,6 +7,7 @@ use rdf_types::{
 	vocabulary::{IriVocabulary, LiteralVocabulary},
 	LiteralTypeRef, Quad, RDF_LANG_STRING,
 };
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 use xsd_types::{
 	ParseXsd, XSD_BOOLEAN, XSD_DECIMAL, XSD_INTEGER, XSD_NON_NEGATIVE_INTEGER, XSD_STRING,
 };
@@ -20,7 +21,10 @@ use crate::{
 
 use super::Signature;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(ser(params(Q), seed(Q)), de(params(Q), seed(Q)))]
 pub enum BuiltInFunction {
 	Get,
 	IriOf,

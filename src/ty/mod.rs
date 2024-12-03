@@ -1,4 +1,8 @@
-use crate::{display::DisplaySignature, Attributes, Registry, Value};
+use crate::{
+	display::DisplaySignature,
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	Attributes, Registry, Value,
+};
 use core::fmt;
 use std::{cmp::Ordering, collections::BTreeMap, fmt::Debug, hash::Hash};
 
@@ -27,8 +31,16 @@ pub use build_in::*;
 
 mod allocator;
 pub use allocator::TypeAllocator;
+use serde::{Deserialize, Serialize};
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>), bounds(T: Ord))
+)]
 pub struct Type<P, R, T = TypeRef<P>> {
 	pub attributes: Attributes<R>,
 	pub desc: TypeDesc<P, R, T>,
@@ -84,7 +96,20 @@ impl<R: Clone + PartialEq> Attributes<R> {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+impl<P, R, T> VisitResources<R> for Type<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.attributes.visit_resources_ref_mut(f);
+		self.desc.visit_resources_ref_mut(f)
+	}
+}
+
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>), bounds(T: Ord))
+)]
 pub enum TypeDesc<P, R, T = TypeRef<P>> {
 	/// RDF resource.
 	Resource(Resource<R>),
@@ -143,14 +168,27 @@ impl<P, R, T> TypeDesc<P, R, T> {
 			Self::Map(ty) => {
 				for (key, field) in &ty.fields {
 					f(key, true);
-					f(&field.type_, false);
+					f(&field.r#type, false);
 				}
 			}
 			Self::Enum(ty) => {
 				for variant in ty.variants.values() {
-					f(&variant.type_, false);
+					f(&variant.r#type, false);
 				}
 			}
+		}
+	}
+}
+
+impl<P, R, T> VisitResources<R> for TypeDesc<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		match self {
+			Self::Resource(r) => r.visit_resources_ref_mut(f),
+			Self::Literal(_) => (),
+			Self::List(_) => (),
+			Self::Map(m) => m.visit_resources_ref_mut(f),
+			Self::Enum(e) => e.visit_resources_ref_mut(f),
+			Self::Any => (),
 		}
 	}
 }
@@ -251,7 +289,7 @@ impl<P: Copy + Ord + Hash, R: Clone + Ord, T> TypeDesc<P, R, T> {
 										key,
 										Field::new(
 											attributes,
-											unifier.unify(&a_field.type_, &b_field.type_),
+											unifier.unify(&a_field.r#type, &b_field.r#type),
 											a_field.required,
 										),
 									);
@@ -279,7 +317,7 @@ impl<P: Copy + Ord + Hash, R: Clone + Ord, T> TypeDesc<P, R, T> {
 									key.clone(),
 									Variant::new(
 										a_variant.attributes.unify_with(&b_variant.attributes)?,
-										unifier.unify(&a_variant.type_, &b_variant.type_),
+										unifier.unify(&a_variant.r#type, &b_variant.r#type),
 									),
 								);
 							}

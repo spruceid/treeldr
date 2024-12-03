@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-	Build, BuildContext, BuildEnvironment, BuildSignature, BuildingNamespace, Error, ExprScope,
+	Build, BuildContext, BuildEnvironment, BuildSignature, BuildingPackage, Error, ExprScope,
 	Scope, TypeValue, TypeVariableRef, TypeVariables,
 };
 
@@ -27,7 +27,7 @@ impl<'ast, P: Copy + PartialEq> BuildModule<'ast, P> {
 	pub fn get<'a, R>(
 		&'a self,
 		registry: &'a impl Registry<PackageId = P, Resource = R>,
-		namespace: &'a BuildingNamespace<'ast, P>,
+		namespace: &'a BuildingPackage<'ast, P>,
 		path: &ItemPath,
 	) -> Option<ScopeItemRef<'a, P>> {
 		match path.split_first() {
@@ -54,7 +54,7 @@ impl<'ast, P: Copy> BuildModule<'ast, P> {
 	pub fn build<E, D>(
 		&self,
 		context: &mut BuildContext<E, D>,
-		namespace: &BuildingNamespace<E::PackageId>,
+		namespace: &BuildingPackage<E::PackageId>,
 	) -> Result<Module<P, E::Resource, TypeVariableRef>, Error<P>>
 	where
 		E: BuildEnvironment<PackageId = P>,
@@ -189,7 +189,7 @@ impl<'a, P: Copy + PartialEq> ScopeItemRef<'a, P> {
 	pub fn get<R>(
 		&self,
 		registry: &'a impl Registry<PackageId = P, Resource = R>,
-		namespace: &'a BuildingNamespace<P>,
+		namespace: &'a BuildingPackage<P>,
 		path: &ItemPath,
 	) -> Option<Self> {
 		match path.split_first() {
@@ -203,7 +203,7 @@ impl<'a, P: Copy + PartialEq> ScopeItemRef<'a, P> {
 	pub fn get_by_segment<R>(
 		&self,
 		registry: &'a impl Registry<PackageId = P, Resource = R>,
-		namespace: &'a BuildingNamespace<P>,
+		namespace: &'a BuildingPackage<P>,
 		segment: &ItemPathSegment,
 	) -> Option<Self> {
 		match self {
@@ -223,7 +223,7 @@ impl<'a, P: Copy + PartialEq> ScopeItemRef<'a, P> {
 	pub fn get_by_name<R>(
 		&self,
 		registry: &'a impl Registry<PackageId = P, Resource = R>,
-		namespace: &'a BuildingNamespace<P>,
+		namespace: &'a BuildingPackage<P>,
 		name: &str,
 	) -> Option<Self> {
 		match self {
@@ -256,7 +256,7 @@ impl<'ast> ast::Module {
 	pub fn declare<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &mut BuildingNamespace<'ast, E::PackageId>,
+		namespace: &mut BuildingPackage<'ast, E::PackageId>,
 		scope: &Scope<E::PackageId>,
 		metadata: Option<&'ast ast::Metadata>,
 	) -> Result<ModuleRef<E::PackageId>, Error<E::PackageId>>

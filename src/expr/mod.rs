@@ -1,4 +1,6 @@
 mod bound;
+use std::hash::Hash;
+
 pub use bound::*;
 
 mod list;
@@ -12,13 +14,27 @@ pub use r#match::*;
 
 mod call;
 pub use call::*;
+use serde::{Deserialize, Serialize};
+use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 
-use crate::{Literal, TypeRef};
+use crate::{
+	rdf::{
+		serde::serde_indexed_resource, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
+	},
+	Literal, TypeRef,
+};
 
 /// Expression.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub struct Expr<P, R, T = TypeRef<P>> {
-	pub type_: T,
+	#[seeded(with(unseeded))]
+	pub r#type: T,
 
 	pub inner: InnerExpr<P, R, T>,
 }
@@ -30,14 +46,26 @@ impl<P, R: Ord, T> Expr<P, R, T> {
 
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Expr<P, R, U> {
 		Expr {
-			type_: f(self.type_),
+			r#type: f(self.r#type),
 			inner: self.inner.map_types_ref_mut(f),
 		}
 	}
 }
 
+impl<P, R, T> VisitResources<R> for Expr<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.inner.visit_resources_ref_mut(f)
+	}
+}
+
 /// Inner expression.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub enum InnerExpr<P, R, T = TypeRef<P>> {
 	/// Let binding.
 	Let(Bindings<P, R, T>, Box<Expr<P, R, T>>),
@@ -49,7 +77,7 @@ pub enum InnerExpr<P, R, T = TypeRef<P>> {
 	/// ```
 	Var(u32),
 
-	Resource(R),
+	Resource(#[seeded(with(serde_indexed_resource))] R),
 
 	/// Literal value.
 	///
@@ -107,6 +135,24 @@ impl<P, R: Ord, T> InnerExpr<P, R, T> {
 			Self::Map(m) => InnerExpr::Map(m.map_types_ref_mut(f)),
 			Self::Match(m) => InnerExpr::Match(m.map_types_ref_mut(f)),
 			Self::Call(m) => InnerExpr::Call(m.map_types_ref_mut(f)),
+		}
+	}
+}
+
+impl<P, R, T> VisitResources<R> for InnerExpr<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		match self {
+			Self::Let(b, e) => {
+				b.visit_resources_ref_mut(f);
+				e.visit_resources_ref_mut(f)
+			}
+			Self::Var(_) => (),
+			Self::Resource(r) => f(r),
+			Self::Literal(_) => (),
+			Self::List(l) => l.visit_resources_ref_mut(f),
+			Self::Map(m) => m.visit_resources_ref_mut(f),
+			Self::Match(m) => m.visit_resources_ref_mut(f),
+			Self::Call(m) => m.visit_resources_ref_mut(f),
 		}
 	}
 }

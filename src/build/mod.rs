@@ -181,7 +181,7 @@ impl<'a, E: BuildEnvironment, D> BuildContext<'a, E, D> {
 	}
 }
 
-pub struct BuildingNamespace<'ast, P> {
+pub struct BuildingPackage<'ast, P> {
 	/// Namespace index.
 	id: P,
 
@@ -195,7 +195,7 @@ pub struct BuildingNamespace<'ast, P> {
 	modules: Vec<Option<BuildModule<'ast, P>>>,
 }
 
-impl<'ast, P> BuildingNamespace<'ast, P> {
+impl<'ast, P> BuildingPackage<'ast, P> {
 	pub fn new(id: P) -> Self {
 		Self {
 			id,
@@ -261,7 +261,7 @@ impl<'ast, P> BuildingNamespace<'ast, P> {
 	}
 }
 
-impl<'ast, P: Copy + Ord + Hash> BuildingNamespace<'ast, P> {
+impl<'ast, P: Copy + Ord + Hash> BuildingPackage<'ast, P> {
 	/// Declare a function.
 	pub fn declare_function(
 		&mut self,
@@ -285,7 +285,7 @@ impl<'ast, P: Copy + Ord + Hash> BuildingNamespace<'ast, P> {
 	pub fn build<E, D>(
 		&self,
 		context: &mut BuildContext<E, D>,
-	) -> Result<UnresolvedNamespace<E::PackageId, E::Resource>, Error<P>>
+	) -> Result<ProtoPackage<E::PackageId, E::Resource>, Error<P>>
 	where
 		E: BuildEnvironment<PackageId = P>,
 		E::Resource: Clone + Ord + Hash,
@@ -295,7 +295,7 @@ impl<'ast, P: Copy + Ord + Hash> BuildingNamespace<'ast, P> {
 			item.build(context, self)?;
 		}
 
-		Ok(UnresolvedNamespace {
+		Ok(ProtoPackage {
 			id: self.id,
 			functions: self
 				.functions
@@ -311,7 +311,7 @@ impl<'ast, P: Copy + Ord + Hash> BuildingNamespace<'ast, P> {
 	}
 }
 
-pub struct UnresolvedNamespace<P, R> {
+pub struct ProtoPackage<P, R> {
 	id: P,
 
 	functions: Vec<Function<P, R, TypeVariableRef>>,
@@ -319,7 +319,7 @@ pub struct UnresolvedNamespace<P, R> {
 	modules: Vec<Module<P, R, TypeVariableRef>>,
 }
 
-impl<P, R> UnresolvedNamespace<P, R>
+impl<P, R> ProtoPackage<P, R>
 where
 	P: Copy + Ord + Hash,
 	R: Clone + Ord,
@@ -341,8 +341,14 @@ where
 			package.insert_function(f.map_types(|x| map[&x]));
 		}
 
-		for m in self.modules {
-			package.insert_module(m.map_types(|x| map[&x]));
+		for (i, m) in self.modules.into_iter().enumerate() {
+			let m = m.map_types(|x| map[&x]);
+
+			if i == 0 {
+				package.set_root(m);
+			} else {
+				package.insert_module(m);
+			}
 		}
 
 		Ok(package)
@@ -355,7 +361,7 @@ pub trait Declare<'ast, P, R> {
 	fn declare<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &mut BuildingNamespace<'ast, P>,
+		namespace: &mut BuildingPackage<'ast, P>,
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: BuildEnvironment<PackageId = P, Resource = R>,
@@ -368,7 +374,7 @@ pub trait Build<'ast, P, R> {
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -396,7 +402,7 @@ impl<'ast, P, R> Build<'ast, P, R> for ast::DocComment {
 	fn build<E, D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, E, D>,
-		_namespace: &BuildingNamespace<'ast, P>,
+		_namespace: &BuildingPackage<'ast, P>,
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -413,7 +419,7 @@ impl<'ast, P, R: Clone + Ord> Build<'ast, P, R> for ast::Metadata {
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where

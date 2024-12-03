@@ -11,11 +11,15 @@ mod byte_string;
 pub use byte_string::ByteString;
 
 mod text_string;
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 pub use text_string::TextString;
 
 use crate::{display::DisplaySignature, Literal};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(ser(params(Q), seed(Q)), de(params(Q), seed(Q)))]
 pub enum LiteralType {
 	Unit,
 	Boolean(Boolean),

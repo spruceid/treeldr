@@ -15,23 +15,21 @@ use crate::{
 };
 
 use super::{
-	Build, BuildContext, BuildEnvironment, BuildingNamespace, Error, Scope, TypeValue,
+	Build, BuildContext, BuildEnvironment, BuildingPackage, Error, Scope, TypeValue,
 	TypeVariableRef,
 };
+
+type BuiltBindings<'a, P, R> = (expr::Bindings<P, R, TypeVariableRef>, Scope<'a, P>);
+
+type BuiltBindingsResult<'a, P, R> = Result<BuiltBindings<'a, P, R>, Error<P>>;
 
 impl ast::Bindings {
 	fn build<'ast, 'a, E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, E::PackageId>,
+		namespace: &BuildingPackage<'ast, E::PackageId>,
 		scope: &'a Scope<E::PackageId>,
-	) -> Result<
-		(
-			expr::Bindings<E::PackageId, E::Resource, TypeVariableRef>,
-			Scope<'a, E::PackageId>,
-		),
-		Error<E::PackageId>,
-	>
+	) -> BuiltBindingsResult<'a, E::PackageId, E::Resource>
 	where
 		E: BuildEnvironment,
 		E::PackageId: Copy + Ord + Hash,
@@ -43,7 +41,7 @@ impl ast::Bindings {
 
 		for binding in &self.variables {
 			let b = binding.build(context, namespace, scope)?;
-			sub_scope.expr.insert(&binding.ident, b.type_);
+			sub_scope.expr.insert(&binding.ident, b.r#type);
 			intro.push(b);
 		}
 
@@ -56,13 +54,15 @@ impl ast::Bindings {
 	}
 }
 
+type BuiltBindingResult<P, R> = Result<Binding<P, R, TypeVariableRef>, Error<P>>;
+
 impl ast::Binding {
 	fn build<'ast, E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, E::PackageId>,
+		namespace: &BuildingPackage<'ast, E::PackageId>,
 		scope: &Scope<E::PackageId>,
-	) -> Result<Binding<E::PackageId, E::Resource, TypeVariableRef>, Error<E::PackageId>>
+	) -> BuiltBindingResult<E::PackageId, E::Resource>
 	where
 		E: BuildEnvironment,
 		E::PackageId: Copy + Ord + Hash,
@@ -76,13 +76,16 @@ impl ast::Binding {
 			.transpose()?;
 
 		let type_ = match &assignment {
-			Some(a) => a.type_,
+			Some(a) => a.r#type,
 			None => context
 				.type_variables
 				.fresh(Type::resource(), Some(self.span())),
 		};
 
-		Ok(Binding { type_, assignment })
+		Ok(Binding {
+			r#type: type_,
+			assignment,
+		})
 	}
 }
 
@@ -92,7 +95,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord> Build<'ast, P, R> for ast::RdfDa
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -113,7 +116,7 @@ impl ast::RdfStatement {
 	fn build<E, D>(
 		&self,
 		context: &mut BuildContext<E, D>,
-		namespace: &BuildingNamespace<E::PackageId>,
+		namespace: &BuildingPackage<E::PackageId>,
 		scope: &Scope<E::PackageId>,
 		result: &mut DatasetPattern<E::Resource>,
 	) -> Result<(), Error<E::PackageId>>
@@ -137,7 +140,7 @@ impl ast::RdfPredicateObjects {
 	fn build<E, D>(
 		&self,
 		context: &mut BuildContext<E, D>,
-		namespace: &BuildingNamespace<E::PackageId>,
+		namespace: &BuildingPackage<E::PackageId>,
 		scope: &Scope<E::PackageId>,
 		result: &mut DatasetPattern<E::Resource>,
 		subject: &TermPattern<E::Resource>,
@@ -170,7 +173,7 @@ impl ast::RdfTerm {
 	fn build<E, D>(
 		&self,
 		context: &mut BuildContext<E, D>,
-		namespace: &BuildingNamespace<E::PackageId>,
+		namespace: &BuildingPackage<E::PackageId>,
 		scope: &Scope<E::PackageId>,
 	) -> Result<E::Resource, Error<E::PackageId>>
 	where
@@ -193,7 +196,7 @@ impl ast::RdfPattern {
 	fn build<E, D>(
 		&self,
 		context: &mut BuildContext<E, D>,
-		namespace: &BuildingNamespace<E::PackageId>,
+		namespace: &BuildingPackage<E::PackageId>,
 		scope: &Scope<E::PackageId>,
 	) -> Result<TermPattern<E::Resource>, Error<E::PackageId>>
 	where
@@ -244,7 +247,7 @@ impl ast::RdfLiteral {
 	fn build<E, D>(
 		&self,
 		context: &mut BuildContext<E, D>,
-		namespace: &BuildingNamespace<E::PackageId>,
+		namespace: &BuildingPackage<E::PackageId>,
 		scope: &Scope<E::PackageId>,
 	) -> Result<E::Resource, Error<E::PackageId>>
 	where
@@ -289,7 +292,7 @@ impl ast::Iri {
 	fn build<E, D>(
 		&self,
 		context: &BuildContext<E, D>,
-		namespace: &BuildingNamespace<E::PackageId>,
+		namespace: &BuildingPackage<E::PackageId>,
 		scope: &Scope<E::PackageId>,
 	) -> Result<IriBuf, Error<E::PackageId>>
 	where
@@ -307,7 +310,7 @@ impl ast::CompactIri {
 	fn build<E, D>(
 		&self,
 		context: &BuildContext<E, D>,
-		namespace: &BuildingNamespace<E::PackageId>,
+		namespace: &BuildingPackage<E::PackageId>,
 		scope: &Scope<E::PackageId>,
 	) -> Result<IriBuf, Error<E::PackageId>>
 	where
@@ -335,7 +338,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -347,7 +350,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 				let (bindings, sub_scope) = bindings.build(context, namespace, scope)?;
 				let inner = inner.build(context, namespace, &sub_scope)?;
 				Ok(Expr {
-					type_: inner.type_,
+					r#type: inner.r#type,
 					inner: InnerExpr::Let(bindings, Box::new(inner)),
 				})
 			}
@@ -359,7 +362,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 					.ok_or_else(|| Error::NotAVariable(ident.clone()))?;
 				let type_ = scope.expr.type_of(x).unwrap();
 				Ok(Expr {
-					type_,
+					r#type: type_,
 					inner: InnerExpr::Var(x),
 				})
 			}
@@ -374,7 +377,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 					Some(self.span()),
 				);
 				Ok(Expr {
-					type_,
+					r#type: type_,
 					inner: InnerExpr::Resource(resource),
 				})
 			}
@@ -385,7 +388,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 					Some(self.span()),
 				);
 				Ok(Expr {
-					type_,
+					r#type: type_,
 					inner: InnerExpr::Literal(e),
 				})
 			}
@@ -396,7 +399,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 					Some(self.span()),
 				);
 				Ok(Expr {
-					type_,
+					r#type: type_,
 					inner: InnerExpr::List(e),
 				})
 			}
@@ -407,7 +410,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 					Some(self.span()),
 				);
 				Ok(Expr {
-					type_,
+					r#type: type_,
 					inner: InnerExpr::Map(e),
 				})
 			}
@@ -418,14 +421,14 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 					Some(self.span()),
 				);
 				Ok(Expr {
-					type_,
+					r#type: type_,
 					inner: InnerExpr::Match(e),
 				})
 			}
 			Self::Call(expr) => {
 				let (e, type_) = expr.build(context, namespace, scope)?;
 				Ok(Expr {
-					type_,
+					r#type: type_,
 					inner: InnerExpr::Call(e),
 				})
 			}
@@ -443,7 +446,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -457,7 +460,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 
 				for item in list {
 					let e = item.build(context, namespace, scope)?;
-					types.push(e.type_);
+					types.push(e.r#type);
 					items.push(e);
 				}
 
@@ -478,7 +481,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 						let body = Box::new(match mapping {
 							Some(m) => m.expr.build(context, namespace, &sub_scope)?,
 							None => Expr {
-								type_: item.type_,
+								r#type: item.r#type,
 								inner: InnerExpr::Var(sub_scope.expr.offset()),
 							},
 						});
@@ -486,9 +489,9 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 						let resource_ty = context
 							.type_variables
 							.fresh(TypeValue::Pattern(Type::resource()), None);
-						context.type_variables.assert_eq(item.type_, resource_ty);
+						context.type_variables.assert_eq(item.r#type, resource_ty);
 
-						let ty = ty::List::uniform(body.type_);
+						let ty = ty::List::uniform(body.r#type);
 						let e = expr::List::Implicit(expr::ImplicitList::Unordered(
 							expr::UnorderedList { bound, body },
 						));
@@ -510,7 +513,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 						let body = Box::new(match mapping {
 							Some(m) => m.expr.build(context, namespace, &sub_scope)?,
 							None => Expr {
-								type_: item.type_,
+								r#type: item.r#type,
 								inner: InnerExpr::Var(sub_scope.expr.offset()),
 							},
 						});
@@ -518,9 +521,9 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 						let resource_ty = context
 							.type_variables
 							.fresh(TypeValue::Pattern(Type::resource()), None);
-						context.type_variables.assert_eq(item.type_, resource_ty);
+						context.type_variables.assert_eq(item.r#type, resource_ty);
 
-						let ty = ty::List::uniform(body.type_);
+						let ty = ty::List::uniform(body.r#type);
 						let e =
 							expr::List::Implicit(expr::ImplicitList::Ordered(expr::OrderedList {
 								components: ListComponents {
@@ -551,7 +554,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -566,10 +569,10 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 			let value = entry.value.build(context, namespace, scope)?;
 
 			fields.insert(
-				key.type_,
+				key.r#type,
 				ty::map::Field::new(
 					entry.metadata.build(context, namespace, scope)?,
-					value.type_,
+					value.r#type,
 					entry.optional.is_none(),
 				),
 			);
@@ -602,7 +605,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -648,7 +651,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 		};
 
 		Ok(TypedValue {
-			type_,
+			r#type: type_,
 			desc: TypedValueDesc::Constant(inner),
 		})
 	}
@@ -672,7 +675,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -684,7 +687,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 
 		for item in &self.items {
 			let e = item.build(context, namespace, scope)?;
-			types.push(e.type_);
+			types.push(e.r#type);
 			items.push(e);
 		}
 
@@ -710,7 +713,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -725,8 +728,8 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 			let value = entry.value.build(context, namespace, scope)?;
 
 			fields.insert(
-				key.type_,
-				ty::map::Field::new(Attributes::new(), value.type_, true),
+				key.r#type,
+				ty::map::Field::new(Attributes::new(), value.r#type, true),
 			);
 
 			entries.insert(key, value);
@@ -747,7 +750,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -767,7 +770,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 			let value = case.value.build(context, namespace, scope)?;
 			let variant = ty::r#enum::Variant::new(
 				case.metadata.build(context, namespace, scope)?,
-				value.type_,
+				value.r#type,
 			);
 			t.variants.insert(case.name.as_str().to_owned(), variant);
 			e.cases.insert(case.name.as_str().to_owned(), value);
@@ -784,7 +787,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -821,7 +824,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 				let const_scope = scope.begin();
 				let a = ast_args.next().unwrap();
 				let e = a.build(context, namespace, &const_scope)?;
-				context.type_variables.assert_subtype_of(e.type_, a_ty);
+				context.type_variables.assert_subtype_of(e.r#type, a_ty);
 				Ok(e)
 			})
 			.collect::<Result<_, _>>()?;
@@ -832,7 +835,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 			.map(|&a_ty| {
 				let a = ast_args.next().unwrap();
 				let e = a.build(context, namespace, scope)?;
-				context.type_variables.assert_subtype_of(e.type_, a_ty);
+				context.type_variables.assert_subtype_of(e.r#type, a_ty);
 				Ok(e)
 			})
 			.collect::<Result<_, _>>()?;
@@ -870,7 +873,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::LiteralExpr {
 	fn build<E, D>(
 		&'ast self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -905,7 +908,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::True {
 	fn build<E, D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, E, D>,
-		_namespace: &BuildingNamespace<'ast, P>,
+		_namespace: &BuildingPackage<'ast, P>,
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -921,7 +924,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::False {
 	fn build<E, D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, E, D>,
-		_namespace: &BuildingNamespace<'ast, P>,
+		_namespace: &BuildingPackage<'ast, P>,
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -945,7 +948,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::Number {
 	fn build<E, D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, E, D>,
-		_namespace: &BuildingNamespace<'ast, P>,
+		_namespace: &BuildingPackage<'ast, P>,
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -968,7 +971,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::TextString {
 	fn build<E, D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, E, D>,
-		_namespace: &BuildingNamespace<'ast, P>,
+		_namespace: &BuildingPackage<'ast, P>,
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
@@ -991,7 +994,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::RdfString {
 	fn build<E, D>(
 		&'ast self,
 		_context: &mut BuildContext<'_, E, D>,
-		_namespace: &BuildingNamespace<'ast, P>,
+		_namespace: &BuildingPackage<'ast, P>,
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where

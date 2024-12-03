@@ -188,7 +188,7 @@ pub struct PrefixDefinition {
 
 #[derive(Debug, ll1::Parse)]
 pub struct TypeDefinition {
-	pub type_: Type,
+	pub r#type: Type,
 	pub ident: Ident,
 	pub eq: Equal,
 	pub value: TypeExpr,
@@ -201,7 +201,7 @@ pub struct FunctionDefinition {
 	pub ident: Ident,
 	pub args: Vec<ArgDef>,
 	pub paren_r: ParenthesisR,
-	pub type_: Option<TypeAnnotation>,
+	pub r#type: Option<TypeAnnotation>,
 	pub where_bound: Option<WhereBound>,
 	pub eq: Equal,
 	pub body: Expr,
@@ -444,7 +444,7 @@ pub struct ListTypeExpr {
 #[derive(Debug, ll1::Parse)]
 pub struct ListTypeExprRest {
 	pub ellipsis: Ellipsis,
-	pub type_: Box<TypeExpr>,
+	pub r#type: Box<TypeExpr>,
 }
 
 #[derive(Debug, ll1::Parse)]
@@ -476,7 +476,7 @@ pub struct Variant {
 	pub metadata: Metadata,
 	pub ident: Ident,
 	pub comma: Comma,
-	pub type_: TypeExpr,
+	pub r#type: TypeExpr,
 }
 
 #[derive(Debug, ll1::Parse)]

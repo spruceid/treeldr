@@ -1,13 +1,19 @@
 use core::fmt;
 use std::{cmp::Ordering, hash::Hash, ops::Deref, sync::OnceLock};
 
-use crate::{display::DisplaySignature, Registry, Value};
+use crate::{
+	display::DisplaySignature,
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	Registry, Value,
+};
 use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 
 use super::Type;
 
 /// Type reference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TypeRef<P> {
 	pub package: P,
 	pub index: u32,
@@ -70,8 +76,16 @@ impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for TypeRef<P>
 }
 
 /// Type definition.
+#[derive(SerializeSeeded, DeserializeSeeded)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord), bounds(P: Ord)),
+	transparent
+)]
 pub struct TypeDefinition<P, R> {
 	value: Type<P, R>,
+
+	#[seeded(skip)]
 	subtype_cmp: OnceLock<DashMap<TypeRef<P>, Option<Ordering>>>,
 }
 
@@ -110,6 +124,12 @@ impl<P: Copy + Ord + Hash, R: Ord> TypeDefinition<P, R> {
 	) -> bool {
 		self.subtype_cmp(registry, other_ref)
 			.is_some_and(Ordering::is_le)
+	}
+}
+
+impl<P, R> VisitResources<R> for TypeDefinition<P, R> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.value.visit_resources_ref_mut(f)
 	}
 }
 

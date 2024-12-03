@@ -34,7 +34,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Match<P, R> {
 	) -> Result<(), EvalError<R>> {
 		for name in &self.order {
 			let expr = self.cases.get(name).unwrap();
-			if expr.type_.contains(registry, output) {
+			if expr.r#type.contains(registry, output) {
 				return expr.eval_inverse(registry, rdf, dataset, scope, output);
 			}
 		}

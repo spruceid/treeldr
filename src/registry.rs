@@ -11,6 +11,10 @@ pub trait Registry {
 	/// Returns the number of packages in the registry.
 	fn len(&self) -> usize;
 
+	fn is_empty(&self) -> bool {
+		self.len() == 0
+	}
+
 	/// Get the package with the given `id`.
 	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>>;
 

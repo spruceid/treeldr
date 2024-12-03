@@ -1,10 +1,22 @@
-use std::collections::BTreeMap;
-
 use educe::Educe;
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
+use std::collections::BTreeMap;
+use std::hash::Hash;
 
-use crate::Value;
+use crate::{
+	rdf::{
+		serde::serde_indexed_resource, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
+	},
+	Value,
+};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Educe)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Educe, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(R: Eq + Hash)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(R: Clone + Ord))
+)]
 #[educe(Default)]
 pub struct Attributes<R> {
 	map: BTreeMap<Attribute<R>, Vec<Value<R>>>,
@@ -33,6 +45,12 @@ impl<R: Ord> Attributes<R> {
 		values: impl IntoIterator<Item = Value<R>>,
 	) {
 		self.map.entry(attr).or_default().extend(values)
+	}
+}
+
+impl<R> VisitResources<R> for Attributes<R> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.map.visit_resources_ref_mut(f)
 	}
 }
 
@@ -93,8 +111,23 @@ where
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(R: Eq + Hash)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(R: Clone + Ord))
+)]
 pub enum Attribute<R> {
 	Documentation,
-	Custom(R),
+	Custom(#[seeded(with(serde_indexed_resource))] R),
+}
+
+impl<R> VisitResources<R> for Attribute<R> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		match self {
+			Self::Documentation => (),
+			Self::Custom(r) => f(r),
+		}
+	}
 }

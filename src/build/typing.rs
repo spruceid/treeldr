@@ -474,7 +474,7 @@ impl<P: Ord, R: Clone> TypePattern<P, R> {
 							realize_var(key),
 							ty::map::Field::new(
 								field.attributes.clone(),
-								realize_var(&field.type_),
+								realize_var(&field.r#type),
 								field.required,
 							),
 						)
@@ -487,7 +487,7 @@ impl<P: Ord, R: Clone> TypePattern<P, R> {
 					.iter()
 					.map(|(name, v)| {
 						let variant =
-							ty::r#enum::Variant::new(v.attributes.clone(), realize_var(&v.type_));
+							ty::r#enum::Variant::new(v.attributes.clone(), realize_var(&v.r#type));
 						(name.clone(), variant)
 					})
 					.collect(),

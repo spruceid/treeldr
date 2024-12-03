@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{syntax::ast, ItemPath, ItemPathSegment, ModuleRef};
 
-use super::{BuildContext, BuildEnvironment, BuildingNamespace, ScopeItemRef, TypeVariableRef};
+use super::{BuildContext, BuildEnvironment, BuildingPackage, ScopeItemRef, TypeVariableRef};
 
 pub struct Scope<'a, P> {
 	pub module: Option<ModuleRef<P>>,
@@ -30,7 +30,7 @@ impl<'a, P: Copy + PartialEq> Scope<'a, P> {
 	pub fn get<'c, E, D>(
 		&self,
 		context: &'c BuildContext<'c, E, D>,
-		namespace: &'c BuildingNamespace<P>,
+		namespace: &'c BuildingPackage<P>,
 		path: &ItemPath,
 	) -> Option<ScopeItemRef<'c, P>>
 	where
@@ -53,7 +53,7 @@ impl<'a, P: Copy + PartialEq> Scope<'a, P> {
 	pub fn get_by_segment<'c, E, D>(
 		&self,
 		context: &'c BuildContext<'c, E, D>,
-		namespace: &'c BuildingNamespace<P>,
+		namespace: &'c BuildingPackage<P>,
 		segment: &ItemPathSegment,
 	) -> Option<ScopeItemRef<'c, P>>
 	where
@@ -84,7 +84,7 @@ impl<'a, P: Copy + PartialEq> Scope<'a, P> {
 	pub fn get_by_name<'c, E, D>(
 		&self,
 		context: &'c BuildContext<'c, E, D>,
-		namespace: &'c BuildingNamespace<P>,
+		namespace: &'c BuildingPackage<P>,
 		name: &str,
 	) -> Option<ScopeItemRef<'c, P>>
 	where

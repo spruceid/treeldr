@@ -1,8 +1,23 @@
-use crate::{function::FunctionRef, TypeRef};
+use std::hash::Hash;
+
+use serde::{Deserialize, Serialize};
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
+
+use crate::{
+	function::FunctionRef,
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	TypeRef,
+};
 
 use super::Expr;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub struct Call<P, R, T = TypeRef<P>> {
 	pub function: FunctionRef<P>,
 	pub const_args: Vec<Expr<P, R, T>>,
@@ -28,5 +43,12 @@ impl<P, R: Ord, T> Call<P, R, T> {
 				.map(|e| e.map_types_ref_mut(f))
 				.collect(),
 		}
+	}
+}
+
+impl<P, R, T> VisitResources<R> for Call<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.const_args.visit_resources_ref_mut(f);
+		self.args.visit_resources_ref_mut(f)
 	}
 }

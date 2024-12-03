@@ -1,9 +1,14 @@
 use core::fmt;
 use std::cmp::Ordering;
 
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
+
 use crate::display::DisplaySignature;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(ser(params(Q), seed(Q)), de(params(Q), seed(Q)))]
 pub struct ByteString;
 
 impl ByteString {

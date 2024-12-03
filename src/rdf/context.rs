@@ -10,8 +10,9 @@ use rdf_types::{
 	vocabulary::{ExtractFromVocabulary, IriVocabulary, LiteralVocabulary},
 	Interpretation, InterpretationMut, Literal, LiteralType, Term, Vocabulary, VocabularyMut,
 };
+use serde_seeded::de::Seed;
 
-use super::{serde::RdfSeed, TryUnifyInterpretation, UnifyLiteralInterpretation};
+use super::{TryUnifyInterpretation, UnifyLiteralInterpretation};
 
 pub trait RdfContext {
 	type Resource;
@@ -58,12 +59,12 @@ pub trait RdfContextMut:
 
 	fn insert_iri(&mut self, iri: Cow<Iri>) -> Self::Resource;
 
-	fn insert_literal(&mut self, value: String, type_: Cow<Iri>) -> Self::Resource;
+	fn insert_literal(&mut self, value: String, r#type: Cow<Iri>) -> Self::Resource;
 
 	fn insert_lang_string(&mut self, value: String, lang: LangTagBuf) -> Self::Resource;
 
-	fn deserialize_seed<T>(&mut self) -> RdfSeed<Self, T> {
-		RdfSeed::new(self)
+	fn deserialize_seed<T>(&mut self) -> Seed<Self, T> {
+		Seed::new(self)
 	}
 }
 
@@ -136,8 +137,8 @@ where
 		self.interpretation.interpret_iri(iri)
 	}
 
-	fn insert_literal(&mut self, value: String, type_: Cow<Iri>) -> R {
-		let type_ = match type_ {
+	fn insert_literal(&mut self, value: String, r#type: Cow<Iri>) -> R {
+		let type_ = match r#type {
 			Cow::Owned(iri) => self.vocabulary.insert_owned(iri),
 			Cow::Borrowed(iri) => self.vocabulary.insert(iri),
 		};

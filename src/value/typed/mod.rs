@@ -1,25 +1,40 @@
 use super::{Destruct, ListLike, Literal, MapLike, Value, ValueLike};
-use crate::TypeRef;
+use crate::{
+	rdf::{
+		serde::serde_indexed_resource, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
+	},
+	TypeRef,
+};
+use std::hash::Hash;
 
 pub mod map;
 pub use map::TypedValueMap;
+use serde::{Deserialize, Serialize};
+use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub struct TypedValue<P, R = rdf_types::Term, T = TypeRef<P>> {
-	pub type_: T,
+	#[seeded(with(unseeded))]
+	pub r#type: T,
 	pub desc: TypedValueDesc<P, R, T>,
 }
 
 impl<P, R, T> TypedValue<P, R, T> {
-	pub fn new(type_: T, desc: impl Into<TypedValueDesc<P, R, T>>) -> Self {
+	pub fn new(r#type: T, desc: impl Into<TypedValueDesc<P, R, T>>) -> Self {
 		Self {
-			type_,
+			r#type,
 			desc: desc.into(),
 		}
 	}
 
-	pub fn new_resource(type_: T, resource: R) -> Self {
-		Self::new(type_, TypedValueInnerDesc::Resource(resource))
+	pub fn new_resource(r#type: T, resource: R) -> Self {
+		Self::new(r#type, TypedValueInnerDesc::Resource(resource))
 	}
 
 	pub fn inner_description(&self) -> &TypedValueInnerDesc<P, R, T> {
@@ -63,9 +78,15 @@ impl<P, R: Ord, T> TypedValue<P, R, T> {
 
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> TypedValue<P, R, U> {
 		TypedValue {
-			type_: f(self.type_),
+			r#type: f(self.r#type),
 			desc: self.desc.map_types_ref_mut(f),
 		}
+	}
+}
+
+impl<P, R, T> VisitResources<R> for TypedValue<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.desc.visit_resources_ref_mut(f)
 	}
 }
 
@@ -111,7 +132,13 @@ impl<P, R, T> MapLike for TypedValueMap<P, R, TypedValue<P, R, T>, T> {
 }
 
 /// Typed tree value description.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub enum TypedValueDesc<P, R = rdf_types::Term, T = TypeRef<P>> {
 	Variant(String, Box<TypedValue<P, R, T>>),
 	Constant(TypedValueInnerDesc<P, R, T>),
@@ -173,6 +200,15 @@ impl<P, R: Ord, T> TypedValueDesc<P, R, T> {
 	}
 }
 
+impl<P, R, T> VisitResources<R> for TypedValueDesc<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		match self {
+			Self::Variant(_, e) => e.visit_resources_ref_mut(f),
+			Self::Constant(desc) => desc.visit_resources_ref_mut(f),
+		}
+	}
+}
+
 impl<P, R, T> From<TypedValueInnerDesc<P, R, T>> for TypedValueDesc<P, R, T> {
 	fn from(value: TypedValueInnerDesc<P, R, T>) -> Self {
 		Self::Constant(value)
@@ -182,10 +218,16 @@ impl<P, R, T> From<TypedValueInnerDesc<P, R, T>> for TypedValueDesc<P, R, T> {
 pub type TypedMap<P, R = rdf_types::Term, T = TypeRef<P>> =
 	TypedValueMap<P, R, TypedValue<P, R, T>, T>;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub enum TypedValueInnerDesc<P, R = rdf_types::Term, T = TypeRef<P>> {
 	/// RDF resource.
-	Resource(R),
+	Resource(#[seeded(with(serde_indexed_resource))] R),
 
 	/// Literal value.
 	Literal(Literal),
@@ -273,6 +315,17 @@ impl<P, R: Ord, T> TypedValueInnerDesc<P, R, T> {
 					.map(|(k, v)| (k.map_types_ref_mut(f), v.map_types_ref_mut(f)))
 					.collect(),
 			),
+		}
+	}
+}
+
+impl<P, R, T> VisitResources<R> for TypedValueInnerDesc<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		match self {
+			Self::Resource(r) => f(r),
+			Self::Literal(_) => (),
+			Self::List(l) => l.visit_resources_ref_mut(f),
+			Self::Map(m) => m.visit_resources_ref_mut(f),
 		}
 	}
 }

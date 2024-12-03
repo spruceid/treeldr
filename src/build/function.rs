@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-	Build, BuildContext, BuildEnvironment, BuildingNamespace, Error, ExprScope, Scope,
+	Build, BuildContext, BuildEnvironment, BuildingPackage, Error, ExprScope, Scope,
 	TypeVariableRef,
 };
 
@@ -25,7 +25,7 @@ impl<'ast, P: Copy + Ord + Hash> FunctionDefinition<'ast, P> {
 	pub fn build<E, D>(
 		&self,
 		context: &mut BuildContext<E, D>,
-		namespace: &BuildingNamespace<'ast, P>,
+		namespace: &BuildingPackage<'ast, P>,
 	) -> Result<Function<P, E::Resource, TypeVariableRef>, Error<P>>
 	where
 		E: BuildEnvironment<PackageId = P>,
@@ -65,9 +65,9 @@ impl<'ast, P: Copy + Ord + Hash> FunctionDefinition<'ast, P> {
 
 		let body = self.value.body.build(context, namespace, &sub_scope)?;
 
-		let return_type = match &self.value.type_ {
+		let return_type = match &self.value.r#type {
 			Some(ty) => ty.expr.build(context, namespace, &scope)?,
-			None => body.type_,
+			None => body.r#type,
 		};
 
 		for (&a, &b) in args.iter().zip(&self.signature.args) {

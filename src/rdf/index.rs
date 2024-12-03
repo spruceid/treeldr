@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, hash::Hash};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, hash::Hash};
 
 use iref::{Iri, IriBuf};
 use rdf_types::{
@@ -7,32 +7,26 @@ use rdf_types::{
 	Term,
 };
 use serde::{Deserialize, Serialize};
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 
-use super::{
-	serde::{DeserializeRdf, ResourceBackwardIndexSeed, SerializeRdf, WithRdf},
-	RdfContext, RdfContextMut,
-};
+use super::{RdfContext, RdfContextMut};
 
 #[derive(Debug)]
-pub struct ResourceForwardIndex<'a, R>(HashMap<&'a R, u32>);
+pub struct ResourceForwardIndex<R>(HashMap<R, u32>);
 
-impl<'a, R> Default for ResourceForwardIndex<'a, R> {
+impl<R> Default for ResourceForwardIndex<R> {
 	fn default() -> Self {
 		Self(HashMap::new())
 	}
 }
 
-impl<'a, R> ResourceForwardIndex<'a, R> {
+impl<R> ResourceForwardIndex<R> {
 	pub fn new() -> Self {
 		Self::default()
 	}
-
-	pub fn with_rdf<'b, C>(&'b self, rdf: &'b C) -> WithRdf<'b, Self, C> {
-		WithRdf { value: self, rdf }
-	}
 }
 
-impl<'a, R> ResourceForwardIndex<'a, R>
+impl<R> ResourceForwardIndex<R>
 where
 	R: Eq + Hash,
 {
@@ -40,24 +34,23 @@ where
 		self.0.get(r).copied()
 	}
 
-	pub fn insert(&mut self, resource: &'a R) -> u32 {
+	pub fn insert(&mut self, resource: R) -> u32 {
 		let i = self.0.len() as u32;
 		*self.0.entry(resource).or_insert(i)
 	}
 }
 
-impl<'a, R> SerializeRdf<R> for ResourceForwardIndex<'a, R> {
-	fn serialize_rdf<S>(
-		&self,
-		rdf: &impl RdfContext<Resource = R>,
-		serializer: S,
-	) -> Result<S::Ok, S::Error>
+impl<C, R> SerializeSeeded<C> for ResourceForwardIndex<R>
+where
+	C: RdfContext<Resource = R>,
+{
+	fn serialize_seeded<S>(&self, rdf: &C, serializer: S) -> Result<S::Ok, S::Error>
 	where
 		S: serde::Serializer,
 	{
 		let mut entries: Vec<(rdf_types::Term<&Iri, _>, u32)> = Vec::new();
 
-		for (&key, &value) in &self.0 {
+		for (key, &value) in &self.0 {
 			for i in rdf.interpretation().iris_of(key) {
 				if let Some(iri) = rdf.vocabulary().iri(i) {
 					entries.push((Term::Id(iri), value));
@@ -98,21 +91,22 @@ impl<R> ResourceBackwardIndex<R> {
 		self.0.insert(i, resource);
 	}
 
-	pub fn deserialize_seed<T>(&self) -> ResourceBackwardIndexSeed<R, T> {
-		ResourceBackwardIndexSeed::new(self)
-	}
+	// pub fn deserialize_seed<T>(&self) -> ResourceBackwardIndexSeed<R, T> {
+	// 	ResourceBackwardIndexSeed::new(self)
+	// }
 }
 
-impl<'de, R> DeserializeRdf<'de, R> for ResourceBackwardIndex<R> {
-	fn deserialize_rdf<D>(
-		rdf: &mut (impl ?Sized + RdfContextMut<Resource = R>),
-		deserializer: D,
-	) -> Result<Self, D::Error>
+impl<'de, C, R> DeserializeSeeded<'de, RefCell<C>> for ResourceBackwardIndex<R>
+where
+	C: RdfContextMut<Resource = R>,
+{
+	fn deserialize_seeded<D>(rdf: &RefCell<C>, deserializer: D) -> Result<Self, D::Error>
 	where
 		D: serde::Deserializer<'de>,
 	{
 		let entries: Vec<(Term<IriBuf, rdf_types::Literal>, u32)> = Vec::deserialize(deserializer)?;
 
+		let mut rdf = rdf.borrow_mut();
 		let mut result = Self::new();
 		for (key, value) in entries {
 			let resource = match key {

@@ -3,15 +3,22 @@ use std::{collections::BTreeMap, fmt::Write, hash::Hash, ops::Deref};
 
 use educe::Educe;
 use iref::{Iri, IriBuf};
+use serde::{Deserialize, Serialize};
+use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 
 use crate::{
 	display::{self, DisplaySignature},
 	function::FunctionRef,
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
 	Attributes, Registry, TypeRef,
 };
 
-#[derive(Debug, Clone, Educe)]
+#[derive(Debug, Clone, Educe, SerializeSeeded, DeserializeSeeded)]
 #[educe(Default)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>), bounds(T: Ord))
+)]
 pub struct Module<P, R = rdf_types::Term, T = TypeRef<P>> {
 	pub parent: Option<ModuleRef<P>>,
 	pub attributes: Attributes<R>,
@@ -79,6 +86,12 @@ impl<P: Copy, R> Module<P, R> {
 	}
 }
 
+impl<P, R, T> VisitResources<R> for Module<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.attributes.visit_resources_ref_mut(f)
+	}
+}
+
 impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Module<P, R> {
 	fn fmt_signature(
 		&self,
@@ -125,8 +138,15 @@ impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Module<P, 
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(params(Q), seed(Q), override_bounds(P: Serialize)),
+	de(params(Q), seed(Q), override_bounds(P: Deserialize<'de>))
+)]
 pub struct ModuleRef<P> {
+	#[seeded(with(unseeded))]
 	pub package: P,
 	pub index: u32,
 }
@@ -186,10 +206,14 @@ impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for ModuleRef<
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, SerializeSeeded, DeserializeSeeded)]
+#[seeded(
+	ser(params(Q), seed(Q), override_bounds(P: Serialize, T: Serialize)),
+	de(params(Q), seed(Q), override_bounds(P: Deserialize<'de>, T: Deserialize<'de>))
+)]
 pub enum Item<P, T = TypeRef<P>> {
-	Prefix(IriBuf),
-	Type(T),
+	Prefix(#[seeded(with(unseeded))] IriBuf),
+	Type(#[seeded(with(unseeded))] T),
 	Function(FunctionRef<P>),
 	Module(ModuleRef<P>),
 }

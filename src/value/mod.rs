@@ -9,32 +9,34 @@ pub use literal::*;
 
 mod typed;
 use ll1::Parse;
-use treeldr_macros::{DeserializeIndexed, SerializeIndexed};
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 pub use typed::*;
 
 pub mod serde;
 
-use crate::{ty::TypeDesc, utils::try_map_list, Registry, Type, TypeRef};
+use crate::{
+	rdf::{
+		serde::serde_indexed_resource, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
+	},
+	ty::TypeDesc,
+	utils::try_map_list,
+	Registry, Type, TypeRef,
+};
 
 pub type List<R = rdf_types::Term> = Vec<Value<R>>;
 
 pub type Map<R = rdf_types::Term> = BTreeMap<Value<R>, Value<R>>;
 
-mod serde_indexed_resource {
-	use crate::rdf::ResourceBackwardIndex;
-
-	pub fn deserialize_seed<R>(index: &ResourceBackwardIndex<R>) -> &ResourceBackwardIndex<R> {
-		index
-	}
-}
-
 /// Untyped tree value.
 #[derive(
-	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeIndexed, DeserializeIndexed,
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
 )]
-#[serde_indexed(deserialize_bounds(R: Clone + Ord))]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(R: Eq + Hash)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(R: Clone + Ord))
+)]
 pub enum Value<R = rdf_types::Term> {
-	Resource(#[serde_indexed(with = serde_indexed_resource)] R),
+	Resource(#[seeded(with(serde_indexed_resource))] R),
 	Literal(Literal),
 	Map(Map<R>),
 	List(List<R>),
@@ -121,7 +123,7 @@ impl<R> Value<R> {
 		let ty: &Type<P, R> = registry.get_type(ty_ref).unwrap();
 		match (&ty.desc, self) {
 			(TypeDesc::Any, value) => Ok(TypedValue {
-				type_: ty_ref,
+				r#type: ty_ref,
 				desc: match value {
 					Value::Resource(r) => TypedValueInnerDesc::Resource(r),
 					Value::Literal(l) => TypedValueInnerDesc::Literal(l),
@@ -139,13 +141,13 @@ impl<R> Value<R> {
 				.into(),
 			}),
 			(TypeDesc::Resource(_), Self::Resource(r)) => Ok(TypedValue {
-				type_: ty_ref,
+				r#type: ty_ref,
 				desc: TypedValueInnerDesc::Resource(r).into(),
 			}),
 			(TypeDesc::Literal(ty), Self::Literal(l)) => {
 				if ty.contains(&l) {
 					Ok(TypedValue {
-						type_: ty_ref,
+						r#type: ty_ref,
 						desc: TypedValueInnerDesc::Literal(l).into(),
 					})
 				} else {
@@ -162,7 +164,7 @@ impl<R> Value<R> {
 				}
 
 				Ok(TypedValue {
-					type_: ty_ref,
+					r#type: ty_ref,
 					desc: TypedValueInnerDesc::List(
 						items
 							.into_iter()
@@ -182,7 +184,7 @@ impl<R> Value<R> {
 
 					while let Some((key, value)) = entries.next() {
 						match key.into_typed(registry, key_pattern) {
-							Ok(typed_key) => match value.into_typed(registry, field.type_) {
+							Ok(typed_key) => match value.into_typed(registry, field.r#type) {
 								Ok(typed_value) => {
 									found = true;
 									result.insert(typed_key, typed_value);
@@ -218,16 +220,16 @@ impl<R> Value<R> {
 				}
 
 				Ok(TypedValue {
-					type_: ty_ref,
+					r#type: ty_ref,
 					desc: TypedValueInnerDesc::Map(result).into(),
 				})
 			}
 			(TypeDesc::Enum(e), mut value) => {
 				for (name, variant) in &e.variants {
-					match std::mem::take(&mut value).into_typed(registry, variant.type_) {
+					match std::mem::take(&mut value).into_typed(registry, variant.r#type) {
 						Ok(typed_value) => {
 							return Ok(TypedValue {
-								type_: ty_ref,
+								r#type: ty_ref,
 								desc: TypedValueDesc::Variant(name.clone(), Box::new(typed_value)),
 							})
 						}
@@ -238,6 +240,17 @@ impl<R> Value<R> {
 				Err(value)
 			}
 			(_, value) => Err(value),
+		}
+	}
+}
+
+impl<R> VisitResources<R> for Value<R> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		match self {
+			Self::Resource(r) => f(r),
+			Self::Literal(_) => (),
+			Self::Map(m) => m.visit_resources_ref_mut(f),
+			Self::List(l) => l.visit_resources_ref_mut(f),
 		}
 	}
 }

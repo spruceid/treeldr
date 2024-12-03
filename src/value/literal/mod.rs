@@ -1,16 +1,13 @@
 use core::fmt;
-use serde::{Deserialize, Serialize};
-
 pub mod number;
 pub use number::{NativeNumber, Number};
-use treeldr_macros::{DeserializeIndexed, SerializeIndexed};
-
-use crate::rdf::serde::{DeserializeIndexed, SerializeIndexed};
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 
 /// Literal value.
 #[derive(
-	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeIndexed, DeserializeIndexed,
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
 )]
+#[seeded(ser(params(Q), seed(Q)), de(params(Q), seed(Q)))]
 pub enum Literal {
 	/// Unit.
 	Unit,
@@ -22,7 +19,7 @@ pub enum Literal {
 	Number(Number),
 
 	/// Byte string.
-	ByteString(#[serde_indexed(with = serde_bytes)] Vec<u8>),
+	ByteString(#[seeded(with(serde_bytes))] Vec<u8>),
 
 	/// Text string.
 	TextString(String),
@@ -127,135 +124,48 @@ fn digit(c: u32) -> char {
 	}
 }
 
-impl<R> SerializeIndexed<R> for () {
-	fn serialize_indexed<S>(
-		&self,
-		_index: &crate::rdf::ResourceForwardIndex<R>,
-		serializer: S,
-	) -> Result<S::Ok, S::Error>
-	where
-		S: serde::Serializer,
-	{
-		self.serialize(serializer)
-	}
-}
-
-impl<'de, R> DeserializeIndexed<'de, R> for () {
-	fn deserialize_indexed<D>(
-		_index: &crate::rdf::ResourceBackwardIndex<R>,
-		deserializer: D,
-	) -> Result<Self, D::Error>
-	where
-		D: serde::Deserializer<'de>,
-	{
-		Self::deserialize(deserializer)
-	}
-}
-
-impl<R> SerializeIndexed<R> for bool {
-	fn serialize_indexed<S>(
-		&self,
-		_index: &crate::rdf::ResourceForwardIndex<R>,
-		serializer: S,
-	) -> Result<S::Ok, S::Error>
-	where
-		S: serde::Serializer,
-	{
-		self.serialize(serializer)
-	}
-}
-
-impl<'de, R> DeserializeIndexed<'de, R> for bool {
-	fn deserialize_indexed<D>(
-		_index: &crate::rdf::ResourceBackwardIndex<R>,
-		deserializer: D,
-	) -> Result<Self, D::Error>
-	where
-		D: serde::Deserializer<'de>,
-	{
-		Self::deserialize(deserializer)
-	}
-}
-
-impl<R> SerializeIndexed<R> for String {
-	fn serialize_indexed<S>(
-		&self,
-		_index: &crate::rdf::ResourceForwardIndex<R>,
-		serializer: S,
-	) -> Result<S::Ok, S::Error>
-	where
-		S: serde::Serializer,
-	{
-		self.serialize(serializer)
-	}
-}
-
-impl<'de, R> DeserializeIndexed<'de, R> for String {
-	fn deserialize_indexed<D>(
-		_index: &crate::rdf::ResourceBackwardIndex<R>,
-		deserializer: D,
-	) -> Result<Self, D::Error>
-	where
-		D: serde::Deserializer<'de>,
-	{
-		Self::deserialize(deserializer)
-	}
-}
-
-impl<R> SerializeIndexed<R> for Vec<u8> {
-	fn serialize_indexed<S>(
-		&self,
-		_index: &crate::rdf::ResourceForwardIndex<R>,
-		_serializer: S,
-	) -> Result<S::Ok, S::Error>
-	where
-		S: serde::Serializer,
-	{
-		todo!()
-	}
-}
-
 mod serde_bytes {
-	use crate::rdf::ResourceBackwardIndex;
+	use serde::{Deserializer, Serializer};
 
-	pub struct Seed;
+	pub fn serialize_seeded<Q, S>(
+		bytes: &[u8],
+		_index: &Q,
+		serializer: S,
+	) -> Result<S::Ok, S::Error>
+	where
+		S: Serializer,
+	{
+		serializer.serialize_bytes(bytes)
+	}
 
-	impl<'de> serde::de::DeserializeSeed<'de> for Seed {
-		type Value = Vec<u8>;
+	pub fn deserialize_seeded<'de, Q, D>(_index: &Q, deserializer: D) -> Result<Vec<u8>, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		struct Visitor;
 
-		fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-		where
-			D: serde::Deserializer<'de>,
-		{
-			struct Visitor;
+		impl<'de> serde::de::Visitor<'de> for Visitor {
+			type Value = Vec<u8>;
 
-			impl<'de> serde::de::Visitor<'de> for Visitor {
-				type Value = Vec<u8>;
-
-				fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-					write!(formatter, "a byte string")
-				}
-
-				fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-				where
-					E: serde::de::Error,
-				{
-					Ok(v.to_owned())
-				}
-
-				fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
-				where
-					E: serde::de::Error,
-				{
-					Ok(v)
-				}
+			fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+				write!(formatter, "a byte string")
 			}
 
-			deserializer.deserialize_bytes(Visitor)
-		}
-	}
+			fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+			where
+				E: serde::de::Error,
+			{
+				Ok(v.to_owned())
+			}
 
-	pub fn deserialize_seed<R>(_index: &ResourceBackwardIndex<R>) -> Seed {
-		Seed
+			fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+			where
+				E: serde::de::Error,
+			{
+				Ok(v)
+			}
+		}
+
+		deserializer.deserialize_bytes(Visitor)
 	}
 }

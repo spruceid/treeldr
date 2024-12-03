@@ -46,7 +46,7 @@ impl<'a, P, R> ScopeTypes<'a, P, R> {
 					b.get(i as usize - a.len()).copied()
 				}
 			}
-			Self::Bindings(b) => b.get(i as usize).map(|b| b.type_),
+			Self::Bindings(b) => b.get(i as usize).map(|b| b.r#type),
 			Self::Repeat(ty, count) => {
 				if i < *count {
 					Some(*ty)

@@ -1,13 +1,23 @@
+use std::hash::Hash;
+
 use super::BuiltInFunction;
 use crate::{
 	eval::{Eval, EvalError, Scope},
 	expr::Expr,
-	rdf::{RdfContext, RdfContextMut},
+	rdf::{RdfContext, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
 	Registry, TypeRef, Value,
 };
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
+use serde::{Deserialize, Serialize};
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>), bounds(T: Ord))
+)]
 pub enum Body<P, R, T = TypeRef<P>> {
 	BuiltIn(BuiltInFunction),
 	Expr(Box<Expr<P, R, T>>),
@@ -57,6 +67,15 @@ impl<P: Copy + Ord, R: Ord + Clone> Body<P, R> {
 
 				Ok(())
 			}
+		}
+	}
+}
+
+impl<P, R, T> VisitResources<R> for Body<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		match self {
+			Self::BuiltIn(_) => (),
+			Self::Expr(e) => e.visit_resources_ref_mut(f),
 		}
 	}
 }

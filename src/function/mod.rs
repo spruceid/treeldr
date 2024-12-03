@@ -3,12 +3,15 @@ use rdf_types::{
 	dataset::{DatasetMut, PatternMatchingDataset},
 	Quad,
 };
+use serde::{Deserialize, Serialize};
+use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 use std::{hash::Hash, marker::PhantomData};
 
 use crate::{
 	display::DisplaySignature,
 	eval::{EvalError, Scope, ScopeTypes, ScopeValues},
-	rdf::{RdfContext, RdfContextMut},
+	pattern::serde_dataset_pattern,
+	rdf::{RdfContext, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
 	ty::{BuiltInType, TypeRef},
 	Attributes, DatasetPattern, Registry, Value,
 };
@@ -19,12 +22,27 @@ mod build_in;
 pub use body::*;
 pub use build_in::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub struct Signature<P, R, T = TypeRef<P>> {
+	#[seeded(with(unseeded))]
 	pub const_args: Vec<T>,
+
+	#[seeded(with(unseeded))]
 	pub args: Vec<T>,
+
+	#[seeded(with(unseeded))]
 	pub return_type: T,
+
+	#[seeded(with(serde_dataset_pattern))]
 	pub dataset: DatasetPattern<R>,
+
+	#[seeded(skip)]
 	p: PhantomData<P>,
 }
 
@@ -72,6 +90,12 @@ impl<P, R, T> Signature<P, R, T> {
 	}
 }
 
+impl<P, R, T> VisitResources<R> for Signature<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.dataset.visit_resources_ref_mut(f)
+	}
+}
+
 impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Signature<P, R> {
 	fn fmt_signature(
 		&self,
@@ -97,7 +121,13 @@ impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Signature<
 }
 
 /// Function.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>), bounds(T: Ord))
+)]
 pub struct Function<P, R, T = TypeRef<P>> {
 	pub attributes: Attributes<R>,
 	pub signature: Signature<P, R, T>,
@@ -183,15 +213,30 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 	}
 }
 
+impl<P, R, T> VisitResources<R> for Function<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.attributes.visit_resources_ref_mut(f);
+		self.signature.visit_resources_ref_mut(f);
+		self.body.visit_resources_ref_mut(f)
+	}
+}
+
 /// Function argument.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Arg<T> {
-	pub type_: T,
+	pub r#type: T,
 	pub is_const: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(params(Q), seed(Q), override_bounds(P: Serialize)),
+	de(params(Q), seed(Q), override_bounds(P: Deserialize<'de>))
+)]
 pub struct FunctionRef<P> {
+	#[seeded(with(unseeded))]
 	pub package: P,
 	pub index: u32,
 }

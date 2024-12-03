@@ -1,15 +1,28 @@
 mod ordered;
+use std::hash::Hash;
+
 pub use ordered::*;
 
 mod unordered;
+use serde::{Deserialize, Serialize};
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 pub use unordered::*;
 
-use crate::TypeRef;
+use crate::{
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	TypeRef,
+};
 
 use super::Expr;
 
 /// List expression.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub enum List<P, R, T = TypeRef<P>> {
 	Explicit(ExplicitList<P, R, T>),
 	Implicit(ImplicitList<P, R, T>),
@@ -28,8 +41,23 @@ impl<P, R: Ord, T> List<P, R, T> {
 	}
 }
 
+impl<P, R, T> VisitResources<R> for List<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		match self {
+			Self::Explicit(e) => e.visit_resources_ref_mut(f),
+			Self::Implicit(i) => i.visit_resources_ref_mut(f),
+		}
+	}
+}
+
 /// Explicit list (tuple construction).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub struct ExplicitList<P, R, T = TypeRef<P>> {
 	pub items: Vec<Expr<P, R, T>>,
 }
@@ -56,8 +84,20 @@ impl<P, R: Ord, T> ExplicitList<P, R, T> {
 	}
 }
 
+impl<P, R, T> VisitResources<R> for ExplicitList<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.items.visit_resources_ref_mut(f)
+	}
+}
+
 /// Implicit list expression.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub enum ImplicitList<P, R, T = TypeRef<P>> {
 	Ordered(OrderedList<P, R, T>),
 	Unordered(UnorderedList<P, R, T>),
@@ -72,6 +112,15 @@ impl<P, R: Ord, T> ImplicitList<P, R, T> {
 		match self {
 			Self::Ordered(o) => ImplicitList::Ordered(o.map_types_ref_mut(f)),
 			Self::Unordered(u) => ImplicitList::Unordered(u.map_types_ref_mut(f)),
+		}
+	}
+}
+
+impl<P, R, T> VisitResources<R> for ImplicitList<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		match self {
+			Self::Ordered(o) => o.visit_resources_ref_mut(f),
+			Self::Unordered(u) => u.visit_resources_ref_mut(f),
 		}
 	}
 }

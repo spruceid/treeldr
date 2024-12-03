@@ -1,8 +1,12 @@
 use core::fmt;
 use std::{cmp::Ordering, collections::BTreeMap, hash::Hash, marker::PhantomData};
 
+use serde::{Deserialize, Serialize};
+use serde_seeded::{unseeded, unseeded_btreemap_key, DeserializeSeeded, SerializeSeeded};
+
 use crate::{
 	display::DisplaySignature,
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
 	utils::{self, take_first},
 	Attributes, Registry, Value,
 };
@@ -10,13 +14,20 @@ use crate::{
 use super::TypeRef;
 
 /// Map type.
-#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>), bounds(T: Ord))
+)]
 pub struct Map<P, R, T = TypeRef<P>> {
 	/// Fields definitions.
 	///
 	/// # Soundness
 	///
 	/// It is a logical error for two keys to have a non-null intersection.
+	#[seeded(with(unseeded_btreemap_key))]
 	pub fields: BTreeMap<T, Field<P, R, T>>,
 }
 
@@ -97,6 +108,14 @@ impl<P: Copy + Ord + Hash, R: Ord> Map<P, R> {
 	}
 }
 
+impl<P, R, T> VisitResources<R> for Map<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		for field in self.fields.values() {
+			field.visit_resources_ref_mut(f)
+		}
+	}
+}
+
 impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Map<P, R> {
 	fn fmt_signature(
 		&self,
@@ -119,7 +138,7 @@ impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Map<P, R> 
 			write!(
 				f,
 				": {}",
-				field.type_.display_signature_with(context.inner())
+				field.r#type.display_signature_with(context.inner())
 			)?;
 		}
 
@@ -127,19 +146,30 @@ impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Map<P, R> 
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>), bounds(T: Ord))
+)]
 pub struct Field<P, R, T = TypeRef<P>> {
 	pub attributes: Attributes<R>,
-	pub type_: T,
+
+	#[seeded(with(unseeded))]
+	pub r#type: T,
+
 	pub required: bool,
+
+	#[seeded(skip)]
 	p: PhantomData<P>,
 }
 
 impl<P, R, T> Field<P, R, T> {
-	pub fn new(attributes: Attributes<R>, type_: T, required: bool) -> Self {
+	pub fn new(attributes: Attributes<R>, r#type: T, required: bool) -> Self {
 		Self {
 			attributes,
-			type_,
+			r#type,
 			required,
 			p: PhantomData,
 		}
@@ -152,6 +182,12 @@ impl<P: Copy + Ord + Hash, R: Ord> Field<P, R> {
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		other: &Self,
 	) -> bool {
-		(!other.required || self.required) && self.type_.is_subtype_of(registry, other.type_)
+		(!other.required || self.required) && self.r#type.is_subtype_of(registry, other.r#type)
+	}
+}
+
+impl<P, R, T> VisitResources<R> for Field<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		self.attributes.visit_resources_ref_mut(f);
 	}
 }

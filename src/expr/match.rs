@@ -1,6 +1,12 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, hash::Hash};
 
-use crate::TypeRef;
+use serde::{Deserialize, Serialize};
+use serde_seeded::{DeserializeSeeded, SerializeSeeded};
+
+use crate::{
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	TypeRef,
+};
 
 use super::Expr;
 
@@ -16,7 +22,13 @@ use super::Expr;
 ///   }
 /// }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
+)]
+#[seeded(
+	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
+	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
+)]
 pub struct Match<P, R, T = TypeRef<P>> {
 	pub cases: BTreeMap<String, Expr<P, R, T>>,
 
@@ -36,6 +48,14 @@ impl<P, R: Ord, T> Match<P, R, T> {
 				.map(|(k, e)| (k, e.map_types_ref_mut(f)))
 				.collect(),
 			order: self.order,
+		}
+	}
+}
+
+impl<P, R, T> VisitResources<R> for Match<P, R, T> {
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		for e in self.cases.values() {
+			e.visit_resources_ref_mut(f)
 		}
 	}
 }
