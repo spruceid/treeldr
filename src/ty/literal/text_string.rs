@@ -73,13 +73,8 @@ pub struct TextString {
 
 impl Default for TextString {
 	fn default() -> Self {
-		let mut automaton = iregex::automata::NFA::new();
-		automaton.add_initial_state(0);
-		automaton.add(0, Some(any_char()), 0);
-		automaton.add_final_state(0);
-
 		Self {
-			automaton,
+			automaton: iregex::automata::NFA::simple_loop(0, any_char()),
 			precomputed_data: Ignored(PrecomputedData::new_any()),
 		}
 	}
