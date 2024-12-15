@@ -1,42 +1,34 @@
-# TreeLDR Layouts
+# TreeLDR
 
-TreeLDR Layouts are a data serialization and deserialization tool for the
-Resource Description Framework (RDF).
-It can be used to convert RDF graphs into tree-like values (such as JSON),
-and back.
-The idea behind layouts is simple: each layout describes the expected shape of a
-tree value.
-This shape can be either a record (sometimes called object, in JSON for
-instance), a list, a number, etc. Each part of this shape is then associated to
-a subset of the represented RDF dataset.
+TreeLDR is a functional data transformation language based on the Resource
+Description Framework (RDF). One can use it to serialize RDF datasets into
+algebraic data values, and back. The main particularity of TreeLDR is that
+functions are **always reversible**: writing a serialization function gives
+the deserialization function for free.
 
-## Basic layout
+## Basic function
 
-Here is an example is a very simple TreeLDR layout:
-```json
-{
-	"type": "record", // The shape of the layout (a record here).
-	"fields": { // A description of the record's fields.
-		"name": { // A field called `name`.
-			"value": { "type": "string" }, // The `name` value is a string.
-		},
-		"age": { // A field called `age`
-			"value": { "type": "number" }, // The `age` value is a number.
-		}
-	}
+Here is an example is a very simple TreeLDR function:
+```tldr
+prefix schema = <https://schema.org/>;
+
+fn (simple_function subject) = {
+	"id" = (id_of subject),
+	"name" = (string_of (get schema:name subject)),
+	"birth_date" = (date_of (get schema:birthDate subject))
 }
 ```
 
-This layout matches any record value that may contain the fields `name` and
-`age`. The layout of `name` is `{ "type": "string" }`, meaning its value must
-be a text string. The layout of `age` is `{ "type": "number" }`, meaning its
-value must be a number.
+```n-triples
+<https://example.org/johnSmith> <https://schema.org/name> "John Smith" .
+<https://example.org/johnSmith> <https://schema.org/birthDate> "2024-12-03"^^<http://www.w3.org/2001/XMLSchema#date> .
+```
 
-Here is an example of a tree value (here in JSON) matching this layout:
 ```json
 {
+	"id": "https://example.org/johnSmith",
 	"name": "John Smith",
-	"age": 30
+	"birth_date": "2024-12-03"
 }
 ```
 

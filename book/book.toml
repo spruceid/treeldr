@@ -6,3 +6,6 @@ build-dir = "target"
 
 [preprocessor.graphviz]
 command = "mdbook-graphviz"
+
+[output.html]
+additional-js = ["src/tldr.js"]
