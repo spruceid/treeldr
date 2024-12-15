@@ -1,7 +1,9 @@
 use core::fmt;
-use std::io::{self, BufRead, Write};
+use std::{
+	io::{self, BufRead, Write},
+	str::FromStr,
+};
 
-use clap::builder::TypedValueParser;
 use nquads_syntax::Parse;
 use treeldr::{
 	rdf::{dataset::BTreeDataset, Quad},
@@ -16,21 +18,13 @@ pub enum LoadError {
 	),
 }
 
-#[derive(Debug, Clone)]
-pub enum RDFFormat {
+#[derive(Debug, Default, Clone)]
+pub enum RdfFormat {
+	#[default]
 	NQuads,
 }
 
-impl RDFFormat {
-	pub const POSSIBLE_VALUES: &'static [&'static str] =
-		&["application/n-quads", "n-quads", "nquads", "nq"];
-
-	pub fn parser(
-	) -> clap::builder::MapValueParser<clap::builder::PossibleValuesParser, fn(String) -> Self> {
-		clap::builder::PossibleValuesParser::new(Self::POSSIBLE_VALUES)
-			.map(|s| Self::new(&s).unwrap())
-	}
-
+impl RdfFormat {
 	pub fn new(name: &str) -> Option<Self> {
 		match name {
 			"nq" | "nquads" | "n-quads" | "application/n-quads" => Some(Self::NQuads),
@@ -76,8 +70,20 @@ impl RDFFormat {
 	}
 }
 
-impl fmt::Display for RDFFormat {
+impl FromStr for RdfFormat {
+	type Err = InvalidRdfFormat;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		Self::new(s).ok_or(InvalidRdfFormat)
+	}
+}
+
+impl fmt::Display for RdfFormat {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		self.as_str().fmt(f)
 	}
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("invalid RDF dataset format")]
+pub struct InvalidRdfFormat;

@@ -57,7 +57,7 @@ impl PositiveTest {
 		// Parse input.
 		let input_text = fs::read_to_string(file_path(format!("{id}-in.nq")))
 			.expect("unable to read RDF dataset");
-		let input: IndexedBTreeDataset = nquads_syntax::Document::parse_str(&input_text)
+		let mut input: IndexedBTreeDataset = nquads_syntax::Document::parse_str(&input_text)
 			.unwrap()
 			.into_value()
 			.into_iter()
@@ -82,7 +82,7 @@ impl PositiveTest {
 		if forward {
 			// Evaluate.
 			let found = function
-				.call(&registry, &rdf, &input, &args)
+				.call(&registry, &mut rdf, &mut input, &args)
 				.expect("evaluation failed");
 
 			if output != found {
@@ -95,7 +95,7 @@ impl PositiveTest {
 				.into_typed(&registry, function.signature.return_type)
 				.expect("post typing failed");
 		} else {
-			let mut found = BTreeDataset::new();
+			let mut found = IndexedBTreeDataset::new();
 			let found_args = function
 				.call_inverse(&registry, &mut rdf, &mut found, &[], &output)
 				.expect("inverse evaluation failed");

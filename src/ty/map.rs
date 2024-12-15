@@ -31,6 +31,12 @@ pub struct Map<P, R, T = TypeRef<P>> {
 	pub fields: BTreeMap<T, Field<P, R, T>>,
 }
 
+impl<P, R, T> Map<P, R, T> {
+	pub fn new(fields: BTreeMap<T, Field<P, R, T>>) -> Self {
+		Self { fields }
+	}
+}
+
 impl<P: Copy + Ord, R: Ord> Map<P, R> {
 	pub fn contains(
 		&self,

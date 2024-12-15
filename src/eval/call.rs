@@ -8,14 +8,14 @@ use rdf_types::{
 
 use crate::{expr::Call, Registry, Value};
 
-use super::{Eval, EvalError, RdfContext, RdfContextMut, Scope};
+use super::{Eval, EvalError, RdfContextMut, Scope};
 
 impl<P: Copy + Ord, R: Clone + Ord> Eval<P, R> for Call<P, R> {
 	fn eval(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &impl RdfContext<Resource = R>,
-		dataset: &impl PatternMatchingDataset<Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>> {
 		let mut evaluated_args = Vec::with_capacity(self.const_args.len() + self.args.len());
@@ -38,14 +38,14 @@ impl<P: Copy + Ord, R: Clone + Ord> Eval<P, R> for Call<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl DatasetMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		let const_args: Vec<_> = self
 			.const_args
 			.iter()
-			.map(|a| a.eval(registry, rdf, &InaccessibleDataset::default(), scope))
+			.map(|a| a.eval(registry, rdf, dataset, scope))
 			.collect::<Result<_, _>>()?;
 
 		let values = registry.get_function(self.function).unwrap().call_inverse(

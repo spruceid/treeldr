@@ -4,7 +4,7 @@ use super::BuiltInFunction;
 use crate::{
 	eval::{Eval, EvalError, Scope},
 	expr::Expr,
-	rdf::{RdfContext, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	rdf::{RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
 	Registry, TypeRef, Value,
 };
 use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
@@ -36,8 +36,8 @@ impl<P: Copy + Ord, R: Ord + Clone> Body<P, R> {
 	pub fn eval(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &impl RdfContext<Resource = R>,
-		dataset: &impl PatternMatchingDataset<Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
@@ -50,7 +50,7 @@ impl<P: Copy + Ord, R: Ord + Clone> Body<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl DatasetMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {

@@ -1,7 +1,10 @@
 use std::{collections::HashMap, hash::Hash, marker::PhantomData};
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
-	function::FunctionRef, ty::TypeDefinition, Function, Module, ModuleRef, Package, Type, TypeRef,
+	build::BuildEnvironment, function::FunctionRef, ty::TypeDefinition, Function, Module,
+	ModuleRef, Package, Type, TypeRef,
 };
 
 pub trait Registry {
@@ -177,5 +180,68 @@ where
 
 	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>> {
 		self.0.package(id).or_else(|| self.1.package(id))
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum PreludeOrTarget {
+	Prelude,
+	Target,
+}
+
+pub struct PreludeAndTarget {
+	pub prelude: Package<PreludeOrTarget>,
+	pub target: Option<Package<PreludeOrTarget>>,
+}
+
+impl Default for PreludeAndTarget {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+impl PreludeAndTarget {
+	pub fn new() -> Self {
+		Self {
+			prelude: Package::prelude(PreludeOrTarget::Prelude),
+			target: None,
+		}
+	}
+}
+
+impl Registry for PreludeAndTarget {
+	type PackageId = PreludeOrTarget;
+	type Resource = rdf_types::Term;
+
+	fn len(&self) -> usize {
+		if self.target.is_some() {
+			2
+		} else {
+			1
+		}
+	}
+
+	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>> {
+		match id {
+			PreludeOrTarget::Prelude => Some(&self.prelude),
+			PreludeOrTarget::Target => self.target.as_ref(),
+		}
+	}
+}
+
+impl BuildEnvironment for PreludeAndTarget {
+	type PackageId = PreludeOrTarget;
+	type Resource = rdf_types::Term;
+	type Registry = Self;
+
+	fn registry(&self) -> &Self::Registry {
+		self
+	}
+
+	fn package(&self, name: Option<&str>) -> Option<Self::PackageId> {
+		match name {
+			Some(_) => None,
+			None => Some(PreludeOrTarget::Prelude),
+		}
 	}
 }

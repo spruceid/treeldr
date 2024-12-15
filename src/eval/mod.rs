@@ -6,7 +6,7 @@ pub use scope::*;
 
 use crate::{
 	expr::{Expr, InnerExpr},
-	rdf::{DebugSubstitution, RdfContext, RdfContextMut},
+	rdf::{DebugSubstitution, RdfContextMut},
 	Registry, TypeRef, Value,
 };
 
@@ -16,6 +16,7 @@ mod list;
 mod literal;
 mod map;
 mod r#match;
+mod pattern;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MissingData {
@@ -69,8 +70,8 @@ pub trait Eval<P, R: Clone> {
 	fn eval(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &impl RdfContext<Resource = R>,
-		dataset: &impl PatternMatchingDataset<Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>>;
 
@@ -78,7 +79,7 @@ pub trait Eval<P, R: Clone> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl DatasetMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>>;
@@ -88,8 +89,8 @@ pub trait EvalTyped<P, R: Clone> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &impl RdfContext<Resource = R>,
-		dataset: &impl PatternMatchingDataset<Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &Scope<P, R>,
 		r#type: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>>;
@@ -98,7 +99,7 @@ pub trait EvalTyped<P, R: Clone> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl DatasetMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &mut Scope<P, R>,
 		r#type: TypeRef<P>,
 		output: &Value<R>,
@@ -109,8 +110,8 @@ impl<P: Copy + Ord, R: Ord + Clone> Eval<P, R> for Expr<P, R> {
 	fn eval(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &impl RdfContext<Resource = R>,
-		dataset: &impl PatternMatchingDataset<Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>> {
 		self.inner
@@ -121,7 +122,7 @@ impl<P: Copy + Ord, R: Ord + Clone> Eval<P, R> for Expr<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl DatasetMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
@@ -134,8 +135,8 @@ impl<P: Copy + Ord, R: Ord + Clone> EvalTyped<P, R> for InnerExpr<P, R> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &impl RdfContext<Resource = R>,
-		dataset: &impl PatternMatchingDataset<Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &Scope<P, R>,
 		r#type: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -167,7 +168,7 @@ impl<P: Copy + Ord, R: Ord + Clone> EvalTyped<P, R> for InnerExpr<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl DatasetMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &mut Scope<P, R>,
 		r#type: TypeRef<P>,
 		output: &Value<R>,

@@ -7,11 +7,12 @@ use rdf_types::{LiteralType, Quad, Term, RDF_FIRST, RDF_NIL, RDF_REST, XSD_STRIN
 
 use crate::{
 	expr::{self, Binding, Expr, InnerExpr, ListComponents},
+	pattern::{CallPattern, MapPattern, PatternDesc},
 	rdf::RdfContextMut,
 	syntax::ast::{self, ListDescription},
 	ty::{self, TypeDesc},
 	value::{Number, TypedValue, TypedValueDesc, TypedValueInnerDesc, TypedValueMap},
-	Attributes, DatasetPattern, Literal, TermPattern, Type, Value,
+	Attributes, DatasetPattern, Literal, Pattern, TermPattern, Type, Value,
 };
 
 use super::{
@@ -36,12 +37,12 @@ impl ast::Bindings {
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
 	{
-		let mut intro = Vec::with_capacity(self.variables.len());
+		let mut intro = Vec::with_capacity(self.list.len());
 		let mut sub_scope = scope.begin();
+		let mut variables = Vec::new();
 
-		for binding in &self.variables {
-			let b = binding.build(context, namespace, scope)?;
-			sub_scope.expr.insert(&binding.ident, b.r#type);
+		for binding in &self.list {
+			let b = binding.build(context, namespace, scope, &mut variables, &mut sub_scope)?;
 			intro.push(b);
 		}
 
@@ -50,7 +51,14 @@ impl ast::Bindings {
 			None => DatasetPattern::new(),
 		};
 
-		Ok((expr::Bindings { intro, dataset }, sub_scope))
+		Ok((
+			expr::Bindings {
+				variables,
+				list: intro,
+				dataset,
+			},
+			sub_scope,
+		))
 	}
 }
 
@@ -62,6 +70,8 @@ impl ast::Binding {
 		context: &mut BuildContext<'_, E, D>,
 		namespace: &BuildingPackage<'ast, E::PackageId>,
 		scope: &Scope<E::PackageId>,
+		variables: &mut Vec<TypeVariableRef>,
+		sub_scope: &mut Scope<E::PackageId>,
 	) -> BuiltBindingResult<E::PackageId, E::Resource>
 	where
 		E: BuildEnvironment,
@@ -75,17 +85,241 @@ impl ast::Binding {
 			.map(|a| a.value.build(context, namespace, scope))
 			.transpose()?;
 
-		let type_ = match &assignment {
+		let r#type = match &assignment {
 			Some(a) => a.r#type,
 			None => context
 				.type_variables
 				.fresh(Type::resource(), Some(self.span())),
 		};
 
+		let pattern = self
+			.pattern
+			.build_pattern(context, namespace, scope, variables, sub_scope)?;
+
+		context.type_variables.assert_eq(r#type, pattern.r#type);
+
 		Ok(Binding {
-			r#type: type_,
+			pattern,
+			r#type,
 			assignment,
 		})
+	}
+}
+
+impl ast::Expr {
+	fn build_pattern<'ast, E, D>(
+		&'ast self,
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingPackage<'ast, E::PackageId>,
+		scope: &Scope<E::PackageId>,
+		variables: &mut Vec<TypeVariableRef>,
+		sub_scope: &mut Scope<E::PackageId>,
+	) -> Result<Pattern<E::PackageId, E::Resource, TypeVariableRef>, Error<E::PackageId>>
+	where
+		E: BuildEnvironment,
+		E::PackageId: Copy + Ord + Hash,
+		E::Resource: Clone + Ord + Hash,
+		D: RdfContextMut<Resource = E::Resource>,
+	{
+		match self {
+			Self::Var(ident) => {
+				let ty = context
+					.type_variables
+					.fresh(TypeValue::Undefined, Some(ident.span()));
+				variables.push(ty);
+				let x = sub_scope.expr.insert(ident, ty);
+				Ok(Pattern::new(ty, PatternDesc::Var(x)))
+			}
+			Self::List(list) => {
+				let (ty, pattern) =
+					list.build_pattern(context, namespace, scope, variables, sub_scope)?;
+				Ok(Pattern::new(
+					context.type_variables.fresh(
+						Type::new(Attributes::new(), TypeDesc::List(ty)),
+						Some(self.span()),
+					),
+					PatternDesc::List(pattern),
+				))
+			}
+			Self::Map(map) => {
+				let (ty, pattern) =
+					map.build_pattern(context, namespace, scope, variables, sub_scope)?;
+				Ok(Pattern::new(
+					context.type_variables.fresh(
+						Type::new(Attributes::new(), TypeDesc::Map(ty)),
+						Some(self.span()),
+					),
+					PatternDesc::Map(pattern),
+				))
+			}
+			Self::Call(call) => {
+				let (ty, pattern) =
+					call.build_pattern(context, namespace, scope, variables, sub_scope)?;
+				Ok(Pattern::new(ty, PatternDesc::Call(pattern)))
+			}
+			_ => {
+				todo!()
+			}
+		}
+	}
+}
+
+type BuiltListPattern<P, R> = (
+	ty::List<P, TypeVariableRef>,
+	Vec<Pattern<P, R, TypeVariableRef>>,
+);
+
+impl ast::ListExpr {
+	fn build_pattern<'ast, E, D>(
+		&'ast self,
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingPackage<'ast, E::PackageId>,
+		scope: &Scope<E::PackageId>,
+		variables: &mut Vec<TypeVariableRef>,
+		sub_scope: &mut Scope<E::PackageId>,
+	) -> Result<BuiltListPattern<E::PackageId, E::Resource>, Error<E::PackageId>>
+	where
+		E: BuildEnvironment,
+		E::PackageId: Copy + Ord + Hash,
+		E::Resource: Clone + Ord + Hash,
+		D: RdfContextMut<Resource = E::Resource>,
+	{
+		match &self.desc {
+			ast::ListDescription::Given(items) => {
+				let mut patterns = Vec::with_capacity(items.len());
+				let mut types = Vec::with_capacity(items.len());
+
+				for item in items {
+					let pattern =
+						item.build_pattern(context, namespace, scope, variables, sub_scope)?;
+					types.push(pattern.r#type);
+					patterns.push(pattern);
+				}
+
+				Ok((ty::List::new(types, None), patterns))
+			}
+			_ => todo!(),
+		}
+	}
+}
+
+type BuiltMapPattern<P, R> = (
+	ty::Map<P, R, TypeVariableRef>,
+	MapPattern<P, R, TypeVariableRef>,
+);
+
+impl ast::MapExpr {
+	fn build_pattern<'ast, E, D>(
+		&self,
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingPackage<'ast, E::PackageId>,
+		scope: &Scope<E::PackageId>,
+		variables: &mut Vec<TypeVariableRef>,
+		sub_scope: &mut Scope<E::PackageId>,
+	) -> Result<BuiltMapPattern<E::PackageId, E::Resource>, Error<E::PackageId>>
+	where
+		E: BuildEnvironment,
+		E::PackageId: Copy + Ord + Hash,
+		E::Resource: Clone + Ord + Hash,
+		D: RdfContextMut<Resource = E::Resource>,
+	{
+		let mut entries = MapPattern::new();
+		let mut fields = BTreeMap::new();
+
+		for entry in &self.entries {
+			let key = entry.key.build(context, namespace, scope)?;
+			let value = entry
+				.value
+				.build_pattern(context, namespace, scope, variables, sub_scope)?;
+
+			fields.insert(
+				key.r#type,
+				ty::map::Field::new(Attributes::new(), value.r#type, true),
+			);
+
+			entries.insert(key, value);
+		}
+
+		Ok((ty::Map::new(fields), entries))
+	}
+}
+
+type BuiltCallPattern<P, R> = (TypeVariableRef, CallPattern<P, R, TypeVariableRef>);
+
+impl ast::CallExpr {
+	fn build_pattern<'ast, E, D>(
+		&self,
+		context: &mut BuildContext<'_, E, D>,
+		namespace: &BuildingPackage<'ast, E::PackageId>,
+		scope: &Scope<E::PackageId>,
+		variables: &mut Vec<TypeVariableRef>,
+		sub_scope: &mut Scope<E::PackageId>,
+	) -> Result<BuiltCallPattern<E::PackageId, E::Resource>, Error<E::PackageId>>
+	where
+		E: BuildEnvironment,
+		E::PackageId: Copy + Ord + Hash,
+		E::Resource: Clone + Ord + Hash,
+		D: RdfContextMut<Resource = E::Resource>,
+	{
+		let path = self.function.build(context, namespace, scope)?;
+
+		let f_ref = scope
+			.get(context, namespace, &path)
+			.ok_or_else(|| Error::UnknownFunction(self.function.span(), path.clone()))?
+			.as_function()
+			.ok_or_else(|| Error::NotAFunction(self.function.span(), path.clone()))?;
+
+		let signature = namespace
+			.import_function_signature(context, f_ref)
+			.unwrap()
+			.clone();
+
+		if self.args.len() != signature.arity() {
+			return Err(Error::ArgumentCount {
+				span: self.span(),
+				expected: signature.args.len(),
+				found: self.args.len(),
+			});
+		}
+
+		let mut ast_args = self.args.iter();
+
+		let const_args = signature
+			.const_args
+			.iter()
+			.map(|&a_ty| {
+				let const_scope = scope.begin();
+				let a = ast_args.next().unwrap();
+				let e = a.build(context, namespace, &const_scope)?;
+				context.type_variables.assert_subtype_of(e.r#type, a_ty);
+				Ok(e)
+			})
+			.collect::<Result<_, _>>()?;
+
+		let args = signature
+			.args
+			.iter()
+			.map(|&a_ty| {
+				let a = ast_args.next().unwrap();
+				let e = a.build_pattern(context, namespace, scope, variables, sub_scope)?;
+				context.type_variables.assert_subtype_of(e.r#type, a_ty);
+				Ok(e)
+			})
+			.collect::<Result<_, _>>()?;
+
+		let e = CallPattern {
+			function: f_ref,
+			const_args,
+			args,
+		};
+
+		let t = context
+			.type_variables
+			.fresh(TypeValue::Undefined, Some(self.span()));
+
+		context.type_variables.assert_eq(signature.return_type, t);
+
+		Ok((t, e))
 	}
 }
 
@@ -472,7 +706,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 			ListDescription::All(_, bindings, mapping) => {
 				let (bound, sub_scope) = bindings.build(context, namespace, scope)?;
 
-				match bound.intro.as_slice() {
+				match bound.list.as_slice() {
 					[item] => {
 						if item.assignment.is_some() {
 							todo!()
@@ -504,7 +738,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 			ListDescription::List(_, bindings, _, head, mapping) => {
 				let (bound, sub_scope) = bindings.build(context, namespace, scope)?;
 
-				match bound.intro.as_slice() {
+				match bound.list.as_slice() {
 					[item] => {
 						if item.assignment.is_some() {
 							todo!()

@@ -330,15 +330,52 @@ pub struct CallExpr {
 
 #[derive(Debug, ll1::Parse)]
 pub struct Bindings {
-	pub variables: List<Binding>,
+	pub list: List<Binding>,
 	pub bound: Option<WhereBound>,
 }
 
 #[derive(Debug, ll1::Parse)]
 pub struct Binding {
-	pub ident: Ident,
+	pub pattern: Expr,
 	pub assignment: Option<Assignment>,
 }
+
+// #[derive(Debug, ll1::Parse)]
+// pub enum Pattern {
+// 	Var(Ident),
+// 	List(ListPattern),
+// 	Map(MapPattern),
+// 	Call(CallPattern)
+// }
+
+// #[derive(Debug, ll1::Parse)]
+// pub struct ListPattern {
+// 	pub bracket_l: BracketL,
+// 	pub items: List<Pattern>,
+// 	pub bracket_r: BracketR
+// }
+
+// #[derive(Debug, ll1::Parse)]
+// pub struct MapPattern {
+// 	pub brace_l: BraceL,
+// 	pub entries: List<EntryPattern>,
+// 	pub brace_r: BraceR
+// }
+
+// #[derive(Debug, ll1::Parse)]
+// pub struct EntryPattern {
+// 	pub key: ConstValue,
+// 	pub colon: Colon,
+// 	pub value: Pattern
+// }
+
+// #[derive(Debug, ll1::Parse)]
+// pub struct CallPattern {
+// 	pub paren_l: ParenthesisL,
+// 	pub function: ItemPath,
+// 	pub args: Vec<Pattern>,
+// 	pub paren_r: ParenthesisR,
+// }
 
 #[derive(Debug, ll1::Parse)]
 pub struct Assignment {

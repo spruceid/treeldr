@@ -1,6 +1,5 @@
 use super::EvalError;
 use crate::{
-	expr::Binding,
 	pattern::Substitution,
 	rdf::{DebugSubstitution, RdfContext, RdfContextMut},
 	value::List,
@@ -12,19 +11,19 @@ use rdf_types::{
 };
 
 #[derive(Clone, Copy)]
-pub enum ScopeTypes<'a, P, R> {
+pub enum ScopeTypes<'a, P> {
 	Slice(&'a [TypeRef<P>]),
 	TwoSlices(&'a [TypeRef<P>], &'a [TypeRef<P>]),
-	Bindings(&'a [Binding<P, R>]),
+	// Bindings(&'a [Binding<P, R>]),
 	Repeat(TypeRef<P>, u32),
 }
 
-impl<'a, P, R> ScopeTypes<'a, P, R> {
+impl<'a, P> ScopeTypes<'a, P> {
 	pub fn len(&self) -> u32 {
 		match self {
 			Self::Slice(s) => s.len() as u32,
 			Self::TwoSlices(a, b) => (a.len() + b.len()) as u32,
-			Self::Bindings(b) => b.len() as u32,
+			// Self::Bindings(b) => b.len() as u32,
 			Self::Repeat(_, len) => *len,
 		}
 	}
@@ -46,7 +45,7 @@ impl<'a, P, R> ScopeTypes<'a, P, R> {
 					b.get(i as usize - a.len()).copied()
 				}
 			}
-			Self::Bindings(b) => b.get(i as usize).map(|b| b.r#type),
+			// Self::Bindings(b) => b.get(i as usize).map(|b| b.r#type),
 			Self::Repeat(ty, count) => {
 				if i < *count {
 					Some(*ty)
@@ -62,7 +61,7 @@ impl<'a, P, R> ScopeTypes<'a, P, R> {
 pub struct Scope<'parent, P, R> {
 	parent: Option<(&'parent Self, u32)>,
 	graph: Option<R>,
-	types: ScopeTypes<'parent, P, R>,
+	types: ScopeTypes<'parent, P>,
 	values: ScopeValues<'parent, R>,
 	dataset: Vec<Quad<TermPattern<R>>>,
 }
@@ -70,7 +69,7 @@ pub struct Scope<'parent, P, R> {
 impl<'parent, P, R> Scope<'parent, P, R> {
 	pub fn new(
 		graph: Option<R>,
-		types: ScopeTypes<'parent, P, R>,
+		types: ScopeTypes<'parent, P>,
 		values: ScopeValues<'parent, R>,
 	) -> Self {
 		Self {
@@ -85,7 +84,7 @@ impl<'parent, P, R> Scope<'parent, P, R> {
 	pub fn root(graph: Option<R>) -> Self {
 		Self::new(
 			graph,
-			ScopeTypes::Bindings(&[]),
+			ScopeTypes::Slice(&[]),
 			ScopeValues::ConstOwned(Vec::new()),
 		)
 	}
@@ -226,7 +225,7 @@ impl<'a, P, R: Clone> Default for Scope<'a, P, R> {
 		Self {
 			parent: None,
 			graph: None,
-			types: ScopeTypes::Bindings(&[]),
+			types: ScopeTypes::Slice(&[]),
 			values: ScopeValues::ConstBorrowed(&[]),
 			dataset: Vec::new(),
 		}
@@ -237,7 +236,7 @@ impl<'a, P, R: Clone> Scope<'a, P, R> {
 	pub fn begin(
 		&self,
 		graph: Option<Option<R>>,
-		types: ScopeTypes<'a, P, R>,
+		types: ScopeTypes<'a, P>,
 		values: ScopeValues<'a, R>,
 	) -> Scope<P, R> {
 		Scope {
@@ -262,7 +261,7 @@ impl<'a, P, R: Clone> Scope<'a, P, R> {
 		dataset: &mut D,
 		graph: Option<Option<R>>,
 		// types: &[TypeRef],
-		types: ScopeTypes<P, R>,
+		types: ScopeTypes<P>,
 		f: impl FnOnce(&mut C, &mut D, &mut Scope<P, R>) -> Result<(), EvalError<R>>,
 	) -> Result<Vec<Value<R>>, EvalError<R>>
 	where

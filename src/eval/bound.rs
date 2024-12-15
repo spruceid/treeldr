@@ -8,7 +8,6 @@ use rdf_types::{
 use crate::{
 	expr::Bindings,
 	pattern::Substitution,
-	rdf::RdfContext,
 	utils::{QuadsExt, QuadsWithDefaultGraph},
 	Matching, Registry, TermPattern, Value,
 };
@@ -19,17 +18,30 @@ impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 	pub fn eval<'s>(
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &impl RdfContext<Resource = R>,
-		dataset: &impl PatternMatchingDataset<Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		scope: &'s Scope<'s, P, R>,
 	) -> Result<Option<Cow<'s, Scope<'s, P, R>>>, EvalError<R>> {
-		self.find_one_with(dataset, scope, |i| {
-			self.intro[i as usize]
-				.assignment
-				.as_ref()
-				.map(|e| e.eval(registry, rdf, dataset, scope))
-				.transpose()
-		})
+		let mut values = Vec::with_capacity(self.len());
+
+		for b in &self.list {
+			match &b.assignment {
+				Some(e) => {
+					let value = e.eval(registry, rdf, dataset, scope)?;
+					values.extend(
+						b.pattern
+							.eval(registry, rdf, dataset, scope, value)?
+							.into_iter()
+							.map(Some),
+					);
+				}
+				None => {
+					b.pattern.visit_variables(|_| values.push(None));
+				}
+			}
+		}
+
+		self.find_one_with(dataset, scope, |i| values[i as usize].take())
 	}
 
 	pub fn eval_inverse<C, D>(
@@ -42,22 +54,27 @@ impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 	) -> Result<(), EvalError<R>>
 	where
 		C: RdfContextMut<Resource = R>,
-		D: DatasetMut<Resource = R>,
+		D: DatasetMut<Resource = R> + PatternMatchingDataset,
 	{
-		let values = scope.begin_mut(
+		let mut values = scope.begin_mut(
 			rdf,
 			dataset,
 			None,
-			ScopeTypes::Bindings(&self.intro),
+			ScopeTypes::Slice(&self.variables),
 			move |rdf, dataset, scope| {
 				scope.extend_dataset(self.dataset.iter().map(Quad::into_cloned));
 				f(rdf, dataset, scope)
 			},
 		)?;
 
-		for (i, value) in values.iter().enumerate() {
-			if let Some(e) = &self.intro[i].assignment {
-				e.eval_inverse(registry, rdf, dataset, scope, value)?;
+		values.reverse();
+
+		for b in &self.list {
+			let value = b
+				.pattern
+				.eval_inverse(registry, rdf, dataset, scope, &mut values)?;
+			if let Some(e) = &b.assignment {
+				e.eval_inverse(registry, rdf, dataset, scope, &value)?;
 			}
 		}
 
@@ -70,15 +87,17 @@ impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 		&'s self,
 		dataset: &impl PatternMatchingDataset<Resource = R>,
 		scope: &'s Scope<'s, P, R>,
-		f: impl Fn(u32) -> Result<Option<Value<R>>, EvalError<R>>,
+		// f: impl Fn(u32) -> Result<Option<Value<R>>, EvalError<R>>,
+		f: impl FnMut(u32) -> Option<Value<R>>,
 	) -> Result<Option<Cow<'s, Scope<'s, P, R>>>, EvalError<R>> {
-		if self.intro.is_empty() {
+		let len = self.len();
+		if len == 0 {
 			Ok(Some(Cow::Borrowed(scope)))
 		} else {
 			let mut matching = Matching::new(
 				dataset,
 				scope,
-				Substitution::try_new(self.intro.len() as u32, f)?,
+				Substitution::new(len as u32, f),
 				self.dataset.quads().with_default_graph(scope.graph()),
 			);
 
@@ -89,7 +108,7 @@ impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 					} else {
 						Ok(Some(Cow::Owned(scope.begin(
 							None,
-							ScopeTypes::Bindings(&self.intro),
+							ScopeTypes::Slice(&self.variables),
 							ScopeValues::ConstOwned(values),
 						))))
 					}
@@ -110,7 +129,7 @@ impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 		Matching::new(
 			dataset,
 			scope,
-			Substitution::new(self.intro.len() as u32, |_| None),
+			Substitution::new(self.list.len() as u32, |_| None),
 			self.dataset.quads().with_default_graph(scope.graph()),
 		)
 	}
@@ -130,7 +149,7 @@ impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 			rdf,
 			dataset,
 			None,
-			ScopeTypes::Bindings(&self.intro),
+			ScopeTypes::Slice(&self.variables),
 			move |rdf, dataset, scope| {
 				scope.extend_dataset(self.dataset.iter().map(Quad::into_cloned));
 				f(rdf, dataset, scope)

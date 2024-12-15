@@ -9,7 +9,7 @@ pub struct Substitution<R>(Vec<OnceCell<Value<R>>>);
 
 impl<R> Substitution<R> {
 	/// Create a new empty substitution without declared variables.
-	pub fn new(len: u32, f: impl Fn(u32) -> Option<Value<R>>) -> Self {
+	pub fn new(len: u32, mut f: impl FnMut(u32) -> Option<Value<R>>) -> Self {
 		let mut result = Vec::with_capacity(len as usize);
 
 		for i in 0..len {

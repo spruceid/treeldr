@@ -7,7 +7,7 @@ use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 use crate::{
 	pattern::serde_dataset_pattern,
 	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
-	DatasetPattern, TypeRef,
+	DatasetPattern, Pattern, TypeRef,
 };
 
 use super::Expr;
@@ -21,19 +21,29 @@ use super::Expr;
 	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
 )]
 pub struct Bindings<P, R, T = TypeRef<P>> {
-	/// Introduced variables.
-	pub intro: Vec<Binding<P, R, T>>,
+	#[seeded(with(unseeded))]
+	pub variables: Vec<T>,
+
+	/// Binding list.
+	pub list: Vec<Binding<P, R, T>>,
 
 	/// Dataset constraints.
 	#[seeded(with(serde_dataset_pattern))]
 	pub dataset: DatasetPattern<R>,
 }
 
+impl<P, R, T> Bindings<P, R, T> {
+	pub fn len(&self) -> usize {
+		self.variables.len()
+	}
+}
+
 impl<P, R: Ord, T> Bindings<P, R, T> {
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Bindings<P, R, U> {
 		Bindings {
-			intro: self
-				.intro
+			variables: self.variables.into_iter().map(|t| f(t)).collect(),
+			list: self
+				.list
 				.into_iter()
 				.map(|b| b.map_types_ref_mut(f))
 				.collect(),
@@ -44,7 +54,7 @@ impl<P, R: Ord, T> Bindings<P, R, T> {
 
 impl<P, R, T> VisitResources<R> for Bindings<P, R, T> {
 	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
-		self.intro.visit_resources_ref_mut(f);
+		self.list.visit_resources_ref_mut(f);
 		self.dataset.visit_resources_ref_mut(f)
 	}
 }
@@ -57,6 +67,7 @@ impl<P, R, T> VisitResources<R> for Bindings<P, R, T> {
 	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
 )]
 pub struct Binding<P, R, T = TypeRef<P>> {
+	pub pattern: Pattern<P, R, T>,
 	#[seeded(with(unseeded))]
 	pub r#type: T,
 	pub assignment: Option<Expr<P, R, T>>,
@@ -65,6 +76,7 @@ pub struct Binding<P, R, T = TypeRef<P>> {
 impl<P, R: Ord, T> Binding<P, R, T> {
 	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Binding<P, R, U> {
 		Binding {
+			pattern: self.pattern.map_types_ref_mut(f),
 			r#type: f(self.r#type),
 			assignment: self.assignment.map(|a| a.map_types_ref_mut(f)),
 		}

@@ -11,7 +11,7 @@ use crate::{
 	display::DisplaySignature,
 	eval::{EvalError, Scope, ScopeTypes, ScopeValues},
 	pattern::serde_dataset_pattern,
-	rdf::{RdfContext, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	rdf::{RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
 	ty::{BuiltInType, TypeRef},
 	Attributes, DatasetPattern, Registry, Value,
 };
@@ -158,8 +158,8 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 	pub fn call(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &impl RdfContext<Resource = R>,
-		dataset: &impl PatternMatchingDataset<Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		args: &[Value<R>],
 	) -> Result<Value<R>, EvalError<R>> {
 		let arg_count = args.len() as u32;
@@ -185,7 +185,7 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl DatasetMut<Resource = R>,
+		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
 		const_args: &[Value<R>],
 		output: &Value<R>,
 	) -> Result<Vec<Value<R>>, EvalError<R>> {

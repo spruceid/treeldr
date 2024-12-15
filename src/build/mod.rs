@@ -24,6 +24,7 @@ pub use function::*;
 
 mod expr;
 mod path;
+mod pattern;
 
 mod module;
 pub use module::*;

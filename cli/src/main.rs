@@ -6,7 +6,6 @@ use codespan_reporting::{
 		termcolor::{ColorChoice, StandardStream},
 	},
 };
-use serde::{Deserialize, Serialize};
 use std::{
 	fs,
 	io::{self, BufReader},
@@ -14,7 +13,7 @@ use std::{
 	process::ExitCode,
 };
 use treeldr::{
-	build::{BuildEnvironment, TypeResolutionError},
+	build::TypeResolutionError,
 	display::DisplaySignature,
 	eval::{EvalError, MissingData},
 	module::ItemRef,
@@ -22,11 +21,15 @@ use treeldr::{
 	rdf::{dataset::BTreeDataset, Rdf},
 	syntax::Spanned,
 	value::ValueParseError,
-	Package, Registry as _, Value,
+	Registry as _, Value,
 };
 
 mod format;
-use format::{RDFFormat, TreeFormat};
+use format::{RdfFormat, TreeFormat};
+
+type PackageId = treeldr::registry::PreludeOrTarget;
+
+type Registry = treeldr::registry::PreludeAndTarget;
 
 #[derive(clap::Parser)]
 #[clap(name="tldr", author, version, about, long_about = None, subcommand_precedence_over_arg = true)]
@@ -46,92 +49,35 @@ struct Args {
 enum Command {
 	Compile,
 
-	/// Serializes an RDF dataset into a tree value.
-	Hydrate {
-		/// Format of the input RDF dataset.
-		#[arg(short, long = "input", value_parser = RDFFormat::parser(), default_value = "n-quads")]
-		input_format: RDFFormat,
+	/// Evaluate a function.
+	Eval {
+		/// Format of the output tree value(s).
+		#[arg(short = 'i', long = "input", value_parser = TreeFormat::parser(), default_value = "json")]
+		input_format: TreeFormat,
 
-		/// Format of the output tree value.
-		#[arg(short, long = "output", value_parser = TreeFormat::parser(), default_value = "json")]
+		/// Format of the output tree value(s).
+		#[arg(short = 'o', long = "output", value_parser = TreeFormat::parser(), default_value = "json")]
 		output_format: TreeFormat,
+
+		/// Format of the input RDF dataset.
+		#[arg(short = 'n', long = "rdf-input", value_names = ["FILENAME", "FORMAT"], num_args(1..=2))]
+		rdf_input: Option<Vec<String>>,
+
+		/// RDF dataset output.
+		#[arg(short = 'u', long = "rdf-output", value_names = ["FILENAME", "FORMAT"], num_args(1..=2))]
+		rdf_output: Option<Vec<String>>,
 
 		/// Function arguments.
 		#[arg(value_parser = value_parser)]
 		args: Vec<Value>,
 
+		#[arg(short = 'r', long = "reverse")]
+		reverse: bool,
+
 		/// Pretty print the output.
 		#[arg(short, long)]
 		pretty: bool,
 	},
-
-	/// Deserializes a tree value into an RDF dataset.
-	Dehydrate {
-		/// Format of the input tree value.
-		#[arg(short, long = "input", value_parser = TreeFormat::parser(), default_value = "json")]
-		input_format: TreeFormat,
-
-		/// Format of the output RDF dataset.
-		#[arg(short, long = "output", value_parser = RDFFormat::parser(), default_value = "n-quads")]
-		output_format: RDFFormat,
-	},
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-enum PackageId {
-	Prelude,
-	Target,
-}
-
-struct Registry {
-	prelude: Package<PackageId>,
-	target: Option<Package<PackageId>>,
-}
-
-impl Registry {
-	fn new() -> Self {
-		Self {
-			prelude: Package::prelude(PackageId::Prelude),
-			target: None,
-		}
-	}
-}
-
-impl treeldr::Registry for Registry {
-	type PackageId = PackageId;
-	type Resource = treeldr::rdf::Term;
-
-	fn len(&self) -> usize {
-		if self.target.is_some() {
-			2
-		} else {
-			1
-		}
-	}
-
-	fn package(&self, id: Self::PackageId) -> Option<&Package<Self::PackageId, Self::Resource>> {
-		match id {
-			PackageId::Prelude => Some(&self.prelude),
-			PackageId::Target => self.target.as_ref(),
-		}
-	}
-}
-
-impl BuildEnvironment for Registry {
-	type PackageId = PackageId;
-	type Resource = treeldr::rdf::Term;
-	type Registry = Self;
-
-	fn registry(&self) -> &Self::Registry {
-		self
-	}
-
-	fn package(&self, name: Option<&str>) -> Option<Self::PackageId> {
-		match name {
-			Some(_) => None,
-			None => Some(PackageId::Prelude),
-		}
-	}
 }
 
 fn main() -> ExitCode {
@@ -199,6 +145,26 @@ impl Args {
 	}
 }
 
+enum RdfInput {
+	Stdin,
+	File(PathBuf),
+}
+
+impl RdfInput {
+	pub fn load(self, format: RdfFormat) -> Result<BTreeDataset, Error> {
+		match self {
+			Self::Stdin => {
+				let stdin = BufReader::new(io::stdin());
+				format.load(stdin).map_err(Error::LoadRdf)
+			}
+			Self::File(path) => {
+				let file = BufReader::new(fs::File::open(path)?);
+				format.load(file).map_err(Error::LoadRdf)
+			}
+		}
+	}
+}
+
 impl Command {
 	fn run(self, rdf: &mut Rdf, registry: &Registry) -> Result<(), Error> {
 		match self {
@@ -211,10 +177,13 @@ impl Command {
 				);
 				Ok(())
 			}
-			Self::Hydrate {
+			Self::Eval {
 				input_format,
 				output_format,
-				args,
+				rdf_input,
+				rdf_output,
+				mut args,
+				reverse,
 				pretty,
 			} => {
 				let module = registry.target.as_ref().unwrap().root();
@@ -229,51 +198,56 @@ impl Command {
 
 				let function = registry.get_function(f_ref).unwrap();
 
-				let stdin = BufReader::new(io::stdin());
-				let dataset = input_format
-					.load(stdin)
-					.map_err(Error::LoadRdf)?
-					.into_indexed();
+				if args.is_empty() && (reverse || !function.signature.args.is_empty()) {
+					let stdin = BufReader::new(io::stdin());
+					args.push(input_format.load(stdin)?)
+				}
 
-				let output = function.call(registry, rdf, &dataset, &args)?;
+				let (rdf_input, rdf_input_format) = match rdf_input {
+					Some(options) => {
+						let mut options = options.into_iter();
+						let filename = options.next().unwrap();
+
+						let input = if filename == "-" {
+							RdfInput::Stdin
+						} else {
+							RdfInput::File(filename.into())
+						};
+
+						let format = options
+							.next()
+							.map(|name| name.parse::<RdfFormat>())
+							.transpose()?
+							.unwrap_or_default();
+
+						(input, format)
+					}
+					None => (RdfInput::Stdin, RdfFormat::default()),
+				};
+
+				let mut dataset = rdf_input.load(rdf_input_format)?.into_indexed();
+
+				let output = function.call(registry, rdf, &mut dataset, &args)?;
 
 				let typed_output = output
 					.into_typed(registry, function.signature.return_type)
 					.unwrap();
 
+				if let Some(options) = rdf_output {
+					let mut options = options.into_iter();
+					let filename: PathBuf = options.next().unwrap().into();
+					let format = options
+						.next()
+						.map(|name| name.parse::<RdfFormat>())
+						.transpose()?
+						.unwrap_or_default();
+
+					let mut output = fs::File::create(filename)?;
+					format.write(dataset, &mut output)?;
+				}
+
 				output_format
 					.write(registry, &typed_output, pretty, io::stdout())
-					.map_err(Into::into)
-			}
-			Self::Dehydrate {
-				input_format,
-				output_format,
-			} => {
-				let module = registry.target.as_ref().unwrap().root();
-
-				let name = "_";
-
-				let f_ref = match module.get_by_name(name) {
-					Some(ItemRef::Function(f_ref)) => f_ref,
-					Some(_) => return Err(Error::NotAFunction(name.to_owned())),
-					None => return Err(Error::UndefinedFunction(name.to_owned())),
-				};
-
-				let function = registry.get_function(f_ref).unwrap();
-
-				let stdin = BufReader::new(io::stdin());
-				let tree = input_format.load(stdin).map_err(Error::LoadTree)?;
-
-				let mut dataset = BTreeDataset::new();
-				let _ = function.call_inverse(registry, rdf, &mut dataset, &[], &tree)?;
-
-				let dataset: BTreeDataset = dataset
-					.into_iter()
-					.map(|quad| quad.map(|t| rdf.interpretation.map_term(t)))
-					.collect();
-
-				output_format
-					.write(dataset, io::stdout())
 					.map_err(Into::into)
 			}
 		}
@@ -297,6 +271,9 @@ enum Error {
 
 	#[error("`{0}` is not a function")]
 	NotAFunction(String),
+
+	#[error(transparent)]
+	InvalidRdfFormat(#[from] format::rdf::InvalidRdfFormat),
 
 	#[error(transparent)]
 	LoadRdf(#[from] format::rdf::LoadError),
