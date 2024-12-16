@@ -49,13 +49,13 @@ struct Args {
 enum Command {
 	Compile,
 
-	/// Evaluate a function.
-	Eval {
-		/// Format of the output tree value(s).
+	/// Call a function.
+	Call {
+		/// Format of the input arguments that are read from the standard input.
 		#[arg(short = 'i', long = "input", value_parser = TreeFormat::parser(), default_value = "json")]
 		input_format: TreeFormat,
 
-		/// Format of the output tree value(s).
+		/// Format of the output values.
 		#[arg(short = 'o', long = "output", value_parser = TreeFormat::parser(), default_value = "json")]
 		output_format: TreeFormat,
 
@@ -63,14 +63,18 @@ enum Command {
 		#[arg(short = 'n', long = "rdf-input", value_names = ["FILENAME", "FORMAT"], num_args(1..=2))]
 		rdf_input: Option<Vec<String>>,
 
-		/// RDF dataset output.
+		/// Format of the output RDF dataset.
 		#[arg(short = 'u', long = "rdf-output", value_names = ["FILENAME", "FORMAT"], num_args(1..=2))]
 		rdf_output: Option<Vec<String>>,
 
 		/// Function arguments.
+		///
+		/// If the inverse function is called, this is expected to be
+		/// the function's const arguments and output.
 		#[arg(value_parser = value_parser)]
 		args: Vec<Value>,
 
+		/// Call the inverse function.
 		#[arg(short = 'r', long = "reverse")]
 		reverse: bool,
 
@@ -177,7 +181,7 @@ impl Command {
 				);
 				Ok(())
 			}
-			Self::Eval {
+			Self::Call {
 				input_format,
 				output_format,
 				rdf_input,
@@ -198,7 +202,13 @@ impl Command {
 
 				let function = registry.get_function(f_ref).unwrap();
 
-				if args.is_empty() && (reverse || !function.signature.args.is_empty()) {
+				let expected_arg_count = if reverse {
+					function.signature.const_args.len() + 1
+				} else {
+					function.signature.arity() as usize
+				};
+
+				while args.len() < expected_arg_count {
 					let stdin = BufReader::new(io::stdin());
 					args.push(input_format.load(stdin)?)
 				}
@@ -227,11 +237,39 @@ impl Command {
 
 				let mut dataset = rdf_input.load(rdf_input_format)?.into_indexed();
 
-				let output = function.call(registry, rdf, &mut dataset, &args)?;
+				if reverse {
+					let mut args = args.into_iter();
 
-				let typed_output = output
-					.into_typed(registry, function.signature.return_type)
-					.unwrap();
+					let const_args: Vec<_> = function
+						.signature
+						.const_args
+						.iter()
+						.map(|_| args.next().unwrap())
+						.collect();
+
+					let output = args.next().unwrap();
+
+					let inputs =
+						function.call_inverse(registry, rdf, &mut dataset, &const_args, &output)?;
+
+					let mut out = io::stdout();
+
+					for input in inputs {
+						let typed_input = input
+							.into_typed(registry, function.signature.return_type)
+							.unwrap();
+
+						output_format.write(registry, &typed_input, pretty, &mut out)?;
+					}
+				} else {
+					let output = function.call(registry, rdf, &mut dataset, &args)?;
+
+					let typed_output = output
+						.into_typed(registry, function.signature.return_type)
+						.unwrap();
+
+					output_format.write(registry, &typed_output, pretty, io::stdout())?;
+				}
 
 				if let Some(options) = rdf_output {
 					let mut options = options.into_iter();
@@ -246,9 +284,7 @@ impl Command {
 					format.write(dataset, &mut output)?;
 				}
 
-				output_format
-					.write(registry, &typed_output, pretty, io::stdout())
-					.map_err(Into::into)
+				Ok(())
 			}
 		}
 	}
