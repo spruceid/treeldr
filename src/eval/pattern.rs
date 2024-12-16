@@ -49,16 +49,35 @@ impl<P: Copy + Ord, R: Clone + Ord> PatternDesc<P, R> {
 				result.push(value);
 				Ok(())
 			}
-			(Self::List(_), Value::List(_)) => {
-				todo!()
+			(Self::List(patterns), Value::List(values)) => {
+				if patterns.len() != values.len() {
+					return Err(EvalError::InvalidType);
+				}
+
+				for (p, v) in patterns.iter().zip(values) {
+					p.eval(registry, rdf, dataset, scope, v)?;
+				}
+
+				Ok(())
 			}
-			(Self::Map(_), Value::Map(_)) => {
-				todo!()
+			(Self::Map(patterns), Value::Map(entries)) => {
+				if patterns.len() != entries.len() {
+					return Err(EvalError::InvalidType);
+				}
+
+				for (k, v) in entries {
+					match patterns.get_untyped(&k) {
+						Some(p) => {
+							p.eval(registry, rdf, dataset, scope, v)?;
+						}
+						None => return Err(EvalError::InvalidType),
+					}
+				}
+
+				Ok(())
 			}
 			(Self::Call(call), value) => call.eval(registry, rdf, dataset, scope, result, value),
-			_ => {
-				todo!()
-			}
+			_ => Err(EvalError::InvalidType),
 		}
 	}
 
@@ -72,12 +91,19 @@ impl<P: Copy + Ord, R: Clone + Ord> PatternDesc<P, R> {
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
 			Self::Var(_) => Ok(values.pop().unwrap()),
-			Self::List(_) => {
-				todo!()
-			}
-			Self::Map(_) => {
-				todo!()
-			}
+			Self::List(patterns) => patterns
+				.iter()
+				.map(|p| p.eval_inverse(registry, rdf, dataset, scope, values))
+				.collect::<Result<_, _>>()
+				.map(Value::List),
+			Self::Map(patterns) => patterns
+				.iter()
+				.map(|(k, p)| {
+					p.eval_inverse(registry, rdf, dataset, scope, values)
+						.map(|v| (k.to_untyped(), v))
+				})
+				.collect::<Result<_, _>>()
+				.map(Value::Map),
 			Self::Call(call) => call.eval_inverse(registry, rdf, dataset, scope, values),
 		}
 	}
