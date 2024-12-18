@@ -253,7 +253,7 @@ pub struct ConstMap {
 #[derive(Debug, ll1::Parse)]
 pub struct ConstEntry {
 	pub key: ConstValue,
-	pub eq: Equal,
+	pub colon: Colon,
 	pub value: ConstValue,
 }
 
@@ -450,7 +450,7 @@ pub struct Entry {
 	pub metadata: Metadata,
 	pub key: ConstValue,
 	pub optional: Option<QuestionMark>,
-	pub eq: Equal,
+	pub colon: Colon,
 	pub value: Expr,
 }
 

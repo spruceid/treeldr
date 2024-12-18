@@ -273,7 +273,6 @@ impl<'a, P, R: Clone> Scope<'a, P, R> {
 			let mut sub_scope = Scope::<P, R> {
 				parent: Some((self, self.len())),
 				graph: graph.unwrap_or_else(|| self.graph.clone()),
-				// types: ScopeTypes::Slice(types),
 				types,
 				values: ScopeValues::Mut(Substitution::new(types_len, |_| None)),
 				dataset: Vec::new(),

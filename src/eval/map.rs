@@ -1,5 +1,4 @@
-use crate::{expr::Map, Registry, TypeRef, Value};
-use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
+use crate::{expr::Map, rdf::EvalDataset, Registry, TypeRef, Value};
 use std::collections::BTreeMap;
 
 use super::{Eval, EvalError, EvalTyped, RdfContextMut, Scope};
@@ -9,7 +8,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Map<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &Scope<P, R>,
 		type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -36,7 +35,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Map<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &mut Scope<P, R>,
 		_type_ref: TypeRef<P>,
 		output: &Value<R>,

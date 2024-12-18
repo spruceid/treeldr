@@ -1,17 +1,16 @@
 use super::{Eval, EvalError, Scope};
 use crate::{
 	pattern::{CallPattern, PatternDesc},
-	rdf::RdfContextMut,
+	rdf::{EvalDataset, RdfContextMut},
 	Pattern, Registry, Value,
 };
-use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 
 impl<P: Copy + Ord, R: Clone + Ord> Pattern<P, R> {
 	pub fn eval<'s>(
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &'s Scope<'s, P, R>,
 		value: Value<R>,
 	) -> Result<Vec<Value<R>>, EvalError<R>> {
@@ -25,7 +24,7 @@ impl<P: Copy + Ord, R: Clone + Ord> Pattern<P, R> {
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &'s Scope<'s, P, R>,
 		values: &mut Vec<Value<R>>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -39,7 +38,7 @@ impl<P: Copy + Ord, R: Clone + Ord> PatternDesc<P, R> {
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &'s Scope<'s, P, R>,
 		result: &mut Vec<Value<R>>,
 		value: Value<R>,
@@ -85,7 +84,7 @@ impl<P: Copy + Ord, R: Clone + Ord> PatternDesc<P, R> {
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &'s Scope<'s, P, R>,
 		values: &mut Vec<Value<R>>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -114,7 +113,7 @@ impl<P: Copy + Ord, R: Clone + Ord> CallPattern<P, R> {
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &'s Scope<'s, P, R>,
 		result: &mut Vec<Value<R>>,
 		output: Value<R>,
@@ -125,13 +124,15 @@ impl<P: Copy + Ord, R: Clone + Ord> CallPattern<P, R> {
 			.map(|a| a.eval(registry, rdf, dataset, scope))
 			.collect::<Result<_, _>>()?;
 
-		let values = registry.get_function(self.function).unwrap().call_inverse(
-			registry,
-			rdf,
-			dataset,
-			&const_args,
-			&output,
-		)?;
+		let values = registry
+			.get_function(self.function)
+			.unwrap()
+			.call_inverse_without_unification(registry, rdf, dataset, &const_args, &output)?;
+
+		// Calling the inverse function may cause some resources to be unified
+		// together. To ensure that pattern matching remains sound, we must
+		// update the RDF dataset accordingly.
+		dataset.apply_unification(rdf.interpretation());
 
 		for (arg, value) in self.args.iter().zip(values) {
 			arg.desc
@@ -145,7 +146,7 @@ impl<P: Copy + Ord, R: Clone + Ord> CallPattern<P, R> {
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &'s Scope<'s, P, R>,
 		values: &mut Vec<Value<R>>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -159,9 +160,14 @@ impl<P: Copy + Ord, R: Clone + Ord> CallPattern<P, R> {
 			evaluated_args.push(a.eval_inverse(registry, rdf, dataset, scope, values)?);
 		}
 
+		// Before we can call the function, we must endure that RDF resource
+		// unification are reflected in the RDF dataset so that pattern matching
+		// remains sound.
+		dataset.apply_unification(rdf.interpretation());
+
 		registry
 			.get_function(self.function)
 			.unwrap()
-			.call(registry, rdf, dataset, &evaluated_args)
+			.call_without_unification(registry, rdf, dataset, &evaluated_args)
 	}
 }

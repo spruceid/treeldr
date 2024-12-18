@@ -33,10 +33,10 @@ impl<P, R> Default for TypeValue<P, R> {
 impl<P, R> TypeValue<P, R> {
 	/// Unifies two type values.
 	pub fn unify(
-		self,
+		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		unifier: &mut Unifier<P>,
-		other: Self,
+		other: &Self,
 		// mut type_ref_variable: impl FnMut(&TypeRef) -> TypeVariableRef,
 		// mut assert_eq: impl FnMut(TypeVariableRef, TypeVariableRef),
 	) -> Result<Self, TypeUnificationError>
@@ -45,10 +45,10 @@ impl<P, R> TypeValue<P, R> {
 		R: Clone + Ord,
 	{
 		match (self, other) {
-			(Self::Undefined, b) => Ok(b),
-			(a, Self::Undefined) => Ok(a),
+			(Self::Undefined, b) => Ok(b.clone()),
+			(a, Self::Undefined) => Ok(a.clone()),
 			(Self::Pattern(a), Self::Pattern(b)) => {
-				a.unify_with(registry, unifier, &b).map(Self::Pattern)
+				a.unify_with(registry, unifier, b).map(Self::Pattern)
 			}
 			(Self::Pattern(a), Self::Type(b_ref)) => {
 				let b = registry.get_type(b_ref.ty_ref).unwrap();
@@ -57,12 +57,12 @@ impl<P, R> TypeValue<P, R> {
 			}
 			(Self::Type(a_ref), Self::Pattern(b)) => {
 				let a = registry.get_type(a_ref.ty_ref).unwrap();
-				a.unify_with(registry, &mut unifier.import(a_ref.import), &b)
+				a.unify_with(registry, &mut unifier.import(a_ref.import), b)
 					.map(Self::Pattern)
 			}
 			(Self::Type(a), Self::Type(b)) => {
 				if a == b {
-					Ok(Self::Type(a))
+					Ok(Self::Type(*a))
 				} else {
 					Err(TypeUnificationError)
 				}
@@ -93,12 +93,29 @@ pub struct ImportedTypeRef<P> {
 #[error("undefined type")]
 pub struct UndefinedType;
 
+#[derive(Debug, Clone, Copy)]
+pub struct TypeVariableMetadata {
+	pub span: Option<Span>,
+}
+
+impl TypeVariableMetadata {
+	pub fn new(span: Option<Span>) -> Self {
+		Self { span }
+	}
+
+	pub fn unify(self, other: Self) -> Self {
+		Self {
+			span: self.span.or(other.span),
+		}
+	}
+}
+
 pub struct TypeVariables<P, R> {
 	list: Vec<TypeValue<P, R>>,
 	subtype_relation: SubtypeRelation,
 	import_count: u32,
 	imported_types: HashMap<ImportedTypeRef<P>, TypeVariableRef>,
-	spans: HashMap<TypeVariableRef, Span>,
+	metadata: HashMap<TypeVariableRef, TypeVariableMetadata>,
 }
 
 impl<P, R> Default for TypeVariables<P, R> {
@@ -108,7 +125,7 @@ impl<P, R> Default for TypeVariables<P, R> {
 			subtype_relation: SubtypeRelation::default(),
 			import_count: 0,
 			imported_types: HashMap::new(),
-			spans: HashMap::new(),
+			metadata: HashMap::new(),
 		}
 	}
 }
@@ -126,14 +143,12 @@ impl<P, R> TypeVariables<P, R> {
 		let x = self.list.len();
 		self.list.push(value.into());
 		self.subtype_relation.declare(x);
-		if let Some(span) = span {
-			self.spans.insert(x, span);
-		}
+		self.metadata.insert(x, TypeVariableMetadata::new(span));
 		x
 	}
 
-	pub fn span_of(&self, x: TypeVariableRef) -> Option<Span> {
-		self.spans.get(&x).copied()
+	pub fn metadata_of(&self, x: TypeVariableRef) -> Option<TypeVariableMetadata> {
+		self.metadata.get(&x).copied()
 	}
 
 	/// Import a type reference as a type variable.
@@ -350,7 +365,38 @@ struct Resolver<'a, P, R> {
 	///
 	/// When the resolution is done, this classification includes *at least* the
 	/// base classification (`base_classes`).
-	classes: DisjointVec<TypeValue<P, R>>,
+	classes: DisjointVec<Class<P, R>>,
+}
+
+struct Class<P, R> {
+	metadata: TypeVariableMetadata,
+	value: TypeValue<P, R>,
+}
+
+impl<P, R> Class<P, R> {
+	fn new(metadata: TypeVariableMetadata, value: TypeValue<P, R>) -> Self {
+		Self { metadata, value }
+	}
+
+	fn unify(
+		self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		unifier: &mut Unifier<P>,
+		other: Self,
+	) -> Result<Self, TypeResolutionError<P>>
+	where
+		P: Copy + Ord + Hash,
+		R: Clone + Ord,
+	{
+		Ok(Self {
+			metadata: self.metadata.unify(other.metadata),
+			value: self.value.unify(registry, unifier, &other.value).map_err(
+				|TypeUnificationError| {
+					TypeResolutionError::Unification(self.metadata, other.metadata)
+				},
+			)?,
+		})
+	}
 }
 
 impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
@@ -361,7 +407,13 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 
 		let (groups, ordered_groups) = variables.compute_resolution_groups(&base_classes)?;
 
-		let classes: DisjointVec<TypeValue<P, R>> = variables.list.iter().cloned().collect();
+		let classes: DisjointVec<Class<P, R>> = variables
+			.list
+			.iter()
+			.cloned()
+			.enumerate()
+			.map(|(x, value)| Class::new(variables.metadata_of(x).unwrap(), value))
+			.collect();
 
 		Ok((
 			Self {
@@ -395,37 +447,37 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 			let component = self.base_classes.get_by_index(c).unwrap();
 			let (&first, rest) = component.split_first().unwrap();
 			for &other in rest {
-				to_unify.push((first, other));
+				to_unify.push((first, other, (first, other)));
 			}
 		}
 
 		// Unify types.
-		while let Some((a, b)) = to_unify.pop() {
-			let mut unifier = Unifier::new(&self.variables.imported_types, resolved, &mut to_unify);
-			self.classes
-				.try_merge(a, b, |a, b| {
-					// Unify `a` and `b`. This might trigger the unification of some
-					// constituents of `a` and `b`. We know the constituents are
-					// in the same resolution group.
-					a.unify(registry, &mut unifier, b)
-				})
-				.map_err(|TypeUnificationError| {
-					TypeResolutionError::Unification(
-						self.variables.span_of(a),
-						self.variables.span_of(b),
-					)
-				})?;
+		while let Some((a, b, cause)) = to_unify.pop() {
+			let mut unifier = Unifier::new(
+				&self.variables.imported_types,
+				resolved,
+				&mut to_unify,
+				cause,
+			);
+
+			self.classes.try_merge(a, b, |a, b| {
+				// Unify `a` and `b`. This might trigger the unification of some
+				// constituents of `a` and `b`. We know the constituents are
+				// in the same resolution group.
+				a.unify(registry, &mut unifier, b)
+			})?;
 		}
 
 		// Resolve classes.
 		let mut reservation = TypeAllocator::new(package);
 		let mut resolved_classes = HashMap::new();
 		for &x in &group.variables {
-			let (y, value) = self.classes.get_with_class(x).unwrap();
+			let (y, class) = self.classes.get_with_class(x).unwrap();
+
 			if x == y {
-				let target = match value {
+				let target = match &class.value {
 					TypeValue::Undefined => {
-						return Err(TypeResolutionError::Definition(UndefinedType))
+						return Err(TypeResolutionError::Definition(class.metadata.span))
 					}
 					TypeValue::Type(r) => r.ty_ref,
 					TypeValue::Pattern(_) => reservation.reserve_type(),
@@ -444,7 +496,7 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 
 		// Realization.
 		for (x, type_ref) in resolved_classes {
-			if let TypeValue::Pattern(pattern) = self.classes.get(x).unwrap() {
+			if let TypeValue::Pattern(pattern) = &self.classes.get(x).unwrap().value {
 				let type_ =
 					pattern.realize(|x| resolved.get(x).copied().unwrap_or_else(|| result[x]));
 				reservation.define_type(type_ref, type_);
@@ -498,22 +550,27 @@ impl<P: Ord, R: Clone> TypePattern<P, R> {
 	}
 }
 
+pub type UnificationCause = (TypeVariableRef, TypeVariableRef);
+
 pub struct Unifier<'a, P> {
 	imported_types: &'a HashMap<ImportedTypeRef<P>, TypeVariableRef>,
 	resolved: &'a HashMap<TypeVariableRef, TypeRef<P>>,
-	queue: &'a mut Vec<(TypeVariableRef, TypeVariableRef)>,
+	queue: &'a mut Vec<(TypeVariableRef, TypeVariableRef, UnificationCause)>,
+	cause: UnificationCause,
 }
 
 impl<'a, P> Unifier<'a, P> {
 	fn new(
 		imported_types: &'a HashMap<ImportedTypeRef<P>, TypeVariableRef>,
 		resolved: &'a HashMap<TypeVariableRef, TypeRef<P>>,
-		queue: &'a mut Vec<(TypeVariableRef, TypeVariableRef)>,
+		queue: &'a mut Vec<(TypeVariableRef, TypeVariableRef, UnificationCause)>,
+		cause: UnificationCause,
 	) -> Self {
 		Self {
 			imported_types,
 			resolved,
 			queue,
+			cause,
 		}
 	}
 
@@ -539,7 +596,7 @@ impl<'a, P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeVariableRef, TypeVariableRe
 	}
 
 	fn unify(&mut self, t: &TypeVariableRef, u: &TypeVariableRef) -> Self::Target {
-		self.queue.push((*t, *u));
+		self.queue.push((*t, *u, self.cause));
 		*t
 	}
 }
@@ -567,7 +624,7 @@ impl<'a, 'u, P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeRef<P>, TypeVariableRef
 			ty_ref: *t,
 			import: self.import,
 		}];
-		self.unifier.queue.push((t, *u));
+		self.unifier.queue.push((t, *u, self.unifier.cause));
 		t
 	}
 }
@@ -590,7 +647,7 @@ impl<'a, 'u, P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeVariableRef, TypeRef<P>
 			ty_ref: *u,
 			import: self.import,
 		}];
-		self.unifier.queue.push((*t, u));
+		self.unifier.queue.push((*t, u, self.unifier.cause));
 		*t
 	}
 }
@@ -677,8 +734,8 @@ pub enum TypeResolutionError<P> {
 	},
 
 	#[error("type unification failed")]
-	Unification(Option<Span>, Option<Span>),
+	Unification(TypeVariableMetadata, TypeVariableMetadata),
 
-	#[error(transparent)]
-	Definition(#[from] UndefinedType),
+	#[error("type annotation needed")]
+	Definition(Option<Span>),
 }

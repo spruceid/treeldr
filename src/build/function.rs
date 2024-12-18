@@ -6,11 +6,11 @@ use crate::{
 	function::{self, Signature},
 	rdf::RdfContextMut,
 	syntax::ast,
-	Function, ModuleRef, Type,
+	Function, ModuleRef,
 };
 
 use super::{
-	Build, BuildContext, BuildEnvironment, BuildingPackage, Error, ExprScope, Scope,
+	Build, BuildContext, BuildEnvironment, BuildingPackage, Error, ExprScope, Scope, TypeValue,
 	TypeVariableRef,
 };
 
@@ -55,7 +55,7 @@ impl<'ast, P: Copy + Ord + Hash> FunctionDefinition<'ast, P> {
 					ast::ArgDef::Untyped(ident) => {
 						let type_ref = context
 							.type_variables
-							.fresh(Type::resource(), Some(ident.span()));
+							.fresh(TypeValue::Undefined, Some(ident.span()));
 						sub_scope.expr.insert(ident, type_ref);
 						type_ref
 					}

@@ -8,6 +8,16 @@ use crate::TermPattern;
 mod ignored;
 pub use ignored::*;
 
+pub trait PairExt<A, B> {
+	fn map_pair<T>(self, f: impl Fn(B) -> T + Fn(A) -> T) -> (T, T);
+}
+
+impl<A, B> PairExt<A, B> for (A, B) {
+	fn map_pair<T>(self, f: impl Fn(B) -> T + Fn(A) -> T) -> (T, T) {
+		(f(self.0), f(self.1))
+	}
+}
+
 pub trait QuadsExt<'a, R>: Sized {
 	fn with_default_graph(self, graph: Option<&'a R>) -> QuadsWithDefaultGraph<'a, R, Self>;
 }

@@ -82,7 +82,7 @@ impl PositiveTest {
 		if forward {
 			// Evaluate.
 			let found = function
-				.call(&registry, &mut rdf, &mut input, &args)
+				.call_without_unification(&registry, &mut rdf, &mut input, &args)
 				.expect("evaluation failed");
 
 			if output != found {
@@ -97,7 +97,7 @@ impl PositiveTest {
 		} else {
 			let mut found = IndexedBTreeDataset::new();
 			let found_args = function
-				.call_inverse(&registry, &mut rdf, &mut found, &[], &output)
+				.call_inverse_without_unification(&registry, &mut rdf, &mut found, &[], &output)
 				.expect("inverse evaluation failed");
 
 			for (i, a) in found_args.iter().enumerate() {

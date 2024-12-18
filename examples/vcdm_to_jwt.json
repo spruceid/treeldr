@@ -1,0 +1,7 @@
+{
+	"issuer": "http://example.com/#Issuer",
+	"credentialSubject": {
+		"id": "http://example.com/#John.Smith",
+		"name": "John Smith"
+	}
+}

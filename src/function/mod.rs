@@ -1,8 +1,5 @@
 use core::fmt;
-use rdf_types::{
-	dataset::{DatasetMut, PatternMatchingDataset},
-	Quad,
-};
+use rdf_types::Quad;
 use serde::{Deserialize, Serialize};
 use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 use std::{hash::Hash, marker::PhantomData};
@@ -11,7 +8,9 @@ use crate::{
 	display::DisplaySignature,
 	eval::{EvalError, Scope, ScopeTypes, ScopeValues},
 	pattern::serde_dataset_pattern,
-	rdf::{RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	rdf::{
+		EvalDataset, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
+	},
 	ty::{BuiltInType, TypeRef},
 	Attributes, DatasetPattern, Registry, Value,
 };
@@ -159,7 +158,19 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
+		args: &[Value<R>],
+	) -> Result<Value<R>, EvalError<R>> {
+		let result = self.call_without_unification(registry, rdf, dataset, args)?;
+		dataset.apply_unification(rdf.interpretation());
+		Ok(result)
+	}
+
+	pub fn call_without_unification(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		dataset: &mut impl EvalDataset<R>,
 		args: &[Value<R>],
 	) -> Result<Value<R>, EvalError<R>> {
 		let arg_count = args.len() as u32;
@@ -181,11 +192,33 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 		self.body.eval(registry, rdf, dataset, &scope)
 	}
 
+	/// Call the inverse function.
+	///
+	/// Returns the inputs associated to the given output and const arguments.
+	/// The returned input list does *not* include the const arguments again.
 	pub fn call_inverse(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
+		const_args: &[Value<R>],
+		output: &Value<R>,
+	) -> Result<Vec<Value<R>>, EvalError<R>> {
+		let result =
+			self.call_inverse_without_unification(registry, rdf, dataset, const_args, output)?;
+		dataset.apply_unification(rdf.interpretation());
+		Ok(result)
+	}
+
+	/// Call the inverse function.
+	///
+	/// Returns the inputs associated to the given output and const arguments.
+	/// The returned input list does *not* include the const arguments again.
+	pub fn call_inverse_without_unification(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+		rdf: &mut impl RdfContextMut<Resource = R>,
+		dataset: &mut impl EvalDataset<R>,
 		const_args: &[Value<R>],
 		output: &Value<R>,
 	) -> Result<Vec<Value<R>>, EvalError<R>> {

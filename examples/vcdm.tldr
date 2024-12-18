@@ -6,14 +6,14 @@ let (_ credential subject) where {
 		credential cred:credentialSubject subject
 } = {
 	## Issuer.
-	"issuer" = (iri_of (get cred:issuer credential)),
+	"issuer": (iri_of (get cred:issuer credential)),
 
 	## Credential subject.
-	"credentialSubject" = {
+	"credentialSubject": {
 		## Identifier.
-		"id" = (iri_of subject),
+		"id": (iri_of subject),
 
 		## Name.
-		"name" = (string_of (get schema:name subject))
+		"name": (string_of (get schema:name subject))
 	}
 }

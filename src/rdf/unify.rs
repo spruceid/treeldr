@@ -17,6 +17,8 @@ pub trait TryUnifyInterpretation: Interpretation {
 		a: &Self::Resource,
 		b: &Self::Resource,
 	) -> Result<(), Self::UnificationError>;
+
+	fn substitute_resource(&self, r: Self::Resource) -> Self::Resource;
 }
 
 #[derive(Default)]
@@ -104,6 +106,10 @@ impl TryUnifyInterpretation for UnifyLiteralInterpretation {
 				}
 			}
 		}
+	}
+
+	fn substitute_resource(&self, r: Self::Resource) -> Self::Resource {
+		self.map_term(r)
 	}
 }
 

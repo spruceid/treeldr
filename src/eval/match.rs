@@ -1,13 +1,12 @@
 use super::{Eval, EvalError, EvalTyped, MissingData, RdfContextMut, Scope};
-use crate::{expr::Match, Registry, TypeRef, Value};
-use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
+use crate::{expr::Match, rdf::EvalDataset, Registry, TypeRef, Value};
 
 impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Match<P, R> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &Scope<P, R>,
 		_type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -27,7 +26,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Match<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &mut Scope<P, R>,
 		_type_ref: TypeRef<P>,
 		output: &Value<R>,

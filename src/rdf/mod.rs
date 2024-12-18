@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use dataset::{DatasetMut, PatternMatchingDataset};
 pub use iref;
 pub use iref::{Iri, IriBuf};
 pub use rdf_types::*;
@@ -17,6 +18,28 @@ mod index;
 pub use index::{ResourceBackwardIndex, ResourceForwardIndex};
 
 pub mod serde;
+
+pub trait EvalDataset<R>:
+	Default + DatasetMut<Resource = R> + PatternMatchingDataset + IntoIterator<Item = Quad<R>>
+{
+	fn apply_substitution(&mut self, mut f: impl FnMut(R) -> R) {
+		for Quad(s, p, o, g) in std::mem::take(self) {
+			self.insert(Quad(f(s), f(p), f(o), g.map(&mut f)));
+		}
+	}
+
+	fn apply_unification(&mut self, i: &impl TryUnifyInterpretation<Resource = R>) {
+		self.apply_substitution(|r| i.substitute_resource(r));
+	}
+}
+
+impl<R, D> EvalDataset<R> for D where
+	D: Default
+		+ DatasetMut<Resource = R>
+		+ PatternMatchingDataset<Resource = R>
+		+ IntoIterator<Item = Quad<R>>
+{
+}
 
 pub trait VisitResources<R> {
 	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R));

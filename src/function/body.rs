@@ -4,10 +4,11 @@ use super::BuiltInFunction;
 use crate::{
 	eval::{Eval, EvalError, Scope},
 	expr::Expr,
-	rdf::{RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	rdf::{
+		EvalDataset, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
+	},
 	Registry, TypeRef, Value,
 };
-use rdf_types::dataset::{DatasetMut, PatternMatchingDataset};
 use serde::{Deserialize, Serialize};
 use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 
@@ -37,7 +38,7 @@ impl<P: Copy + Ord, R: Ord + Clone> Body<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
@@ -50,13 +51,14 @@ impl<P: Copy + Ord, R: Ord + Clone> Body<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {
 			Self::Expr(e) => e.eval_inverse(registry, rdf, dataset, scope, output),
 			Self::BuiltIn(b) => {
+				// The const arguments are in the parent scope.
 				let offset = scope.parent().unwrap().top_const_values().len() as u32;
 
 				let values = b.eval_inverse(rdf, dataset, scope, output)?;

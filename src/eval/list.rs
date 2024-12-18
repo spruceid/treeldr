@@ -3,20 +3,17 @@ use super::{
 };
 use crate::{
 	expr::{ExplicitList, ImplicitList, List, OrderedList, UnorderedList},
-	rdf::DebugSubstitution,
+	rdf::{DebugSubstitution, EvalDataset},
 	Registry, TypeRef, Value,
 };
-use rdf_types::{
-	dataset::{DatasetMut, PatternMatchingDataset},
-	Quad,
-};
+use rdf_types::Quad;
 
 impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for List<P, R> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &Scope<P, R>,
 		r#type: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -30,7 +27,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for List<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &mut Scope<P, R>,
 		r#type: TypeRef<P>,
 		output: &Value<R>,
@@ -51,7 +48,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for ExplicitList<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &Scope<P, R>,
 		_type: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -68,7 +65,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for ExplicitList<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &mut Scope<P, R>,
 		_type: TypeRef<P>,
 		output: &Value<R>,
@@ -91,7 +88,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for ImplicitList<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &Scope<P, R>,
 		r#type: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -105,7 +102,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for ImplicitList<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &mut Scope<P, R>,
 		r#type: TypeRef<P>,
 		output: &Value<R>,
@@ -126,7 +123,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for UnorderedList<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &Scope<P, R>,
 		type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -161,7 +158,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for UnorderedList<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &mut Scope<P, R>,
 		_type_ref: TypeRef<P>,
 		output: &Value<R>,
@@ -192,7 +189,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &Scope<P, R>,
 		_type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -289,7 +286,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &mut Scope<P, R>,
 		_type_ref: TypeRef<P>,
 		output: &Value<R>,

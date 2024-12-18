@@ -106,6 +106,8 @@ impl ast::Binding {
 	}
 }
 
+type BuildPatternResult<P, R> = Result<Pattern<P, R, TypeVariableRef>, Error<P>>;
+
 impl ast::Expr {
 	fn build_pattern<'ast, E, D>(
 		&'ast self,
@@ -114,7 +116,7 @@ impl ast::Expr {
 		scope: &Scope<E::PackageId>,
 		variables: &mut Vec<TypeVariableRef>,
 		sub_scope: &mut Scope<E::PackageId>,
-	) -> Result<Pattern<E::PackageId, E::Resource, TypeVariableRef>, Error<E::PackageId>>
+	) -> BuildPatternResult<E::PackageId, E::Resource>
 	where
 		E: BuildEnvironment,
 		E::PackageId: Copy + Ord + Hash,
@@ -169,6 +171,8 @@ type BuiltListPattern<P, R> = (
 	Vec<Pattern<P, R, TypeVariableRef>>,
 );
 
+type BuildListPatternResult<P, R> = Result<BuiltListPattern<P, R>, Error<P>>;
+
 impl ast::ListExpr {
 	fn build_pattern<'ast, E, D>(
 		&'ast self,
@@ -177,7 +181,7 @@ impl ast::ListExpr {
 		scope: &Scope<E::PackageId>,
 		variables: &mut Vec<TypeVariableRef>,
 		sub_scope: &mut Scope<E::PackageId>,
-	) -> Result<BuiltListPattern<E::PackageId, E::Resource>, Error<E::PackageId>>
+	) -> BuildListPatternResult<E::PackageId, E::Resource>
 	where
 		E: BuildEnvironment,
 		E::PackageId: Copy + Ord + Hash,
@@ -208,15 +212,17 @@ type BuiltMapPattern<P, R> = (
 	MapPattern<P, R, TypeVariableRef>,
 );
 
+type BuildMapPatternResult<P, R> = Result<BuiltMapPattern<P, R>, Error<P>>;
+
 impl ast::MapExpr {
-	fn build_pattern<'ast, E, D>(
+	fn build_pattern<E, D>(
 		&self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingPackage<'ast, E::PackageId>,
+		namespace: &BuildingPackage<E::PackageId>,
 		scope: &Scope<E::PackageId>,
 		variables: &mut Vec<TypeVariableRef>,
 		sub_scope: &mut Scope<E::PackageId>,
-	) -> Result<BuiltMapPattern<E::PackageId, E::Resource>, Error<E::PackageId>>
+	) -> BuildMapPatternResult<E::PackageId, E::Resource>
 	where
 		E: BuildEnvironment,
 		E::PackageId: Copy + Ord + Hash,
@@ -246,15 +252,17 @@ impl ast::MapExpr {
 
 type BuiltCallPattern<P, R> = (TypeVariableRef, CallPattern<P, R, TypeVariableRef>);
 
+type BuildCallPatternResult<P, R> = Result<BuiltCallPattern<P, R>, Error<P>>;
+
 impl ast::CallExpr {
-	fn build_pattern<'ast, E, D>(
+	fn build_pattern<E, D>(
 		&self,
 		context: &mut BuildContext<'_, E, D>,
-		namespace: &BuildingPackage<'ast, E::PackageId>,
+		namespace: &BuildingPackage<E::PackageId>,
 		scope: &Scope<E::PackageId>,
 		variables: &mut Vec<TypeVariableRef>,
 		sub_scope: &mut Scope<E::PackageId>,
-	) -> Result<BuiltCallPattern<E::PackageId, E::Resource>, Error<E::PackageId>>
+	) -> BuildCallPatternResult<E::PackageId, E::Resource>
 	where
 		E: BuildEnvironment,
 		E::PackageId: Copy + Ord + Hash,
@@ -302,7 +310,7 @@ impl ast::CallExpr {
 			.map(|&a_ty| {
 				let a = ast_args.next().unwrap();
 				let e = a.build_pattern(context, namespace, scope, variables, sub_scope)?;
-				context.type_variables.assert_subtype_of(e.r#type, a_ty);
+				context.type_variables.assert_eq(e.r#type, a_ty);
 				Ok(e)
 			})
 			.collect::<Result<_, _>>()?;
@@ -316,7 +324,6 @@ impl ast::CallExpr {
 		let t = context
 			.type_variables
 			.fresh(TypeValue::Undefined, Some(self.span()));
-
 		context.type_variables.assert_eq(signature.return_type, t);
 
 		Ok((t, e))
@@ -440,12 +447,22 @@ impl ast::RdfPattern {
 		D: RdfContextMut<Resource = E::Resource>,
 	{
 		match self {
-			Self::Var(ident) => scope
-				.get_by_name(context, namespace, ident.as_str())
-				.ok_or_else(|| Error::<E::PackageId>::UnknownVariable(ident.clone()))?
-				.as_variable()
-				.ok_or_else(|| Error::<E::PackageId>::NotAVariable(ident.clone()))
-				.map(TermPattern::Var),
+			Self::Var(ident) => {
+				let x = scope
+					.get_by_name(context, namespace, ident.as_str())
+					.ok_or_else(|| Error::<E::PackageId>::UnknownVariable(ident.clone()))?
+					.as_variable()
+					.ok_or_else(|| Error::<E::PackageId>::NotAVariable(ident.clone()))?;
+
+				let t = context
+					.type_variables
+					.fresh(Type::resource(), Some(self.span()));
+				context
+					.type_variables
+					.assert_eq(scope.expr.type_of(x).unwrap(), t);
+
+				Ok(TermPattern::Var(x))
+			}
 			Self::Iri(i) => {
 				let iri = i.build(context, namespace, scope)?;
 				Ok(TermPattern::Resource(
@@ -1083,6 +1100,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		let t = context
 			.type_variables
 			.fresh(TypeValue::Undefined, Some(self.span()));
+
 		context.type_variables.assert_eq(signature.return_type, t);
 
 		Ok((e, t))

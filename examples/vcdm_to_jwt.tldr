@@ -1,0 +1,35 @@
+prefix cred = <https://www.w3.org/2018/credentials#>
+prefix schema = <https://schema.org/>
+
+let (_ vc) = let (vcdm2 credential subject) = vc; (jwt credential subject)
+
+## VCDM 2.0 layout.
+let (vcdm2 credential subject) where {
+		credential cred:credentialSubject subject
+} = {
+	## Issuer.
+	"issuer": (iri_of (get cred:issuer credential)),
+
+	## Credential subject.
+	"credentialSubject": {
+		## Identifier.
+		"id": (iri_of subject),
+
+		## Name.
+		"name": (string_of (get schema:name subject))
+	}
+}
+
+## JWT layout.
+let (jwt credential subject) where {
+		credential cred:credentialSubject subject
+} = {
+	## Issuer.
+	"iss": (iri_of (get cred:issuer credential)),
+
+	## Identifier.
+	"id": (iri_of subject),
+
+	## Name.
+	"name": (string_of (get schema:name subject))
+}

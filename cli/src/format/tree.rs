@@ -1,14 +1,23 @@
 use core::fmt;
-use std::io::{self, BufRead, Write};
+use std::{
+	io::{self, BufRead, Write},
+	str::FromStr,
+};
 
 use clap::builder::TypedValueParser;
 use json_syntax::Print;
-use treeldr::value::{serde::json::NonJsonValue, TypedValue};
+use treeldr::value::{serde::json::NonJsonValue, TypedValue, ValueParseError};
 
 use crate::{PackageId, Registry};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
+	#[error(transparent)]
+	IO(#[from] io::Error),
+
+	#[error("TRON parse error: {0}")]
+	Tron(#[from] ValueParseError),
+
 	#[error("JSON parse error: {0}")]
 	Json(json_syntax::parse::Error<io::Error>),
 	// #[error("CBOR parse error: {0}")]
@@ -31,13 +40,20 @@ pub enum WriteError {
 
 #[derive(Debug, Clone)]
 pub enum TreeFormat {
+	Tron,
 	Json,
 	// Cbor,
 }
 
 impl TreeFormat {
-	pub const POSSIBLE_VALUES: &'static [&'static str] =
-		&["application/json", "json", "application/cbor", "cbor"];
+	pub const POSSIBLE_VALUES: &'static [&'static str] = &[
+		"application/tron",
+		"tron",
+		"application/json",
+		"json",
+		"application/cbor",
+		"cbor",
+	];
 
 	pub fn parser(
 	) -> clap::builder::MapValueParser<clap::builder::PossibleValuesParser, fn(String) -> Self> {
@@ -47,6 +63,7 @@ impl TreeFormat {
 
 	pub fn new(name: &str) -> Option<Self> {
 		match name {
+			"application/tron" | "tron" => Some(Self::Tron),
 			"application/json" | "json" => Some(Self::Json),
 			// "application/cbor" | "cbor" => Some(Self::Cbor),
 			_ => None,
@@ -55,13 +72,19 @@ impl TreeFormat {
 
 	pub fn as_str(&self) -> &'static str {
 		match self {
+			Self::Tron => "application/tron",
 			Self::Json => "application/json",
 			// Self::Cbor => "application/cbor",
 		}
 	}
 
-	pub fn load(&self, input: impl BufRead) -> Result<treeldr::Value, LoadError> {
+	pub fn load(&self, mut input: impl BufRead) -> Result<treeldr::Value, LoadError> {
 		match self {
+			Self::Tron => {
+				let mut buf = String::new();
+				input.read_to_string(&mut buf)?;
+				treeldr::Value::from_str(&buf).map_err(Into::into)
+			}
 			Self::Json => {
 				use json_syntax::Parse;
 				let utf8_input = utf8_decode::UnsafeDecoder::new(input.bytes());
@@ -80,6 +103,9 @@ impl TreeFormat {
 		mut output: impl Write,
 	) -> Result<(), WriteError> {
 		match self {
+			Self::Tron => {
+				writeln!(output, "{}", value.to_untyped().to_string()).map_err(WriteError::IO)
+			}
 			Self::Json => {
 				let json: json_syntax::Value = value
 					.clone()
@@ -87,9 +113,9 @@ impl TreeFormat {
 					.try_into()
 					.map_err(WriteError::NonJsonValue)?;
 				if pretty {
-					write!(output, "{}", json.pretty_print()).map_err(WriteError::IO)
+					writeln!(output, "{}", json.pretty_print()).map_err(WriteError::IO)
 				} else {
-					write!(output, "{}", json.compact_print()).map_err(WriteError::IO)
+					writeln!(output, "{}", json.compact_print()).map_err(WriteError::IO)
 				}
 			} // Self::Cbor => {
 			  // 	let cbor = value

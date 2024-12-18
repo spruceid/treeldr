@@ -8,6 +8,7 @@ use rdf_types::{
 use crate::{
 	expr::Bindings,
 	pattern::Substitution,
+	rdf::EvalDataset,
 	utils::{QuadsExt, QuadsWithDefaultGraph},
 	Matching, Registry, TermPattern, Value,
 };
@@ -19,7 +20,7 @@ impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut (impl DatasetMut<Resource = R> + PatternMatchingDataset),
+		dataset: &mut impl EvalDataset<R>,
 		scope: &'s Scope<'s, P, R>,
 	) -> Result<Option<Cow<'s, Scope<'s, P, R>>>, EvalError<R>> {
 		let mut values = Vec::with_capacity(self.len());
@@ -54,7 +55,7 @@ impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 	) -> Result<(), EvalError<R>>
 	where
 		C: RdfContextMut<Resource = R>,
-		D: DatasetMut<Resource = R> + PatternMatchingDataset,
+		D: EvalDataset<R>,
 	{
 		let mut values = scope.begin_mut(
 			rdf,
@@ -67,6 +68,8 @@ impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 			},
 		)?;
 
+		// Reverse the values, because patterns need to pop the values front to
+		// back.
 		values.reverse();
 
 		for b in &self.list {

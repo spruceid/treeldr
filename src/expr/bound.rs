@@ -33,15 +33,19 @@ pub struct Bindings<P, R, T = TypeRef<P>> {
 }
 
 impl<P, R, T> Bindings<P, R, T> {
+	pub fn is_empty(&self) -> bool {
+		self.variables.is_empty()
+	}
+
 	pub fn len(&self) -> usize {
 		self.variables.len()
 	}
 }
 
 impl<P, R: Ord, T> Bindings<P, R, T> {
-	pub fn map_types_ref_mut<U: Ord>(self, f: &mut impl FnMut(T) -> U) -> Bindings<P, R, U> {
+	pub fn map_types_ref_mut<U: Ord>(self, mut f: &mut impl FnMut(T) -> U) -> Bindings<P, R, U> {
 		Bindings {
-			variables: self.variables.into_iter().map(|t| f(t)).collect(),
+			variables: self.variables.into_iter().map(&mut f).collect(),
 			list: self
 				.list
 				.into_iter()

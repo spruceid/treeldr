@@ -8,7 +8,7 @@ use codespan_reporting::{
 };
 use std::{
 	fs,
-	io::{self, BufReader},
+	io::{self, BufReader, BufWriter, Write},
 	path::PathBuf,
 	process::ExitCode,
 };
@@ -18,7 +18,10 @@ use treeldr::{
 	eval::{EvalError, MissingData},
 	module::ItemRef,
 	package::CompileError,
-	rdf::{dataset::BTreeDataset, Rdf},
+	rdf::{
+		dataset::{BTreeDataset, IndexedBTreeDataset},
+		Rdf,
+	},
 	syntax::Spanned,
 	value::ValueParseError,
 	Registry as _, Value,
@@ -52,11 +55,11 @@ enum Command {
 	/// Call a function.
 	Call {
 		/// Format of the input arguments that are read from the standard input.
-		#[arg(short = 'i', long = "input", value_parser = TreeFormat::parser(), default_value = "json")]
+		#[arg(short = 'i', long = "input", value_parser = TreeFormat::parser(), default_value = "tron")]
 		input_format: TreeFormat,
 
 		/// Format of the output values.
-		#[arg(short = 'o', long = "output", value_parser = TreeFormat::parser(), default_value = "json")]
+		#[arg(short = 'o', long = "output", value_parser = TreeFormat::parser(), default_value = "tron")]
 		output_format: TreeFormat,
 
 		/// Format of the input RDF dataset.
@@ -169,6 +172,27 @@ impl RdfInput {
 	}
 }
 
+enum RdfOutput {
+	Stdout,
+	File(PathBuf),
+}
+
+impl RdfOutput {
+	pub fn save(self, dataset: IndexedBTreeDataset, format: RdfFormat) -> Result<(), Error> {
+		match self {
+			Self::Stdout => {
+				let mut stdout = BufWriter::new(io::stdout());
+				stdout.write(b"\n")?;
+				format.write(dataset, stdout).map_err(Into::into)
+			}
+			Self::File(path) => {
+				let file = fs::File::create(path)?;
+				format.write(dataset, file).map_err(Into::into)
+			}
+		}
+	}
+}
+
 impl Command {
 	fn run(self, rdf: &mut Rdf, registry: &Registry) -> Result<(), Error> {
 		match self {
@@ -209,11 +233,12 @@ impl Command {
 				};
 
 				while args.len() < expected_arg_count {
+					println!("expecting one argument");
 					let stdin = BufReader::new(io::stdin());
 					args.push(input_format.load(stdin)?)
 				}
 
-				let (rdf_input, rdf_input_format) = match rdf_input {
+				let mut dataset = match rdf_input {
 					Some(options) => {
 						let mut options = options.into_iter();
 						let filename = options.next().unwrap();
@@ -230,12 +255,10 @@ impl Command {
 							.transpose()?
 							.unwrap_or_default();
 
-						(input, format)
+						input.load(format)?.into_indexed()
 					}
-					None => (RdfInput::Stdin, RdfFormat::default()),
+					None => IndexedBTreeDataset::new(),
 				};
-
-				let mut dataset = rdf_input.load(rdf_input_format)?.into_indexed();
 
 				if reverse {
 					let mut args = args.into_iter();
@@ -254,13 +277,14 @@ impl Command {
 
 					let mut out = io::stdout();
 
-					for input in inputs {
-						let typed_input = input
-							.into_typed(registry, function.signature.return_type)
-							.unwrap();
+					for (ty, input) in function.signature.args.iter().copied().zip(inputs) {
+						let typed_input = input.into_typed(registry, ty).unwrap();
 
 						output_format.write(registry, &typed_input, pretty, &mut out)?;
+						out.write(b"\n")?;
 					}
+
+					out.flush()?;
 				} else {
 					let output = function.call(registry, rdf, &mut dataset, &args)?;
 
@@ -273,15 +297,21 @@ impl Command {
 
 				if let Some(options) = rdf_output {
 					let mut options = options.into_iter();
-					let filename: PathBuf = options.next().unwrap().into();
+					let filename = options.next().unwrap();
+
+					let output = if filename == "-" {
+						RdfOutput::Stdout
+					} else {
+						RdfOutput::File(filename.into())
+					};
+
 					let format = options
 						.next()
 						.map(|name| name.parse::<RdfFormat>())
 						.transpose()?
 						.unwrap_or_default();
 
-					let mut output = fs::File::create(filename)?;
-					format.write(dataset, &mut output)?;
+					output.save(dataset, format)?
 				}
 
 				Ok(())
@@ -343,21 +373,35 @@ impl Error {
 						),
 					])
 					.with_message(e.to_string()),
-				CompileError::Typing(TypeResolutionError::Unification(a, b)) => {
-					let mut labels = Vec::new();
+				CompileError::Typing(e) => match e {
+					TypeResolutionError::Unification(a, b) => {
+						let mut labels = Vec::new();
 
-					if let Some(span) = a {
-						labels.push(Label::primary(file_id, span));
+						if let Some(span) = a.span {
+							labels.push(Label::primary(file_id, span));
+						}
+
+						if let Some(span) = b.span {
+							labels.push(Label::primary(file_id, span));
+						}
+
+						Diagnostic::error()
+							.with_labels(labels)
+							.with_message("type mismatch")
 					}
+					TypeResolutionError::Definition(span) => {
+						let mut labels = Vec::new();
 
-					if let Some(span) = b {
-						labels.push(Label::primary(file_id, span));
+						if let Some(span) = span {
+							labels.push(Label::primary(file_id, span));
+						}
+
+						Diagnostic::error()
+							.with_labels(labels)
+							.with_message("type annotation needed")
 					}
-
-					Diagnostic::error()
-						.with_labels(labels)
-						.with_message("type mismatch")
-				}
+					e => Diagnostic::error().with_message(e.to_string()),
+				},
 				CompileError::Build(e) => Diagnostic::error()
 					.with_labels(vec![
 						Label::primary(file_id, e.span()).with_message(e.to_string())
@@ -368,10 +412,9 @@ impl Error {
 						Label::primary(file_id, e.span()).with_message(e.to_string())
 					])
 					.with_message("invalid syntax"),
-				e => Diagnostic::error().with_message(e.to_string()),
 			},
 			Self::Eval(EvalError::MissingData(MissingData::Empty(dataset))) => Diagnostic::error()
-				.with_message("no matching data")
+				.with_message("missing required RDF quads")
 				.with_notes(dataset.iter().map(|quad| quad.to_string()).collect()),
 			e => Diagnostic::error().with_message(e.to_string()),
 		}

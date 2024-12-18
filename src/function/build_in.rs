@@ -126,10 +126,10 @@ impl BuiltInFunction {
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
 			Self::Get => {
-				let prop = args[0].as_resource().unwrap();
+				let predicate = args[0].as_resource().unwrap();
 				let subject = args[1].as_resource().unwrap();
 
-				let mut objects = dataset.quad_objects(None, subject, prop);
+				let mut objects = dataset.quad_objects(None, subject, predicate);
 
 				match objects.next() {
 					Some(object) => {
@@ -144,7 +144,7 @@ impl BuiltInFunction {
 						Err(EvalError::MissingData(MissingData::Empty(
 							[Quad(
 								substitution.insert_resource(rdf, subject),
-								substitution.insert_resource(rdf, prop),
+								substitution.insert_resource(rdf, predicate),
 								substitution.new_resource(),
 								None,
 							)]

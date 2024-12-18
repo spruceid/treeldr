@@ -1,60 +1,70 @@
 {
-    "name": "treeldr",
-    "displayName": "TreeLDR",
-    "description": "TreeLDR schema definition language for Visual Studio Code",
-    "version": "0.0.1",
-    "engines": {
-        "vscode": "^1.64.0"
-    },
-    "categories": [
-        "Programming Languages",
-        "Snippets"
-    ],
-    "activationEvents": [
-        "onLanguage:treeldr"
-    ],
-    "main": "./main.js",
-    "contributes": {
-        "languages": [
-            {
-                "id": "treeldr",
-                "aliases": ["TreeLDR", "treeldr"],
-                "extensions": [".tldr"],
-                "configuration": "./language-configuration.json"
-            },
-            {
-                "id": "treeldr-markdown-injection"
-            }
-        ],
-        "grammars": [
-            {
-                "language": "treeldr",
-                "scopeName": "source.treeldr",
-                "path": "./grammar.json"
-            },
-            {
-                "language": "treeldr-markdown-injection",
-                "scopeName": "markdown.treeldr.codeblock",
-                "path": "./markdown-injection.json",
-                "injectTo": ["text.html.markdown"],
-                "embeddedLanguages": {
-                    "meta.embedded.block.treeldr": "treeldr"
-                }
-            }
-        ],
-        "snippets": [
-            {
-                "language": "treeldr",
-                "path": "./snippets.json"
-            }
-        ],
-        "tokenColors": [
-            {
-                "scope": "meta.embedded.block.treeldr",
-                "settings": {
-                    "foreground": "${editor.foreground}"
-                }
-            }
-        ]
-    }
+	"name": "treeldr",
+	"displayName": "TreeLDR",
+	"description": "TreeLDR schema definition language for Visual Studio Code",
+	"version": "0.0.1",
+	"engines": {
+		"vscode": "^1.64.0"
+	},
+	"categories": [
+		"Programming Languages",
+		"Snippets"
+	],
+	"activationEvents": [
+		"onLanguage:treeldr"
+	],
+	"main": "./main.js",
+	"contributes": {
+		"languages": [
+			{
+				"id": "treeldr",
+				"aliases": [
+					"TreeLDR",
+					"treeldr"
+				],
+				"extensions": [
+					".tldr"
+				],
+				"configuration": "./language-configuration.json"
+			},
+			{
+				"id": "treeldr-markdown-injection"
+			}
+		],
+		"grammars": [
+			{
+				"language": "treeldr",
+				"scopeName": "source.treeldr",
+				"path": "./grammar.json"
+			},
+			{
+				"language": "treeldr-markdown-injection",
+				"scopeName": "markdown.treeldr.codeblock",
+				"path": "./markdown-injection.json",
+				"injectTo": [
+					"text.html.markdown"
+				],
+				"embeddedLanguages": {
+					"meta.embedded.block.treeldr": "treeldr"
+				}
+			}
+		],
+		"snippets": [
+			{
+				"language": "treeldr",
+				"path": "./snippets.json"
+			}
+		],
+		"tokenColors": [
+			{
+				"scope": "meta.embedded.block.treeldr",
+				"settings": {
+					"foreground": "${editor.foreground}"
+				}
+			}
+		]
+	},
+	"__metadata": {
+		"size": 148720
+	}
 }
