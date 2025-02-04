@@ -19,6 +19,10 @@ impl ByteString {
 	pub fn contains(&self, _value: &[u8]) -> bool {
 		true
 	}
+
+	pub fn to_singleton_value(&self) -> Option<Vec<u8>> {
+		None
+	}
 }
 
 impl<P, R> DisplaySignature<P, R> for ByteString {

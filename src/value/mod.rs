@@ -1,7 +1,8 @@
 use core::fmt;
-use std::{collections::BTreeMap, hash::Hash, str::FromStr};
+use std::{hash::Hash, str::FromStr};
 
 mod like;
+use btree_indexmap::BTreeIndexMap;
 pub use like::*;
 
 mod literal;
@@ -25,7 +26,7 @@ use crate::{
 
 pub type List<R = rdf_types::Term> = Vec<Value<R>>;
 
-pub type Map<R = rdf_types::Term> = BTreeMap<Value<R>, Value<R>>;
+pub type Map<R = rdf_types::Term> = BTreeIndexMap<Value<R>, Value<R>>;
 
 /// Untyped tree value.
 #[derive(
@@ -190,7 +191,7 @@ impl<R> Value<R> {
 									result.insert(typed_key, typed_value);
 								}
 								Err(value) => {
-									let mut reverted = BTreeMap::new();
+									let mut reverted = BTreeIndexMap::new();
 									reverted.extend(
 										result
 											.into_iter()
@@ -208,7 +209,7 @@ impl<R> Value<R> {
 					}
 
 					if field.required && !found {
-						let mut reverted = BTreeMap::new();
+						let mut reverted = BTreeIndexMap::new();
 						reverted.extend(
 							result
 								.into_iter()
@@ -242,6 +243,35 @@ impl<R> Value<R> {
 			(_, value) => Err(value),
 		}
 	}
+
+	fn map_resources_ref_mut(&mut self, f: &mut impl FnMut(R) -> R) where R: Ord {
+		match self {
+			Self::Resource(_) => {
+				let Self::Resource(r) = std::mem::replace(self, Self::Literal(Literal::Unit)) else {
+					unreachable!()
+				};
+
+				*self = Self::Resource(f(r));
+			}
+			Self::Literal(_) => (),
+			Self::List(list) => {
+				for item in list {
+					item.map_resources_ref_mut(f);
+				}
+			}
+			Self::Map(map) => {
+				for (mut key, mut value) in std::mem::take(map) {
+					key.map_resources_ref_mut(f);
+					value.map_resources_ref_mut(f);
+					map.insert(key, value);
+				}
+			}
+		}
+	}
+
+	pub fn map_resources(&mut self, mut f: impl FnMut(R) -> R) where R: Ord {
+		self.map_resources_ref_mut(&mut f);
+	}
 }
 
 impl<R> VisitResources<R> for Value<R> {
@@ -274,7 +304,7 @@ pub struct ValueParseError(pub String);
 impl<R> ValueLike for Value<R> {
 	type Resource = R;
 	type List = Vec<Self>;
-	type Map = BTreeMap<Self, Self>;
+	type Map = BTreeIndexMap<Self, Self>;
 
 	fn destruct(&self) -> Destruct<Self> {
 		match self {
@@ -299,7 +329,7 @@ impl<R> ListLike for Vec<Value<R>> {
 	}
 }
 
-impl<R> MapLike for BTreeMap<Value<R>, Value<R>> {
+impl<R> MapLike for BTreeIndexMap<Value<R>, Value<R>> {
 	type Resource = R;
 	type Value = Value<R>;
 
@@ -365,7 +395,7 @@ fn try_map_into_typed<P, R: Ord>(
 					result.insert(bk, bv);
 				}
 				Err(av) => {
-					let mut reverted = BTreeMap::new();
+					let mut reverted = BTreeIndexMap::new();
 					reverted.extend(result.into_iter().map(|(bk, bv)| (revert(bk), revert(bv))));
 					reverted.insert(revert(bk), av);
 					reverted.extend(entries);
@@ -373,7 +403,7 @@ fn try_map_into_typed<P, R: Ord>(
 				}
 			},
 			Err(ak) => {
-				let mut reverted = BTreeMap::new();
+				let mut reverted = BTreeIndexMap::new();
 				reverted.extend(result.into_iter().map(|(bk, bv)| (revert(bk), revert(bv))));
 				reverted.insert(ak, av);
 				reverted.extend(entries);

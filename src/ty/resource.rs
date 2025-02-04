@@ -61,6 +61,18 @@ impl<R: Ord> Resource<R> {
 	}
 }
 
+impl<R: Clone> Resource<R> {
+	pub fn to_singleton_value(&self) -> Option<R> {
+		if let Some(set) = &self.set {
+			if set.len() == 1 {
+				return set.iter().next().cloned()
+			}
+		}
+
+		None
+	}
+}
+
 impl<R> VisitResources<R> for Resource<R> {
 	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
 		if let Some(set) = &self.set {

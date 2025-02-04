@@ -2,9 +2,7 @@ use core::fmt;
 use std::{cmp::Ordering, hash::Hash, ops::Deref, sync::OnceLock};
 
 use crate::{
-	display::DisplaySignature,
-	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
-	Registry, Value,
+	display::DisplaySignature, rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources}, value::TypedValue, Registry, Value
 };
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -22,6 +20,13 @@ pub struct TypeRef<P> {
 impl<P> TypeRef<P> {
 	pub fn new(package: P, index: u32) -> Self {
 		Self { package, index }
+	}
+
+	pub fn to_singleton_value<R>(&self, registry: &impl Registry<PackageId = P, Resource = R>) -> Option<TypedValue<P, R>> where P: Copy, R: Clone + Ord {
+		Some(TypedValue::new(
+			*self,
+			registry.get_type(*self)?.to_singleton_value(registry)?
+		))
 	}
 }
 

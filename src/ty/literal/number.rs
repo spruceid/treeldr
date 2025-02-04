@@ -159,11 +159,15 @@ impl Number {
 		}
 	}
 
-	pub fn as_singleton(&self) -> Option<&value::Number> {
+	pub fn as_singleton_value(&self) -> Option<&value::Number> {
 		match (&self.min, &self.max) {
 			(MinBound::Included(a), MaxBound::Included(b)) if a == b => Some(a),
 			_ => None,
 		}
+	}
+
+	pub fn to_singleton_value(&self) -> Option<value::Number> {
+		self.as_singleton_value().cloned()
 	}
 
 	pub fn subtype_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -338,7 +342,7 @@ impl<P, R> DisplaySignature<P, R> for Number {
 		>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
-		match self.as_singleton() {
+		match self.as_singleton_value() {
 			Some(s) => fmt::Display::fmt(s, f),
 			None => match self.as_native_number() {
 				Some(n) => match n {

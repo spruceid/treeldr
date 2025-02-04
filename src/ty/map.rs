@@ -1,14 +1,12 @@
 use core::fmt;
-use std::{cmp::Ordering, collections::BTreeMap, hash::Hash, marker::PhantomData};
+use std::{cmp::Ordering, hash::Hash, marker::PhantomData};
 
+use btree_indexmap::{serde_seeded::unseeded_btree_index_map_key, BTreeIndexMap};
 use serde::{Deserialize, Serialize};
-use serde_seeded::{unseeded, unseeded_btreemap_key, DeserializeSeeded, SerializeSeeded};
+use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 
 use crate::{
-	display::DisplaySignature,
-	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
-	utils::{self, take_first},
-	Attributes, Registry, Value,
+	display::DisplaySignature, rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources}, utils::{self, take_first}, value::{self, TypedMap}, Attributes, Registry,
 };
 
 use super::TypeRef;
@@ -27,13 +25,32 @@ pub struct Map<P, R, T = TypeRef<P>> {
 	/// # Soundness
 	///
 	/// It is a logical error for two keys to have a non-null intersection.
-	#[seeded(with(unseeded_btreemap_key))]
-	pub fields: BTreeMap<T, Field<P, R, T>>,
+	#[seeded(with(unseeded_btree_index_map_key))]
+	pub fields: BTreeIndexMap<T, Field<P, R, T>>,
 }
 
 impl<P, R, T> Map<P, R, T> {
-	pub fn new(fields: BTreeMap<T, Field<P, R, T>>) -> Self {
+	pub fn new(fields: BTreeIndexMap<T, Field<P, R, T>>) -> Self {
 		Self { fields }
+	}
+}
+
+impl<P, R> Map<P, R> {
+	pub fn to_singleton_value(&self, registry: &impl Registry<PackageId = P, Resource = R>) -> Option<TypedMap<P, R>> where P: Copy, R: Clone + Ord {
+		let mut result = TypedMap::new();
+
+		for (key, field) in &self.fields {
+			if !field.required {
+				return None
+			}
+
+			let key = key.to_singleton_value(registry)?;
+			let value = field.r#type.to_singleton_value(registry)?;
+
+			result.insert(key, value);
+		}
+
+		Some(result)
 	}
 }
 
@@ -41,7 +58,7 @@ impl<P: Copy + Ord, R: Ord> Map<P, R> {
 	pub fn contains(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		map: &BTreeMap<Value<R>, Value<R>>,
+		map: &value::Map<R>,
 	) -> bool {
 		let mut fields: Vec<_> = self.fields.iter().collect();
 

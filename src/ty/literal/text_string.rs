@@ -101,8 +101,12 @@ impl TextString {
 		self.automaton.is_singleton()
 	}
 
-	pub fn as_singleton(&self) -> Option<&str> {
+	pub fn as_singleton_value(&self) -> Option<&str> {
 		self.precomputed_data.singleton.as_deref()
+	}
+
+	pub fn to_singleton_value(&self) -> Option<String> {
+		self.as_singleton_value().map(ToOwned::to_owned)
 	}
 
 	pub fn automaton(&self) -> &iregex::automata::NFA<u32> {
@@ -115,7 +119,7 @@ impl TextString {
 	}
 
 	pub fn subtype_cmp(&self, other: &Self) -> Option<Ordering> {
-		match (self.as_singleton(), other.as_singleton()) {
+		match (self.as_singleton_value(), other.as_singleton_value()) {
 			(Some(a), Some(b)) => {
 				if a == b {
 					Some(Ordering::Equal)
@@ -148,7 +152,7 @@ impl TextString {
 	}
 
 	pub fn contains(&self, value: &str) -> bool {
-		match self.as_singleton() {
+		match self.as_singleton_value() {
 			Some(singleton) => singleton == value,
 			None => self.automaton.contains(value.chars()),
 		}
@@ -163,7 +167,7 @@ impl<P, R> DisplaySignature<P, R> for TextString {
 		>,
 		f: &mut fmt::Formatter,
 	) -> fmt::Result {
-		match self.as_singleton() {
+		match self.as_singleton_value() {
 			Some(s) => {
 				f.write_char('"')?;
 

@@ -19,6 +19,10 @@ impl Boolean {
 		Self { const_: Some(b) }
 	}
 
+	pub fn to_singleton_value(&self) -> Option<bool> {
+		self.const_
+	}
+
 	pub fn subtype_cmp(&self, other: &Self) -> Option<Ordering> {
 		match (self.const_, other.const_) {
 			(Some(a), Some(b)) => {

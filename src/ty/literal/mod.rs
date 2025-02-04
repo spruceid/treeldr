@@ -74,6 +74,16 @@ impl LiteralType {
 			_ => None,
 		}
 	}
+
+	pub fn to_singleton_value(&self) -> Option<Literal> {
+		match self {
+			Self::Unit => Some(Literal::Unit),
+			Self::Boolean(t) => t.to_singleton_value().map(Literal::Boolean),
+			Self::Number(t) => t.to_singleton_value().map(Literal::Number),
+			Self::TextString(t) => t.to_singleton_value().map(Literal::TextString),
+			Self::ByteString(t) => t.to_singleton_value().map(Literal::ByteString)
+		}
+	}
 }
 
 impl<P, R> DisplaySignature<P, R> for LiteralType {

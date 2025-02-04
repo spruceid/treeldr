@@ -4,7 +4,7 @@ use std::{cmp::Ordering, hash::Hash, marker::PhantomData};
 use serde::{Deserialize, Serialize};
 use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 
-use crate::{display::DisplaySignature, Registry, Value};
+use crate::{display::DisplaySignature, value::TypedValue, Registry, Value};
 
 use super::{refine_cmp, TypeRef};
 
@@ -63,6 +63,20 @@ impl<P> List<P> {
 		} else {
 			Some(self.prefix.len())
 		}
+	}
+
+	pub fn to_singleton_value<R>(&self, registry: &impl Registry<PackageId = P, Resource = R>) -> Option<Vec<TypedValue<P, R>>> where P: Copy, R: Clone + Ord {
+		if self.rest.is_some() {
+			return None
+		}
+
+		let mut items = Vec::with_capacity(self.prefix.len());
+
+		for ty_ref in &self.prefix {
+			items.push(ty_ref.to_singleton_value(registry)?);
+		}
+
+		Some(items)
 	}
 }
 
