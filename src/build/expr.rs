@@ -1,5 +1,6 @@
 use std::{borrow::Cow, collections::BTreeMap, hash::Hash};
 
+use btree_indexmap::BTreeIndexMap;
 use iref::{InvalidIri, IriBuf};
 use langtag::{InvalidLangTag, LangTagBuf};
 use ll1::{Span, Spanned};
@@ -11,7 +12,7 @@ use crate::{
 	rdf::RdfContextMut,
 	syntax::ast::{self, ListDescription},
 	ty::{self, TypeDesc},
-	value::{Number, TypedValue, TypedValueDesc, TypedValueInnerDesc, TypedValueMap},
+	value::{Map, Number, TypedValue, TypedValueDesc, TypedValueInnerDesc, TypedValueMap},
 	Attributes, DatasetPattern, Literal, Pattern, TermPattern, Type, Value,
 };
 
@@ -230,7 +231,7 @@ impl ast::MapExpr {
 		D: RdfContextMut<Resource = E::Resource>,
 	{
 		let mut entries = MapPattern::new();
-		let mut fields = BTreeMap::new();
+		let mut fields = BTreeIndexMap::new();
 
 		for entry in &self.entries {
 			let key = entry.key.build(context, namespace, scope)?;
@@ -812,7 +813,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		E: BuildEnvironment<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
-		let mut fields = BTreeMap::new();
+		let mut fields = BTreeIndexMap::new();
 		let mut entries = TypedValueMap::new();
 
 		for entry in &self.entries {
@@ -947,7 +948,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 }
 
 impl ast::ConstMap {
-	pub fn build_unscoped<P>(&self) -> Result<BTreeMap<Value, Value>, Error<P>> {
+	pub fn build_unscoped<P>(&self) -> Result<Map, Error<P>> {
 		self.entries
 			.iter()
 			.map(|entry| Ok((entry.key.build_unscoped()?, entry.value.build_unscoped()?)))
@@ -971,7 +972,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 		E: BuildEnvironment<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
-		let mut fields = BTreeMap::new();
+		let mut fields = BTreeIndexMap::new();
 		let mut entries = TypedValueMap::new();
 
 		for entry in &self.entries {

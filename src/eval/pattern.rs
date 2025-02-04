@@ -1,7 +1,7 @@
 use super::{Eval, EvalError, Scope};
 use crate::{
 	pattern::{CallPattern, PatternDesc},
-	rdf::{EvalDataset, RdfContextMut},
+	rdf::{EvalDataset, RdfContextMut, TryUnifyInterpretation},
 	Pattern, Registry, Value,
 };
 
@@ -133,6 +133,7 @@ impl<P: Copy + Ord, R: Clone + Ord> CallPattern<P, R> {
 		// together. To ensure that pattern matching remains sound, we must
 		// update the RDF dataset accordingly.
 		dataset.apply_unification(rdf.interpretation());
+		// FIXME: the values in scope should be substituted too, right?
 
 		for (arg, value) in self.args.iter().zip(values) {
 			arg.desc
@@ -160,10 +161,13 @@ impl<P: Copy + Ord, R: Clone + Ord> CallPattern<P, R> {
 			evaluated_args.push(a.eval_inverse(registry, rdf, dataset, scope, values)?);
 		}
 
-		// Before we can call the function, we must endure that RDF resource
-		// unification are reflected in the RDF dataset so that pattern matching
-		// remains sound.
+		// Before we can call the function, we must ensure that the latest RDF
+		// resources unification are reflected in the RDF dataset so that
+		// pattern matching remains sound.
 		dataset.apply_unification(rdf.interpretation());
+		for value in &mut evaluated_args {
+			value.map_resources(|r| rdf.interpretation().substitute_resource(r));
+		}
 
 		registry
 			.get_function(self.function)

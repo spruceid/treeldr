@@ -9,9 +9,9 @@ use crate::{
 	eval::{EvalError, Scope, ScopeTypes, ScopeValues},
 	pattern::serde_dataset_pattern,
 	rdf::{
-		EvalDataset, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
+		EvalDataset, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, TryUnifyInterpretation, VisitResources
 	},
-	ty::{BuiltInType, TypeRef},
+	ty::{BuiltInTypeMap, TypeRef},
 	Attributes, DatasetPattern, Registry, Value,
 };
 
@@ -144,7 +144,7 @@ impl<P, R: Ord, T> Function<P, R, T> {
 }
 
 impl<P, R> Function<P, R> {
-	pub fn built_in(b: BuiltInFunction, ty: impl Fn(BuiltInType) -> TypeRef<P>) -> Self {
+	pub fn built_in(b: BuiltInFunction, ty: &BuiltInTypeMap<TypeRef<P>>) -> Self where P: Copy {
 		Self {
 			attributes: Attributes::new(),
 			signature: b.signature(ty),
@@ -161,8 +161,9 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 		dataset: &mut impl EvalDataset<R>,
 		args: &[Value<R>],
 	) -> Result<Value<R>, EvalError<R>> {
-		let result = self.call_without_unification(registry, rdf, dataset, args)?;
+		let mut result = self.call_without_unification(registry, rdf, dataset, args)?;
 		dataset.apply_unification(rdf.interpretation());
+		result.map_resources(|r| rdf.interpretation().substitute_resource(r));
 		Ok(result)
 	}
 
@@ -204,9 +205,14 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 		const_args: &[Value<R>],
 		output: &Value<R>,
 	) -> Result<Vec<Value<R>>, EvalError<R>> {
-		let result =
+		let mut result =
 			self.call_inverse_without_unification(registry, rdf, dataset, const_args, output)?;
+		
 		dataset.apply_unification(rdf.interpretation());
+		for value in &mut result {
+			value.map_resources(|r| rdf.interpretation().substitute_resource(r));
+		}
+
 		Ok(result)
 	}
 

@@ -1,12 +1,11 @@
 use crate::{
-	display::DisplaySignature,
-	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
-	Attributes, Registry, Value,
+	display::DisplaySignature, rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources}, value::TypedValueDesc, Attributes, Registry, Value
 };
 use core::fmt;
 use std::{cmp::Ordering, collections::BTreeMap, fmt::Debug, hash::Hash};
 
 mod resource;
+use btree_indexmap::BTreeIndexMap;
 use map::Field;
 use r#enum::Variant;
 pub use resource::Resource;
@@ -193,6 +192,19 @@ impl<P, R, T> VisitResources<R> for TypeDesc<P, R, T> {
 	}
 }
 
+impl<P, R> TypeDesc<P, R> {
+	pub fn to_singleton_value(&self, registry: &impl Registry<PackageId = P, Resource = R>) -> Option<TypedValueDesc<P, R>> where P: Copy, R: Clone + Ord {
+		match self {
+			Self::Any => None,
+			Self::Resource(r) => r.to_singleton_value().map(TypedValueDesc::resource),
+			Self::Literal(l) => l.to_singleton_value().map(TypedValueDesc::literal),
+			Self::List(l) => l.to_singleton_value(registry).map(TypedValueDesc::list),
+			Self::Map(m) => m.to_singleton_value(registry).map(TypedValueDesc::map),
+			Self::Enum(_) => None
+		}
+	}
+}
+
 pub trait TypeUnifier<P, T, U> {
 	type Target;
 
@@ -268,7 +280,7 @@ impl<P: Copy + Ord + Hash, R: Clone + Ord, T> TypeDesc<P, R, T> {
 			))),
 			(Self::Map(a), TypeDesc::Map(b)) => {
 				if a.fields.len() == b.fields.len() {
-					let mut fields = BTreeMap::new();
+					let mut fields = BTreeIndexMap::new();
 
 					for (a_key, a_field) in &a.fields {
 						let a_key_type = unifier.left_key_type(a_key);
@@ -338,6 +350,12 @@ impl<P: Copy + Ord + Hash, R: Clone + Ord, T> TypeDesc<P, R, T> {
 #[derive(Debug, thiserror::Error)]
 #[error("type unification failed")]
 pub struct TypeUnificationError;
+
+impl<P, R> Type<P, R> {
+	pub fn to_singleton_value(&self, registry: &impl Registry<PackageId = P, Resource = R>) -> Option<TypedValueDesc<P, R>> where P: Copy, R: Clone + Ord {
+		self.desc.to_singleton_value(registry)
+	}
+}
 
 impl<P: Copy + Ord, R: Ord> Type<P, R> {
 	pub fn contains(

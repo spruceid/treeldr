@@ -69,6 +69,7 @@ thiserror.workspace = true
 locspan.workspace = true
 raw-btree = "0.3.0"
 dashmap = "6.1.0"
+btree-indexmap = { path = "/home/timothee/Projets/utils/data-structures/btree-indexmap" }
 
 json-syntax = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

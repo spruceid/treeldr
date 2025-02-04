@@ -6,8 +6,7 @@ use std::hash::Hash;
 use crate::{
 	rdf::{
 		serde::serde_indexed_resource, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
-	},
-	Value,
+	}, Value
 };
 
 #[derive(
@@ -45,6 +44,124 @@ impl<R: Ord> Attributes<R> {
 		values: impl IntoIterator<Item = Value<R>>,
 	) {
 		self.map.entry(attr).or_default().extend(values)
+	}
+
+	pub fn label(&self) -> Option<&str> {
+		let label = self.map.get(&Attribute::Documentation)?.first()?.as_str()?.lines().next()?.trim();
+		Some(label.strip_suffix(".").unwrap_or(label))
+	}
+
+	pub fn description(&self) -> String {
+		let mut result = String::new();
+
+		if let Some(attrs) = self.map.get(&Attribute::Documentation) {
+			for (i, doc) in attrs.iter().enumerate() {
+				if let Some(s) = doc.as_str() {
+					for (j, line) in s.lines().enumerate() {
+						if i > 0 || j > 0 {
+							let line = line.trim();
+							if !result.is_empty() || !line.is_empty() {
+								if !result.is_empty() {
+									result.push('\n');
+								}
+
+								result.push_str(line);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		result
+	}
+
+	pub fn function_arguments_documentation(&self) -> Vec<ArgumentDocumentation> {
+		let mut result = Vec::new();
+
+		if let Some(attr) = self.map.get(&Attribute::Documentation) {
+			enum State {
+				Initial,
+				List,
+				Argument(ArgumentDocumentation)
+			}
+
+			let mut state = State::Initial;
+
+			impl State {
+				fn next(self, result: &mut Vec<ArgumentDocumentation>, line: &str) -> Self {
+					match self {
+						Self::Initial => {
+							if line == "# Arguments" {
+								Self::List
+							} else {
+								Self::Initial
+							}
+						}
+						Self::List => {
+							if let Some(rest) = line.strip_prefix('-') {
+								if let Some(a) = ArgumentDocumentation::from_li(rest.trim()) {
+									return State::Argument(a)
+								}
+							}
+
+							Self::List
+						}
+						Self::Argument(mut arg) => {
+							match line.strip_prefix('-') {
+								Some(rest) => {
+									result.push(arg);
+									match ArgumentDocumentation::from_li(rest.trim()) {
+										Some(a) => State::Argument(a),
+										None => Self::List
+									}
+								}
+								None => {
+									if !arg.description.is_empty() {
+										arg.description.push('\n');
+									}
+
+									arg.description.push_str(line);
+									State::Argument(arg)
+								}
+							}
+						}
+					}
+				}
+			}
+
+			for doc in attr.iter() {
+				if let Some(s) = doc.as_str() {
+					for line in s.lines() {
+						state = state.next(&mut result, line.trim());
+					}
+				}
+			}
+
+			if let State::Argument(arg) = state {
+				result.push(arg);
+			}
+		}
+
+		result
+	}
+}
+
+#[derive(Clone)]
+pub struct ArgumentDocumentation {
+	pub id: String,
+	pub label: String,
+	pub description: String
+}
+
+impl ArgumentDocumentation {
+	fn from_li(s: &str) -> Option<Self> {
+		let (id, label) = s.split_once(':')?;
+		Some(ArgumentDocumentation {
+			id: id.trim().trim_matches('`').to_string(),
+			label: label.trim().to_string(),
+			description: String::new()
+		})
 	}
 }
 

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use btree_indexmap::BTreeIndexMap;
 use dataset::{DatasetMut, PatternMatchingDataset};
 pub use iref;
 pub use iref::{Iri, IriBuf};
@@ -78,6 +79,19 @@ impl<R, T: VisitResources<R>> VisitResources<R> for Vec<T> {
 }
 
 impl<R, K, V> VisitResources<R> for BTreeMap<K, V>
+where
+	K: VisitResources<R>,
+	V: VisitResources<R>,
+{
+	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
+		for (key, value) in self {
+			key.visit_resources_ref_mut(f);
+			value.visit_resources_ref_mut(f);
+		}
+	}
+}
+
+impl<R, K, V> VisitResources<R> for BTreeIndexMap<K, V>
 where
 	K: VisitResources<R>,
 	V: VisitResources<R>,

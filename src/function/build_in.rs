@@ -15,7 +15,7 @@ use xsd_types::{
 use crate::{
 	eval::{EvalError, MissingData, Scope},
 	rdf::{DebugSubstitution, RdfContext, RdfContextMut},
-	ty::BuiltInType,
+	ty::{BuiltInType, BuiltInTypeMap},
 	DatasetPattern, TypeRef, Value,
 };
 
@@ -41,78 +41,78 @@ pub enum BuiltInFunction {
 }
 
 impl BuiltInFunction {
-	pub fn signature<P, R>(&self, ty: impl Fn(BuiltInType) -> TypeRef<P>) -> Signature<P, R> {
+	pub fn signature<P: Copy, R>(&self, ty: &BuiltInTypeMap<TypeRef<P>>) -> Signature<P, R> {
 		match self {
 			Self::Get => Signature::new(
 				vec![],
-				vec![ty(BuiltInType::Resource), ty(BuiltInType::Resource)],
-				ty(BuiltInType::Resource),
+				vec![*ty.get(BuiltInType::Resource), *ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::Resource),
 				DatasetPattern::new(),
 			),
 			Self::IriOf => Signature::new(
 				vec![],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::TextString),
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::TextString),
 				DatasetPattern::new(),
 			),
 			Self::BoolOf => Signature::new(
 				vec![],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::Boolean),
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::Boolean),
 				DatasetPattern::new(),
 			),
 			Self::TypedBoolOf => Signature::new(
-				vec![ty(BuiltInType::Resource)],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::Boolean),
+				vec![*ty.get(BuiltInType::Resource)],
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::Boolean),
 				DatasetPattern::new(),
 			),
 			Self::NumberOf => Signature::new(
 				vec![],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::Number),
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::Number),
 				DatasetPattern::new(),
 			),
 			Self::TypedNumberOf => Signature::new(
-				vec![ty(BuiltInType::Resource)],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::Number),
+				vec![*ty.get(BuiltInType::Resource)],
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::Number),
 				DatasetPattern::new(),
 			),
 			Self::IntOf => Signature::new(
 				vec![],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::Int),
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::Int),
 				DatasetPattern::new(),
 			),
 			Self::TypedIntOf => Signature::new(
-				vec![ty(BuiltInType::Resource)],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::Int),
+				vec![*ty.get(BuiltInType::Resource)],
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::Int),
 				DatasetPattern::new(),
 			),
 			Self::UintOf => Signature::new(
 				vec![],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::Uint),
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::Uint),
 				DatasetPattern::new(),
 			),
 			Self::TypedUintOf => Signature::new(
-				vec![ty(BuiltInType::Resource)],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::Uint),
+				vec![*ty.get(BuiltInType::Resource)],
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::Uint),
 				DatasetPattern::new(),
 			),
 			Self::StringOf => Signature::new(
 				vec![],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::TextString),
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::TextString),
 				DatasetPattern::new(),
 			),
 			Self::TypedStringOf => Signature::new(
-				vec![ty(BuiltInType::Resource)],
-				vec![ty(BuiltInType::Resource)],
-				ty(BuiltInType::TextString),
+				vec![*ty.get(BuiltInType::Resource)],
+				vec![*ty.get(BuiltInType::Resource)],
+				*ty.get(BuiltInType::TextString),
 				DatasetPattern::new(),
 			),
 		}

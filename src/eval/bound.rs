@@ -125,7 +125,7 @@ impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 		&'a self,
 		dataset: &'a D,
 		scope: &'a Scope<'a, P, R>,
-	) -> Matching<P, R, D, EmbeddedQuads<'_, R>>
+	) -> Matching<'a, 'a, P, R, D, EmbeddedQuads<'a, R>>
 	where
 		D: PatternMatchingDataset<Resource = R>,
 	{

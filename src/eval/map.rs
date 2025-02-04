@@ -1,5 +1,6 @@
+use btree_indexmap::BTreeIndexMap;
+
 use crate::{expr::Map, rdf::EvalDataset, Registry, TypeRef, Value};
-use std::collections::BTreeMap;
 
 use super::{Eval, EvalError, EvalTyped, RdfContextMut, Scope};
 
@@ -14,7 +15,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Map<P, R> {
 	) -> Result<Value<R>, EvalError<R>> {
 		let type_ = registry.get_type(type_ref).unwrap().as_struct().unwrap();
 
-		let mut result = BTreeMap::new();
+		let mut result = BTreeIndexMap::new();
 
 		for (key, value) in &self.entries {
 			let field = type_.fields.get(&key.r#type).unwrap();

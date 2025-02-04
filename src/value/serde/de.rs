@@ -1,4 +1,6 @@
-use std::{collections::BTreeMap, fmt, marker::PhantomData};
+use std::{fmt, marker::PhantomData};
+
+use btree_indexmap::BTreeIndexMap;
 
 use crate::{value::Number, Literal, Value};
 
@@ -107,7 +109,7 @@ impl<'de, R: Ord + serde::Deserialize<'de>> serde::Deserialize<'de> for Value<R>
 			where
 				V: serde::de::MapAccess<'de>,
 			{
-				let mut map = BTreeMap::new();
+				let mut map = BTreeIndexMap::new();
 
 				while let Some((key, value)) = visitor.next_entry()? {
 					map.insert(key, value);
