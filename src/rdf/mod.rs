@@ -50,7 +50,7 @@ pub trait VisitResources<R> {
 	}
 }
 
-impl<'a, R, T: VisitResources<R>> VisitResources<R> for &'a T {
+impl<R, T: VisitResources<R>> VisitResources<R> for &T {
 	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R)) {
 		T::visit_resources_ref_mut(*self, f)
 	}

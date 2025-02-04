@@ -10,7 +10,7 @@ pub struct Scope<'a, P> {
 	pub const_: bool,
 }
 
-impl<'a, P> Default for Scope<'a, P> {
+impl<P> Default for Scope<'_, P> {
 	fn default() -> Self {
 		Self {
 			module: None,
@@ -20,7 +20,7 @@ impl<'a, P> Default for Scope<'a, P> {
 	}
 }
 
-impl<'a, P> Scope<'a, P> {
+impl<P> Scope<'_, P> {
 	pub fn new() -> Self {
 		Self::default()
 	}

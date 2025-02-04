@@ -33,7 +33,7 @@ impl<'a, P, R> TypeAllocator<'a, P, R> {
 	}
 }
 
-impl<'a, P, R> Drop for TypeAllocator<'a, P, R> {
+impl<P, R> Drop for TypeAllocator<'_, P, R> {
 	fn drop(&mut self) {
 		for t in self.reserved_types.drain(..) {
 			match t {

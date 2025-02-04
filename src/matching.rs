@@ -52,7 +52,7 @@ where
 	quad_matching: D::QuadPatternMatching<'a, 'p>,
 }
 
-impl<'a, 'p, P, R: Clone, D, Q> Matching<'a, 'p, P, R, D, Q>
+impl<'a, P, R: Clone, D, Q> Matching<'a, '_, P, R, D, Q>
 where
 	D: PatternMatchingDataset<Resource = R>,
 {
@@ -92,7 +92,7 @@ struct MatchingScope<'a, P, R: Clone> {
 	substitution: Substitution<R>,
 }
 
-impl<'a, P: Copy, R: Clone + PartialEq> MatchingScope<'a, P, R> {
+impl<P: Copy, R: Clone + PartialEq> MatchingScope<'_, P, R> {
 	// pub fn assign(&mut self, i: u32, value: TypedValue<R>) -> Result<(), TypedValue<R>> {
 	// 	let scope_len = self.scope.len() as u32;
 	// 	if i < scope_len {

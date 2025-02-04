@@ -12,7 +12,7 @@ pub struct DisplayContext<'a, G: Registry> {
 	pub indent: Indent,
 }
 
-impl<'a, G: Registry> DisplayContext<'a, G> {
+impl<G: Registry> DisplayContext<'_, G> {
 	pub fn inner(&self) -> Self {
 		Self {
 			registry: self.registry,
@@ -77,7 +77,7 @@ pub struct DisplayedSignature<'a, G: Registry, T: ?Sized> {
 	t: &'a T,
 }
 
-impl<'a, G, T> fmt::Display for DisplayedSignature<'a, G, T>
+impl<G, T> fmt::Display for DisplayedSignature<'_, G, T>
 where
 	G: Registry,
 	T: ?Sized + DisplaySignature<G::PackageId, G::Resource>,

@@ -790,9 +790,7 @@ impl<'a, P> Unifier<'a, P> {
 	}
 }
 
-impl<'a, P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeVariableRef, TypeVariableRef>
-	for Unifier<'a, P>
-{
+impl<P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeVariableRef, TypeVariableRef> for Unifier<'_, P> {
 	type Target = TypeVariableRef;
 
 	fn left_key_type(&mut self, t: &TypeVariableRef) -> TypeRef<P> {
@@ -814,8 +812,8 @@ struct ImportUnifier<'a, 'u, P> {
 	import: u32,
 }
 
-impl<'a, 'u, P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeRef<P>, TypeVariableRef>
-	for ImportUnifier<'a, 'u, P>
+impl<P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeRef<P>, TypeVariableRef>
+	for ImportUnifier<'_, '_, P>
 {
 	type Target = TypeVariableRef;
 
@@ -837,8 +835,8 @@ impl<'a, 'u, P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeRef<P>, TypeVariableRef
 	}
 }
 
-impl<'a, 'u, P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeVariableRef, TypeRef<P>>
-	for ImportUnifier<'a, 'u, P>
+impl<P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeVariableRef, TypeRef<P>>
+	for ImportUnifier<'_, '_, P>
 {
 	type Target = TypeVariableRef;
 

@@ -18,7 +18,7 @@ pub enum ScopeTypes<'a, P> {
 	Repeat(TypeRef<P>, u32),
 }
 
-impl<'a, P> ScopeTypes<'a, P> {
+impl<P> ScopeTypes<'_, P> {
 	pub fn len(&self) -> u32 {
 		match self {
 			Self::Slice(s) => s.len() as u32,
@@ -220,7 +220,7 @@ impl<'parent, P, R> Scope<'parent, P, R> {
 	}
 }
 
-impl<'a, P, R: Clone> Default for Scope<'a, P, R> {
+impl<P, R: Clone> Default for Scope<'_, P, R> {
 	fn default() -> Self {
 		Self {
 			parent: None,
@@ -354,7 +354,7 @@ pub enum ScopeValues<'a, R> {
 	Mut(Substitution<R>),
 }
 
-impl<'a, R> ScopeValues<'a, R> {
+impl<R> ScopeValues<'_, R> {
 	fn len(&self) -> u32 {
 		match self {
 			Self::ConstBorrowed(values) => values.len() as u32,

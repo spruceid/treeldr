@@ -153,7 +153,7 @@ pub mod serde_dataset_pattern {
 		{
 			struct Visitor<'seed, R>(&'seed ResourceBackwardIndex<R>);
 
-			impl<'de, 'seed, R> serde::de::Visitor<'de> for Visitor<'seed, R>
+			impl<'de, R> serde::de::Visitor<'de> for Visitor<'_, R>
 			where
 				R: Clone + Ord,
 			{
@@ -214,7 +214,7 @@ pub mod serde_dataset_pattern {
 	{
 		struct Visitor<'seed, R>(&'seed ResourceBackwardIndex<R>);
 
-		impl<'de, 'seed, R> serde::de::Visitor<'de> for Visitor<'seed, R>
+		impl<'de, R> serde::de::Visitor<'de> for Visitor<'_, R>
 		where
 			R: Clone + Ord,
 		{

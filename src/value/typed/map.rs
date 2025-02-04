@@ -244,7 +244,7 @@ where
 			p: PhantomData<(P, R, V, T)>,
 		}
 
-		impl<'de, 'seed, Q, P, R, V, T> serde::de::Visitor<'de> for Visitor<'seed, Q, P, R, V, T>
+		impl<'de, Q, P, R, V, T> serde::de::Visitor<'de> for Visitor<'_, Q, P, R, V, T>
 		where
 			R: Ord,
 			TypedValue<P, R, T>: DeserializeSeeded<'de, Q>,

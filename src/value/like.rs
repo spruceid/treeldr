@@ -195,7 +195,7 @@ where
 	}
 }
 
-impl<'a, T: ?Sized + ValueLike> Eq for Destruct<'a, T> where T::Resource: Eq {}
+impl<T: ?Sized + ValueLike> Eq for Destruct<'_, T> where T::Resource: Eq {}
 
 impl<'a, T: ?Sized + ValueLike, U: ?Sized + ValueLike<Resource = T::Resource>>
 	PartialOrd<Destruct<'a, U>> for Destruct<'a, T>
@@ -207,7 +207,7 @@ where
 	}
 }
 
-impl<'a, T: ?Sized + ValueLike> Ord for Destruct<'a, T>
+impl<T: ?Sized + ValueLike> Ord for Destruct<'_, T>
 where
 	T::Resource: Ord,
 {

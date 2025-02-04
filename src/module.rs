@@ -254,7 +254,7 @@ pub enum ItemRef<'a, P, T = TypeRef<P>> {
 	Module(ModuleRef<P>),
 }
 
-impl<'a, P: Copy, T> ItemRef<'a, P, T> {
+impl<P: Copy, T> ItemRef<'_, P, T> {
 	pub fn as_function(&self) -> Option<FunctionRef<P>> {
 		match self {
 			Self::Function(f) => Some(*f),

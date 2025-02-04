@@ -50,7 +50,7 @@ impl<'ast, P: Copy + PartialEq> BuildModule<'ast, P> {
 	}
 }
 
-impl<'ast, P: Copy> BuildModule<'ast, P> {
+impl<P: Copy> BuildModule<'_, P> {
 	pub fn build<E, D>(
 		&self,
 		context: &mut BuildContext<E, D>,
@@ -176,7 +176,7 @@ impl<'a, P> ScopeItemRef<'a, P> {
 	}
 }
 
-impl<'a, P: Copy> ScopeItemRef<'a, P> {
+impl<P: Copy> ScopeItemRef<'_, P> {
 	pub fn as_function(&self) -> Option<FunctionRef<P>> {
 		match self {
 			Self::Function(f) => Some(*f),

@@ -136,7 +136,7 @@ impl<P: Copy, R> Registry for EmptyRegistry<P, R> {
 	}
 }
 
-impl<'a, T: Registry> Registry for &'a T {
+impl<T: Registry> Registry for &T {
 	type PackageId = T::PackageId;
 
 	type Resource = T::Resource;
@@ -150,7 +150,7 @@ impl<'a, T: Registry> Registry for &'a T {
 	}
 }
 
-impl<'a, T: Registry> Registry for &'a mut T {
+impl<T: Registry> Registry for &mut T {
 	type PackageId = T::PackageId;
 
 	type Resource = T::Resource;

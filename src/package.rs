@@ -368,7 +368,7 @@ where
 	{
 		struct Visitor<'seed, C, P, R>(&'seed RefCell<C>, PhantomData<(P, R)>);
 
-		impl<'de, 'seed, C, P, R> serde::de::Visitor<'de> for Visitor<'seed, C, P, R>
+		impl<'de, C, P, R> serde::de::Visitor<'de> for Visitor<'_, C, P, R>
 		where
 			C: RdfContextMut<Resource = R>,
 			P: Ord + Deserialize<'de>,
