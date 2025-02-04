@@ -145,6 +145,22 @@ pub enum TypedValueDesc<P, R = rdf_types::Term, T = TypeRef<P>> {
 }
 
 impl<P, R, T> TypedValueDesc<P, R, T> {
+	pub fn resource(value: R) -> Self {
+		Self::Constant(TypedValueInnerDesc::Resource(value))
+	}
+
+	pub fn literal(value: Literal) -> Self {
+		Self::Constant(TypedValueInnerDesc::Literal(value))
+	}
+
+	pub fn list(value: Vec<TypedValue<P, R, T>>) -> Self {
+		Self::Constant(TypedValueInnerDesc::List(value))
+	}
+
+	pub fn map(value: TypedMap<P, R, T>) -> Self {
+		Self::Constant(TypedValueInnerDesc::Map(value))
+	}
+
 	pub fn inner_description(&self) -> &TypedValueInnerDesc<P, R, T> {
 		match self {
 			Self::Variant(_, inner) => inner.desc.inner_description(),
