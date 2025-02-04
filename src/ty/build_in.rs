@@ -137,7 +137,7 @@ impl BuiltInType {
 			Self::Int => "int",
 			Self::Uint => "uint",
 			Self::TextString => "string",
-			Self::ByteString => "bytes"
+			Self::ByteString => "bytes",
 		}
 	}
 
@@ -151,7 +151,7 @@ impl BuiltInType {
 			Self::Int => TypeDesc::Literal(LiteralType::int()),
 			Self::Uint => TypeDesc::Literal(LiteralType::uint()),
 			Self::TextString => TypeDesc::Literal(LiteralType::text_string()),
-			Self::ByteString => TypeDesc::Literal(LiteralType::byte_string())
+			Self::ByteString => TypeDesc::Literal(LiteralType::byte_string()),
 		}
 	}
 }

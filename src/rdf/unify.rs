@@ -136,7 +136,8 @@ impl IriInterpretationMut for UnifyLiteralInterpretation {
 impl ReverseIriInterpretation for UnifyLiteralInterpretation {
 	type Iri = IriBuf;
 
-	type Iris<'a> = std::option::IntoIter<&'a IriBuf>
+	type Iris<'a>
+		= std::option::IntoIter<&'a IriBuf>
 	where
 		Self: 'a;
 
@@ -167,7 +168,8 @@ impl LiteralInterpretationMut for UnifyLiteralInterpretation {
 impl ReverseLiteralInterpretation for UnifyLiteralInterpretation {
 	type Literal = Literal;
 
-	type Literals<'a> = std::option::IntoIter<&'a Literal>
+	type Literals<'a>
+		= std::option::IntoIter<&'a Literal>
 	where
 		Self: 'a;
 

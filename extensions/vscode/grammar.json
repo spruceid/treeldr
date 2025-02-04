@@ -21,7 +21,7 @@
 		},
 		{
 			"name": "keyword.treeldr",
-			"match": "\\b(prefix|type|let|mod|where|in|as|all|set|begin)\\b"
+			"match": "\\b(prefix|type|let|mod|where|in|as|all|list)\\b"
 		},
 		{
 			"name": "entity.name.type.treeldr",

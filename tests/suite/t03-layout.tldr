@@ -3,29 +3,29 @@ prefix schema = <https://schema.org/>
 prefix ex = <https://example.org/#>
 
 let (_ receipt) = {
-	"date" = (typed_string_of xsd:dateTime (get ex:date receipt)),
-	"bill" = {{
+	"date": (typed_string_of xsd:dateTime (get ex:date receipt)),
+	"bill": {{
 		let bill = (get ex:bill receipt);
 		{
-			"milk1L" = (by_unit (get ex:milk1L bill)),
-			"beef" = (by_volume (get ex:beef bill))
+			"milk1L": (by_unit (get ex:milk1L bill)),
+			"beef": (by_volume (get ex:beef bill))
 		}
 	}},
-	"pointOfSale" = {{
+	"pointOfSale": {{
 		let point_of_sale = (get ex:pointOfSale receipt);
 		{
-			"address" = (typed_string_of schema:Text (get schema:address point_of_sale)),
-			"till" = (typed_number_of xsd:nonNegativeInteger (get ex:till point_of_sale))
+			"address": (typed_string_of schema:Text (get schema:address point_of_sale)),
+			"till": (typed_number_of xsd:nonNegativeInteger (get ex:till point_of_sale))
 		}
 	}}
 }
 
 let (by_unit item) = {
-	"unitPrice" = (typed_number_of xsd:decimal (get ex:unitPrice item)),
-	"units" = (typed_number_of xsd:nonNegativeInteger (get ex:units item))
+	"unitPrice": (typed_number_of xsd:decimal (get ex:unitPrice item)),
+	"units": (typed_number_of xsd:nonNegativeInteger (get ex:units item))
 }
 
 let (by_volume item) = {
-	"volumePrice" = (typed_number_of xsd:decimal (get ex:volumePrice item)),
-	"volume" = (typed_number_of xsd:decimal (get ex:volume item))
+	"volumePrice": (typed_number_of xsd:decimal (get ex:volumePrice item)),
+	"volume": (typed_number_of xsd:decimal (get ex:volume item))
 }

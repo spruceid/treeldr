@@ -70,9 +70,11 @@ impl<R> Dataset for InaccessibleDataset<R> {
 }
 
 impl<R> PatternMatchingDataset for InaccessibleDataset<R> {
-	type QuadPatternMatching<'a, 'p> = InaccessibleQuadPatternMatching<'a, R> where
-	Self: 'a,
-	Self::Resource: 'p;
+	type QuadPatternMatching<'a, 'p>
+		= InaccessibleQuadPatternMatching<'a, R>
+	where
+		Self: 'a,
+		Self::Resource: 'p;
 
 	fn quad_pattern_matching<'p>(
 		&self,

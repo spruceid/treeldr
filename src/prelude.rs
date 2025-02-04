@@ -1,8 +1,5 @@
 use crate::{
-	function::BuiltInFunction,
-	module::Item,
-	ty::BuiltInTypeMap,
-	Function, Module, Package,
+	function::BuiltInFunction, module::Item, ty::BuiltInTypeMap, Function, Module, Package,
 };
 
 impl<P: Copy, R> Package<P, R> {
@@ -18,9 +15,7 @@ impl<P: Copy, R> Module<P, R> {
 	pub fn prelude(package: &mut Package<P, R>) -> Self {
 		let mut result = Self::new();
 
-		let types = BuiltInTypeMap::new(|ty| {
-			package.insert_type(ty.into_description())
-		});
+		let types = BuiltInTypeMap::new(|ty| package.insert_type(ty.into_description()));
 
 		for (ty, &ty_ref) in &types {
 			result.insert(ty.name(), Item::Type(ty_ref));

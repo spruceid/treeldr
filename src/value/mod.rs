@@ -16,6 +16,7 @@ pub use typed::*;
 pub mod serde;
 
 use crate::{
+	display::DisplayResource,
 	rdf::{
 		serde::serde_indexed_resource, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
 	},
@@ -244,10 +245,14 @@ impl<R> Value<R> {
 		}
 	}
 
-	fn map_resources_ref_mut(&mut self, f: &mut impl FnMut(R) -> R) where R: Ord {
+	fn map_resources_ref_mut(&mut self, f: &mut impl FnMut(R) -> R)
+	where
+		R: Ord,
+	{
 		match self {
 			Self::Resource(_) => {
-				let Self::Resource(r) = std::mem::replace(self, Self::Literal(Literal::Unit)) else {
+				let Self::Resource(r) = std::mem::replace(self, Self::Literal(Literal::Unit))
+				else {
 					unreachable!()
 				};
 
@@ -269,7 +274,10 @@ impl<R> Value<R> {
 		}
 	}
 
-	pub fn map_resources(&mut self, mut f: impl FnMut(R) -> R) where R: Ord {
+	pub fn map_resources(&mut self, mut f: impl FnMut(R) -> R)
+	where
+		R: Ord,
+	{
 		self.map_resources_ref_mut(&mut f);
 	}
 }
@@ -346,10 +354,10 @@ impl<R> MapLike for BTreeIndexMap<Value<R>, Value<R>> {
 #[error("type mismatch")]
 pub struct TypeMismatch;
 
-impl<R: fmt::Display> fmt::Display for Value<R> {
+impl<R: DisplayResource> fmt::Display for Value<R> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::Resource(r) => r.fmt(f),
+			Self::Resource(r) => r.fmt_resource(f),
 			Self::Literal(l) => l.fmt(f),
 			Self::List(l) => {
 				f.write_str("[")?;

@@ -28,10 +28,6 @@ serde_cbor = ["cbor", "dep:serde_cbor"]
 [workspace]
 members = [
 	"cli"
-	# "layouts",
-	# "generators/rust/treeldr-rs",
-	# "generators/rust/treeldr-rs-macros",
-	# "generators/rust/generator"
 ]
 resolver = "2"
 
@@ -69,7 +65,7 @@ thiserror.workspace = true
 locspan.workspace = true
 raw-btree = "0.3.0"
 dashmap = "6.1.0"
-btree-indexmap = { path = "/home/timothee/Projets/utils/data-structures/btree-indexmap" }
+btree-indexmap = { path = "/home/timothee/Projets/utils/data-structures/btree-indexmap", features = ["serde-seeded"] }
 
 json-syntax = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
@@ -84,5 +80,4 @@ langtag = "0.4.0"
 
 [dev-dependencies]
 nquads-syntax.workspace = true
-# serde_json.workspace = true
 paste = "1.0"

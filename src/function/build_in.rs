@@ -45,7 +45,10 @@ impl BuiltInFunction {
 		match self {
 			Self::Get => Signature::new(
 				vec![],
-				vec![*ty.get(BuiltInType::Resource), *ty.get(BuiltInType::Resource)],
+				vec![
+					*ty.get(BuiltInType::Resource),
+					*ty.get(BuiltInType::Resource),
+				],
 				*ty.get(BuiltInType::Resource),
 				DatasetPattern::new(),
 			),

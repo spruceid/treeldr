@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
 	cmp::Ordering,
 	collections::{HashMap, HashSet},
@@ -13,7 +14,14 @@ use crate::{
 	Package, Registry, RegistryUnion, Type, TypeRef,
 };
 
-pub type TypeVariableRef = usize;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TypeVariableRef(pub usize);
+
+impl fmt::Display for TypeVariableRef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "T{}", self.0)
+	}
+}
 
 pub type TypePattern<P, R> = Type<P, R, TypeVariableRef>;
 
@@ -110,6 +118,51 @@ impl TypeVariableMetadata {
 	}
 }
 
+pub struct DisjointTypeVariables<T>(DisjointVec<T>);
+
+impl<T> DisjointTypeVariables<T> {
+	pub fn new<P, R>(
+		variables: &TypeVariables<P, R>,
+		mut f: impl FnMut(TypeVariableRef, &TypeValue<P, R>) -> T,
+	) -> Self {
+		Self(variables.values().map(|(x, value)| f(x, value)).collect())
+	}
+
+	pub fn get(&self, i: usize) -> Option<&T> {
+		self.0.get(i)
+	}
+
+	pub fn merge(&mut self, x: TypeVariableRef, y: TypeVariableRef, f: impl FnOnce(T, T) -> T) {
+		self.0.merge(x.0, y.0, f);
+	}
+
+	pub fn try_merge<E>(
+		&mut self,
+		x: TypeVariableRef,
+		y: TypeVariableRef,
+		f: impl FnOnce(T, T) -> Result<T, E>,
+	) -> Result<(), E> {
+		self.0.try_merge(x.0, y.0, f)?;
+		Ok(())
+	}
+
+	pub fn classes(&self) -> impl Iterator<Item = (usize, &T)> {
+		self.0.classes()
+	}
+
+	pub fn class_of(&self, x: TypeVariableRef) -> Option<usize> {
+		self.0.class_of(x.0)
+	}
+
+	pub fn get_with_class(&self, x: TypeVariableRef) -> Option<(usize, &T)> {
+		self.0.get_with_class(x.0)
+	}
+
+	pub fn map<U>(self, f: impl FnMut(T) -> U) -> DisjointTypeVariables<U> {
+		DisjointTypeVariables(self.0.map(f))
+	}
+}
+
 pub struct TypeVariables<P, R> {
 	list: Vec<TypeValue<P, R>>,
 	subtype_relation: SubtypeRelation,
@@ -135,12 +188,23 @@ impl<P, R> TypeVariables<P, R> {
 		Self::default()
 	}
 
+	pub fn iter(&self) -> impl '_ + Iterator<Item = TypeVariableRef> {
+		(0..self.list.len()).map(TypeVariableRef)
+	}
+
+	pub fn values(&self) -> impl Iterator<Item = (TypeVariableRef, &TypeValue<P, R>)> {
+		self.list
+			.iter()
+			.enumerate()
+			.map(|(x, value)| (TypeVariableRef(x), value))
+	}
+
 	pub fn fresh(
 		&mut self,
 		value: impl Into<TypeValue<P, R>>,
 		span: Option<Span>,
 	) -> TypeVariableRef {
-		let x = self.list.len();
+		let x = TypeVariableRef(self.list.len());
 		self.list.push(value.into());
 		self.subtype_relation.declare(x);
 		self.metadata.insert(x, TypeVariableMetadata::new(span));
@@ -235,18 +299,16 @@ impl<P, R> TypeVariables<P, R> {
 	/// ```
 	fn compute_resolution_groups(
 		&self,
-		base_classes: &Components<usize>,
-	) -> Result<(DisjointVec<ResolutionGroup>, Vec<usize>), TypeResolutionError<P>> {
+		base_classes: &BaseClasses,
+	) -> Result<(DisjointTypeVariables<ResolutionGroup>, Vec<usize>), TypeResolutionError<P>> {
 		// Compute groups.
-		let mut groups: DisjointVec<HashSet<TypeVariableRef>> = (0..self.list.len())
-			.map(|x| {
-				let mut set = HashSet::new();
-				set.insert(x);
-				set
-			})
-			.collect();
+		let mut groups = DisjointTypeVariables::new(self, |x, _| {
+			let mut set = HashSet::new();
+			set.insert(x);
+			set
+		});
 
-		for (x, value) in self.list.iter().enumerate() {
+		for (x, value) in self.values() {
 			for y in self.subtype_relation.subtypes_of(x) {
 				groups.merge(x, y, |mut a, b| {
 					a.extend(b);
@@ -272,7 +334,7 @@ impl<P, R> TypeVariables<P, R> {
 			ordering.insert(c, HashSet::new());
 		}
 
-		for (x, value) in self.list.iter().enumerate() {
+		for (x, value) in self.values() {
 			let x_class = groups.class_of(x).unwrap();
 			if let TypeValue::Pattern(Type {
 				desc: TypeDesc::Map(s),
@@ -353,42 +415,134 @@ struct Resolver<'a, P, R> {
 	variables: &'a TypeVariables<P, R>,
 
 	/// Resolution groups.
-	groups: DisjointVec<ResolutionGroup>,
+	groups: DisjointTypeVariables<ResolutionGroup>,
 
 	/// Base equivalence classes.
 	///
 	/// The strongly connected components of the sub-typing relation graph.
 	/// Types that are in the same base class must be unified.
-	base_classes: Components<usize>,
+	base_classes: BaseClasses,
 
 	/// Equivalence classes.
 	///
 	/// When the resolution is done, this classification includes *at least* the
 	/// base classification (`base_classes`).
-	classes: DisjointVec<Class<P, R>>,
+	classes: Classes<P, R>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BaseClassRef(usize);
+
+impl fmt::Display for BaseClassRef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "B{}", self.0)
+	}
+}
+
+/// Base equivalence classes.
+///
+/// The strongly connected components of the sub-typing relation graph.
+/// Types that are in the same base class must be unified.
+pub struct BaseClasses {
+	components: Components<TypeVariableRef>,
+	depths: Vec<usize>,
+}
+
+impl BaseClasses {
+	fn new(components: Components<TypeVariableRef>) -> Self {
+		let depths = components.depths();
+
+		Self { components, depths }
+	}
+
+	fn get(&self, c: BaseClassRef) -> Option<&[TypeVariableRef]> {
+		self.components.get_by_index(c.0)
+	}
+
+	fn of(&self, x: TypeVariableRef) -> Option<BaseClassRef> {
+		self.components.vertex_component_index(&x).map(BaseClassRef)
+	}
+
+	fn depth(&self, c: BaseClassRef) -> Option<usize> {
+		self.depths.get(c.0).copied()
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct ClassRef(usize);
+
+impl fmt::Display for ClassRef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "C{}", self.0)
+	}
+}
+
+/// Equivalence classes.
+struct Classes<P, R>(DisjointTypeVariables<Class<P, R>>);
+
+impl<P, R> Classes<P, R> {
+	fn new(variables: &TypeVariables<P, R>) -> Self
+	where
+		P: Clone,
+		R: Clone,
+	{
+		Self(DisjointTypeVariables::new(variables, |x, value| {
+			Class::new(x, variables.metadata_of(x).unwrap(), value.clone())
+		}))
+	}
+
+	fn get(&self, k: ClassRef) -> Option<&Class<P, R>> {
+		self.0.get(k.0)
+	}
+
+	fn of(&self, x: TypeVariableRef) -> Option<ClassRef> {
+		self.0.class_of(x).map(ClassRef)
+	}
+
+	fn of_with_value(&self, x: TypeVariableRef) -> Option<(ClassRef, &Class<P, R>)> {
+		self.0
+			.get_with_class(x)
+			.map(|(i, value)| (ClassRef(i), value))
+	}
+
+	fn try_merge<E>(
+		&mut self,
+		x: TypeVariableRef,
+		y: TypeVariableRef,
+		f: impl FnOnce(Class<P, R>, Class<P, R>) -> Result<Class<P, R>, E>,
+	) -> Result<(), E> {
+		self.0.try_merge(x, y, f)
+	}
 }
 
 struct Class<P, R> {
+	variables: Vec<TypeVariableRef>,
 	metadata: TypeVariableMetadata,
 	value: TypeValue<P, R>,
 }
 
 impl<P, R> Class<P, R> {
-	fn new(metadata: TypeVariableMetadata, value: TypeValue<P, R>) -> Self {
-		Self { metadata, value }
+	fn new(x: TypeVariableRef, metadata: TypeVariableMetadata, value: TypeValue<P, R>) -> Self {
+		Self {
+			variables: vec![x],
+			metadata,
+			value,
+		}
 	}
 
 	fn unify(
-		self,
+		mut self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		unifier: &mut Unifier<P>,
-		other: Self,
+		mut other: Self,
 	) -> Result<Self, TypeResolutionError<P>>
 	where
 		P: Copy + Ord + Hash,
 		R: Clone + Ord,
 	{
+		self.variables.append(&mut other.variables);
 		Ok(Self {
+			variables: self.variables,
 			metadata: self.metadata.unify(other.metadata),
 			value: self.value.unify(registry, unifier, &other.value).map_err(
 				|TypeUnificationError| {
@@ -403,17 +557,11 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 	fn new(
 		variables: &'a TypeVariables<P, R>,
 	) -> Result<(Self, Vec<usize>), TypeResolutionError<P>> {
-		let base_classes = variables.subtype_relation.strongly_connected_components();
+		let base_classes = variables.subtype_relation.base_classes();
 
 		let (groups, ordered_groups) = variables.compute_resolution_groups(&base_classes)?;
 
-		let classes: DisjointVec<Class<P, R>> = variables
-			.list
-			.iter()
-			.cloned()
-			.enumerate()
-			.map(|(x, value)| Class::new(variables.metadata_of(x).unwrap(), value))
-			.collect();
+		let classes = Classes::new(variables);
 
 		Ok((
 			Self {
@@ -437,14 +585,15 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 		P: Ord + Hash,
 		R: Ord,
 	{
+		eprintln!("group {g}");
 		let group = &self.groups.get(g).unwrap();
 
-		// Prepare type unification. Types that are in the same base class must
-		// be unified.
+		// Prepare type unification.
 		let mut to_unify = Vec::new();
 
+		// Types that are in the same base class must be unified.
 		for &c in &group.base_classes {
-			let component = self.base_classes.get_by_index(c).unwrap();
+			let component = self.base_classes.get(c).unwrap();
 			let (&first, rest) = component.split_first().unwrap();
 			for &other in rest {
 				to_unify.push((first, other, (first, other)));
@@ -468,35 +617,94 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 			})?;
 		}
 
+		// Order the variables by base class depth, so that we visit the super
+		// types before their sub types while resolving the classes below.
+		let variables = group
+			.base_classes
+			.iter()
+			.flat_map(|&c| self.base_classes.get(c).unwrap());
+
+		for &b in &group.base_classes {
+			eprint!("{b} = {{");
+			let base_class = self.base_classes.get(b).unwrap();
+			for x in base_class {
+				eprint!("{x},");
+			}
+			eprintln!("}}");
+		}
+
 		// Resolve classes.
 		let mut reservation = TypeAllocator::new(package);
-		let mut resolved_classes = HashMap::new();
-		for &x in &group.variables {
-			let (y, class) = self.classes.get_with_class(x).unwrap();
+		let mut resolved_classes: HashMap<ClassRef, TypeRef<P>> = HashMap::new();
 
-			if x == y {
-				let target = match &class.value {
-					TypeValue::Undefined => {
-						return Err(TypeResolutionError::Definition(class.metadata.span))
-					}
-					TypeValue::Type(r) => r.ty_ref,
-					TypeValue::Pattern(_) => reservation.reserve_type(),
-				};
+		for &x in variables {
+			let (k, class) = self.classes.of_with_value(x).unwrap();
 
-				resolved_classes.insert(x, target);
+			if resolved_classes.contains_key(&k) {
+				continue;
 			}
+
+			eprint!("resolve {k} = {{");
+			for &x in &class.variables {
+				eprint!("{x},");
+			}
+			eprintln!("}}");
+
+			let target = match &class.value {
+				TypeValue::Undefined => {
+					// The type is undefined, but we can try to fallback to
+					// a super-type if it is un-ambiguous.
+					let mut candidates: Vec<_> = class
+						.variables
+						.iter()
+						.copied()
+						.flat_map(|y| {
+							self.variables
+								.subtype_relation
+								.supertypes_of(y)
+								.map(|z| {
+									eprintln!("parent type {z}");
+									self.classes.of(z).unwrap()
+								})
+								.filter(|&l| k != l)
+								.map(|l| {
+									eprintln!("parent class {l}");
+									*resolved_classes.get(&l).unwrap()
+								})
+						})
+						.collect();
+
+					// let mut candidates: Vec<_> = self.variables.subtype_relation.supertypes_of(x).filter_map(|y| {
+					// 	self.classes.of(y)
+					// }).filter(|&k2| k2 != k).collect();
+					candidates.sort_unstable();
+					candidates.dedup();
+
+					match candidates.as_slice() {
+						[z] => *z,
+						// Ambiguous or empty (type annotation needed).
+						_ => return Err(TypeResolutionError::Definition(class.metadata.span)),
+					}
+
+					// return Err(TypeResolutionError::Definition(class.metadata.span))
+				}
+				TypeValue::Type(r) => r.ty_ref,
+				TypeValue::Pattern(_) => reservation.reserve_type(),
+			};
+
+			resolved_classes.insert(k, target);
 		}
 
 		// Resolve variables from classes.
 		let mut result = HashMap::new();
 		for &x in &group.variables {
-			let k = self.classes.class_of(x).unwrap();
+			let k = self.classes.of(x).unwrap();
 			result.insert(x, resolved_classes[&k]);
 		}
 
 		// Realization.
-		for (x, type_ref) in resolved_classes {
-			if let TypeValue::Pattern(pattern) = &self.classes.get(x).unwrap().value {
+		for (k, type_ref) in resolved_classes {
+			if let TypeValue::Pattern(pattern) = &self.classes.get(k).unwrap().value {
 				let type_ =
 					pattern.realize(|x| resolved.get(x).copied().unwrap_or_else(|| result[x]));
 				reservation.define_type(type_ref, type_);
@@ -654,20 +862,35 @@ impl<'a, 'u, P: Copy + Eq + Hash> ty::TypeUnifier<P, TypeVariableRef, TypeRef<P>
 
 /// Subtype relation.
 #[derive(Default)]
-struct SubtypeRelation(HashMap<TypeVariableRef, HashSet<TypeVariableRef>>);
+struct SubtypeRelation {
+	super_to_sub: HashMap<TypeVariableRef, HashSet<TypeVariableRef>>,
+	sub_to_super: HashMap<TypeVariableRef, HashSet<TypeVariableRef>>,
+}
 
 impl SubtypeRelation {
+	fn base_classes(&self) -> BaseClasses {
+		BaseClasses::new(self.strongly_connected_components())
+	}
+
 	fn declare(&mut self, x: TypeVariableRef) {
-		self.0.entry(x).or_default();
+		eprintln!("{x}");
+		self.super_to_sub.entry(x).or_default();
+		self.sub_to_super.entry(x).or_default();
 	}
 
 	/// Declares that `a` is a subtype of `b`.
 	fn insert(&mut self, a: TypeVariableRef, b: TypeVariableRef) -> bool {
-		self.0.get_mut(&b).unwrap().insert(a)
+		eprintln!("{a} < {b}");
+		self.super_to_sub.get_mut(&b).unwrap().insert(a);
+		self.sub_to_super.get_mut(&a).unwrap().insert(b)
 	}
 
 	fn subtypes_of(&self, b: TypeVariableRef) -> impl '_ + Iterator<Item = TypeVariableRef> {
-		self.0[&b].iter().copied()
+		self.super_to_sub[&b].iter().copied()
+	}
+
+	fn supertypes_of(&self, a: TypeVariableRef) -> impl '_ + Iterator<Item = TypeVariableRef> {
+		self.sub_to_super[&a].iter().copied()
 	}
 
 	fn resolve<P: Eq + Hash>(
@@ -676,7 +899,7 @@ impl SubtypeRelation {
 	) -> HashMap<TypeRef<P>, HashSet<TypeRef<P>>> {
 		let mut result: HashMap<TypeRef<P>, HashSet<TypeRef<P>>> = HashMap::new();
 
-		for (&key, value) in &self.0 {
+		for (&key, value) in &self.super_to_sub {
 			result
 				.entry(f(key))
 				.or_default()
@@ -691,11 +914,11 @@ impl Scc for SubtypeRelation {
 	type Vertex = TypeVariableRef;
 
 	fn vertices(&self) -> impl '_ + IntoIterator<Item = Self::Vertex> {
-		self.0.keys().copied()
+		self.super_to_sub.keys().copied()
 	}
 
 	fn successors(&self, v: Self::Vertex) -> impl '_ + IntoIterator<Item = Self::Vertex> {
-		self.0[&v].iter().copied()
+		self.super_to_sub[&v].iter().copied()
 	}
 }
 
@@ -705,15 +928,21 @@ struct ResolutionGroup {
 	variables: HashSet<TypeVariableRef>,
 
 	/// Type variable base classes in the resolution group.
-	base_classes: HashSet<usize>,
+	///
+	/// Ordered by sub-type (super-types first).
+	base_classes: Vec<BaseClassRef>,
 }
 
 impl ResolutionGroup {
-	fn new(base_classes: &Components<usize>, variables: HashSet<TypeVariableRef>) -> Self {
-		let group_classes = variables
+	fn new(base_classes: &BaseClasses, variables: HashSet<TypeVariableRef>) -> Self {
+		let mut group_classes: Vec<_> = variables
 			.iter()
-			.map(|x| base_classes.vertex_component_index(x).unwrap())
+			.copied()
+			.map(|x| base_classes.of(x).unwrap())
 			.collect();
+
+		group_classes.sort_by_key(|&c| base_classes.depth(c).unwrap());
+		group_classes.dedup();
 
 		Self {
 			variables,

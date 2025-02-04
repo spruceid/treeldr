@@ -65,7 +65,7 @@ impl<R: Clone> Resource<R> {
 	pub fn to_singleton_value(&self) -> Option<R> {
 		if let Some(set) = &self.set {
 			if set.len() == 1 {
-				return set.iter().next().cloned()
+				return set.iter().next().cloned();
 			}
 		}
 

@@ -775,6 +775,12 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 							.fresh(TypeValue::Pattern(Type::resource()), None);
 						context.type_variables.assert_eq(item.r#type, resource_ty);
 
+						let head = head.build(context, namespace, scope)?;
+						let resource_ty = context
+							.type_variables
+							.fresh(TypeValue::Pattern(Type::resource()), None);
+						context.type_variables.assert_eq(head.r#type, resource_ty);
+
 						let ty = ty::List::uniform(body.r#type);
 						let e =
 							expr::List::Implicit(expr::ImplicitList::Ordered(expr::OrderedList {
@@ -783,7 +789,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 									rest: context.rdf.insert_iri(Cow::Borrowed(RDF_REST)),
 									nil: context.rdf.insert_iri(Cow::Borrowed(RDF_NIL)),
 								},
-								head: Box::new(head.build(context, namespace, scope)?),
+								head: Box::new(head),
 								bound,
 								body,
 							}));

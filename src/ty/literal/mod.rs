@@ -81,7 +81,7 @@ impl LiteralType {
 			Self::Boolean(t) => t.to_singleton_value().map(Literal::Boolean),
 			Self::Number(t) => t.to_singleton_value().map(Literal::Number),
 			Self::TextString(t) => t.to_singleton_value().map(Literal::TextString),
-			Self::ByteString(t) => t.to_singleton_value().map(Literal::ByteString)
+			Self::ByteString(t) => t.to_singleton_value().map(Literal::ByteString),
 		}
 	}
 }

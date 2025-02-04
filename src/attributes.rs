@@ -6,7 +6,8 @@ use std::hash::Hash;
 use crate::{
 	rdf::{
 		serde::serde_indexed_resource, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
-	}, Value
+	},
+	Value,
 };
 
 #[derive(
@@ -47,7 +48,14 @@ impl<R: Ord> Attributes<R> {
 	}
 
 	pub fn label(&self) -> Option<&str> {
-		let label = self.map.get(&Attribute::Documentation)?.first()?.as_str()?.lines().next()?.trim();
+		let label = self
+			.map
+			.get(&Attribute::Documentation)?
+			.first()?
+			.as_str()?
+			.lines()
+			.next()?
+			.trim();
 		Some(label.strip_suffix(".").unwrap_or(label))
 	}
 
@@ -83,7 +91,7 @@ impl<R: Ord> Attributes<R> {
 			enum State {
 				Initial,
 				List,
-				Argument(ArgumentDocumentation)
+				Argument(ArgumentDocumentation),
 			}
 
 			let mut state = State::Initial;
@@ -101,31 +109,29 @@ impl<R: Ord> Attributes<R> {
 						Self::List => {
 							if let Some(rest) = line.strip_prefix('-') {
 								if let Some(a) = ArgumentDocumentation::from_li(rest.trim()) {
-									return State::Argument(a)
+									return State::Argument(a);
 								}
 							}
 
 							Self::List
 						}
-						Self::Argument(mut arg) => {
-							match line.strip_prefix('-') {
-								Some(rest) => {
-									result.push(arg);
-									match ArgumentDocumentation::from_li(rest.trim()) {
-										Some(a) => State::Argument(a),
-										None => Self::List
-									}
-								}
-								None => {
-									if !arg.description.is_empty() {
-										arg.description.push('\n');
-									}
-
-									arg.description.push_str(line);
-									State::Argument(arg)
+						Self::Argument(mut arg) => match line.strip_prefix('-') {
+							Some(rest) => {
+								result.push(arg);
+								match ArgumentDocumentation::from_li(rest.trim()) {
+									Some(a) => State::Argument(a),
+									None => Self::List,
 								}
 							}
-						}
+							None => {
+								if !arg.description.is_empty() {
+									arg.description.push('\n');
+								}
+
+								arg.description.push_str(line);
+								State::Argument(arg)
+							}
+						},
 					}
 				}
 			}
@@ -151,7 +157,7 @@ impl<R: Ord> Attributes<R> {
 pub struct ArgumentDocumentation {
 	pub id: String,
 	pub label: String,
-	pub description: String
+	pub description: String,
 }
 
 impl ArgumentDocumentation {
@@ -160,7 +166,7 @@ impl ArgumentDocumentation {
 		Some(ArgumentDocumentation {
 			id: id.trim().trim_matches('`').to_string(),
 			label: label.trim().to_string(),
-			description: String::new()
+			description: String::new(),
 		})
 	}
 }

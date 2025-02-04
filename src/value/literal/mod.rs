@@ -3,6 +3,8 @@ pub mod number;
 pub use number::{NativeNumber, Number};
 use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 
+use crate::display::{string_literal, StringLiteralDelimiter};
+
 /// Literal value.
 #[derive(
 	Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeSeeded, DeserializeSeeded,
@@ -62,65 +64,8 @@ impl fmt::Display for Literal {
 				}
 				Ok(())
 			}
-			Self::TextString(s) => string_literal(s, f),
+			Self::TextString(s) => string_literal(s, StringLiteralDelimiter::Double, f),
 		}
-	}
-}
-
-/// Formats a string literal according to [RFC8785](https://www.rfc-editor.org/rfc/rfc8785#name-serialization-of-strings).
-pub fn string_literal(s: &str, f: &mut fmt::Formatter) -> fmt::Result {
-	use fmt::Display;
-	f.write_str("\"")?;
-
-	for c in s.chars() {
-		match c {
-			'\\' => f.write_str("\\\\")?,
-			'\"' => f.write_str("\\\"")?,
-			'\u{0008}' => f.write_str("\\b")?,
-			'\u{0009}' => f.write_str("\\t")?,
-			'\u{000a}' => f.write_str("\\n")?,
-			'\u{000c}' => f.write_str("\\f")?,
-			'\u{000d}' => f.write_str("\\r")?,
-			'\u{0000}'..='\u{001f}' => {
-				f.write_str("\\u")?;
-
-				let codepoint = c as u32;
-				let d = codepoint & 0x000f;
-				let c = (codepoint & 0x00f0) >> 4;
-				let b = (codepoint & 0x0f00) >> 8;
-				let a = (codepoint & 0xf000) >> 12;
-
-				digit(a).fmt(f)?;
-				digit(b).fmt(f)?;
-				digit(c).fmt(f)?;
-				digit(d).fmt(f)?
-			}
-			_ => c.fmt(f)?,
-		}
-	}
-
-	f.write_str("\"")
-}
-
-fn digit(c: u32) -> char {
-	match c {
-		0x0 => '0',
-		0x1 => '1',
-		0x2 => '2',
-		0x3 => '3',
-		0x4 => '4',
-		0x5 => '5',
-		0x6 => '6',
-		0x7 => '7',
-		0x8 => '8',
-		0x9 => '9',
-		0xa => 'a',
-		0xb => 'b',
-		0xc => 'c',
-		0xd => 'd',
-		0xe => 'e',
-		0xf => 'f',
-		_ => panic!("invalid input: {}", c),
 	}
 }
 

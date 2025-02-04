@@ -1,5 +1,8 @@
 use crate::{
-	display::DisplaySignature, rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources}, value::TypedValueDesc, Attributes, Registry, Value
+	display::DisplaySignature,
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	value::TypedValueDesc,
+	Attributes, Registry, Value,
 };
 use core::fmt;
 use std::{cmp::Ordering, collections::BTreeMap, fmt::Debug, hash::Hash};
@@ -193,14 +196,21 @@ impl<P, R, T> VisitResources<R> for TypeDesc<P, R, T> {
 }
 
 impl<P, R> TypeDesc<P, R> {
-	pub fn to_singleton_value(&self, registry: &impl Registry<PackageId = P, Resource = R>) -> Option<TypedValueDesc<P, R>> where P: Copy, R: Clone + Ord {
+	pub fn to_singleton_value(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+	) -> Option<TypedValueDesc<P, R>>
+	where
+		P: Copy,
+		R: Clone + Ord,
+	{
 		match self {
 			Self::Any => None,
 			Self::Resource(r) => r.to_singleton_value().map(TypedValueDesc::resource),
 			Self::Literal(l) => l.to_singleton_value().map(TypedValueDesc::literal),
 			Self::List(l) => l.to_singleton_value(registry).map(TypedValueDesc::list),
 			Self::Map(m) => m.to_singleton_value(registry).map(TypedValueDesc::map),
-			Self::Enum(_) => None
+			Self::Enum(_) => None,
 		}
 	}
 }
@@ -352,7 +362,14 @@ impl<P: Copy + Ord + Hash, R: Clone + Ord, T> TypeDesc<P, R, T> {
 pub struct TypeUnificationError;
 
 impl<P, R> Type<P, R> {
-	pub fn to_singleton_value(&self, registry: &impl Registry<PackageId = P, Resource = R>) -> Option<TypedValueDesc<P, R>> where P: Copy, R: Clone + Ord {
+	pub fn to_singleton_value(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+	) -> Option<TypedValueDesc<P, R>>
+	where
+		P: Copy,
+		R: Clone + Ord,
+	{
 		self.desc.to_singleton_value(registry)
 	}
 }

@@ -6,7 +6,11 @@ use serde::{Deserialize, Serialize};
 use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 
 use crate::{
-	display::DisplaySignature, rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources}, utils::{self, take_first}, value::{self, TypedMap}, Attributes, Registry,
+	display::DisplaySignature,
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	utils::{self, take_first},
+	value::{self, TypedMap},
+	Attributes, Registry,
 };
 
 use super::TypeRef;
@@ -36,12 +40,19 @@ impl<P, R, T> Map<P, R, T> {
 }
 
 impl<P, R> Map<P, R> {
-	pub fn to_singleton_value(&self, registry: &impl Registry<PackageId = P, Resource = R>) -> Option<TypedMap<P, R>> where P: Copy, R: Clone + Ord {
+	pub fn to_singleton_value(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+	) -> Option<TypedMap<P, R>>
+	where
+		P: Copy,
+		R: Clone + Ord,
+	{
 		let mut result = TypedMap::new();
 
 		for (key, field) in &self.fields {
 			if !field.required {
-				return None
+				return None;
 			}
 
 			let key = key.to_singleton_value(registry)?;

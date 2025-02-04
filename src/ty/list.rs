@@ -65,9 +65,16 @@ impl<P> List<P> {
 		}
 	}
 
-	pub fn to_singleton_value<R>(&self, registry: &impl Registry<PackageId = P, Resource = R>) -> Option<Vec<TypedValue<P, R>>> where P: Copy, R: Clone + Ord {
+	pub fn to_singleton_value<R>(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = R>,
+	) -> Option<Vec<TypedValue<P, R>>>
+	where
+		P: Copy,
+		R: Clone + Ord,
+	{
 		if self.rest.is_some() {
-			return None
+			return None;
 		}
 
 		let mut items = Vec::with_capacity(self.prefix.len());
