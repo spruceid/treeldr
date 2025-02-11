@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-	Build, BuildContext, BuildEnvironment, BuildSignature, BuildingPackage, Error, ExprScope,
-	Scope, TypeValue, TypeVariableRef, TypeVariables,
+	Build, BuildContext, BuildSignature, BuildingPackage, Error, ExprScope, Scope, TypeValue,
+	TypeVariableRef, TypeVariables,
 };
 
 pub struct BuildModule<'ast, P> {
@@ -26,7 +26,7 @@ pub struct BuildModule<'ast, P> {
 impl<'ast, P: Copy + PartialEq> BuildModule<'ast, P> {
 	pub fn get<'a, R>(
 		&'a self,
-		registry: &'a impl Registry<PackageId = P, Resource = R>,
+		registry: &'a (impl ?Sized + Registry<PackageId = P, Resource = R>),
 		namespace: &'a BuildingPackage<'ast, P>,
 		path: &ItemPath,
 	) -> Option<ScopeItemRef<'a, P>> {
@@ -57,7 +57,7 @@ impl<P: Copy> BuildModule<'_, P> {
 		namespace: &BuildingPackage<E::PackageId>,
 	) -> Result<Module<P, E::Resource, TypeVariableRef>, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P>,
+		E: ?Sized + Registry<PackageId = P>,
 		E::Resource: Clone + Ord,
 		D: RdfContextMut<Resource = E::Resource>,
 	{
@@ -128,7 +128,7 @@ pub enum ScopeItem<P> {
 impl<P: Copy + Ord + Hash> ScopeItem<P> {
 	pub fn import_type<R>(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		type_variables: &mut TypeVariables<P, R>,
 	) -> Option<TypeVariableRef> {
 		match self {
@@ -188,7 +188,7 @@ impl<P: Copy> ScopeItemRef<'_, P> {
 impl<'a, P: Copy + PartialEq> ScopeItemRef<'a, P> {
 	pub fn get<R>(
 		&self,
-		registry: &'a impl Registry<PackageId = P, Resource = R>,
+		registry: &'a (impl ?Sized + Registry<PackageId = P, Resource = R>),
 		namespace: &'a BuildingPackage<P>,
 		path: &ItemPath,
 	) -> Option<Self> {
@@ -202,7 +202,7 @@ impl<'a, P: Copy + PartialEq> ScopeItemRef<'a, P> {
 
 	pub fn get_by_segment<R>(
 		&self,
-		registry: &'a impl Registry<PackageId = P, Resource = R>,
+		registry: &'a (impl ?Sized + Registry<PackageId = P, Resource = R>),
 		namespace: &'a BuildingPackage<P>,
 		segment: &ItemPathSegment,
 	) -> Option<Self> {
@@ -222,7 +222,7 @@ impl<'a, P: Copy + PartialEq> ScopeItemRef<'a, P> {
 
 	pub fn get_by_name<R>(
 		&self,
-		registry: &'a impl Registry<PackageId = P, Resource = R>,
+		registry: &'a (impl ?Sized + Registry<PackageId = P, Resource = R>),
 		namespace: &'a BuildingPackage<P>,
 		name: &str,
 	) -> Option<Self> {
@@ -261,7 +261,7 @@ impl<'ast> ast::Module {
 		metadata: Option<&'ast ast::Metadata>,
 	) -> Result<ModuleRef<E::PackageId>, Error<E::PackageId>>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,

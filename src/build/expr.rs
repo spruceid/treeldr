@@ -13,13 +13,10 @@ use crate::{
 	syntax::ast::{self, ListDescription},
 	ty::{self, TypeDesc},
 	value::{Map, Number, TypedValue, TypedValueDesc, TypedValueInnerDesc, TypedValueMap},
-	Attributes, DatasetPattern, Literal, Pattern, TermPattern, Type, Value,
+	Attributes, DatasetPattern, Literal, Pattern, Registry, TermPattern, Type, Value,
 };
 
-use super::{
-	Build, BuildContext, BuildEnvironment, BuildingPackage, Error, Scope, TypeValue,
-	TypeVariableRef,
-};
+use super::{Build, BuildContext, BuildingPackage, Error, Scope, TypeValue, TypeVariableRef};
 
 type BuiltBindings<'a, P, R> = (expr::Bindings<P, R, TypeVariableRef>, Scope<'a, P>);
 
@@ -33,7 +30,7 @@ impl ast::Bindings {
 		scope: &'a Scope<E::PackageId>,
 	) -> BuiltBindingsResult<'a, E::PackageId, E::Resource>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -75,7 +72,7 @@ impl ast::Binding {
 		sub_scope: &mut Scope<E::PackageId>,
 	) -> BuiltBindingResult<E::PackageId, E::Resource>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -119,7 +116,7 @@ impl ast::Expr {
 		sub_scope: &mut Scope<E::PackageId>,
 	) -> BuildPatternResult<E::PackageId, E::Resource>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -184,7 +181,7 @@ impl ast::ListExpr {
 		sub_scope: &mut Scope<E::PackageId>,
 	) -> BuildListPatternResult<E::PackageId, E::Resource>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -225,7 +222,7 @@ impl ast::MapExpr {
 		sub_scope: &mut Scope<E::PackageId>,
 	) -> BuildMapPatternResult<E::PackageId, E::Resource>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -265,7 +262,7 @@ impl ast::CallExpr {
 		sub_scope: &mut Scope<E::PackageId>,
 	) -> BuildCallPatternResult<E::PackageId, E::Resource>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -341,7 +338,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord> Build<'ast, P, R> for ast::RdfDa
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		let mut result = DatasetPattern::new();
@@ -363,7 +360,7 @@ impl ast::RdfStatement {
 		result: &mut DatasetPattern<E::Resource>,
 	) -> Result<(), Error<E::PackageId>>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 		E::Resource: Clone + Ord,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -388,7 +385,7 @@ impl ast::RdfPredicateObjects {
 		subject: &TermPattern<E::Resource>,
 	) -> Result<(), Error<E::PackageId>>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 		E::Resource: Clone + Ord,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -419,7 +416,7 @@ impl ast::RdfTerm {
 		scope: &Scope<E::PackageId>,
 	) -> Result<E::Resource, Error<E::PackageId>>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 		E::Resource: Clone,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -442,7 +439,7 @@ impl ast::RdfPattern {
 		scope: &Scope<E::PackageId>,
 	) -> Result<TermPattern<E::Resource>, Error<E::PackageId>>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 		E::Resource: Clone,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -503,7 +500,7 @@ impl ast::RdfLiteral {
 		scope: &Scope<E::PackageId>,
 	) -> Result<E::Resource, Error<E::PackageId>>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 		E::Resource: Clone,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -548,7 +545,7 @@ impl ast::Iri {
 		scope: &Scope<E::PackageId>,
 	) -> Result<IriBuf, Error<E::PackageId>>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 	{
 		match self {
@@ -566,7 +563,7 @@ impl ast::CompactIri {
 		scope: &Scope<E::PackageId>,
 	) -> Result<IriBuf, Error<E::PackageId>>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 	{
 		let (prefix_name, suffix) = self.as_str().split_once(':').unwrap();
@@ -594,7 +591,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		match self {
@@ -702,7 +699,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		match &self.desc {
@@ -816,7 +813,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		let mut fields = BTreeIndexMap::new();
@@ -867,7 +864,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		let (inner, type_) = match self {
@@ -937,7 +934,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		let mut items = Vec::with_capacity(self.items.len());
@@ -975,7 +972,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		let mut fields = BTreeIndexMap::new();
@@ -1012,7 +1009,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		let mut t = ty::Enum {
@@ -1049,7 +1046,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		let path = self.function.build(context, namespace, scope)?;
@@ -1136,7 +1133,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::LiteralExpr {
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		match self {
@@ -1171,7 +1168,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::True {
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 	{
 		Ok((true, ty::Boolean::singleton(true)))
 	}
@@ -1187,7 +1184,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::False {
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 	{
 		Ok((false, ty::Boolean::singleton(false)))
 	}
@@ -1211,7 +1208,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::Number {
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 	{
 		let value = self.build_unscoped()?;
 		Ok((value.clone(), ty::Number::singleton(value)))
@@ -1234,7 +1231,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::TextString {
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 	{
 		let value = self.decode()?;
 		Ok((value.clone(), ty::TextString::singleton(value)))
@@ -1257,7 +1254,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::RdfString {
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 	{
 		let value = self.decode()?;
 		Ok((value.clone(), ty::TextString::singleton(value)))

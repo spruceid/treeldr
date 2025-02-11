@@ -1,10 +1,6 @@
 # TreeLDR
 
-TreeLDR is a functional data transformation language based on the Resource
-Description Framework (RDF). One can use it to serialize RDF datasets into
-algebraic data values, and back. The main particularity of TreeLDR is that
-functions are **always reversible**: writing a serialization function gives
-the deserialization function for free.
+TreeLDR is a functional data transformation language based on the Resource Description Framework (RDF). It can be used to serialize RDF datasets into algebraic data values, and back. What makes TreeLDR unique is that functions are **always reversible**: writing a serialization function gives the deserialization function for free.
 
 ## Basic function
 
@@ -12,18 +8,25 @@ Here is an example is a very simple TreeLDR function:
 ```tldr
 prefix schema = <https://schema.org/>;
 
-fn (simple_function subject) = {
-	"id" = (id_of subject),
-	"name" = (string_of (get schema:name subject)),
-	"birth_date" = (date_of (get schema:birthDate subject))
+let (foo input) = {
+	"id": (id_of input),
+	"name": (string_of (get schema:name input)),
+	"birth_date": (date_of (get schema:birthDate input))
 }
 ```
 
+In this example we start with defining an IRI prefix so that IRIs of the form `https://schema.org/something` can be shorthanded into `schema:something`. Then we define a function called `foo` with a single `input` parameter. This parameter represents an RDF resource in a dataset. We use it to build a map (a.k.a a JSON object) with a few entries derived from `input`.
+- The `"id"` entry is set to the identifier (IRI) of the input value.
+- The `"name"` entry is set to the text string representation of the XSD string literal value of the `https://schema.org/name` property of `input`.
+- Lastly the `"birth_date"` entry is set to the text string representation of the XSD date literal value of the `https://schema.org/birthDate` property of `input`.
+
+Now let's consider the following RDF dataset:
 ```n-triples
 <https://example.org/johnSmith> <https://schema.org/name> "John Smith" .
 <https://example.org/johnSmith> <https://schema.org/birthDate> "2024-12-03"^^<http://www.w3.org/2001/XMLSchema#date> .
 ```
 
+If we evaluate `foo` using `<https://example.org/johnSmith>` as input value, here is the output we will get:
 ```json
 {
 	"id": "https://example.org/johnSmith",
@@ -31,65 +34,48 @@ fn (simple_function subject) = {
 	"birth_date": "2024-12-03"
 }
 ```
+Because all the functions in TreeLDR are *reversible*, we can also feed this JSON object back to the inverse of `foo` and find the original RDF dataset.
 
-## Adding RDF to the Layout
+## RDF as an intermediate representation
 
-TreeLDR layouts are meant to define a transformation between tree values and
-RDF datasets.
-The layout above is a pattern for tree values, but there is not yet mention 
-of RDF.
-The simplest way to add RDF information to our layout is to use the `property`
-attribute to bind each record field to an RDF property:
+Because every functions are reversible, it is actually possible to use TreeLDR without never inputting or outputting any RDF dataset whatsoever. Instead RDF can be hidden away as an intermediate representation to a data transformation operation.
 
-```json
-{
-	"type": "record",
-	"fields": {
-		"name": {
-			"value": { "type": "string" },
-			// We bind the name `field` to the <http://example.org/#name> property.
-			"property": "http://example.org/#name"
-		},
-		"age": {
-			"value": { "type": "number" },
-			// We bind the name `age` to the <http://example.org/#age> property.
-			"property": "http://example.org/#age"
-		}
+For instance, consider the following new function:
+```tldr
+let (bar input) = {
+	"identifier": (id_of input),
+	"data": {
+		"fullName": (string_of (get schema:name input)),
+		"dateOfBirth": (date_of (get schema:birthDate input))
 	}
 }
 ```
+This function is very similar to our original `foo`. It uses the same expressions to populate the map from the `input` RDF resource (the *semantics* is the same), but the entry names and overall structure is different.
 
-With the `property` attributes this layout now maps each matching tree value to
-a unique RDF data.
-For example, our previous JSON value `{ "name": "John Smith", "age": 30 }` is
-mapped to the following RDF dataset (written in N-Triples here):
-```n-triples
-_:0 <http://example.org/#name> "John Smith" .
-_:0 <http://example.org/#age> "30"^^<http://www.w3.org/2001/XMLSchema#decimal> .
+We can combine the two function to translate any value from one structure to the other:
+```tldr
+let (foo_to_bar json_input) =
+	let (foo rdf_resource) = json_input;
+	(bar rdf_resource)
 ```
+Here we first call the inverse of `foo` on the `json_input`, creating an intermediate `rdf_resource`. This is done using the `let (f x) = y` syntax that finds the input `x` such that `(f x)` is `y`. Then we call `bar` on that intermediate value.
 
-Here is a walk-through of this dataset:
-  - It contains two triples, one for each field of the original tree value
-  - `_:0` is the subject of those triples. It is the RDF resource represented
-    by the top-level layout. A layout can represent any number of resources,
-	called **input** resources. By default a layout has only one input.
-	The next section goes over layout inputs in more details.
-  - `"John Smith"` is a text string literal value associated to the property
-    `http://example.org/#name`, as prescribed by the layout `name` field.
-    In RDF each literal value has a type. Here the type is implicitly the XSD
-    datatype `http://www.w3.org/2001/XMLSchema#string`. It is possible to
-    manually set this datatype.
-  - `"30"` is the literal value associated to the property
-    `http://example.org/#age`, as prescribed by the layout `age` field.
-	Because the `number` layout was used, the default datatype for this
-	literal is `http://www.w3.org/2001/XMLSchema#decimal`. It is possible to
-	manually set this datatype.
-
-The layout can be used to go from the RDF form to the structured value form by
-**serialization**.
-It can also be used in the opposite direction from the structured value form to
-the pure RDF form by **deserialization**.
-
-## Layout inputs
-
-TODO
+Let's bring back the output of our previous example:
+```json
+{
+	"id": "https://example.org/johnSmith",
+	"name": "John Smith",
+	"birth_date": "2024-12-03"
+}
+```
+If we call the `foo_to_bar` function on this value, we will get the following output:
+```json
+{
+	"identifier": "https://example.org/johnSmith",
+	"data": {
+		"fullName": "John Smith",
+		"dateOfBirth": "2024-12-03"
+	}
+}
+```
+We got this output without seeing any RDF dataset. And it is still possible to reverse the `foo_to_bar` function to convert the output back.

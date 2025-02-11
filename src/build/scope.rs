@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{syntax::ast, ItemPath, ItemPathSegment, ModuleRef};
+use crate::{syntax::ast, ItemPath, ItemPathSegment, ModuleRef, Registry};
 
-use super::{BuildContext, BuildEnvironment, BuildingPackage, ScopeItemRef, TypeVariableRef};
+use super::{BuildContext, BuildingPackage, ScopeItemRef, TypeVariableRef};
 
 pub struct Scope<'a, P> {
 	pub module: Option<ModuleRef<P>>,
@@ -34,18 +34,12 @@ impl<'a, P: Copy + PartialEq> Scope<'a, P> {
 		path: &ItemPath,
 	) -> Option<ScopeItemRef<'c, P>>
 	where
-		E: BuildEnvironment<PackageId = P>,
+		E: ?Sized + Registry<PackageId = P>,
 	{
 		match path.split_first() {
 			Some((first, rest)) => self
 				.get_by_segment(context, namespace, first)
-				.and_then(|i| {
-					i.get(
-						context.environment.registry(),
-						namespace,
-						ItemPath::from_slice(rest),
-					)
-				}),
+				.and_then(|i| i.get(context.registry, namespace, ItemPath::from_slice(rest))),
 			None => self.module.map(ScopeItemRef::Module),
 		}
 	}
@@ -57,7 +51,7 @@ impl<'a, P: Copy + PartialEq> Scope<'a, P> {
 		segment: &ItemPathSegment,
 	) -> Option<ScopeItemRef<'c, P>>
 	where
-		E: BuildEnvironment<PackageId = P>,
+		E: ?Sized + Registry<PackageId = P>,
 	{
 		if let ItemPathSegment::Item(name) = segment {
 			if let Some(x) = self.expr.get_by_name(name) {
@@ -66,18 +60,16 @@ impl<'a, P: Copy + PartialEq> Scope<'a, P> {
 		}
 
 		if let Some(m) = self.module {
-			if let Some(item) = ScopeItemRef::Module(m).get_by_segment(
-				context.environment.registry(),
-				namespace,
-				segment,
-			) {
+			if let Some(item) =
+				ScopeItemRef::Module(m).get_by_segment(context.registry, namespace, segment)
+			{
 				return Some(item);
 			}
 		}
 
 		match segment {
 			ItemPathSegment::Super => None,
-			ItemPathSegment::Item(name) => context.environment.get_by_name(name).map(Into::into),
+			ItemPathSegment::Item(name) => context.registry.get_by_name(name).map(Into::into),
 		}
 	}
 
@@ -88,7 +80,7 @@ impl<'a, P: Copy + PartialEq> Scope<'a, P> {
 		name: &str,
 	) -> Option<ScopeItemRef<'c, P>>
 	where
-		E: BuildEnvironment<PackageId = P>,
+		E: ?Sized + Registry<PackageId = P>,
 	{
 		if let Some(x) = self.expr.get_by_name(name) {
 			return Some(ScopeItemRef::Variable(x));
@@ -96,13 +88,13 @@ impl<'a, P: Copy + PartialEq> Scope<'a, P> {
 
 		if let Some(m) = self.module {
 			if let Some(item) =
-				ScopeItemRef::Module(m).get_by_name(context.environment.registry(), namespace, name)
+				ScopeItemRef::Module(m).get_by_name(context.registry, namespace, name)
 			{
 				return Some(item);
 			}
 		}
 
-		context.environment.get_by_name(name).map(Into::into)
+		context.registry.get_by_name(name).map(Into::into)
 	}
 
 	pub fn begin(&'a self) -> Scope<'a, P> {

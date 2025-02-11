@@ -54,6 +54,10 @@ enum Command {
 
 	/// Call a function.
 	Call {
+		/// Function to call.
+		#[arg(short, long, default_value = "_")]
+		function: String,
+
 		/// Format of the input arguments that are read from the standard input.
 		#[arg(short = 'i', long = "input", value_parser = TreeFormat::parser(), default_value = "tron")]
 		input_format: TreeFormat,
@@ -125,7 +129,7 @@ impl Args {
 		let file_id = files.add(self.input.to_string_lossy().into_owned(), content);
 
 		registry.target = Some(
-			treeldr::Module::compile(
+			treeldr::Package::compile(
 				rdf,
 				registry,
 				PackageId::Target,
@@ -206,6 +210,7 @@ impl Command {
 				Ok(())
 			}
 			Self::Call {
+				function: name,
 				input_format,
 				output_format,
 				rdf_input,
@@ -216,9 +221,7 @@ impl Command {
 			} => {
 				let module = registry.target.as_ref().unwrap().root();
 
-				let name = "_";
-
-				let f_ref = match module.get_by_name(name) {
+				let f_ref = match module.get_by_name(&name) {
 					Some(ItemRef::Function(f_ref)) => f_ref,
 					Some(_) => return Err(Error::NotAFunction(name.to_owned())),
 					None => return Err(Error::UndefinedFunction(name.to_owned())),
@@ -233,7 +236,6 @@ impl Command {
 				};
 
 				while args.len() < expected_arg_count {
-					println!("expecting one argument");
 					let stdin = BufReader::new(io::stdin());
 					args.push(input_format.load(stdin)?)
 				}
@@ -272,8 +274,13 @@ impl Command {
 
 					let output = args.next().unwrap();
 
-					let inputs =
-						function.call_inverse(registry, rdf, &mut dataset, &const_args, &output)?;
+					let inputs = function.call_inverse_with(
+						registry,
+						rdf,
+						&mut dataset,
+						&const_args,
+						&output,
+					)?;
 
 					let mut out = io::stdout();
 
@@ -286,7 +293,7 @@ impl Command {
 
 					out.flush()?;
 				} else {
-					let output = function.call(registry, rdf, &mut dataset, &args)?;
+					let output = function.call_with(registry, rdf, &mut dataset, &args)?;
 
 					let typed_output = output
 						.into_typed(registry, function.signature.return_type)

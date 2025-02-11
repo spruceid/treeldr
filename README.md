@@ -1,124 +1,106 @@
 # TreeLDR
 
-TreeLDR is Linked-Data serialization framework providing:
-  - RDF layouts to serialize and deserialize RDF datasets from/to tree data;
-  - A concise schema definition language for RDF classes and layouts;
-  - A set of boilerplate code generator.
+TreeLDR is a functional data transformation language based on the Resource Description Framework (RDF). It can be used to serialize RDF datasets into algebraic data values, and back. What makes TreeLDR unique is that functions are **always reversible**: writing a serialization function gives the deserialization function for free.
 
-TreeLDR can be used to produce JSON Schemas, JSON-LD contexts, migration
-strategies, blockchain publishing routines, etc. and entire SDKs in various
-target programming languages such as Python, Java and more. This way, developers
-can define data structures in a familiar way and focus purely on the application
-level.
+Here is an example is a very simple TreeLDR function:
+```tldr
+prefix schema = <https://schema.org/>;
 
-> [!IMPORTANT]
-> TreeLDR has experienced major changes with version 0.2. In particular, we
-> formalized the data model of Layouts, changing their definition in a way that
-> is incompatible with our current implementation of the DSL and (some)
-> generators. We will reintroduce the missing DSL and generators in future
-> updates.
+let (foo input) = {
+	"id": (id_of input),
+	"name": (string_of (get schema:name input)),
+	"birth_date": (date_of (get schema:birthDate input))
+}
+```
 
-## Install
+In this example we start with defining an IRI prefix so that IRIs of the form `https://schema.org/something` can be shorthanded into `schema:something`. Then we define a function called `foo` with a single `input` parameter. This parameter represents an RDF resource in a dataset. We use it to build a map (a.k.a a JSON object) with a few entries derived from `input`.
+- The `"id"` entry is set to the identifier (IRI) of the input value.
+- The `"name"` entry is set to the text string representation of the XSD string literal value of the `https://schema.org/name` property of `input`.
+- Lastly the `"birth_date"` entry is set to the text string representation of the XSD date literal value of the `https://schema.org/birthDate` property of `input`.
 
-You will need [Rust](https://rust-lang.org) 1.74 or later
-to install TreeLDR, with [cargo](https://doc.rust-lang.org/cargo/).
+Now let's consider the following RDF dataset:
+```n-triples
+<https://example.org/johnSmith> <https://schema.org/name> "John Smith" .
+<https://example.org/johnSmith> <https://schema.org/birthDate> "2024-12-03"^^<http://www.w3.org/2001/XMLSchema#date> .
+```
 
-TreeLDR can be installed from the source by first cloning
-the git repository:
+If we evaluate `foo` using `<https://example.org/johnSmith>` as input value, here is the output we will get:
+```json
+{
+	"id": "https://example.org/johnSmith",
+	"name": "John Smith",
+	"birth_date": "2024-12-03"
+}
+```
+Because all the functions in TreeLDR are *reversible*, we can also feed this JSON object back to the inverse of `foo` and find the original RDF dataset.
+
+## Command line interface
+
+The top-level package provides a command-line interface to compile and run TreeLDR programs.
+
+### Install
+
+You will need [Rust](https://rust-lang.org) 1.74 or later to build and install the command line interface from the sources, with [cargo](https://doc.rust-lang.org/cargo/).
+
+Start by cloning the git repository:
 ```console
 $ git clone https://github.com/spruceid/treeldr.git
 ```
 
-This repository contains the different libraries and executables composing
-the TreeLDR framework.
 You can then build everything from the repository root:
 ```console
 $ cargo build
 ```
 
-Alternatively if you want to install the binaries on you computer, use
+Alternatively if you want to install the binary on your machine, use
 ```console
 $ cargo install --path .
 ```
 
-## Usage
-
-The top-level package provides a command-line interface which can use TreeLDR
-layouts to serialize or deserialize tree value (like JSON), or generate code.
-If you want to use TreeLDR layouts directly in your code, use the
-[`treeldr-layouts` library](layouts).
-
-In this section, the `tldr` command can be replaced with `cargo run -- ` if
-you chose not to install the binary.
-
-### Deserialization
-
-Use the `dehydrate` subcommand to turn any *tree value* (JSON) into an RDF
-dataset using a given layout.
-The input tree is read from the standard input, and the output written to the
-standard output.
+### Usage
 
 ```console
-$ tldr path/to/layout.json dehydrate
+$ cat path/to/dataset.nq | tldr path/to/program.tldr call arg1 ... argN
 ```
+You can specify the function you want to call using `-f function_name`. By default the `_` function will be called.
 
-Example layouts are found in the `layouts/examples` folder.
+Use the `-r` (`--reverse`) flag to call the inverse function.
 ```console
-$ echo '{"id": "http://example.org/#bob", "name": "Bob"}' | tldr layouts/examples/record.json dehydrate
-<http://example.org/#bob> <https://schema.org/name> "Bob" .
+$ cat tldr path/to/program.tldr call -r arg1 ... argN
 ```
-
-You can specify the input (tree) format using the `-i` option after `dehydrate`.
-Similarly, you can specify the output (RDF) format using the `-o` option.
-By default the input is expected to be JSON and output is N-Quads.
-Supported formats are given in the [Supported Formats](#supported-formats)
-section below.
-
-### Serialization
-
-Use `hydrate` subcommand to turn any *RDF dataset* into a tree value (JSON)
-using a given layout.
-The input dataset is read from the standard input, and the output written to the
-standard output.
-
+If you don't provide enough input arguments, TreeLDR will try to read the missing ones from the standard input. For instance:
 ```console
-$ tldr path/to/layout.json hydrate
+$ echo '{"id": "http://example.org/#bob", "name": "Bob"}' | tldr examples/simple.tldr call -r
+<http://example.org/#bob>
 ```
-
-Example layouts are found in the `layouts/examples` folder.
-```console
-$ echo '<http://example.org/#bob> <https://schema.org/name> "Bob" .' | tldr layouts/examples/record.json hydrate 'http://example.org/#bob'
-{"id":"http://example.org/#bob","name":"Bob"}
-```
-
-You can specify the input (RDF) format using the `-i` option after `hydrate`.
-Similarly, you can specify the output (tree) format using the `-o` option.
-By default the input is expected to be N-Quads and output is JSON.
-Supported formats are given in the [Supported Formats](#supported-formats)
-section below.
 
 ### Supported formats
-
-The following table lists all the tree formats supported by TreeLDR.
-The "Option value" can be given to the `-i` option of the `dehydrate`
-subcommand, or the `-o` option of the `hydrate` subcommand.
 
 | Tree format | Option value(s)                                  |
 | ----------- | ------------------------------------------------ |
 | JSON        | `application/json`, `json`                       |
 | CBOR        | `application/cbor`, `cbor`                       |
 
-The following table lists all the RDF formats supported by TreeLDR.
-The "Option value" can be given to the `-i` option of the `hydrate` subcommand,
-or the `-i` option of the `dehydrate` subcommand.
-
 | RDF format  | Option value(s)                                  |
 | ----------- | ------------------------------------------------ |
 | N-Quads     | `application/n-quads`, `n-quads`, `nquads`, `nq` |
 
-## Tesing
+## Library
+
+TreeLDR can be used as a Rust library and embedded in your application. Just add it as a dependency in your `Cargo.toml` file:
+```toml
+[dependencies]
+treeldr = { git = "https://github.com/spruceid/treeldr.git" }
+```
+
+Here is a simple example building and evaluating a TreeLDR program:
+```rust
+// TODO
+```
+
+## Testing
 
 To run all the tests, use the following command:
 ```console
-$ cargo test --workspace --all-features
+$ cargo test
 ```

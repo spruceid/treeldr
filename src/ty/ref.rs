@@ -27,7 +27,7 @@ impl<P> TypeRef<P> {
 
 	pub fn to_singleton_value<R>(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 	) -> Option<TypedValue<P, R>>
 	where
 		P: Copy,
@@ -43,7 +43,7 @@ impl<P> TypeRef<P> {
 impl<P: Copy + Ord> TypeRef<P> {
 	pub fn contains<R: Ord>(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		value: &Value<R>,
 	) -> bool {
 		registry
@@ -55,7 +55,7 @@ impl<P: Copy + Ord> TypeRef<P> {
 impl<P: Copy + Ord + Hash> TypeRef<P> {
 	pub fn subtype_cmp<R: Ord>(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other_ref: TypeRef<P>,
 	) -> Option<Ordering> {
 		registry.get_type(*self)?.subtype_cmp(registry, other_ref)
@@ -63,7 +63,7 @@ impl<P: Copy + Ord + Hash> TypeRef<P> {
 
 	pub fn is_subtype_of<R: Ord>(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other_ref: TypeRef<P>,
 	) -> bool {
 		registry
@@ -116,7 +116,7 @@ impl<P, R> TypeDefinition<P, R> {
 impl<P: Copy + Ord + Hash, R: Ord> TypeDefinition<P, R> {
 	pub fn subtype_cmp(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other_ref: TypeRef<P>,
 	) -> Option<Ordering> {
 		let map = self.subtype_cmp.get_or_init(Default::default);
@@ -134,7 +134,7 @@ impl<P: Copy + Ord + Hash, R: Ord> TypeDefinition<P, R> {
 
 	pub fn is_subtype_of(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other_ref: TypeRef<P>,
 	) -> bool {
 		self.subtype_cmp(registry, other_ref)

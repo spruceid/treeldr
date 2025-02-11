@@ -26,7 +26,7 @@ pub struct Enum<P, R, T = TypeRef<P>> {
 impl<P: Copy + Ord, R: Ord> Enum<P, R> {
 	pub fn contains(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		value: &Value<R>,
 	) -> bool {
 		self.variants
@@ -38,7 +38,7 @@ impl<P: Copy + Ord, R: Ord> Enum<P, R> {
 impl<P: Copy + Ord + Hash, R: Ord> Enum<P, R> {
 	pub fn subtype_cmp(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other: &TypeDesc<P, R>,
 	) -> Option<Ordering> {
 		match other {

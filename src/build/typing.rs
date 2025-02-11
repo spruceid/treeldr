@@ -11,7 +11,7 @@ use scc_trait::{Components, Scc};
 
 use crate::{
 	ty::{self, TypeAllocator, TypeDesc, TypeUnificationError},
-	Package, Registry, RegistryUnion, Type, TypeRef,
+	Package, PackageId, Registry, RegistryUnion, Type, TypeRef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -42,7 +42,7 @@ impl<P, R> TypeValue<P, R> {
 	/// Unifies two type values.
 	pub fn unify(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		unifier: &mut Unifier<P>,
 		other: &Self,
 		// mut type_ref_variable: impl FnMut(&TypeRef) -> TypeVariableRef,
@@ -218,7 +218,7 @@ impl<P, R> TypeVariables<P, R> {
 	/// Import a type reference as a type variable.
 	pub fn import_type_ref(
 		&mut self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		ty_ref: TypeRef<P>,
 	) -> TypeVariableRef
 	where
@@ -370,11 +370,11 @@ impl<P, R> TypeVariables<P, R> {
 	/// Resolve the type variables.
 	pub fn resolve(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		package: &mut Package<P, R>,
 	) -> Result<HashMap<TypeVariableRef, TypeRef<P>>, TypeResolutionError<P>>
 	where
-		P: Copy + Ord + Hash,
+		P: PackageId + Ord + Hash,
 		R: Clone + Ord,
 	{
 		let (mut resolver, ordered_groups) = Resolver::new(self)?;
@@ -532,7 +532,7 @@ impl<P, R> Class<P, R> {
 
 	fn unify(
 		mut self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		unifier: &mut Unifier<P>,
 		mut other: Self,
 	) -> Result<Self, TypeResolutionError<P>>
@@ -576,7 +576,7 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 
 	fn resolve_group(
 		&mut self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		package: &mut Package<P, R>,
 		resolved: &HashMap<TypeVariableRef, TypeRef<P>>,
 		g: usize,
@@ -585,7 +585,6 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 		P: Ord + Hash,
 		R: Ord,
 	{
-		eprintln!("group {g}");
 		let group = &self.groups.get(g).unwrap();
 
 		// Prepare type unification.
@@ -624,15 +623,6 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 			.iter()
 			.flat_map(|&c| self.base_classes.get(c).unwrap());
 
-		for &b in &group.base_classes {
-			eprint!("{b} = {{");
-			let base_class = self.base_classes.get(b).unwrap();
-			for x in base_class {
-				eprint!("{x},");
-			}
-			eprintln!("}}");
-		}
-
 		// Resolve classes.
 		let mut reservation = TypeAllocator::new(package);
 		let mut resolved_classes: HashMap<ClassRef, TypeRef<P>> = HashMap::new();
@@ -643,12 +633,6 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 			if resolved_classes.contains_key(&k) {
 				continue;
 			}
-
-			eprint!("resolve {k} = {{");
-			for &x in &class.variables {
-				eprint!("{x},");
-			}
-			eprintln!("}}");
 
 			let target = match &class.value {
 				TypeValue::Undefined => {
@@ -662,15 +646,9 @@ impl<'a, P: Copy, R: Clone> Resolver<'a, P, R> {
 							self.variables
 								.subtype_relation
 								.supertypes_of(y)
-								.map(|z| {
-									eprintln!("parent type {z}");
-									self.classes.of(z).unwrap()
-								})
+								.map(|z| self.classes.of(z).unwrap())
 								.filter(|&l| k != l)
-								.map(|l| {
-									eprintln!("parent class {l}");
-									*resolved_classes.get(&l).unwrap()
-								})
+								.map(|l| *resolved_classes.get(&l).unwrap())
 						})
 						.collect();
 
@@ -871,14 +849,12 @@ impl SubtypeRelation {
 	}
 
 	fn declare(&mut self, x: TypeVariableRef) {
-		eprintln!("{x}");
 		self.super_to_sub.entry(x).or_default();
 		self.sub_to_super.entry(x).or_default();
 	}
 
 	/// Declares that `a` is a subtype of `b`.
 	fn insert(&mut self, a: TypeVariableRef, b: TypeVariableRef) -> bool {
-		eprintln!("{a} < {b}");
 		self.super_to_sub.get_mut(&b).unwrap().insert(a);
 		self.sub_to_super.get_mut(&a).unwrap().insert(b)
 	}

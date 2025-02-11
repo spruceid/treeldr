@@ -1,5 +1,5 @@
 use core::fmt;
-use rdf_types::Quad;
+use rdf_types::{Quad, Term};
 use serde::{Deserialize, Serialize};
 use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 use std::{hash::Hash, marker::PhantomData};
@@ -9,7 +9,7 @@ use crate::{
 	eval::{EvalError, Scope, ScopeTypes, ScopeValues},
 	pattern::serde_dataset_pattern,
 	rdf::{
-		EvalDataset, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex,
+		EvalDataset, Rdf, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex,
 		TryUnifyInterpretation, VisitResources,
 	},
 	ty::{BuiltInTypeMap, TypeRef},
@@ -128,7 +128,7 @@ impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Signature<
 	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
 	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>), bounds(T: Ord))
 )]
-pub struct Function<P, R, T = TypeRef<P>> {
+pub struct Function<P, R = Term, T = TypeRef<P>> {
 	pub attributes: Attributes<R>,
 	pub signature: Signature<P, R, T>,
 	pub body: Body<P, R, T>,
@@ -157,8 +157,35 @@ impl<P, R> Function<P, R> {
 	}
 }
 
-impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
+impl<P: Copy + Ord> Function<P> {
 	pub fn call(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = Term>,
+		dataset: &mut impl EvalDataset<Term>,
+		args: &[Value],
+	) -> Result<Value, EvalError> {
+		let mut rdf = Rdf::default();
+		self.call_with(registry, &mut rdf, dataset, args)
+	}
+
+	/// Call the inverse function.
+	///
+	/// Returns the inputs associated to the given output and const arguments.
+	/// The returned input list does *not* include the const arguments again.
+	pub fn call_inverse(
+		&self,
+		registry: &impl Registry<PackageId = P, Resource = Term>,
+		dataset: &mut impl EvalDataset<Term>,
+		const_args: &[Value],
+		output: &Value,
+	) -> Result<Vec<Value>, EvalError> {
+		let mut rdf = Rdf::default();
+		self.call_inverse_with(registry, &mut rdf, dataset, const_args, output)
+	}
+}
+
+impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
+	pub fn call_with(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
@@ -201,7 +228,7 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 	///
 	/// Returns the inputs associated to the given output and const arguments.
 	/// The returned input list does *not* include the const arguments again.
-	pub fn call_inverse(
+	pub fn call_inverse_with(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut impl RdfContextMut<Resource = R>,
@@ -287,6 +314,15 @@ pub struct FunctionRef<P> {
 impl<P> FunctionRef<P> {
 	pub fn new(package: P, index: u32) -> Self {
 		Self { package, index }
+	}
+}
+
+impl<P: Copy> FunctionRef<P> {
+	pub fn get<'r, R>(
+		&self,
+		registry: &'r impl Registry<PackageId = P, Resource = R>,
+	) -> Option<&'r Function<P, R>> {
+		registry.get_function(*self)
 	}
 }
 

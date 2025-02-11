@@ -1,8 +1,8 @@
 use std::hash::Hash;
 
-use crate::{module::ItemPathBuf, rdf::RdfContextMut, syntax::ast, ItemPathSegment};
+use crate::{module::ItemPathBuf, rdf::RdfContextMut, syntax::ast, ItemPathSegment, Registry};
 
-use super::{Build, BuildContext, BuildEnvironment, BuildingPackage, Error, Scope};
+use super::{Build, BuildContext, BuildingPackage, Error, Scope};
 
 impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::ItemPath {
 	type Target = ItemPathBuf;
@@ -14,7 +14,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::ItemPath {
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		let mut result = Vec::new();

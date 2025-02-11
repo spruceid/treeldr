@@ -1,11 +1,9 @@
 prefix cred = <https://www.w3.org/2018/credentials#>
 prefix schema = <https://schema.org/>
 
-let (_ vc) = let (vcdm2 credential subject) = vc; (jwt credential subject)
-
 ## VCDM 2.0 layout.
 let (vcdm2 credential subject) where {
-		credential cred:credentialSubject subject
+	credential cred:credentialSubject subject
 } = {
 	## Issuer.
 	"issuer": (iri_of (get cred:issuer credential)),
@@ -22,7 +20,7 @@ let (vcdm2 credential subject) where {
 
 ## JWT layout.
 let (jwt credential subject) where {
-		credential cred:credentialSubject subject
+	credential cred:credentialSubject subject
 } = {
 	## Issuer.
 	"iss": (iri_of (get cred:issuer credential)),
@@ -33,3 +31,7 @@ let (jwt credential subject) where {
 	## Name.
 	"name": (string_of (get schema:name subject))
 }
+
+let (vcdm2_to_jwt vc) =
+	let (vcdm2 credential subject) = vc;
+	(jwt credential subject)

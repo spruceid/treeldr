@@ -73,7 +73,7 @@ impl<P, R, T> Module<P, R, T> {
 impl<P: Copy, R> Module<P, R> {
 	pub fn get<'a>(
 		&'a self,
-		registry: &'a impl Registry<PackageId = P, Resource = R>,
+		registry: &'a (impl ?Sized + Registry<PackageId = P, Resource = R>),
 		this: ModuleRef<P>,
 		path: &ItemPath,
 	) -> Option<ItemRef<'a, P>> {
@@ -160,7 +160,7 @@ impl<P> ModuleRef<P> {
 impl<P: Copy> ModuleRef<P> {
 	pub fn get<'a>(
 		&self,
-		registry: &'a impl Registry<PackageId = P>,
+		registry: &'a (impl ?Sized + Registry<PackageId = P>),
 		path: &ItemPath,
 	) -> Option<ItemRef<'a, P>>
 	where
@@ -171,7 +171,7 @@ impl<P: Copy> ModuleRef<P> {
 
 	pub fn get_by_segment<'a>(
 		&self,
-		registry: &'a impl Registry<PackageId = P>,
+		registry: &'a (impl ?Sized + Registry<PackageId = P>),
 		segment: &ItemPathSegment,
 	) -> Option<ItemRef<'a, P>>
 	where
@@ -182,7 +182,7 @@ impl<P: Copy> ModuleRef<P> {
 
 	pub fn get_by_name<'a>(
 		&self,
-		registry: &'a impl Registry<PackageId = P>,
+		registry: &'a (impl ?Sized + Registry<PackageId = P>),
 		name: &str,
 	) -> Option<ItemRef<'a, P>>
 	where
@@ -271,7 +271,11 @@ impl<P: Copy, T> ItemRef<'_, P, T> {
 }
 
 impl<'a, P: 'a + Copy> ItemRef<'a, P> {
-	pub fn get(&self, registry: &'a impl Registry<PackageId = P>, path: &ItemPath) -> Option<Self> {
+	pub fn get(
+		&self,
+		registry: &'a (impl ?Sized + Registry<PackageId = P>),
+		path: &ItemPath,
+	) -> Option<Self> {
 		if path.is_empty() {
 			Some(*self)
 		} else {

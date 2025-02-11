@@ -1,12 +1,12 @@
 use std::{cell::RefCell, hash::Hash, marker::PhantomData};
 
 use crate::{
-	build::{self, BuildEnvironment},
+	build,
 	function::FunctionRef,
 	rdf::{RdfContext, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
 	syntax,
 	ty::TypeDefinition,
-	Function, Module, ModuleRef, Registry, Type, TypeRef,
+	Function, Module, ModuleRef, PackageId, Registry, Type, TypeRef,
 };
 use educe::Educe;
 use serde::{ser::SerializeSeq, Deserialize, Serialize};
@@ -91,21 +91,21 @@ impl<P: Copy, R> Package<P, R> {
 	}
 }
 
-impl<P: Copy + Ord + Hash, R: Clone + Ord + Hash> Module<P, R> {
-	/// Compiles a module.
+impl<P: PackageId + Ord + Hash, R: Clone + Ord + Hash> Package<P, R> {
+	/// Compiles a package.
 	pub fn compile(
 		rdf: &mut impl RdfContextMut<Resource = R>,
-		env: &impl BuildEnvironment<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		package_id: P,
 		text: &str,
-	) -> Result<Package<P, R>, CompileError<P>> {
+	) -> Result<Self, CompileError<P>> {
 		use crate::build::{self, BuildContext, BuildingPackage};
 		use crate::syntax::{self, Parse};
 
 		let ast = syntax::ast::Module::parse_str(text)?;
 
 		let mut namespace = BuildingPackage::new(package_id);
-		let mut context = BuildContext::new(rdf, env);
+		let mut context = BuildContext::new(rdf, registry);
 
 		let scope = build::Scope::new();
 
@@ -298,7 +298,7 @@ impl<'de, T: DeserializeSeeded<'de, Q>, Q> DeserializeSeeded<'de, Q> for NonEmpt
 	}
 }
 
-impl<P: Copy + PartialEq, R> Registry for Package<P, R> {
+impl<P: PackageId + PartialEq, R> Registry for Package<P, R> {
 	type PackageId = P;
 	type Resource = R;
 
@@ -313,22 +313,9 @@ impl<P: Copy + PartialEq, R> Registry for Package<P, R> {
 			None
 		}
 	}
-}
 
-impl<P: Copy + PartialEq, R> BuildEnvironment for Package<P, R> {
-	type PackageId = P;
-	type Resource = R;
-	type Registry = Self;
-
-	fn registry(&self) -> &Self::Registry {
-		self
-	}
-
-	fn package(&self, name: Option<&str>) -> Option<Self::PackageId> {
-		match name {
-			Some(_) => None,
-			None => Some(self.id),
-		}
+	fn prelude_package_id(&self) -> Option<Self::PackageId> {
+		Some(self.id)
 	}
 }
 

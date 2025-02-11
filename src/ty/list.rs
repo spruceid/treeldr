@@ -67,7 +67,7 @@ impl<P> List<P> {
 
 	pub fn to_singleton_value<R>(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 	) -> Option<Vec<TypedValue<P, R>>>
 	where
 		P: Copy,
@@ -108,7 +108,7 @@ impl<P: Copy> List<P> {
 impl<P: Copy + Ord> List<P> {
 	pub fn contains<R: Ord>(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		value: &[Value<R>],
 	) -> bool {
 		if value.len() < self.min_len() {
@@ -125,7 +125,7 @@ impl<P: Copy + Ord> List<P> {
 impl<P: Copy + Ord + Hash> List<P> {
 	pub fn subtype_cmp<R: Ord>(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other: &Self,
 	) -> Option<Ordering> {
 		let mut a_prefix = self.prefix.iter().copied();

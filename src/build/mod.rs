@@ -1,13 +1,13 @@
 use crate::{
 	function::FunctionRef,
-	module::{ItemPath, ItemPathBuf, ItemPathSegment, ItemRef},
+	module::ItemPathBuf,
 	rdf::RdfContextMut,
 	syntax::{
 		ast::{self, Ident},
 		Span,
 	},
 	value::number::NumberParseError,
-	Attribute, Attributes, Function, Module, ModuleRef, Package, Registry, Value,
+	Attribute, Attributes, Function, Module, ModuleRef, Package, PackageId, Registry, Value,
 };
 use std::hash::Hash;
 
@@ -126,57 +126,22 @@ impl<P> Error<P> {
 	}
 }
 
-pub trait BuildEnvironment {
-	type PackageId: Copy;
-	type Resource;
-	type Registry: Registry<PackageId = Self::PackageId, Resource = Self::Resource>;
-
-	fn registry(&self) -> &Self::Registry;
-
-	fn package(&self, name: Option<&str>) -> Option<Self::PackageId>;
-
-	fn get_by_name(&self, name: &str) -> Option<ItemRef<Self::PackageId>> {
-		match self
-			.package(Some(name))
-			.and_then(|id| self.registry().package(id))
-		{
-			Some(p) => Some(ItemRef::Module(p.root_ref())),
-			None => self
-				.package(None)
-				.and_then(|id| self.registry().package(id))?
-				.root()
-				.get_by_name(name),
-		}
-	}
-
-	fn get(&self, path: &ItemPath) -> Option<ItemRef<Self::PackageId>> {
-		let (first, rest) = path.split_first()?;
-
-		match first {
-			ItemPathSegment::Super => None,
-			ItemPathSegment::Item(name) => self
-				.get_by_name(name)
-				.and_then(|i| i.get(self.registry(), ItemPath::from_slice(rest))),
-		}
-	}
-}
-
-pub struct BuildContext<'a, E: BuildEnvironment, D> {
+pub struct BuildContext<'a, E: ?Sized + Registry, D> {
 	/// RDF context.
 	rdf: &'a mut D,
 
-	/// Environment.
-	environment: &'a E,
+	/// Registry.
+	registry: &'a E,
 
 	/// Type variables.
 	type_variables: TypeVariables<E::PackageId, E::Resource>,
 }
 
-impl<'a, E: BuildEnvironment, D> BuildContext<'a, E, D> {
-	pub fn new(rdf: &'a mut D, env: &'a E) -> Self {
+impl<'a, E: ?Sized + Registry, D> BuildContext<'a, E, D> {
+	pub fn new(rdf: &'a mut D, registry: &'a E) -> Self {
 		Self {
 			rdf,
-			environment: env,
+			registry,
 			type_variables: TypeVariables::new(),
 		}
 	}
@@ -245,17 +210,17 @@ impl<'ast, P> BuildingPackage<'ast, P> {
 	) -> Option<BuildSignature>
 	where
 		P: Copy + Ord + Hash,
-		E: BuildEnvironment<PackageId = P>,
+		E: ?Sized + Registry<PackageId = P>,
 		E::Resource: Clone,
 	{
 		if r.package == self.id {
 			Some(self.functions[r.index as usize].signature.clone())
 		} else {
-			context.environment.registry().get_function(r).map(|f| {
+			context.registry.get_function(r).map(|f| {
 				BuildSignature::import(&f.signature, |&ty_ref| {
 					context
 						.type_variables
-						.import_type_ref(context.environment.registry(), ty_ref)
+						.import_type_ref(context.registry, ty_ref)
 				})
 			})
 		}
@@ -288,7 +253,7 @@ impl<'ast, P: Copy + Ord + Hash> BuildingPackage<'ast, P> {
 		context: &mut BuildContext<E, D>,
 	) -> Result<ProtoPackage<E::PackageId, E::Resource>, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P>,
+		E: ?Sized + Registry<PackageId = P>,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
 	{
@@ -322,7 +287,7 @@ pub struct ProtoPackage<P, R> {
 
 impl<P, R> ProtoPackage<P, R>
 where
-	P: Copy + Ord + Hash,
+	P: PackageId + Ord + Hash,
 	R: Clone + Ord,
 {
 	pub fn resolve<E, D>(
@@ -330,13 +295,13 @@ where
 		context: BuildContext<E, D>,
 	) -> Result<Package<P, R>, TypeResolutionError<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 	{
 		let mut package = Package::new(self.id);
 
 		let map = context
 			.type_variables
-			.resolve(context.environment.registry(), &mut package)?;
+			.resolve(context.registry, &mut package)?;
 
 		for f in self.functions {
 			package.insert_function(f.map_types(|x| map[&x]));
@@ -365,7 +330,7 @@ pub trait Declare<'ast, P, R> {
 		namespace: &mut BuildingPackage<'ast, P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>;
 }
 
@@ -379,7 +344,7 @@ pub trait Build<'ast, P, R> {
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>;
 }
 
@@ -407,7 +372,7 @@ impl<'ast, P, R> Build<'ast, P, R> for ast::DocComment {
 		_scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		Ok(Value::string(self.decode().to_owned()))
@@ -424,7 +389,7 @@ impl<'ast, P, R: Clone + Ord> Build<'ast, P, R> for ast::Metadata {
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		let mut result = Attributes::new();

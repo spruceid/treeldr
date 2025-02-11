@@ -6,12 +6,11 @@ use crate::{
 	function::{self, Signature},
 	rdf::RdfContextMut,
 	syntax::ast,
-	Function, ModuleRef,
+	Function, ModuleRef, Registry,
 };
 
 use super::{
-	Build, BuildContext, BuildEnvironment, BuildingPackage, Error, ExprScope, Scope, TypeValue,
-	TypeVariableRef,
+	Build, BuildContext, BuildingPackage, Error, ExprScope, Scope, TypeValue, TypeVariableRef,
 };
 
 pub struct FunctionDefinition<'ast, P> {
@@ -28,7 +27,7 @@ impl<'ast, P: Copy + Ord + Hash> FunctionDefinition<'ast, P> {
 		namespace: &BuildingPackage<'ast, P>,
 	) -> Result<Function<P, E::Resource, TypeVariableRef>, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P>,
+		E: ?Sized + Registry<PackageId = P>,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
 	{

@@ -6,13 +6,10 @@ use crate::{
 	rdf::RdfContextMut,
 	syntax::ast,
 	ty::{self, TypeDesc},
-	Attributes, ModuleRef, Type,
+	Attributes, ModuleRef, Registry, Type,
 };
 
-use super::{
-	Build, BuildContext, BuildEnvironment, BuildingPackage, Error, ExprScope, Scope,
-	TypeVariableRef,
-};
+use super::{Build, BuildContext, BuildingPackage, Error, ExprScope, Scope, TypeVariableRef};
 
 pub struct TypeDefinition<'ast, P> {
 	pub module: ModuleRef<P>,
@@ -28,7 +25,7 @@ impl<'ast, P> TypeDefinition<'ast, P> {
 		namespace: &BuildingPackage<'ast, P>,
 	) -> Result<TypeVariableRef, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P>,
+		E: ?Sized + Registry<PackageId = P>,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -61,7 +58,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		self.build_with_attributes(context, namespace, scope, Attributes::new())
@@ -77,7 +74,7 @@ impl ast::TypeExpr {
 		attributes: Attributes<E::Resource>,
 	) -> Result<TypeVariableRef, Error<E::PackageId>>
 	where
-		E: BuildEnvironment,
+		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
 		D: RdfContextMut<Resource = E::Resource>,
@@ -90,7 +87,7 @@ impl ast::TypeExpr {
 					.get(context, namespace, &path)
 					.ok_or_else(|| Error::UnknownType(path_ast.span(), path.clone()))?
 					.into_owned()
-					.import_type(context.environment.registry(), &mut context.type_variables)
+					.import_type(context.registry, &mut context.type_variables)
 					.ok_or_else(|| Error::NotAType(path_ast.span(), path.clone()))
 			}
 			Self::Literal(expr) => {
@@ -132,7 +129,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		Ok(ty::List::new(
@@ -158,7 +155,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		Ok(ty::Map {
@@ -190,7 +187,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 		scope: &Scope<P>,
 	) -> Result<Self::Target, Error<P>>
 	where
-		E: BuildEnvironment<PackageId = P, Resource = R>,
+		E: ?Sized + Registry<PackageId = P, Resource = R>,
 		D: RdfContextMut<Resource = R>,
 	{
 		Ok(ty::Enum {

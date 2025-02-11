@@ -1,20 +1,20 @@
 function tldrLanguage(hljs) {
+	const COMPACT_IRI = {
+		className: 'attr',
+		begin: /[a-zA-Z0-9_]+:[a-zA-Z0-9_]*/,
+	};
+
 	return {
 		name: 'TreeLDR',
 		keywords: {
-			keyword: 'prefix type fn let where',
+			keyword: 'prefix type let where all list',
 			literal: 'true false null',
 		},
 		contains: [
 			hljs.COMMENT('#'),
-			// hljs.QUOTE_STRING_MODE,
-			// hljs.NUMBER_MODE,
-			// {
-			// 	className: 'built_in',
-			// 	begin: '\\b(print|input)\\b'
-			// },
+			COMPACT_IRI,
 			{
-				className: 'string',
+				className: 'attr',
 				begin: '<',
 				end: '>',
 			},
@@ -22,6 +22,11 @@ function tldrLanguage(hljs) {
 				className: 'string',
 				begin: '"',
 				end: '"',
+			},
+			{
+				className: 'attr',
+				begin: '\'',
+				end: '\'',
 			},
 		],
 	};

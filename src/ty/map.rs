@@ -42,7 +42,7 @@ impl<P, R, T> Map<P, R, T> {
 impl<P, R> Map<P, R> {
 	pub fn to_singleton_value(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 	) -> Option<TypedMap<P, R>>
 	where
 		P: Copy,
@@ -68,7 +68,7 @@ impl<P, R> Map<P, R> {
 impl<P: Copy + Ord, R: Ord> Map<P, R> {
 	pub fn contains(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		map: &value::Map<R>,
 	) -> bool {
 		let mut fields: Vec<_> = self.fields.iter().collect();
@@ -94,7 +94,7 @@ impl<P: Copy + Ord, R: Ord> Map<P, R> {
 impl<P: Copy + Ord + Hash, R: Ord> Map<P, R> {
 	pub fn subtype_cmp(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other: &Self,
 	) -> Option<Ordering> {
 		if self.is_subtype_of(registry, other) {
@@ -112,7 +112,7 @@ impl<P: Copy + Ord + Hash, R: Ord> Map<P, R> {
 
 	pub fn is_subtype_of(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other: &Self,
 	) -> bool {
 		let mut fields: Vec<_> = other.fields.iter().collect();
@@ -213,7 +213,7 @@ impl<P, R, T> Field<P, R, T> {
 impl<P: Copy + Ord + Hash, R: Ord> Field<P, R> {
 	pub fn is_subfield_of(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other: &Self,
 	) -> bool {
 		(!other.required || self.required) && self.r#type.is_subtype_of(registry, other.r#type)

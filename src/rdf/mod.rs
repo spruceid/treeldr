@@ -4,6 +4,8 @@ use btree_indexmap::BTreeIndexMap;
 use dataset::{DatasetMut, PatternMatchingDataset};
 pub use iref;
 pub use iref::{Iri, IriBuf};
+use nquads_syntax::{strip_quad, Parse};
+use rdf_types::dataset::BTreeDataset;
 pub use rdf_types::*;
 
 mod context;
@@ -119,4 +121,17 @@ impl<R, T: VisitResources<R>> VisitResources<R> for rdf_types::Quad<T> {
 		self.2.visit_resources_ref_mut(f);
 		self.3.visit_resources_ref_mut(f)
 	}
+}
+
+pub type NQuadsParseError =
+	nquads_syntax::parsing::MetaError<nquads_syntax::lexing::Error, ll1::Span>;
+
+pub fn parse_nquads(str: &str) -> Result<BTreeDataset, NQuadsParseError> {
+	nquads_syntax::GrdfDocument::parse_str(str).map(|quads| {
+		quads
+			.into_value()
+			.into_iter()
+			.map(|quad| strip_quad(quad.into_value()))
+			.collect()
+	})
 }

@@ -198,7 +198,7 @@ impl<P, R, T> VisitResources<R> for TypeDesc<P, R, T> {
 impl<P, R> TypeDesc<P, R> {
 	pub fn to_singleton_value(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 	) -> Option<TypedValueDesc<P, R>>
 	where
 		P: Copy,
@@ -228,7 +228,7 @@ pub trait TypeUnifier<P, T, U> {
 impl<P: Copy + Ord + Hash, R: Clone + Ord, T> Type<P, R, T> {
 	pub fn unify_with<U, V>(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		unifier: &mut impl TypeUnifier<P, T, U, Target = V>,
 		other: &Type<P, R, U>,
 	) -> Result<Type<P, R, V>, TypeUnificationError>
@@ -252,7 +252,7 @@ impl<P: Copy + Ord + Hash, R: Clone + Ord, T> Type<P, R, T> {
 impl<P: Copy + Ord + Hash, R: Clone + Ord, T> TypeDesc<P, R, T> {
 	pub fn unify_with<U, V>(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		unifier: &mut impl TypeUnifier<P, T, U, Target = V>,
 		other: &TypeDesc<P, R, U>,
 	) -> Result<TypeDesc<P, R, V>, TypeUnificationError>
@@ -364,7 +364,7 @@ pub struct TypeUnificationError;
 impl<P, R> Type<P, R> {
 	pub fn to_singleton_value(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 	) -> Option<TypedValueDesc<P, R>>
 	where
 		P: Copy,
@@ -377,7 +377,7 @@ impl<P, R> Type<P, R> {
 impl<P: Copy + Ord, R: Ord> Type<P, R> {
 	pub fn contains(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		value: &Value<R>,
 	) -> bool {
 		self.desc.contains(registry, value)
@@ -387,7 +387,7 @@ impl<P: Copy + Ord, R: Ord> Type<P, R> {
 impl<P: Copy + Ord + Hash, R: Ord> Type<P, R> {
 	pub fn subtype_cmp(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other: &Self,
 	) -> Option<Ordering> {
 		self.desc.subtype_cmp(registry, &other.desc)
@@ -397,7 +397,7 @@ impl<P: Copy + Ord + Hash, R: Ord> Type<P, R> {
 impl<P: Copy + Ord, R: Ord> TypeDesc<P, R> {
 	pub fn contains(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		value: &Value<R>,
 	) -> bool {
 		match (self, value) {
@@ -415,7 +415,7 @@ impl<P: Copy + Ord, R: Ord> TypeDesc<P, R> {
 impl<P: Copy + Ord + Hash, R: Ord> TypeDesc<P, R> {
 	pub fn subtype_cmp(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		other: &Self,
 	) -> Option<Ordering> {
 		match (self, other) {

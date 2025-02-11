@@ -11,7 +11,7 @@ use rdf_types::{
 use treeldr::{
 	rdf::{Rdf, RdfContextMut},
 	utils::strip_rdf_quad,
-	Package, Registry, RegistryUnion, Value,
+	Package, PreludeOrTarget, Registry, RegistryUnion, Value,
 };
 
 fn file_path(path: impl AsRef<Path>) -> PathBuf {
@@ -26,22 +26,17 @@ pub struct PositiveTest {
 	pub inputs: Vec<&'static str>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum PackageId {
-	Prelude,
-	Target,
-}
-
 impl PositiveTest {
 	pub fn run(&self, id: &str, forward: bool) {
 		let mut rdf = Rdf::default();
-		let prelude = Package::prelude(PackageId::Prelude);
+		let prelude = Package::prelude(PreludeOrTarget::Prelude);
 
 		// Parse layout.
 		let layout_text = fs::read_to_string(file_path(format!("{id}-layout.tldr")))
 			.expect("unable to read layout");
-		let package = treeldr::Module::compile(&mut rdf, &prelude, PackageId::Target, &layout_text)
-			.expect("compile error");
+		let package =
+			treeldr::Package::compile(&mut rdf, &prelude, PreludeOrTarget::Target, &layout_text)
+				.expect("compile error");
 
 		let registry = RegistryUnion(prelude, &package);
 
