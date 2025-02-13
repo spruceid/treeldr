@@ -1,0 +1,47 @@
+{
+	"type": "record",
+	"fields": {
+		"evidence": {
+			"intro": [],
+			"value": {
+				"input": ["_:self"],
+				"layout": {
+					"type": "set",
+					"input": ["self"],
+					"intro": [],
+					"item": {
+						"intro": ["value"],
+						"property": "https://www.w3.org/2018/credentials#evidence",
+						"value": {
+							"input": ["_:value"],
+							"layout": {
+								"type": "record",
+								"fields": {
+									"id": {
+										"intro": [],
+										"value": {
+											"input": "_:self",
+											"layout": { "type": "string" }
+										}
+									},
+									"type": {
+										"intro": [],
+										"value": {
+											"input": [
+												"_:self"
+											],
+											"layout": {
+												"type": "unit",
+												"const": ["Evidence"]
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

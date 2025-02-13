@@ -115,11 +115,13 @@ fn dehydrate<const N: usize>(id: &str, expected_values: [Term; N]) {
 			.expect("not isomorphic"); // fail if the output is not isomorphic to the expected dataset.
 
 	assert_eq!(output_values.len(), expected_values.len());
-	for (output, expected) in output_values.iter().zip(&expected_values) {
-		if output.is_blank() {
-			assert_eq!(*bijection.forward.get(output).unwrap(), expected)
-		} else {
-			assert_eq!(output, expected)
+	if !expected_dataset.is_empty() || !output_dataset.is_empty() {
+		for (output, expected) in output_values.iter().zip(&expected_values) {
+			if output.is_blank() {
+				assert_eq!(*bijection.forward.get(output).unwrap(), expected)
+			} else {
+				assert_eq!(output, expected)
+			}
 		}
 	}
 }
@@ -254,4 +256,12 @@ fn dehydrate_t16() {
 			BlankIdBuf::new("_:subject".to_string()).unwrap(),
 		)],
 	)
+}
+
+test! {
+	t17 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
+}
+
+test! {
+	t18 (Term::blank(BlankIdBuf::new("_:subject".to_string()).unwrap()))
 }

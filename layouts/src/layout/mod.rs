@@ -32,7 +32,10 @@ use crate::{DerefResource, Layouts, Ref};
 pub struct LayoutType;
 
 impl<R: Ord> DerefResource<LayoutType, R> for Layouts<R> {
-	type Target<'c> = &'c Layout<R> where R: 'c;
+	type Target<'c>
+		= &'c Layout<R>
+	where
+		R: 'c;
 
 	fn deref_resource<'c>(&'c self, r: &crate::Ref<LayoutType, R>) -> Option<Self::Target<'c>> {
 		self.layout(r.id())
