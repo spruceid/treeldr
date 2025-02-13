@@ -32,7 +32,7 @@ where
 	quad_matching: D::QuadPatternMatching<'a, 'p>,
 }
 
-impl<'a, 'p, D, Q> Matching<'a, 'p, D, Q>
+impl<'a, D, Q> Matching<'a, '_, D, Q>
 where
 	D: PatternMatchingDataset,
 {
@@ -48,7 +48,7 @@ where
 	}
 }
 
-impl<'a, 'p, D, Q> Matching<'a, 'p, D, Q>
+impl<'p, D, Q> Matching<'_, 'p, D, Q>
 where
 	D: PatternMatchingDataset,
 	D::Resource: Clone + PartialEq,
@@ -72,7 +72,7 @@ where
 	}
 }
 
-impl<'a, 'p, D, Q> Iterator for Matching<'a, 'p, D, Q>
+impl<'p, D, Q> Iterator for Matching<'_, 'p, D, Q>
 where
 	D: PatternMatchingDataset,
 	D::Resource: Clone + PartialEq,

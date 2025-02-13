@@ -6,7 +6,7 @@ pub enum Environment<'a, R> {
 	Child(&'a Environment<'a, R>, Vec<R>),
 }
 
-impl<'a, R> Environment<'a, R> {
+impl<R> Environment<'_, R> {
 	pub fn get(&self, i: u32) -> Result<&R, u32> {
 		match self {
 			Self::Root(inputs) => match inputs.get(i as usize) {
@@ -42,7 +42,7 @@ impl<'a, R> Environment<'a, R> {
 	}
 }
 
-impl<'a, R: Clone> Environment<'a, R> {
+impl<R: Clone> Environment<'_, R> {
 	pub fn instantiate_pattern(&self, pattern: &Pattern<R>) -> R
 where
 		// Q: Clone + Into<R>,

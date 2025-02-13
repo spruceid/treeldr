@@ -437,7 +437,7 @@ impl<Q: Ord, L: Ord> DetAutomaton<Q, L> {
 	/// Minimizes the automaton.
 	// Hopcroft's algorithm.
 	// https://en.wikipedia.org/wiki/DFA_minimization
-	pub fn minimize<'a, P>(&'a self, partition: P) -> DetAutomaton<BTreeSet<&Q>, &L>
+	pub fn minimize<'a, P>(&'a self, partition: P) -> DetAutomaton<BTreeSet<&'a Q>, &'a L>
 	where
 		Q: Hash,
 		L: Hash,

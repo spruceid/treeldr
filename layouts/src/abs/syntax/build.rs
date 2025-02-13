@@ -54,7 +54,7 @@ pub trait Context {
 	fn anonymous_resource(&mut self) -> Self::Resource;
 }
 
-impl<'a, G> Context for abs::BuilderWithGeneratorMut<'a, G>
+impl<G> Context for abs::BuilderWithGeneratorMut<'_, G>
 where
 	G: rdf_types::Generator,
 {
@@ -91,7 +91,7 @@ where
 	}
 }
 
-impl<'a, V, I> Context for abs::BuilderWithInterpretationMut<'a, V, I>
+impl<V, I> Context for abs::BuilderWithInterpretationMut<'_, V, I>
 where
 	V: VocabularyMut,
 	I: IriInterpretationMut<V::Iri> + LiteralInterpretationMut<V::Literal> + InterpretationMut<V>,

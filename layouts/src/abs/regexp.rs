@@ -530,7 +530,7 @@ impl fmt::Display for RegExp {
 /// This will enclose it between parenthesis if necessary.
 pub struct DisplaySub<'a>(&'a RegExp);
 
-impl<'a> fmt::Display for DisplaySub<'a> {
+impl fmt::Display for DisplaySub<'_> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		if self.0.is_simple() {
 			self.0.fmt(f)
@@ -599,7 +599,7 @@ impl<'de> serde::Deserialize<'de> for RegExp {
 	{
 		struct Visitor;
 
-		impl<'de> serde::de::Visitor<'de> for Visitor {
+		impl serde::de::Visitor<'_> for Visitor {
 			type Value = RegExp;
 
 			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

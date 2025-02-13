@@ -45,7 +45,7 @@ where
 	quad_matching: D::QuadPatternMatching<'a, 'p>,
 }
 
-impl<'a, 'p, R, D, Q> Matching<'a, 'p, R, D, Q>
+impl<'a, R, D, Q> Matching<'a, '_, R, D, Q>
 where
 	D: PatternMatchingDataset<Resource = R>,
 {

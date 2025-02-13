@@ -157,7 +157,7 @@ pub enum ErrorHint<'a> {
 	DuplicateEntry(usize),
 }
 
-impl<'a> ErrorHint<'a> {
+impl ErrorHint<'_> {
 	pub fn position(&self) -> Option<usize> {
 		match self {
 			Self::DuplicateEntry(offset) => Some(*offset),
@@ -166,7 +166,7 @@ impl<'a> ErrorHint<'a> {
 	}
 }
 
-impl<'a> fmt::Display for ErrorHint<'a> {
+impl fmt::Display for ErrorHint<'_> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
 			Self::ExpectedType(e) => match e {

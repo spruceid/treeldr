@@ -182,7 +182,7 @@ pub trait LayoutRegistry<R = Term> {
 	}
 }
 
-impl<'a, R, T: LayoutRegistry<R>> LayoutRegistry<R> for &'a T {
+impl<R, T: LayoutRegistry<R>> LayoutRegistry<R> for &T {
 	fn get(&self, id: &Ref<LayoutType, R>) -> Option<&Layout<R>> {
 		T::get(*self, id)
 	}
