@@ -5,17 +5,12 @@ use std::{
 };
 
 use nquads_syntax::Parse;
-use treeldr::{
-	rdf::{dataset::BTreeDataset, Quad},
-	syntax::Span,
-};
+use treeldr::rdf::{dataset::BTreeDataset, Quad};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
 	#[error("N-Quads parse error: {0}")]
-	NQuads(
-		#[from] nquads_syntax::parsing::MetaError<nquads_syntax::lexing::Error<io::Error>, Span>,
-	),
+	NQuads(#[from] nquads_syntax::Error<nquads_syntax::LexingError<io::Error>>),
 }
 
 #[derive(Debug, Default, Clone)]
@@ -42,12 +37,10 @@ impl RdfFormat {
 		match self {
 			Self::NQuads => {
 				let utf8_input = utf8_decode::UnsafeDecoder::new(input.bytes());
-				let document = nquads_syntax::GrdfDocument::parse_utf8(utf8_input)
+				Ok(nquads_syntax::GrdfDocument::parse_utf8(utf8_input)
 					.map_err(LoadError::NQuads)?
-					.into_value();
-				Ok(document
+					.0
 					.into_iter()
-					.map(|q| nquads_syntax::strip_quad(q.into_value()))
 					.collect())
 			}
 		}

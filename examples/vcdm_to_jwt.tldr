@@ -32,6 +32,6 @@ let (jwt credential subject) where {
 	"name": (string_of (get schema:name subject))
 }
 
-let (vcdm2_to_jwt vc) =
+let (_ vc) =
 	let (vcdm2 credential subject) = vc;
 	(jwt credential subject)

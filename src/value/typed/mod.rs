@@ -19,7 +19,7 @@ use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
 	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>))
 )]
-pub struct TypedValue<P, R = rdf_types::Term, T = TypeRef<P>> {
+pub struct TypedValue<P, R = rdf_types::LocalTerm, T = TypeRef<P>> {
 	#[seeded(with(unseeded))]
 	pub r#type: T,
 	pub desc: TypedValueDesc<P, R, T>,

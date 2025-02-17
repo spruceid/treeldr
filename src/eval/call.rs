@@ -2,55 +2,53 @@ use std::marker::PhantomData;
 
 use rdf_types::{dataset::PatternMatchingDataset, pattern::CanonicalQuadPattern, Dataset, Quad};
 
-use crate::{expr::Call, rdf::EvalDataset, Registry, Value};
+use crate::{expr::Call, Registry, Value};
 
-use super::{Eval, EvalError, RdfContextMut, Scope};
+use super::{Eval, EvalContext, EvalError, Scope};
 
 impl<P: Copy + Ord, R: Clone + Ord> Eval<P, R> for Call<P, R> {
 	fn eval(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &impl EvalContext<Resource = R>,
 		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>> {
 		let mut evaluated_args = Vec::with_capacity(self.const_args.len() + self.args.len());
 
 		for a in &self.const_args {
-			evaluated_args.push(a.eval(registry, rdf, dataset, scope)?);
+			evaluated_args.push(a.eval(registry, rdf, scope)?);
 		}
 
 		for a in &self.args {
-			evaluated_args.push(a.eval(registry, rdf, dataset, scope)?);
+			evaluated_args.push(a.eval(registry, rdf, scope)?);
 		}
 
 		registry
 			.get_function(self.function)
 			.unwrap()
-			.call_without_unification(registry, rdf, dataset, &evaluated_args)
+			.call_with(registry, rdf, &evaluated_args)
 	}
 
 	fn eval_inverse(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		let const_args: Vec<_> = self
 			.const_args
 			.iter()
-			.map(|a| a.eval(registry, rdf, dataset, scope))
+			.map(|a| a.eval(registry, rdf, scope))
 			.collect::<Result<_, _>>()?;
 
 		let values = registry
 			.get_function(self.function)
 			.unwrap()
-			.call_inverse_without_unification(registry, rdf, dataset, &const_args, output)?;
+			.call_inverse_with(registry, rdf, &const_args, output)?;
 
 		for (arg, value) in self.args.iter().zip(values) {
-			arg.eval_inverse(registry, rdf, dataset, scope, &value)?;
+			arg.eval_inverse(registry, rdf, scope, &value)?;
 		}
 
 		Ok(())

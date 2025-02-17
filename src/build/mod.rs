@@ -1,7 +1,6 @@
 use crate::{
 	function::FunctionRef,
 	module::ItemPathBuf,
-	rdf::RdfContextMut,
 	syntax::{
 		ast::{self, Ident},
 		Span,
@@ -14,6 +13,7 @@ use std::hash::Hash;
 mod scope;
 use iref::{InvalidIri, IriBuf};
 use ll1::Spanned;
+use rdf_types::InterpretationMut;
 pub use scope::*;
 
 mod ty;
@@ -255,7 +255,7 @@ impl<'ast, P: Copy + Ord + Hash> BuildingPackage<'ast, P> {
 	where
 		E: ?Sized + Registry<PackageId = P>,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		for item in &self.types {
 			item.build(context, self)?;
@@ -331,7 +331,7 @@ pub trait Declare<'ast, P, R> {
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>;
+		D: InterpretationMut<Resource = R>;
 }
 
 pub trait Build<'ast, P, R> {
@@ -345,7 +345,7 @@ pub trait Build<'ast, P, R> {
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>;
+		D: InterpretationMut<Resource = R>;
 }
 
 impl ast::FullIri {
@@ -373,7 +373,7 @@ impl<'ast, P, R> Build<'ast, P, R> for ast::DocComment {
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		Ok(Value::string(self.decode().to_owned()))
 	}
@@ -390,7 +390,7 @@ impl<'ast, P, R: Clone + Ord> Build<'ast, P, R> for ast::Metadata {
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		let mut result = Attributes::new();
 

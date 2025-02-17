@@ -3,12 +3,13 @@ use std::{cell::RefCell, hash::Hash, marker::PhantomData};
 use crate::{
 	build,
 	function::FunctionRef,
-	rdf::{RdfContext, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, TryUnifyInterpretation, VisitResources},
 	syntax,
 	ty::TypeDefinition,
 	Function, Module, ModuleRef, PackageId, Registry, Type, TypeRef,
 };
 use educe::Educe;
+use rdf_types::{interpretation::ReverseInterpretation, InterpretationMut, LocalTerm};
 use serde::{ser::SerializeSeq, Deserialize, Serialize};
 use serde_seeded::{de::Seed, ser::Seeded, unseeded, DeserializeSeeded, SerializeSeeded};
 
@@ -20,7 +21,7 @@ use serde_seeded::{de::Seed, ser::Seeded, unseeded, DeserializeSeeded, Serialize
 	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash)),
 	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord), bounds(P: Ord))
 )]
-pub struct Package<P, R = rdf_types::Term> {
+pub struct Package<P, R = rdf_types::LocalTerm> {
 	#[seeded(with(unseeded))]
 	pub id: P,
 
@@ -60,8 +61,8 @@ impl<P, R> Package<P, R> {
 		std::mem::replace(self.root_mut(), value)
 	}
 
-	pub fn with_rdf<'a, C>(&self, rdf: &'a C) -> Seeded<'a, C, &Self> {
-		Seeded::new(rdf, self)
+	pub fn with_interpretation<'a, C>(&self, interpretation: &'a C) -> Seeded<'a, C, &Self> {
+		Seeded::new(interpretation, self)
 	}
 }
 
@@ -93,8 +94,8 @@ impl<P: Copy, R> Package<P, R> {
 
 impl<P: PackageId + Ord + Hash, R: Clone + Ord + Hash> Package<P, R> {
 	/// Compiles a package.
-	pub fn compile(
-		rdf: &mut impl RdfContextMut<Resource = R>,
+	pub fn compile_with(
+		rdf: &mut impl InterpretationMut<Resource = R>,
 		registry: &(impl ?Sized + Registry<PackageId = P, Resource = R>),
 		package_id: P,
 		text: &str,
@@ -115,6 +116,17 @@ impl<P: PackageId + Ord + Hash, R: Clone + Ord + Hash> Package<P, R> {
 			.build(&mut context)?
 			.resolve(context)
 			.map_err(Into::into)
+	}
+}
+
+impl<P: PackageId + Ord + Hash> Package<P> {
+	/// Compiles a package.
+	pub fn compile(
+		registry: &(impl ?Sized + Registry<PackageId = P, Resource = LocalTerm>),
+		package_id: P,
+		text: &str,
+	) -> Result<Self, CompileError<P>> {
+		Self::compile_with(&mut (), registry, package_id, text)
 	}
 }
 
@@ -321,7 +333,7 @@ impl<P: PackageId + PartialEq, R> Registry for Package<P, R> {
 
 impl<C, P, R> SerializeSeeded<C> for Package<P, R>
 where
-	C: RdfContext<Resource = R>,
+	C: ReverseInterpretation<Resource = R>,
 	P: Serialize,
 	R: Clone + Eq + Hash,
 {
@@ -345,7 +357,7 @@ where
 
 impl<'de, C, P, R> DeserializeSeeded<'de, RefCell<C>> for Package<P, R>
 where
-	C: RdfContextMut<Resource = R>,
+	C: InterpretationMut<Resource = R> + TryUnifyInterpretation,
 	P: Ord + Deserialize<'de>,
 	R: Clone + Ord,
 {
@@ -357,7 +369,7 @@ where
 
 		impl<'de, C, P, R> serde::de::Visitor<'de> for Visitor<'_, C, P, R>
 		where
-			C: RdfContextMut<Resource = R>,
+			C: InterpretationMut<Resource = R> + TryUnifyInterpretation,
 			P: Ord + Deserialize<'de>,
 			R: Clone + Ord,
 		{

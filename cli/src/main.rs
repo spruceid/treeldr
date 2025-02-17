@@ -20,7 +20,7 @@ use treeldr::{
 	package::CompileError,
 	rdf::{
 		dataset::{BTreeDataset, IndexedBTreeDataset},
-		Rdf,
+		generator,
 	},
 	syntax::Spanned,
 	value::ValueParseError,
@@ -103,10 +103,10 @@ fn main() -> ExitCode {
 
 	let mut files = SimpleFiles::new();
 
-	let mut rdf = Rdf::default();
+	let mut generator = generator::Blank::new();
 	let mut registry = Registry::new();
 
-	match args.run(&mut rdf, &mut registry, &mut files) {
+	match args.run(&mut generator, &mut registry, &mut files) {
 		Ok(()) => ExitCode::SUCCESS,
 		Err(e) => {
 			let diagnostic = e.into_diagnostic(&registry);
@@ -121,7 +121,7 @@ fn main() -> ExitCode {
 impl Args {
 	fn run(
 		self,
-		rdf: &mut Rdf,
+		rdf: &mut generator::Blank,
 		registry: &mut Registry,
 		files: &mut SimpleFiles<String, String>,
 	) -> Result<(), Error> {
@@ -130,7 +130,6 @@ impl Args {
 
 		registry.target = Some(
 			treeldr::Package::compile(
-				rdf,
 				registry,
 				PackageId::Target,
 				files.get(file_id).unwrap().source().as_str(),
@@ -198,14 +197,14 @@ impl RdfOutput {
 }
 
 impl Command {
-	fn run(self, rdf: &mut Rdf, registry: &Registry) -> Result<(), Error> {
+	fn run(self, generator: &mut generator::Blank, registry: &Registry) -> Result<(), Error> {
 		match self {
 			Self::Compile => {
 				let package = registry.target.as_ref().unwrap();
 				let config = ron::ser::PrettyConfig::new();
 				println!(
 					"{}",
-					ron::ser::to_string_pretty(&package.with_rdf(rdf), config).unwrap()
+					ron::ser::to_string_pretty(&package.with_interpretation(&()), config).unwrap()
 				);
 				Ok(())
 			}
@@ -274,9 +273,9 @@ impl Command {
 
 					let output = args.next().unwrap();
 
-					let inputs = function.call_inverse_with(
+					let inputs = function.call_inverse(
 						registry,
-						rdf,
+						generator,
 						&mut dataset,
 						&const_args,
 						&output,
@@ -293,7 +292,7 @@ impl Command {
 
 					out.flush()?;
 				} else {
-					let output = function.call_with(registry, rdf, &mut dataset, &args)?;
+					let output = function.call(registry, generator, &mut dataset, &args)?;
 
 					let typed_output = output
 						.into_typed(registry, function.signature.return_type)

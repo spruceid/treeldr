@@ -1,9 +1,9 @@
 use std::hash::Hash;
 
 use ll1::Spanned;
+use rdf_types::InterpretationMut;
 
 use crate::{
-	rdf::RdfContextMut,
 	syntax::ast,
 	ty::{self, TypeDesc},
 	Attributes, ModuleRef, Registry, Type,
@@ -28,7 +28,7 @@ impl<'ast, P> TypeDefinition<'ast, P> {
 		E: ?Sized + Registry<PackageId = P>,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		let scope = Scope {
 			module: Some(self.module),
@@ -59,7 +59,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		self.build_with_attributes(context, namespace, scope, Attributes::new())
 	}
@@ -77,7 +77,7 @@ impl ast::TypeExpr {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		match self {
 			Self::Path(path_ast) => {
@@ -130,7 +130,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		Ok(ty::List::new(
 			self.prefix
@@ -156,7 +156,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		Ok(ty::Map {
 			fields: self
@@ -188,7 +188,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		Ok(ty::Enum {
 			variants: self

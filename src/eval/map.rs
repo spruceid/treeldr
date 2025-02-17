@@ -1,15 +1,14 @@
 use btree_indexmap::BTreeIndexMap;
 
-use crate::{expr::Map, rdf::EvalDataset, Registry, TypeRef, Value};
+use crate::{expr::Map, Registry, TypeRef, Value};
 
-use super::{Eval, EvalError, EvalTyped, RdfContextMut, Scope};
+use super::{Eval, EvalContext, EvalError, EvalTyped, Scope};
 
 impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Map<P, R> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &impl EvalContext<Resource = R>,
 		scope: &Scope<P, R>,
 		type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -20,7 +19,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Map<P, R> {
 		for (key, value) in &self.entries {
 			let field = type_.fields.get(&key.r#type).unwrap();
 
-			match value.eval(registry, rdf, dataset, scope) {
+			match value.eval(registry, rdf, scope) {
 				Ok(value) => {
 					result.insert(key.to_untyped(), value);
 				}
@@ -35,8 +34,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Map<P, R> {
 	fn eval_inverse_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &mut Scope<P, R>,
 		_type_ref: TypeRef<P>,
 		output: &Value<R>,
@@ -46,7 +44,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Map<P, R> {
 				for (key, value) in map {
 					match self.entries.get_untyped(key) {
 						Some(expr) => {
-							expr.eval_inverse(registry, rdf, dataset, scope, value)?;
+							expr.eval_inverse(registry, rdf, scope, value)?;
 						}
 						None => return Err(EvalError::UnknownKey(key.clone())),
 					}

@@ -1,7 +1,7 @@
-use rdf_types::{dataset::PatternMatchingDataset, pattern::CanonicalQuadPattern, Quad};
+use rdf_types::{pattern::CanonicalQuadPattern, Quad};
 
 use crate::{
-	eval::Scope,
+	eval::{EvalContext, Scope},
 	pattern::{PatternRefQuad, Substitution},
 	TermPattern, Value,
 };
@@ -24,37 +24,38 @@ pub enum Error {
 ///
 /// Iterates over all the substitutions mapping the input pattern to a fragment
 /// of the given RDF dataset.
-pub struct Matching<'a, 'p, P, R: Clone, D, Q>
+pub struct Matching<'a, P, R: Clone, D, Q>
 where
-	D: PatternMatchingDataset<Resource = R>,
+	D: EvalContext<Resource = R>,
 {
 	/// Dataset on which the pattern matching is performed.
-	dataset: &'a D,
+	rdf: &'a D,
 
 	/// Working stack.
-	stack: Vec<State<'a, 'p, P, R, D, Q>>,
+	stack: Vec<State<'a, P, R, D, Q>>,
 }
 
-pub struct State<'a, 'p, P, R: Clone, D, Q>
+pub struct State<'a, P, R: Clone, D, Q>
 where
-	D: 'a + PatternMatchingDataset<Resource = R>,
+	D: 'a + EvalContext<Resource = R>,
 {
 	scope: MatchingScope<'a, P, R>,
-	quad_state: Option<QuadState<'a, 'p, R, D>>,
+	quad_state: Option<QuadState<'a, R, D>>,
 	rest: Q,
 }
 
-pub struct QuadState<'a, 'p, R, D>
+pub struct QuadState<'a, R, D>
 where
-	D: 'a + PatternMatchingDataset<Resource = R>,
+	R: 'a,
+	D: 'a + EvalContext<Resource = R>,
 {
-	pattern: PatternRefQuad<'p, R>,
-	quad_matching: D::QuadPatternMatching<'a, 'p>,
+	pattern: PatternRefQuad<'a, R>,
+	quad_matching: D::QuadPatternMatching<'a>,
 }
 
-impl<'a, P, R: Clone, D, Q> Matching<'a, '_, P, R, D, Q>
+impl<'a, P, R: Clone, D, Q> Matching<'a, P, R, D, Q>
 where
-	D: PatternMatchingDataset<Resource = R>,
+	D: EvalContext<Resource = R>,
 {
 	/// Starts a pattern matching on the given `dataset` using the input partial
 	/// `substitution` and `patterns` (an iterator of [`PatternRefQuad`]).
@@ -71,9 +72,14 @@ where
 		scope: &'a Scope<'a, P, R>,
 		substitution: Substitution<R>,
 		patterns: Q,
-	) -> Self {
+	) -> Self
+	where
+		P: Copy,
+		R: PartialEq + 'a,
+		Q: Clone + Iterator<Item = PatternRefQuad<'a, R>>,
+	{
 		Self {
-			dataset,
+			rdf: dataset,
 			stack: vec![State {
 				scope: MatchingScope {
 					scope,
@@ -190,12 +196,12 @@ impl<P: Copy, R: Clone + PartialEq> MatchingScope<'_, P, R> {
 	}
 }
 
-impl<'a, 'p, P, R, D, Q> Matching<'a, 'p, P, R, D, Q>
+impl<'a, P, R, D, Q> Matching<'a, P, R, D, Q>
 where
 	P: Copy,
 	R: Clone + PartialEq + 'a,
-	D: PatternMatchingDataset<Resource = R>,
-	Q: Clone + Iterator<Item = PatternRefQuad<'p, R>>,
+	D: EvalContext<Resource = R>,
+	Q: Clone + Iterator<Item = PatternRefQuad<'a, R>>,
 {
 	pub fn into_optional(mut self) -> Result<Option<Vec<Value<R>>>, Error> {
 		match self.next() {
@@ -215,12 +221,12 @@ where
 	}
 }
 
-impl<'a, 'p, P, R, D, Q> Iterator for Matching<'a, 'p, P, R, D, Q>
+impl<'a, P, R, D, Q> Iterator for Matching<'a, P, R, D, Q>
 where
 	P: Copy,
 	R: Clone + PartialEq + 'a,
-	D: PatternMatchingDataset<Resource = R>,
-	Q: Clone + Iterator<Item = PatternRefQuad<'p, R>>,
+	D: EvalContext<Resource = R>,
+	Q: Clone + Iterator<Item = PatternRefQuad<'a, R>>,
 {
 	type Item = Vec<Value<R>>;
 
@@ -249,8 +255,8 @@ where
 							state.quad_state = Some(QuadState {
 								pattern,
 								quad_matching: self
-									.dataset
-									.quad_pattern_matching(quad_matching_pattern(pattern)),
+									.rdf
+									.pattern_matching(quad_matching_pattern(pattern)),
 							})
 						}
 						None => {

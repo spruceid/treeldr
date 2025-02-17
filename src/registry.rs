@@ -1,13 +1,12 @@
 use std::{collections::HashMap, hash::Hash, marker::PhantomData};
 
-use rdf_types::Term;
+use rdf_types::{InterpretationMut, LocalTerm};
 use serde::{Deserialize, Serialize};
 
 use crate::{
 	function::FunctionRef,
 	module::{ItemPath, ItemPathSegment, ItemRef},
 	package::CompileError,
-	rdf::{Rdf, RdfContextMut},
 	ty::TypeDefinition,
 	Function, Module, ModuleRef, Package, Type, TypeRef,
 };
@@ -143,7 +142,7 @@ pub trait RegistryMut: Registry {
 	/// Compiles a package and inserts it in the registry.
 	fn compile_and_insert_package_with(
 		&mut self,
-		rdf: &mut impl RdfContextMut<Resource = Self::Resource>,
+		rdf: &mut impl InterpretationMut<Resource = Self::Resource>,
 		package_id: Self::PackageId,
 		text: &str,
 	) -> Result<(), CompileError<Self::PackageId>>
@@ -151,7 +150,7 @@ pub trait RegistryMut: Registry {
 		Self::PackageId: Clone + Ord + Hash,
 		Self::Resource: Clone + Ord + Hash,
 	{
-		let package = Package::compile(rdf, self, package_id, text)?;
+		let package = Package::compile_with(rdf, self, package_id, text)?;
 		self.insert_package(package);
 		Ok(())
 	}
@@ -165,10 +164,9 @@ pub trait RegistryMut: Registry {
 	) -> Result<(), CompileError<Self::PackageId>>
 	where
 		Self::PackageId: Clone + Ord + Hash,
-		Self: Registry<Resource = Term>,
+		Self: Registry<Resource = LocalTerm>,
 	{
-		let mut rdf = Rdf::default();
-		let package = Package::compile(&mut rdf, self, package_id, text)?;
+		let package = Package::compile(self, package_id, text)?;
 		self.insert_package(package);
 		Ok(())
 	}
@@ -330,7 +328,7 @@ impl PreludeAndTarget {
 
 impl Registry for PreludeAndTarget {
 	type PackageId = PreludeOrTarget;
-	type Resource = rdf_types::Term;
+	type Resource = rdf_types::LocalTerm;
 
 	fn len(&self) -> usize {
 		if self.target.is_some() {

@@ -5,12 +5,12 @@ use std::{
 
 use nquads_syntax::Parse;
 use rdf_types::{
-	dataset::{BTreeDataset, IndexedBTreeDataset},
-	Id, Term,
+	dataset::IndexedBTreeDataset,
+	generator::{self, LocalGeneratorInterpretation},
+	LocalTerm, Term,
 };
 use treeldr::{
-	rdf::{Rdf, RdfContextMut},
-	utils::strip_rdf_quad,
+	rdf::{FallibleResourceUnifier, SubstituteResource, TryUnifyInterpretation},
 	Package, PreludeOrTarget, Registry, RegistryUnion, Value,
 };
 
@@ -28,15 +28,15 @@ pub struct PositiveTest {
 
 impl PositiveTest {
 	pub fn run(&self, id: &str, forward: bool) {
-		let mut rdf = Rdf::default();
+		// let mut rdf = Rdf::default();
+		let mut generator = generator::Blank::new();
 		let prelude = Package::prelude(PreludeOrTarget::Prelude);
 
 		// Parse layout.
 		let layout_text = fs::read_to_string(file_path(format!("{id}-layout.tldr")))
 			.expect("unable to read layout");
-		let package =
-			treeldr::Package::compile(&mut rdf, &prelude, PreludeOrTarget::Target, &layout_text)
-				.expect("compile error");
+		let package = treeldr::Package::compile(&prelude, PreludeOrTarget::Target, &layout_text)
+			.expect("compile error");
 
 		let registry = RegistryUnion(prelude, &package);
 
@@ -52,11 +52,10 @@ impl PositiveTest {
 		// Parse input.
 		let input_text = fs::read_to_string(file_path(format!("{id}-in.nq")))
 			.expect("unable to read RDF dataset");
-		let mut input: IndexedBTreeDataset = nquads_syntax::Document::parse_str(&input_text)
+		let mut input: IndexedBTreeDataset = nquads_syntax::GrdfDocument::parse_str(&input_text)
 			.unwrap()
-			.into_value()
+			.0
 			.into_iter()
-			.map(strip_rdf_quad)
 			.collect();
 
 		// Parse output.
@@ -77,7 +76,7 @@ impl PositiveTest {
 		if forward {
 			// Evaluate.
 			let found = function
-				.call_without_unification(&registry, &mut rdf, &mut input, &args)
+				.call(&registry, &mut generator, &mut input, &args)
 				.expect("evaluation failed");
 
 			if output != found {
@@ -91,30 +90,22 @@ impl PositiveTest {
 				.expect("post typing failed");
 		} else {
 			let mut found = IndexedBTreeDataset::new();
-			let found_args = function
-				.call_inverse_without_unification(&registry, &mut rdf, &mut found, &[], &output)
+			let mut found_args = function
+				.call_inverse(&registry, &mut generator, &mut found, &[], &output)
 				.expect("inverse evaluation failed");
 
+			let mut interpretation = LocalGeneratorInterpretation::new(&mut generator);
+			let mut unifier = interpretation.begin_unification();
 			for (i, a) in found_args.iter().enumerate() {
-				if let Value::Resource(a @ Term::Id(Id::Blank(_))) = a {
-					if let Value::Resource(b @ Term::Id(Id::Iri(_))) = &args[i] {
-						rdf.unify(a, b).expect("term unification failed");
+				if let Value::Resource(a @ LocalTerm::Anonymous(_)) = a {
+					if let Value::Resource(b @ LocalTerm::Named(Term::Iri(_))) = &args[i] {
+						unifier.try_unify(a, b).expect("term unification failed");
 					}
 				}
 			}
 
-			let found: BTreeDataset = found
-				.into_iter()
-				.map(|quad| quad.map(|t| rdf.interpretation.map_term(t)))
-				.collect();
-
-			let found_args: Vec<_> = found_args
-				.into_iter()
-				.map(|value| match value {
-					Value::Resource(r) => Value::Resource(rdf.interpretation.map_term(r)),
-					other => other,
-				})
-				.collect();
+			found.substitute_resource(|r| unifier.substitute_resource(r));
+			found_args.substitute_resource(|r| unifier.substitute_resource(r));
 
 			let Some(bijection) = rdf_types::dataset::isomorphism::find_bijection(&found, &input)
 			else {
@@ -144,7 +135,7 @@ impl PositiveTest {
 			let found_args: Vec<_> = found_args
 				.into_iter()
 				.map(|value| match value {
-					Value::Resource(term @ Term::Id(Id::Blank(_))) => {
+					Value::Resource(term @ LocalTerm::Anonymous(_)) => {
 						Value::Resource((*bijection.forward.get(&term).unwrap()).clone())
 					}
 					other => other,

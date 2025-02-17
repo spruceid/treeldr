@@ -1,10 +1,11 @@
 use iref::{Iri, IriBuf};
 use ll1::Spanned;
+use rdf_types::InterpretationMut;
 use std::{collections::HashMap, hash::Hash};
 
 use crate::{
-	function::FunctionRef, module::Item, rdf::RdfContextMut, syntax::ast, ItemPath,
-	ItemPathSegment, ItemRef, Module, ModuleRef, Registry, TypeRef,
+	function::FunctionRef, module::Item, syntax::ast, ItemPath, ItemPathSegment, ItemRef, Module,
+	ModuleRef, Registry, TypeRef,
 };
 
 use super::{
@@ -59,7 +60,7 @@ impl<P: Copy> BuildModule<'_, P> {
 	where
 		E: ?Sized + Registry<PackageId = P>,
 		E::Resource: Clone + Ord,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		let mut result = Module::default();
 
@@ -264,7 +265,7 @@ impl<'ast> ast::Module {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		namespace.begin_module(|namespace, module_ref| {
 			let mut result = BuildModule {

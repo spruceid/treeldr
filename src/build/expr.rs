@@ -4,12 +4,14 @@ use btree_indexmap::BTreeIndexMap;
 use iref::{InvalidIri, IriBuf};
 use langtag::{InvalidLangTag, LangTagBuf};
 use ll1::{Span, Spanned};
-use rdf_types::{LiteralType, Quad, Term, RDF_FIRST, RDF_NIL, RDF_REST, XSD_STRING};
+use rdf_types::{
+	CowLiteral, InterpretationMut, LiteralType, Quad, Term, RDF_FIRST, RDF_NIL, RDF_REST,
+	XSD_STRING,
+};
 
 use crate::{
 	expr::{self, Binding, Expr, InnerExpr, ListComponents},
 	pattern::{CallPattern, MapPattern, PatternDesc},
-	rdf::RdfContextMut,
 	syntax::ast::{self, ListDescription},
 	ty::{self, TypeDesc},
 	value::{Map, Number, TypedValue, TypedValueDesc, TypedValueInnerDesc, TypedValueMap},
@@ -33,7 +35,7 @@ impl ast::Bindings {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		let mut intro = Vec::with_capacity(self.list.len());
 		let mut sub_scope = scope.begin();
@@ -75,7 +77,7 @@ impl ast::Binding {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		let assignment = self
 			.assignment
@@ -119,7 +121,7 @@ impl ast::Expr {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		match self {
 			Self::Var(ident) => {
@@ -184,7 +186,7 @@ impl ast::ListExpr {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		match &self.desc {
 			ast::ListDescription::Given(items) => {
@@ -225,7 +227,7 @@ impl ast::MapExpr {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		let mut entries = MapPattern::new();
 		let mut fields = BTreeIndexMap::new();
@@ -265,7 +267,7 @@ impl ast::CallExpr {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + Ord + Hash,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		let path = self.function.build(context, namespace, scope)?;
 
@@ -339,7 +341,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord> Build<'ast, P, R> for ast::RdfDa
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		let mut result = DatasetPattern::new();
 
@@ -363,7 +365,7 @@ impl ast::RdfStatement {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 		E::Resource: Clone + Ord,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		let subject = self.subject.build(context, namespace, scope)?;
 
@@ -388,7 +390,7 @@ impl ast::RdfPredicateObjects {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 		E::Resource: Clone + Ord,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		let predicate = self.predicate.build(context, namespace, scope)?;
 
@@ -404,7 +406,7 @@ impl ast::RdfPredicateObjects {
 impl ast::RdfTerm {
 	fn build_unscoped<P>(&self) -> Result<Term, Error<P>> {
 		match self {
-			Self::Iri(i) => i.build_unscoped().map(Term::iri),
+			Self::Iri(i) => i.build_unscoped().map(Term::Iri),
 			Self::Literal(l) => l.build_unscoped().map(Term::Literal),
 		}
 	}
@@ -419,7 +421,7 @@ impl ast::RdfTerm {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 		E::Resource: Clone,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		match self {
 			Self::Iri(i) => {
@@ -442,7 +444,7 @@ impl ast::RdfPattern {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 		E::Resource: Clone,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		match self {
 			Self::Var(ident) => {
@@ -503,18 +505,20 @@ impl ast::RdfLiteral {
 		E: ?Sized + Registry,
 		E::PackageId: Copy + PartialEq,
 		E::Resource: Clone,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		let value = self.value.decode()?;
 		match &self.annotation {
-			None => Ok(context.rdf.insert_literal(value, Cow::Borrowed(XSD_STRING))),
+			None => Ok(context
+				.rdf
+				.insert_literal(CowLiteral::new(value, XSD_STRING))),
 			Some(ast::RdfLiteralAnnotation::Type(_, iri)) => {
 				let iri = iri.build(context, namespace, scope)?;
-				Ok(context.rdf.insert_literal(value, Cow::Owned(iri)))
+				Ok(context.rdf.insert_literal(CowLiteral::new(value, iri)))
 			}
 			Some(ast::RdfLiteralAnnotation::Language(lang)) => {
 				let tag = lang.decode()?;
-				Ok(context.rdf.insert_lang_string(value, tag))
+				Ok(context.rdf.insert_literal(CowLiteral::new(value, tag)))
 			}
 		}
 	}
@@ -592,7 +596,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		match self {
 			Self::Let(_, bindings, _, inner) => {
@@ -700,7 +704,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		match &self.desc {
 			ListDescription::Given(list) => {
@@ -814,7 +818,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		let mut fields = BTreeIndexMap::new();
 		let mut entries = TypedValueMap::new();
@@ -846,7 +850,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 impl ast::ConstValue {
 	pub fn build_unscoped<P>(&self) -> Result<Value, Error<P>> {
 		match self {
-			Self::Resource(term) => term.build_unscoped().map(Value::Resource),
+			Self::Resource(term) => term.build_unscoped().map(Into::into).map(Value::Resource),
 			Self::Literal(expr) => expr.build_unscoped().map(Value::Literal),
 			Self::List(expr) => expr.build_unscoped().map(Value::List),
 			Self::Map(expr) => expr.build_unscoped().map(Value::Map),
@@ -865,7 +869,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		let (inner, type_) = match self {
 			Self::Resource(term) => {
@@ -935,7 +939,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		let mut items = Vec::with_capacity(self.items.len());
 		let mut types = Vec::with_capacity(self.items.len());
@@ -973,7 +977,7 @@ impl<'ast, P: Copy + PartialEq, R: Clone + Ord + Hash> Build<'ast, P, R> for ast
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		let mut fields = BTreeIndexMap::new();
 		let mut entries = TypedValueMap::new();
@@ -1010,7 +1014,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		let mut t = ty::Enum {
 			variants: BTreeMap::new(),
@@ -1047,7 +1051,7 @@ impl<'ast, P: Copy + Ord + Hash, R: Clone + Ord + Hash> Build<'ast, P, R> for as
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		let path = self.function.build(context, namespace, scope)?;
 
@@ -1134,7 +1138,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::LiteralExpr {
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		match self {
 			Self::Unit(_) => Ok((Literal::Unit, ty::LiteralType::Unit)),

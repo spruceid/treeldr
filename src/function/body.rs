@@ -2,11 +2,9 @@ use std::hash::Hash;
 
 use super::BuiltInFunction;
 use crate::{
-	eval::{Eval, EvalError, Scope},
+	eval::{Eval, EvalContext, EvalError, Scope},
 	expr::Expr,
-	rdf::{
-		EvalDataset, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex, VisitResources,
-	},
+	rdf::{ResourceBackwardIndex, ResourceForwardIndex, VisitResources},
 	Registry, TypeRef, Value,
 };
 use serde::{Deserialize, Serialize};
@@ -37,31 +35,29 @@ impl<P: Copy + Ord, R: Ord + Clone> Body<P, R> {
 	pub fn eval(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &impl EvalContext<Resource = R>,
 		scope: &Scope<P, R>,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
-			Self::Expr(e) => e.eval(registry, rdf, dataset, scope),
-			Self::BuiltIn(b) => b.eval(rdf, dataset, scope.top_const_values()),
+			Self::Expr(e) => e.eval(registry, rdf, scope),
+			Self::BuiltIn(b) => b.eval(rdf, scope.top_const_values()),
 		}
 	}
 
 	pub fn eval_inverse(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {
-			Self::Expr(e) => e.eval_inverse(registry, rdf, dataset, scope, output),
+			Self::Expr(e) => e.eval_inverse(registry, rdf, scope, output),
 			Self::BuiltIn(b) => {
 				// The const arguments are in the parent scope.
 				let offset = scope.parent().unwrap().top_const_values().len() as u32;
 
-				let values = b.eval_inverse(rdf, dataset, scope, output)?;
+				let values = b.eval_inverse(rdf, scope, output)?;
 
 				for (i, value) in values.into_iter().enumerate() {
 					scope.set(rdf, offset + i as u32, value)?;

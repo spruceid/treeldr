@@ -1,9 +1,7 @@
-use super::{
-	Eval, EvalError, EvalTyped, MissingData, RdfContextMut, Scope, ScopeTypes, ScopeValues,
-};
+use super::{Eval, EvalContext, EvalError, EvalTyped, MissingData, Scope, ScopeTypes, ScopeValues};
 use crate::{
 	expr::{ExplicitList, ImplicitList, List, OrderedList, UnorderedList},
-	rdf::{DebugSubstitution, EvalDataset},
+	rdf::DebugSubstitution,
 	Registry, TypeRef, Value,
 };
 use rdf_types::Quad;
@@ -12,33 +10,27 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for List<P, R> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &impl EvalContext<Resource = R>,
 		scope: &Scope<P, R>,
 		r#type: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
-			Self::Explicit(list) => list.eval_typed(registry, rdf, dataset, scope, r#type),
-			Self::Implicit(list) => list.eval_typed(registry, rdf, dataset, scope, r#type),
+			Self::Explicit(list) => list.eval_typed(registry, rdf, scope, r#type),
+			Self::Implicit(list) => list.eval_typed(registry, rdf, scope, r#type),
 		}
 	}
 
 	fn eval_inverse_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &mut Scope<P, R>,
 		r#type: TypeRef<P>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {
-			Self::Explicit(list) => {
-				list.eval_inverse_typed(registry, rdf, dataset, scope, r#type, output)
-			}
-			Self::Implicit(list) => {
-				list.eval_inverse_typed(registry, rdf, dataset, scope, r#type, output)
-			}
+			Self::Explicit(list) => list.eval_inverse_typed(registry, rdf, scope, r#type, output),
+			Self::Implicit(list) => list.eval_inverse_typed(registry, rdf, scope, r#type, output),
 		}
 	}
 }
@@ -47,15 +39,14 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for ExplicitList<P, R> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &impl EvalContext<Resource = R>,
 		scope: &Scope<P, R>,
 		_type: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		let mut items = Vec::with_capacity(self.items.len());
 
 		for e in &self.items {
-			items.push(e.eval(registry, rdf, dataset, scope)?);
+			items.push(e.eval(registry, rdf, scope)?);
 		}
 
 		Ok(Value::List(items))
@@ -64,8 +55,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for ExplicitList<P, R> {
 	fn eval_inverse_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &mut Scope<P, R>,
 		_type: TypeRef<P>,
 		output: &Value<R>,
@@ -73,7 +63,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for ExplicitList<P, R> {
 		match &output {
 			Value::List(list) => {
 				for (expr, item) in self.items.iter().zip(list) {
-					expr.eval_inverse(registry, rdf, dataset, scope, item)?;
+					expr.eval_inverse(registry, rdf, scope, item)?;
 				}
 
 				Ok(())
@@ -87,33 +77,27 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for ImplicitList<P, R> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &impl EvalContext<Resource = R>,
 		scope: &Scope<P, R>,
 		r#type: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
-			Self::Ordered(list) => list.eval_typed(registry, rdf, dataset, scope, r#type),
-			Self::Unordered(list) => list.eval_typed(registry, rdf, dataset, scope, r#type),
+			Self::Ordered(list) => list.eval_typed(registry, rdf, scope, r#type),
+			Self::Unordered(list) => list.eval_typed(registry, rdf, scope, r#type),
 		}
 	}
 
 	fn eval_inverse_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &mut Scope<P, R>,
 		r#type: TypeRef<P>,
 		output: &Value<R>,
 	) -> Result<(), EvalError<R>> {
 		match self {
-			Self::Ordered(list) => {
-				list.eval_inverse_typed(registry, rdf, dataset, scope, r#type, output)
-			}
-			Self::Unordered(list) => {
-				list.eval_inverse_typed(registry, rdf, dataset, scope, r#type, output)
-			}
+			Self::Ordered(list) => list.eval_inverse_typed(registry, rdf, scope, r#type, output),
+			Self::Unordered(list) => list.eval_inverse_typed(registry, rdf, scope, r#type, output),
 		}
 	}
 }
@@ -122,8 +106,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for UnorderedList<P, R> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &impl EvalContext<Resource = R>,
 		scope: &Scope<P, R>,
 		type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -137,7 +120,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for UnorderedList<P, R> {
 
 		let mut result = Vec::new();
 
-		let substitutions: Vec<_> = self.bound.find_all(dataset, scope).collect();
+		let substitutions: Vec<_> = self.bound.find_all(rdf, scope).collect();
 
 		for values in substitutions {
 			let scope = scope.begin(
@@ -146,7 +129,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for UnorderedList<P, R> {
 				ScopeValues::ConstOwned(values),
 			);
 
-			result.push(self.body.eval(registry, rdf, dataset, &scope)?);
+			result.push(self.body.eval(registry, rdf, &scope)?);
 		}
 
 		result.sort_unstable();
@@ -157,8 +140,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for UnorderedList<P, R> {
 	fn eval_inverse_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &mut Scope<P, R>,
 		_type_ref: TypeRef<P>,
 		output: &Value<R>,
@@ -166,15 +148,10 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for UnorderedList<P, R> {
 		match output {
 			Value::List(list) => {
 				for item in list {
-					self.bound.eval_inverse(
-						registry,
-						rdf,
-						dataset,
-						scope,
-						|rdf, dataset, scope| {
-							self.body.eval_inverse(registry, rdf, dataset, scope, item)
-						},
-					)?;
+					self.bound
+						.eval_inverse(registry, rdf, scope, |rdf, scope| {
+							self.body.eval_inverse(registry, rdf, scope, item)
+						})?;
 				}
 
 				Ok(())
@@ -188,8 +165,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &impl EvalContext<Resource = R>,
 		scope: &Scope<P, R>,
 		_type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -197,13 +173,13 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 
 		let mut head = self
 			.head
-			.eval(registry, rdf, dataset, scope)?
+			.eval(registry, rdf, scope)?
 			.into_resource()
 			.unwrap();
 
 		while head != self.components.nil {
 			let (first, rest) = {
-				let mut first_candidates = dataset.quad_pattern_matching(
+				let mut first_candidates = rdf.pattern_matching(
 					Quad(
 						Some(&head),
 						Some(&self.components.first),
@@ -231,7 +207,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 					return Err(EvalError::Ambiguity);
 				}
 
-				let mut rest_candidates = dataset.quad_pattern_matching(
+				let mut rest_candidates = rdf.pattern_matching(
 					Quad(
 						Some(&head),
 						Some(&self.components.rest),
@@ -264,7 +240,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 
 			let scope = self
 				.bound
-				.find_one_with(dataset, scope, |_| Some(Value::Resource(first.clone())))?
+				.find_one_with(rdf, scope, |_| Some(Value::Resource(first.clone())))?
 				.ok_or_else(|| {
 					let mut substitution = DebugSubstitution::new();
 					EvalError::MissingData(MissingData::Empty(scope.substitute_dataset(
@@ -274,7 +250,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 					)))
 				})?;
 
-			result.push(self.body.eval(registry, rdf, dataset, &scope)?);
+			result.push(self.body.eval(registry, rdf, &scope)?);
 
 			head = rest;
 		}
@@ -285,8 +261,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 	fn eval_inverse_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &mut Scope<P, R>,
 		_type_ref: TypeRef<P>,
 		output: &Value<R>,
@@ -302,8 +277,8 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 
 					let first = self
 						.bound
-						.find_one_inverse(rdf, dataset, scope, |rdf, dataset, scope| {
-							self.body.eval_inverse(registry, rdf, dataset, scope, item)
+						.find_one_inverse(rdf, scope, |rdf, scope| {
+							self.body.eval_inverse(registry, rdf, scope, item)
 						})?
 						.into_iter()
 						.next()
@@ -311,13 +286,13 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 						.into_resource()
 						.unwrap();
 
-					dataset.insert(Quad(
+					rdf.insert(Quad(
 						head.clone(),
 						self.components.first.clone(),
 						first,
 						scope.graph().cloned(),
 					));
-					dataset.insert(Quad(
+					rdf.insert(Quad(
 						head.clone(),
 						self.components.rest.clone(),
 						rest,
@@ -327,7 +302,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for OrderedList<P, R> {
 				}
 
 				self.head
-					.eval_inverse(registry, rdf, dataset, scope, &Value::Resource(rest))
+					.eval_inverse(registry, rdf, scope, &Value::Resource(rest))
 			}
 			_ => Err(EvalError::InvalidType),
 		}

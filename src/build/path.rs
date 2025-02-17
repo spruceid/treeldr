@@ -1,6 +1,8 @@
 use std::hash::Hash;
 
-use crate::{module::ItemPathBuf, rdf::RdfContextMut, syntax::ast, ItemPathSegment, Registry};
+use rdf_types::InterpretationMut;
+
+use crate::{module::ItemPathBuf, syntax::ast, ItemPathSegment, Registry};
 
 use super::{Build, BuildContext, BuildingPackage, Error, Scope};
 
@@ -15,7 +17,7 @@ impl<'ast, P, R: Clone + Ord + Hash> Build<'ast, P, R> for ast::ItemPath {
 	) -> Result<Self::Target, Error<P>>
 	where
 		E: ?Sized + Registry<PackageId = P, Resource = R>,
-		D: RdfContextMut<Resource = R>,
+		D: InterpretationMut<Resource = R>,
 	{
 		let mut result = Vec::new();
 		self.build_into(&mut result);

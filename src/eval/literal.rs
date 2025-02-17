@@ -1,12 +1,11 @@
-use super::{EvalError, EvalTyped, RdfContextMut, Scope};
-use crate::{rdf::EvalDataset, Literal, Registry, TypeRef, Value};
+use super::{EvalContext, EvalError, EvalTyped, Scope};
+use crate::{Literal, Registry, TypeRef, Value};
 
 impl<P, R: Clone> EvalTyped<P, R> for Literal {
 	fn eval_typed(
 		&self,
 		_registry: &impl Registry<PackageId = P, Resource = R>,
-		_rdf: &mut impl RdfContextMut<Resource = R>,
-		_dataset: &mut impl EvalDataset<R>,
+		_rdf: &impl EvalContext<Resource = R>,
 		_scope: &Scope<P, R>,
 		_type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -16,8 +15,7 @@ impl<P, R: Clone> EvalTyped<P, R> for Literal {
 	fn eval_inverse_typed(
 		&self,
 		_registry: &impl Registry<PackageId = P, Resource = R>,
-		_rdf: &mut impl RdfContextMut<Resource = R>,
-		_dataset: &mut impl rdf_types::dataset::DatasetMut<Resource = R>,
+		_rdf: &mut impl EvalContext<Resource = R>,
 		_scope: &mut Scope<P, R>,
 		_type_ref: TypeRef<P>,
 		output: &Value<R>,

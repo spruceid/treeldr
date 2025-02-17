@@ -91,6 +91,19 @@ impl<R> Substitution<R> {
 		self.try_into_total_with(|_| Err(PartialSubstitution))
 	}
 
+	pub fn into_total_with(self, mut f: impl FnMut(u32) -> Value<R>) -> Vec<Value<R>> {
+		let mut result = Vec::with_capacity(self.0.len());
+
+		for (i, value) in self.0.into_iter().enumerate() {
+			result.push(match value.into_inner() {
+				None => f(i as u32),
+				Some(value) => value,
+			})
+		}
+
+		result
+	}
+
 	pub fn try_into_total_with<E>(
 		self,
 		mut f: impl FnMut(u32) -> Result<Value<R>, E>,

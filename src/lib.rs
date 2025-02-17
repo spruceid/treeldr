@@ -10,7 +10,7 @@
 //! ```
 //! use treeldr::{
 //!   registry::{Registry, RegistryMut, PreludeAndTarget, PreludeOrTarget},
-//!   rdf::{dataset::BTreeDataset, parse_nquads}
+//!   rdf::{dataset::BTreeDataset, generator, parse_nquads}
 //! };
 //! use serde_json::json;
 //!
@@ -52,9 +52,12 @@
 //!   <http://example.com/subject> <http://example.com/bar> <http://example.com/object> .
 //! "#).unwrap().into_indexed();
 //!
+//! let mut generator = generator::Blank::new();
+//!
 //! // Call the function.
 //! let output = function.call(
 //!   &registry,
+//!   &mut generator,
 //!   &mut dataset,
 //!   &["<http://example.com/subject>".parse().unwrap()]
 //! ).unwrap();
@@ -71,6 +74,7 @@
 //! // Call the function's inverse.
 //! let inputs = function.call_inverse(
 //!   &registry,
+//!   &mut generator,
 //!   &mut dataset,
 //!   &[],
 //!   &output

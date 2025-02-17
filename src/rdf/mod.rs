@@ -1,18 +1,17 @@
 use std::collections::BTreeMap;
 
 use btree_indexmap::BTreeIndexMap;
-use dataset::{DatasetMut, PatternMatchingDataset};
 pub use iref;
 pub use iref::{Iri, IriBuf};
-use nquads_syntax::{strip_quad, Parse};
+use nquads_syntax::Parse;
 use rdf_types::dataset::BTreeDataset;
 pub use rdf_types::*;
 
-mod context;
-pub use context::*;
-
 mod unify;
 pub use unify::*;
+
+mod context;
+pub use context::*;
 
 mod substitution;
 pub use substitution::*;
@@ -21,28 +20,6 @@ mod index;
 pub use index::{ResourceBackwardIndex, ResourceForwardIndex};
 
 pub mod serde;
-
-pub trait EvalDataset<R>:
-	Default + DatasetMut<Resource = R> + PatternMatchingDataset + IntoIterator<Item = Quad<R>>
-{
-	fn apply_substitution(&mut self, mut f: impl FnMut(R) -> R) {
-		for Quad(s, p, o, g) in std::mem::take(self) {
-			self.insert(Quad(f(s), f(p), f(o), g.map(&mut f)));
-		}
-	}
-
-	fn apply_unification(&mut self, i: &impl TryUnifyInterpretation<Resource = R>) {
-		self.apply_substitution(|r| i.substitute_resource(r));
-	}
-}
-
-impl<R, D> EvalDataset<R> for D where
-	D: Default
-		+ DatasetMut<Resource = R>
-		+ PatternMatchingDataset<Resource = R>
-		+ IntoIterator<Item = Quad<R>>
-{
-}
 
 pub trait VisitResources<R> {
 	fn visit_resources_ref_mut(&self, f: &mut impl FnMut(&R));
@@ -123,15 +100,8 @@ impl<R, T: VisitResources<R>> VisitResources<R> for rdf_types::Quad<T> {
 	}
 }
 
-pub type NQuadsParseError =
-	nquads_syntax::parsing::MetaError<nquads_syntax::lexing::Error, ll1::Span>;
+pub type NQuadsParseError = nquads_syntax::Error;
 
 pub fn parse_nquads(str: &str) -> Result<BTreeDataset, NQuadsParseError> {
-	nquads_syntax::GrdfDocument::parse_str(str).map(|quads| {
-		quads
-			.into_value()
-			.into_iter()
-			.map(|quad| strip_quad(quad.into_value()))
-			.collect()
-	})
+	nquads_syntax::GrdfDocument::parse_str(str).map(|(quads, _)| quads.into_iter().collect())
 }

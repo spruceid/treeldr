@@ -88,6 +88,20 @@ impl<R> TermPattern<R> {
 			Err(s) => Err(Quad(s, q.1, q.2, q.3)),
 		}
 	}
+
+	pub fn map<S>(self, f: impl FnOnce(R) -> S) -> TermPattern<S> {
+		match self {
+			Self::Resource(r) => TermPattern::Resource(f(r)),
+			Self::Var(x) => TermPattern::Var(x),
+		}
+	}
+
+	pub fn mapped<'a, S>(&'a self, f: impl FnOnce(&'a R) -> S) -> TermPattern<S> {
+		match self {
+			Self::Resource(r) => TermPattern::Resource(f(r)),
+			Self::Var(x) => TermPattern::Var(*x),
+		}
+	}
 }
 
 impl<R> VisitResources<R> for TermPattern<R> {

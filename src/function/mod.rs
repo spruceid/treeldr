@@ -1,16 +1,20 @@
 use core::fmt;
-use rdf_types::{Quad, Term};
+use rdf_types::{
+	dataset::{DatasetMut, MultiPatternMatchingDataset},
+	generator::LocalGeneratorInterpretation,
+	LocalGenerator, LocalTerm, Quad,
+};
 use serde::{Deserialize, Serialize};
 use serde_seeded::{unseeded, DeserializeSeeded, SerializeSeeded};
 use std::{hash::Hash, marker::PhantomData};
 
 use crate::{
 	display::DisplaySignature,
-	eval::{EvalError, Scope, ScopeTypes, ScopeValues},
+	eval::{EvalContext, EvalError, Scope, ScopeTypes, ScopeValues},
 	pattern::serde_dataset_pattern,
 	rdf::{
-		EvalDataset, Rdf, RdfContextMut, ResourceBackwardIndex, ResourceForwardIndex,
-		TryUnifyInterpretation, VisitResources,
+		ContextStack, ResourceBackwardIndex, ResourceForwardIndex, SubstituteResource,
+		VisitResources,
 	},
 	ty::{BuiltInTypeMap, TypeRef},
 	Attributes, DatasetPattern, Registry, Value,
@@ -128,7 +132,7 @@ impl<P: Copy + PartialEq, R: fmt::Display> DisplaySignature<P, R> for Signature<
 	ser(seed(ResourceForwardIndex<R>), override_bounds(P: Serialize, R: Eq + Hash, T: Serialize)),
 	de(seed(ResourceBackwardIndex<R>), override_bounds(P: Deserialize<'de>, R: Clone + Ord, T: Deserialize<'de>), bounds(T: Ord))
 )]
-pub struct Function<P, R = Term, T = TypeRef<P>> {
+pub struct Function<P, R = LocalTerm, T = TypeRef<P>> {
 	pub attributes: Attributes<R>,
 	pub signature: Signature<P, R, T>,
 	pub body: Body<P, R, T>,
@@ -160,12 +164,14 @@ impl<P, R> Function<P, R> {
 impl<P: Copy + Ord> Function<P> {
 	pub fn call(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = Term>,
-		dataset: &mut impl EvalDataset<Term>,
+		registry: &impl Registry<PackageId = P, Resource = LocalTerm>,
+		generator: impl LocalGenerator,
+		dataset: &impl MultiPatternMatchingDataset<Resource = LocalTerm>,
 		args: &[Value],
 	) -> Result<Value, EvalError> {
-		let mut rdf = Rdf::default();
-		self.call_with(registry, &mut rdf, dataset, args)
+		let interpretation = LocalGeneratorInterpretation::new(generator);
+		let rdf = ContextStack::new(&interpretation, dataset);
+		self.call_with(registry, &rdf, args)
 	}
 
 	/// Call the inverse function.
@@ -174,13 +180,20 @@ impl<P: Copy + Ord> Function<P> {
 	/// The returned input list does *not* include the const arguments again.
 	pub fn call_inverse(
 		&self,
-		registry: &impl Registry<PackageId = P, Resource = Term>,
-		dataset: &mut impl EvalDataset<Term>,
+		registry: &impl Registry<PackageId = P, Resource = LocalTerm>,
+		generator: impl LocalGenerator,
+		dataset: &mut (impl MultiPatternMatchingDataset<Resource = LocalTerm>
+		          + DatasetMut
+		          + SubstituteResource),
 		const_args: &[Value],
 		output: &Value,
 	) -> Result<Vec<Value>, EvalError> {
-		let mut rdf = Rdf::default();
-		self.call_inverse_with(registry, &mut rdf, dataset, const_args, output)
+		let mut interpretation = LocalGeneratorInterpretation::new(generator);
+		let mut rdf = ContextStack::new(&interpretation, dataset);
+		let mut inputs = self.call_inverse_with(registry, &mut rdf, const_args, output)?;
+		let delta = rdf.pop();
+		delta.apply(&mut interpretation, dataset, &mut inputs)?;
+		Ok(inputs)
 	}
 }
 
@@ -188,21 +201,7 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 	pub fn call_with(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
-		args: &[Value<R>],
-	) -> Result<Value<R>, EvalError<R>> {
-		let mut result = self.call_without_unification(registry, rdf, dataset, args)?;
-		dataset.apply_unification(rdf.interpretation());
-		result.map_resources(|r| rdf.interpretation().substitute_resource(r));
-		Ok(result)
-	}
-
-	pub fn call_without_unification(
-		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &impl EvalContext<Resource = R>,
 		args: &[Value<R>],
 	) -> Result<Value<R>, EvalError<R>> {
 		let arg_count = args.len() as u32;
@@ -221,7 +220,7 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 			ScopeValues::ConstBorrowed(args),
 		);
 
-		self.body.eval(registry, rdf, dataset, &scope)
+		self.body.eval(registry, rdf, &scope)
 	}
 
 	/// Call the inverse function.
@@ -231,31 +230,7 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 	pub fn call_inverse_with(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
-		const_args: &[Value<R>],
-		output: &Value<R>,
-	) -> Result<Vec<Value<R>>, EvalError<R>> {
-		let mut result =
-			self.call_inverse_without_unification(registry, rdf, dataset, const_args, output)?;
-
-		dataset.apply_unification(rdf.interpretation());
-		for value in &mut result {
-			value.map_resources(|r| rdf.interpretation().substitute_resource(r));
-		}
-
-		Ok(result)
-	}
-
-	/// Call the inverse function.
-	///
-	/// Returns the inputs associated to the given output and const arguments.
-	/// The returned input list does *not* include the const arguments again.
-	pub fn call_inverse_without_unification(
-		&self,
-		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		const_args: &[Value<R>],
 		output: &Value<R>,
 	) -> Result<Vec<Value<R>>, EvalError<R>> {
@@ -271,13 +246,11 @@ impl<P: Copy + Ord, R: Clone + Ord> Function<P, R> {
 			)
 			.begin_mut(
 				rdf,
-				dataset,
 				None,
 				ScopeTypes::Slice(&self.signature.args),
-				|rdf, dataset, scope| {
+				|rdf, scope| {
 					scope.extend_dataset(self.signature.dataset.iter().map(Quad::into_cloned));
-					self.body
-						.eval_inverse(registry, rdf, dataset, scope, output)
+					self.body.eval_inverse(registry, rdf, scope, output)
 				},
 			)
 	}

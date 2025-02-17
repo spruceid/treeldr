@@ -1,105 +1,94 @@
-use disjoint_collections::DisjointHashMap;
-use iref::IriBuf;
-use rdf_types::{
-	generator,
-	interpretation::{
-		IriInterpretation, IriInterpretationMut, LiteralInterpretation, LiteralInterpretationMut,
-		ReverseIriInterpretation, ReverseLiteralInterpretation,
-	},
-	BlankIdBuf, Id, Interpretation, InterpretationMut, Literal, Term,
-};
+use std::borrow::Cow;
 
-pub trait TryUnifyInterpretation: Interpretation {
-	type UnificationError;
-
-	fn try_unify(
-		&mut self,
-		a: &Self::Resource,
-		b: &Self::Resource,
-	) -> Result<(), Self::UnificationError>;
-
-	fn substitute_resource(&self, r: Self::Resource) -> Self::Resource;
-}
-
-#[derive(Default)]
-pub struct UnifyLiteralInterpretation {
-	generator: generator::Blank,
-	classes: DisjointHashMap<BlankIdBuf, Term>,
-}
-
-impl UnifyLiteralInterpretation {
-	pub fn new() -> Self {
-		Self::default()
-	}
-
-	pub fn map_term(&self, t: Term) -> Term {
-		match t {
-			Term::Id(Id::Blank(b)) => match self.classes.get(&b) {
-				Some(t) => t.clone(),
-				_ => Term::Id(Id::Blank(b)),
-			},
-			t => t,
-		}
-	}
-}
-
-impl Interpretation for UnifyLiteralInterpretation {
-	type Resource = Term;
-}
+use disjoint_collections::DisjointVec;
+use hashbrown::HashMap;
+use iref::Iri;
+use rdf_types::{BlankId, BlankIdBuf, CowLiteral, Interpretation, LocalTerm, Term};
 
 #[derive(Debug, thiserror::Error)]
 #[error("resource unification failed")]
 pub struct ResourceUnificationFailed;
 
-impl TryUnifyInterpretation for UnifyLiteralInterpretation {
-	type UnificationError = ResourceUnificationFailed;
+pub trait FallibleResourceUnifier<R> {
+	type Error;
+
+	fn try_unify(&mut self, a: &R, b: &R) -> Result<R, Self::Error>;
+
+	fn insert_iri<'a>(&mut self, r: &R, iri: impl Into<Cow<'a, Iri>>) -> Result<(), Self::Error>;
+
+	fn insert_literal<'a>(
+		&mut self,
+		r: &R,
+		literal: impl Into<CowLiteral<'a>>,
+	) -> Result<(), Self::Error>;
+
+	fn substitute_resource(&self, r: R) -> R;
+}
+
+pub trait TryUnifyInterpretation: Interpretation {
+	type Error;
+	type Unifier<'a>: FallibleResourceUnifier<Self::Resource, Error = Self::Error>
+	where
+		Self: 'a;
+
+	fn begin_unification(&mut self) -> Self::Unifier<'_>;
 
 	fn try_unify(
 		&mut self,
 		a: &Self::Resource,
 		b: &Self::Resource,
-	) -> Result<(), ResourceUnificationFailed> {
-		match (a, b) {
-			(Term::Id(Id::Blank(a)), Term::Id(Id::Blank(b))) => {
-				self.classes.try_merge(a, b, |a, b| match (a, b) {
-					(Term::Id(Id::Blank(a)), Term::Id(Id::Blank(_))) => Ok(Term::Id(Id::Blank(a))),
-					(Term::Id(Id::Blank(_)), b) => Ok(b),
-					(a, Term::Id(Id::Blank(_))) => Ok(a),
-					(a, b) => {
-						if a == b {
-							Ok(a)
-						} else {
-							Err(ResourceUnificationFailed)
-						}
-					}
-				})?;
+	) -> Result<Self::Resource, Self::Error> {
+		let mut unifier = self.begin_unification();
+		unifier.try_unify(a, b)
+	}
+}
 
-				Ok(())
+impl<I> TryUnifyInterpretation for I
+where
+	I: Interpretation<Resource = LocalTerm>,
+{
+	type Unifier<'a>
+		= LocalTermUnifier
+	where
+		Self: 'a;
+	type Error = ResourceUnificationFailed;
+
+	fn begin_unification(&mut self) -> Self::Unifier<'_> {
+		LocalTermUnifier::new()
+	}
+}
+
+#[derive(Debug, Default)]
+pub struct LocalTermUnifier {
+	map: HashMap<BlankIdBuf, usize>,
+	classes: DisjointVec<LocalTerm>,
+}
+
+impl LocalTermUnifier {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	fn import_blank_id(&mut self, id: &BlankId) -> usize {
+		match self.map.get(id) {
+			Some(i) => *i,
+			None => {
+				let i = self.classes.push(LocalTerm::Anonymous(id.to_owned()));
+				self.map.insert(id.to_owned(), i);
+				i
 			}
-			(Term::Id(Id::Blank(a)), b) => match self.classes.replace(a, b.clone()) {
-				Ok(Term::Id(Id::Blank(_))) => Ok(()),
-				Ok(c) => {
-					if c == *b {
-						Ok(())
-					} else {
-						Err(ResourceUnificationFailed)
-					}
-				}
-				Err(_) => Err(ResourceUnificationFailed),
-			},
-			(a, Term::Id(Id::Blank(b))) => match self.classes.replace(b, a.clone()) {
-				Ok(Term::Id(Id::Blank(_))) => Ok(()),
-				Ok(c) => {
-					if c == *a {
-						Ok(())
-					} else {
-						Err(ResourceUnificationFailed)
-					}
-				}
-				Err(_) => Err(ResourceUnificationFailed),
-			},
-			(a, b) => {
-				if a == b {
+		}
+	}
+
+	fn insert_term(&mut self, a: &LocalTerm, b: Term) -> Result<(), ResourceUnificationFailed> {
+		match a {
+			LocalTerm::Anonymous(a) => {
+				let i = self.import_blank_id(a);
+				let term = self.classes.get_mut(i).unwrap();
+				unify_local_term(term, &b)
+			}
+			LocalTerm::Named(a) => {
+				if *a == b {
 					Ok(())
 				} else {
 					Err(ResourceUnificationFailed)
@@ -107,80 +96,85 @@ impl TryUnifyInterpretation for UnifyLiteralInterpretation {
 			}
 		}
 	}
-
-	fn substitute_resource(&self, r: Self::Resource) -> Self::Resource {
-		self.map_term(r)
-	}
 }
 
-impl InterpretationMut<()> for UnifyLiteralInterpretation {
-	fn new_resource(&mut self, _vocabulary: &mut ()) -> Self::Resource {
-		let id = self.generator.next_blank_id();
-		self.classes.insert(id.clone(), Term::blank(id.clone()));
-		Term::blank(id)
+impl FallibleResourceUnifier<LocalTerm> for LocalTermUnifier {
+	type Error = ResourceUnificationFailed;
+
+	fn try_unify(&mut self, a: &LocalTerm, b: &LocalTerm) -> Result<LocalTerm, Self::Error> {
+		eprintln!("unify {a} and {b}");
+		match (a, b) {
+			(LocalTerm::Anonymous(a), LocalTerm::Anonymous(b)) => {
+				if a == b {
+					Ok(LocalTerm::Anonymous(a.to_owned()))
+				} else {
+					let ia = self.import_blank_id(a);
+					let ib = self.import_blank_id(b);
+					let i = self
+						.classes
+						.merge(ia, ib, |a, b| std::cmp::min(a, b))
+						.unwrap();
+					Ok(self.classes.get(i).unwrap().clone())
+				}
+			}
+			(LocalTerm::Anonymous(a), LocalTerm::Named(b)) => {
+				let i = self.import_blank_id(a);
+				let term = self.classes.get_mut(i).unwrap();
+				unify_local_term(term, b)?;
+				Ok(LocalTerm::Named(b.clone()))
+			}
+			(LocalTerm::Named(a), LocalTerm::Anonymous(b)) => {
+				let i = self.import_blank_id(b);
+				let term = self.classes.get_mut(i).unwrap();
+				unify_local_term(term, a)?;
+				Ok(LocalTerm::Named(a.clone()))
+			}
+			(LocalTerm::Named(a), LocalTerm::Named(b)) => {
+				if a == b {
+					Ok(LocalTerm::Named(a.to_owned()))
+				} else {
+					Err(ResourceUnificationFailed)
+				}
+			}
+		}
 	}
-}
 
-impl IriInterpretation<IriBuf> for UnifyLiteralInterpretation {
-	fn iri_interpretation(&self, iri: &IriBuf) -> Option<Self::Resource> {
-		Some(Term::iri(iri.clone()))
+	fn insert_iri<'a>(
+		&mut self,
+		r: &LocalTerm,
+		iri: impl Into<Cow<'a, Iri>>,
+	) -> Result<(), Self::Error> {
+		self.insert_term(r, Term::Iri(iri.into().into_owned()))
 	}
-}
 
-impl IriInterpretationMut for UnifyLiteralInterpretation {
-	fn interpret_iri(&mut self, iri: IriBuf) -> Self::Resource {
-		Term::iri(iri)
+	fn insert_literal<'a>(
+		&mut self,
+		r: &LocalTerm,
+		literal: impl Into<CowLiteral<'a>>,
+	) -> Result<(), Self::Error> {
+		self.insert_term(r, Term::Literal(literal.into().into_owned()))
 	}
-}
 
-impl ReverseIriInterpretation for UnifyLiteralInterpretation {
-	type Iri = IriBuf;
-
-	type Iris<'a>
-		= std::option::IntoIter<&'a IriBuf>
-	where
-		Self: 'a;
-
-	fn iris_of<'a>(&'a self, id: &'a Self::Resource) -> Self::Iris<'a> {
-		match id {
-			Term::Id(Id::Blank(b)) => match self.classes.get(b) {
-				Some(Term::Id(Id::Iri(iri))) => Some(iri).into_iter(),
-				_ => None.into_iter(),
+	fn substitute_resource(&self, r: LocalTerm) -> LocalTerm {
+		match r {
+			LocalTerm::Anonymous(b) => match self.map.get(&b) {
+				Some(&i) => self.classes.get(i).unwrap().clone(),
+				None => LocalTerm::Anonymous(b),
 			},
-			Term::Id(Id::Iri(iri)) => Some(iri).into_iter(),
-			Term::Literal(_) => None.into_iter(),
+			term => term,
 		}
 	}
 }
 
-impl LiteralInterpretation<Literal> for UnifyLiteralInterpretation {
-	fn literal_interpretation(&self, l: &Literal) -> Option<Self::Resource> {
-		Some(Term::Literal(l.clone()))
+fn unify_local_term(a: &mut LocalTerm, b: &Term) -> Result<(), ResourceUnificationFailed> {
+	if let LocalTerm::Named(a) = a {
+		return if a == b {
+			Ok(())
+		} else {
+			Err(ResourceUnificationFailed)
+		};
 	}
-}
 
-impl LiteralInterpretationMut for UnifyLiteralInterpretation {
-	fn interpret_literal(&mut self, l: Literal) -> Self::Resource {
-		Term::Literal(l)
-	}
-}
-
-impl ReverseLiteralInterpretation for UnifyLiteralInterpretation {
-	type Literal = Literal;
-
-	type Literals<'a>
-		= std::option::IntoIter<&'a Literal>
-	where
-		Self: 'a;
-
-	fn literals_of<'a>(&'a self, id: &'a Self::Resource) -> Self::Literals<'a> {
-		match id {
-			Term::Id(Id::Blank(b)) => match self.classes.get(b) {
-				Some(Term::Literal(l)) => Some(l).into_iter(),
-				_ => None.into_iter(),
-			},
-			Term::Id(Id::Iri(_)) => None.into_iter(),
-			Term::Literal(l) => Some(l).into_iter(),
-		}
-	}
+	*a = LocalTerm::Named(b.clone());
+	Ok(())
 }

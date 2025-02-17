@@ -1,9 +1,4 @@
-use educe::Educe;
-use iref::IriBuf;
-use locspan::{Meta, Span};
-use rdf_types::{GraphLabel, Id, Object, Quad, Term};
-
-use crate::TermPattern;
+use rdf_types::Quad;
 
 mod ignored;
 pub use ignored::*;
@@ -18,73 +13,61 @@ impl<A, B> PairExt<A, B> for (A, B) {
 	}
 }
 
-pub trait QuadsExt<'a, R>: Sized {
-	fn with_default_graph(self, graph: Option<&'a R>) -> QuadsWithDefaultGraph<'a, R, Self>;
+pub trait QuadsExt<R>: Sized {
+	fn with_default_graph(self, graph: Option<R>) -> QuadsWithDefaultGraph<R, Self>;
 }
 
-impl<'a, R: 'a, I> QuadsExt<'a, R> for I
+impl<R, I> QuadsExt<R> for I
 where
-	I: Iterator<
-		Item = Quad<&'a TermPattern<R>, &'a TermPattern<R>, &'a TermPattern<R>, &'a TermPattern<R>>,
-	>,
+	I: Iterator<Item = Quad<R>>,
 {
-	fn with_default_graph(self, graph: Option<&'a R>) -> QuadsWithDefaultGraph<'a, R, Self> {
+	fn with_default_graph(self, graph: Option<R>) -> QuadsWithDefaultGraph<R, Self> {
 		QuadsWithDefaultGraph { quads: self, graph }
 	}
 }
 
-#[derive(Educe)]
-#[educe(Clone(bound = "I: Clone"))]
-pub struct QuadsWithDefaultGraph<'a, R, I> {
+#[derive(Debug, Clone)]
+pub struct QuadsWithDefaultGraph<R, I> {
 	quads: I,
-	graph: Option<&'a R>,
+	graph: Option<R>,
 }
 
-impl<'a, R, I> Iterator for QuadsWithDefaultGraph<'a, R, I>
+impl<R, I> Iterator for QuadsWithDefaultGraph<R, I>
 where
-	I: Iterator<
-		Item = Quad<&'a TermPattern<R>, &'a TermPattern<R>, &'a TermPattern<R>, &'a TermPattern<R>>,
-	>,
+	R: Clone,
+	I: Iterator<Item = Quad<R>>,
 {
-	type Item =
-		Quad<TermPattern<&'a R>, TermPattern<&'a R>, TermPattern<&'a R>, TermPattern<&'a R>>;
+	type Item = Quad<R>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.quads.next().map(|quad| {
-			Quad(
-				quad.0.as_ref(),
-				quad.1.as_ref(),
-				quad.2.as_ref(),
-				quad.3
-					.map(TermPattern::as_ref)
-					.or_else(|| self.graph.map(TermPattern::Resource)),
-			)
-		})
+		self.quads
+			.next()
+			.map(|quad| quad.map_graph(|g| g.or_else(|| self.graph.clone())))
 	}
 }
 
-pub type MetaQuad = Meta<
-	rdf_types::Quad<Meta<Id, Span>, Meta<IriBuf, Span>, Meta<Object, Span>, Meta<GraphLabel, Span>>,
-	Span,
->;
+// pub type MetaQuad = Meta<
+// 	rdf_types::Quad<Meta<Id, Span>, Meta<IriBuf, Span>, Meta<Object, Span>, Meta<GraphLabel, Span>>,
+// 	Span,
+// >;
 
-/// Strips the input RDF `quad` of its metadata information and returns it as a
-/// gRDF quad (a quad where all components are [`Term`](rdf_types::Term)s).
-pub fn strip_rdf_quad(
-	locspan::Meta(Quad(
-		locspan::Meta(s, _),
-		locspan::Meta(p, _),
-		locspan::Meta(o, _),
-		g
-	), _): MetaQuad,
-) -> Quad {
-	Quad(
-		Term::Id(s),
-		Term::iri(p),
-		o,
-		g.map(|locspan::Meta(g, _)| Term::Id(g)),
-	)
-}
+// /// Strips the input RDF `quad` of its metadata information and returns it as a
+// /// gRDF quad (a quad where all components are [`Term`](rdf_types::Term)s).
+// pub fn strip_rdf_quad(
+// 	locspan::Meta(Quad(
+// 		locspan::Meta(s, _),
+// 		locspan::Meta(p, _),
+// 		locspan::Meta(o, _),
+// 		g
+// 	), _): MetaQuad,
+// ) -> Quad {
+// 	Quad(
+// 		Term::Id(s),
+// 		Term::iri(p),
+// 		o,
+// 		g.map(|locspan::Meta(g, _)| Term::Id(g)),
+// 	)
+// }
 
 pub fn try_map_list<A, B>(
 	l: Vec<A>,

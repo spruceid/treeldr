@@ -25,9 +25,9 @@ use crate::{
 	Registry, Type, TypeRef,
 };
 
-pub type List<R = rdf_types::Term> = Vec<Value<R>>;
+pub type List<R = rdf_types::LocalTerm> = Vec<Value<R>>;
 
-pub type Map<R = rdf_types::Term> = BTreeIndexMap<Value<R>, Value<R>>;
+pub type Map<R = rdf_types::LocalTerm> = BTreeIndexMap<Value<R>, Value<R>>;
 
 /// Untyped tree value.
 #[derive(
@@ -37,7 +37,7 @@ pub type Map<R = rdf_types::Term> = BTreeIndexMap<Value<R>, Value<R>>;
 	ser(seed(ResourceForwardIndex<R>), override_bounds(R: Eq + Hash)),
 	de(seed(ResourceBackwardIndex<R>), override_bounds(R: Clone + Ord))
 )]
-pub enum Value<R = rdf_types::Term> {
+pub enum Value<R = rdf_types::LocalTerm> {
 	Resource(#[seeded(with(serde_indexed_resource))] R),
 	Literal(Literal),
 	Map(Map<R>),

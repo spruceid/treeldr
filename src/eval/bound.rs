@@ -1,26 +1,24 @@
 use std::borrow::Cow;
 
 use rdf_types::{
-	dataset::{BTreeDataset, DatasetMut, PatternMatchingDataset, TraversableDataset},
+	dataset::{BTreeDataset, TraversableDataset},
 	Quad,
 };
 
 use crate::{
 	expr::Bindings,
 	pattern::Substitution,
-	rdf::EvalDataset,
 	utils::{QuadsExt, QuadsWithDefaultGraph},
 	Matching, Registry, TermPattern, Value,
 };
 
-use super::{Eval, EvalError, RdfContextMut, Scope, ScopeTypes, ScopeValues};
+use super::{Eval, EvalContext, EvalError, Scope, ScopeTypes, ScopeValues};
 
 impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 	pub fn eval<'s>(
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &'s Scope<'s, P, R>,
 	) -> Result<Option<Cow<'s, Scope<'s, P, R>>>, EvalError<R>> {
 		let mut values = Vec::with_capacity(self.len());
@@ -28,10 +26,10 @@ impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 		for b in &self.list {
 			match &b.assignment {
 				Some(e) => {
-					let value = e.eval(registry, rdf, dataset, scope)?;
+					let value = e.eval(registry, rdf, scope)?;
 					values.extend(
 						b.pattern
-							.eval(registry, rdf, dataset, scope, value)?
+							.eval(registry, rdf, scope, value)?
 							.into_iter()
 							.map(Some),
 					);
@@ -42,29 +40,26 @@ impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 			}
 		}
 
-		self.find_one_with(dataset, scope, |i| values[i as usize].take())
+		self.find_one_with(rdf, scope, |i| Option::take(&mut values[i as usize]))
 	}
 
-	pub fn eval_inverse<C, D>(
+	pub fn eval_inverse<C>(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
 		rdf: &mut C,
-		dataset: &mut D,
 		scope: &mut Scope<P, R>,
-		f: impl FnOnce(&mut C, &mut D, &mut Scope<P, R>) -> Result<(), EvalError<R>>,
+		f: impl FnOnce(&mut C, &mut Scope<P, R>) -> Result<(), EvalError<R>>,
 	) -> Result<(), EvalError<R>>
 	where
-		C: RdfContextMut<Resource = R>,
-		D: EvalDataset<R>,
+		C: EvalContext<Resource = R>,
 	{
 		let mut values = scope.begin_mut(
 			rdf,
-			dataset,
 			None,
 			ScopeTypes::Slice(&self.variables),
-			move |rdf, dataset, scope| {
+			move |rdf, scope| {
 				scope.extend_dataset(self.dataset.iter().map(Quad::into_cloned));
-				f(rdf, dataset, scope)
+				f(rdf, scope)
 			},
 		)?;
 
@@ -73,11 +68,9 @@ impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 		values.reverse();
 
 		for b in &self.list {
-			let value = b
-				.pattern
-				.eval_inverse(registry, rdf, dataset, scope, &mut values)?;
+			let value = b.pattern.eval_inverse(registry, rdf, scope, &mut values)?;
 			if let Some(e) = &b.assignment {
-				e.eval_inverse(registry, rdf, dataset, scope, &value)?;
+				e.eval_inverse(registry, rdf, scope, &value)?;
 			}
 		}
 
@@ -88,9 +81,8 @@ impl<P: Copy + Ord, R: Clone + Ord> Bindings<P, R> {
 impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 	pub fn find_one_with<'s>(
 		&'s self,
-		dataset: &impl PatternMatchingDataset<Resource = R>,
+		rdf: &impl EvalContext<Resource = R>,
 		scope: &'s Scope<'s, P, R>,
-		// f: impl Fn(u32) -> Result<Option<Value<R>>, EvalError<R>>,
 		f: impl FnMut(u32) -> Option<Value<R>>,
 	) -> Result<Option<Cow<'s, Scope<'s, P, R>>>, EvalError<R>> {
 		let len = self.len();
@@ -98,10 +90,13 @@ impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 			Ok(Some(Cow::Borrowed(scope)))
 		} else {
 			let mut matching = Matching::new(
-				dataset,
+				rdf,
 				scope,
 				Substitution::new(len as u32, f),
-				self.dataset.quads().with_default_graph(scope.graph()),
+				self.dataset
+					.quads()
+					.map(|quad| quad.map(TermPattern::as_ref))
+					.with_default_graph(scope.graph().map(|r| TermPattern::Resource(r))),
 			);
 
 			match matching.next() {
@@ -123,39 +118,41 @@ impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 
 	pub fn find_all<'a, D>(
 		&'a self,
-		dataset: &'a D,
+		rdf: &'a D,
 		scope: &'a Scope<'a, P, R>,
-	) -> Matching<'a, 'a, P, R, D, EmbeddedQuads<'a, R>>
+	) -> Matching<'a, P, R, D, EmbeddedQuads<'a, R>>
 	where
-		D: PatternMatchingDataset<Resource = R>,
+		D: EvalContext<Resource = R>,
 	{
+		let quad_pattern_as_ref: QuadPatternAsRef<'a, R> = |quad| quad.map(TermPattern::as_ref);
 		Matching::new(
-			dataset,
+			rdf,
 			scope,
 			Substitution::new(self.list.len() as u32, |_| None),
-			self.dataset.quads().with_default_graph(scope.graph()),
+			self.dataset
+				.quads()
+				.map(quad_pattern_as_ref)
+				.with_default_graph(scope.graph().map(TermPattern::Resource)),
 		)
 	}
 
-	pub fn find_one_inverse<C, D>(
+	pub fn find_one_inverse<C>(
 		&self,
 		rdf: &mut C,
-		dataset: &mut D,
 		scope: &mut Scope<P, R>,
-		f: impl FnOnce(&mut C, &mut D, &mut Scope<P, R>) -> Result<(), EvalError<R>>,
+		f: impl FnOnce(&mut C, &mut Scope<P, R>) -> Result<(), EvalError<R>>,
 	) -> Result<Vec<Value<R>>, EvalError<R>>
 	where
-		C: RdfContextMut<Resource = R>,
-		D: DatasetMut<Resource = R>,
+		C: EvalContext<Resource = R>,
 	{
 		let values = scope.begin_mut(
 			rdf,
-			dataset,
 			None,
 			ScopeTypes::Slice(&self.variables),
-			move |rdf, dataset, scope| {
-				scope.extend_dataset(self.dataset.iter().map(Quad::into_cloned));
-				f(rdf, dataset, scope)
+			move |rdf, scope| {
+				let quads = self.dataset.iter().map(Quad::into_cloned);
+				scope.extend_dataset(quads);
+				f(rdf, scope)
 			},
 		);
 
@@ -163,5 +160,17 @@ impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 	}
 }
 
-type EmbeddedQuads<'a, R> =
-	QuadsWithDefaultGraph<'a, R, <BTreeDataset<TermPattern<R>> as TraversableDataset>::Quads<'a>>;
+// fn binding_quad_to_deduced<'a, R>(quad: Quad<&'a TermPattern<R>>) -> Quad<TermPattern<DeducedResourceRef<'a, R>>> {
+// 	quad.map(|pattern| {
+// 		pattern.mapped(|r| DeducedResourceRef::Base(r))
+// 	})
+// }
+
+type QuadPatternAsRef<'a, R> = fn(Quad<&'a TermPattern<R>>) -> Quad<TermPattern<&'a R>>;
+
+type BindingQuads<'a, R> = std::iter::Map<
+	<BTreeDataset<TermPattern<R>> as TraversableDataset>::Quads<'a>,
+	QuadPatternAsRef<'a, R>,
+>;
+
+type EmbeddedQuads<'a, R> = QuadsWithDefaultGraph<TermPattern<&'a R>, BindingQuads<'a, R>>;

@@ -2,7 +2,7 @@ use core::fmt;
 use std::fmt::Write;
 
 use iref::IriBuf;
-use rdf_types::{BlankIdBuf, IsXsdStringIri, RdfDisplay, Term};
+use rdf_types::{BlankIdBuf, LocalTerm, RdfDisplay, Term};
 
 use crate::{Registry, TypeRef};
 
@@ -91,20 +91,20 @@ pub trait DisplayResource {
 	fn fmt_resource(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result;
 }
 
-impl<I: DisplayResource, L: DisplayResource> DisplayResource for Term<I, L> {
+impl DisplayResource for Term {
 	fn fmt_resource(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::Id(id) => id.fmt_resource(f),
+			Self::Iri(id) => id.fmt_resource(f),
 			Self::Literal(l) => l.fmt_resource(f),
 		}
 	}
 }
 
-impl<I: DisplayResource, B: DisplayResource> DisplayResource for rdf_types::Id<I, B> {
+impl DisplayResource for LocalTerm {
 	fn fmt_resource(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::Iri(i) => i.fmt_resource(f),
-			Self::Blank(b) => b.fmt_resource(f),
+			Self::Anonymous(blank_id) => blank_id.rdf_fmt(f),
+			Self::Named(named) => named.fmt_resource(f),
 		}
 	}
 }
@@ -121,7 +121,7 @@ impl DisplayResource for BlankIdBuf {
 	}
 }
 
-impl<I: RdfDisplay + IsXsdStringIri> DisplayResource for rdf_types::Literal<I> {
+impl DisplayResource for rdf_types::Literal {
 	fn fmt_resource(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		string_literal(&self.value, StringLiteralDelimiter::Single, f)?;
 		if self.type_.is_xsd_string() {

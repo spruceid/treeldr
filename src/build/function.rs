@@ -1,10 +1,10 @@
 use std::hash::Hash;
 
 use ll1::Spanned;
+use rdf_types::InterpretationMut;
 
 use crate::{
 	function::{self, Signature},
-	rdf::RdfContextMut,
 	syntax::ast,
 	Function, ModuleRef, Registry,
 };
@@ -29,7 +29,7 @@ impl<'ast, P: Copy + Ord + Hash> FunctionDefinition<'ast, P> {
 	where
 		E: ?Sized + Registry<PackageId = P>,
 		E::Resource: Clone + Ord + Hash,
-		D: RdfContextMut<Resource = E::Resource>,
+		D: InterpretationMut<Resource = E::Resource>,
 	{
 		let scope = Scope {
 			module: Some(self.module),

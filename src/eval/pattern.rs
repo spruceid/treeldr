@@ -1,7 +1,6 @@
-use super::{Eval, EvalError, Scope};
+use super::{Eval, EvalContext, EvalError, Scope};
 use crate::{
 	pattern::{CallPattern, PatternDesc},
-	rdf::{EvalDataset, RdfContextMut, TryUnifyInterpretation},
 	Pattern, Registry, Value,
 };
 
@@ -9,27 +8,23 @@ impl<P: Copy + Ord, R: Clone + Ord> Pattern<P, R> {
 	pub fn eval<'s>(
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &'s Scope<'s, P, R>,
 		value: Value<R>,
 	) -> Result<Vec<Value<R>>, EvalError<R>> {
 		let mut result = Vec::new();
-		self.desc
-			.eval(registry, rdf, dataset, scope, &mut result, value)?;
+		self.desc.eval(registry, rdf, scope, &mut result, value)?;
 		Ok(result)
 	}
 
 	pub fn eval_inverse<'s>(
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &'s Scope<'s, P, R>,
 		values: &mut Vec<Value<R>>,
 	) -> Result<Value<R>, EvalError<R>> {
-		self.desc
-			.eval_inverse(registry, rdf, dataset, scope, values)
+		self.desc.eval_inverse(registry, rdf, scope, values)
 	}
 }
 
@@ -37,8 +32,7 @@ impl<P: Copy + Ord, R: Clone + Ord> PatternDesc<P, R> {
 	pub fn eval<'s>(
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &'s Scope<'s, P, R>,
 		result: &mut Vec<Value<R>>,
 		value: Value<R>,
@@ -54,7 +48,7 @@ impl<P: Copy + Ord, R: Clone + Ord> PatternDesc<P, R> {
 				}
 
 				for (p, v) in patterns.iter().zip(values) {
-					p.eval(registry, rdf, dataset, scope, v)?;
+					p.eval(registry, rdf, scope, v)?;
 				}
 
 				Ok(())
@@ -67,7 +61,7 @@ impl<P: Copy + Ord, R: Clone + Ord> PatternDesc<P, R> {
 				for (k, v) in entries {
 					match patterns.get_untyped(&k) {
 						Some(p) => {
-							p.eval(registry, rdf, dataset, scope, v)?;
+							p.eval(registry, rdf, scope, v)?;
 						}
 						None => return Err(EvalError::InvalidType),
 					}
@@ -75,7 +69,7 @@ impl<P: Copy + Ord, R: Clone + Ord> PatternDesc<P, R> {
 
 				Ok(())
 			}
-			(Self::Call(call), value) => call.eval(registry, rdf, dataset, scope, result, value),
+			(Self::Call(call), value) => call.eval(registry, rdf, scope, result, value),
 			_ => Err(EvalError::InvalidType),
 		}
 	}
@@ -83,8 +77,7 @@ impl<P: Copy + Ord, R: Clone + Ord> PatternDesc<P, R> {
 	pub fn eval_inverse<'s>(
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &'s Scope<'s, P, R>,
 		values: &mut Vec<Value<R>>,
 	) -> Result<Value<R>, EvalError<R>> {
@@ -92,18 +85,18 @@ impl<P: Copy + Ord, R: Clone + Ord> PatternDesc<P, R> {
 			Self::Var(_) => Ok(values.pop().unwrap()),
 			Self::List(patterns) => patterns
 				.iter()
-				.map(|p| p.eval_inverse(registry, rdf, dataset, scope, values))
+				.map(|p| p.eval_inverse(registry, rdf, scope, values))
 				.collect::<Result<_, _>>()
 				.map(Value::List),
 			Self::Map(patterns) => patterns
 				.iter()
 				.map(|(k, p)| {
-					p.eval_inverse(registry, rdf, dataset, scope, values)
+					p.eval_inverse(registry, rdf, scope, values)
 						.map(|v| (k.to_untyped(), v))
 				})
 				.collect::<Result<_, _>>()
 				.map(Value::Map),
-			Self::Call(call) => call.eval_inverse(registry, rdf, dataset, scope, values),
+			Self::Call(call) => call.eval_inverse(registry, rdf, scope, values),
 		}
 	}
 }
@@ -112,8 +105,7 @@ impl<P: Copy + Ord, R: Clone + Ord> CallPattern<P, R> {
 	pub fn eval<'s>(
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &'s Scope<'s, P, R>,
 		result: &mut Vec<Value<R>>,
 		output: Value<R>,
@@ -121,23 +113,18 @@ impl<P: Copy + Ord, R: Clone + Ord> CallPattern<P, R> {
 		let const_args: Vec<_> = self
 			.const_args
 			.iter()
-			.map(|a| a.eval(registry, rdf, dataset, scope))
+			.map(|a| a.eval(registry, rdf, scope))
 			.collect::<Result<_, _>>()?;
+
+		// let mut inner_rdf = rdf.begin();
 
 		let values = registry
 			.get_function(self.function)
 			.unwrap()
-			.call_inverse_without_unification(registry, rdf, dataset, &const_args, &output)?;
-
-		// Calling the inverse function may cause some resources to be unified
-		// together. To ensure that pattern matching remains sound, we must
-		// update the RDF dataset accordingly.
-		dataset.apply_unification(rdf.interpretation());
-		// FIXME: the values in scope should be substituted too, right?
+			.call_inverse_with(registry, rdf, &const_args, &output)?;
 
 		for (arg, value) in self.args.iter().zip(values) {
-			arg.desc
-				.eval(registry, rdf, dataset, scope, result, value)?;
+			arg.desc.eval(registry, rdf, scope, result, value)?;
 		}
 
 		Ok(())
@@ -146,32 +133,23 @@ impl<P: Copy + Ord, R: Clone + Ord> CallPattern<P, R> {
 	pub fn eval_inverse<'s>(
 		&'s self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &'s Scope<'s, P, R>,
 		values: &mut Vec<Value<R>>,
 	) -> Result<Value<R>, EvalError<R>> {
 		let mut evaluated_args = Vec::with_capacity(self.const_args.len() + self.args.len());
 
 		for a in &self.const_args {
-			evaluated_args.push(a.eval(registry, rdf, dataset, scope)?);
+			evaluated_args.push(a.eval(registry, rdf, scope)?);
 		}
 
 		for a in &self.args {
-			evaluated_args.push(a.eval_inverse(registry, rdf, dataset, scope, values)?);
-		}
-
-		// Before we can call the function, we must ensure that the latest RDF
-		// resources unification are reflected in the RDF dataset so that
-		// pattern matching remains sound.
-		dataset.apply_unification(rdf.interpretation());
-		for value in &mut evaluated_args {
-			value.map_resources(|r| rdf.interpretation().substitute_resource(r));
+			evaluated_args.push(a.eval_inverse(registry, rdf, scope, values)?);
 		}
 
 		registry
 			.get_function(self.function)
 			.unwrap()
-			.call_without_unification(registry, rdf, dataset, &evaluated_args)
+			.call_with(registry, rdf, &evaluated_args)
 	}
 }

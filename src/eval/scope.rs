@@ -1,14 +1,9 @@
-use super::EvalError;
+use super::{EvalContext, EvalError};
 use crate::{
-	pattern::Substitution,
-	rdf::{DebugSubstitution, RdfContext, RdfContextMut},
-	value::List,
-	DatasetPattern, TermPattern, TypeRef, Value,
+	pattern::Substitution, rdf::DebugSubstitution, value::List, DatasetPattern, TermPattern,
+	TypeRef, Value,
 };
-use rdf_types::{
-	dataset::{BTreeDataset, DatasetMut},
-	Quad, Term,
-};
+use rdf_types::{dataset::BTreeDataset, LocalTerm, Quad};
 
 #[derive(Clone, Copy)]
 pub enum ScopeTypes<'a, P> {
@@ -156,7 +151,7 @@ impl<'parent, P, R> Scope<'parent, P, R> {
 
 	pub fn set(
 		&self,
-		rdf: &mut impl RdfContextMut<Resource = R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		i: u32,
 		value: Value<R>,
 	) -> Result<(), EvalError<R>>
@@ -187,10 +182,10 @@ impl<'parent, P, R> Scope<'parent, P, R> {
 
 	pub fn substitute_pattern(
 		&self,
-		rdf: &impl RdfContext<Resource = R>,
+		rdf: &impl EvalContext<Resource = R>,
 		substitution: &mut DebugSubstitution<R>,
 		pattern: &TermPattern<R>,
-	) -> Term
+	) -> LocalTerm
 	where
 		R: Ord + Clone,
 	{
@@ -206,7 +201,7 @@ impl<'parent, P, R> Scope<'parent, P, R> {
 
 	pub fn substitute_dataset(
 		&self,
-		rdf: &impl RdfContext<Resource = R>,
+		rdf: &impl EvalContext<Resource = R>,
 		substitution: &mut DebugSubstitution<R>,
 		dataset: &DatasetPattern<R>,
 	) -> BTreeDataset
@@ -255,18 +250,16 @@ impl<'a, P, R: Clone> Scope<'a, P, R> {
 	///
 	/// This guarantees that the sub scopes does not outlive the parent scope
 	/// and that is has exclusive access over the parent scope.
-	pub fn begin_mut<C, D>(
+	pub fn begin_mut<C>(
 		&mut self,
 		rdf: &mut C,
-		dataset: &mut D,
 		graph: Option<Option<R>>,
 		// types: &[TypeRef],
 		types: ScopeTypes<P>,
-		f: impl FnOnce(&mut C, &mut D, &mut Scope<P, R>) -> Result<(), EvalError<R>>,
+		f: impl FnOnce(&mut C, &mut Scope<P, R>) -> Result<(), EvalError<R>>,
 	) -> Result<Vec<Value<R>>, EvalError<R>>
 	where
-		C: RdfContextMut<Resource = R>,
-		D: DatasetMut<Resource = R>,
+		C: EvalContext<Resource = R>,
 	{
 		let types_len = types.len();
 		let (substitution, more_patterns) = {
@@ -278,9 +271,9 @@ impl<'a, P, R: Clone> Scope<'a, P, R> {
 				dataset: Vec::new(),
 			};
 
-			f(rdf, dataset, &mut sub_scope)?;
+			f(rdf, &mut sub_scope)?;
 
-			sub_scope.end(rdf, dataset)?
+			sub_scope.end(rdf)?
 		};
 
 		self.dataset.extend(more_patterns);
@@ -289,14 +282,13 @@ impl<'a, P, R: Clone> Scope<'a, P, R> {
 
 	fn end(
 		self,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl DatasetMut<Resource = R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 	) -> Result<(List<R>, UnresolvedQuads<R>), EvalError<R>> {
 		let mut patterns = Vec::new();
 		for quad_pattern in &self.dataset {
 			match TermPattern::quad_into_resources(self.realize_quad(rdf, quad_pattern)?) {
 				Ok(quad) => {
-					dataset.insert(quad);
+					rdf.insert(quad);
 				}
 				Err(quad_pattern) => patterns.push(quad_pattern),
 			}
@@ -306,14 +298,14 @@ impl<'a, P, R: Clone> Scope<'a, P, R> {
 			.values
 			.into_mut()
 			.unwrap()
-			.try_into_total_with(|_| Ok(Value::Resource(rdf.new_resource())))?;
+			.into_total_with(|_| Value::Resource(rdf.new_resource()));
 
 		Ok((substitution, patterns))
 	}
 
 	fn realize_quad(
 		&self,
-		rdf: &mut impl RdfContextMut<Resource = R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		quad: &Quad<TermPattern<R>>,
 	) -> Result<Quad<TermPattern<R>>, EvalError<R>> {
 		Ok(Quad(
@@ -329,7 +321,7 @@ impl<'a, P, R: Clone> Scope<'a, P, R> {
 
 	fn realize_term(
 		&self,
-		rdf: &mut impl RdfContextMut<Resource = R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		t: &TermPattern<R>,
 	) -> Result<TermPattern<R>, EvalError<R>> {
 		match t {
@@ -395,7 +387,7 @@ impl<R> ScopeValues<'_, R> {
 
 	pub fn set(
 		&self,
-		rdf: &mut impl RdfContextMut<Resource = R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		i: u32,
 		value: Value<R>,
 	) -> Result<(), EvalError<R>>
@@ -405,9 +397,10 @@ impl<R> ScopeValues<'_, R> {
 		match self {
 			Self::Mut(values) => match values.set(i, value) {
 				Ok(()) => Ok(()),
-				Err((Value::Resource(a), Value::Resource(b))) => rdf
-					.unify(a, &b)
-					.map_err(|_| EvalError::ResourceUnificationError),
+				Err((Value::Resource(a), Value::Resource(b))) => {
+					rdf.unify(a, &b);
+					Ok(())
+				}
 				Err(_) => Err(EvalError::Ambiguity),
 			},
 			_ => panic!("cannot mutate const scope"),

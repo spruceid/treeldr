@@ -1,18 +1,17 @@
-use super::{Eval, EvalError, EvalTyped, MissingData, RdfContextMut, Scope};
-use crate::{expr::Match, rdf::EvalDataset, Registry, TypeRef, Value};
+use super::{Eval, EvalContext, EvalError, EvalTyped, MissingData, Scope};
+use crate::{expr::Match, Registry, TypeRef, Value};
 
 impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Match<P, R> {
 	fn eval_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &impl EvalContext<Resource = R>,
 		scope: &Scope<P, R>,
 		_type_ref: TypeRef<P>,
 	) -> Result<Value<R>, EvalError<R>> {
 		for name in &self.order {
 			let expr = self.cases.get(name).unwrap();
-			match expr.eval(registry, rdf, dataset, scope) {
+			match expr.eval(registry, rdf, scope) {
 				Ok(value) => return Ok(value),
 				Err(EvalError::MissingData(_)) => (),
 				Err(e) => return Err(e),
@@ -25,8 +24,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Match<P, R> {
 	fn eval_inverse_typed(
 		&self,
 		registry: &impl Registry<PackageId = P, Resource = R>,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl EvalDataset<R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &mut Scope<P, R>,
 		_type_ref: TypeRef<P>,
 		output: &Value<R>,
@@ -34,7 +32,7 @@ impl<P: Copy + Ord, R: Clone + Ord> EvalTyped<P, R> for Match<P, R> {
 		for name in &self.order {
 			let expr = self.cases.get(name).unwrap();
 			if expr.r#type.contains(registry, output) {
-				return expr.eval_inverse(registry, rdf, dataset, scope, output);
+				return expr.eval_inverse(registry, rdf, scope, output);
 			}
 		}
 

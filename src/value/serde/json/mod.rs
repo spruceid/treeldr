@@ -9,7 +9,7 @@ mod serde_json;
 /// Error raised when trying to convert a value to JSON that is not compatible
 /// with the JSON data model.
 #[derive(Debug, thiserror::Error)]
-pub enum NonJsonValue<R = rdf_types::Term> {
+pub enum NonJsonValue<R = rdf_types::LocalTerm> {
 	/// RDF resource value, not supported by JSON.
 	#[error("RDF resource cannot be converted to JSON")]
 	Resource,

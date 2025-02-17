@@ -1,22 +1,21 @@
 use std::borrow::Cow;
 
 use iref::Iri;
-use rdf_types::{
-	dataset::{DatasetMut, PatternMatchingDataset},
-	interpretation::{IriInterpretation, ReverseIriInterpretation, ReverseLiteralInterpretation},
-	vocabulary::{IriVocabulary, LiteralVocabulary},
-	LiteralTypeRef, Quad, RDF_LANG_STRING,
-};
+use rdf_types::{CowLiteral, CowLiteralType, Quad, RDF_LANG_STRING};
 use serde_seeded::{DeserializeSeeded, SerializeSeeded};
 use xsd_types::{
 	ParseXsd, XSD_BOOLEAN, XSD_DECIMAL, XSD_INTEGER, XSD_NON_NEGATIVE_INTEGER, XSD_STRING,
 };
 
 use crate::{
-	eval::{EvalError, MissingData, Scope},
-	rdf::{DebugSubstitution, RdfContext, RdfContextMut},
+	// eval::{EvalError, MissingData, Scope},
+	// rdf::DebugSubstitution,
+	eval::{EvalContext, EvalError, MissingData, Scope},
+	rdf::DebugSubstitution,
 	ty::{BuiltInType, BuiltInTypeMap},
-	DatasetPattern, TypeRef, Value,
+	DatasetPattern,
+	TypeRef,
+	Value,
 };
 
 use super::Signature;
@@ -123,8 +122,7 @@ impl BuiltInFunction {
 
 	pub fn eval<R: Ord + Clone>(
 		&self,
-		rdf: &impl RdfContext<Resource = R>,
-		dataset: &impl PatternMatchingDataset<Resource = R>,
+		rdf: &impl EvalContext<Resource = R>,
 		args: &[Value<R>],
 	) -> Result<Value<R>, EvalError<R>> {
 		match self {
@@ -132,7 +130,7 @@ impl BuiltInFunction {
 				let predicate = args[0].as_resource().unwrap();
 				let subject = args[1].as_resource().unwrap();
 
-				let mut objects = dataset.quad_objects(None, subject, predicate);
+				let mut objects = rdf.quad_objects(None, subject, predicate);
 
 				match objects.next() {
 					Some(object) => {
@@ -159,87 +157,79 @@ impl BuiltInFunction {
 			}
 			Self::IriOf => {
 				let r = args[0].as_resource().unwrap();
-
-				let mut value = None;
-				for i in rdf.interpretation().iris_of(r) {
-					let iri = rdf.vocabulary().iri(i).unwrap();
-					if let Some(old_value) = value.replace(iri) {
-						return Err(EvalError::AmbiguousIriRepresentation(
-							old_value.to_owned(),
-							iri.to_owned(),
-						));
-					}
-				}
-
-				match value {
-					Some(value) => Ok(Value::string(value.as_str().to_owned())),
-					None => Err(EvalError::MissingData(
-						MissingData::NoMatchingIriRepresentation,
-					)),
-				}
+				let iri = iri_of(rdf, r)?;
+				Ok(Value::string(iri.into_owned().into_string()))
 			}
 			Self::BoolOf => {
 				let r = args[0].as_resource().unwrap();
-				let v = xsd_types::Boolean::parse_xsd(find_literal_lexical(rdf, r, XSD_BOOLEAN)?)
-					.map_err(|_| EvalError::InvalidValue)?;
+				let v = xsd_types::Boolean::parse_xsd(
+					find_literal_lexical(rdf, r, XSD_BOOLEAN)?.as_ref(),
+				)
+				.map_err(|_| EvalError::InvalidValue)?;
 				Ok(Value::boolean(v.into()))
 			}
 			Self::TypedBoolOf => {
 				let ty = args[0].as_resource().unwrap();
 				let r = args[1].as_resource().unwrap();
-				let v = xsd_types::Boolean::parse_xsd(find_literal_interpreted(rdf, r, ty)?)
-					.map_err(|_| EvalError::InvalidValue)?;
+				let v =
+					xsd_types::Boolean::parse_xsd(find_literal_interpreted(rdf, r, ty)?.as_ref())
+						.map_err(|_| EvalError::InvalidValue)?;
 				Ok(Value::boolean(v.into()))
 			}
 			Self::NumberOf => {
 				let r = args[0].as_resource().unwrap();
-				let v = xsd_types::Decimal::parse_xsd(find_literal_lexical(rdf, r, XSD_DECIMAL)?)
-					.map_err(|_| EvalError::InvalidValue)?;
+				let v = xsd_types::Decimal::parse_xsd(
+					find_literal_lexical(rdf, r, XSD_DECIMAL)?.as_ref(),
+				)
+				.map_err(|_| EvalError::InvalidValue)?;
 				Ok(Value::number(v.into()))
 			}
 			Self::TypedNumberOf => {
 				let ty = args[0].as_resource().unwrap();
 				let r = args[1].as_resource().unwrap();
-				let v = xsd_types::Decimal::parse_xsd(find_literal_interpreted(rdf, r, ty)?)
-					.map_err(|_| EvalError::InvalidValue)?;
+				let v =
+					xsd_types::Decimal::parse_xsd(find_literal_interpreted(rdf, r, ty)?.as_ref())
+						.map_err(|_| EvalError::InvalidValue)?;
 				Ok(Value::number(v.into()))
 			}
 			Self::IntOf => {
 				let r = args[0].as_resource().unwrap();
-				let v = xsd_types::Integer::parse_xsd(find_literal_lexical(rdf, r, XSD_INTEGER)?)
-					.map_err(|_| EvalError::InvalidValue)?;
+				let v = xsd_types::Integer::parse_xsd(
+					find_literal_lexical(rdf, r, XSD_INTEGER)?.as_ref(),
+				)
+				.map_err(|_| EvalError::InvalidValue)?;
 				Ok(Value::number(v.into()))
 			}
 			Self::TypedIntOf => {
 				let ty = args[0].as_resource().unwrap();
 				let r = args[1].as_resource().unwrap();
-				let v = xsd_types::Integer::parse_xsd(find_literal_interpreted(rdf, r, ty)?)
-					.map_err(|_| EvalError::InvalidValue)?;
+				let v =
+					xsd_types::Integer::parse_xsd(find_literal_interpreted(rdf, r, ty)?.as_ref())
+						.map_err(|_| EvalError::InvalidValue)?;
 				Ok(Value::number(v.into()))
 			}
 			Self::UintOf => {
 				let r = args[0].as_resource().unwrap();
-				let v = xsd_types::NonNegativeInteger::parse_xsd(find_literal_lexical(
-					rdf,
-					r,
-					XSD_NON_NEGATIVE_INTEGER,
-				)?)
+				let v = xsd_types::NonNegativeInteger::parse_xsd(
+					find_literal_lexical(rdf, r, XSD_NON_NEGATIVE_INTEGER)?.as_ref(),
+				)
 				.map_err(|_| EvalError::InvalidValue)?;
 				Ok(Value::number(v.into()))
 			}
 			Self::TypedUintOf => {
 				let ty = args[0].as_resource().unwrap();
 				let r = args[1].as_resource().unwrap();
-				let v =
-					xsd_types::NonNegativeInteger::parse_xsd(find_literal_interpreted(rdf, r, ty)?)
-						.map_err(|_| EvalError::InvalidValue)?;
+				let v = xsd_types::NonNegativeInteger::parse_xsd(
+					find_literal_interpreted(rdf, r, ty)?.as_ref(),
+				)
+				.map_err(|_| EvalError::InvalidValue)?;
 				Ok(Value::number(v.into()))
 			}
 			Self::StringOf => {
 				let r = args[0].as_resource().unwrap();
 
 				find_literal_lexical(rdf, r, XSD_STRING)
-					.map(ToOwned::to_owned)
+					.map(Cow::into_owned)
 					.map(Value::string)
 			}
 			Self::TypedStringOf => {
@@ -247,7 +237,7 @@ impl BuiltInFunction {
 				let r = args[1].as_resource().unwrap();
 
 				find_literal_interpreted(rdf, r, ty)
-					.map(ToOwned::to_owned)
+					.map(Cow::into_owned)
 					.map(Value::string)
 			}
 		}
@@ -255,8 +245,7 @@ impl BuiltInFunction {
 
 	pub fn eval_inverse<P, R>(
 		&self,
-		rdf: &mut impl RdfContextMut<Resource = R>,
-		dataset: &mut impl DatasetMut<Resource = R>,
+		rdf: &mut impl EvalContext<Resource = R>,
 		scope: &mut Scope<P, R>,
 		output: &Value<R>,
 	) -> Result<Vec<Value<R>>, EvalError<R>>
@@ -268,7 +257,7 @@ impl BuiltInFunction {
 				let predicate = rdf.new_resource();
 				let subject = rdf.new_resource();
 
-				dataset.insert(Quad(
+				rdf.insert(Quad(
 					subject.clone(),
 					predicate.clone(),
 					output.as_resource().unwrap().clone(),
@@ -285,14 +274,14 @@ impl BuiltInFunction {
 			}
 			Self::BoolOf => {
 				let value = xsd_types::Boolean(output.as_bool().unwrap());
-				let r = rdf.insert_literal(value.to_string(), Cow::Borrowed(XSD_BOOLEAN));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), XSD_BOOLEAN));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedBoolOf => {
 				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
 
 				let value = xsd_types::Boolean(output.as_bool().unwrap());
-				let r = rdf.insert_literal(value.to_string(), Cow::Owned(ty));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty.into_owned()));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::NumberOf => {
@@ -302,7 +291,7 @@ impl BuiltInFunction {
 					.clone()
 					.try_into()
 					.map_err(|_| EvalError::InvalidValue)?;
-				let r = rdf.insert_literal(value.to_string(), Cow::Borrowed(XSD_DECIMAL));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), XSD_DECIMAL));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedNumberOf => {
@@ -314,7 +303,7 @@ impl BuiltInFunction {
 					.clone()
 					.try_into()
 					.map_err(|_| EvalError::InvalidValue)?;
-				let r = rdf.insert_literal(value.to_string(), Cow::Owned(ty));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty.into_owned()));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::IntOf => {
@@ -324,7 +313,7 @@ impl BuiltInFunction {
 					.clone()
 					.try_into()
 					.map_err(|_| EvalError::InvalidValue)?;
-				let r = rdf.insert_literal(value.to_string(), Cow::Borrowed(XSD_INTEGER));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), XSD_INTEGER));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedIntOf => {
@@ -336,7 +325,7 @@ impl BuiltInFunction {
 					.clone()
 					.try_into()
 					.map_err(|_| EvalError::InvalidValue)?;
-				let r = rdf.insert_literal(value.to_string(), Cow::Owned(ty));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty.into_owned()));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::UintOf => {
@@ -346,8 +335,8 @@ impl BuiltInFunction {
 					.clone()
 					.try_into()
 					.map_err(|_| EvalError::InvalidValue)?;
-				let r =
-					rdf.insert_literal(value.to_string(), Cow::Borrowed(XSD_NON_NEGATIVE_INTEGER));
+				let r = rdf
+					.insert_literal(CowLiteral::new(value.to_string(), XSD_NON_NEGATIVE_INTEGER));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedUintOf => {
@@ -359,19 +348,19 @@ impl BuiltInFunction {
 					.clone()
 					.try_into()
 					.map_err(|_| EvalError::InvalidValue)?;
-				let r = rdf.insert_literal(value.to_string(), Cow::Owned(ty));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty.into_owned()));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::StringOf => {
 				let value = output.as_str().unwrap();
-				let r = rdf.insert_literal(value.to_owned(), Cow::Borrowed(XSD_STRING));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_owned(), XSD_STRING));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedStringOf => {
 				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
 
 				let value = output.as_str().unwrap();
-				let r = rdf.insert_literal(value.to_string(), Cow::Owned(ty));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty.into_owned()));
 				Ok(vec![Value::Resource(r)])
 			}
 		}
@@ -379,17 +368,17 @@ impl BuiltInFunction {
 }
 
 fn iri_of<'a, R>(
-	rdf: &'a impl RdfContext<Resource = R>,
+	rdf: &'a impl EvalContext<Resource = R>,
 	resource: &'a R,
-) -> Result<&'a Iri, EvalError<R>> {
-	let mut iris = rdf.interpretation().iris_of(resource);
+) -> Result<Cow<'a, Iri>, EvalError<R>> {
+	let mut iris = rdf.iris_of(resource);
 
 	match iris.next() {
 		Some(i) => {
 			if iris.next().is_some() {
 				Err(EvalError::Ambiguity)
 			} else {
-				Ok(rdf.vocabulary().iri(i).unwrap())
+				Ok(i)
 			}
 		}
 		None => Err(EvalError::MissingData(
@@ -399,24 +388,22 @@ fn iri_of<'a, R>(
 }
 
 fn find_literal_lexical<'a, R: PartialEq>(
-	rdf: &'a impl RdfContext<Resource = R>,
+	rdf: &'a impl EvalContext<Resource = R>,
 	resource: &'a R,
 	expected_ty: &Iri,
-) -> Result<&'a str, EvalError<R>> {
+) -> Result<Cow<'a, str>, EvalError<R>> {
 	let mut value = None;
-	for l in rdf.interpretation().literals_of(resource) {
-		let literal = rdf.vocabulary().literal(l).unwrap();
-
+	for literal in rdf.literals_of(resource) {
 		let type_resource = match literal.type_ {
-			LiteralTypeRef::Any(i) => rdf.vocabulary().iri(i).unwrap(),
-			LiteralTypeRef::LangString(_) => RDF_LANG_STRING,
+			CowLiteralType::Any(i) => i,
+			CowLiteralType::LangString(_) => Cow::Borrowed(RDF_LANG_STRING),
 		};
 
-		if type_resource == expected_ty {
+		if type_resource.as_ref() == expected_ty {
 			if let Some(old_value) = value.replace(literal.value) {
 				return Err(EvalError::AmbiguousLiteralRepresentation(
-					old_value.to_owned(),
-					literal.value.to_owned(),
+					old_value.into_owned(),
+					value.unwrap().into_owned(),
 				));
 			}
 		}
@@ -431,27 +418,23 @@ fn find_literal_lexical<'a, R: PartialEq>(
 }
 
 fn find_literal_interpreted<'a, R: PartialEq>(
-	rdf: &'a impl RdfContext<Resource = R>,
+	rdf: &'a impl EvalContext<Resource = R>,
 	resource: &'a R,
 	expected_ty: &R,
-) -> Result<&'a str, EvalError<R>> {
+) -> Result<Cow<'a, str>, EvalError<R>> {
 	let mut value = None;
-	for l in rdf.interpretation().literals_of(resource) {
-		let literal = rdf.vocabulary().literal(l).unwrap();
-
+	for literal in rdf.literals_of(resource) {
 		let type_resource = match literal.type_ {
-			LiteralTypeRef::Any(i) => rdf.interpretation().iri_interpretation(i),
-			LiteralTypeRef::LangString(_) => rdf
-				.interpretation()
-				.lexical_iri_interpretation(rdf.vocabulary(), RDF_LANG_STRING),
+			CowLiteralType::Any(i) => rdf.iri_interpretation(&i),
+			CowLiteralType::LangString(_) => rdf.iri_interpretation(RDF_LANG_STRING),
 		};
 
 		if let Some(type_resource) = type_resource {
 			if type_resource == *expected_ty {
 				if let Some(old_value) = value.replace(literal.value) {
 					return Err(EvalError::AmbiguousLiteralRepresentation(
-						old_value.to_owned(),
-						literal.value.to_owned(),
+						old_value.into_owned(),
+						value.unwrap().into_owned(),
 					));
 				}
 			}
