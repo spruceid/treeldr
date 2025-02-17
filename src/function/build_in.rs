@@ -278,10 +278,10 @@ impl BuiltInFunction {
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedBoolOf => {
-				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
+				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.into_owned();
 
 				let value = xsd_types::Boolean(output.as_bool().unwrap());
-				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty.into_owned()));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::NumberOf => {
@@ -295,7 +295,7 @@ impl BuiltInFunction {
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedNumberOf => {
-				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
+				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.into_owned();
 
 				let value: xsd_types::Decimal = output
 					.as_number()
@@ -303,7 +303,7 @@ impl BuiltInFunction {
 					.clone()
 					.try_into()
 					.map_err(|_| EvalError::InvalidValue)?;
-				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty.into_owned()));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::IntOf => {
@@ -317,7 +317,7 @@ impl BuiltInFunction {
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedIntOf => {
-				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
+				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.into_owned();
 
 				let value: xsd_types::Integer = output
 					.as_number()
@@ -325,7 +325,7 @@ impl BuiltInFunction {
 					.clone()
 					.try_into()
 					.map_err(|_| EvalError::InvalidValue)?;
-				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty.into_owned()));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::UintOf => {
@@ -340,7 +340,7 @@ impl BuiltInFunction {
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedUintOf => {
-				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
+				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.into_owned();
 
 				let value: xsd_types::NonNegativeInteger = output
 					.as_number()
@@ -348,7 +348,7 @@ impl BuiltInFunction {
 					.clone()
 					.try_into()
 					.map_err(|_| EvalError::InvalidValue)?;
-				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty.into_owned()));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty));
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::StringOf => {
@@ -357,10 +357,10 @@ impl BuiltInFunction {
 				Ok(vec![Value::Resource(r)])
 			}
 			Self::TypedStringOf => {
-				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.to_owned();
+				let ty = iri_of(rdf, scope.get(0).unwrap().as_resource().unwrap())?.into_owned();
 
 				let value = output.as_str().unwrap();
-				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty.into_owned()));
+				let r = rdf.insert_literal(CowLiteral::new(value.to_string(), ty));
 				Ok(vec![Value::Resource(r)])
 			}
 		}

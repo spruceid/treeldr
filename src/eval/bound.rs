@@ -96,7 +96,7 @@ impl<P: Copy, R: Clone + PartialEq> Bindings<P, R> {
 				self.dataset
 					.quads()
 					.map(|quad| quad.map(TermPattern::as_ref))
-					.with_default_graph(scope.graph().map(|r| TermPattern::Resource(r))),
+					.with_default_graph(scope.graph().map(TermPattern::Resource)),
 			);
 
 			match matching.next() {

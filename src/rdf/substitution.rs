@@ -17,7 +17,7 @@ impl<R, T: SubstituteResource<R>> SubstituteResource<R> for Vec<T> {
 	}
 }
 
-impl<'a, R, T: SubstituteResource<R>> SubstituteResource<R> for &'a mut [T] {
+impl<R, T: SubstituteResource<R>> SubstituteResource<R> for &mut [T] {
 	fn substitute_resource(&mut self, mut f: impl FnMut(R) -> R) {
 		for t in self.iter_mut() {
 			t.substitute_resource(&mut f);

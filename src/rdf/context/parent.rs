@@ -16,7 +16,7 @@ pub enum ParentContext<'a, I: ?Sized, D: ?Sized + Dataset> {
 	Sub(&'a ContextStack<'a, I, D>),
 }
 
-impl<'a, I, D> ParentContext<'a, I, D>
+impl<I, D> ParentContext<'_, I, D>
 where
 	I: ?Sized,
 	D: ?Sized + Dataset,

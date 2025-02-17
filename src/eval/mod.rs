@@ -170,7 +170,7 @@ where
 	}
 }
 
-impl<'a, I, D> EvalContext for ContextStack<'a, I, D>
+impl<I, D> EvalContext for ContextStack<'_, I, D>
 where
 	I: ?Sized + ConstGenerativeInterpretation<Resource: Clone + Ord + Hash> + ReverseInterpretation,
 	D: ?Sized + MultiPatternMatchingDataset<Resource = I::Resource>,

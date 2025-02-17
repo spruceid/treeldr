@@ -52,7 +52,7 @@ impl PositiveTest {
 		// Parse input.
 		let input_text = fs::read_to_string(file_path(format!("{id}-in.nq")))
 			.expect("unable to read RDF dataset");
-		let mut input: IndexedBTreeDataset = nquads_syntax::GrdfDocument::parse_str(&input_text)
+		let input: IndexedBTreeDataset = nquads_syntax::GrdfDocument::parse_str(&input_text)
 			.unwrap()
 			.0
 			.into_iter()
@@ -76,7 +76,7 @@ impl PositiveTest {
 		if forward {
 			// Evaluate.
 			let found = function
-				.call(&registry, &mut generator, &mut input, &args)
+				.call(&registry, &mut generator, &input, &args)
 				.expect("evaluation failed");
 
 			if output != found {

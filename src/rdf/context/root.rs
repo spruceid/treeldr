@@ -14,7 +14,7 @@ impl<'a, I: ?Sized, D: ?Sized> RootContext<'a, I, D> {
 	}
 }
 
-impl<'a, I, D> RootContext<'a, I, D>
+impl<I, D> RootContext<'_, I, D>
 where
 	I: ?Sized + ConstGenerativeInterpretation,
 	D: ?Sized,

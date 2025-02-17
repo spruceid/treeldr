@@ -112,7 +112,7 @@ impl FallibleResourceUnifier<LocalTerm> for LocalTermUnifier {
 					let ib = self.import_blank_id(b);
 					let i = self
 						.classes
-						.merge(ia, ib, |a, b| std::cmp::min(a, b))
+						.merge(ia, ib, std::cmp::min)
 						.unwrap();
 					Ok(self.classes.get(i).unwrap().clone())
 				}

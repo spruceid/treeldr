@@ -306,7 +306,7 @@ where
 	}
 }
 
-impl<'a, I: ?Sized + ReverseInterpretation, D: Dataset> ContextStack<'a, I, D>
+impl<I: ?Sized + ReverseInterpretation, D: Dataset> ContextStack<'_, I, D>
 where
 	I::Resource: Eq + Hash,
 {
@@ -350,7 +350,7 @@ where
 	// }
 }
 
-impl<'a, I, D> ContextStack<'a, I, D>
+impl<I, D> ContextStack<'_, I, D>
 where
 	I: ?Sized,
 	D: ?Sized + MultiPatternMatchingDataset,

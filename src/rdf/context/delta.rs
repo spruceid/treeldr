@@ -70,6 +70,12 @@ pub struct ContextDelta<R> {
 	pub(crate) dataset: IndexedBTreeDataset<R>,
 }
 
+impl<R> Default for ContextDelta<R> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<R> ContextDelta<R> {
 	pub fn new() -> Self {
 		Self {
